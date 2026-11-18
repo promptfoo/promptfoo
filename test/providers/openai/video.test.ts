@@ -1087,30 +1087,23 @@ describe('OpenAiVideoProvider', () => {
   });
 
   describe('checkVideoCache', () => {
-    it('should return video key if cache mapping exists and video file exists', async () => {
-      vi.mocked(fsPromises.readFile).mockResolvedValue(
-        JSON.stringify({
-          videoKey: 'video/abc123def456.mp4',
-          thumbnailKey: 'video/abc123def456.webp',
-        }),
+    it('returns the mapping when its video exists', async () => {
+      const mapping = { ...createStoredVideoAssetKeys(), createdAt: '2026-04-28T00:00:00.000Z' };
+      vi.mocked(fsPromises.readFile).mockResolvedValue(JSON.stringify(mapping));
+      const exists = vi.fn().mockResolvedValue(true);
+      mockGetMediaStorage.mockReturnValue({ exists });
+
+      await expect(checkVideoCache('test-cache-key')).resolves.toEqual(mapping);
+      expect(fsPromises.readFile).toHaveBeenCalledExactlyOnceWith(
+        path.join('/test/config', 'media', 'video', '_cache', 'test-cache-key.json'),
+        'utf8',
       );
+      expect(exists).toHaveBeenCalledExactlyOnceWith(mapping.videoKey);
+    });
 
-      // Mock storage: video file exists
-      const mockStorage = {
-        exists: vi.fn().mockImplementation((key: string) => {
-          if (key === 'video/abc123def456.mp4') {
-            return Promise.resolve(true);
-          }
-          return Promise.resolve(false);
-        }),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
-
-      const result = await checkVideoCache('test-cache-key');
-
-      expect(result).toBe('video/abc123def456.mp4');
-      expect(fsPromises.readFile).toHaveBeenCalled();
-      expect(mockStorage.exists).toHaveBeenCalledWith('video/abc123def456.mp4');
+    it.each(['{', '{}'])('treats invalid mapping %j as a miss', async (data) => {
+      vi.mocked(fsPromises.readFile).mockResolvedValue(data);
+      await expect(checkVideoCache('invalid-key')).resolves.toBeNull();
     });
 
     it('should return null if cache mapping does not exist', async () => {
@@ -1174,59 +1167,53 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.model).toBe('sora-2');
     });
 
-    it('should include thumbnail path in cached result if thumbnail exists', async () => {
+    it('uses the verified mapping for all assets even when the mapping is replaced', async () => {
       const provider = new OpenAiVideoProvider('sora-2', { config: { apiKeyRequired: false } });
-
-      vi.mocked(fsPromises.readFile).mockResolvedValue(
-        JSON.stringify(createStoredVideoAssetKeys()),
-      );
-
-      // Mock storage: all asset files exist
-      const mockStorage = {
-        exists: vi.fn().mockImplementation((key: string) => {
-          if (
-            key === 'video/stored123.mp4' ||
-            key === 'video/stored123.webp' ||
-            key === 'video/stored123.jpg'
-          ) {
-            return Promise.resolve(true);
-          }
-          return Promise.resolve(false);
-        }),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
+      const original = createStoredVideoAssetKeys();
+      vi.mocked(fsPromises.readFile)
+        .mockResolvedValueOnce(JSON.stringify(original))
+        .mockResolvedValue(JSON.stringify({ videoKey: 'video/replacement.mp4' }));
+      mockGetMediaStorage.mockReturnValue({ exists: vi.fn().mockResolvedValue(true) });
 
       const result = await provider.callApi('cached video with assets');
 
+      expect(fsPromises.readFile).toHaveBeenCalledTimes(1);
       expect(result.cached).toBe(true);
+      expect(result.video?.url).toBe('storageRef:video/stored123.mp4');
       expect(result.video?.thumbnail).toBe('storageRef:video/stored123.webp');
       expect(result.video?.spritesheet).toBe('storageRef:video/stored123.jpg');
     });
 
-    it('should not include thumbnail in cached result if it does not exist', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', { config: { apiKeyRequired: false } });
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+    ])(
+      'checks optional blobs independently (thumbnail %s, spritesheet %s)',
+      async (thumbnail, spritesheet) => {
+        const provider = new OpenAiVideoProvider('sora-2', { config: { apiKeyRequired: false } });
+        const mapping = createStoredVideoAssetKeys();
+        vi.mocked(fsPromises.readFile).mockResolvedValue(JSON.stringify(mapping));
+        const available = {
+          [mapping.videoKey]: true,
+          [mapping.thumbnailKey]: thumbnail,
+          [mapping.spritesheetKey]: spritesheet,
+        };
+        mockGetMediaStorage.mockReturnValue({
+          exists: async (key: string) => available[key] ?? false,
+        });
 
-      vi.mocked(fsPromises.readFile).mockResolvedValue(
-        JSON.stringify(createStoredVideoAssetKeys()),
-      );
+        const result = await provider.callApi('cached video with unavailable extras');
 
-      // Mock storage: only video exists, not thumbnail/spritesheet
-      const mockStorage = {
-        exists: vi.fn().mockImplementation((key: string) => {
-          if (key === 'video/stored123.mp4') {
-            return Promise.resolve(true);
-          }
-          return Promise.resolve(false);
-        }),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
-
-      const result = await provider.callApi('cached video without extras');
-
-      expect(result.cached).toBe(true);
-      expect(result.video?.thumbnail).toBeUndefined();
-      expect(result.video?.spritesheet).toBeUndefined();
-    });
+        expect(result.cached).toBe(true);
+        expect(result.video?.thumbnail).toBe(
+          thumbnail ? 'storageRef:video/stored123.webp' : undefined,
+        );
+        expect(result.video?.spritesheet).toBe(
+          spritesheet ? 'storageRef:video/stored123.jpg' : undefined,
+        );
+      },
+    );
 
     it('should skip caching for remix operations', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {

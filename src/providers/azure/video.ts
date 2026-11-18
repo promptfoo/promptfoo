@@ -346,7 +346,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
     });
 
     // Check for cached video
-    const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
+    const cachedVideoKey = (await checkVideoCache(cacheKey, PROVIDER_NAME))?.videoKey;
     if (cachedVideoKey) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 

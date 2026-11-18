@@ -1,5 +1,9 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase, type ModelCost } from '../shared';
+import {
+  calculateCost as calculateCostBase,
+  type ModelCost,
+  parseToolCallArguments,
+} from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -20,6 +24,12 @@ export function formatLegacyCompletionPrompt(prompt: string): string {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
+  // Fast mode on Fable/Mythos 5.2 ($16/$80) is not encoded here; set `inputCost` and
+  // `outputCost` to track it.
+  ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
+    input: 8 / 1e6, // $8 / MTok
+    output: 40 / 1e6, // $40 / MTok
+  }),
   ...modelsWithCost(
     ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'],
     {
@@ -191,6 +201,7 @@ export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
+const CLAUDE_FABLE_MYTHOS_52_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-2(?![a-z0-9])/i;
 const CLAUDE_HAIKU_55_PATTERN = /(^|[^a-z0-9])claude-haiku-5-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
 // `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
@@ -224,7 +235,7 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
-  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1 and 5.2). */
   forcedToolChoiceUnsupported?: boolean;
   /**
    * Omitting `thinking` runs adaptive thinking rather than no thinking, so requests that never
@@ -269,6 +280,19 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     warningName: 'Claude Mythos Preview',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
+  },
+  // `CLAUDE_FABLE_MYTHOS_5_PATTERN` also matches the point releases, so each 5.x row must
+  // precede it: the warning name and cache-read multiplier come from the first matching row.
+  // Fable/Mythos 5.2 keep the 5.1 request rules (verified live): thinking can't be disabled,
+  // sampling params and forced `tool_choice` return 400, and cache reads cost 0.025x input.
+  {
+    match: CLAUDE_FABLE_MYTHOS_52_PATTERN,
+    warningName: 'Claude Fable 5.2 and Claude Mythos 5.2',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+    cacheReadMultiplier: 0.025,
   },
   {
     match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
@@ -374,7 +398,7 @@ export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
 
-/** Matches the Claude 5 Fable and Mythos model IDs. */
+/** Matches the Claude 5 Fable and Mythos model IDs, including point releases such as 5.2. */
 export function isClaudeFableOrMythos5Model(modelId: string): boolean {
   return CLAUDE_FABLE_MYTHOS_5_PATTERN.test(modelId);
 }
@@ -516,6 +540,18 @@ export function normalizeAnthropicModelName(modelName: string): string {
   return normalized !== modelName && normalized === 'claude-haiku-4-5-20251001-v1:0'
     ? 'claude-haiku-4-5-20251001'
     : normalized;
+}
+
+/** Shared gateways may use opaque deployment aliases. Only match complete known model IDs. */
+export function isKnownClaudeModelWithDeprecatedSampling(modelId: string): boolean {
+  const canonical = normalizeAnthropicModelName(modelId)
+    .replace(/-v\d+:\d+$/, '') // Bedrock revision
+    .replace(/(?:[-@]\d{8}|-latest)$/, '') // dated snapshot or model alias
+    .replace(/(\d)\.(\d)/, '$1-$2'); // OpenRouter uses dotted versions
+  return CLAUDE_MODEL_FAMILIES.some(
+    ({ match, samplingParamsDeprecated }) =>
+      samplingParamsDeprecated && match.exec(canonical)?.[0] === canonical,
+  );
 }
 
 /**
@@ -770,30 +806,76 @@ export function parseMessages(messages: string): {
   extractedMessages: Anthropic.MessageParam[];
   thinking?: Anthropic.ThinkingConfigParam;
 } {
+  let parsed;
   try {
-    const parsed = JSON.parse(messages);
-    if (Array.isArray(parsed)) {
-      const systemMessage = parsed.find((msg) => msg.role === 'system');
-      const thinking = parsed.find((msg) => msg.thinking)?.thinking;
-      return {
-        extractedMessages: parsed
-          .filter((msg) => msg.role && msg.role !== 'system')
-          .map((msg) => ({
-            role: msg.role,
-            content: Array.isArray(msg.content)
-              ? processAnthropicImageContent(msg.content)
-              : [{ type: 'text', text: msg.content }],
-          })),
-        system: systemMessage
-          ? Array.isArray(systemMessage.content)
-            ? systemMessage.content
-            : [{ type: 'text', text: systemMessage.content }]
-          : undefined,
-        thinking,
-      };
-    }
+    parsed = JSON.parse(messages);
   } catch {
-    // Not JSON, parse as plain text
+    // Not JSON, parse as plain text below.
+  }
+  if (Array.isArray(parsed) && parsed.every((msg) => msg != null)) {
+    const extractedMessages: Anthropic.MessageParam[] = [];
+    const systemMessages = parsed.filter(
+      (msg) => msg.role === 'system' || msg.role === 'developer',
+    );
+    for (const msg of parsed.filter((item) => item.role && !systemMessages.includes(item))) {
+      if (msg.role === 'tool' || msg.tool_call_id != null) {
+        if (typeof msg.tool_call_id !== 'string' || !msg.tool_call_id) {
+          throw new Error('Tool result requires a tool_call_id');
+        }
+        const result: Anthropic.ToolResultBlockParam = {
+          type: 'tool_result',
+          tool_use_id: msg.tool_call_id,
+          content: Array.isArray(msg.content)
+            ? processAnthropicImageContent(msg.content)
+            : typeof msg.content === 'string' || msg.content == null
+              ? (msg.content ?? '')
+              : JSON.stringify(msg.content),
+        };
+        const previous = extractedMessages[extractedMessages.length - 1];
+        if (
+          previous?.role === 'user' &&
+          Array.isArray(previous.content) &&
+          previous.content.length &&
+          previous.content.every((block) => block.type === 'tool_result')
+        ) {
+          previous.content.push(result);
+        } else {
+          extractedMessages.push({ role: 'user', content: [result] });
+        }
+        continue;
+      }
+      const content: Anthropic.ContentBlockParam[] = Array.isArray(msg.content)
+        ? processAnthropicImageContent(msg.content)
+        : msg.content == null || (msg.tool_calls?.length && msg.content === '')
+          ? []
+          : [{ type: 'text', text: msg.content }];
+      for (const call of msg.tool_calls ?? []) {
+        if (
+          typeof call?.id !== 'string' ||
+          !call.id ||
+          typeof call.function?.name !== 'string' ||
+          !call.function.name
+        ) {
+          throw new Error('Tool call requires an id and function name');
+        }
+        content.push({
+          type: 'tool_use',
+          id: call.id,
+          name: call.function.name,
+          input: parseToolCallArguments(call.function.arguments),
+        });
+      }
+      extractedMessages.push({ role: msg.role, content });
+    }
+    return {
+      extractedMessages,
+      system: systemMessages.length
+        ? systemMessages.flatMap((msg) =>
+            Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }],
+          )
+        : undefined,
+      thinking: parsed.find((msg) => msg.thinking)?.thinking,
+    };
   }
   const lines = messages
     .split('\n')

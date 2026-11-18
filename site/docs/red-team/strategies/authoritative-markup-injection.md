@@ -80,7 +80,7 @@ Authoritative markup injection is particularly important because:
 3. **Reflects Real-World Attacks**: Adversaries increasingly use professional-looking formatting to make harmful requests appear legitimate
 4. **Tests Context Awareness**: Evaluates whether models can maintain safety standards regardless of how requests are formatted
 
-This strategy helps identify vulnerabilities where models prioritize structural authority over content analysis, which is crucial for building robust AI safety systems.
+This strategy tests whether a model treats attacker-controlled markup as authoritative instructions.
 
 ## Related Concepts
 

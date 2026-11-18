@@ -1,5 +1,6 @@
 import type { ProviderFactory } from '../registryTypes';
 
+const GEMINI_DECISION_MODEL = 'gemini-decision-1';
 const GEMINI_ROBOTICS_STANDARD_MODEL = 'gemini-robotics-er-2-preview';
 const NATIVE_INTERACTIONS_MODELS = new Set([
   'gemini-omni-flash-preview',
@@ -7,6 +8,9 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
   'gemini-3.5-transcribe',
   GEMINI_ROBOTICS_STANDARD_MODEL,
 ]);
+
+// Chat models that also accept google:interactions: but default to generateContent.
+const INTERACTIONS_OPT_IN_MODELS = new Set(['gemini-4-argon', 'gemini-4-hydrogen']);
 
 function isLiveOnlyModel(modelName: string): boolean {
   return (
@@ -21,6 +25,11 @@ function validateGoogleModelRoute(
   serviceType?: string,
   allowNativeInteractions = false,
 ): void {
+  if (modelName === GEMINI_DECISION_MODEL) {
+    throw new Error(
+      `Model "${modelName}" requires the Gemini Decisions API. Use google:decisions:${modelName}.`,
+    );
+  }
   if (isLiveOnlyModel(modelName) && serviceType !== 'live') {
     if (modelName === 'gemini-3.5-transcribe-live') {
       throw new Error(
@@ -53,6 +62,11 @@ export const googleProviderFactories: ProviderFactory[] = [
     create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'decisions') {
+        throw new Error(
+          `The Gemini Decisions API requires the native Gemini API. Use google:decisions:${GEMINI_DECISION_MODEL}.`,
+        );
+      }
       if (firstPart === 'live') {
         const modelName = splits.slice(2).join(':');
         if (!modelName) {
@@ -150,6 +164,27 @@ export const googleProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (path) =>
+      /^(?:google|palm):decisions(?:$|:)/.test(path) ||
+      path === `google:${GEMINI_DECISION_MODEL}` ||
+      path === `palm:${GEMINI_DECISION_MODEL}`,
+    create: async (providerPath, providerOptions, context) => {
+      const [prefix, route, ...rest] = providerPath.split(':');
+      const modelName = route === 'decisions' ? rest.join(':') : route;
+      if (modelName !== GEMINI_DECISION_MODEL) {
+        throw new Error(
+          `The Gemini Decisions API requires model "${GEMINI_DECISION_MODEL}". Use ${prefix}:decisions:${GEMINI_DECISION_MODEL}.`,
+        );
+      }
+      const { GoogleDecisionsProvider } = await import('../google/decisions');
+      return new GoogleDecisionsProvider(modelName, {
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath.startsWith('google:') || providerPath.startsWith('palm:'),
     create: async (providerPath, providerOptions, context) => {
@@ -170,7 +205,10 @@ export const googleProviderFactories: ProviderFactory[] = [
         validateGoogleModelRoute(modelName, serviceType, true);
 
         if (serviceType === 'interactions') {
-          if (!NATIVE_INTERACTIONS_MODELS.has(modelName)) {
+          if (
+            !NATIVE_INTERACTIONS_MODELS.has(modelName) &&
+            !INTERACTIONS_OPT_IN_MODELS.has(modelName)
+          ) {
             throw new Error(
               `The Gemini Interactions provider does not support model "${modelName}".`,
             );

@@ -160,10 +160,8 @@ describe('AzureFoundryAgentProvider', () => {
     mockGetAgent = vi.fn();
     mockListAgents = vi.fn().mockReturnValue(createAsyncIterable([]));
     mockClient = {
-      agents: {
-        get: mockGetAgent,
-        list: mockListAgents,
-      },
+      getAgent: mockGetAgent,
+      listAgents: mockListAgents,
       getOpenAIClient: vi.fn(() => ({
         responses: {
           create: mockResponsesCreate,
@@ -264,22 +262,17 @@ describe('AzureFoundryAgentProvider', () => {
           ],
           temperature: 0.2,
           top_p: 0.8,
+          agent_reference: { name: 'weather-agent', type: 'agent_reference' },
         }),
         expect.objectContaining({
-          body: {
-            agent_reference: {
-              name: 'weather-agent',
-              type: 'agent_reference',
-            },
-          },
           maxRetries: 0,
           signal: expect.any(AbortSignal),
         }),
       );
       // Guard against regressing to the deprecated `agent` key, which the
       // Foundry Responses API now rejects with a 400.
-      const responseOptions = mockResponsesCreate.mock.calls[0][1];
-      expect(responseOptions.body).not.toHaveProperty('agent');
+      const requestBody = mockResponsesCreate.mock.calls[0][0];
+      expect(requestBody).not.toHaveProperty('agent');
       expect(result.output).toBe('Test response');
     });
 
@@ -363,15 +356,10 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockGetAgent).toHaveBeenCalledWith('asst_legacy');
       expect(mockListAgents).toHaveBeenCalledTimes(1);
       expect(mockResponsesCreate).toHaveBeenCalledWith(
-        expect.any(Object),
         expect.objectContaining({
-          body: {
-            agent_reference: {
-              name: 'weather-agent',
-              type: 'agent_reference',
-            },
-          },
+          agent_reference: { name: 'weather-agent', type: 'agent_reference' },
         }),
+        expect.any(Object),
       );
       expect(result.output).toBe('Listed response');
     });
@@ -612,16 +600,11 @@ describe('AzureFoundryAgentProvider', () => {
             },
           ],
           previous_response_id: 'resp_tool',
+          agent_reference: { name: 'weather-agent', type: 'agent_reference' },
         },
         {
           maxRetries: 0,
           signal: expect.any(AbortSignal),
-          body: {
-            agent_reference: {
-              name: 'weather-agent',
-              type: 'agent_reference',
-            },
-          },
         },
       );
       expect(result.output).toBe('Tool finished');
@@ -1219,9 +1202,9 @@ describe('AzureFoundryAgentProvider', () => {
 
       expect(result.output).toBe('finished');
       expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
-      for (const [, options] of mockResponsesCreate.mock.calls) {
+      for (const [body, options] of mockResponsesCreate.mock.calls) {
+        expect(body.agent_reference).toEqual({ name: 'weather-agent', type: 'agent_reference' });
         expect(options).toEqual({
-          body: { agent_reference: { name: 'weather-agent', type: 'agent_reference' } },
           timeout: 250,
           maxRetries: 0,
           signal: expect.any(AbortSignal),
@@ -1828,7 +1811,7 @@ describe('AzureFoundryAgentProvider', () => {
 
       it('reads Retry-After from an Azure HttpHeaders on the SDK response', async () => {
         // `@azure/core-rest-pipeline`'s HttpHeadersImpl, which is what an
-        // `@azure/ai-projects` RestError carries. Measured against the real
+        // Azure REST client error carries. Measured against the real
         // class: `entries` is undefined, `Object.entries()` yields exactly
         // `[['_headersMap', Map]]`, and only get/toJSON/[Symbol.iterator]
         // reach the headers. Built here rather than imported because

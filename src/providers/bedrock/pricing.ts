@@ -64,7 +64,11 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
  * different rates and must not be used here. Last reconciled 2026-09-01.
  */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
-  // Claude 5
+  // Claude 5. Fable/Mythos point releases must precede `anthropic.claude-fable-5`: lookup is
+  // first-match `includes()`, so a missing row silently bills 5.2 at Fable 5's $10/$50.
+  // Fable/Mythos 5.2: $8/$40 global, $8.80/$44 regional (AWS price list, 2026-11-09).
+  'anthropic.claude-fable-5-2': { input: 8, output: 40 },
+  'anthropic.claude-mythos-5-2': { input: 8, output: 40 },
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
   'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
@@ -536,8 +540,10 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  // Every GPT-6 system profile goes to the shared Runtime billing table, which owns the
+  // list of priced variants and returns no cost for the others.
   const gptProfile =
-    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6-luna|gpt-6\.1-sol)$/.exec(
+    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6(?:\.\d+)?-[a-z]+)$/.exec(
       normalizedModelId,
     );
   if (gptProfile) {

@@ -5,6 +5,7 @@ import { buildHttpRateLimitError } from '../../util/fetch';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isKnownClaudeModelWithDeprecatedSampling } from '../anthropic/util';
 import { calculateCost } from '../shared';
 import { InvalidToolSchemaError } from '../toolSchemaError';
 import { prepareOpenAiFunctions } from './prepare';
@@ -602,6 +603,15 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
     input: 1.75 / 1e6,
     output: 14 / 1e6,
   }),
+  ...modelsWithCost(['gpt-6.2-astra'], {
+    input: 8 / 1e6,
+    output: 40 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 16 / 1e6,
+      output: 60 / 1e6,
+    },
+  }),
   ...modelsWithCost(['gpt-6-astra'], {
     input: 10 / 1e6,
     output: 50 / 1e6,
@@ -611,7 +621,7 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
       output: 75 / 1e6,
     },
   }),
-  ...modelsWithCost(['gpt-6-sol', 'gpt-6.1-sol'], {
+  ...modelsWithCost(['gpt-6-sol', 'gpt-6.1-sol', 'gpt-6.2-sol'], {
     input: 2 / 1e6,
     output: 10 / 1e6,
     longContext: {
@@ -763,6 +773,22 @@ export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
     return OPENAI_FIRST_PARTY_API_HOSTNAMES.has(new URL(apiUrl).hostname.toLowerCase());
   } catch {
     return false;
+  }
+}
+
+/** Apply Claude's wire-format restriction after prompt and passthrough overrides are merged. */
+export function omitDeprecatedClaudeSamplingParams(body: Record<string, unknown>): void {
+  if (typeof body.model !== 'string') {
+    return;
+  }
+  // Only the fine-tune base identifies the model; later fields are user-defined.
+  const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(body.model)?.[1];
+  const model = fineTuneBase ?? body.model;
+  const leaf = model.slice(model.lastIndexOf('/') + 1);
+  if (isKnownClaudeModelWithDeprecatedSampling(leaf)) {
+    delete body.temperature;
+    delete body.top_p;
+    delete body.top_k;
   }
 }
 

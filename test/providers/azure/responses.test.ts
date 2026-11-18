@@ -762,6 +762,66 @@ describe('AzureResponsesProvider', () => {
       expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
     });
 
+    it('sends GPT-6.2 cache settings for an aliased deployment and keeps custom prices off the wire', async () => {
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createCachedTokenResponse()));
+      const provider = new AzureResponsesProvider('prod', {
+        config: {
+          modelName: 'gpt-6.2-sol',
+          inputCost: 2e-6,
+          outputCost: 10e-6,
+          prompt_cache_key: 'policy',
+          prompt_cache_options: { mode: 'implicit', ttl: '12h' },
+        },
+      });
+      const result = await provider.callApi('Check the policy.');
+      const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+      expect(requestBody).toMatchObject({
+        model: 'prod',
+        prompt_cache_key: 'policy',
+        prompt_cache_options: { mode: 'implicit', ttl: '12h' },
+      });
+      expect(requestBody).not.toHaveProperty('modelName');
+      expect(requestBody).not.toHaveProperty('inputCost');
+      expect(requestBody).not.toHaveProperty('outputCost');
+      expect(result.cost).toBeCloseTo(0.014, 10);
+    });
+
+    it('omits the estimate when Azure also bills for a hosted tool', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          ...createCachedTokenResponse(),
+          tool_usage: { web_search: { num_requests: 1 } },
+        }),
+      );
+      const provider = new AzureResponsesProvider('gpt-6.2-astra', { config: { cost: 1e-5 } });
+      const result = await provider.callApi('Search the web.');
+      expect(result.output).toBe('4');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('grades only the root final answer of a GPT-6.2 multi-agent response', async () => {
+      const message = (agent_name: string, phase: string, text: string) => ({
+        type: 'message',
+        role: 'assistant',
+        agent: { agent_name },
+        phase,
+        content: [{ type: 'output_text', text }],
+      });
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          output: [
+            message('/root', 'commentary', 'Delegating.'),
+            message('/root/worker', 'final_answer', 'Worker.'),
+            message('/root', 'final_answer', 'Complete.'),
+          ],
+        }),
+      );
+      const provider = new AzureResponsesProvider('gpt-6.2-astra', {
+        config: { passthrough: { multi_agent: { enabled: true } } },
+      });
+      expect((await provider.callApi('Finish the task.')).output).toBe('Complete.');
+    });
+
     it('prices the served tier using the passthrough model sent for an aliased deployment', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

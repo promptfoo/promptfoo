@@ -13,9 +13,11 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+} from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
@@ -956,7 +958,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
 
-    // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
+    // Legacy budget-based thinking and the models flagged in CLAUDE_MODEL_FAMILIES
+    // (Fable/Mythos 5.1 and 5.2, Opus 5.5, Sonnet 5.5) reject forced tool use.
     // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
     // this on thinkingEnabled: doing so would silently change their tool-routing evals.
     const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);

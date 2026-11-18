@@ -1,11 +1,14 @@
-import { AIProjectClient } from '@azure/ai-projects';
 import { ClientSecretCredential, DefaultAzureCredential } from '@azure/identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { FoundryProjectClient } from '../../../src/providers/azure/foundryProjectClient';
 import { createDeferred } from '../../util/utils';
 
-vi.mock('@azure/ai-projects', () => ({ AIProjectClient: vi.fn() }));
-vi.mock('@azure/identity', () => ({
+vi.mock('../../../src/providers/azure/foundryProjectClient', () => ({
+  FoundryProjectClient: vi.fn(),
+}));
+vi.mock('@azure/identity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@azure/identity')>()),
   ClientSecretCredential: vi.fn(),
   DefaultAzureCredential: vi.fn(),
 }));
@@ -43,15 +46,16 @@ describe('Foundry client lifecycle', () => {
       .mockImplementation(function () {
         return Object.create(DefaultAzureCredential.prototype);
       });
-    vi.mocked(AIProjectClient)
+    vi.mocked(FoundryProjectClient)
       .mockReset()
       .mockImplementation(function () {
-        return Object.assign(Object.create(AIProjectClient.prototype), {
-          agents: { get: getAgent, list: listAgents },
+        return Object.assign(Object.create(FoundryProjectClient.prototype), {
+          getAgent,
+          listAgents,
           getOpenAIClient,
         });
       });
-    await import('@azure/ai-projects');
+    await import('../../../src/providers/azure/foundryProjectClient');
     await import('@azure/identity');
   });
 
@@ -67,7 +71,7 @@ describe('Foundry client lifecycle', () => {
     const provider = createProvider();
     const requests = Array.from({ length: 20 }, () => provider.callApi('Hello'));
     await vi.dynamicImportSettled();
-    expect(AIProjectClient).toHaveBeenCalledTimes(1);
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(1);
     expect(DefaultAzureCredential).toHaveBeenCalledTimes(1);
     expect(getAgent).toHaveBeenCalledTimes(1);
     expect(createResponse).not.toHaveBeenCalled();
@@ -78,13 +82,16 @@ describe('Foundry client lifecycle', () => {
     expect(getAgent).toHaveBeenCalledTimes(1);
     expect(getOpenAIClient).toHaveBeenCalledTimes(21);
     expect(createResponse).toHaveBeenCalledTimes(21);
-    expect(AIProjectClient).toHaveBeenCalledWith(projectUrl, expect.any(DefaultAzureCredential));
+    expect(FoundryProjectClient).toHaveBeenCalledWith(
+      projectUrl,
+      expect.any(DefaultAzureCredential),
+    );
   });
 
   it.each(['credential', 'project client'])(
     'retries failed %s initialization on a later call',
     async (failure) => {
-      const constructor = failure === 'credential' ? DefaultAzureCredential : AIProjectClient;
+      const constructor = failure === 'credential' ? DefaultAzureCredential : FoundryProjectClient;
       vi.mocked(constructor).mockImplementationOnce(function () {
         throw new Error('temporary initialization failure');
       });
@@ -124,7 +131,7 @@ describe('Foundry client lifecycle', () => {
 
     expect(await provider.callApi('Recovered')).toMatchObject({ output: 'Hello' });
     expect(getAgent).toHaveBeenCalledTimes(2);
-    expect(AIProjectClient).toHaveBeenCalledTimes(1);
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(1);
     expect(DefaultAzureCredential).toHaveBeenCalledTimes(1);
   });
 
@@ -141,7 +148,7 @@ describe('Foundry client lifecycle', () => {
     expect(results.every((result) => result.output === 'Hello')).toBe(true);
     expect(getAgent).toHaveBeenCalledTimes(2);
     expect(listAgents).toHaveBeenCalledTimes(2);
-    expect(AIProjectClient).toHaveBeenCalledTimes(1);
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(1);
   });
 
   it('retries OpenAI client construction without repeating successful initialization', async () => {
@@ -154,7 +161,7 @@ describe('Foundry client lifecycle', () => {
     });
     expect(await provider.callApi('Recovered')).toMatchObject({ output: 'Hello' });
     expect(getOpenAIClient).toHaveBeenCalledTimes(2);
-    expect(AIProjectClient).toHaveBeenCalledTimes(1);
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(1);
     expect(getAgent).toHaveBeenCalledTimes(1);
   });
 
@@ -167,22 +174,23 @@ describe('Foundry client lifecycle', () => {
     expect(await provider.callApi('Recovered')).toMatchObject({ output: 'Hello' });
     expect(createResponse).toHaveBeenCalledTimes(2);
     expect(getOpenAIClient).toHaveBeenCalledTimes(2);
-    expect(AIProjectClient).toHaveBeenCalledTimes(1);
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(1);
     expect(DefaultAzureCredential).toHaveBeenCalledTimes(1);
     expect(getAgent).toHaveBeenCalledTimes(1);
   });
 
   it('returns a later token acquisition failure through the actual SDK request', async () => {
-    const { AIProjectClient: RealAIProjectClient } =
-      await vi.importActual<typeof import('@azure/ai-projects')>('@azure/ai-projects');
+    const { FoundryProjectClient: RealFoundryProjectClient } = await vi.importActual<
+      typeof import('../../../src/providers/azure/foundryProjectClient')
+    >('../../../src/providers/azure/foundryProjectClient');
     vi.useFakeTimers();
     const getToken = vi
       .fn()
       .mockResolvedValueOnce({ token: 'test-token', expiresOnTimestamp: Date.now() + 1500 })
       .mockRejectedValue(new Error('simulated identity outage'));
-    const project = new RealAIProjectClient(projectUrl, { getToken });
-    vi.spyOn(project.agents, 'get').mockImplementation(getAgent);
-    vi.mocked(AIProjectClient).mockImplementationOnce(function () {
+    const project = new RealFoundryProjectClient(projectUrl, { getToken });
+    vi.spyOn(project, 'getAgent').mockImplementation(getAgent);
+    vi.mocked(FoundryProjectClient).mockImplementationOnce(function () {
       return project;
     });
     const fetch = vi
@@ -211,7 +219,7 @@ describe('Foundry client lifecycle', () => {
     });
     expect(await provider.callApi('Recovered')).toMatchObject({ output: 'Hello' });
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(AIProjectClient).toHaveBeenCalledTimes(1);
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(1);
   });
 
   it('hands explicit service principals to separate project clients without invoking ambient discovery', async () => {
@@ -250,7 +258,8 @@ describe('Foundry client lifecycle', () => {
       expect(DefaultAzureCredential).not.toHaveBeenCalled();
       expect(fetch).not.toHaveBeenCalled();
       expect(
-        new Set(vi.mocked(AIProjectClient).mock.calls.map(([, credential]) => credential)).size,
+        new Set(vi.mocked(FoundryProjectClient).mock.calls.map(([, credential]) => credential))
+          .size,
       ).toBe(2);
     } finally {
       vi.unstubAllEnvs();
@@ -299,8 +308,8 @@ describe('Foundry client lifecycle', () => {
     await first.callApi('First');
     await second.callApi('Second');
 
-    expect(AIProjectClient).toHaveBeenCalledTimes(2);
-    const [firstCall, secondCall] = vi.mocked(AIProjectClient).mock.calls;
+    expect(FoundryProjectClient).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = vi.mocked(FoundryProjectClient).mock.calls;
     expect(new Set([firstCall[0], secondCall[0]])).toEqual(new Set([projectUrl, secondUrl]));
     expect(firstCall[1]).not.toBe(secondCall[1]);
     expect(DefaultAzureCredential).toHaveBeenCalledTimes(2);
