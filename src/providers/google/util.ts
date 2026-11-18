@@ -1528,7 +1528,9 @@ export function getCandidateParts(candidate: Candidate): Part[] {
 
 export function formatCandidateContents(candidate: Candidate) {
   const parts = getCandidateParts(candidate);
-  return parts.every((part) => 'text' in part) ? parts.map((part) => part.text).join('') : parts;
+  return parts.every((part) => 'text' in part)
+    ? parts.map((part) => part.text).join('')
+    : [...parts];
 }
 
 /** Format text after the last chunk. Multipart replies retain their wire order and signatures. */
@@ -1550,25 +1552,6 @@ export function formatGeminiThinking(parts: Part[], showThinking: boolean | unde
     return output;
   }
   return output ? `Thinking: ${summary}\n\n${output}` : `Thinking: ${summary}`;
-}
-
-export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
-  if (parts1 === undefined) {
-    // Detach the accumulator from the raw multipart response before appending later chunks.
-    return typeof parts2 === 'string' ? parts2 : [...parts2];
-  }
-
-  if (typeof parts1 === 'string' && typeof parts2 === 'string') {
-    return parts1 + parts2;
-  }
-
-  const array1: Part[] = typeof parts1 === 'string' ? [{ text: parts1 }] : parts1;
-
-  const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
-
-  array1.push(...array2);
-
-  return array1;
 }
 
 export function normalizeGeminiAudio(output: Part[] | string | undefined) {
