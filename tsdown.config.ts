@@ -74,10 +74,10 @@ export default defineConfig([
   // Server (ESM only) - stable path for workflows
   // Only public library entry points emit declarations. The server's index declaration
   // otherwise races the library build for dist/src/index.d.ts.
-  esmBuildOptions({ 'server/index': 'src/server/index.ts' }, { dts: false }),
+  esmBuildOptions({ 'server/index': './src/server/index.ts' }, { dts: false }),
   // CLI binary (ESM only)
   {
-    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts'], { dts: false }),
+    ...esmBuildOptions(['./src/entrypoint.ts', './src/main.ts'], { dts: false }),
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
@@ -85,8 +85,8 @@ export default defineConfig([
   // Library ESM build
   esmBuildOptions(
     {
-      contracts: 'src/contracts.ts',
-      index: 'src/index.ts',
+      contracts: './src/contracts.ts',
+      index: './src/index.ts',
     },
     { treeshake: true },
   ), // Ensure library ESM build has shims
@@ -102,8 +102,8 @@ export default defineConfig([
       alwaysBundle: ['chalk'],
     },
     entry: {
-      contracts: 'src/contracts.ts',
-      index: 'src/index.ts',
+      contracts: './src/contracts.ts',
+      index: './src/index.ts',
     },
     format: ['cjs'],
     fixedExtension: true, // Use .cjs extension for CJS output
