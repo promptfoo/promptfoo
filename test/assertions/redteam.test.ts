@@ -164,11 +164,7 @@ describe('redteam strategy result grading', () => {
   });
 
   it('applies the weight: 0 override to a failing stored redteam grade', async () => {
-    const recordedAssertion: Assertion = {
-      ...piiAssertion,
-      metric: 'PIILeak/recorded',
-      weight: 0,
-    };
+    const recordedAssertion = { ...piiAssertion, weight: 0 };
     const result = await runAssertions({
       prompt: originalPrompt,
       test: { ...test, assert: [recordedAssertion] },
@@ -177,18 +173,12 @@ describe('redteam strategy result grading', () => {
         metadata: {
           redteamFinalPrompt: attackPrompt,
           storedGraderResult: {
+            ...storedResult,
             pass: false,
-            score: 0,
-            reason: storedResult.reason,
-            assertion: { ...recordedAssertion, value: 'Stored rubric' },
+            score: 0.25,
             metadata: {
+              ...storedResult.metadata,
               redteamGradingAssertionHash: getGradingAssertionHash(recordedAssertion),
-              redteamGradingInputHash: getGradingInputHash(
-                attackPrompt,
-                output,
-                undefined,
-                'pii:social',
-              ),
             },
           },
         },
@@ -198,11 +188,11 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(true);
     expect(result.componentResults?.[0]).toMatchObject({
       pass: true,
-      score: 0,
+      score: 0.25,
       reason: storedResult.reason,
     });
     // The recorded metric keeps its measured value instead of being dropped.
-    expect(result.namedScores?.['PIILeak/recorded']).toBe(0);
+    expect(result.namedScores?.['PIILeak/Crescendo']).toBe(0.25);
   });
 
   it.each([
