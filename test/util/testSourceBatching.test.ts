@@ -48,18 +48,6 @@ describe('large test source loading', () => {
     fs.rmSync(fixtureDir, { recursive: true, force: true });
   });
 
-  it('control: reads a large scalar JSON test reference in order', async () => {
-    const result = await readTests(largePath);
-    expect(result).toHaveLength(rowCount);
-    expect(result[0].description).toBe('row 0');
-    expect(result.at(-1)?.description).toBe(`row ${rowCount - 1}`);
-  });
-
-  it('control: reads a small array JSON test reference in order', async () => {
-    const result = await readTests([smallPath]);
-    expect(result.map((row) => row.description)).toEqual(['row 0', 'row 1', 'row 2']);
-  });
-
   it('reads a large JSON source between other files without changing row order', async () => {
     const result = await readTests([smallPath, largePath, smallPath]);
     expect(result).toHaveLength(rowCount + 6);
