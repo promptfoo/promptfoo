@@ -1,13 +1,12 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { serializeProvider } from './serialization';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+type FikraOptions = NonNullable<ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]>;
 
 const FIKRA_API_BASE = 'https://api.fikraapi.co.ke/v1';
 
 export class FikraProvider extends OpenAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: ProviderOptions = {}) {
+  constructor(modelName: string, providerOptions: FikraOptions = {}) {
     super(modelName, {
       ...providerOptions,
       config: {
@@ -37,8 +36,8 @@ export class FikraProvider extends OpenAiChatCompletionProvider {
 
 export function createFikraProvider(
   providerPath: string,
-  options: { config?: ProviderOptions; env?: EnvOverrides } = {},
-): ApiProvider {
+  options: { config?: FikraOptions; env?: FikraOptions['env'] } = {},
+): FikraProvider {
   const modelName = providerPath.split(':').slice(1).join(':');
   return new FikraProvider(modelName, {
     ...options.config,
