@@ -281,7 +281,11 @@ def pull_docker_image(
         except subprocess.CalledProcessError as error:
             if error.stderr:
                 print(error.stderr, file=sys.stderr, end="", flush=True)
-            rate_limited = "toomanyrequests" in (error.stderr or "").lower()
+            diagnostic = (error.stderr or "").lower()
+            rate_limited = (
+                "toomanyrequests" in diagnostic
+                or "error from registry: data limit exceeded" in diagnostic
+            )
             if attempt == len(delays) or not rate_limited:
                 # Only a quota error can have triggered an earlier retry.
                 if has_mirror and (attempt > 0 or rate_limited):
