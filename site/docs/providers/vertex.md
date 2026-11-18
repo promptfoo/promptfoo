@@ -205,11 +205,16 @@ Use `vertex:<model-id>` with a hosted Llama model. You can include the `meta/` p
 
 #### Llama Configuration Example
 
+Set sampling options at the top level or in `generationConfig`. A nested setting takes precedence over the same top-level setting.
+
 ```yaml
 providers:
   - id: vertex:meta/llama-4-scout-17b-16e-instruct-maas
     config:
       region: us-east5
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
 ```
 
 To send an image, use a chat message with an `image_url` content part. See the [runnable Llama image example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-vertex/promptfooconfig.llama.yaml).
