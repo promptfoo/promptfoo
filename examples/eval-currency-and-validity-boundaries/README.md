@@ -8,18 +8,19 @@ Initialize this example in your project:
 
 ```bash
 npx promptfoo@latest init --example eval-currency-and-validity-boundaries
+cd eval-currency-and-validity-boundaries
 ```
 
 Run the evaluation:
 
 ```bash
-npm run local -- eval -c promptfooconfig.yaml
+npx promptfoo@latest eval -c promptfooconfig.yaml
 ```
 
 Or export the results to JSON:
 
 ```bash
-npm run local -- eval -c promptfooconfig.yaml -o output.json --no-cache
+npx promptfoo@latest eval -c promptfooconfig.yaml -o output.json --no-cache
 ```
 
 ## Overview
