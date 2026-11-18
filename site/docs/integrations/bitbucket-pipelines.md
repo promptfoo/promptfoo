@@ -150,7 +150,7 @@ pipelines:
 
 ### Using Pipes
 
-Leverage Bitbucket Pipes for a more concise configuration:
+Use Bitbucket Pipes to shorten the configuration:
 
 ```yaml
 image: node:24
