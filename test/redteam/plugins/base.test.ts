@@ -5,13 +5,14 @@ import cliState from '../../../src/cliState';
 import * as esm from '../../../src/esm';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
+import { CoppaGrader } from '../../../src/redteam/plugins/compliance/coppa';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
 import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
-import { setRedteamProviderLoader } from '../../../src/redteam/providers/shared';
+import { runRedteamGrader, setRedteamProviderLoader } from '../../../src/redteam/providers/shared';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
@@ -1433,6 +1434,38 @@ describe('RedteamGraderBase', () => {
       }
     },
   );
+
+  it('forwards per-test grader selection through compliance grader subclasses', async () => {
+    const perTestGrader = createMockProvider({ id: 'per-test-grader' });
+    const loadProvider = vi.fn().mockResolvedValue([perTestGrader]);
+    const restoreLoader = setRedteamProviderLoader(loadProvider);
+    cliState.config = { defaultTest: { options: { provider: 'suite-grader' } } };
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    });
+
+    try {
+      await runRedteamGrader(
+        new CoppaGrader(),
+        'test prompt',
+        'The response gives ordinary informational advice.',
+        {
+          ...mockTest,
+          options: { provider: 'per-test-grader' },
+        } as AtomicTestCase,
+        undefined,
+        undefined,
+      );
+
+      expect(loadProvider).toHaveBeenCalledWith(['per-test-grader']);
+      expect(vi.mocked(matchesLlmRubric).mock.calls.at(-1)?.[2]?.provider).toBe(perTestGrader);
+    } finally {
+      restoreLoader();
+      cliState.config = {};
+    }
+  });
 
   it('should pass only image output context to multimodal graders', async () => {
     const mockResult: GradingResult = {

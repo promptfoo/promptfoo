@@ -186,6 +186,17 @@ describe('getFinalTest', () => {
     expect(result.options?.provider).toBe(testProvider);
   });
 
+  it('normalizes graderProvider for direct assertion calls', () => {
+    const testProvider = createMockProvider('testProvider');
+    const result = getFinalTest(
+      { options: { graderProvider: testProvider } } as TestCase,
+      createStringAssertion('equals', 'expected value'),
+    );
+
+    expect(result.options?.provider).toBe(testProvider);
+    expect(result.options).not.toHaveProperty('graderProvider');
+  });
+
   it('should handle test with direct provider property', () => {
     const testProvider = createMockProvider('testProvider');
     const assertionProvider = createMockProvider('assertionProvider');
