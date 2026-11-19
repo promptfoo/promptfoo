@@ -47,6 +47,28 @@ providers:
 
 Check the [models reference](https://abliteratedllm.dev/docs/models) or `GET https://api.abliteratedllm.dev/v1/models`, which needs no API key, for current model IDs, context limits, and input modalities. See [pricing](https://abliteratedllm.dev/pricing) for current rates.
 
+## Red teaming
+
+An abliterated model can also serve as the [attacker and grader](/docs/red-team/configuration/#providers) for a red team scan. Set `redteam.provider` to the same configuration:
+
+```yaml
+redteam:
+  provider:
+    id: openai:chat:glm-5.3-cyber-abliterated
+    config:
+      apiBaseUrl: https://api.abliteratedllm.dev/v1
+      apiKeyEnvar: ABLITERATEDLLM_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      max_tokens: 4096
+      showThinking: false
+      passthrough:
+        reasoning_effort: low
+```
+
+To send every generation and grading request to this provider, set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Plugins that require remote generation, such as `harmful:cybercrime`, then generate no test cases. Only test systems you own or are authorized to test.
+
 ## Example
 
 The [provider-abliteratedllm example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-abliteratedllm) compares GLM-5.3 Flash Abliterated with the stock GLM-5.3 Flash using the same API key.
