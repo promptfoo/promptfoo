@@ -25,6 +25,7 @@ import {
 import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 
 import type { FetchWithCacheResult } from '../../../src/cache';
+import type { PluginActionParams } from '../../../src/redteam/types';
 import type { TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -699,91 +700,76 @@ describe('Plugins', () => {
       expect(result).toEqual([]);
     });
 
-    it('generates 50 misinformation cases through a proxy that times out above 20', async () => {
-      // This plugin always uses the remote service, even when regular plugins run locally.
-      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
-      vi.mocked(neverGenerateRemote).mockReturnValue(false);
-      const requests: number[] = [];
-      const cacheKeys: string[] = [];
-      let nextId = 0;
-      vi.mocked(fetchWithCache).mockImplementation(async (_url, options) => {
-        const { n } = JSON.parse(options!.body as string);
-        requests.push(n);
-        cacheKeys.push(getScopedCacheKey('same-request'));
-        if (n > 20) {
-          throw new Error('HTTP 524');
-        }
-        return mockFetchResponse(
-          Array.from({ length: n }, () => ({ vars: { query: `Sample ${++nextId}` } })),
-        );
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'harmful:misinformation-disinformation')!;
-      const result = await withCacheNamespace('repeat:1', () =>
-        plugin.action({
-          provider: mockProvider,
-          purpose: 'Test catalog',
-          injectVar: 'query',
-          n: 50,
-          config: {},
-          delayMs: 0,
-        }),
-      );
-
-      expect(requests).toEqual([20, 20, 10]);
-      expect(checkRemoteHealth).toHaveBeenCalledTimes(1);
-      expect(new Set(cacheKeys).size).toBe(3);
-      expect(cacheKeys.every((key) => key.startsWith('repeat:1:'))).toBe(true);
-      expect(result.map((test) => test.vars?.query)).toEqual(
-        Array.from({ length: 50 }, (_, i) => `Sample ${i + 1}`),
-      );
-      expect(
-        result.every((test) => test.assert?.[0].type === `promptfoo:redteam:${plugin.key}`),
-      ).toBe(true);
-    });
-
     describe('large remote misinformation requests', () => {
       const plugin = Plugins.find((p) => p.key === 'harmful:misinformation-disinformation')!;
-      const params = { purpose: 'Test catalog', injectVar: 'query', n: 21, delayMs: 0 };
+      const fetch = vi.mocked(fetchWithCache);
+      const requestBodies = () =>
+        fetch.mock.calls.map(([, options]) => JSON.parse(options!.body as string));
       const samples = (start: number, count: number) =>
         Array.from({ length: count }, (_, i) => ({ vars: { query: `Sample ${start + i}` } }));
+      let params: PluginActionParams;
 
       beforeEach(() => {
+        params = {
+          purpose: 'Test catalog',
+          injectVar: 'query',
+          n: 21,
+          delayMs: 0,
+          provider: mockProvider,
+        };
+        // This plugin uses the remote service even when regular plugins run locally.
+        vi.mocked(shouldGenerateRemote).mockReturnValue(false);
         vi.mocked(neverGenerateRemote).mockReturnValue(false);
       });
 
+      it('generates 50 cases through a proxy that times out above 20', async () => {
+        const cacheKeys: string[] = [];
+        let next = 0;
+        fetch.mockImplementation(async (_url, options) => {
+          const { n } = JSON.parse(options!.body as string);
+          if (n > 20) {
+            throw new Error('HTTP 524');
+          }
+          cacheKeys.push(getScopedCacheKey('same-request'));
+          const batch = samples(next, n);
+          next += n;
+          return mockFetchResponse(batch);
+        });
+
+        const result = await withCacheNamespace('repeat:1', () =>
+          plugin.action({ ...params, n: 50 }),
+        );
+
+        expect(requestBodies().map((body) => body.n)).toEqual([20, 20, 10]);
+        expect(checkRemoteHealth).toHaveBeenCalledOnce();
+        expect(new Set(cacheKeys).size).toBe(3);
+        expect(cacheKeys.every((key) => key.startsWith('repeat:1:'))).toBe(true);
+        expect(result).toMatchObject(samples(0, 50));
+        expect(
+          result.every((test) => test.assert?.[0].type === `promptfoo:redteam:${plugin.key}`),
+        ).toBe(true);
+      });
+
       it('respects explicitly disabled remote generation', async () => {
-        vi.mocked(neverGenerateRemote).mockReturnValueOnce(true);
-        expect(await plugin.action({ ...params, provider: mockProvider })).toEqual([]);
+        vi.mocked(neverGenerateRemote).mockReturnValue(true);
+        expect(await plugin.action(params)).toEqual([]);
         expect(checkRemoteHealth).not.toHaveBeenCalled();
-        expect(fetchWithCache).not.toHaveBeenCalled();
+        expect(fetch).not.toHaveBeenCalled();
       });
 
       it('tops up short responses with fresh prompts and retains the first copy with its metadata', async () => {
         const first = { vars: { query: 'Sample 0' }, metadata: { source: 'first' } };
         const duplicate = { vars: { query: ' Sample 0 ' }, metadata: { source: 'duplicate' } };
-        const batches = [[first, ...samples(1, 18), duplicate], [duplicate], samples(19, 3)];
-        const sizes: number[] = [];
-        vi.mocked(fetchWithCache).mockImplementation(async (_url, options) => {
-          sizes.push(JSON.parse(options!.body as string).n);
-          return mockFetchResponse(batches.shift()!);
-        });
+        fetch
+          .mockResolvedValueOnce(mockFetchResponse([first, ...samples(1, 18), duplicate]))
+          .mockResolvedValueOnce(mockFetchResponse([duplicate]))
+          .mockResolvedValueOnce(mockFetchResponse(samples(19, 3)));
 
-        const result = await plugin.action({
-          ...params,
-          provider: mockProvider,
-          config: { language: 'en' },
-        });
+        const result = await plugin.action({ ...params, config: { language: 'en' } });
 
-        expect(sizes).toEqual([20, 2, 2]);
-        expect(vi.mocked(fetchWithCache).mock.calls.map((call) => call[4])).toEqual([
-          false,
-          true,
-          true,
-        ]);
-        expect(result.map((test) => test.vars?.query)).toEqual(
-          samples(0, 21).map((test) => test.vars.query),
-        );
+        expect(requestBodies().map((body) => body.n)).toEqual([20, 2, 2]);
+        expect(fetch.mock.calls.map((call) => call[4])).toEqual([false, true, true]);
+        expect(result).toMatchObject(samples(0, 21));
         expect(result[0].metadata).toMatchObject({
           source: 'first',
           pluginConfig: { language: 'en' },
@@ -795,69 +781,56 @@ describe('Plugins', () => {
           result: samples(0, 20),
           tokenUsage: { total: 10, numRequests: 1 },
         });
-        vi.mocked(fetchWithCache)
+        fetch
           .mockResolvedValueOnce(firstBatch)
           .mockResolvedValueOnce({ ...firstBatch, coalesced: true })
           .mockResolvedValue(mockFetchResponse(samples(20, 1)));
         const usage = {};
-        const provider = trackGenerationTokenUsage(mockProvider, usage);
-        const results = await Promise.all([
-          plugin.action({ ...params, provider }),
-          plugin.action({ ...params, provider }),
-        ]);
+        const request = { ...params, provider: trackGenerationTokenUsage(mockProvider, usage) };
+        const results = await Promise.all([plugin.action(request), plugin.action(request)]);
 
         expect(results.map((cases) => cases.length)).toEqual([21, 21]);
         expect(usage).toMatchObject({ total: 10, numRequests: 1 });
       });
 
       it('stops after two top-ups when every response repeats the same prompt', async () => {
-        vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse(samples(0, 1)));
+        fetch.mockResolvedValue(mockFetchResponse(samples(0, 1)));
         const errorLog = vi.spyOn(logger, 'error');
-        const result = await plugin.action({ ...params, provider: mockProvider });
+        const result = await plugin.action(params);
 
-        expect(fetchWithCache).toHaveBeenCalledTimes(4);
+        expect(fetch).toHaveBeenCalledTimes(4);
         expect(result).toHaveLength(1);
         expect(errorLog).toHaveBeenCalledWith(expect.stringMatching(/1 of 21.*too few distinct/i));
       });
 
       it('keeps previous batches after a proxy error without retrying the failed POST', async () => {
-        const firstBatch = [...samples(0, 19), { vars: { query: 'x'.repeat(30) } }];
-        vi.mocked(fetchWithCache)
-          .mockResolvedValueOnce(mockFetchResponse(firstBatch))
+        fetch
+          .mockResolvedValueOnce(
+            mockFetchResponse([...samples(0, 19), { vars: { query: 'x'.repeat(30) } }]),
+          )
           .mockResolvedValueOnce(
             createMockFetchResponse({}, { status: 524, statusText: 'timeout' }),
           );
         const errorLog = vi.spyOn(logger, 'error');
-        const result = await plugin.action({
-          ...params,
-          provider: mockProvider,
-          config: { maxCharsPerMessage: 10 },
-        });
+        const result = await plugin.action({ ...params, config: { maxCharsPerMessage: 10 } });
 
-        expect(result.map((test) => test.vars?.query)).toEqual(
-          samples(0, 19).map((test) => test.vars.query),
-        );
-        expect(vi.mocked(fetchWithCache).mock.calls.map((call) => call[5])).toEqual([0, 0]);
-        expect(checkRemoteHealth).toHaveBeenCalledTimes(1);
-        const retry = JSON.parse(vi.mocked(fetchWithCache).mock.calls[1][1]!.body as string);
+        expect(result).toMatchObject(samples(0, 19));
+        expect(fetch.mock.calls.map((call) => call[5])).toEqual([0, 0]);
+        expect(checkRemoteHealth).toHaveBeenCalledOnce();
+        const retry = requestBodies()[1];
         expect(retry.n).toBe(2);
         expect(retry.config.modifiers.__maxCharsPerMessageRetry).toContain('10-character limit');
         expect(errorLog).toHaveBeenCalledWith(expect.stringMatching(/19 of 21.*524/i));
       });
 
       it.each([
-        ['harmful:misinformation-disinformation', { inputs: { query: 'A catalog request' } }],
+        [plugin.key, { inputs: { query: 'A catalog request' } }],
         ['ssrf', {}],
       ] as const)('preserves the full request for %s with config %o', async (key, config) => {
-        vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse(samples(0, 1)));
-        await Plugins.find((p) => p.key === key)!.action({
-          ...params,
-          provider: mockProvider,
-          config,
-        });
+        fetch.mockResolvedValue(mockFetchResponse(samples(0, 1)));
+        await Plugins.find((p) => p.key === key)!.action({ ...params, config });
 
-        expect(fetchWithCache).toHaveBeenCalledTimes(1);
-        expect(JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string).n).toBe(21);
+        expect(requestBodies()).toMatchObject([{ n: 21 }]);
       });
     });
 

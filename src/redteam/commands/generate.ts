@@ -61,7 +61,11 @@ import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
-import { PartialGenerationError, ProbeLimitExceededError } from '../types';
+import {
+  formatFailedPluginCounts,
+  PartialGenerationError,
+  ProbeLimitExceededError,
+} from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -76,23 +80,17 @@ import type {
   SynthesizeOptions,
 } from '../types';
 
-/**
- * Handles failed plugins based on strict mode.
- * In strict mode, throws PartialGenerationError.
- * In non-strict mode (default), logs a warning and returns false to continue.
- * @returns true if we should stop (error thrown), false to continue
- */
 function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean): void {
   if (failedPlugins.length === 0) {
     return;
   }
+  if (strict) {
+    throw new PartialGenerationError(failedPlugins);
+  }
 
-  const pluginList = failedPlugins.map(
-    (p) => `  - ${p.pluginId} (${p.generated ?? 0}/${p.requested} tests)`,
-  );
   const warningMessage = dedent`
     ${chalk.yellow('⚠️  Warning:')} Test case generation failed for ${failedPlugins.length} plugin(s):
-    ${pluginList.join('\n')}
+    ${formatFailedPluginCounts(failedPlugins)}
 
     ${chalk.dim('Possible causes:')}
       - API rate limiting or connectivity issues
@@ -105,12 +103,6 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
       - Retry the scan after resolving any reported errors
   `;
 
-  if (strict) {
-    // In strict mode, throw to stop the scan
-    throw new PartialGenerationError(failedPlugins);
-  }
-
-  // In non-strict mode (default), log warning and continue
   logger.warn(warningMessage);
   logger.warn(
     chalk.yellow(
@@ -864,7 +856,10 @@ async function doGenerateRedteamInternal(
 
     let ret: Partial<UnifiedConfig> | undefined;
     // A later generation, including --strict, must retry an incomplete batch.
-    const hasIncompleteBatch = failedPlugins.some((plugin) => plugin.generated !== undefined);
+    const getOutputConfigHash = () =>
+      configPath && !failedPlugins.some((plugin) => plugin.generated !== undefined)
+        ? getConfigHash(configPath, options)
+        : 'force-regenerate';
     if (options.output && options.output.endsWith('.burp')) {
       // Write in Burp Intruder compatible format
       const outputLines = redteamTests
@@ -908,10 +903,7 @@ async function doGenerateRedteamInternal(
         redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
         metadata: {
           ...existingMetadata,
-          configHash:
-            configPath && !hasIncompleteBatch
-              ? await getConfigHash(configPath, options)
-              : 'force-regenerate',
+          configHash: await getOutputConfigHash(),
           ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
           generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
@@ -981,9 +973,7 @@ async function doGenerateRedteamInternal(
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...existingMetadata,
-        configHash: hasIncompleteBatch
-          ? 'force-regenerate'
-          : await getConfigHash(configPath, options),
+        configHash: await getOutputConfigHash(),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
         generation,
       };

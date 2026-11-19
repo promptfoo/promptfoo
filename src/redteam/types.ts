@@ -464,6 +464,15 @@ export interface FailedPluginInfo {
   generated?: number;
 }
 
+export function formatFailedPluginCounts(failedPlugins: FailedPluginInfo[]): string {
+  return failedPlugins
+    .map(
+      ({ pluginId, generated = 0, requested }) =>
+        `  - ${pluginId} (${generated}/${requested} tests)`,
+    )
+    .join('\n');
+}
+
 /**
  * Custom error class for partial test generation failures.
  * Thrown in strict mode when a plugin fails or a chunked request falls short.
@@ -472,12 +481,9 @@ export class PartialGenerationError extends Error {
   public readonly failedPlugins: FailedPluginInfo[];
 
   constructor(failedPlugins: FailedPluginInfo[]) {
-    const pluginList = failedPlugins.map(
-      (p) => `  - ${p.pluginId} (${p.generated ?? 0}/${p.requested} tests)`,
-    );
     const message =
       `Test case generation failed for ${failedPlugins.length} plugin(s):\n` +
-      `${pluginList.join('\n')}\n\n` +
+      `${formatFailedPluginCounts(failedPlugins)}\n\n` +
       `The scan has been stopped because missing test cases would significantly ` +
       `decrease scan quality and completeness.\n\n` +
       `Possible causes:\n` +
