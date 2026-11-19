@@ -776,21 +776,27 @@ describe('Plugins', () => {
         });
       });
 
-      it('counts reported usage once when concurrent actions share a physical batch', async () => {
+      it('counts batches without token usage and skips coalesced requests', async () => {
         const firstBatch = createMockFetchResponse({
           result: samples(0, 20),
           tokenUsage: { total: 10, numRequests: 1 },
         });
+        const lastBatch = mockFetchResponse(samples(20, 1));
         fetch
           .mockResolvedValueOnce(firstBatch)
           .mockResolvedValueOnce({ ...firstBatch, coalesced: true })
-          .mockResolvedValue(mockFetchResponse(samples(20, 1)));
+          .mockResolvedValueOnce(lastBatch)
+          .mockResolvedValueOnce({ ...lastBatch, cached: true });
         const usage = {};
         const request = { ...params, provider: trackGenerationTokenUsage(mockProvider, usage) };
         const results = await Promise.all([plugin.action(request), plugin.action(request)]);
 
         expect(results.map((cases) => cases.length)).toEqual([21, 21]);
-        expect(usage).toMatchObject({ total: 10, numRequests: 1 });
+        expect(usage).toMatchObject({
+          total: 10,
+          numRequests: 3,
+          incurredTokenUsage: { total: 10, numRequests: 2 },
+        });
       });
 
       it('stops after two top-ups when every response repeats the same prompt', async () => {

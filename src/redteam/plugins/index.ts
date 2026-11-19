@@ -529,7 +529,7 @@ async function fetchRemoteTestCases(
         }
         throw error;
       });
-    if (provider && (!chunked || (data?.tokenUsage && !coalesced))) {
+    if (provider && (!chunked || !coalesced)) {
       recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
     }
     if (status !== 200 || !Array.isArray(data?.result)) {
