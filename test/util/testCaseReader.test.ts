@@ -689,6 +689,30 @@ not valid json`,
     ]);
   });
 
+  it('should skip blank lines in CSV files', async () => {
+    vi.mocked(getEnvString).mockReturnValue(',');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'var1,__expected\nvalue1,expected1\n\nvalue2,expected2\n\n',
+    );
+
+    const result = await readStandaloneTestsFile('test.csv');
+
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value2' },
+      },
+    ]);
+  });
+
   it('should read XLSX file and return test cases', async () => {
     // Mock parseXlsxFile to return processed CsvRow[] data
     const mockData = [
