@@ -10,11 +10,7 @@ import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
-import {
-  isAbortError,
-  isTransientConnectionError,
-  ResponseJsonParseError,
-} from './util/fetch/errors';
+import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudAuthHeaderName,
@@ -795,6 +791,16 @@ async function fetchAndReadBody(
   }
   // Unreachable: loop always returns or throws, but TypeScript needs this
   throw new Error('Exhausted body retries without returning or throwing');
+}
+
+/** Preserves the HTTP status separately from the JSON parser's diagnostic text. */
+export class ResponseJsonParseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
 }
 
 function parseFetchResponse(

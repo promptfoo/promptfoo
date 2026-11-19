@@ -24,7 +24,10 @@ function createMathProgressBar() {
 
 vi.mock('cli-progress');
 vi.mock('../../../src/redteam/providers/shared');
-vi.mock('../../../src/cache');
+vi.mock(import('../../../src/cache'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
 vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('mathPrompt', () => {

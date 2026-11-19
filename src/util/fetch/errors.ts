@@ -6,16 +6,6 @@ export interface SystemError extends Error {
   cause?: unknown;
 }
 
-/** Preserves the HTTP status separately from the JSON parser's diagnostic text. */
-export class ResponseJsonParseError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
-
 /**
  * Body-level error codes that indicate a hard quota/billing failure rather than
  * a transient per-window rate limit. Retrying these will not succeed and just

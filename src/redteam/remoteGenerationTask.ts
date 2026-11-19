@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, ResponseJsonParseError } from '../cache';
 import { getUserEmail } from '../globalConfig/accounts';
 import { getRequestTimeoutMs } from '../providers/shared';
 import {
@@ -12,6 +12,14 @@ import type { StrategyRuntimeContext } from './strategies/types';
 interface RemoteGenerationTaskOptions {
   headers?: Record<string, string>;
   bustCache?: boolean;
+  /** Reject non-2xx or invalid JSON with this context and the status, omitting the response body. */
+  responseErrorContext?: string;
+}
+
+function checkResponseStatus(status: number, context: string): void {
+  if (status < 200 || status >= 300) {
+    throw new Error(`${context} failed (HTTP ${status}).`);
+  }
 }
 
 /**
@@ -28,6 +36,7 @@ export async function postRemoteGenerationTask<T>(
 ): Promise<Awaited<ReturnType<typeof fetchWithCache<T>>>> {
   const provider = runtimeContext?.generationProviderSelection?.provider;
   let responseRecorded = false;
+  let response: Awaited<ReturnType<typeof fetchWithCache<T>>>;
 
   try {
     const request = {
@@ -38,7 +47,7 @@ export async function postRemoteGenerationTask<T>(
         email: getUserEmail(),
       }),
     };
-    const response = options?.bustCache
+    response = options?.bustCache
       ? await fetchWithCache<T>(
           getRemoteGenerationUrl(),
           request,
@@ -60,12 +69,20 @@ export async function postRemoteGenerationTask<T>(
         cached: response.cached,
       });
     }
-
-    return response;
   } catch (error) {
     if (provider && !responseRecorded) {
       recordFailedGenerationTokenUsage(provider, error);
     }
+    if (options?.responseErrorContext && error instanceof ResponseJsonParseError) {
+      checkResponseStatus(error.status, options.responseErrorContext);
+      throw new Error(
+        `${options.responseErrorContext} returned invalid JSON (HTTP ${error.status}).`,
+      );
+    }
     throw error;
   }
+  if (options?.responseErrorContext) {
+    checkResponseStatus(response.status, options.responseErrorContext);
+  }
+  return response;
 }
