@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from 'node:util';
+
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +14,12 @@ import {
 
 import type { Prompt } from '../../src/types/prompts';
 
+// Render tables as on an 80-column terminal (TERMINAL_MAX_WIDTH is columns - 10).
+const TERMINAL_COLUMNS = 80;
+vi.mock('../../src/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/constants')>()),
+  TERMINAL_MAX_WIDTH: 70,
+}));
 vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
 vi.mock('../../src/util/database');
@@ -217,6 +225,12 @@ describe('handlers', () => {
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
   }
 
+  function expectWithinTerminalWidth(table: string) {
+    for (const line of stripVTControlCharacters(table).split('\n')) {
+      expect(line.length).toBeLessThanOrEqual(TERMINAL_COLUMNS);
+    }
+  }
+
   beforeEach(() => {
     vi.resetAllMocks();
     process.exitCode = undefined;
@@ -232,7 +246,7 @@ describe('handlers', () => {
       expect(logger.error).toHaveBeenCalledWith(`Prompt with ID ${promptId} not found.`);
     });
 
-    it('should list full eval IDs, newest first', async () => {
+    it('should list full eval IDs, newest first, within the terminal width', async () => {
       vi.mocked(getPromptFromHash).mockResolvedValue({
         id: 'prompt-hash',
         prompt: { raw: 'test', label: 'Test Prompt' },
@@ -245,7 +259,9 @@ describe('handlers', () => {
 
       await handlePrompt('prompt-hash');
 
-      expectFullIdsInOrder(getLoggedTable(), newestFirstEvalIds);
+      const table = getLoggedTable();
+      expectFullIdsInOrder(table, newestFirstEvalIds);
+      expectWithinTerminalWidth(table);
     });
   });
 
@@ -270,7 +286,7 @@ describe('handlers', () => {
       expect(logger.error).toHaveBeenCalledWith(`Dataset with ID ${datasetId} not found.`);
     });
 
-    it('should list full eval IDs, newest first', async () => {
+    it('should list full eval IDs, newest first, within the terminal width', async () => {
       vi.mocked(getDatasetFromHash).mockResolvedValue({
         id: 'dataset-hash',
         prompts: newestFirstEvalIds.map((evalId, index) => ({
@@ -286,7 +302,9 @@ describe('handlers', () => {
 
       await handleDataset('dataset-hash');
 
-      expectFullIdsInOrder(getLoggedTable(), newestFirstEvalIds);
+      const table = getLoggedTable();
+      expectFullIdsInOrder(table, newestFirstEvalIds);
+      expectWithinTerminalWidth(table);
     });
   });
 });

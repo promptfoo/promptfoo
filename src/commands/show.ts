@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { TERMINAL_MAX_WIDTH } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
@@ -10,8 +11,10 @@ type MatchedPrompt = NonNullable<Awaited<ReturnType<typeof getPromptFromHash>>>;
 
 // Wide enough for a full `eval-xxx-YYYY-MM-DDTHH:MM:SS` ID, so it can be copied into
 // `promptfoo show eval <id>`.
-const EVAL_USAGE_COLUMN_WIDTHS = {
-  'Eval ID': 32,
+const EVAL_ID_COLUMN_WIDTH = 32;
+// Preferred widths for the other columns; they shrink to share whatever terminal width
+// the eval ID column leaves.
+const EVAL_USAGE_COLUMN_MAX_WIDTHS: Record<string, number> = {
   'Dataset ID': 12,
   'Prompt ID': 12,
   'Raw score': 11,
@@ -19,6 +22,22 @@ const EVAL_USAGE_COLUMN_WIDTHS = {
   'Pass count': 12,
   'Fail count': 18,
 };
+const MIN_COLUMN_WIDTH = 5;
+
+function getEvalUsageColumnWidths(columns: string[]): Record<string, number> {
+  const otherColumns = columns.filter((column) => column !== 'Eval ID');
+  // TERMINAL_MAX_WIDTH already leaves a margin for the table borders, as in wrapTable.
+  const available = TERMINAL_MAX_WIDTH - EVAL_ID_COLUMN_WIDTH;
+  const share = Math.max(
+    MIN_COLUMN_WIDTH,
+    Math.floor(available / Math.max(otherColumns.length, 1)),
+  );
+  const widths: Record<string, number> = { 'Eval ID': EVAL_ID_COLUMN_WIDTH };
+  for (const column of otherColumns) {
+    widths[column] = Math.min(EVAL_USAGE_COLUMN_MAX_WIDTHS[column] ?? share, share);
+  }
+  return widths;
+}
 
 function formatMetrics(metrics: MatchedPrompt['evals'][number]['metrics']) {
   const rawScore = metrics?.score?.toFixed(2) || '-';
@@ -69,7 +88,7 @@ function showPrompt(id: string, prompt: MatchedPrompt | undefined) {
       ...formatMetrics(evl.metrics),
     });
   }
-  logger.info(wrapTable(table, EVAL_USAGE_COLUMN_WIDTHS) as string);
+  logger.info(wrapTable(table, getEvalUsageColumnWidths(Object.keys(table[0] ?? {}))) as string);
   printBorder();
   printResourceHint('eval');
   printResourceHint('dataset');
@@ -145,7 +164,7 @@ function showDataset(id: string, dataset: Awaited<ReturnType<typeof getDatasetFr
     'Prompt ID': prompt.id.slice(0, 6),
     ...formatMetrics(prompt.prompt.metrics),
   }));
-  logger.info(wrapTable(table, EVAL_USAGE_COLUMN_WIDTHS) as string);
+  logger.info(wrapTable(table, getEvalUsageColumnWidths(Object.keys(table[0] ?? {}))) as string);
   printBorder();
   printResourceHint('prompt');
   printResourceHint('eval');
