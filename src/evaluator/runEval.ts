@@ -259,15 +259,21 @@ interface RenderedRunEvalPrompt {
   setup: RunEvalSetup;
 }
 
-export interface PreparedBayesAtNInput {
-  sourceHash: string;
+interface PreparedBayesAtNQuestion {
   inputHash: string;
   state: RunEvalState;
   rendered: RenderedRunEvalPrompt;
 }
 
-function copyPreparedBayesAtNInput(prepared: PreparedBayesAtNInput): PreparedBayesAtNInput {
-  const vars = copyPromptVars(prepared.state.vars);
+export interface PreparedBayesAtNInput {
+  sourceHash: string;
+  question: PreparedBayesAtNQuestion;
+}
+
+function copyPreparedBayesAtNQuestion(
+  prepared: PreparedBayesAtNQuestion,
+): PreparedBayesAtNQuestion {
+  const vars = copyPromptVars(prepared.state.vars, copyBayesAtNInput);
   return {
     ...prepared,
     state: {
@@ -275,12 +281,19 @@ function copyPreparedBayesAtNInput(prepared: PreparedBayesAtNInput): PreparedBay
       vars,
       promptForRender: copyBayesAtNInput(prepared.state.promptForRender),
       fileMetadata: structuredClone(prepared.state.fileMetadata),
+      setup: {
+        ...prepared.state.setup,
+        provider: { ...prepared.state.setup.provider },
+        vars,
+        prompt: copyBayesAtNInput(prepared.state.setup.prompt),
+      },
     },
     rendered: {
       ...prepared.rendered,
-      renderedJson: structuredClone(prepared.rendered.renderedJson),
+      renderedJson: copyBayesAtNInput(prepared.rendered.renderedJson),
       setup: {
         ...prepared.rendered.setup,
+        provider: { ...prepared.rendered.setup.provider },
         vars,
         prompt: copyBayesAtNInput(prepared.rendered.setup.prompt),
       },
@@ -306,9 +319,9 @@ function hasFileMode(value: unknown, seen = new Set<object>()): boolean {
 
 function hashRunEvalInputs(
   step: Pick<RunEvalOptions, 'prompt' | 'provider' | 'test' | 'nunjucksFilters'>,
-  includeProviderInputs = false,
-  providerVars = step.test.vars ?? {},
-  evaluationId?: string,
+  nativeContext?: Pick<CallApiContextParams, 'prompt' | 'vars' | 'test' | 'evaluationId'> & {
+    renderedPrompt: string;
+  },
 ) {
   const nativeConfigs = new Map<object, unknown>();
   return hashBayesAtNInputs(step, {
@@ -316,7 +329,7 @@ function hashRunEvalInputs(
     functionSource: (fn) => bayesAtNFunctionSources.get(fn),
     rubricFileReference: renderBayesAtNRubricFileReference,
     providerConfig: (provider) => nativeConfigs.get(provider),
-    providerFiles: includeProviderInputs
+    providerFiles: nativeContext
       ? (provider, target) => {
           const declaration =
             typeof provider === 'string'
@@ -338,15 +351,13 @@ function hashRunEvalInputs(
             return [];
           }
           const context = {
-            prompt: {
-              ...step.prompt,
-              config: target
-                ? mergeProviderPromptConfig(step.prompt.config, step.test.options)
-                : undefined,
-            },
-            vars: providerVars,
-            evaluationId,
+            prompt: target ? nativeContext.prompt : { ...step.prompt, config: undefined },
+            vars: target ? nativeContext.vars : (step.test.vars ?? {}),
+            evaluationId: nativeContext.evaluationId,
             isGrading: !target,
+            test: target ? nativeContext.test : undefined,
+            filters: step.nunjucksFilters,
+            renderedPrompt: target ? nativeContext.renderedPrompt : undefined,
           };
           if (target) {
             const config = { ...inputProvider.config, ...context.prompt.config };
@@ -408,6 +419,15 @@ function hashRunEvalInputs(
   });
 }
 
+function getStepRuntimeVars(step: RunEvalOptions): EvalRuntimeVars {
+  return getEvalRuntimeVars({
+    evalId: step.evalId,
+    promptIndex: step.promptIdx,
+    repeatIndex: step.repeatIndex,
+    testIndex: step.testIdx,
+  });
+}
+
 export async function prepareBayesAtNInput(
   step: RunEvalOptions,
   testSuite: TestSuite,
@@ -417,15 +437,8 @@ export async function prepareBayesAtNInput(
   step.test = copyBayesAtNInput(step.test);
   step.prompt = copyBayesAtNInput(step.prompt);
   const state = createRunEvalState({ ...step, promptIndex: step.promptIdx });
-  Object.assign(
-    state.vars,
-    getEvalRuntimeVars({
-      evalId: step.evalId,
-      promptIndex: step.promptIdx,
-      repeatIndex: step.repeatIndex,
-      testIndex: step.testIdx,
-    }),
-  );
+  const runtimeVars = getStepRuntimeVars(step);
+  Object.assign(state.vars, runtimeVars);
   const rendered = await renderRunEvalPrompt({
     filters: step.nunjucksFilters,
     isRedteam: false,
@@ -439,41 +452,46 @@ export async function prepareBayesAtNInput(
   if (hasBayesAtNSharedSession({ ...step, prompt: rendered.setup.prompt })) {
     throw new Error('Bayes@N does not support shared provider sessions');
   }
-  const inputHash = hashRunEvalInputs(
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete state.vars[key];
+  }
+  const inputHash = hashPreparedBayesAtNQuestion(step, state, rendered);
+  return { sourceHash, question: { inputHash, state, rendered } };
+}
+
+function hashPreparedBayesAtNQuestion(
+  step: RunEvalOptions,
+  state: RunEvalState,
+  rendered: RenderedRunEvalPrompt,
+): string {
+  return hashRunEvalInputs(
     {
       ...step,
       prompt: { ...state.promptForRender, ...rendered.setup.prompt },
-      test: { ...step.test, vars: omitEvalRuntimeVars(state.vars) },
+      test: { ...step.test, vars: state.vars },
     },
-    true,
-    state.vars,
-    step.evalId,
+    {
+      prompt: { ...state.promptForRender, config: rendered.setup.prompt.config },
+      renderedPrompt: rendered.renderedPrompt,
+      vars: { ...state.vars, ...getStepRuntimeVars(step) },
+      test: step.test,
+      evaluationId: step.evalId,
+    },
   );
-  return { sourceHash, inputHash, state, rendered };
 }
 
 export function verifyBayesAtNInput(
   evalStep: RunEvalOptions,
   bayesAtNInput: PreparedBayesAtNInput,
 ): void {
-  if (hasBayesAtNSharedSession({ ...evalStep, prompt: bayesAtNInput.rendered.setup.prompt })) {
+  const { sourceHash, question } = bayesAtNInput;
+  if (hasBayesAtNSharedSession({ ...evalStep, prompt: question.rendered.setup.prompt })) {
     throw new Error('Bayes@N does not support shared provider sessions');
   }
   if (
-    hashRunEvalInputs(evalStep) !== bayesAtNInput.sourceHash ||
-    hashRunEvalInputs(
-      {
-        ...evalStep,
-        prompt: {
-          ...bayesAtNInput.state.promptForRender,
-          ...bayesAtNInput.rendered.setup.prompt,
-        },
-        test: { ...evalStep.test, vars: omitEvalRuntimeVars(bayesAtNInput.state.vars) },
-      },
-      true,
-      bayesAtNInput.state.vars,
-      evalStep.evalId,
-    ) !== bayesAtNInput.inputHash
+    hashPreparedBayesAtNQuestion(evalStep, question.state, question.rendered) !==
+      question.inputHash ||
+    hashRunEvalInputs(evalStep) !== sourceHash
   ) {
     throw new Error('Bayes@N requires unchanged question and grading inputs after beforeEach');
   }
@@ -1574,7 +1592,7 @@ export async function runEvalInternal(
   );
 
   const bayesAtNInput = orchestrationOptions.bayesAtNInput
-    ? copyPreparedBayesAtNInput(orchestrationOptions.bayesAtNInput)
+    ? copyPreparedBayesAtNQuestion(orchestrationOptions.bayesAtNInput.question)
     : undefined;
   const state = bayesAtNInput?.state ?? createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({

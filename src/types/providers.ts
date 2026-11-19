@@ -166,12 +166,17 @@ export interface ApiProvider extends MinimalApiProvider {
    * Descriptions and their fingerprints remain in memory only.
    */
   getEvaluationInputs?: (
-    context: Pick<CallApiContextParams, 'prompt' | 'vars' | 'evaluationId' | 'isGrading'>,
-  ) => {
-    config?: unknown;
-    filePaths?: string[];
-    hasSharedSession?: boolean;
-  };
+    context: Pick<
+      CallApiContextParams,
+      'prompt' | 'vars' | 'evaluationId' | 'filters' | 'isGrading' | 'test'
+    > & { renderedPrompt?: string },
+  ) =>
+    | {
+        config?: unknown;
+        filePaths?: string[];
+        hasSharedSession?: boolean;
+      }
+    | undefined;
   /** True when configured calls reuse conversation history; Bayes@N rejects this mode. */
   readonly hasSharedSession?: boolean;
   /**

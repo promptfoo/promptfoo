@@ -1189,17 +1189,20 @@ Shared-session option names are reserved in Bayes@N, including with custom
 provider IDs: `persistSession`, `session_id`, `persist_sessions`, `thread_id`,
 `persist_threads`, `resume`, `continue`, `sessionId`, `session_key`, and `session`.
 The restriction also covers `runOptions.session`, OpenClaw's session-key header,
-Claude's session-related `extra_args` flags, Slack's `threadTs`, n8n's prepared
-`vars.sessionId`, and Realtime's `maintainContext` when `metadata.conversationId`
-enables history. Target overrides and configured graders are checked too.
+Claude's session-related `extra_args` flags, Slack's `threadTs`, and the session
+ID supplied to n8n or A2A. OpenAI and Azure Realtime can reuse history when
+`metadata.conversationId` is set and `maintainContext` is enabled. Azure
+Realtime enables `maintainContext` by default. The checks also cover target
+overrides and configured graders.
 Remove shared-session modes from base provider configuration even if a per-test
 option disables them, since some providers read only their base configuration.
 Saving a fresh Claude session with `persist_session` or creating a fresh OpenCode
 child with `parent_session_id` is allowed.
 
-Prompt and file inputs are prepared once per scheduled trial. Each call receives
-its own mutable grading state. In-memory consistency checks require identical
-question and grading inputs across repeats, and check again after `beforeEach`.
+Each scheduled trial renders its prompt and loads its file inputs before
+generation. Repeats for the same question share one prepared payload in memory.
+Each call gets its own copy of the mutable state. The evaluator checks question
+and grading inputs across repeats and again after `beforeEach`.
 These checks include native assertion file inputs such as `contextTransform` and
 `rubricPrompt`, including environment-expanded rubric file paths. No fingerprints
 are saved. Use plain data objects for vars and grading options; maps, sets, and
@@ -1213,9 +1216,11 @@ supported for file declarations. Graders with native file inputs must be loaded
 providers that declare those inputs. Inline undeclared file modes and unresolved
 JSON/YAML grader configuration references are rejected. Google Video declares media inputs using its
 native aliases and owning base paths. HTTP declares multipart path sources using
-its native template and path rules. Multipart modes with request transforms or
-dynamically fetched authentication/session variables, and templated multipart
-paths in graders, are unsupported. OpenClaw private header modes are unsupported.
+its native template and path rules. HTTP request templates for target calls
+cannot use `__repeatIndex` or `__evalStepId` or load another Nunjucks template
+with Bayes@N enabled. Multipart modes with request transforms or dynamically
+fetched authentication/session variables, and templated multipart paths in
+graders, are unsupported. OpenClaw private header modes are unsupported.
 Provider instances that expose neither public configuration nor an input
 descriptor are rejected, as are recognized undeclared file modes. Custom callbacks must keep captured state, code dependencies,
 authentication scope, and other external inputs fixed throughout the run.

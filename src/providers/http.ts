@@ -18,7 +18,7 @@ import {
 import { HttpAuthSchema } from '../contracts/providerConfig/httpAuth';
 import { HttpSignatureAuthSchema } from '../contracts/providerConfig/httpSignature';
 import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import {
@@ -46,7 +46,11 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
-import { getNunjucksEngine } from '../util/templates';
+import {
+  getNunjucksEngine,
+  templateLoadsAnotherTemplate,
+  templateReferencesVariable,
+} from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
   getHttpMultipartInputFilePaths,
@@ -82,6 +86,46 @@ import type {
 const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
 const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);
 const MAX_AUTH_CACHE_ENTRIES = 256;
+const RAW_HTTP_TEMPLATE_EXPRESSIONS = /\{\{[\s\S]*?\}\}/g;
+const HTTP_PER_REPEAT_VARS = ['__repeatIndex', '__evalStepId'];
+
+function validateHttpRepeatTemplates(value: unknown): void {
+  if (typeof value === 'string') {
+    if (templateLoadsAnotherTemplate(value)) {
+      throw new Error('Bayes@N cannot verify HTTP request templates that load other templates');
+    }
+    if (HTTP_PER_REPEAT_VARS.some((variable) => templateReferencesVariable(value, variable))) {
+      throw new Error(
+        'Bayes@N does not support HTTP request templates that use per-repeat variables (__repeatIndex or __evalStepId)',
+      );
+    }
+  } else if (value !== null && typeof value === 'object') {
+    Object.values(value).forEach(validateHttpRepeatTemplates);
+  }
+}
+
+function parseHttpBodyForTemplateCheck(body: HttpProviderConfig['body']): unknown {
+  if (typeof body !== 'string') {
+    return undefined;
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+}
+
+function validateHttpConfigRepeatTemplates(url: string, config: HttpProviderConfig): void {
+  const { auth, body, headers, method, multipart, queryParams, request, signatureAuth } = config;
+  const templates = request
+    ? [request.match(RAW_HTTP_TEMPLATE_EXPRESSIONS)]
+    : [url, method, headers, queryParams, body, parseHttpBodyForTemplateCheck(body), multipart];
+  validateHttpRepeatTemplates([
+    ...templates,
+    auth?.type === 'file' ? undefined : auth,
+    signatureAuth?.privateKey,
+  ]);
+}
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -255,7 +299,7 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
 
   // 1) Temporarily replace all {{...}} occurrences with placeholders
   const placeholders: string[] = [];
-  working = working.replace(/\{\{[\s\S]*?\}\}/g, (m) => {
+  working = working.replace(RAW_HTTP_TEMPLATE_EXPRESSIONS, (m) => {
     const idx = placeholders.push(m) - 1;
     return `${VAR_TOKEN}${idx}__`;
   });
@@ -1759,8 +1803,14 @@ export class HttpProvider implements ApiProvider {
   }
 
   getEvaluationInputs(
-    context: Pick<CallApiContextParams, 'prompt' | 'vars' | 'evaluationId' | 'isGrading'>,
+    context: Pick<CallApiContextParams, 'prompt' | 'vars' | 'evaluationId' | 'isGrading'> & {
+      renderedPrompt?: string;
+    },
   ) {
+    const checkRepeatTemplates = !context.isGrading && !getEnvBool('PROMPTFOO_DISABLE_TEMPLATING');
+    if (checkRepeatTemplates) {
+      validateHttpConfigRepeatTemplates(this.url, this.config);
+    }
     if (!this.config.multipart) {
       return {};
     }
@@ -1796,12 +1846,24 @@ export class HttpProvider implements ApiProvider {
       typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
     const vars = {
       ...context.vars,
-      prompt: context.prompt.raw,
+      prompt: context.renderedPrompt ?? context.prompt.raw,
       ...(context.evaluationId ? { evaluationId: context.evaluationId } : {}),
       ...(tools === undefined ? {} : { tools: serialize(tools) }),
       ...(toolChoice === undefined ? {} : { tool_choice: serialize(toolChoice) }),
     };
-    return { filePaths: getHttpMultipartInputFilePaths(this.config.multipart, vars) };
+    const filePaths = getHttpMultipartInputFilePaths(this.config.multipart, vars);
+    if (checkRepeatTemplates) {
+      let fileIndex = 0;
+      for (const part of this.config.multipart.parts) {
+        if (part.kind === 'file' && part.source.type === 'path') {
+          const filePath = filePaths[fileIndex++];
+          if (!part.filenameTemplate && !part.filename) {
+            validateHttpRepeatTemplates(path.basename(filePath));
+          }
+        }
+      }
+    }
+    return { filePaths };
   }
 
   toString(): string {

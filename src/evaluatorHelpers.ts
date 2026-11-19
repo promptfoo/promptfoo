@@ -39,8 +39,11 @@ import { loadYaml } from './util/yamlLoad';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
-export function copyPromptVars(vars: Record<string, VarValue>): Record<string, VarValue> {
-  const copy = structuredClone(vars);
+export function copyPromptVars(
+  vars: Record<string, VarValue>,
+  copyVars: (vars: Record<string, VarValue>) => Record<string, VarValue>,
+): Record<string, VarValue> {
+  const copy = copyVars(vars);
   setLoadedFileMimeTypes(copy, setLoadedFileMimeTypes({ ...vars }));
   return copy;
 }

@@ -40,58 +40,7 @@ export const handleSimilar = async ({
     }
   }
 
-  if (Array.isArray(renderedValue)) {
-    // `not-similar` is the negation of the positive "similar to at least one"
-    // semantics, so it must pass only when the output is dissimilar to EVERY
-    // value. Fail (return early) on the first value the output is too similar
-    // to, reporting that value's score. If the output clears all of them,
-    // report the lowest score — the value it came closest to (the tightest
-    // margin). matchesSimilarity already normalizes the inverse score so
-    // higher is always better.
-    let closestResult: Omit<GradingResult, 'assertion'> | undefined;
-    // The assertion passes if the output matches ANY of the values (we return
-    // early on the first pass), so when none pass, report the best (highest)
-    // score — how close the output got to its closest value — not the worst.
-    // matchesSimilarity normalizes score so higher is always better, including
-    // for inverse and euclidean. This matches bleu/gleu/meteor (Math.max).
-    let maxScore = inverse ? 0 : Number.NEGATIVE_INFINITY;
-    for (const value of renderedValue) {
-      const result = await matchesSimilarity(
-        value,
-        outputString,
-        threshold,
-        inverse,
-        test.options,
-        metric,
-        providerCallContext,
-      );
-      if (inverse ? !result.pass : result.pass) {
-        return {
-          assertion,
-          ...result,
-        };
-      }
-      if (inverse && (!closestResult || result.score < closestResult.score)) {
-        closestResult = result;
-      } else if (!inverse && result.score > maxScore) {
-        maxScore = result.score;
-      }
-    }
-    if (inverse) {
-      // renderedValue is non-empty (invariant above), so closestResult is set.
-      invariant(closestResult, 'Similarity result missing');
-      return {
-        assertion,
-        ...closestResult,
-      };
-    }
-    return {
-      assertion,
-      pass: false,
-      score: maxScore,
-      reason: `None of the provided values met the similarity threshold`,
-    };
-  } else {
+  if (!Array.isArray(renderedValue)) {
     return {
       assertion,
       ...(await matchesSimilarity(
@@ -105,4 +54,45 @@ export const handleSimilar = async ({
       )),
     };
   }
+
+  let closestResult: Omit<GradingResult, 'assertion'> | undefined;
+  let graderFailure: Omit<GradingResult, 'assertion'> | undefined;
+  let maxScore = Number.NEGATIVE_INFINITY;
+  for (const value of renderedValue) {
+    const result = await matchesSimilarity(
+      value,
+      outputString,
+      threshold,
+      inverse,
+      test.options,
+      metric,
+      providerCallContext,
+    );
+    // Similar needs one match. Not-similar needs every comparison to pass.
+    if (inverse ? !result.pass : result.pass) {
+      return { assertion, ...result };
+    }
+    if (result.metadata?.graderError === true) {
+      graderFailure ??= result;
+      continue;
+    }
+    if (inverse && (!closestResult || result.score < closestResult.score)) {
+      closestResult = result;
+    } else if (!inverse && result.score > maxScore) {
+      maxScore = result.score;
+    }
+  }
+  if (inverse) {
+    invariant(closestResult, 'Similarity result missing');
+    return { assertion, ...closestResult };
+  }
+  if (graderFailure) {
+    return { assertion, ...graderFailure };
+  }
+  return {
+    assertion,
+    pass: false,
+    score: maxScore,
+    reason: 'None of the provided values met the similarity threshold',
+  };
 };

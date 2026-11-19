@@ -1883,6 +1883,7 @@ function adjustConcurrencyForSerialFeatures({
 }
 
 interface ProcessEvalStepOptions {
+  bayesAtNInput?: PreparedBayesAtNInput;
   deferGrading?: boolean;
   onRowsReady?: () => void;
   precomputedRows?: EvaluateResult[];
@@ -2419,6 +2420,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     evalStep: RunEvalOptions,
     index: number,
     {
+      bayesAtNInput,
       deferGrading = false,
       onRowsReady,
       precomputedRows,
@@ -2433,6 +2435,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         const rows =
           precomputedRows ||
           (await this.runEvalStepAfterBeforeEach(evalStep, {
+            bayesAtNInput,
             deferGrading,
             deferredGradingAbortSignal: context.deferredGradingAbortSignal,
             onRowsReady,
@@ -2451,12 +2454,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private async runEvalStepAfterBeforeEach(
     evalStep: RunEvalOptions,
     {
+      bayesAtNInput,
       deferGrading,
       deferredGradingAbortSignal,
       onRowsReady,
       providerCallQueue,
       testSuite,
     }: {
+      bayesAtNInput?: PreparedBayesAtNInput;
       deferGrading: boolean;
       deferredGradingAbortSignal?: AbortSignal;
       onRowsReady?: () => void;
@@ -2464,8 +2469,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
-    const bayesAtNInput = this.bayesAtNInputs.get(evalStep);
-    this.bayesAtNInputs.delete(evalStep);
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
@@ -2621,12 +2624,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const bayesAtNInput = this.bayesAtNInputs.get(evalStep);
+    this.bayesAtNInputs.delete(evalStep);
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
         evalStep,
         index,
-        { deferGrading, providerCallQueue },
+        { bayesAtNInput, deferGrading, providerCallQueue },
         context,
       );
     }
@@ -2654,6 +2659,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           evalStepWithSignal,
           index,
           {
+            bayesAtNInput,
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
             providerCallQueue,
@@ -3979,15 +3985,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           'Bayes@N does not support conversation history, output registers, or shared provider sessions',
         );
       }
+      const preparedQuestions = new Map<string, PreparedBayesAtNInput['question']>();
       for (const step of runEvalOptions) {
         checkAbort();
-        const prepared = await prepareBayesAtNInput(step, testSuite, checkAbort);
-        this.bayesAtNInputs.set(step, prepared);
+        const { sourceHash, question } = await prepareBayesAtNInput(step, testSuite, checkAbort);
+        const key = JSON.stringify([step.repeatGroupId, step.promptIdx]);
+        const previous = preparedQuestions.get(key);
+        if (previous && previous.inputHash !== question.inputHash) {
+          throw new Error('Bayes@N requires identical question and grading inputs across repeats');
+        }
+        const sharedQuestion = previous ?? question;
+        preparedQuestions.set(key, sharedQuestion);
+        this.bayesAtNInputs.set(step, { sourceHash, question: sharedQuestion });
       }
       const currentPlan = createBayesAtNPlan(
         runEvalOptions.map((step) => ({
           ...step,
-          inputHash: this.bayesAtNInputs.get(step)!.inputHash,
+          inputHash: this.bayesAtNInputs.get(step)!.question.inputHash,
           provider: {
             id: () =>
               sanitizeObject({ id: step.provider.id() }, { sanitizeUrls: true, maxDepth: Infinity })

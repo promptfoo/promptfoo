@@ -176,6 +176,31 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  it.each([
+    { input: 'Expected output', response: { error: 'Embedding unavailable' } },
+    { input: 'Sample output', response: { error: 'Embedding unavailable' } },
+    { input: 'Expected output', response: {} },
+    { input: 'Sample output', response: { embedding: [] } },
+  ])('tags unusable embedding responses: %j', async ({ input, response }) => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation(async (text) =>
+      text === input
+        ? { ...response, tokenUsage: { total: 3, cached: 0, numRequests: 1 } }
+        : { embedding: [1, 0], cached: true, tokenUsage: { total: 0, cached: 5, numRequests: 0 } },
+    );
+
+    for (const inverse of [false, true]) {
+      await expect(
+        matchesSimilarity('Expected output', 'Sample output', 0.5, inverse),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: response.error ?? 'Embedding not found',
+        metadata: { graderError: true },
+        tokensUsed: { total: 3, cached: 5, numRequests: 1 },
+      });
+    }
+  });
+
   it('should return zero similarity for zero-magnitude embeddings', async () => {
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
       embedding: [0, 0, 0],
@@ -439,6 +464,7 @@ describe('matchesSimilarity', () => {
             pass: false,
             score: 0,
             reason: `Invalid similarity score: ${invalidScore}`,
+            metadata: { graderError: true },
             tokensUsed: { total: 10, prompt: 4, completion: 6 },
           });
         }
@@ -520,6 +546,28 @@ describe('matchesSimilarity', () => {
   });
 
   describe('metric validation', () => {
+    it.each([{ error: 'Similarity unavailable' }, {}])(
+      'tags native similarity failures: %j',
+      async (response) => {
+        const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
+          callSimilarityApi: vi.fn().mockResolvedValue({
+            ...response,
+            tokenUsage: { total: 5, numRequests: 1 },
+          }),
+        });
+
+        await expect(
+          matchesSimilarity('expected', 'output', 0.8, false, { provider }),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: response.error ?? 'Unknown error fetching similarity',
+          metadata: { graderError: true },
+          tokensUsed: { total: 5, numRequests: 1 },
+        });
+      },
+    );
+
     it.each([NaN, Infinity, '0.9', { pass: true, score: 50 }])(
       'rejects malformed native similarity values: %j',
       async (similarity) => {
@@ -533,6 +581,7 @@ describe('matchesSimilarity', () => {
           pass: false,
           score: 0,
           reason: `Invalid similarity score: ${similarity}`,
+          metadata: { graderError: true },
         });
       },
     );
@@ -596,6 +645,7 @@ describe('matchesSimilarity', () => {
       ).resolves.toMatchObject({
         pass: false,
         reason: expect.stringContaining('only supports cosine similarity'),
+        metadata: { graderError: true },
       });
     });
 

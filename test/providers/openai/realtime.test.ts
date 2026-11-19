@@ -115,6 +115,7 @@ const createPersistentTextConfig = () => ({
 
 const createHelloProviderResponse = () => ({
   output: 'hello',
+  cached: false,
   tokenUsage: { prompt: 1, completion: 1, total: 2 },
   metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
 });
@@ -1030,21 +1031,28 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.config.maintainContext).toBe(true);
     });
 
-    it('should treat an empty realtime conversation ID as stateless', async () => {
+    it('uses an empty conversation ID for one turn without disabling later conversations', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { apiKey: 'test-key', modalities: ['text'], maintainContext: true },
       });
       const response = createHelloProviderResponse();
-      const persistentRequest = vi.spyOn(provider as any, 'persistentWebSocketRequest');
+      const persistentRequest = vi
+        .spyOn(provider, 'persistentWebSocketRequest')
+        .mockResolvedValue(response);
       const directRequest = vi
-        .spyOn(provider as any, 'directWebSocketRequest')
+        .spyOn(provider, 'directWebSocketRequest')
         .mockResolvedValue(response);
 
       await provider.callApi('hello', { test: { metadata: { conversationId: '' } } } as any);
 
       expect(directRequest).toHaveBeenCalledOnce();
       expect(persistentRequest).not.toHaveBeenCalled();
-      expect(provider.config.maintainContext).toBe(false);
+      expect(provider.config.maintainContext).toBe(true);
+
+      await provider.callApi('hello', createLoanConversationContext() as any);
+
+      expect(persistentRequest).toHaveBeenCalledOnce();
+      expect(directRequest).toHaveBeenCalledOnce();
     });
 
     it('should maintain conversation context across multiple messages', async () => {

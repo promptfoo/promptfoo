@@ -125,8 +125,6 @@ export function hasBayesAtNSharedSession(step: InputStep): boolean {
   const hasConversation =
     (typeof conversationId === 'string' && conversationId !== '') ||
     typeof conversationId === 'number';
-  const sharedConfig = (config: Record<string, unknown>) =>
-    hasSharedSession(config) || (config.maintainContext === true && hasConversation);
   const seenProviders = new Set<object>();
   const hasSharedProvider = (provider: unknown, target = false): boolean => {
     if (!provider || typeof provider !== 'object' || seenProviders.has(provider)) {
@@ -139,6 +137,11 @@ export function hasBayesAtNSharedSession(step: InputStep): boolean {
     if ('id' in provider || 'config' in provider) {
       const config =
         'config' in provider ? ((provider.config as Record<string, unknown>) ?? {}) : {};
+      const reportsNativeInputs =
+        'getEvaluationInputs' in provider && typeof provider.getEvaluationInputs === 'function';
+      const sharedConfig = (config: Record<string, unknown>) =>
+        hasSharedSession(config) ||
+        (!reportsNativeInputs && config.maintainContext === true && hasConversation);
       return (
         sharedConfig(config) ||
         sharedConfig({

@@ -13,9 +13,108 @@ import { OpenAiRealtimeProvider } from '../../src/providers/openai/realtime';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
-import type { Assertion, TestCase } from '../../src/types/index';
+import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 describeEvaluator('Bayes@N review regressions', () => {
+  it('rejects a beforeEach input change when the per-step timeout is enabled', async () => {
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach' && 'test' in context) {
+        context.test.vars = { question: 'changed' };
+      }
+      return context;
+    });
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    await expect(
+      evaluate(
+        {
+          providers: [{ id: () => 'target', callApi }],
+          prompts: [toPrompt('{{ question }}')],
+          tests: [{ vars: { question: 'original' } }],
+          extensions: ['test-hook'],
+        },
+        new Eval({}),
+        { bayesAtN: true, repeat: 2, cache: false, timeoutMs: 30_000 },
+      ),
+    ).rejects.toThrow('unchanged question and grading inputs after beforeEach');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it('reuses the prepared render with a timeout while keeping file inputs and trial vars intact', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-media-repeats-'));
+    const file = path.join(directory, 'question.png');
+    const bytes = Buffer.from('question image');
+    fs.writeFileSync(file, bytes);
+    const expectedMedia = `data:image/png;base64,${bytes.toString('base64')}`;
+    const seen: { prompt: string; media: unknown; repeat: unknown; step: unknown }[] = [];
+    const callApi: ApiProvider['callApi'] = async (prompt, context) => {
+      seen.push({
+        prompt,
+        media: context?.vars.media,
+        repeat: context?.vars.__repeatIndex,
+        step: context?.vars.__evalStepId,
+      });
+      if (context) {
+        context.vars.media = 'provider-local change';
+      }
+      return { output: 'answer' };
+    };
+    const render = vi.fn(async () => 'Question image: {{ media }}');
+    const record = new Eval({});
+    try {
+      await evaluate(
+        {
+          providers: [{ id: () => 'target', callApi }],
+          prompts: [{ ...toPrompt('image question'), function: render }],
+          tests: [{ vars: { media: `file://${file}` }, options: { disableVarExpansion: true } }],
+        },
+        record,
+        { bayesAtN: true, repeat: 4, cache: false, maxConcurrency: 1, timeoutMs: 30_000 },
+      );
+      expect(render).toHaveBeenCalledTimes(4);
+      expect(seen).toEqual(
+        [0, 1, 2, 3].map((repeat) => ({
+          prompt: `Question image: ${expectedMedia}`,
+          media: expectedMedia,
+          repeat,
+          step: `test-${repeat}-prompt-0-repeat-${repeat}`,
+        })),
+      );
+      expect((await record.getRepeatStability())?.bayesAtN?.[0].mean).toBe(5 / 6);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('isolates each result provider record from afterEach mutations in other repeats', async () => {
+    const labels: (string | undefined)[] = [];
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'afterEach' && 'result' in context) {
+        labels.push(context.result.provider.label);
+        if (labels.length === 1) {
+          context.result.provider.label = 'first result only';
+        }
+      }
+      return context;
+    });
+    await evaluate(
+      {
+        providers: [
+          {
+            id: () => 'target',
+            label: 'target label',
+            callApi: async () => ({ output: 'answer' }),
+          },
+        ],
+        prompts: [toPrompt('question')],
+        tests: [{}],
+        extensions: ['test-hook'],
+      },
+      new Eval({}),
+      { bayesAtN: true, repeat: 3, cache: false, maxConcurrency: 1 },
+    );
+    expect(labels).toEqual(['target label', 'target label', 'target label']);
+  });
+
   it.each(['conversation', 0])(
     'rejects Realtime conversation reuse with ID %j',
     async (conversationId) => {

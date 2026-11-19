@@ -23,7 +23,8 @@ const { mockCallApi, mockCleanup, mockRegister, mockUnregister } = vi.hoisted(()
   mockUnregister: vi.fn(),
 }));
 
-vi.mock('../../../src/providers/openai/realtime', () => ({
+vi.mock('../../../src/providers/openai/realtime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/providers/openai/realtime')>()),
   OpenAiRealtimeProvider: vi.fn(),
 }));
 
@@ -343,6 +344,31 @@ describe('AzureRealtimeProvider', () => {
     );
     expect((provider as any).realtimeProviders.size).toBe(0);
     expect(mockCleanup).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses separate delegates when a prompt disables Azure Realtime context', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key', maintainContext: true },
+    });
+    const baseContext = createConversationContext();
+    const context = {
+      ...baseContext,
+      prompt: {
+        ...baseContext.prompt,
+        raw: 'hello',
+        label: 'question',
+        config: { maintainContext: false },
+      },
+      vars: {},
+    };
+
+    await Promise.all([provider.callApi('hello', context), provider.callApi('hello', context)]);
+
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+    expect(mockCleanup).toHaveBeenCalledTimes(2);
+    for (const { value } of vi.mocked(OpenAiRealtimeProvider).mock.results) {
+      expect(value.config.maintainContext).toBe(false);
+    }
   });
 
   it('releases a stateless realtime delegate when the request fails', async () => {
