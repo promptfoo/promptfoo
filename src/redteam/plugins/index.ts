@@ -70,10 +70,6 @@ import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
-import {
-  REMOTE_MISINFORMATION_BATCH_SIZE,
-  shouldChunkRemoteMisinformationRequests,
-} from './remoteMisinformation';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
@@ -113,6 +109,21 @@ type PluginClass<T extends PluginConfig> = new (
 ) => RedteamPluginBase;
 
 const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
+const REMOTE_MISINFORMATION_BATCH_SIZE = 20;
+
+export function shouldChunkRemoteMisinformationRequests(
+  key: string,
+  n: number,
+  config?: PluginConfig,
+) {
+  // Named inputs can require position-dependent materialization on the server.
+  return (
+    key === 'harmful:misinformation-disinformation' &&
+    n > REMOTE_MISINFORMATION_BATCH_SIZE &&
+    Object.keys(config?.inputs ?? {}).length === 0 &&
+    !neverGenerateRemote()
+  );
+}
 
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).

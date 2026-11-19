@@ -39,9 +39,8 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
-import { Plugins } from './plugins/index';
+import { Plugins, shouldChunkRemoteMisinformationRequests } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
-import { shouldChunkRemoteMisinformationRequests } from './plugins/remoteMisinformation';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
