@@ -36,7 +36,10 @@ const validatePath = (value: string, isTyping: boolean): ValidationError | undef
     return undefined;
   }
 
-  if (!filePath?.trim() || !functionName?.trim() || extra.length > 0) {
+  // splitExtensionReference keeps the `//` of `file://` in the path, so `file://:beforeAll`
+  // would otherwise pass as having a path.
+  const pathAfterProtocol = filePath?.replace(/^\/\//, '');
+  if (!pathAfterProtocol?.trim() || !functionName?.trim() || extra.length > 0) {
     return { message: 'Incorrect format. Must be of the format /path/to/file.js:hookFunction' };
   }
 
