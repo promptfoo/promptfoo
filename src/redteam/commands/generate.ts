@@ -61,11 +61,7 @@ import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
-import {
-  formatFailedPluginCounts,
-  PartialGenerationError,
-  ProbeLimitExceededError,
-} from '../types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -88,9 +84,12 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
     throw new PartialGenerationError(failedPlugins);
   }
 
+  const pluginList = failedPlugins.map(
+    (p) => `  - ${p.pluginId} (${p.generated ?? 0}/${p.requested} tests)`,
+  );
   const warningMessage = dedent`
     ${chalk.yellow('⚠️  Warning:')} Test case generation failed for ${failedPlugins.length} plugin(s):
-    ${formatFailedPluginCounts(failedPlugins)}
+    ${pluginList.join('\n')}
 
     ${chalk.dim('Possible causes:')}
       - API rate limiting or connectivity issues
