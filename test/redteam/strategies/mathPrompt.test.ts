@@ -1,5 +1,5 @@
 import { SingleBar } from 'cli-progress';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
@@ -11,6 +11,7 @@ import {
   encodeMathPrompt,
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
+import * as http from '../../../src/util/fetch/index';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 function createMathProgressBar() {
@@ -27,8 +28,8 @@ vi.mock('../../../src/cache');
 vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('mathPrompt', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  afterEach(() => {
+    vi.resetAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -80,8 +81,11 @@ describe('mathPrompt', () => {
 
     it('sends only the remote math contract', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        status: 200,
+        statusText: 'OK',
         data: { result: [{ vars: { prompt: 'encoded' } }] },
-      } as any);
+      });
 
       await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
         mathConcepts: ['topology'],
@@ -104,12 +108,18 @@ describe('mathPrompt', () => {
       expect(body).not.toContain('header-secret');
     });
 
-    it('should handle errors gracefully', async () => {
-      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
-      (SingleBar as any).mockImplementation(createMathProgressBar);
+    it('propagates the remote failure and stops the progress bar', async () => {
+      const error = new Error('Network error');
+      const progressBar = createMathProgressBar();
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(error);
+      vi.mocked(SingleBar).mockImplementation(function () {
+        return progressBar;
+      });
 
-      const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
-      expect(result).toEqual([]);
+      await expect(generateMathPrompt([{ vars: { prompt: 'test' } }], 'prompt', {})).rejects.toBe(
+        error,
+      );
+      expect(progressBar.stop).toHaveBeenCalledOnce();
     });
   });
 
@@ -145,8 +155,100 @@ describe('mathPrompt', () => {
   });
 
   describe('addMathPrompt', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
+    it.each([
+      { status: 524, message: 'Remote MathPrompt generation failed (HTTP 524).' },
+      { status: 200, message: 'Remote MathPrompt generation returned invalid JSON (HTTP 200).' },
+    ])(
+      'reports HTTP $status for an HTML response when the local fallback has no API key',
+      async ({ status, message }) => {
+        const cache =
+          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+        vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+        vi.mocked(remoteGeneration.getRemoteGenerationUrl).mockReturnValue(
+          'https://example.test/task',
+        );
+        vi.mocked(fetchWithCache).mockImplementationOnce(cache.fetchWithCache);
+        vi.spyOn(http, 'fetchWithRetries').mockResolvedValueOnce(
+          new Response('<html>private upstream details</html>', { status }),
+        );
+        vi.mocked(redteamProviderManager.getProvider).mockRejectedValueOnce(
+          new Error('OpenAI API key is not set'),
+        );
+
+        await expect(
+          cache.withCacheEnabled(false, () =>
+            addMathPrompt([{ vars: { prompt: 'hello' } }], 'prompt', {
+              mathConcepts: ['topology'],
+            }),
+          ),
+        ).rejects.toMatchObject({ message });
+        expect(redteamProviderManager.getProvider).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each([
+      { status: 503, data: { result: [] }, message: 'HTTP 503' },
+      { status: 200, data: { result: {} }, message: 'expected an array of test cases' },
+      { status: 200, data: {}, message: 'expected an array of test cases' },
+    ])(
+      'reports the remote failure for HTTP $status with $data',
+      async ({ status, data, message }) => {
+        vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status,
+          statusText: '',
+          data,
+        });
+        vi.mocked(redteamProviderManager.getProvider).mockRejectedValueOnce(
+          new Error('No local key'),
+        );
+
+        await expect(addMathPrompt([{ vars: { prompt: 'hello' } }], 'prompt', {})).rejects.toThrow(
+          message,
+        );
+      },
+    );
+
+    it.each([200, 503])('uses local results after HTTP %i with no remote cases', async (status) => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        cached: false,
+        status,
+        statusText: '',
+        data: { result: [] },
+      });
+      const provider = createMockProvider({
+        response: createProviderResponse({ output: JSON.stringify({ encodedPrompt: 'local' }) }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValueOnce(provider);
+
+      const result = await addMathPrompt([{ vars: { prompt: 'hello' } }], 'prompt', {
+        mathConcepts: ['topology'],
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars?.prompt).toContain('local');
+      expect(provider.callApi).toHaveBeenCalledOnce();
+    });
+
+    it('preserves errors from the explicitly selected local provider', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      const provider = createMockProvider();
+      const error = new Error('Local provider unavailable');
+      vi.mocked(provider.callApi).mockRejectedValueOnce(error);
+
+      await expect(
+        addMathPrompt(
+          [{ vars: { prompt: 'hello' } }],
+          'prompt',
+          {},
+          {
+            generationProviderSelection: { source: 'explicit', provider },
+          },
+        ),
+      ).rejects.toBe(error);
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
     it('should use custom math concepts when provided', async () => {
@@ -239,11 +341,13 @@ describe('mathPrompt', () => {
       vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(fetchWithCache).mockResolvedValue({
         cached: false,
+        status: 200,
+        statusText: 'OK',
         data: {
           result: [{ vars: { prompt: 'remote-default' } }],
           tokenUsage: { total: 45, prompt: 30, completion: 15, numRequests: 3 },
         },
-      } as any);
+      });
 
       const result = await addMathPrompt(
         [{ vars: { prompt: 'test' } }] as any,

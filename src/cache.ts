@@ -10,7 +10,11 @@ import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
-import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
+import {
+  isAbortError,
+  isTransientConnectionError,
+  ResponseJsonParseError,
+} from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudAuthHeaderName,
@@ -807,10 +811,14 @@ function parseFetchResponse(
     if (sanitizeResponse) {
       // Malformed JSON cannot pass through the sanitizer. Body text, parser excerpts,
       // and statusText can all contain escaped credentials, so omit them entirely.
-      throw new Error(`${message} Invalid JSON. HTTP ${response.status}.`);
+      throw new ResponseJsonParseError(
+        `${message} Invalid JSON. HTTP ${response.status}.`,
+        response.status,
+      );
     }
-    throw new Error(
+    throw new ResponseJsonParseError(
       `${message} ${(err as Error).message}. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
+      response.status,
     );
   }
 }
