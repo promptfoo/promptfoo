@@ -793,16 +793,6 @@ async function fetchAndReadBody(
   throw new Error('Exhausted body retries without returning or throwing');
 }
 
-/** Preserves the HTTP status separately from the JSON parser's diagnostic text. */
-export class ResponseJsonParseError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
-
 function parseFetchResponse(
   url: RequestInfo,
   response: Response,
@@ -814,18 +804,11 @@ function parseFetchResponse(
     return format === 'json' ? JSON.parse(responseText) : responseText;
   } catch (err) {
     const message = `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}:`;
-    if (sanitizeResponse) {
-      // Malformed JSON cannot pass through the sanitizer. Body text, parser excerpts,
-      // and statusText can all contain escaped credentials, so omit them entirely.
-      throw new ResponseJsonParseError(
-        `${message} Invalid JSON. HTTP ${response.status}.`,
-        response.status,
-      );
-    }
-    throw new ResponseJsonParseError(
-      `${message} ${(err as Error).message}. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
-      response.status,
-    );
+    // A sanitizer cannot remove credentials from malformed JSON or parser diagnostics.
+    const detail = sanitizeResponse
+      ? `Invalid JSON. HTTP ${response.status}.`
+      : `${(err as Error).message}. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`;
+    throw Object.assign(new Error(`${message} ${detail}`), { jsonParseStatus: response.status });
   }
 }
 
