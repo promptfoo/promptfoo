@@ -187,8 +187,9 @@ export async function createStreamResponse(
   } else if (typeof transform === 'string') {
     return (accumulator, data, context) => {
       const trimmedTransform = transform.trim();
-      // Check if it's a function expression (either arrow or regular)
-      const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+      // Arrow or function expression, named or not; `s` lets the parameter list span lines
+      const isFunctionExpression =
+        /^(\(.*?\)\s*=>|function\b[\w$\s]*\(.*?\))/s.test(trimmedTransform);
 
       let transformFn: Function;
       // Add process parameter for ESM compatibility - allows process.mainModule.require to work
