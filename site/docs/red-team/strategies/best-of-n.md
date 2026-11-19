@@ -78,7 +78,7 @@ Number of prompt variations to generate in each batch. Lower values provide more
 Usually best to set this to `1` and increase `nSteps` until you get a successful jailbreak.
 
 :::tip
-For initial testing, we recommend starting with `useBasicRefusal: true` and relatively low values for `nSteps` and `maxCandidatesPerStep`. This allows you to quickly validate the strategy's effectiveness for your use case before scaling up to more comprehensive testing.
+For initial testing, we recommend starting with `useBasicRefusal: true` and relatively low values for `nSteps` and `maxCandidatesPerStep`. Increase these limits after checking the results and API cost.
 :::
 
 ## Performance

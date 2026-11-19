@@ -2,7 +2,7 @@
 sidebar_position: 2
 sidebar_label: Reference
 title: Configuration Reference - Complete API Documentation
-description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
+description: Look up Promptfoo configuration fields for prompts, providers, tests, assertions, transforms, hooks, and eval options. See types and examples for each field.
 keywords:
   [
     promptfoo reference,
@@ -576,7 +576,7 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
-These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
+Use hooks for setup, teardown, logging, or integrations. The extension function receives the `hookName` and a `context` object specific to that hook.
 
 The `beforeAll`, `beforeEach`, and `afterEach` hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 
@@ -644,7 +644,7 @@ For a custom target, set `flagged` explicitly. `flaggedInput: true` or `flaggedO
 
 ## Transformation Pipeline
 
-Understanding the transformation pipeline is crucial for complex evaluations, especially for [RAG systems](/docs/guides/evaluate-rag) which require [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). Here's how transforms are applied:
+Transforms run in the order below. For [RAG evals](/docs/guides/evaluate-rag), this order determines which data reaches [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based).
 
 ### Execution Flow
 
