@@ -209,6 +209,10 @@ All providers support these common parameters:
 | `maxSpeakers` | Expected number of speakers (hint)         |
 | `audioFormat` | Input audio format                         |
 
+<a id="llm-cascading"></a>
+<a id="multi-voice-conversations"></a>
+<a id="phone-integration"></a>
+
 ### Agent-Specific Parameters
 
 Without `agentId`, the provider creates a temporary agent and deletes it after its last evaluation finishes. Reusing the provider after cleanup creates a new agent. Temporary agent IDs are not cached. If you set `agentId`, cleanup leaves that agent in place.
