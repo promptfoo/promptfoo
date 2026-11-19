@@ -140,10 +140,6 @@ Test voice AI agents with LLM backends and evaluation criteria:
 - Multi-turn conversation simulation
 - Automated evaluation criteria
 - Tool calling and mocking
-- LLM cascading for cost optimization
-- Custom LLM endpoints
-- Multi-voice conversations
-- Phone integration (Twilio, SIP)
 
 **Example:**
 
@@ -225,12 +221,6 @@ Without `agentId`, the provider creates a temporary agent and deletes it after i
 | `evaluationCriteria` | Evaluation criteria for agent performance |
 | `toolMockConfig`     | Mock tool responses for testing           |
 | `maxTurns`           | Maximum conversation turns (default: 10)  |
-| `llmCascade`         | LLM fallback configuration                |
-| `customLLM`          | Custom LLM endpoint configuration         |
-| `mcpConfig`          | Model Context Protocol integration        |
-| `multiVoice`         | Multi-voice conversation configuration    |
-| `postCallWebhook`    | Webhook notification after conversation   |
-| `phoneConfig`        | Twilio or SIP phone integration           |
 
 ## Examples
 
@@ -343,58 +333,6 @@ providers:
         gender: male
         age: middle_aged
         accent: american
-```
-
-### LLM Cascading
-
-Optimize costs with automatic fallback:
-
-```yaml
-providers:
-  - id: elevenlabs:agents
-    config:
-      llmCascade:
-        primary: gpt-4o
-        fallback:
-          - gpt-4o-mini
-          - gpt-3.5-turbo
-        cascadeOnError: true
-        cascadeOnLatency:
-          enabled: true
-          maxLatencyMs: 5000
-```
-
-### Multi-voice Conversations
-
-Different voices for different characters:
-
-```yaml
-providers:
-  - id: elevenlabs:agents
-    config:
-      multiVoice:
-        characters:
-          - name: Agent
-            voiceId: 21m00Tcm4TlvDq8ikWAM
-            role: Customer support representative
-          - name: Customer
-            voiceId: 2EiwWnXFnvU5JabPnv8n
-            role: Customer seeking help
-```
-
-### Phone Integration
-
-Test agents with real phone calls:
-
-```yaml
-providers:
-  - id: elevenlabs:agents
-    config:
-      phoneConfig:
-        provider: twilio
-        twilioAccountSid: ${TWILIO_ACCOUNT_SID}
-        twilioAuthToken: ${TWILIO_AUTH_TOKEN}
-        twilioPhoneNumber: +1234567890
 ```
 
 ## Cost Tracking
@@ -555,19 +493,6 @@ providers:
     config:
       cache: true
       cacheTTL: 86400 # 24 hours
-```
-
-**Implement LLM cascading for agents:**
-
-```yaml
-providers:
-  - id: elevenlabs:agents
-    config:
-      llmCascade:
-        primary: gpt-4o-mini # Cheaper first
-        fallback:
-          - gpt-4o # Better fallback
-        cascadeOnError: true
 ```
 
 **Test with shorter prompts during development:**

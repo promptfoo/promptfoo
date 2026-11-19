@@ -447,7 +447,6 @@ Check out complete examples:
 
 - Use `gpt-5-mini` instead of `gpt-5`
 - Enable caching for repeated tests
-- Implement LLM cascading
 - Test with shorter prompts first
 
 **Evaluation criteria always failing:**
