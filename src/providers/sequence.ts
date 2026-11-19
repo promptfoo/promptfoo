@@ -16,6 +16,39 @@ interface SequenceProviderConfig {
   separator?: string;
 }
 
+function getResponseGuardrails(response: ProviderResponse): ProviderResponse['guardrails'] {
+  const history = response.metadata?.redteamHistory;
+  return (
+    response.guardrails ||
+    (Array.isArray(history) ? history[history.length - 1]?.guardrails : undefined)
+  );
+}
+
+function mergeGuardrails(
+  current: ProviderResponse['guardrails'],
+  next: ProviderResponse['guardrails'],
+): ProviderResponse['guardrails'] {
+  if (!current) {
+    return next ? { ...next } : undefined;
+  }
+  if (!next) {
+    return current;
+  }
+
+  const flagged = current.flagged === true || next.flagged === true;
+  const reason = flagged
+    ? ((current.flagged === true ? current.reason : undefined) ??
+      (next.flagged === true ? next.reason : undefined))
+    : (current.reason ?? next.reason);
+
+  return {
+    flagged,
+    flaggedInput: current.flaggedInput === true || next.flaggedInput === true,
+    flaggedOutput: current.flaggedOutput === true || next.flaggedOutput === true,
+    ...(reason !== undefined && { reason }),
+  };
+}
+
 export class SequenceProvider implements ApiProvider {
   private readonly sequenceInputs: string[];
   private readonly separator: string;
@@ -47,6 +80,10 @@ export class SequenceProvider implements ApiProvider {
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
     const accumulatedTokenUsage = createEmptyTokenUsage();
+    let allStepsCached = true;
+    let accumulatedCost: number | undefined;
+    let accumulatedIncurredCost: number | undefined;
+    let accumulatedGuardrails: ProviderResponse['guardrails'];
 
     // Send each input to the original provider
     for (const input of this.sequenceInputs) {
@@ -59,18 +96,40 @@ export class SequenceProvider implements ApiProvider {
 
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
+      allStepsCached &&= response.cached === true;
+      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
+      if (response.cost !== undefined && Number.isFinite(response.cost)) {
+        accumulatedCost = (accumulatedCost ?? 0) + response.cost;
+      }
+      const responseIncurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+      if (responseIncurredCost !== undefined && Number.isFinite(responseIncurredCost)) {
+        accumulatedIncurredCost = (accumulatedIncurredCost ?? 0) + responseIncurredCost;
+      }
+      accumulatedGuardrails = mergeGuardrails(
+        accumulatedGuardrails,
+        getResponseGuardrails(response),
+      );
+
       if (response.error) {
-        return response;
+        return {
+          ...response,
+          cached: allStepsCached,
+          tokenUsage: accumulatedTokenUsage,
+          cost: accumulatedCost,
+          incurredCost: accumulatedIncurredCost,
+          ...(accumulatedGuardrails && { guardrails: accumulatedGuardrails }),
+        };
       }
 
       responses.push(response.output);
-
-      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
     }
 
     return {
       output: responses.join(this.separator),
       tokenUsage: accumulatedTokenUsage,
+      ...(accumulatedCost !== undefined && { cost: accumulatedCost }),
+      ...(accumulatedIncurredCost !== undefined && { incurredCost: accumulatedIncurredCost }),
+      ...(accumulatedGuardrails && { guardrails: accumulatedGuardrails }),
     };
   }
 
