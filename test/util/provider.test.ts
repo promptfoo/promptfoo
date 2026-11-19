@@ -449,6 +449,50 @@ describe('doesProviderRefMatch', () => {
     ).toBe(false);
   });
 
+  it.each([
+    'exec:./scripts/runner.sh --verbose',
+    'exec:"./scripts/runner.sh" --verbose',
+    "exec:'./scripts/runner.sh' --verbose",
+    'exec:./scripts/runner.sh --output ../other/result.json',
+    'exec:  ./scripts/runner.sh\t--verbose',
+  ])('matches exec executable paths without resolving arguments: %s', (id) => {
+    expect(doesProviderRefMatch(`exec:${path.resolve('scripts')}/*`, createProvider(id))).toBe(
+      true,
+    );
+  });
+
+  it('preserves exec arguments when matching a normalized command prefix', () => {
+    const provider = createProvider('exec:./scripts/runner.sh\t--mode  "fast mode"');
+    const executable = path.resolve('scripts/runner.sh');
+    expect(doesProviderRefMatch(`exec:${executable}\t--mode  *`, provider)).toBe(true);
+    expect(doesProviderRefMatch(`exec:${executable} --mode *`, provider)).toBe(false);
+    expect(doesProviderRefMatch(`exec:${executable} --other *`, provider)).toBe(false);
+  });
+
+  it('normalizes quoted exec paths containing spaces', () => {
+    const provider = createProvider('exec:"./scripts/my runner.sh" --verbose');
+    expect(doesProviderRefMatch(`exec:${path.resolve('scripts')}/*`, provider)).toBe(true);
+  });
+
+  it('does not combine adjacent quoted command and argument tokens into a path', () => {
+    const provider = createProvider('exec:"./other"../scripts/runner --verbose');
+    expect(doesProviderRefMatch(`exec:${path.resolve('other..', 'scripts')}/*`, provider)).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    'exec:echo ./scripts/runner.sh',
+    'exec:./other/runner.sh ../scripts/result.json',
+    'exec:./scripts-other/runner.sh ../scripts/result.json',
+    'exec:"./scripts/runner.sh --verbose',
+    'exec:"" ./scripts/runner.sh',
+  ])('does not match an exec argument as an executable path: %s', (id) => {
+    expect(doesProviderRefMatch(`exec:${path.resolve('scripts')}/*`, createProvider(id))).toBe(
+      false,
+    );
+  });
+
   it('preserves raw label wildcards that look like file paths', () => {
     const provider = createProvider('custom-provider', 'file://./providers/alpha');
     expect(doesProviderRefMatch('file://./providers/*', provider)).toBe(true);

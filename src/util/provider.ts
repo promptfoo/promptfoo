@@ -78,7 +78,17 @@ function normalizeWildcardPath(raw: string, canonical: string): string {
   // An exec ID can contain a command and arguments. Resolving the whole string as
   // a path can remove the executable when an argument contains a parent segment.
   if (raw.startsWith('exec:') && /\s/.test(raw)) {
-    return raw;
+    const script = raw.slice('exec:'.length);
+    const command = /^\s*(?:"([^"]*)"|'([^']*)'|([^\s"']+))/.exec(script);
+    const executable = command?.[1] || command?.[2] || command?.[3];
+    if (!command || !executable || !/[\\/]/.test(executable)) {
+      return raw;
+    }
+    const args = script.slice(command[0].length);
+    if (args && !/^\s/.test(args)) {
+      return raw;
+    }
+    return canonicalizeProviderId('exec:' + executable) + args;
   }
   // The shared canonicalizer preserves absolute file IDs for exact matching.
   return canonical.startsWith('file://')
