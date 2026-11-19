@@ -15,9 +15,10 @@ import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
   expandPluginCollections,
+  getAiucCoverageGap,
   type TestResultStats,
 } from './FrameworkComplianceUtils';
-import CSVExporter from './FrameworkCsvExporter';
+import FrameworkExporter from './FrameworkExporter';
 import { useReportStore } from './store';
 import type { UnifiedConfig } from '@promptfoo/types';
 
@@ -105,10 +106,12 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
     frameworksToShow.forEach((framework) => {
       const nonCompliantPlugins = getNonCompliantPlugins(framework);
-      result[framework] = nonCompliantPlugins.length === 0;
+      result[framework] =
+        nonCompliantPlugins.length === 0 &&
+        (framework !== 'aiuc:1' || !getAiucCoverageGap(categoryStats));
     });
     return result;
-  }, [frameworksToShow, getNonCompliantPlugins]);
+  }, [frameworksToShow, getNonCompliantPlugins, categoryStats]);
 
   const pluginComplianceStats = React.useMemo(() => {
     // Collect all unique plugins across all frameworks to show
@@ -180,7 +183,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
           {frameworksToShow.length})
         </h2>
-        <CSVExporter
+        <FrameworkExporter
           categoryStats={categoryStats}
           pluginPassRateThreshold={pluginPassRateThreshold}
           frameworksToShow={frameworksToShow}
@@ -189,9 +192,15 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
       <Card className="overflow-hidden rounded-xl transition-shadow duration-300">
         <CardContent className="pt-6">
           <p className="mb-2 text-sm text-muted-foreground">
-            {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
-            {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
-            across {pluginComplianceStats.total} plugins)
+            {pluginComplianceStats.totalTests === 0 ? (
+              'No test results for the mapped framework plugins.'
+            ) : (
+              <>
+                {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate
+                ({pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
+                across {pluginComplianceStats.total} plugins)
+              </>
+            )}
           </p>
           {/* Progress bar */}
           <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
