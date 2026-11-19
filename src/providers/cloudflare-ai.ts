@@ -73,12 +73,30 @@ function getApiBaseUrl(config?: CloudflareAiConfig, env?: EnvOverrides): string 
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
 }
 
-function getOpenAiProviderOptions(providerOptions: CloudflareAiProviderOptions) {
+// The chat provider resolves these itself: it loads `file://` references, renders Nunjucks
+// vars and merges in MCP tools. `passthrough` is spread into the body last, so a raw copy of
+// one of them would overwrite the resolved value. The completion and embedding providers do
+// not resolve them, so they keep receiving these through `passthrough`.
+const chatResolvedOptionNames = [
+  'functions',
+  'response_format',
+  'tool_choice',
+  'tools',
+] satisfies (keyof OpenAiCompletionOptions)[];
+
+function getOpenAiProviderOptions(
+  providerOptions: CloudflareAiProviderOptions,
+  resolvedOptionNames: string[] = [],
+) {
   const config = providerOptions.config || {};
   const apiBaseUrl = getApiBaseUrl(config, providerOptions.env);
   // Only genuine model parameters belong in the request body; promptfoo's own settings
   // (credentials, headers, cost overrides, basePath) stay local.
-  const { modelParameters } = splitLocalOptions(config, ['accountId', 'accountIdEnvar']);
+  const { modelParameters } = splitLocalOptions(config, [
+    'accountId',
+    'accountIdEnvar',
+    ...resolvedOptionNames,
+  ]);
 
   const openAiConfig: OpenAiCompletionOptions = {
     ...config,
@@ -109,7 +127,7 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   private modelType = 'chat';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    super(modelName, getOpenAiProviderOptions(providerOptions));
+    super(modelName, getOpenAiProviderOptions(providerOptions, chatResolvedOptionNames));
 
     this.cloudflareConfig = providerOptions.config || {};
   }
