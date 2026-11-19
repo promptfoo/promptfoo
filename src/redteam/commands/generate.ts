@@ -87,7 +87,9 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
     return;
   }
 
-  const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+  const pluginList = failedPlugins.map(
+    (p) => `  - ${p.pluginId} (${p.generated ?? 0}/${p.requested} tests)`,
+  );
   const warningMessage = dedent`
     ${chalk.yellow('⚠️  Warning:')} Test case generation failed for ${failedPlugins.length} plugin(s):
     ${pluginList.join('\n')}
@@ -668,7 +670,7 @@ async function doGenerateRedteamInternal(
   let purpose: string;
   let entities: string[] = [];
   let finalInjectVar: string = '';
-  let failedPlugins: { pluginId: string; requested: number }[] = [];
+  let failedPlugins: FailedPluginInfo[] = [];
   const generationTokenUsage: TokenUsage = {
     cached: 0,
     completion: 0,
@@ -682,7 +684,7 @@ async function doGenerateRedteamInternal(
     logger.info(`Generating tests for ${contexts.length} contexts...`);
 
     // Collect failed plugins across all contexts
-    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+    const allFailedPlugins: FailedPluginInfo[] = [];
     let firstContextPurpose: string | undefined;
 
     for (const context of contexts) {
@@ -861,6 +863,8 @@ async function doGenerateRedteamInternal(
     }
 
     let ret: Partial<UnifiedConfig> | undefined;
+    // A later generation, including --strict, must retry an incomplete batch.
+    const hasIncompleteBatch = failedPlugins.some((plugin) => plugin.generated !== undefined);
     if (options.output && options.output.endsWith('.burp')) {
       // Write in Burp Intruder compatible format
       const outputLines = redteamTests
@@ -904,9 +908,10 @@ async function doGenerateRedteamInternal(
         redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
         metadata: {
           ...existingMetadata,
-          ...(configPath && redteamTests.length > 0
-            ? { configHash: await getConfigHash(configPath, options) }
-            : { configHash: 'force-regenerate' }),
+          configHash:
+            configPath && !hasIncompleteBatch
+              ? await getConfigHash(configPath, options)
+              : 'force-regenerate',
           ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
           generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
@@ -976,7 +981,9 @@ async function doGenerateRedteamInternal(
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...existingMetadata,
-        configHash: await getConfigHash(configPath, options),
+        configHash: hasIncompleteBatch
+          ? 'force-regenerate'
+          : await getConfigHash(configPath, options),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
         generation,
       };
@@ -1133,7 +1140,7 @@ export function redteamGenerateCommand(
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .option(
       '--strict',
-      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      'Fail if a plugin generates no tests or a batched request returns fewer tests than requested. By default, generation continues with a warning.',
       false,
     )
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {

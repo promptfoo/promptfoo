@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
+import { fetchWithCache, withCacheNamespace } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -17,7 +17,10 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import { recordGenerationTokenUsage } from '../generationTokenUsage';
+import {
+  recordFailedGenerationTokenUsage,
+  recordGenerationTokenUsage,
+} from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -67,6 +70,10 @@ import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import {
+  REMOTE_MISINFORMATION_BATCH_SIZE,
+  shouldChunkRemoteMisinformationRequests,
+} from './remoteMisinformation';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
@@ -306,12 +313,47 @@ function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?:
   `.trim();
 }
 
+function filterByPromptLength(
+  generatedTestCases: TestCase[],
+  injectVar: string,
+  maxCharsPerMessage: number,
+) {
+  const validTestCases: TestCase[] = [];
+  const rejectedPromptLengths: number[] = [];
+  let rejectedPromptLimit: number | undefined;
+
+  for (const testCase of generatedTestCases) {
+    const violation = getGeneratedPromptOverLimit(
+      String(testCase.vars?.[injectVar] ?? ''),
+      maxCharsPerMessage,
+    );
+    if (violation) {
+      rejectedPromptLengths.push(violation.length);
+      rejectedPromptLimit = violation.limit;
+      continue;
+    }
+
+    validTestCases.push(stripRetryModifier(testCase));
+  }
+
+  const retryInstructions =
+    rejectedPromptLengths.length > 0
+      ? buildMaxCharsRetryInstructions(rejectedPromptLengths, rejectedPromptLimit)
+      : undefined;
+
+  return { validTestCases, retryInstructions };
+}
+
 function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
       const maxCharsPerMessage = getMaxCharsPerMessageFromConfig(params.config);
-      if (!maxCharsPerMessage) {
+      // Chunked generation applies the length limit within its own bounded retry budget.
+      if (
+        !maxCharsPerMessage ||
+        shouldChunkRemoteMisinformationRequests(pluginFactory.key, params.n, params.config)
+      ) {
         return pluginFactory.action(params);
       }
 
@@ -324,30 +366,13 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
           config: retryConfig,
         });
 
-        const validTestCases: TestCase[] = [];
-        const rejectedPromptLengths: number[] = [];
-        let rejectedPromptLimit: number | undefined;
-
-        for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptOverLimit(
-            String(testCase.vars?.[params.injectVar] ?? ''),
-            maxCharsPerMessage,
-          );
-          if (violation) {
-            rejectedPromptLengths.push(violation.length);
-            rejectedPromptLimit = violation.limit;
-            continue;
-          }
-
-          validTestCases.push(stripRetryModifier(testCase));
-        }
-
-        retryInstructions =
-          rejectedPromptLengths.length > 0
-            ? buildMaxCharsRetryInstructions(rejectedPromptLengths, rejectedPromptLimit)
-            : undefined;
-
-        return validTestCases;
+        const filtered = filterByPromptLength(
+          generatedTestCases,
+          params.injectVar,
+          maxCharsPerMessage,
+        );
+        retryInstructions = filtered.retryInstructions;
+        return filtered.validTestCases;
       };
 
       const testCases = await retryWithDeduplication(
@@ -360,6 +385,49 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       return testCases.map(stripRetryModifier);
     },
   };
+}
+
+/** Keep each synchronous request small enough to finish within the proxy timeout. */
+async function generateRemoteMisinformationTests(
+  key: string,
+  n: number,
+  injectVar: string,
+  fetchBatch: (size: number, bypassCache: boolean) => Promise<TestCase[]>,
+): Promise<TestCase[]> {
+  const cases = new Map<string, TestCase>();
+  const maxRequests = Math.ceil(n / REMOTE_MISINFORMATION_BATCH_SIZE) + 2;
+  let bypassCache = false;
+  let reason = 'the generator returned too few distinct valid prompts';
+  for (let index = 0; index < maxRequests && cases.size < n; index++) {
+    const previousCount = cases.size;
+    const size = Math.min(REMOTE_MISINFORMATION_BATCH_SIZE, n - previousCount);
+    try {
+      // Equal-sized POSTs share their body. Scope both their cache and in-flight keys
+      // while retaining the caller's namespace for repeats.
+      const batch = await withCacheNamespace(`misinformation-batch:${index}`, () =>
+        fetchBatch(size, bypassCache),
+      );
+      for (const test of batch) {
+        const prompt = test?.vars?.[injectVar];
+        if (typeof prompt === 'string' && prompt.trim() && !cases.has(prompt.trim())) {
+          cases.set(prompt.trim(), test);
+          if (cases.size === n) {
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      reason = String(error);
+      break;
+    }
+    // Once a response underfills a batch, request fresh generations for the
+    // remaining slots so a cached shortage cannot prevent the next run from recovering.
+    bypassCache ||= cases.size - previousCount < size;
+  }
+  if (cases.size < n) {
+    logger.error(`Generated ${cases.size} of ${n} test cases for ${key}: ${reason}`);
+  }
+  return Array.from(cases.values());
 }
 
 async function fetchRemoteTestCases(
@@ -376,13 +444,18 @@ async function fetchRemoteTestCases(
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
+  const chunked = shouldChunkRemoteMisinformationRequests(key, n, config);
   // Health check remote before generating test cases
   const remoteHealth = await checkRemoteHealth(
     getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
   );
 
   if (remoteHealth.status !== 'OK') {
-    logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
+    logger.error(
+      chunked
+        ? `Generated 0 of ${n} test cases for ${key}: ${remoteHealth.message}`
+        : `Error generating test cases for ${key}: ${remoteHealth.message}`,
+    );
     return [];
   }
 
@@ -396,7 +469,7 @@ async function fetchRemoteTestCases(
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
-  const body = JSON.stringify({
+  const request = {
     config: configForRemote,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
@@ -407,42 +480,82 @@ async function fetchRemoteTestCases(
     ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
-  });
+  };
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
     tokenUsage?: TokenUsage;
   }
 
-  let responseRecorded = false;
+  async function fetchBatch(
+    size: number,
+    bypassCache = false,
+    retryInstructions?: string,
+  ): Promise<TestCase[]> {
+    let responseRecorded = false;
+    try {
+      const { cached, coalesced, data, status, statusText } =
+        await fetchWithCache<PluginGenerationResponse>(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify({
+              ...request,
+              n: size,
+              config: retryInstructions
+                ? buildRetryConfig(configForRemote, retryInstructions)
+                : configForRemote,
+            }),
+          },
+          getRequestTimeoutMs(),
+          'json',
+          bypassCache,
+          // A timed-out POST may still complete at the origin. Do not replay a batch.
+          chunked ? 0 : undefined,
+        );
+      if (provider && (!chunked || (data?.tokenUsage && !coalesced))) {
+        recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+        responseRecorded = true;
+      }
+      if (status !== 200 || !Array.isArray(data?.result)) {
+        throw new Error(`HTTP ${status} ${statusText}: ${JSON.stringify(data)}`);
+      }
+      if (requiresRemoteMaterialization(config?.inputs)) {
+        assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+      }
+      const ret = data.result;
+      logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+      return ret;
+    } catch (err) {
+      if (provider && !responseRecorded) {
+        if (chunked) {
+          recordFailedGenerationTokenUsage(provider, err);
+        } else {
+          recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
+        }
+      }
+      throw err;
+    }
+  }
+
+  if (chunked) {
+    const maxChars = getMaxCharsPerMessageFromConfig(config);
+    let retryInstructions: string | undefined;
+    return generateRemoteMisinformationTests(key, n, injectVar, async (size, bypassCache) => {
+      const batch = await fetchBatch(size, bypassCache, retryInstructions);
+      if (!maxChars) {
+        return batch;
+      }
+      const filtered = filterByPromptLength(batch, injectVar, maxChars);
+      retryInstructions = filtered.retryInstructions;
+      return filtered.validTestCases;
+    });
+  }
+
   try {
-    const { cached, data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body,
-      },
-      getRequestTimeoutMs(),
-    );
-    if (provider) {
-      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
-      responseRecorded = true;
-    }
-    if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
-      return [];
-    }
-    if (requiresRemoteMaterialization(config?.inputs)) {
-      assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
-    }
-    const ret = data.result;
-    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
+    return await fetchBatch(n);
   } catch (err) {
-    if (provider && !responseRecorded) {
-      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
-    }
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];
   }

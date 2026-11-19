@@ -41,6 +41,7 @@ import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { shouldChunkRemoteMisinformationRequests } from './plugins/remoteMisinformation';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -1361,7 +1362,8 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const pluginResults: Record<string, { requested: number; generated: number; chunked?: boolean }> =
+    {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1528,6 +1530,11 @@ export async function synthesize({
 
       // Get the display ID for this plugin (also serves as the unique key)
       const baseDisplayId = getPluginDisplayId(plugin);
+      const chunked = shouldChunkRemoteMisinformationRequests(
+        plugin.id,
+        plugin.numTests,
+        hasMultipleInputs ? { ...plugin.config, inputs } : plugin.config,
+      );
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
@@ -1537,7 +1544,7 @@ export async function synthesize({
           const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[displayId] = { requested, generated: result.generated };
+          pluginResults[displayId] = { requested, generated: result.generated, chunked };
         }
       } else {
         // Single language or no language - use aggregated result
@@ -1546,7 +1553,7 @@ export async function synthesize({
             ? allPluginTests.length
             : getExpectedPluginTestCount(plugin, language);
         const generated = allPluginTests.length;
-        pluginResults[baseDisplayId] = { requested, generated };
+        pluginResults[baseDisplayId] = { requested, generated, chunked };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1755,10 +1762,14 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  // Calculate failed plugins (those that generated 0 tests when they should have generated some)
-  const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
-    .filter(([_, { requested, generated }]) => requested > 0 && generated === 0)
-    .map(([pluginId, { requested }]) => ({ pluginId, requested }));
+  const failedPlugins: FailedPluginInfo[] = [];
+  for (const [pluginId, { requested, generated, chunked }] of Object.entries(pluginResults)) {
+    if (chunked && generated < requested) {
+      failedPlugins.push({ pluginId, requested, generated });
+    } else if (requested > 0 && generated === 0) {
+      failedPlugins.push({ pluginId, requested });
+    }
+  }
 
   return {
     purpose,
