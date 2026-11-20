@@ -1066,7 +1066,7 @@ describe('OpenAiLiveProvider', () => {
       return response;
     };
 
-    const dated = await capture('gpt-live-1-9999-99-99');
+    const dated = await capture('gpt-live-1-2026-09-01');
     expect(dated.metadata?.voiceCost).toBeCloseTo(0.025);
     expect(dated.cost).toBeCloseTo(0.025);
     // Other model names are priced only with costPerMinute.
