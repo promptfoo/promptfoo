@@ -15,7 +15,7 @@ import type { OpenAiCompletionOptions } from './openai/types';
 
 const MOONSHOT_API_BASE_URL = 'https://api.moonshot.ai/v1';
 const MOONSHOT_API_KEY_ENVAR = 'MOONSHOT_API_KEY';
-const DEFAULT_MOONSHOT_MODEL = 'kimi-k3';
+const DEFAULT_MOONSHOT_MODEL = 'kimi-k3.1-pro';
 
 type MoonshotConfig = OpenAiCompletionOptions & {
   // Per-cached-token input rate; Moonshot returns prompt cache hits and they are
@@ -28,15 +28,16 @@ type MoonshotProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MoonshotConfig;
 };
 
-// The Kimi models (kimi-k3, kimi-k2.5 / kimi-k2.6 / kimi-k2.7-code, …) are
+// The Kimi models (kimi-k3.1-pro, kimi-k3, kimi-k2.6 / kimi-k2.7-code, …) are
 // "thinking" models that pin temperature, top_p, n and the penalties to fixed
 // values and reject any other value with a 400 ("invalid temperature: only 1
 // is allowed for this model"). They emit `reasoning_content` (which counts
 // against the output budget) and default to a large server-side budget (32k
-// for K2.x, 131k for K3). The moonshot-v1 generation models accept arbitrary
-// sampling params, so they keep promptfoo's defaults.
-// https://platform.kimi.ai/docs/guide/kimi-k3-quickstart
-// https://platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model
+// for K2.x, 131k for the K3 series). The moonshot-v1 generation models accept
+// arbitrary sampling params, so they keep promptfoo's defaults.
+// https://platform.kimi.ai/docs/api/models-overview
+// https://platform.kimi.ai/docs/guide/kimi-k3-1-pro-quickstart
+// https://platform.kimi.ai/docs/guide/use-thinking-models
 function pinsSamplingParams(modelName: string): boolean {
   return /^kimi-/i.test(modelName);
 }
@@ -149,7 +150,8 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
 
     const modelName = typeof result.body.model === 'string' ? result.body.model : this.modelName;
 
-    // reasoning_effort is K3-only per Moonshot's parameter matrix; fail fast on
+    // reasoning_effort is K3-series-only (kimi-k3, kimi-k3.1-pro,
+    // kimi-k3.1-pro-highspeed) per Moonshot's parameter matrix; fail fast on
     // other models instead of silently dropping it or sending it unsupported.
     // https://platform.kimi.ai/docs/api/models-overview
     if (result.config.reasoning_effort !== undefined) {
@@ -170,7 +172,8 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
     // deprecated alias). Honor an explicit value on either field — prompt-level
     // config beats provider-level regardless of which alias each layer used —
     // and drop the base provider's injected max_tokens: 1024 default so
-    // reasoning can use Moonshot's server budget (32k for K2.x, 131k for K3).
+    // reasoning can use Moonshot's server budget (32k for K2.x, 131k for the K3
+    // series).
     const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
     const promptPassthrough = promptConfig.passthrough as
       | { max_completion_tokens?: unknown; max_tokens?: unknown }
@@ -218,8 +221,10 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   }
 
   // promptfoo has no Moonshot price table, so cost comes from user-provided
-  // rates. Cached tokens live in the documented top-level usage.cached_tokens;
-  // the OpenAI-style prompt_tokens_details mirror is undocumented.
+  // rates. Moonshot reports cache reads in prompt_tokens_details.cached_tokens
+  // (mirrored at the top-level usage.cached_tokens). K3-series cache writes
+  // (prompt_tokens_details.cache_write_tokens) at the default 5m TTL cost the
+  // same as uncached input, so they stay in the input-rate bucket.
   // https://platform.kimi.ai/docs/api/chat
   protected override calculateResponseCost(
     data: OpenAiChatCompletionCostData,
