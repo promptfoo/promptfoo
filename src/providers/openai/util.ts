@@ -834,6 +834,11 @@ export function normalizeOpenAiServiceTierForWire(
   return serviceTier === 'fast' && isOpenAiFirstPartyApiUrl(apiUrl) ? 'priority' : serviceTier;
 }
 
+/** Published conversational GPT-Live models and their dated snapshots. */
+export function isGptLiveConversationalModel(model: string): boolean {
+  return /^gpt-live-1(?:\.1)?(?:-\d{4}-\d{2}-\d{2})?$/.test(model);
+}
+
 export function assertOpenAiModelEndpointCompatibility(
   model: unknown,
   options: { allowTranscription?: boolean } = {},

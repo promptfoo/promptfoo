@@ -10,6 +10,7 @@ import {
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
   getTokenUsageWithRequestCount,
+  isGptLiveConversationalModel,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
   OPENAI_CHAT_MODELS,
@@ -1643,4 +1644,21 @@ it('keeps mutable prices independent across model aliases', () => {
   expect(new Set(costs).size).toBe(costs.length);
   const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
   expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
+});
+
+describe('isGptLiveConversationalModel', () => {
+  it.each(['gpt-live-1', 'gpt-live-1.1', 'gpt-live-1-2026-09-01'])('matches %s', (model) => {
+    expect(isGptLiveConversationalModel(model)).toBe(true);
+  });
+
+  it.each([
+    'gpt-live-transcribe',
+    'gpt-live-1-preview',
+    'gpt-live-1.10',
+    'gpt-live-11',
+    'gpt-live-9.99-fakemodel',
+    'vendor/gpt-live-1.1',
+  ])('does not match %s', (model) => {
+    expect(isGptLiveConversationalModel(model)).toBe(false);
+  });
 });

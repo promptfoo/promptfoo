@@ -88,6 +88,7 @@ import {
   assertOpenAiApiModel,
   assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
+  isGptLiveConversationalModel,
   isOpenAiFirstPartyApiUrl,
   OPENAI_DAYBREAK_ALIASES,
 } from './openai/util';
@@ -1257,8 +1258,7 @@ export const providerMap: ProviderFactory[] = [
           'gpt-live-transcribe requires Realtime transcription sessions, which are not yet supported by promptfoo.',
         );
       }
-      const isLiveProvider =
-        modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      const isLiveProvider = modelType === 'live' || isGptLiveConversationalModel(modelType);
       const providerEnv =
         modelType === 'decisions'
           ? mergeProviderEnv(providerPath, context.env, providerOptions.env)
