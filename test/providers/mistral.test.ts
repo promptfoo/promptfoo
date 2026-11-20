@@ -9,6 +9,7 @@ import {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 import { maybeLoadToolsFromExternalFile } from '../../src/util';
 import { createChatCompletion } from '../factories/literalFixtures';
 import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
@@ -587,17 +588,20 @@ describe('Mistral', () => {
       expect(result).toMatchObject({ output: '391', cost: expect.closeTo(0.00154, 8) });
     });
 
-    it('returns an error when Mistral rejects an unsupported reasoning effort', async () => {
+    it('returns the status and message when Mistral rejects an unsupported reasoning effort', async () => {
       const largeProvider = new MistralChatCompletionProvider('mistral-large-4', {
         config: { reasoning_effort: 'none' },
       });
       vi.spyOn(largeProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      // Body shape captured from Mistral's live 400 for this request.
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           object: 'error',
           message: 'reasoning_effort none is not supported for this model',
           type: 'invalid_request_invalid_args',
+          param: null,
           code: '3051',
+          raw_status_code: 400,
         },
         cached: false,
         status: 400,
@@ -606,8 +610,122 @@ describe('Mistral', () => {
 
       const result = await largeProvider.callApi('Test prompt');
 
-      expect(result.output).toBeUndefined();
-      expect(result.error).toContain('reasoning_effort none is not supported for this model');
+      expect(result).toEqual({
+        error:
+          'Mistral API error 400 Bad Request: reasoning_effort none is not supported for this model (invalid_request_invalid_args, code 3051)',
+        metadata: { http: { status: 400, statusText: 'Bad Request' } },
+      });
+    });
+
+    it.each([
+      [
+        401,
+        'Unauthorized',
+        { detail: 'Invalid API Key' },
+        'Mistral API error 401 Unauthorized: Invalid API Key',
+      ],
+      [
+        422,
+        'Unprocessable Entity',
+        {
+          detail: [
+            {
+              type: 'missing',
+              loc: ['body', 'messages'],
+              msg: 'Field required',
+              input: { model: 'mistral-large-4' },
+            },
+            {
+              type: 'extra_forbidden',
+              loc: ['body', 'store'],
+              msg: 'Extra inputs are not permitted',
+              input: 'secret-value',
+            },
+          ],
+        },
+        'Mistral API error 422 Unprocessable Entity: body.messages: Field required; body.store: Extra inputs are not permitted',
+      ],
+      [
+        429,
+        'Too Many Requests',
+        {
+          object: 'error',
+          message: 'Rate limit exceeded',
+          type: 'rate_limited',
+          param: null,
+          code: '1300',
+          raw_status_code: 429,
+        },
+        'Mistral API error 429 Too Many Requests: Rate limit exceeded (rate_limited, code 1300)',
+      ],
+      [
+        400,
+        'Bad Request',
+        {
+          error: {
+            message: 'Invalid model: mistral-9.99-fakemodel',
+            type: 'invalid_model',
+            code: 1500,
+          },
+        },
+        'Mistral API error 400 Bad Request: Invalid model: mistral-9.99-fakemodel (invalid_model, code 1500)',
+      ],
+      [503, 'Service Unavailable', {}, 'Mistral API error 503 Service Unavailable'],
+    ])(
+      'surfaces HTTP %i errors with Mistral error details',
+      async (status, statusText, data, error) => {
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data,
+          cached: false,
+          status,
+          statusText,
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result).toEqual({ error, metadata: { http: { status, statusText } } });
+        expect(result.error).not.toContain('secret-value');
+      },
+    );
+
+    it('marks Mistral capacity 429s as retryable rate limits', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          object: 'error',
+          message: 'Not enough capacity available for this request, please retry later.',
+          type: 'service_tier_capacity_exceeded',
+          param: null,
+          code: '3505',
+          raw_status_code: 429,
+        },
+        cached: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+    });
+
+    it('does not cache HTTP error responses', async () => {
+      const cacheSet = vi.fn();
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockReturnValue({
+        get: vi.fn().mockResolvedValue(null),
+        set: cacheSet,
+      } as any);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { detail: 'Invalid API Key' },
+        cached: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe('Mistral API error 401 Unauthorized: Invalid API Key');
+      expect(cacheSet).not.toHaveBeenCalled();
     });
 
     it('forwards prompt_cache_key in the request body', async () => {
@@ -1185,8 +1303,26 @@ describe('Mistral', () => {
 
       const result = await provider.callApi('Test text');
 
-      expect(result.error).toContain('Mistral embeddings API error: 401 Unauthorized');
+      expect(result.error).toContain(
+        'Mistral embeddings API error: 401 Unauthorized: Unauthorized',
+      );
       expect(result.error).not.toContain('No embedding found');
+    });
+
+    it('includes Mistral validation details when the embeddings request is rejected', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse(
+          { detail: [{ type: 'missing', loc: ['body', 'input'], msg: 'Field required' }] },
+          { status: 422, statusText: 'Unprocessable Entity' },
+        ),
+      );
+
+      const result = await provider.callApi('Test text');
+
+      expect(result.error).toContain(
+        'Mistral embeddings API error: 422 Unprocessable Entity: body.input: Field required',
+      );
     });
 
     it('should use cache for embedding when enabled', async () => {

@@ -453,6 +453,65 @@ function getMistralEmbeddingResponseMetadata(data: any) {
   };
 }
 
+const MAX_MISTRAL_ERROR_DETAIL_LENGTH = 500;
+
+function isHttpFailure(status: number | undefined): status is number {
+  return status !== undefined && (status < 200 || status >= 300);
+}
+
+/**
+ * Human-readable message from a Mistral error body. Shapes per
+ * https://docs.mistral.ai/resources/error-glossary:
+ * - most errors: `{ object: 'error', message, type, param, code, raw_status_code }`
+ * - 401: `{ detail: 'Invalid API Key' }`
+ * - 422: `{ detail: [{ loc, msg, ... }] }`
+ * - OpenAI-compatible endpoint: the error object wrapped in `error`
+ */
+function getMistralErrorMessage(data: unknown): string | undefined {
+  if (typeof data === 'string') {
+    return data.trim().slice(0, MAX_MISTRAL_ERROR_DETAIL_LENGTH) || undefined;
+  }
+  if (!data || typeof data !== 'object') {
+    return undefined;
+  }
+  const body = data as Record<string, any>;
+  if (typeof body.error === 'string') {
+    return body.error;
+  }
+  const error = body.error && typeof body.error === 'object' ? body.error : body;
+  if (typeof error.message === 'string') {
+    const details = [
+      typeof error.type === 'string' ? error.type : undefined,
+      typeof error.code === 'string' || typeof error.code === 'number'
+        ? `code ${error.code}`
+        : undefined,
+    ].filter(Boolean);
+    return details.length > 0 ? `${error.message} (${details.join(', ')})` : error.message;
+  }
+  if (typeof body.detail === 'string') {
+    return body.detail;
+  }
+  if (Array.isArray(body.detail)) {
+    // Only field locations and messages: a 422 item's `input` echoes the request.
+    const issues = body.detail
+      .map((issue: any) => {
+        const location = Array.isArray(issue?.loc) ? issue.loc.join('.') : undefined;
+        const message = typeof issue?.msg === 'string' ? issue.msg : undefined;
+        return location && message ? `${location}: ${message}` : message;
+      })
+      .filter(Boolean);
+    if (issues.length > 0) {
+      return issues.join('; ');
+    }
+  }
+  return undefined;
+}
+
+function formatMistralHttpError(status: number, statusText: string | undefined, data: unknown) {
+  const detail = getMistralErrorMessage(data);
+  return `Mistral API error ${status}${statusText ? ` ${statusText}` : ''}${detail ? `: ${detail}` : ''}`;
+}
+
 function getMistralErrorMetadata(error: any) {
   return {
     code:
@@ -732,10 +791,12 @@ export class MistralChatCompletionProvider implements ApiProvider {
     });
 
     let data,
-      cached = false;
+      cached = false,
+      status: number | undefined,
+      statusText: string | undefined;
 
     try {
-      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
+      ({ data, cached, status, statusText } = await fetchMistralWithDedupe(cacheKey, async () => {
         return (await fetchWithCache(
           url,
           {
@@ -760,9 +821,16 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     logger.debug('Mistral API response', getMistralResponseMetadata(data));
 
+    if (isHttpFailure(status)) {
+      logger.debug('Mistral API error', { status, ...getMistralErrorMetadata(data) });
+      return {
+        error: formatMistralHttpError(status, statusText, data),
+        metadata: { http: { status, statusText: statusText ?? '' } },
+      };
+    }
     if (data.error) {
       return {
-        error: `API call error: ${data.error}`,
+        error: `API call error: ${getMistralErrorMessage(data) ?? JSON.stringify(data.error)}`,
       };
     }
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
@@ -955,8 +1023,11 @@ export class MistralEmbeddingProvider implements ApiProvider {
         throw err;
       }
 
-      if (status !== undefined && (status < 200 || status >= 300)) {
-        throw new Error(`Mistral embeddings API error: ${status} ${statusText}`);
+      if (isHttpFailure(status)) {
+        const detail = getMistralErrorMessage(data);
+        throw new Error(
+          `Mistral embeddings API error: ${status} ${statusText}${detail ? `: ${detail}` : ''}`,
+        );
       }
     }
 
