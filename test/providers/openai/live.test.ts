@@ -578,27 +578,66 @@ describe('OpenAiLiveProvider', () => {
     expect(JSON.stringify(response)).not.toContain('fixture-key');
   });
 
-  it.each(['before acknowledgment', 'after acknowledgment'])(
-    'does not increase the output budget for delayed startup (%s)',
-    async (phase) => {
-      const result = provider({ websocketTimeout: 1000 }).callApi('Hi');
-      const socket = await connect();
-      start(socket, { ack: false });
-      await vi.advanceTimersByTimeAsync(900);
-      if (phase === 'after acknowledgment') {
-        emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
-      }
+  it('includes the wait before a text prompt response window in the output budget', async () => {
+    const result = provider({ websocketTimeout: 1000, responseWindowMs: 200 }).callApi('Hi');
+    const socket = await connect();
+    start(socket, { ack: false });
+    // Live streams output audio, silence included, in step with the input timeline, in 100 ms
+    // chunks that can run slightly ahead of the frames sent.
+    const chunk = () =>
       emit(socket, {
         type: 'session.output_audio.delta',
-        delta: Buffer.alloc(9600).toString('base64'),
+        delta: Buffer.alloc(4800, 1).toString('base64'),
       });
-      if (phase === 'before acknowledgment') {
-        emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    const stream = async (ms: number) => {
+      for (let elapsed = 0; elapsed < ms; elapsed += 100) {
+        chunk();
+        await vi.advanceTimersByTimeAsync(100);
       }
-      closed(socket);
-      expect((await result).error).toBe('GPT-Live audio exceeded the capture limit.');
-    },
-  );
+    };
+    // The acknowledgment arrives after more silence than the response window holds.
+    await stream(500);
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    text(socket, ' Paris.');
+    await stream(200);
+    expect(sentTypes(socket).at(-1)).toBe('session.close');
+    // Audio received after closing begins is ignored.
+    chunk();
+    closed(socket, 1);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe(' Paris.');
+    expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(44 + 700 * 48);
+    expect(response.cost).toBeCloseTo(0.05 / 60);
+  });
+
+  it('accepts in-step output that crosses the capture end during delegation', async () => {
+    // A 50 ms clip plus a 100 ms window streams eight 20 ms frames (160 ms).
+    const result = provider(createResponsesDelegationConfig()).callApi(
+      audioPrompt(Buffer.alloc(2400)),
+    );
+    const socket = await connect();
+    start(socket, { ack: false });
+    const chunk = Buffer.alloc(4800, 1).toString('base64');
+    emit(socket, { type: 'session.output_audio.delta', delta: chunk });
+    await vi.advanceTimersByTimeAsync(40);
+    delegateResponses(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    backend(socket, createCompletedResponseEvent());
+    await vi.advanceTimersByTimeAsync(60);
+    // The second 100 ms chunk ends at 200 ms, past the 160 ms capture end.
+    emit(socket, { type: 'session.output_audio.delta', delta: chunk });
+    text(socket, ' It shipped.');
+    await vi.advanceTimersByTimeAsync(60);
+    expect(sentTypes(socket).at(-1)).toBe('session.close');
+    closed(socket, 1);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.delegations).toHaveLength(1);
+    expect(response.metadata?.backendResponses).toHaveLength(1);
+    expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(44 + 200 * 48);
+    expect(response.cost).toBeTypeOf('number');
+  });
 
   it('rejects a tool continuation while its handler is still preparing results', async () => {
     let resolve!: (value: string) => void;
@@ -1027,7 +1066,7 @@ describe('OpenAiLiveProvider', () => {
       return response;
     };
 
-    const dated = await capture('gpt-live-1-2026-09-01');
+    const dated = await capture('gpt-live-1-9999-99-99');
     expect(dated.metadata?.voiceCost).toBeCloseTo(0.025);
     expect(dated.cost).toBeCloseTo(0.025);
     // Other model names are priced only with costPerMinute.
@@ -1910,13 +1949,15 @@ describe('OpenAiLiveProvider', () => {
       ] satisfies LiveAudioFormat[]
     ).flatMap((format) => [false, true].map((overflow) => ({ format, overflow }))),
   )(
-    'bounds output by capture duration ($format.type, $format.rate, overflow: $overflow)',
+    'bounds output by the streamed timeline ($format.type, $format.rate, overflow: $overflow)',
     async ({ format, overflow }) => {
-      const result = provider({ audio: { format }, responseWindowMs: 100 }).callApi('Hi');
+      const result = provider({ audio: { format }, responseWindowMs: 1000 }).callApi('Hi');
       const socket = await connect();
       start(socket);
+      // Five 20 ms frames have streamed; output may lead them by one second.
+      await vi.advanceTimersByTimeAsync(80);
       const sampleBytes = format.type === 'audio/pcm' ? 2 : 1;
-      const bytes = Buffer.alloc((format.rate * sampleBytes) / 10);
+      const bytes = Buffer.alloc((format.rate * sampleBytes * 11) / 10);
       emit(socket, { type: 'session.output_audio.delta', delta: bytes.toString('base64') });
       if (overflow) {
         emit(socket, {
@@ -1929,7 +1970,9 @@ describe('OpenAiLiveProvider', () => {
       expect(response.error).toBe(
         overflow ? 'GPT-Live audio exceeded the capture limit.' : undefined,
       );
-      expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(44 + (format.rate / 10) * 2);
+      expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(
+        44 + ((format.rate * 11) / 10) * 2,
+      );
     },
   );
 
@@ -1937,6 +1980,8 @@ describe('OpenAiLiveProvider', () => {
     const result = provider({ responseWindowMs: 100_000 }).callApi('Hi');
     const socket = await connect();
     start(socket);
+    // Stream enough timeline that the chunk count, not the byte budget, is the binding limit.
+    await vi.advanceTimersByTimeAsync(2000);
     for (let index = 0; index <= 50_000; index++) {
       emit(socket, { type: 'session.output_audio.delta', delta: 'AAA=' });
     }
@@ -1965,9 +2010,10 @@ describe('OpenAiLiveProvider', () => {
     );
     const socket = await connect();
     emit(socket, { type: 'session.started', session: { id: 'session_1' } });
+    // One 20 ms frame has streamed: one more byte than that frame plus one second of lead.
     emit(socket, {
       type: 'session.output_audio.delta',
-      delta: Buffer.alloc(1600).toString('base64'),
+      delta: Buffer.alloc(8 * 1020 + 1).toString('base64'),
     });
     const response = await result;
     expect(response.error).toBe('GPT-Live audio exceeded the capture limit.');

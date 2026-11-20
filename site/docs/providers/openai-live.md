@@ -80,7 +80,7 @@ Promptfoo streams audio in 20 ms frames at the configured sample rate. Recorded 
 
 Live has no authoritative speech-completed event. The response window is a fixed recording window and may cut off speech. Increase it for long replies or backend work. Backend completion and transcript gaps do not end the capture early. Transcript and audio deltas received after closing begins are ignored; final usage and errors are still processed. Output audio contains the received samples; transcript timestamps are on the session timeline and do not establish playback timing.
 
-Output audio is capped by the configured format and capture duration, with a maximum of five minutes. Startup delay does not increase this budget. Excess audio ends the capture with an error.
+Live streams output audio, including silence, in step with the input frames. Output audio is capped at the duration streamed so far, including the wait before a text prompt's response window, plus one second for audio that arrives slightly ahead. Excess audio ends the capture with an error.
 
 `websocketTimeout` covers the handshake, `session.started`, and a text prompt's acknowledgment (default: 30 seconds); `closeTimeoutMs` controls finalization (default: 15 seconds). These timeouts plus the capture duration must fit within `REQUEST_TIMEOUT_MS` (default: five minutes). Increase it for a full five-minute capture. Cancellation and eval shutdown release active sockets. Live responses are not cached.
 

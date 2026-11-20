@@ -144,7 +144,7 @@ describe('OpenAiResponsesProvider request building', () => {
     'gpt-live-transcribe',
     'gpt-live-transcribe-2026-09-01',
     'gpt-live-1',
-    'gpt-live-1-2026-09-01',
+    'gpt-live-1-9999-99-99',
   ])('rejects prompt-scoped voice model %s before making a Responses request', async (model) => {
     const provider = new OpenAiResponsesProvider('gpt-4.1', {
       config: { apiKey: 'fixture-key' },
