@@ -1175,7 +1175,7 @@ describe('Provider Registry', () => {
       });
     });
 
-    it('keeps the default Meta model at muse-spark-1.1', async () => {
+    it('defaults the Meta model to muse-spark-1.3', async () => {
       const factory = providerMap.find((f) => f.test('meta:'));
       expect(factory).toBeDefined();
 
@@ -1184,7 +1184,7 @@ describe('Provider Registry', () => {
         { ...mockProviderOptions, id: undefined },
         mockContext,
       );
-      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
+      expect(provider.id()).toBe('meta:responses:muse-spark-1.3');
     });
 
     it('rejects unsupported Meta API sub-types', async () => {

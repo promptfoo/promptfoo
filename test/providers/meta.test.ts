@@ -84,24 +84,24 @@ describe('createMetaProvider routing', () => {
   });
 
   it('falls back to the default model for a bare prefix', () => {
-    expect(asChat(createMetaProvider('meta:')).modelName).toBe('muse-spark-1.1');
-    expect(createMetaProvider('meta:').id()).toBe('meta:responses:muse-spark-1.1');
-    expect(asChat(createMetaProvider('meta:chat')).modelName).toBe('muse-spark-1.1');
-    expect(asChat(createMetaProvider('meta:chat:')).modelName).toBe('muse-spark-1.1');
+    expect(asChat(createMetaProvider('meta:')).modelName).toBe('muse-spark-1.3');
+    expect(createMetaProvider('meta:').id()).toBe('meta:responses:muse-spark-1.3');
+    expect(asChat(createMetaProvider('meta:chat')).modelName).toBe('muse-spark-1.3');
+    expect(asChat(createMetaProvider('meta:chat:')).modelName).toBe('muse-spark-1.3');
   });
 
   it('routes meta:responses:<model> to the Responses API provider', () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1');
     expect(provider).toBeInstanceOf(MetaResponsesProvider);
     expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
-    expect(createMetaProvider('meta:responses').id()).toBe('meta:responses:muse-spark-1.1');
+    expect(createMetaProvider('meta:responses').id()).toBe('meta:responses:muse-spark-1.3');
   });
 
   it('routes meta:messages:<model> to the Anthropic-compatible Messages provider', () => {
     const provider = createMetaProvider('meta:messages:muse-spark-1.1');
     expect(provider).toBeInstanceOf(MetaMessagesProvider);
     expect(provider.id()).toBe('meta:messages:muse-spark-1.1');
-    expect(createMetaProvider('meta:messages').id()).toBe('meta:messages:muse-spark-1.1');
+    expect(createMetaProvider('meta:messages').id()).toBe('meta:messages:muse-spark-1.3');
   });
 
   it.each([

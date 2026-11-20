@@ -23,7 +23,7 @@ providers:
   - id: meta:muse-spark-1.3
 ```
 
-`meta:<model>` defaults to the [Responses API](#responses-api) — Meta's full-feature surface and the one its docs recommend. Use `meta:chat:<model>` for the OpenAI-compatible chat completions endpoint, or `meta:messages:<model>` for the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.1`; select `muse-spark-1.3` explicitly to use the latest model.
+`meta:<model>` defaults to the [Responses API](#responses-api) — Meta's full-feature surface and the one its docs recommend. Use `meta:chat:<model>` for the OpenAI-compatible chat completions endpoint, or `meta:messages:<model>` for the Anthropic-compatible [Messages API](#messages-api). If you omit the model, the provider defaults to `muse-spark-1.3`, the version Meta recommends for new work.
 
 ## Available Models
 

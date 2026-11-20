@@ -26,7 +26,8 @@ const META_MESSAGES_API_BASE_URL = 'https://api.meta.ai';
 // quickstart use. Use `apiKeyEnvar` (or `apiKey`) in the provider config to
 // source the key from somewhere else.
 const META_API_KEY_ENVAR = 'MODEL_API_KEY';
-const DEFAULT_META_MODEL = 'muse-spark-1.1';
+// Meta recommends Muse Spark 1.3 for new work; it is priced like 1.1.
+const DEFAULT_META_MODEL = 'muse-spark-1.3';
 const DEFAULT_META_MAX_OUTPUT_TOKENS = 131_072;
 const UNSUPPORTED_META_SUBTYPES = new Set([
   'assistant',
