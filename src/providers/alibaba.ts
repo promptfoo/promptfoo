@@ -2,9 +2,13 @@ import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
-import type { ProviderOptions } from '../types/index';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderOptions } from '../types/index';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 const KNOWN_MODELS = new Set([
+  // Qwen4
+  'qwen4-max',
+
   // Qwen3.8
   'qwen3.8-max',
   'qwen3.8-max-0902',
@@ -245,6 +249,15 @@ function getAlibabaProviderOptions(modelName: string, options: ProviderOptions) 
   };
 }
 
+/**
+ * Qwen4 models think by default, and their max_tokens limit is equivalent to
+ * max_completion_tokens: it covers the reasoning and the answer together.
+ * https://www.alibabacloud.com/help/en/model-studio/api-compatibility-upgrade-notice
+ */
+function isQwen4Model(modelName: string): boolean {
+  return /^qwen4(?:[.-]|$)/.test(modelName);
+}
+
 export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
   protected override getGenAISystem(): string {
     return 'alibaba';
@@ -252,6 +265,60 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
 
   constructor(modelName: string, options: ProviderOptions = {}) {
     super(modelName, getAlibabaProviderOptions(modelName, options));
+  }
+
+  // Treating Qwen4 as a reasoning model forwards reasoning_effort and
+  // max_completion_tokens, and skips the base max_tokens default (1024), which
+  // on Qwen4 would also cap the reasoning.
+  protected override isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
+    return isQwen4Model(modelName) || super.isReasoningModel(modelName);
+  }
+
+  protected override isReasoningCapabilityModel(modelName: string): boolean {
+    return isQwen4Model(modelName) || super.isReasoningCapabilityModel(modelName);
+  }
+
+  // Qwen4 accepts temperature in both thinking and non-thinking modes.
+  protected override supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
+    return isQwen4Model(modelName) || super.supportsTemperature(modelName);
+  }
+
+  protected override supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return isQwen4Model(modelName) || super.supportsTemperatureForCapabilityModel(modelName);
+  }
+
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = result;
+    if (typeof body.model !== 'string' || !isQwen4Model(body.model)) {
+      return result;
+    }
+
+    // The base provider drops max_tokens for reasoning models. On Qwen4 it means
+    // max_completion_tokens, so send an explicit limit under that name. A
+    // prompt-level limit wins over a provider-level one; passthrough wins within
+    // each layer.
+    const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
+    const promptPassthrough = promptConfig.passthrough as
+      | { max_completion_tokens?: unknown; max_tokens?: unknown }
+      | undefined;
+    const maxCompletionTokens =
+      promptPassthrough?.max_completion_tokens ??
+      promptPassthrough?.max_tokens ??
+      promptConfig.max_completion_tokens ??
+      promptConfig.max_tokens ??
+      config.passthrough?.max_completion_tokens ??
+      config.passthrough?.max_tokens ??
+      config.max_completion_tokens ??
+      config.max_tokens;
+    if (maxCompletionTokens !== undefined) {
+      body.max_completion_tokens = maxCompletionTokens;
+    }
+    return result;
   }
 }
 
