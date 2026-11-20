@@ -6,6 +6,11 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
+import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import {
+  getMaxCharsPerMessageModifierValue,
+  MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
+} from '../redteam/shared/promptLength';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
 import {
@@ -25,6 +30,66 @@ import type { ApiProvider } from '../types/providers';
 const VALIDATE_FAILURE_PREFIX = 'Failed to validate configuration: ';
 const LOAD_FAILURE_PREFIX = 'Failed to load configuration: ';
 const TEST_RESULT_INDENT = '    ';
+
+/**
+ * Maximum serialized size, in UTF-8 bytes, the remote generation service accepts
+ * for a single plugin `config` object. Configs over this limit are rejected by
+ * the service with "config must serialize to at most 30000 bytes".
+ */
+export const REMOTE_PLUGIN_CONFIG_MAX_BYTES = 30000;
+
+export interface OversizedPluginConfig {
+  pluginId: string;
+  sizeBytes: number;
+}
+
+/**
+ * Measure a plugin config the way remote generation sends it, so the size matches
+ * what the server validates. Mirrors fetchRemoteTestCases in
+ * src/redteam/plugins/index.ts: `graderExamples` are stripped before sending, and
+ * a max-chars-per-message modifier is added when one applies.
+ */
+function getRemotePluginConfigSizeBytes(pluginConfig: Record<string, unknown>): number {
+  const { graderExamples, ...configForRemote } = pluginConfig;
+  const maxCharsModifier = getMaxCharsPerMessageModifierValue(
+    pluginConfig.maxCharsPerMessage as number | undefined,
+  );
+  if (maxCharsModifier) {
+    configForRemote.modifiers = {
+      ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),
+      [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
+    };
+  }
+  const serialized = JSON.stringify(configForRemote) ?? '';
+  return Buffer.byteLength(serialized, 'utf8');
+}
+
+/**
+ * Return the plugins whose config would exceed the remote generation size limit.
+ * Only the serialized `config` object is measured, matching the server-side
+ * check on the `config` field of the remote generation request.
+ */
+export function getOversizedRemotePluginConfigs(config: UnifiedConfig): OversizedPluginConfig[] {
+  const plugins = config?.redteam?.plugins;
+  if (!Array.isArray(plugins)) {
+    return [];
+  }
+  const oversized: OversizedPluginConfig[] = [];
+  for (const plugin of plugins) {
+    if (!plugin || typeof plugin !== 'object') {
+      continue;
+    }
+    const { id, config: pluginConfig } = plugin as { id?: unknown; config?: unknown };
+    if (typeof id !== 'string' || !pluginConfig || typeof pluginConfig !== 'object') {
+      continue;
+    }
+    const sizeBytes = getRemotePluginConfigSizeBytes(pluginConfig as Record<string, unknown>);
+    if (sizeBytes > REMOTE_PLUGIN_CONFIG_MAX_BYTES) {
+      oversized.push({ pluginId: id, sizeBytes });
+    }
+  }
+  return oversized;
+}
 
 type ProviderTestResult = Awaited<ReturnType<typeof testProviderConnectivity>>;
 type SessionTestResult = Awaited<ReturnType<typeof testProviderSession>>;
@@ -495,6 +560,18 @@ ${z.prettifyError(configParse.error)}`,
       logger.error(dedent`Test suite validation error:\n${z.prettifyError(suiteParse.error)}`);
       process.exitCode = 1;
       return;
+    }
+    if (shouldGenerateRemote()) {
+      const oversized = getOversizedRemotePluginConfigs(configParse.data);
+      if (oversized.length > 0) {
+        for (const { pluginId, sizeBytes } of oversized) {
+          logger.error(
+            `Plugin "${pluginId}" config serializes to ${sizeBytes} bytes, which exceeds the ${REMOTE_PLUGIN_CONFIG_MAX_BYTES} byte limit for remote generation. Shorten the plugin config (for example, the system prompt) or disable remote generation.`,
+          );
+        }
+        process.exitCode = 1;
+        return;
+      }
     }
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {
