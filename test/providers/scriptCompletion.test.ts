@@ -199,6 +199,29 @@ describe('getFileHashes', () => {
     expect(readFileSyncMock).not.toHaveBeenCalled();
   });
 
+  it('skips caching when a single-dash option has a file attached without a separator', () => {
+    const cwd = path.resolve('fixture-directory');
+    const attached = path.join(cwd, 'rules.awk');
+    existsSyncMock.mockImplementation((candidate) => candidate === attached);
+
+    expect(getFileHashes(['awk', '-frules.awk'], cwd)).toEqual([]);
+    expect(existsSyncMock).toHaveBeenCalledWith(attached);
+    expect(readFileSyncMock).not.toHaveBeenCalled();
+  });
+
+  it('does not skip caching for a single-dash option that has no file attached', () => {
+    const cwd = path.resolve('fixture-directory');
+    existsSyncMock.mockImplementation((candidate) => candidate === 'script.js');
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('content');
+    createHashMock.mockReturnValue({
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn().mockReturnValue('script-hash'),
+    } as unknown as crypto.Hash);
+
+    expect(getFileHashes(['script.js', '-v', '-n5'], cwd)).toEqual(['script-hash']);
+  });
+
   it('should return an empty array for non-existent files', () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];
     existsSyncMock.mockReturnValue(false);
@@ -526,6 +549,41 @@ describe('ScriptCompletionProvider', () => {
         '--empty=',
         'plain',
       ]);
+    });
+
+    it('does not replay a cached result after a quoted short-option file changes', async () => {
+      const actualChildProcess =
+        await vi.importActual<typeof import('child_process')>('child_process');
+      const actualFs = await vi.importActual<typeof import('fs')>('fs');
+      vi.mocked(execFile).mockImplementation(actualChildProcess.execFile as typeof execFile);
+      existsSyncMock.mockImplementation(actualFs.existsSync);
+      statSyncMock.mockImplementation(actualFs.statSync as typeof fs.statSync);
+      readFileSyncMock.mockImplementation(actualFs.readFileSync as typeof fs.readFileSync);
+      const actualCrypto = await vi.importActual<typeof import('crypto')>('crypto');
+      createHashMock.mockImplementation(actualCrypto.createHash);
+      const store = new Map<string, unknown>();
+      vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+      vi.mocked(cacheModule.getCache).mockResolvedValue({
+        get: async (key: string) => store.get(key),
+        set: async (key: string, value: unknown) => store.set(key, value),
+      } as unknown as Awaited<ReturnType<typeof cacheModule.getCache>>);
+      const scriptFile = path.join(tempDir, 'cat-option.js');
+      const rulesFile = path.join(tempDir, 'rules.txt');
+      // Option `-f<file>` is an attached value; the last three arguments are prompt, options and context
+      fs.writeFileSync(
+        scriptFile,
+        "const a = process.argv.slice(2, -3)[0]; console.log(require('fs').readFileSync(a.slice(2), 'utf8'));",
+      );
+      fs.writeFileSync(rulesFile, 'first');
+      const cachedProvider = new ScriptCompletionProvider(`node "${scriptFile}" -f"${rulesFile}"`);
+
+      const first = await cachedProvider.callApi('test prompt');
+      fs.writeFileSync(rulesFile, 'second');
+      const second = await cachedProvider.callApi('test prompt');
+
+      expect(first.output).toBe('first');
+      expect(second.output).toBe('second');
+      expect(second.cached).toBeUndefined();
     });
   });
 });

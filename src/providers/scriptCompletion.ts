@@ -71,12 +71,16 @@ export function getFileHashes(scriptParts: string[], cwd = process.cwd()): strin
   // An attached option may refer to a changing file, including credentials.
   // Skip caching these commands without reading the attached file.
   for (const part of scriptParts) {
+    const attachedValues: string[] = [];
     const equals = part.indexOf('=');
-    if (
-      equals > 0 &&
-      equals < part.length - 1 &&
-      fs.existsSync(path.resolve(cwd, part.slice(equals + 1)))
-    ) {
+    if (equals > 0 && equals < part.length - 1) {
+      attachedValues.push(part.slice(equals + 1));
+    }
+    // A single-dash option can carry its value directly: `-f"rules.awk"` is one part, `-frules.awk`.
+    if (part.length > 2 && part[0] === '-' && part[1] !== '-') {
+      attachedValues.push(part.slice(2));
+    }
+    if (attachedValues.some((value) => fs.existsSync(path.resolve(cwd, value)))) {
       return [];
     }
   }
