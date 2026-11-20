@@ -1027,7 +1027,7 @@ describe('OpenAiLiveProvider', () => {
       return response;
     };
 
-    for (const model of ['gpt-live-1.1', 'gpt-live-1-2026-09-01']) {
+    for (const model of ['gpt-live-1.1', 'gpt-live-1-9999-99-99']) {
       const priced = await capture(model);
       expect(priced.metadata?.voiceCost).toBeCloseTo(0.025);
       expect(priced.cost).toBeCloseTo(0.025);

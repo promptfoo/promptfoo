@@ -1647,7 +1647,7 @@ it('keeps mutable prices independent across model aliases', () => {
 });
 
 describe('isGptLiveConversationalModel', () => {
-  it.each(['gpt-live-1', 'gpt-live-1.1', 'gpt-live-1-2026-09-01'])('matches %s', (model) => {
+  it.each(['gpt-live-1', 'gpt-live-1.1', 'gpt-live-1-9999-99-99'])('matches %s', (model) => {
     expect(isGptLiveConversationalModel(model)).toBe(true);
   });
 

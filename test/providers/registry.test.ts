@@ -488,7 +488,7 @@ describe('Provider Registry', () => {
     ['openai:live:gpt-live-1', 'gpt-live-1'],
     ['openai:live', 'gpt-live-1'],
     ['openai:gpt-live-1', 'gpt-live-1'],
-    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+    ['openai:gpt-live-1-9999-99-99', 'gpt-live-1-9999-99-99'],
     ['openai:live:gpt-live-1.1', 'gpt-live-1.1'],
     ['openai:gpt-live-1.1', 'gpt-live-1.1'],
   ])(
@@ -566,7 +566,7 @@ describe('Provider Registry', () => {
     'openai:chat:gpt-live-1',
     'openai:chat:gpt-live-1-2026-09-01',
     'openai:responses:gpt-live-1',
-    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1-9999-99-99',
     'openai:realtime:gpt-live-1.1',
     'openai:chat:gpt-live-1.1',
     'openai:responses:gpt-live-1.1',
