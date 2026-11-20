@@ -3861,10 +3861,18 @@ describe('util', () => {
         now.mockReturnValue(Date.UTC(2026, 10, 30, 23, 59, 59, 999));
 
         expect(calculateGoogleCost(modelName, {}, 1000, 500)).toBeCloseTo(0.007, 10);
+        expect(calculateGoogleCost(modelName, { region: 'us' }, 1000, 500, true)).toBeCloseTo(
+          0.0077,
+          10,
+        );
 
         now.mockReturnValue(Date.UTC(2026, 11, 1));
 
         expect(calculateGoogleCost(modelName, {}, 1000, 500)).toBeCloseTo(0.014, 10);
+        expect(calculateGoogleCost(modelName, { region: 'us' }, 1000, 500, true)).toBeCloseTo(
+          0.0154,
+          10,
+        );
       });
 
       it.each([
