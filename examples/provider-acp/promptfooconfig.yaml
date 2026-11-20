@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare agents over the Agent Client Protocol
+
+prompts:
+  - 'Reply with only the first word alphabetically. Words: {{words}}.'
+
+providers:
+  - acp:copilot
+  - acp:antigravity
+  - acp:cursor
+  - acp:hermes
+  - acp:deepseek
+
+tests:
+  - vars:
+      words: 'cedar, birch, maple'
+    assert:
+      - type: icontains
+        value: birch

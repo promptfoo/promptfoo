@@ -25,6 +25,7 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
+import { getMinimalProcessEnv } from '../agentProcessEnv';
 import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
@@ -36,11 +37,7 @@ import {
   withCodexTraceExporter,
 } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
-import {
-  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
-  findGitRepositoryRoot,
-  getMinimalProcessEnv,
-} from './codexProcess';
+import { COMMON_OPTIONAL_PROCESS_ENV_KEYS, findGitRepositoryRoot } from './codexProcess';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,

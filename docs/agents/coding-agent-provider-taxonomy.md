@@ -20,6 +20,7 @@ The main providers in this family today are:
 
 | Provider family         | Provider IDs                                          | Runtime boundary                                |
 | ----------------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| Agent Client Protocol   | `acp`, `acp:<preset>`                                 | ACP v1 stdio subprocess                         |
 | OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                     |
 | OpenAI Codex Security   | `openai:codex-security`                               | Native `@openai/codex-security` SDK             |
 | OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process       |

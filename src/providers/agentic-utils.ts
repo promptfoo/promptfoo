@@ -35,6 +35,7 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
   }
 
   return [
+    'acp',
     'anthropic:claude-agent-sdk',
     'anthropic:claude-code',
     'openai:codex',

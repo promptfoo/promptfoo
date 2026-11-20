@@ -483,6 +483,13 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (path: string) => path === 'acp' || path.startsWith('acp:'),
+    create: async (path, options) => {
+      const { AcpProvider } = await import('./acp');
+      return new AcpProvider(path, options);
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath.startsWith('opencode:') || providerPath === 'opencode',
     create: async (
