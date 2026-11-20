@@ -329,7 +329,12 @@ describe('AzureChatCompletionProvider', () => {
       const body = JSON.parse((vi.mocked(fetchWithCache).mock.calls[0][1] as any).body);
       expect(body).toMatchObject({ model: 'mai-thinking-1', reasoning_effort: 'medium' });
       expect(body).not.toHaveProperty('temperature');
-      expect(result.tokenUsage).toMatchObject({ prompt: 19, completion: 149, cached: 2 });
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 19,
+        completion: 149,
+        cached: 2,
+        completionDetails: { reasoning: 141 },
+      });
       // $2/1M input, $0.20/1M cached input, $8/1M output (reasoning tokens bill as output).
       expect(result.cost).toBeCloseTo((17 * 2 + 2 * 0.2 + 149 * 8) / 1e6, 12);
     });

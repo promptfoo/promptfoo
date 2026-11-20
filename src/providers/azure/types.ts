@@ -271,23 +271,25 @@ export interface AzureAssistantProviderOptions {
 
 /**
  * Configuration options for Microsoft MAI image generation models served from
- * the Foundry `/mai/v1/images/generations` route (e.g. `MAI-Image-2.5`).
+ * the Foundry `/mai/v1/images/generations` route (e.g. `MAI-Image-2.7`).
  *
  * @see https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai
  */
 export interface AzureImageOptions extends AzureCompletionOptions {
   /**
-   * Output image width in pixels. Minimum 768; `width * height` must not exceed
-   * 1,048,576 (1024x1024). Defaults to 1024.
+   * Output image width in pixels. Minimum 768. The maximum `width * height`
+   * depends on the model (2048x2048 for MAI-Image-2.7, 1536x1536 for 2.6,
+   * 1024x1024 for 2.5) and is enforced by the API. Defaults to 1024.
    */
   width?: number;
   /**
-   * Output image height in pixels. Minimum 768; `width * height` must not exceed
-   * 1,048,576 (1024x1024). Defaults to 1024.
+   * Output image height in pixels. Minimum 768. The maximum `width * height`
+   * depends on the model (2048x2048 for MAI-Image-2.7, 1536x1536 for 2.6,
+   * 1024x1024 for 2.5) and is enforced by the API. Defaults to 1024.
    */
   height?: number;
   /**
-   * MAI model id used only for cost reporting (e.g. `MAI-Image-2.5`). Azure
+   * MAI model id used only for cost reporting (e.g. `MAI-Image-2.7`). Azure
    * deployment names can't contain the dots in model ids, so set this when your
    * deployment name differs from the model id. Defaults to the deployment name.
    */
