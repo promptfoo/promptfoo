@@ -440,6 +440,89 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(expectedCost, 6);
     });
 
+    const mockPromptCacheResponse = (cachedTokens: unknown, promptTokens = 1000) =>
+      createMockFetchResponse({
+        choices: [{ message: { content: 'ok' } }],
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: 100,
+          total_tokens: promptTokens + 100,
+          prompt_tokens_details: { cached_tokens: cachedTokens },
+        },
+      });
+
+    it.each([
+      // [model, expected cost for 1000 prompt tokens (640 cached) and 100 completion tokens]
+      // Mistral Large 4: 360 * $0.70 + 640 * $0.07 + 100 * $2.10 per 1M
+      ['mistral-large-latest', 0.0005068],
+      // GLM 5.3 Flash lists $0.03 cached (20%): 360 * $0.15 + 640 * $0.03 + 100 * $0.50 per 1M
+      ['zai-glm-5-3-flash', 0.0001232],
+      // DeepSeek V4.1 Flash lists $0.007 cached: 360 * $0.30 + 640 * $0.007 + 100 * $1.20 per 1M
+      ['deepseek-v4-1-flash-1017', 0.00023248],
+      // No listed cached rate, so 10% of input: 360 * $1.50 + 640 * $0.15 + 100 * $7.50 per 1M
+      ['mistral-medium-3-5', 0.001386],
+    ])('bills prompt-cache hits at the cached-input rate for %s', async (model, expectedCost) => {
+      const cacheProvider = new MistralChatCompletionProvider(model);
+      vi.spyOn(cacheProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockPromptCacheResponse(640));
+
+      const result = await cacheProvider.callApi('Test prompt cache billing');
+
+      expect(result.cost).toBeCloseTo(expectedCost, 10);
+      expect(result.cached).toBe(false);
+      expect(result.tokenUsage).toEqual({
+        total: 1100,
+        prompt: 1000,
+        completion: 100,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 640 },
+      });
+    });
+
+    it.each([
+      // cacheReadCost overrides the cached rate: 360 * $0.70 + 640 * $0.50 + 100 * $2.10 per 1M
+      [{ cacheReadCost: 0.5 / 1e6 }, 0.000782],
+      // An input-price override also prices cached tokens: 1000 * $1 + 100 * $2.10 per 1M
+      [{ inputCost: 1 / 1e6 }, 0.00121],
+      [{ cost: 0 }, 0],
+    ])('applies price overrides to prompt-cache hits: %o', async (overrides, expectedCost) => {
+      const cacheProvider = new MistralChatCompletionProvider('mistral-large-4', {
+        config: overrides,
+      });
+      vi.spyOn(cacheProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockPromptCacheResponse(640));
+
+      const result = await cacheProvider.callApi('Test prompt cache overrides');
+
+      expect(result.cost).toBeCloseTo(expectedCost, 10);
+    });
+
+    it('caps cached prompt tokens at the reported prompt tokens', async () => {
+      const cacheProvider = new MistralChatCompletionProvider('mistral-large-4');
+      vi.spyOn(cacheProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockPromptCacheResponse(5000, 128));
+
+      const result = await cacheProvider.callApi('Test prompt cache clamp');
+
+      // 128 * $0.07 + 100 * $2.10 per 1M
+      expect(result.cost).toBeCloseTo(0.00021896, 10);
+    });
+
+    it.each([0, -64, 1.5, '640', null])(
+      'bills all prompt tokens at the input rate when cached_tokens is %s',
+      async (cachedTokens) => {
+        const cacheProvider = new MistralChatCompletionProvider('mistral-large-4');
+        vi.spyOn(cacheProvider, 'getApiKey').mockReturnValue('fake-api-key');
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(mockPromptCacheResponse(cachedTokens));
+
+        const result = await cacheProvider.callApi('Test invalid prompt cache usage');
+
+        // 1000 * $0.70 + 100 * $2.10 per 1M
+        expect(result.cost).toBeCloseTo(0.00091, 10);
+        expect(result.tokenUsage).not.toHaveProperty('completionDetails');
+      },
+    );
+
     it.each([
       'mistral-large-4',
       'mistral-large-4-0',

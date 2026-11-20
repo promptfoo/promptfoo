@@ -196,6 +196,13 @@ adds $0.004 per audio minute when the API reports `usage.prompt_audio_seconds`, 
 input and output token charges. If audio duration is omitted, only the token subtotal is available.
 Token price overrides apply to the token charges; the reported audio duration is billed separately.
 
+When the API reports prompt-cache hits in `usage.prompt_tokens_details.cached_tokens`, promptfoo
+bills those tokens at the model's cached-input rate from Mistral's
+[pricing page](https://docs.mistral.ai/inference/pricing), or at 10% of the input price when no
+rate is listed, and reports them as `tokenUsage.completionDetails.cacheReadInputTokens`. Set
+`cacheReadCost` to override the cached-input rate; an `inputCost` or `cost` override also applies
+to cached tokens.
+
 :::note Aliases move — pin a snapshot for stability
 
 `*-latest` aliases follow whatever model Mistral currently points them at, so their price and
