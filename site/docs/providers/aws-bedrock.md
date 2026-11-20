@@ -140,6 +140,7 @@ The `inferenceModelType` config option selects the native request schema. For an
 - `nvidia` - For NVIDIA Nemotron models
 - `writer` - For Writer Palmyra models
 - `gemma` - For Google Gemma models
+- `twelvelabs` - For TwelveLabs Pegasus video models
 
 ### Example: Multi-Region Inference Profile
 
@@ -1629,7 +1630,7 @@ require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3`,
 `bedrock:us.moonshotai.kimi-k3`, or `bedrock:us.moonshotai.kimi-k3.1`; all also accept
 `global.` profiles, and Kimi accepts `in.moonshotai.kimi-k3` and `in.moonshotai.kimi-k3.1`
 from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
-Kimi K3 and K3.1 reason at `max` effort by default; set `reasoning_effort: none` to turn reasoning off.
+Kimi K3 and K3.1 reason at `max` effort by default; set `reasoning_effort: none` to turn reasoning off, or on Converse, `additionalModelRequestFields: { reasoning_effort: none }`.
 For Converse, add `converse:` after `bedrock:`. Kimi K3/K3.1 and GLM 5.3 Converse cost estimates
 include cache reads/writes for the published US/global rates and the India Kimi rate.
 For Kimi K3/K3.1, set `serviceTier: { type: priority }` on Converse or `service_tier: priority`
@@ -2040,7 +2041,7 @@ This will show detailed AWS SDK logs including credential resolution.
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma, twelvelabs
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:

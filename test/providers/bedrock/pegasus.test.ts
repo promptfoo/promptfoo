@@ -5,7 +5,6 @@ import {
   BEDROCK_MODEL,
   getHandlerForModel,
 } from '../../../src/providers/bedrock/index';
-import { calculateBedrockInvokeModelCost } from '../../../src/providers/bedrock/pricing';
 import { awsProviderFactories } from '../../../src/providers/families/aws';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -189,10 +188,26 @@ describe('TwelveLabs Pegasus 1.5 on Bedrock InvokeModel', () => {
     expect(invokeModel).not.toHaveBeenCalled();
   });
 
-  it('does not estimate per-second video billing from token counts', () => {
-    expect(calculateBedrockInvokeModelCost(PROFILE, 131, 37)).toBeUndefined();
-    expect(
-      calculateBedrockInvokeModelCost('global.twelvelabs.pegasus-1-5-v1:0', 131, 37),
-    ).toBeUndefined();
+  it.each([
+    `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${PROFILE}`,
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/video-eval',
+  ])('sends a Pegasus body through the profile ARN %s', async (arn) => {
+    const config = {
+      region: 'us-east-1',
+      inferenceModelType: 'twelvelabs',
+      mediaSource: { base64String: 'AAAA' },
+    } as any;
+    expect(getHandlerForModel(arn, config)).toBe(BEDROCK_MODEL.TWELVELABS_PEGASUS);
+    const provider = new AwsBedrockCompletionProvider(arn, { config });
+    const invokeModel = mockInvoke(provider, { message: 'ok', stopReason: 'stop' });
+
+    const result = await provider.callApi('Describe', context({}));
+
+    expect(invokeModel.mock.calls[0][0].modelId).toBe(arn);
+    expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
+      inputPrompt: 'Describe',
+      mediaSource: { base64String: 'AAAA' },
+    });
+    expect(result.output).toBe('ok');
   });
 });

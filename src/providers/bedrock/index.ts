@@ -114,7 +114,8 @@ export type BedrockModelFamily =
   | 'moonshot'
   | 'nvidia'
   | 'writer'
-  | 'gemma';
+  | 'gemma'
+  | 'twelvelabs';
 
 /**
  * Extended Bedrock options for InvokeModel API
@@ -2744,7 +2745,7 @@ export function getHandlerForModel(
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma',
+          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma, twelvelabs',
       );
     }
 
@@ -2796,6 +2797,8 @@ export function getHandlerForModel(
       case 'writer':
       case 'gemma':
         return BEDROCK_MODEL.OPENAI_COMPAT;
+      case 'twelvelabs':
+        return BEDROCK_MODEL.TWELVELABS_PEGASUS;
       default:
         throw new Error(`Unknown inference model type: ${inferenceModelType}`);
     }
