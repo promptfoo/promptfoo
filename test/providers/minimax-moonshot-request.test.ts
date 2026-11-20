@@ -157,9 +157,9 @@ describe('MiniMax effective billing', () => {
     reply();
     const result = await makeProvider('minimax', { apiKey: 'fixture', inputCost: 0.01 }).callApi(
       'Hello',
-      promptContext({ inputCost: 0.02, passthrough: { model: 'MiniMax-M2.7-highspeed' } }),
+      promptContext({ inputCost: 0.02, passthrough: { model: 'MiniMax-M3.1-Flash' } }),
     );
-    expect(result.cost).toBeCloseTo(60 * 0.02 + (40 * 0.06) / 1e6 + (50 * 2.4) / 1e6, 10);
+    expect(result.cost).toBeCloseTo(60 * 0.02 + (40 * 0.015) / 1e6 + (50 * 0.6) / 1e6, 10);
   });
 
   it.each([{}, { passthrough: { service_tier: 'priority' } }])(

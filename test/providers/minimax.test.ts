@@ -52,55 +52,60 @@ describe('calculateMiniMaxCost', () => {
     );
   });
 
-  it('should calculate cost without cache for MiniMax-M2.7', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(1.5); // (0.3 + 1.2)
+  it('should calculate cost without cache for MiniMax-M3.1-Flash', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 1000000, 1000000);
+    expect(cost).toBeCloseTo(0.75, 10); // (0.15 + 0.6)
   });
 
-  it('should calculate cost with cache hits for MiniMax-M2.7', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000, 500000);
-    expect(cost).toBeCloseTo(1.38); // (0.3 * 0.5 + 0.06 * 0.5 + 1.2)
+  it('should calculate cost with cache hits for MiniMax-M3.1-Flash', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 1000000, 1000000, 500000);
+    expect(cost).toBeCloseTo(0.6825, 10); // (0.15 * 0.5 + 0.015 * 0.5 + 0.6)
   });
 
-  it('should calculate cost for MiniMax-M2.7-highspeed', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7-highspeed', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(3.0); // (0.6 + 2.4)
+  it('should keep MiniMax-M3.1-Flash on flat pricing above 512k prompt tokens', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 900_000, 100_000, 300_000);
+    expect(cost).toBeCloseTo((0.15 * 600_000 + 0.015 * 300_000 + 0.6 * 100_000) / 1e6, 10);
   });
 
-  it('should calculate cost with cache hits for MiniMax-M2.7-highspeed', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7-highspeed', {}, 1000000, 1000000, 500000);
-    expect(cost).toBeCloseTo(2.73); // (0.6 * 0.5 + 0.06 * 0.5 + 2.4)
+  it('should not apply the M3 priority multiplier to MiniMax-M3.1-Flash', () => {
+    const cost = calculateMiniMaxCost(
+      'MiniMax-M3.1-Flash',
+      { service_tier: 'priority' },
+      1000000,
+      1000000,
+    );
+    expect(cost).toBeCloseTo(0.75, 10);
   });
 
   it('should return undefined if promptTokens is missing', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, undefined, 1000000);
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, undefined, 1000000);
     expect(cost).toBeUndefined();
   });
 
   it('should return undefined if completionTokens is missing', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, undefined);
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 1000000, undefined);
     expect(cost).toBeUndefined();
   });
 
   it('should charge input cost when a response has zero completion tokens', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 0);
-    expect(cost).toBeCloseTo(0.3);
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 1000000, 0);
+    expect(cost).toBeCloseTo(0.15, 10);
   });
 
   it('should clamp inconsistent cached-token usage to prompt token usage', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 0, 2000000);
-    expect(cost).toBeCloseTo(0.06);
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 1000000, 0, 2000000);
+    expect(cost).toBeCloseTo(0.015, 10);
   });
 
   it('should use custom cost from config', () => {
     const config = { cost: 1.0 / 1e6 };
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', config, 1000000, 1000000);
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', config, 1000000, 1000000);
     expect(cost).toBeCloseTo(2.0); // (1.0 + 1.0) from config override
   });
 
   it('should use separate input and output cost overrides', () => {
     const cost = calculateMiniMaxCost(
-      'MiniMax-M2.7',
+      'MiniMax-M3.1-Flash',
       { inputCost: 1.0 / 1e6, outputCost: 2.0 / 1e6 },
       1000000,
       1000000,
@@ -113,13 +118,23 @@ describe('calculateMiniMaxCost', () => {
     expect(cost).toBeUndefined();
   });
 
-  it('should calculate cost with 100% cache hits for M2.7', () => {
-    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000, 1000000);
-    expect(cost).toBeCloseTo(1.26); // (0.06 + 1.2) - all input tokens are cached
+  it('should calculate cost with 100% cache hits for M3.1-Flash', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 1000000, 1000000, 1000000);
+    expect(cost).toBeCloseTo(0.615, 10); // (0.015 + 0.6) - all input tokens are cached
   });
 });
 
 describe('MINIMAX_CHAT_MODELS', () => {
+  it('should have correct pricing for MiniMax-M3.1-Flash', () => {
+    const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M3.1-Flash');
+    // Flat rates: no long-context tier.
+    expect(model?.cost).toEqual({
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      cache_read: 0.015 / 1e6,
+    });
+  });
+
   it('should have correct pricing for MiniMax-M3', () => {
     const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M3');
     expect(model).toBeDefined();
@@ -134,42 +149,20 @@ describe('MINIMAX_CHAT_MODELS', () => {
     });
   });
 
-  it('should have correct pricing for MiniMax-M2.7', () => {
-    const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M2.7');
-    expect(model).toBeDefined();
-    expect(model?.cost.input).toBeCloseTo(0.3 / 1e6);
-    expect(model?.cost.output).toBeCloseTo(1.2 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.06 / 1e6);
+  it('should list the available MiniMax chat models newest first', () => {
+    expect(MINIMAX_CHAT_MODELS.map((m) => m.id)).toEqual(['MiniMax-M3.1-Flash', 'MiniMax-M3']);
   });
 
-  it('should have correct pricing for MiniMax-M2.7-highspeed', () => {
-    const model = MINIMAX_CHAT_MODELS.find((m) => m.id === 'MiniMax-M2.7-highspeed');
-    expect(model).toBeDefined();
-    expect(model?.cost.input).toBeCloseTo(0.6 / 1e6);
-    expect(model?.cost.output).toBeCloseTo(2.4 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.06 / 1e6);
-  });
-
-  it('should contain exactly three models', () => {
-    expect(MINIMAX_CHAT_MODELS).toHaveLength(3);
-  });
-
-  it('should have M3 as first model in the list', () => {
-    expect(MINIMAX_CHAT_MODELS[0].id).toBe('MiniMax-M3');
-  });
-
-  it('should have M2.7 as second model in the list', () => {
-    expect(MINIMAX_CHAT_MODELS[1].id).toBe('MiniMax-M2.7');
-  });
-
-  it('should have M2.7-highspeed as third model in the list', () => {
-    expect(MINIMAX_CHAT_MODELS[2].id).toBe('MiniMax-M2.7-highspeed');
-  });
-
-  it('should no longer include the older M2.5 models', () => {
+  it('should no longer include the retired M2.x models', () => {
     const ids = MINIMAX_CHAT_MODELS.map((m) => m.id);
-    expect(ids).not.toContain('MiniMax-M2.5');
-    expect(ids).not.toContain('MiniMax-M2.5-highspeed');
+    for (const retired of [
+      'MiniMax-M2.5',
+      'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.7',
+      'MiniMax-M2.7-highspeed',
+    ]) {
+      expect(ids).not.toContain(retired);
+    }
   });
 });
 
@@ -189,8 +182,8 @@ describe('createMiniMaxProvider', () => {
   });
 
   it('should handle model names with colons', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed');
-    expect(provider.id()).toBe('minimax:MiniMax-M2.7-highspeed');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash');
+    expect(provider.id()).toBe('minimax:MiniMax-M3.1-Flash');
   });
 
   it('should pass options to the provider', () => {
@@ -232,17 +225,17 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should return correct id', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
-    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash');
+    expect(provider.id()).toBe('minimax:MiniMax-M3.1-Flash');
   });
 
   it('should return correct string representation', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
-    expect(provider.toString()).toBe('[MiniMax Provider MiniMax-M2.7]');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash');
+    expect(provider.toString()).toBe('[MiniMax Provider MiniMax-M3.1-Flash]');
   });
 
   it('should serialize to JSON correctly', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: {
         config: {
           temperature: 0.7,
@@ -252,11 +245,11 @@ describe('MiniMaxProvider', () => {
     });
     const json = (provider as any).toJSON();
     expect(json.provider).toBe('minimax');
-    expect(json.model).toBe('MiniMax-M2.7');
+    expect(json.model).toBe('MiniMax-M3.1-Flash');
   });
 
   it('should not expose apiKey in JSON serialization', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: {
         config: {
           apiKey: 'secret-key',
@@ -268,19 +261,19 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should set apiBaseUrl to MiniMax API endpoint', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash');
     const json = (provider as any).toJSON();
     expect(json.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
   });
 
   it('should set apiKeyEnvar to MINIMAX_API_KEY', () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash');
     const json = (provider as any).toJSON();
     expect(json.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
   });
 
   it('should reject deprecated function_call configuration', async () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: {
         config: {
           function_call: 'auto',
@@ -296,7 +289,7 @@ describe('MiniMaxProvider', () => {
   it('should preserve explicit API endpoint and API key environment overrides', () => {
     const restoreCustomEnv = mockProcessEnv({ CUSTOM_MINIMAX_KEY: 'custom-minimax-key' });
     try {
-      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
         config: {
           config: {
             apiBaseUrl: 'https://proxy.example.com/minimax/v1',
@@ -320,7 +313,7 @@ describe('MiniMaxProvider', () => {
       OPENAI_API_BASE_URL: 'https://wrong-service.example.com/v1',
     });
     try {
-      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7') as any;
+      const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash') as any;
 
       expect(provider.getApiKey()).toBeUndefined();
       expect(provider.getOrganization()).toBeUndefined();
@@ -331,7 +324,7 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should send MiniMax completion limits and omit its invalid inherited temperature default', async () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: { config: { max_tokens: 256 } },
     }) as any;
     const { body } = await provider.getOpenAiBody('Test prompt');
@@ -342,7 +335,7 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should preserve explicit supported MiniMax request parameters', async () => {
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: { config: { max_completion_tokens: 512, temperature: 0.7 } },
     }) as any;
     const { body } = await provider.getOpenAiBody('Test prompt');
@@ -355,7 +348,7 @@ describe('MiniMaxProvider', () => {
   it('should not leak OpenAI sampling env defaults (OPENAI_TOP_P / OPENAI_PRESENCE_PENALTY / OPENAI_FREQUENCY_PENALTY) into MiniMax requests', async () => {
     const restoreOpenAiSamplingEnv = mockProcessEnv(createSamplingEnvironment());
     try {
-      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7') as any;
+      const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash') as any;
       const { body } = await provider.getOpenAiBody('Test prompt');
 
       expect(body.top_p).toBeUndefined();
@@ -369,7 +362,7 @@ describe('MiniMaxProvider', () => {
   it('should preserve explicit MiniMax sampling parameters even when OPENAI_* sampling envs are set', async () => {
     const restoreOpenAiSamplingEnv = mockProcessEnv(createSamplingEnvironment());
     try {
-      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
         config: { config: { top_p: 0.95, presence_penalty: 0.1, frequency_penalty: 0.2 } },
       }) as any;
       const { body } = await provider.getOpenAiBody('Test prompt');
@@ -380,6 +373,96 @@ describe('MiniMaxProvider', () => {
     } finally {
       restoreOpenAiSamplingEnv();
     }
+  });
+
+  it('should forward reasoning_effort, which the base provider drops for non-OpenAI models', async () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
+      config: { config: { reasoning_effort: 'low' } },
+    }) as any;
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.reasoning_effort).toBe('low');
+  });
+
+  it('should leave reasoning_effort to the MiniMax default when it is not configured', async () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash') as any;
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('should render reasoning_effort from test vars', async () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
+      config: { config: { reasoning_effort: '{{ effort }}' as any } },
+    }) as any;
+    const { body } = await provider.getOpenAiBody('Test prompt', {
+      vars: { effort: 'xhigh' },
+      prompt: { raw: 'Test prompt', label: 'fixture' },
+    });
+
+    expect(body.reasoning_effort).toBe('xhigh');
+  });
+
+  it.each([
+    [{ reasoning_effort: 'low' }, { reasoning_effort: 'high' }, 'high'],
+    [{ passthrough: { reasoning_effort: 'low' } }, { reasoning_effort: 'high' }, 'high'],
+    [{ reasoning_effort: 'low' }, { passthrough: { reasoning_effort: 'medium' } }, 'medium'],
+    [{ reasoning_effort: 'low', passthrough: { reasoning_effort: 'max' } }, {}, 'max'],
+  ])(
+    'should resolve reasoning_effort from provider config %j and prompt config %j',
+    async (config, promptConfig, expected) => {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
+        config: { config: config as any },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: {},
+        prompt: { raw: 'Test prompt', label: 'fixture', config: promptConfig },
+      });
+
+      expect(body.reasoning_effort).toBe(expected);
+    },
+  );
+
+  it('should call MiniMax-M3.1-Flash with reasoning_effort and price its cached usage', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        model: 'MiniMax-M3.1-Flash',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Paris',
+              reasoning_content: 'The user asks for the capital of France.',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          total_tokens: 1500,
+          prompt_tokens: 1200,
+          completion_tokens: 300,
+          prompt_tokens_details: { cached_tokens: 800 },
+        },
+      }),
+    );
+
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
+      config: { config: { apiKey: 'fixture-key', reasoning_effort: 'medium' } },
+    });
+    const result = await provider.callApi('What is the capital of France?');
+
+    const [url, init] = vi.mocked(fetchWithCache).mock.calls[0] ?? [];
+    expect(url).toBe('https://api.minimax.io/v1/chat/completions');
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body).toMatchObject({ model: 'MiniMax-M3.1-Flash', reasoning_effort: 'medium' });
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body).not.toHaveProperty('max_completion_tokens');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Thinking: The user asks for the capital of France.\n\nParis');
+    // MiniMax's documented example: (400 * 0.15 + 800 * 0.015 + 300 * 0.60) / 1M = $0.000252
+    expect(result.cost).toBeCloseTo(0.000252, 12);
+    expect(result.tokenUsage).toMatchObject({ prompt: 1200, completion: 300, total: 1500 });
   });
 
   it('should call a configured MiniMax-compatible endpoint and charge prompt-cache reads', async () => {
@@ -395,7 +478,7 @@ describe('MiniMaxProvider', () => {
       }),
     );
 
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: {
         config: {
           apiKey: 'minimax-key',
@@ -416,7 +499,7 @@ describe('MiniMaxProvider', () => {
     expect(body).toMatchObject({ max_completion_tokens: 256, temperature: 0.7 });
     expect(body.max_tokens).toBeUndefined();
     expect(result.output).toBe('MiniMax output');
-    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 10, 5, 4));
+    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 10, 5, 4));
   });
 
   it('should return API errors from the MiniMax endpoint', async () => {
@@ -427,7 +510,7 @@ describe('MiniMaxProvider', () => {
       statusText: 'Bad Request',
     } as never);
 
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: { config: { apiKey: 'minimax-key' } },
     });
     const result = await provider.callApi('Test prompt');
@@ -445,7 +528,7 @@ describe('MiniMaxProvider', () => {
       }),
     );
 
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: { config: { apiKey: 'minimax-key' } },
     });
     const result = await provider.callApi('Test prompt');
@@ -468,11 +551,13 @@ describe('MiniMaxProvider', () => {
           },
         }),
       );
-      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
         config: { config: { apiKey: 'fixture-key' } },
       });
       const result = await provider.callApi('Test prompt');
-      expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 100, 50, cachedTokens));
+      expect(result.cost).toBe(
+        calculateMiniMaxCost('MiniMax-M3.1-Flash', {}, 100, 50, cachedTokens),
+      );
       expect(result.tokenUsage?.prompt).toBe(100);
     },
   );
@@ -487,7 +572,7 @@ describe('MiniMaxProvider', () => {
       status: 200,
       statusText: 'OK',
     });
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed', {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M3.1-Flash', {
       config: { config: { apiKey: 'fixture-key' } },
     });
     const result = await provider.callApi('Test prompt');

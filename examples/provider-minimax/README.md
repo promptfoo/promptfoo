@@ -19,4 +19,4 @@ cd provider-minimax
 promptfoo eval
 ```
 
-The included config compares the flagship M3 model with the previous-generation M2.7 on a simple factual prompt.
+The included config compares M3 with the lower-cost M3.1 Flash on a simple factual prompt. Both models think before answering, and thinking tokens count toward `max_completion_tokens`.
