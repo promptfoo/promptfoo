@@ -5,11 +5,15 @@ import { CustomPlugin } from '../../../src/redteam/plugins/custom';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { DoNotAnswerPlugin } from '../../../src/redteam/plugins/donotanswer';
 import { HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
-import { Plugins } from '../../../src/redteam/plugins/index';
+import {
+  canPluginGenerateRemote,
+  Plugins,
+  willPluginGenerateRemote,
+} from '../../../src/redteam/plugins/index';
 import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
-import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
   createProviderResponse,
@@ -78,6 +82,53 @@ describe('canGenerateRemote property and behavior', () => {
       expect(IntentPlugin.canGenerateRemote).toBe(false);
       expect(PlinyPlugin.canGenerateRemote).toBe(false);
       expect(UnsafeBenchPlugin.canGenerateRemote).toBe(false);
+    });
+  });
+
+  describe('canPluginGenerateRemote and willPluginGenerateRemote', () => {
+    it('returns false for custom file:// plugins, which CustomPlugin generates locally', () => {
+      // Custom file:// plugins are never registered in Plugins, so the
+      // lookup must not fail closed for this known local-only route.
+      expect(canPluginGenerateRemote('file:///tmp/custom-plugin.yaml')).toBe(false);
+      expect(willPluginGenerateRemote('file:///tmp/custom-plugin.yaml')).toBe(false);
+    });
+
+    it('still fails closed for other unknown plugin ids when remote generation is selected', () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      expect(canPluginGenerateRemote('some-unknown-plugin')).toBe(true);
+      expect(willPluginGenerateRemote('some-unknown-plugin')).toBe(true);
+    });
+
+    it('returns true for remote-only plugins even when shouldGenerateRemote is false', () => {
+      // rag-poisoning has no local implementation: its action calls the
+      // remote API whenever remote generation is not explicitly disabled.
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      expect(canPluginGenerateRemote('rag-poisoning')).toBe(true);
+      expect(willPluginGenerateRemote('rag-poisoning')).toBe(true);
+    });
+
+    it('returns false for remote-only plugins when remote generation is explicitly disabled', () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      expect(willPluginGenerateRemote('rag-poisoning')).toBe(false);
+    });
+
+    it('follows the global preference for remote-capable plugins', () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      expect(willPluginGenerateRemote('prompt-extraction')).toBe(false);
+
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      expect(willPluginGenerateRemote('prompt-extraction')).toBe(true);
+    });
+
+    it('returns false for local-only plugins even when remote generation is selected', () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      expect(canPluginGenerateRemote('intent')).toBe(false);
+      expect(willPluginGenerateRemote('intent')).toBe(false);
     });
   });
 

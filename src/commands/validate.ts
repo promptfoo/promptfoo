@@ -6,8 +6,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
-import { canPluginGenerateRemote } from '../redteam/plugins/index';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import { willPluginGenerateRemote } from '../redteam/plugins/index';
 import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -84,10 +83,13 @@ function getRemotePluginConfigSizeBytes(pluginConfig: Record<string, unknown>): 
 /**
  * Return the plugins whose config would exceed the remote generation size limit.
  * Only the serialized `config` object is measured, matching the server-side
- * check on the `config` field of the remote generation request. Plugins whose
- * generation route never sends the config remotely (local-only plugins, per
- * the plugin factory's canGenerateRemote flag) are skipped, as are plugins
- * without a config. Unknown plugin ids fail closed and keep the check.
+ * check on the `config` field of the remote generation request. Each plugin is
+ * judged by its effective generation route in the current environment
+ * (willPluginGenerateRemote): local-only plugins, custom `file://` plugins,
+ * and remote-capable plugins when local generation is selected are skipped,
+ * as are plugins without a config. Remote-only plugins are checked even when
+ * the global preference is local generation, since they still send their
+ * config remotely. Unknown plugin ids fail closed and keep the check.
  */
 export function getOversizedRemotePluginConfigs(config: UnifiedConfig): OversizedPluginConfig[] {
   const plugins = config?.redteam?.plugins;
@@ -103,7 +105,7 @@ export function getOversizedRemotePluginConfigs(config: UnifiedConfig): Oversize
     if (typeof id !== 'string' || !pluginConfig || typeof pluginConfig !== 'object') {
       continue;
     }
-    if (!canPluginGenerateRemote(id)) {
+    if (!willPluginGenerateRemote(id)) {
       continue;
     }
     const sizeBytes = getRemotePluginConfigSizeBytes(pluginConfig as Record<string, unknown>);
@@ -584,17 +586,18 @@ ${z.prettifyError(configParse.error)}`,
       process.exitCode = 1;
       return;
     }
-    if (shouldGenerateRemote()) {
-      const oversized = getOversizedRemotePluginConfigs(configParse.data);
-      if (oversized.length > 0) {
-        for (const { pluginId, sizeBytes } of oversized) {
-          logger.error(
-            `Plugin "${pluginId}" config serializes to ${sizeBytes} bytes, which exceeds the ${REMOTE_PLUGIN_CONFIG_MAX_BYTES} byte limit for remote generation. Shorten the plugin config (for example, the system prompt) or disable remote generation.`,
-          );
-        }
-        process.exitCode = 1;
-        return;
+    // The size check is per plugin, by effective generation route: plugins
+    // that will generate remotely in this environment are checked, the rest
+    // are skipped inside getOversizedRemotePluginConfigs.
+    const oversized = getOversizedRemotePluginConfigs(configParse.data);
+    if (oversized.length > 0) {
+      for (const { pluginId, sizeBytes } of oversized) {
+        logger.error(
+          `Plugin "${pluginId}" config serializes to ${sizeBytes} bytes, which exceeds the ${REMOTE_PLUGIN_CONFIG_MAX_BYTES} byte limit for remote generation. Shorten the plugin config (for example, the system prompt) or disable remote generation.`,
+        );
       }
+      process.exitCode = 1;
+      return;
     }
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {

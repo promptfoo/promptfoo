@@ -97,6 +97,82 @@ describe('validate plugin config size for remote generation (#12513)', () => {
       expect(oversized).toEqual([]);
     });
 
+    it('passes an oversized config for a custom file:// plugin', () => {
+      // Custom file:// plugins are generated locally by CustomPlugin
+      // (canGenerateRemote = false) and are never registered in Plugins, so
+      // their config never goes to remote generation.
+      const oversized = getOversizedRemotePluginConfigs(
+        configWithPlugin(
+          { examples: 'x'.repeat(40_000) },
+          'file:///tmp/custom-plugin.yaml',
+        ) as unknown as UnifiedConfig,
+      );
+      expect(oversized).toEqual([]);
+    });
+
+    it('passes an oversized config for a remote-capable plugin when remote generation is not selected', () => {
+      // With an OPENAI_API_KEY set and no Cloud login or remote URL,
+      // shouldGenerateRemote() is false, so prompt-extraction generates
+      // locally and its config never goes to the remote service.
+      const restoreLocalEnv = mockProcessEnv({
+        PROMPTFOO_REMOTE_GENERATION_URL: undefined,
+        OPENAI_API_KEY: 'test-openai-key',
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+      });
+      try {
+        const oversized = getOversizedRemotePluginConfigs(
+          configWithPlugin({ systemPrompt: 'x'.repeat(40_000) }) as unknown as UnifiedConfig,
+        );
+        expect(oversized).toEqual([]);
+      } finally {
+        restoreLocalEnv();
+      }
+    });
+
+    it('still flags an oversized config for a remote-only plugin when remote generation is not selected', () => {
+      // rag-poisoning has no local implementation: createRemotePlugin only
+      // checks neverGenerateRemote(), so it still sends its config remotely
+      // when an OPENAI_API_KEY is set and no Cloud login or remote URL exists.
+      const restoreLocalEnv = mockProcessEnv({
+        PROMPTFOO_REMOTE_GENERATION_URL: undefined,
+        OPENAI_API_KEY: 'test-openai-key',
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+      });
+      try {
+        const oversized = getOversizedRemotePluginConfigs(
+          configWithPlugin(
+            { intendedResults: ['x'.repeat(40_000)] },
+            'rag-poisoning',
+          ) as unknown as UnifiedConfig,
+        );
+        expect(oversized).toHaveLength(1);
+        expect(oversized[0].pluginId).toBe('rag-poisoning');
+      } finally {
+        restoreLocalEnv();
+      }
+    });
+
+    it('passes an oversized config for a remote-only plugin when remote generation is disabled', () => {
+      const restoreDisabledEnv = mockProcessEnv({
+        PROMPTFOO_REMOTE_GENERATION_URL: undefined,
+        OPENAI_API_KEY: 'test-openai-key',
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      });
+      try {
+        const oversized = getOversizedRemotePluginConfigs(
+          configWithPlugin(
+            { intendedResults: ['x'.repeat(40_000)] },
+            'rag-poisoning',
+          ) as unknown as UnifiedConfig,
+        );
+        expect(oversized).toEqual([]);
+      } finally {
+        restoreDisabledEnv();
+      }
+    });
+
     it('still flags an oversized config for a remote-capable plugin', () => {
       // prompt-extraction generates remotely, so the limit still applies.
       const oversized = getOversizedRemotePluginConfigs(
@@ -258,6 +334,42 @@ describe('validate plugin config size for remote generation (#12513)', () => {
 
       expect(process.exitCode).toBe(0);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Configuration is valid'));
+    });
+
+    it('passes validation for an oversized custom file:// plugin config', async () => {
+      mockResolved(
+        configWithPlugin({ examples: 'x'.repeat(40_000) }, 'file:///tmp/custom-plugin.yaml'),
+      );
+      await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+      expect(process.exitCode).toBe(0);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Configuration is valid'));
+    });
+
+    it('fails validation for an oversized remote-only plugin config even when remote generation is not selected', async () => {
+      // With an OPENAI_API_KEY set and no Cloud login or remote URL, the
+      // global preference is local generation, but rag-poisoning still sends
+      // its config remotely, so the size limit still applies to it.
+      const restoreLocalEnv = mockProcessEnv({
+        PROMPTFOO_REMOTE_GENERATION_URL: undefined,
+        OPENAI_API_KEY: 'test-openai-key',
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+      });
+      try {
+        mockResolved(configWithPlugin({ intendedResults: ['x'.repeat(40_000)] }, 'rag-poisoning'));
+        await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+        expect(process.exitCode).toBe(1);
+        const errorOutput = vi
+          .mocked(logger.error)
+          .mock.calls.map((call) => String(call[0]))
+          .join('\n');
+        expect(errorOutput).toContain('rag-poisoning');
+        expect(errorOutput).toContain('30000');
+      } finally {
+        restoreLocalEnv();
+      }
     });
 
     it('passes validation when the plugin config is under the limit', async () => {

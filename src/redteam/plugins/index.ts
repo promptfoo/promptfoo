@@ -100,6 +100,14 @@ export interface PluginFactory {
    * calling fetchRemoteTestCases. Undefined means remote-capable.
    */
   canGenerateRemote?: boolean;
+  /**
+   * Whether this plugin has no local implementation and always sends its
+   * config to remote generation unless remote generation is explicitly
+   * disabled. Set by createRemotePlugin and by the bias and unaligned-harm
+   * factories, whose actions call fetchRemoteTestCases after checking only
+   * neverGenerateRemote(), without consulting shouldGenerateRemote().
+   */
+  remoteOnly?: boolean;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
 }
@@ -586,6 +594,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(VLSUPlugin, 'vlsu'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
+    // No local implementation: getHarmfulTests always calls the remote API
+    // unless remote generation is explicitly disabled.
+    remoteOnly: true,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
         logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
@@ -632,6 +643,9 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
 
 const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
+  // No local implementation: this action always calls the remote API unless
+  // remote generation is explicitly disabled.
+  remoteOnly: true,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
       logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
@@ -660,6 +674,9 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     // Remote plugins always send their config to remote generation.
     canGenerateRemote: true,
+    // No local implementation: this action always calls the remote API
+    // unless remote generation is explicitly disabled.
+    remoteOnly: true,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({
       provider,
@@ -731,18 +748,48 @@ export const Plugins: PluginFactory[] = [
   ...remotePlugins,
 ].map(withMaxCharsRetries);
 
+function findPluginFactory(pluginId: string): PluginFactory | undefined {
+  return Plugins.find(
+    (pluginFactory) =>
+      pluginFactory.key === pluginId || pluginFactory.key === getShortPluginId(pluginId),
+  );
+}
+
 /**
  * Whether the plugin with this id sends its config to remote generation when
  * remote generation is selected. Resolves the id against the plugin factory
  * registry, accepting both the short key (`intent`) and the full id
- * (`promptfoo:redteam:intent`). Unknown plugin ids (custom file:// plugins
- * and anything not registered) fail closed and return true, since their
- * generation route is unknown.
+ * (`promptfoo:redteam:intent`). Custom `file://` plugins are generated
+ * locally by CustomPlugin (`canGenerateRemote = false`) and are never
+ * registered, so they return false instead of failing closed. Any other
+ * unknown plugin id fails closed and returns true, since its generation
+ * route is unknown.
  */
 export function canPluginGenerateRemote(pluginId: string): boolean {
-  const factory = Plugins.find(
-    (pluginFactory) =>
-      pluginFactory.key === pluginId || pluginFactory.key === getShortPluginId(pluginId),
-  );
+  if (pluginId.startsWith('file://')) {
+    return false;
+  }
+  const factory = findPluginFactory(pluginId);
   return factory?.canGenerateRemote !== false;
+}
+
+/**
+ * Whether the plugin with this id will send its config to remote generation
+ * in the current environment: its effective generation route, not just its
+ * capability. Remote-only plugins (those with no local implementation)
+ * generate remotely whenever remote generation is not explicitly disabled,
+ * even when the global preference is local generation. Local-only plugins
+ * and custom `file://` plugins never do. Every other plugin follows the
+ * global preference. Unknown plugin ids fail closed when remote generation
+ * is selected.
+ */
+export function willPluginGenerateRemote(pluginId: string): boolean {
+  if (neverGenerateRemote()) {
+    return false;
+  }
+  const factory = findPluginFactory(pluginId);
+  if (factory?.remoteOnly) {
+    return true;
+  }
+  return canPluginGenerateRemote(pluginId) && shouldGenerateRemote();
 }
