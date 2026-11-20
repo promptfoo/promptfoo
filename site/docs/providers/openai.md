@@ -393,7 +393,7 @@ Current standard rates in USD per million tokens, for requests with up to 272,00
 
 Above 272,000 input tokens, input, cached-input, and cache-write rates double and output rates increase by 50%. Batch costs half the standard rates, as does Flex for models with published Flex pricing. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. Fast mode supports EU data residency on GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Sol, GPT-6.1 Terra, and GPT-6 Luna. Cache-write prices in this table assume 30-minute retention. For 12-hour retention the write price doubles. See [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
-For GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Terra, and GPT-6 Luna, an eligible Standard background response costs 30% less for a two-hour window or 40% less for an eight-hour window. Set `background: true` and pass `background_options.completion_window` as `2h` or `8h` under `passthrough`. The discount applies to model tokens. [Background completion windows](https://developers.openai.com/api/docs/guides/background#use-discounted-completion-windows)
+For Responses API evals that can wait, see [discounted background completion windows](#discounted-background-completion-windows).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
@@ -479,14 +479,15 @@ The selected program is available in the provider response's `raw.access_program
 | Option                 | Behavior                                                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `instructions`         | Set system instructions for this request.                                                                     |
-| `previous_response_id` | Continue a stored response by ID. It does not automatically connect separate test cases.                      |
+| `previous_response_id` | Continue a stored response by ID. Accepts a literal ID or a test variable.                                    |
 | `store`                | Control storage for later retrieval. OpenAI's default is `true`; account data controls can restrict it.       |
 | `include`              | Request extra fields in the raw response, such as `web_search_call.results` or `reasoning.encrypted_content`. |
 | `max_tool_calls`       | Limit built-in tool calls in one response.                                                                    |
 | `parallel_tool_calls`  | Allow parallel tool calls where supported.                                                                    |
 | `metadata`             | Attach string key/value metadata.                                                                             |
 | `truncation`           | Use `disabled` to fail on excess context, or `auto` to let OpenAI truncate it.                                |
-| `background`           | Create a background response; Promptfoo polls until it completes or times out.                                |
+| `background`           | Create a background response. Promptfoo polls its ID until it finishes or times out.                          |
+| `background_options`   | Set a [completion window](#discounted-background-completion-windows) and optional continuation ID.            |
 | `stream`               | Request streaming; Promptfoo collects the stream into the eval result.                                        |
 
 The provider response's `raw` field contains the Responses object, including `id` and `output` items. Its `metadata` includes extracted annotations and HTTP metadata. Use these fields when you need to inspect tool results or continue a conversation.
@@ -496,6 +497,26 @@ For incomplete Responses output, `metadata.responseStatus` and `metadata.incompl
 A failed foreground generation returned with HTTP 200 retains reported token usage and any available cost estimate. Without reported usage, both remain unknown.
 
 </details>
+
+### Discounted background completion windows
+
+Set `background_options.completion_window` to `2h` for 30% off Standard model token rates or `8h` for 40% off. OpenAI aims to finish the initial response within the selected window after accepting the request. The public beta supports GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Terra, and GPT-6 Luna. [OpenAI background mode](https://developers.openai.com/api/docs/guides/background#use-discounted-completion-windows)
+
+```yaml
+providers:
+  - id: openai:responses:gpt-6.2-sol
+    config:
+      background: true
+      service_tier: default
+      background_options:
+        completion_window: 8h
+```
+
+Use `background: true` with streaming disabled. Set `service_tier: default` to select the required Standard processing. With `auto`, the request qualifies only if OpenAI selects Standard. Omit `completion_window` or use `soonest` for regular background processing. Keep the eval running while Promptfoo polls for the result. [Timeouts](#timeout-configuration)
+
+Choose a unique `background_options.continuation_id` for each multi-step workflow. You can supply the ID from a test variable with `continuation_id: '{{workflow}}'`. Reuse it with the same project, model, and window to make follow-ups eligible for higher queue priority. [Follow-up requests](https://developers.openai.com/api/docs/guides/background#run-a-workflow-with-follow-up-requests)
+
+In a two-test eval with one prompt and one provider, set `previous_response_id: '{{prior}}'` in the provider config to carry conversation history forward. On the first test, set `options.transform: context.metadata.responseId` and `options.storeOutputAs: prior`. This makes the response ID the first test's output and the second test's `prior` variable. [Storing outputs between tests](/docs/configuration/chat#using-storeoutputas)
 
 ### Prompt caching {#prompt-caching-and-included-tool-results}
 
@@ -1169,13 +1190,13 @@ Set `PROMPTFOO_RETRY_5XX=true` to retry HTTP server errors. Check the error and 
 
 <Link id="gpt-5-pro-timeout-configuration" />
 
-Responses requests with `background: true` and GPT-5 Pro variants use a 10-minute timeout unless `PROMPTFOO_EVAL_TIMEOUT_MS` is set. Regular requests use the standard request timeout, normally 5 minutes. Set an overall limit for a longer run:
+For a `2h` or `8h` background completion window, Promptfoo waits up to the requested window plus 10 minutes. The default timeout for other background responses, deep research models, and GPT-5 Pro variants is 10 minutes. Set `PROMPTFOO_EVAL_TIMEOUT_MS` to override these defaults. This command allows up to nine hours per eval step.
 
 ```sh
-PROMPTFOO_EVAL_TIMEOUT_MS=1200000 npx promptfoo@latest eval --no-cache
+PROMPTFOO_EVAL_TIMEOUT_MS=32400000 npx promptfoo@latest eval --no-cache
 ```
 
-For these long-running Responses requests, `REQUEST_TIMEOUT_MS` does not override the automatic 10-minute timeout. See [background caching and cancellation](#prompt-caching-and-included-tool-results) before relying on an interrupted run to cancel upstream work.
+For regular requests, `REQUEST_TIMEOUT_MS` sets the timeout, which defaults to 5 minutes. See [background caching and cancellation](#prompt-caching-and-included-tool-results) before relying on an interrupted run to cancel upstream work.
 
 ## Migrating older configurations
 

@@ -27,17 +27,26 @@ const responseData = {
 };
 
 describe('GPT-6.2 background Responses billing', () => {
+  const twoHours = { background_options: { completion_window: '2h' } } as const;
+  const eightHours = { background_options: { completion_window: '8h' } } as const;
+
   it.each([
-    { returnedWindow: undefined, multiplier: 0.6 },
-    { returnedWindow: '2h', multiplier: 0.7 },
-    { returnedWindow: 'soonest', multiplier: 1 },
+    { config: twoHours, returnedWindow: undefined, multiplier: 0.7 },
+    { config: eightHours, returnedWindow: undefined, multiplier: 0.6 },
+    { config: { passthrough: eightHours }, returnedWindow: undefined, multiplier: 0.6 },
+    { config: eightHours, returnedWindow: '2h', multiplier: 0.7 },
+    { config: eightHours, returnedWindow: 'soonest', multiplier: 1 },
   ])(
-    'uses the effective completion window ($returnedWindow)',
-    async ({ returnedWindow, multiplier }) => {
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+    'bills model tokens for $config when the completed poll reports $returnedWindow',
+    async ({ config, returnedWindow, multiplier }) => {
+      const id = 'resp_background';
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({ id, status: 'queued', usage: null }),
+      );
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
         createMockFetchResponse({
           ...responseData,
-          id: `resp_background_${returnedWindow ?? 'omitted'}`,
+          id,
           model: 'gpt-6.2-sol',
           background: true,
           background_options: returnedWindow ? { completion_window: returnedWindow } : undefined,
@@ -49,7 +58,8 @@ describe('GPT-6.2 background Responses billing', () => {
         config: {
           apiKey: 'test-key',
           background: true,
-          passthrough: { background_options: { completion_window: '8h' } },
+          service_tier: 'auto',
+          ...config,
         },
       }).callApi('Say ready.');
 

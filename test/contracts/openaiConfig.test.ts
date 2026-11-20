@@ -135,6 +135,11 @@ const chatValid = [
   },
 ];
 const responseValid = [
+  ...['soonest', '2h', '8h', '{{ window }}'].map((completion_window) => ({
+    background: true,
+    background_options: { completion_window },
+  })),
+  { background: true, background_options: { continuation_id: '{{ workflow_id }}' } },
   { prompt_cache_options: { mode: 'explicit', ttl: '12h' } },
   { tools: [{ type: 'web_search_2025_08_26' }, { type: 'web_search_preview_2025_03_11' }] },
   {
@@ -329,6 +334,7 @@ const invalidCommon = [
 ];
 
 const invalidChat = [
+  { background_options: { completion_window: '2h' } },
   { audio: { voice: { name: 'voice_123' } } },
   { prompt_cache_options: { ttl: '12h' } },
   { best_of: 1 },
@@ -364,6 +370,8 @@ describe('OpenAI portable configuration contracts', () => {
         ...invalidCommon,
         { max_output_tokens: '20' },
         { include: [123] },
+        { background_options: { completion_window: '4h' } },
+        { background_options: { continuation_id: 123 } },
         { access_programs: { cyber: 'unknown' } },
         { max_tokens: 32 },
         { max_completion_tokens: 32 },

@@ -5,7 +5,7 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString, getEvalTimeoutMs } from '../../envars';
 import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
@@ -17,7 +17,7 @@ import {
 import { fetchWithRetries } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
-import { sleep } from '../../util/time';
+import { sleepWithAbort } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import {
   calculateOpenRouterResponseCost,
@@ -154,10 +154,54 @@ interface BackgroundResponseResult {
   statusText: string;
   headers?: Record<string, string>;
   error?: string;
+  polledResponseId?: string;
   retried?: boolean;
   cancelled?: boolean;
   shared?: boolean;
   timedOut?: boolean;
+}
+
+class BackgroundPollError extends Error {
+  constructor(
+    readonly responseId: string,
+    cause: unknown,
+  ) {
+    super(`Failed to poll background response ${responseId}`, { cause });
+  }
+}
+
+function getPollErrorMetadata(responseId?: string) {
+  // Transport retries poll this ID. A scheduler retry could submit a second paid job.
+  return responseId ? { responseId, rateLimitRetryable: false } : undefined;
+}
+
+function getBackgroundCompletionWindowMs(completionWindow?: string): number {
+  switch (completionWindow) {
+    case '2h':
+      return 2 * 60 * 60 * 1000;
+    case '8h':
+      return 8 * 60 * 60 * 1000;
+    default:
+      return 0;
+  }
+}
+
+function getBackgroundAttemptTimeout(request: BackgroundRequest, timeout: number): number {
+  return request.hasDiscountedWindow ? Math.min(timeout, LONG_RUNNING_MODEL_TIMEOUT_MS) : timeout;
+}
+
+function getBackgroundTimeoutResult(
+  data: OpenAIResponsesResponse,
+  timeout: number,
+): BackgroundResponseResult {
+  return {
+    data,
+    status: 0,
+    statusText: 'Error',
+    error: `Background response ${data.id} timed out after ${timeout}ms.`,
+    polledResponseId: data.id,
+    timedOut: true,
+  };
 }
 
 const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
@@ -172,6 +216,7 @@ type BackgroundRequest = {
   body: string;
   cacheScope: string;
   hasPerPromptAuthorization: boolean;
+  hasDiscountedWindow?: boolean;
   signal?: AbortSignal;
 };
 const inFlightBackgroundCreations = new Map<
@@ -334,10 +379,9 @@ async function cancelBackgroundResponse(
 async function pollBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
-  authentication: Pick<BackgroundRequest, 'headers' | 'getAuthHeaders'>,
+  request: BackgroundRequest,
   timeout: number,
   maxRetries?: number,
-  signal?: AbortSignal,
   deadline = Date.now() + timeout,
   cancelOnStop = true,
 ): Promise<BackgroundResponseResult> {
@@ -354,45 +398,36 @@ async function pollBackgroundResponse(
   let status = 200;
   let statusText = 'OK';
   let responseHeaders: Record<string, string> | undefined;
-  let firstPoll = true;
-  let deadlineSignal: AbortSignal | undefined;
+  let intervalMs = 0;
+  const maxIntervalMs = request.hasDiscountedWindow ? 30_000 : 1_000;
+  const { signal } = request;
+  const deadlineSignal = AbortSignal.timeout(Math.max(0, deadline - Date.now()));
+  const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
 
   try {
     while (data.status === 'queued' || data.status === 'in_progress') {
-      signal?.throwIfAborted();
-      if (!firstPoll) {
-        await sleep(Math.min(1000, Math.max(0, deadline - Date.now())));
-        signal?.throwIfAborted();
+      if (intervalMs > 0) {
+        await sleepWithAbort(Math.min(intervalMs, Math.max(0, deadline - Date.now())), pollSignal);
       }
-      firstPoll = false;
-
+      pollSignal.throwIfAborted();
+      intervalMs = Math.min(maxIntervalMs, Math.max(1_000, intervalMs * 2));
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
         if (cancelOnStop) {
-          await cancelBackgroundResponse(initial.id, url, authentication);
+          await cancelBackgroundResponse(initial.id, url, request);
         }
-        return {
-          data,
-          status: 0,
-          statusText: 'Error',
-          error: `Background response ${initial.id} timed out after ${timeout}ms.`,
-          timedOut: true,
-        };
+        return getBackgroundTimeoutResult(initial, timeout);
       }
 
-      deadlineSignal = AbortSignal.timeout(remainingMs);
-      const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
       const polled = await fetchWithCache<OpenAIResponsesResponse>(
         appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
         {
           method: 'GET',
-          headers: authentication.headers,
-          ...(authentication.getAuthHeaders
-            ? { getAuthHeaders: authentication.getAuthHeaders }
-            : {}),
+          headers: request.headers,
+          ...(request.getAuthHeaders ? { getAuthHeaders: request.getAuthHeaders } : {}),
           signal: pollSignal,
         },
-        remainingMs,
+        getBackgroundAttemptTimeout(request, remainingMs),
         'json',
         true,
         maxRetries,
@@ -405,7 +440,7 @@ async function pollBackgroundResponse(
         const shouldCancel =
           status >= 400 && status < 500 && ![404, 408, 409, 410, 425, 429].includes(status);
         if (shouldCancel) {
-          await cancelBackgroundResponse(initial.id, url, authentication);
+          await cancelBackgroundResponse(initial.id, url, request);
         }
         return {
           data,
@@ -413,6 +448,7 @@ async function pollBackgroundResponse(
           statusText,
           headers: responseHeaders,
           error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
+          polledResponseId: initial.id,
           cancelled: shouldCancel,
         };
       }
@@ -420,23 +456,17 @@ async function pollBackgroundResponse(
   } catch (error) {
     if (signal?.aborted) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, authentication);
+        await cancelBackgroundResponse(initial.id, url, request);
       }
       throw error;
     }
-    if (deadlineSignal?.aborted || Date.now() >= deadline) {
+    if (deadlineSignal.aborted || Date.now() >= deadline) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, authentication);
+        await cancelBackgroundResponse(initial.id, url, request);
       }
-      return {
-        data,
-        status: 0,
-        statusText: 'Error',
-        error: `Background response ${initial.id} timed out after ${timeout}ms.`,
-        timedOut: true,
-      };
+      return getBackgroundTimeoutResult(initial, timeout);
     }
-    throw error;
+    throw new BackgroundPollError(initial.id, error);
   }
 
   return { data, status, statusText, headers: responseHeaders };
@@ -466,7 +496,7 @@ async function createBackgroundResponseWithCancellation(
         body: request.body,
         ...(request.getAuthHeaders ? { getAuthHeaders: request.getAuthHeaders } : {}),
       },
-      timeout,
+      getBackgroundAttemptTimeout(request, timeout),
       'json',
       effectiveCacheOptions,
       maxRetries,
@@ -567,7 +597,6 @@ async function resolveBackgroundResponse(
     request,
     timeout,
     maxRetries,
-    request.signal,
     deadline,
     cancelOnStop,
   );
@@ -576,10 +605,15 @@ async function resolveBackgroundResponse(
   }
 
   await deleteFromCache?.();
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) {
+    return getBackgroundTimeoutResult(initial, timeout);
+  }
+  request.signal?.throwIfAborted();
   const retried = await createBackgroundResponseWithCancellation(
     url,
     request,
-    Math.max(1, deadline - Date.now()),
+    remainingMs,
     cancelOnStop,
     maxRetries,
   );
@@ -602,7 +636,6 @@ async function resolveBackgroundResponse(
         request,
         timeout,
         maxRetries,
-        request.signal,
         deadline,
         cancelOnStop,
       )),
@@ -1070,6 +1103,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : undefined;
     const config = { ...mergedConfig, passthrough };
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
+    // Prompt options override inherited passthrough. Keep active passthrough values literal.
+    const backgroundConfig = promptConfig?.background_options === undefined ? config : promptConfig;
+    const backgroundOptions =
+      backgroundConfig.passthrough?.background_options === undefined
+        ? renderVarsInObject(config.background_options, context?.vars)
+        : undefined;
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
     // prompts authored for the chat API work here too (the Responses API rejects
@@ -1136,6 +1175,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const topP = this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
+    const previousResponseId = renderVarsInObject(config.previous_response_id, context?.vars);
 
     // Load response_format from external file if needed (handles nested schema loading)
     const responseFormat = prepareOpenAiResponseFormat(config.response_format, context?.vars);
@@ -1203,7 +1243,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.include === undefined ? {} : { include: config.include }),
-      ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
+      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
@@ -1229,6 +1269,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(backgroundOptions === undefined ? {} : { background_options: backgroundOptions }),
       ...(effectiveServiceTier === undefined || effectiveServiceTier === null
         ? {}
         : {
@@ -1275,14 +1316,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
 
     omitDeprecatedClaudeSamplingParams(body);
-    const backgroundOptions = body.background_options as { completion_window?: string } | undefined;
 
     return {
       body,
       config: {
         ...config,
         backgroundCompletionWindow:
-          body.background === true ? backgroundOptions?.completion_window : undefined,
+          body.background === true ? body.background_options?.completion_window : undefined,
         service_tier: effectiveServiceTier,
         tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
@@ -1387,11 +1427,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models and background responses.
     let timeout = getRequestTimeoutMs();
+    const windowMs = body.stream
+      ? 0
+      : getBackgroundCompletionWindowMs(config.backgroundCompletionWindow);
     const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(effectiveModelName);
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel || body.background === true;
     if (isLongRunningModel) {
-      const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
+      const evalTimeout = getEvalTimeoutMs();
+      // Completion windows are targets. Allow the normal polling budget beyond the target.
+      timeout = evalTimeout > 0 ? evalTimeout : windowMs + LONG_RUNNING_MODEL_TIMEOUT_MS;
       logger.debug(`Using timeout of ${timeout}ms for long-running model ${effectiveModelName}`);
     }
 
@@ -1442,6 +1486,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ...(getAuthHeaders ? { getAuthHeaders } : {}),
         body: JSON.stringify(body),
         cacheScope: this.backgroundCacheScope,
+        ...(windowMs ? { hasDiscountedWindow: true } : {}),
         hasPerPromptAuthorization: Object.keys(context?.prompt?.config?.headers ?? {}).some(
           (header) => header.toLowerCase() === 'authorization',
         ),
@@ -1763,7 +1808,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
           return {
             error: polled.error,
-            metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
+            metadata: {
+              ...getPollErrorMetadata(polled.polledResponseId),
+              http: { status, statusText, headers: responseHeaders ?? {} },
+            },
           };
         }
       }
@@ -1778,7 +1826,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
         };
       }
-    } catch (err) {
+    } catch (error) {
+      const pollError = error instanceof BackgroundPollError ? error : undefined;
+      const err = pollError ? pollError.cause : error;
+      const pollMetadata = getPollErrorMetadata(pollError?.responseId);
       if (isAbortError(err) || abortSignal?.aborted) {
         throw abortSignal?.aborted ? getAbortError(abortSignal) : err;
       }
@@ -1787,6 +1838,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           error: formatRateLimitErrorMessage(err),
           metadata: {
             rateLimitKind: err.kind,
+            ...pollMetadata,
             http: {
               status: err.status,
               statusText: err.statusText,
@@ -1804,6 +1856,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       const result = {
         error: `API call error: ${String(err)}`,
         metadata: {
+          ...pollMetadata,
           http: {
             status: foregroundStream ? status : 0,
             statusText: foregroundStream ? statusText : 'Error',
