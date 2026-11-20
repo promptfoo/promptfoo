@@ -65,9 +65,11 @@ redteam:
       showThinking: false
       passthrough:
         reasoning_effort: low
+  strategies:
+    - basic
 ```
 
-To send every generation and grading request to this provider, set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Plugins that require remote generation, such as `harmful:cybercrime`, then generate no test cases. Only test systems you own or are authorized to test.
+To send every generation and grading request to this provider, set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Plugins that require remote generation, such as `harmful:cybercrime`, then generate no test cases. The default strategies include `jailbreak:meta` and `jailbreak:composite`, which also require remote generation, so the example lists only `basic`; add other strategies that run locally as needed. Only test systems you own or are authorized to test.
 
 ## Example
 
