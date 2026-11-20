@@ -196,6 +196,51 @@ describe('Nscale request construction', () => {
     expect(body).not.toHaveProperty('passthrough');
     expect(body.chat_template_kwargs).toEqual({ thinking: true });
   });
+
+  it.each(['nscale:chat:fixture-model', 'nscale:fixture-model'])(
+    'sends the model parameters the OpenAI provider resolved, not their raw copies (%s)',
+    async (providerPath) => {
+      mockResponse();
+      const provider = createNscaleProvider(providerPath, {
+        config: {
+          config: {
+            apiKey: 'tok',
+            tools: [{ type: 'function', function: { name: '{{ toolName }}' } }],
+            response_format: { type: 'json_schema', json_schema: { name: '{{ schemaName }}' } },
+          },
+        },
+      });
+      const response = await provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'fixture' },
+        vars: { toolName: 'get_weather', schemaName: 'weather' },
+      });
+
+      expect(response.error).toBeUndefined();
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.tools).toEqual([{ type: 'function', function: { name: 'get_weather' } }]);
+      expect(body.response_format).toEqual({
+        type: 'json_schema',
+        json_schema: { name: 'weather' },
+      });
+    },
+  );
+
+  it('still sends model parameters the completion provider does not resolve', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({
+        choices: [{ text: 'hi', finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }) as any,
+    );
+    const provider = createNscaleProvider('nscale:completion:fixture-model', {
+      config: { config: { apiKey: 'tok', response_format: { type: 'json_object' } } },
+    });
+    const response = await provider.callApi('hello');
+
+    expect(response.error).toBeUndefined();
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
 });
 
 describe.each([

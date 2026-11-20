@@ -35,6 +35,26 @@ const LOCAL_OPTIONS = {
 const LOCAL_OPTION_NAMES = new Set<string>(Object.keys(LOCAL_OPTIONS));
 
 /**
+ * Options the OpenAI chat provider resolves itself: it loads `file://` references, renders
+ * Nunjucks vars, merges in MCP tools and normalizes tool shapes. `passthrough` is spread into
+ * the body last, so a chat provider that forwards its model parameters through `passthrough`
+ * must keep these out of it, or a raw copy would clobber the resolved value. The chat provider
+ * sends each of these whenever it is set (an empty `tools` list aside), so dropping the raw
+ * copy cannot lose a usable parameter. Keeping them at the top level also lets function-call
+ * assertions see `functions` and lets a prompt's or test's own value win.
+ * `reasoning_effort` is deliberately absent: the chat provider only renders and
+ * emits it for recognized reasoning model patterns or names containing `gpt-oss`, so
+ * passthrough has to keep carrying it for other models. The completion and embedding
+ * providers do not resolve these options, so they keep receiving them through `passthrough`.
+ */
+export const CHAT_RESOLVED_OPTION_NAMES = [
+  'functions',
+  'response_format',
+  'tool_choice',
+  'tools',
+] satisfies (keyof OpenAiCompletionOptions)[];
+
+/**
  * Splits an OpenAI-compatible provider config into the settings promptfoo handles itself
  * (auth, routing, headers, cost overrides) and genuine model parameters, so that only the
  * latter reach the request body via `passthrough`.
