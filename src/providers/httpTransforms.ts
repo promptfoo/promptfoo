@@ -44,8 +44,10 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
+        // Arrow or function expression, named or not; `s` lets the parameter list span lines
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\b[\w$\s]*\(.*?\))/s.test(
+          trimmedParser,
+        );
         // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         const transformFn = new Function(
           'json',
@@ -103,8 +105,10 @@ export async function createTransformRequest(
     return async (prompt, vars, context) => {
       try {
         const trimmedTransform = transform.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+        // Arrow or function expression, named or not; `s` lets the parameter list span lines
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\b[\w$\s]*\(.*?\))/s.test(
+          trimmedTransform,
+        );
 
         let body: string;
         if (isFunctionExpression) {

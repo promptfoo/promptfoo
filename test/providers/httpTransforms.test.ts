@@ -68,6 +68,15 @@ describe('createTransformResponse', () => {
     expect(result.output).toBe('value');
   });
 
+  it.each([
+    ['multiline arrow', '(\n  json,\n  text\n) => json.data'],
+    ['named function', 'function parse(json) { return json.data; }'],
+  ])('should invoke a %s expression', async (_, source) => {
+    const parser = await createTransformResponse(source);
+    const result = parser({ data: 'value' }, '');
+    expect(result.output).toBe('value');
+  });
+
   it('should pass context parameter to parser', async () => {
     const parser = await createTransformResponse(
       '(json, text, context) => ({ output: json.data, status: context.response.status })',
@@ -165,6 +174,15 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest(
       'function(prompt, vars) { return { text: prompt.toUpperCase() } }',
     );
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it.each([
+    ['multiline arrow', '(\n  prompt,\n  vars\n) => { return { text: prompt.toUpperCase() } }'],
+    ['named function', 'function build(prompt) { return { text: prompt.toUpperCase() } }'],
+  ])('should invoke a %s expression', async (_, source) => {
+    const transform = await createTransformRequest(source);
     const result = await transform('hello', {} as any);
     expect(result).toEqual({ text: 'HELLO' });
   });
