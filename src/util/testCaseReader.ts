@@ -356,10 +356,9 @@ async function readLocalCsvRows(resolvedVarsPath: string): Promise<CsvRow[]> {
 function decodeUtf8CsvFile(fileBytes: Uint8Array, filePath: string): string {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(fileBytes);
-  } catch (err) {
+  } catch {
     throw new Error(
       `CSV test file ${filePath} is not valid UTF-8. Save it with UTF-8 encoding (in Excel: "CSV UTF-8 (Comma delimited)"), or use the .xlsx file directly.`,
-      { cause: err },
     );
   }
 }
