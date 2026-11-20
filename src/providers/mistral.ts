@@ -11,6 +11,7 @@ import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { isNonTransientHttpStatus } from '../util/fetch/errors';
 import { isSafeTokenCount } from '../util/numeric';
 import { resolveProviderEnv } from './env';
 import { calculateCost, clampCachedTokens, getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -679,6 +680,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   static MISTRAL_CHAT_MODELS_NAMES = MISTRAL_CHAT_MODELS.map((model) => model.id);
 
+  private readonly loggedNonTransientErrors = new Set<string>();
+
   constructor(
     modelName: string,
     options: { id?: string; config?: MistralChatCompletionOptions; env?: EnvOverrides } = {},
@@ -823,10 +826,14 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     if (isHttpFailure(status)) {
       logger.debug('Mistral API error', { status, ...getMistralErrorMetadata(data) });
-      return {
-        error: formatMistralHttpError(status, statusText, data),
-        metadata: { http: { status, statusText: statusText ?? '' } },
-      };
+      const error = formatMistralHttpError(status, statusText, data);
+      // The eval aborts on these statuses and prints only the status code, so show
+      // Mistral's message once per provider.
+      if (isNonTransientHttpStatus(status) && !this.loggedNonTransientErrors.has(error)) {
+        this.loggedNonTransientErrors.add(error);
+        logger.error(error);
+      }
+      return { error, metadata: { http: { status, statusText: statusText ?? '' } } };
     }
     if (data.error) {
       return {

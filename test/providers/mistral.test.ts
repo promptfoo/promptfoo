@@ -688,6 +688,43 @@ describe('Mistral', () => {
       },
     );
 
+    it('logs a non-transient HTTP error once so it is visible when the eval aborts', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { detail: 'Invalid API Key' },
+        cached: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+
+      await provider.callApi('First prompt');
+      await provider.callApi('Second prompt');
+
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Mistral API error 401 Unauthorized: Invalid API Key',
+      );
+    });
+
+    it('does not log retryable or request-specific HTTP errors at error level', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { object: 'error', message: 'Rate limit exceeded', code: '1300' },
+        cached: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { object: 'error', message: 'Invalid model', code: '1500' },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      await provider.callApi('First prompt');
+      await provider.callApi('Second prompt');
+
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
     it('marks Mistral capacity 429s as retryable rate limits', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
