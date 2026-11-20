@@ -342,8 +342,26 @@ function parseLocalCsv(fileContent: string, delimiter: string, relaxQuotes: bool
 }
 
 async function readLocalCsvRows(resolvedVarsPath: string): Promise<CsvRow[]> {
-  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseCsvRows(fileContent);
+  const fileBytes = await fsPromises.readFile(resolvedVarsPath);
+  return parseCsvRows(decodeUtf8CsvFile(fileBytes, resolvedVarsPath));
+}
+
+/**
+ * Decodes a local CSV test file as strict UTF-8.
+ *
+ * Decoding with the 'utf-8' encoding name replaces invalid bytes with U+FFFD, so a CSV saved in
+ * a legacy code page (Excel's default "CSV (Comma delimited)" on Windows) would load as corrupted
+ * text whose assertions still match.
+ */
+function decodeUtf8CsvFile(fileBytes: Uint8Array, filePath: string): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(fileBytes);
+  } catch (err) {
+    throw new Error(
+      `CSV test file ${filePath} is not valid UTF-8. Save it with UTF-8 encoding (in Excel: "CSV UTF-8 (Comma delimited)"), or use the .xlsx file directly.`,
+      { cause: err },
+    );
+  }
 }
 
 function parseCsvRows(fileContent: string): CsvRow[] {
