@@ -238,12 +238,16 @@ describe('redteamInit', () => {
       expect.arrayContaining([
         expect.objectContaining({ value: 'openai:gpt-6.2-sol' }),
         expect.objectContaining({ value: 'openai:gpt-6.2-astra' }),
+        expect.objectContaining({ value: 'google:gemini-4-carbon' }),
+        expect.objectContaining({ value: 'google:gemini-4-neon' }),
         expect.objectContaining({ value: 'google:gemini-4-argon' }),
         expect.objectContaining({ value: 'google:gemini-4-hydrogen' }),
         expect.objectContaining({ value: 'google:gemini-3.8-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.7-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-4-carbon' }),
+        expect.objectContaining({ value: 'vertex:gemini-4-neon' }),
         expect.objectContaining({ value: 'vertex:gemini-4-argon' }),
         expect.objectContaining({ value: 'vertex:gemini-4-hydrogen' }),
         expect.objectContaining({ value: 'vertex:gemini-3.8-flash' }),
@@ -284,6 +288,8 @@ describe('redteamInit', () => {
   });
 
   it.each([
+    'vertex:gemini-4-carbon',
+    'vertex:gemini-4-neon',
     'vertex:gemini-4-argon',
     'vertex:gemini-4-hydrogen',
     'vertex:gemini-3.8-flash',
