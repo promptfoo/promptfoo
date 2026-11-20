@@ -1443,10 +1443,11 @@ Both Runtime APIs reject the Converse-style `serviceTier` field.
 For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
 `bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
 [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
-requires a supported US, India, or global inference profile on both Runtime APIs; bare
+and [Kimi K3.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3-1-highspeed.html)
+require a supported US, India, or global inference profile on both Runtime APIs; bare
 model IDs and foundation-model ARNs are rejected before transport. Kimi supports Priority
 and Flex on the US, India, and global profiles, including Converse and InvokeModel.
-For US/global Kimi K3 and [Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+For US/global Kimi K3/K3.1 and [Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
 inference profiles, Runtime Chat and Responses cost estimates use Priority at 1.75× Standard
 and Flex at 0.5× Standard. Unpublished Grok cache-write rates remain unknown.
 
@@ -1621,20 +1622,23 @@ Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeMo
 one handler and the same configuration options. They also work through the [Converse API](#converse-api)
 (`bedrock:converse:<id>`).
 
-[GLM 5.3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-zai-glm-5-3.html)
-and [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
-require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
-`bedrock:us.moonshotai.kimi-k3`; both also accept `global.` profiles, and Kimi K3 accepts
-`in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
-For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
+[GLM 5.3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-zai-glm-5-3.html),
+[Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html),
+and [Kimi K3.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3-1-highspeed.html)
+require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3`,
+`bedrock:us.moonshotai.kimi-k3`, or `bedrock:us.moonshotai.kimi-k3.1`; all also accept
+`global.` profiles, and Kimi accepts `in.moonshotai.kimi-k3` and `in.moonshotai.kimi-k3.1`
+from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
+Kimi K3 and K3.1 reason at `max` effort by default; set `reasoning_effort: none` to turn reasoning off.
+For Converse, add `converse:` after `bedrock:`. Kimi K3/K3.1 and GLM 5.3 Converse cost estimates
 include cache reads/writes for the published US/global rates and the India Kimi rate.
-For Kimi K3, set `serviceTier: { type: priority }` on Converse or `service_tier: priority`
+For Kimi K3/K3.1, set `serviceTier: { type: priority }` on Converse or `service_tier: priority`
 on InvokeModel for Priority processing. Use `flex` for Flex processing. India estimates cover Standard. GLM 5.3 Converse supports
-Standard, Priority, and Flex. InvokeModel cost remains unavailable for both models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
+Standard, Priority, and Flex. InvokeModel cost remains unavailable for these models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3/K3.1 Converse limitations for document inputs
 and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
 before sending a subsequent Converse turn.
 
-For Kimi K3 Priority or Flex, use Runtime Chat Completions through the generic OpenAI provider:
+For Kimi K3/K3.1 Priority or Flex, use Runtime Chat Completions through the generic OpenAI provider:
 
 ```yaml
 providers:
@@ -1646,7 +1650,7 @@ providers:
       service_tier: priority # Or flex
 ```
 
-Kimi K3 is available on Bedrock Runtime, not Mantle.
+Kimi K3 and K3.1 are available on Bedrock Runtime, not Mantle.
 
 | Family          | Example model IDs                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -1697,7 +1701,40 @@ providers:
 or AWS model cards to confirm which of these models are enabled in your target region. Use
 `aws bedrock list-foundation-models` for direct foundation model IDs and
 `aws bedrock list-inference-profiles` for inference profiles such as Writer Palmyra's `us.`
-route — availability varies by model and region. TwelveLabs Pegasus uses a separate video-understanding request schema, not Converse or this chat handler. See its [model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-twelvelabs-pegasus-v1-5.html) and use a custom provider. TwelveLabs Marengo uses a [model-specific embedding schema](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-marengo-3.html). Use a custom provider for versions or input types without a documented built-in adapter.
+route — availability varies by model and region. TwelveLabs Pegasus uses a separate video-understanding request schema, not Converse or this chat handler; see [TwelveLabs Pegasus](#twelvelabs-pegasus). TwelveLabs Marengo uses a [model-specific embedding schema](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-marengo-3.html). Use a custom provider for versions or input types without a documented built-in adapter.
+
+### TwelveLabs Pegasus (Video Understanding) {#twelvelabs-pegasus}
+
+[Pegasus 1.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-pegasus-1-5.html)
+answers prompts about a video through `InvokeModel`. It is served only through the
+`us.twelvelabs.pegasus-1-5-v1:0` and `global.twelvelabs.pegasus-1-5-v1:0` inference
+profiles, and Converse does not serve it. The rendered prompt is sent as
+`inputPrompt`, and the video comes from `mediaSource`, whose strings are rendered with test
+vars. A `file://` video var loads as base64 (up to 25 MB); larger videos use an S3 object in
+the request region.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Describe what happens in this video.'
+providers:
+  - id: bedrock:us.twelvelabs.pegasus-1-5-v1:0
+    config:
+      region: us-east-1
+      maxOutputTokens: 512 # 512 minimum; segmentation needs at least 2048
+      mediaSource:
+        base64String: '{{video}}'
+        # Or: s3Location: { uri: 's3://my-bucket/clip.mp4', bucketOwner: '123456789012' }
+tests:
+  - vars:
+      video: file://clip.mp4
+```
+
+Other request fields use the AWS names: `temperature`, `responseFormat` (`json_schema` with
+`jsonSchema`), `start_time`, `end_time`, `analysis_mode`, `segment_time_format`, and
+`segment_definitions`. With `analysis_mode: time_based_metadata`, promptfoo omits the prompt
+and returns `{ segments, definition_errors }` as the output. Token usage is reported, but cost
+is not: AWS bills Pegasus per second of video plus output tokens, and the response does not
+include the video duration. See [AWS pricing](https://aws.amazon.com/bedrock/pricing/).
 
 ## Model-graded tests
 

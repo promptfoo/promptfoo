@@ -2,7 +2,11 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   clampMaxTokensForThinkingBudget,
@@ -508,7 +512,32 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOpti
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
    */
-  reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+}
+
+/**
+ * Options for TwelveLabs Pegasus 1.5 video understanding over `InvokeModel`. Field names
+ * follow the AWS request schema; the rendered prompt is sent as `inputPrompt`.
+ */
+interface BedrockPegasusGenerationOptions extends BedrockOptions {
+  /** Video to analyze. Strings are rendered with test vars, e.g. `base64String: '{{video}}'`. */
+  mediaSource?: {
+    /** Base64-encoded video, up to 25 MB. */
+    base64String?: string;
+    /** S3 object in the request region. */
+    s3Location?: { uri: string; bucketOwner?: string };
+  };
+  /** `time_based_metadata` returns segments and does not send the prompt. */
+  analysis_mode?: 'general' | 'time_based_metadata';
+  temperature?: number;
+  maxOutputTokens?: number;
+  /** Structured output (`json_schema` or `segment_definitions`); accepts `file://`. */
+  responseFormat?: Record<string, unknown> | string;
+  start_time?: number;
+  end_time?: number;
+  segment_time_format?: 'seconds' | 'hh:mm:ss.fff';
+  /** Segment types to extract in `time_based_metadata` mode; accepts `file://`. */
+  segment_definitions?: Record<string, unknown>[] | string;
 }
 
 // =============================================================================
@@ -2169,12 +2198,15 @@ ${prompt}
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const params: any = { messages };
-      if (
-        config?.service_tier !== undefined &&
-        /(?:^|:inference-profile\/)(?:us|in|global)\.moonshotai\.kimi-k3$/.test(modelName ?? '')
-      ) {
+      const kimiVersion =
+        /(?:^|:inference-profile\/)(?:us|in|global)\.moonshotai\.kimi-k3(\.1)?$/.exec(
+          modelName ?? '',
+        );
+      if (config?.service_tier !== undefined && kimiVersion) {
         if (!['default', 'priority', 'flex'].includes(config.service_tier)) {
-          throw new Error('Kimi K3 supports default, priority, and flex service_tier values.');
+          throw new Error(
+            `Kimi K3${kimiVersion[1] ?? ''} supports default, priority, and flex service_tier values.`,
+          );
         }
         params.service_tier = config.service_tier;
       }
@@ -2276,6 +2308,78 @@ ${prompt}
       return content;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
+  },
+  /**
+   * TwelveLabs Pegasus 1.5 video understanding. The video comes from `mediaSource`: base64
+   * (for example a `file://` video var) or an S3 object in the request region.
+   */
+  TWELVELABS_PEGASUS: {
+    params: async (
+      config: BedrockPegasusGenerationOptions,
+      prompt: string,
+      _stop?: string[],
+      _modelName?: string,
+      vars?: Record<string, VarValue>,
+    ) => {
+      const mediaSource = renderVarsInObject(config.mediaSource, vars);
+      if (!mediaSource?.base64String && !mediaSource?.s3Location?.uri) {
+        throw new Error(
+          'TwelveLabs Pegasus requires config.mediaSource with a non-empty base64String or s3Location.uri.',
+        );
+      }
+      // Segmentation rejects a prompt; its segment definitions describe what to extract.
+      const params: Record<string, unknown> =
+        config.analysis_mode === 'time_based_metadata'
+          ? { mediaSource }
+          : { inputPrompt: prompt, mediaSource };
+      addConfigParam(params, 'analysis_mode', config.analysis_mode);
+      addConfigParam(
+        params,
+        'temperature',
+        config.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+      );
+      addConfigParam(
+        params,
+        'maxOutputTokens',
+        config.maxOutputTokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+      );
+      addConfigParam(
+        params,
+        'responseFormat',
+        maybeLoadFromExternalFileWithVars(config.responseFormat, vars),
+      );
+      addConfigParam(params, 'start_time', config.start_time);
+      addConfigParam(params, 'end_time', config.end_time);
+      addConfigParam(params, 'segment_time_format', config.segment_time_format);
+      addConfigParam(
+        params,
+        'segment_definitions',
+        maybeLoadFromExternalFileWithVars(config.segment_definitions, vars),
+      );
+      return params;
+    },
+    output: (_config: BedrockOptions, responseJson: any) => {
+      if (Array.isArray(responseJson?.segments)) {
+        return {
+          segments: responseJson.segments,
+          definition_errors: responseJson.definition_errors ?? [],
+        };
+      }
+      return responseJson?.message;
+    },
+    tokenUsage: (responseJson: any): TokenUsage => {
+      // AWS bills Pegasus per second of video plus output tokens; these counts are usage only.
+      const prompt = coerceStrToNum(responseJson?.input_tokens);
+      const completion = coerceStrToNum(responseJson?.output_tokens);
+      return {
+        prompt,
+        completion,
+        total: prompt !== undefined && completion !== undefined ? prompt + completion : undefined,
+        numRequests: 1,
+      };
+    },
   },
 };
 
@@ -2455,7 +2559,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // use `{ messages, max_tokens, ... }` -> `{ choices: [{ message: { content } }] }`, so they
   // share BEDROCK_MODEL.OPENAI_COMPAT. Verified available via `aws bedrock list-foundation-models`.
 
-  // Grok 4.7, GLM 5.3, and Kimi K3 require Runtime cross-region inference profiles.
+  // Grok 4.7, GLM 5.3, Kimi K3, and Kimi K3.1 require Runtime cross-region inference profiles.
   'us.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
   'global.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
 
@@ -2475,6 +2579,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
   'global.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
   'in.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'us.moonshotai.kimi-k3.1': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.moonshotai.kimi-k3.1': BEDROCK_MODEL.OPENAI_COMPAT,
+  'in.moonshotai.kimi-k3.1': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshotai.kimi-k2.5': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshot.kimi-k2-thinking': BEDROCK_MODEL.OPENAI_COMPAT,
 
@@ -2498,6 +2605,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.writer.palmyra-x5-v1:0': BEDROCK_MODEL.OPENAI_COMPAT,
   'us.writer.palmyra-x4-v1:0': BEDROCK_MODEL.OPENAI_COMPAT,
   'writer.palmyra-vision-7b': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // TwelveLabs Pegasus 1.5 video understanding is served only through US and global profiles.
+  'us.twelvelabs.pegasus-1-5-v1:0': BEDROCK_MODEL.TWELVELABS_PEGASUS,
+  'global.twelvelabs.pegasus-1-5-v1:0': BEDROCK_MODEL.TWELVELABS_PEGASUS,
 
   // Japan and global cross-region inference models (Nova 2)
   'jp.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
@@ -2586,6 +2697,8 @@ const INFERENCE_PROFILE_ONLY_MODELS = new Set([
   'xai.grok-4.7',
   'zai.glm-5.3',
   'moonshotai.kimi-k3',
+  'moonshotai.kimi-k3.1',
+  'twelvelabs.pegasus-1-5-v1:0',
   'anthropic.claude-fable-5-1',
   'anthropic.claude-mythos-5-1',
   'anthropic.claude-fable-5-2',
@@ -2602,7 +2715,7 @@ export function assertBedrockModelIsAvailable(modelName: string): void {
     throw new Error(
       `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
         `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +
-        (modelId === 'moonshotai.kimi-k3' ? ` or "bedrock:in.${modelId}"` : '') +
+        (modelId.startsWith('moonshotai.kimi-k3') ? ` or "bedrock:in.${modelId}"` : '') +
         ' in a supported region.',
     );
   }

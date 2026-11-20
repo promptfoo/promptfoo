@@ -53,7 +53,11 @@ function capabilityName(model: string): string {
     .replace(/^(?:openai|xai)\./, '');
 }
 
-const REASONING_PROFILES_WITH_LEGACY_TOKEN_CAP = new Set(['zai.glm-5.3', 'moonshotai.kimi-k3']);
+const REASONING_PROFILES_WITH_LEGACY_TOKEN_CAP = new Set([
+  'zai.glm-5.3',
+  'moonshotai.kimi-k3',
+  'moonshotai.kimi-k3.1',
+]);
 
 function flexibleReasoningModel(model: string): boolean {
   const name = capabilityName(model);
@@ -125,6 +129,7 @@ function runtimeCost(
   if (
     model !== 'zai.glm-5.3' &&
     model !== 'moonshotai.kimi-k3' &&
+    model !== 'moonshotai.kimi-k3.1' &&
     calculateBedrockInvokeModelCost(
       modelName,
       catalogInput,
