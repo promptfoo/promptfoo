@@ -531,7 +531,7 @@ tests:
         value: context.providerResponse.audio?.format === 'mpeg'
 ```
 
-Lyria is available only on the paid tier, and each request generates one song. Promptfoo reports Google's [per-song price](https://ai.google.dev/gemini-api/docs/pricing#lyria-3-5) as the cost of each response that contains audio: $0.08 for `lyria-3.5` and `lyria-3-pro-preview`, and $0.04 for `lyria-3-clip-preview`. Lyria RealTime (`lyria-realtime-exp`) streams music over a WebSocket API that this provider does not support. See Google's [music generation guide](https://ai.google.dev/gemini-api/docs/music-generation) and the [google-lyria example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-lyria).
+Lyria is available only on the paid tier, and each request generates one song. Promptfoo reports Google's [per-song price](https://ai.google.dev/gemini-api/docs/pricing#lyria-3-5) as the cost of each response that contains audio: $0.08 for `lyria-3.5` and `lyria-3-pro-preview`, and $0.04 for `lyria-3-clip-preview`. Promptfoo rejects Lyria RealTime (`lyria-realtime-exp`), which streams music over a separate WebSocket API, and Lyria model IDs on `vertex:`, where Vertex AI serves Lyria 3 through its Interactions API. See Google's [music generation guide](https://ai.google.dev/gemini-api/docs/music-generation) and the [google-lyria example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-lyria).
 
 ### Embedding Models
 

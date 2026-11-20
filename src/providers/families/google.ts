@@ -50,6 +50,11 @@ function validateGoogleModelRoute(
       `Model "${modelName}" uses the standard Gemini Interactions API. Use google:${modelName} or vertex:${modelName}.`,
     );
   }
+  if (modelName.startsWith('lyria-realtime')) {
+    throw new Error(
+      `Model "${modelName}" streams music through the Lyria RealTime API, which promptfoo does not support. Use google:lyria-3.5 or google:lyria-3-clip-preview to generate songs.`,
+    );
+  }
 }
 
 // Every provider class is imported lazily inside its factory so that merely
@@ -107,6 +112,11 @@ export const googleProviderFactories: ProviderFactory[] = [
         );
       }
       validateGoogleModelRoute(routedModelName, explicitServiceType);
+      if (routedModelName.startsWith('lyria')) {
+        throw new Error(
+          `Model "${routedModelName}" is not available through the vertex: provider. Vertex AI serves Lyria 3 through its Interactions API and Lyria 2 through predict. Use google:lyria-3.5 or google:lyria-3-clip-preview with a Gemini API key.`,
+        );
+      }
       if (
         explicitServiceType === 'interactions' &&
         !['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(routedModelName)
