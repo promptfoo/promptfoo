@@ -117,6 +117,67 @@ describe('Alibaba Qwen4 request body', () => {
   });
 });
 
+describe('Alibaba-hosted models whose max_tokens includes reasoning', () => {
+  const sharedLimitModels = [
+    'deepseek-v4.1-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4-pro-0813',
+    'deepseek-v4-flash-0731',
+    'glm-5.3',
+    'glm-5.2',
+  ];
+
+  it.each(sharedLimitModels)('omits the default max_tokens cap for %s', async (modelName) => {
+    const { body } = await makeProvider(modelName).getOpenAiBody('Hello');
+
+    expect(body).toMatchObject({ model: modelName, temperature: 0 });
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body).not.toHaveProperty('max_completion_tokens');
+  });
+
+  it.each(sharedLimitModels)(
+    'forwards reasoning_effort and sends max_tokens as max_completion_tokens for %s',
+    async (modelName) => {
+      const { body } = await makeProvider(modelName, {
+        reasoning_effort: 'high',
+        max_tokens: 4096,
+      }).getOpenAiBody('Hello');
+
+      expect(body).toMatchObject({ reasoning_effort: 'high', max_completion_tokens: 4096 });
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
+
+  it('keeps glm-5.2 max_tokens as the answer limit when thinking_budget is set', async () => {
+    const { body } = await makeProvider('glm-5.2', {
+      max_tokens: 8192,
+      passthrough: { thinking_budget: 2048 },
+    }).getOpenAiBody('Hello', promptContext({ max_tokens: 1500 }));
+
+    expect(body).toMatchObject({ thinking_budget: 2048, max_tokens: 1500 });
+    expect(body).not.toHaveProperty('max_completion_tokens');
+  });
+
+  it('forwards glm-5.2 max_completion_tokens alongside thinking_budget', async () => {
+    const { body } = await makeProvider('glm-5.2', {
+      max_completion_tokens: 6000,
+      passthrough: { thinking_budget: 2048 },
+    }).getOpenAiBody('Hello');
+
+    expect(body).toMatchObject({ thinking_budget: 2048, max_completion_tokens: 6000 });
+    expect(body).not.toHaveProperty('max_tokens');
+  });
+
+  it.each(['kimi-k3.1-pro', 'MiniMax-M2.5', 'ZHIPU/GLM-5.3'])(
+    'keeps the existing request defaults for %s',
+    async (modelName) => {
+      const { body } = await makeProvider(modelName).getOpenAiBody('Hello');
+
+      expect(body).toMatchObject({ model: modelName, max_tokens: 1024, temperature: 0 });
+    },
+  );
+});
+
 describe('Alibaba Qwen4 responses', () => {
   it('returns reasoning, answer, token usage and configured cost', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({

@@ -15,6 +15,8 @@ const KNOWN_MODELS = new Set([
   'qwen3.8-max-2026-09-02',
   'qwen3.8-flash',
   'qwen3.8-omni-flash',
+  'qwen3.8-2.4t-a95b',
+  'qwen3.8-27b',
 
   // Qwen3.7
   'qwen3.7-max',
@@ -34,10 +36,12 @@ const KNOWN_MODELS = new Set([
   'qwen3.6-flash',
   'qwen3.6-flash-2026-04-16',
   'qwen3.6-35b-a3b',
+  'qwen3.6-27b',
 
   // Qwen3.5
   'qwen3.5-plus',
   'qwen3.5-plus-2026-02-15',
+  'qwen3.5-plus-2026-04-20',
   'qwen3.5-flash',
   'qwen3.5-flash-2026-02-23',
   'qwen3.5-397b-a17b',
@@ -65,6 +69,8 @@ const KNOWN_MODELS = new Set([
   'qwen-plus-2025-07-14',
   'qwen-plus-2025-04-28',
   'qwen-plus-2025-01-25',
+  'qwen-plus-2025-01-12',
+  'qwen-plus-2024-12-20',
 
   // Qwen-Flash
   'qwen-flash',
@@ -86,6 +92,10 @@ const KNOWN_MODELS = new Set([
   // Qwen-Omni
   'qwen3-omni-flash',
   'qwen3-omni-flash-2025-09-15',
+  'qwen3.5-omni-plus',
+  'qwen3.5-omni-plus-2026-03-15',
+  'qwen3.5-omni-flash',
+  'qwen3.5-omni-flash-2026-03-15',
 
   // Qwen-Omni-Realtime
   'qwen3-omni-flash-realtime',
@@ -106,6 +116,9 @@ const KNOWN_MODELS = new Set([
 
   // Qwen-VL-OCR
   'qwen-vl-ocr',
+  'qwen-vl-ocr-2025-11-20',
+  'qwen-vl-ocr-2024-10-28',
+  'qwen3.5-ocr',
 
   // Qwen3-ASR
   'qwen3-asr-flash',
@@ -137,6 +150,13 @@ const KNOWN_MODELS = new Set([
   // Qwen-MT
   'qwen-mt-plus',
   'qwen-mt-turbo',
+  'qwen-mt-flash',
+  'qwen-mt-lite',
+
+  // Qwen-Character
+  'qwen-plus-character',
+  'qwen-plus-character-ja',
+  'qwen-flash-character',
 
   // Qwen data mining
   'qwen-doc-turbo',
@@ -183,6 +203,11 @@ const KNOWN_MODELS = new Set([
   'qwen3-vl-8b-thinking',
   'qwen3-vl-8b-instruct',
 
+  // Qwen2-VL open-source
+  'qwen2-vl-72b-instruct',
+  'qwen2-vl-7b-instruct',
+  'qwen2-vl-2b-instruct',
+
   // Qwen2.5-Math
   'qwen2.5-math-72b-instruct',
   'qwen2.5-math-7b-instruct',
@@ -193,7 +218,9 @@ const KNOWN_MODELS = new Set([
   'qwen3-coder-30b-a3b-instruct',
 
   // DeepSeek
+  'deepseek-v4.1-flash-1017',
   'deepseek-v4.1-flash',
+  'deepseek-v4-flash-0731',
   'deepseek-v4-pro-0813',
   'deepseek-v4-pro',
   'deepseek-v4-flash',
@@ -211,13 +238,32 @@ const KNOWN_MODELS = new Set([
   'deepseek-r1-distill-llama-70b',
 
   // Kimi
+  'kimi-k3.1-pro',
   'kimi-k3',
+  'kimi/kimi-k3',
+  'kimi-k2.7-code',
   'kimi-k2.6',
+  'kimi-k2.5',
   'moonshot-kimi-k2-instruct',
 
   // GLM
+  'glm-5.3',
+  'glm-5.3-prime',
   'ZHIPU/GLM-5.3',
   'glm-5.2',
+  'glm-5.2-fast-preview',
+  'ZHIPU/GLM-5.2',
+  'glm-5.1',
+  'glm-5',
+
+  // MiniMax
+  'MiniMax-M2.5',
+
+  // MindLab
+  'mindlab/macaron-v1.1-venti-pro',
+  'mindlab/macaron-v1.1-venti',
+  'mindlab/macaron-v1.1-coding-venti',
+  'mindlab/macaron-v1-tall',
 
   // Image generation
   'qwen-image-plus',
@@ -250,12 +296,32 @@ function getAlibabaProviderOptions(modelName: string, options: ProviderOptions) 
 }
 
 /**
- * Qwen4 models think by default, and their max_tokens limit is equivalent to
- * max_completion_tokens: it covers the reasoning and the answer together.
+ * Models whose max_tokens covers the reasoning and the answer together, so it is
+ * equivalent to max_completion_tokens. Qwen4 models (qwen4*) follow the same rule.
  * https://www.alibabacloud.com/help/en/model-studio/api-compatibility-upgrade-notice
+ * https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions
  */
-function isQwen4Model(modelName: string): boolean {
-  return /^qwen4(?:[.-]|$)/.test(modelName);
+const SHARED_OUTPUT_LIMIT_MODELS = new Set([
+  'deepseek-v4.1-flash',
+  'deepseek-v4-pro',
+  'deepseek-v4-pro-0813',
+  'deepseek-v4-flash-0731',
+  'glm-5.3',
+]);
+
+/**
+ * glm-5.2's max_tokens also covers the reasoning, unless the request sets
+ * thinking_budget. The budget then limits the reasoning, and max_tokens limits
+ * only the answer.
+ */
+const THINKING_BUDGET_SPLIT_LIMIT_MODELS = new Set(['glm-5.2']);
+
+function countsReasoningInMaxTokens(modelName: string): boolean {
+  return (
+    /^qwen4(?:[.-]|$)/.test(modelName) ||
+    SHARED_OUTPUT_LIMIT_MODELS.has(modelName) ||
+    THINKING_BUDGET_SPLIT_LIMIT_MODELS.has(modelName)
+  );
 }
 
 export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
@@ -267,24 +333,27 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
     super(modelName, getAlibabaProviderOptions(modelName, options));
   }
 
-  // Treating Qwen4 as a reasoning model forwards reasoning_effort and
-  // max_completion_tokens, and skips the base max_tokens default (1024), which
-  // on Qwen4 would also cap the reasoning.
+  // These models think by default. Treating them as reasoning models forwards
+  // reasoning_effort and max_completion_tokens, and skips the base max_tokens
+  // default (1024), which would also cap the reasoning.
   protected override isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
-    return isQwen4Model(modelName) || super.isReasoningModel(modelName);
+    return countsReasoningInMaxTokens(modelName) || super.isReasoningModel(modelName);
   }
 
   protected override isReasoningCapabilityModel(modelName: string): boolean {
-    return isQwen4Model(modelName) || super.isReasoningCapabilityModel(modelName);
+    return countsReasoningInMaxTokens(modelName) || super.isReasoningCapabilityModel(modelName);
   }
 
-  // Qwen4 accepts temperature in both thinking and non-thinking modes.
+  // They accept temperature in thinking mode.
   protected override supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
-    return isQwen4Model(modelName) || super.supportsTemperature(modelName);
+    return countsReasoningInMaxTokens(modelName) || super.supportsTemperature(modelName);
   }
 
   protected override supportsTemperatureForCapabilityModel(modelName: string): boolean {
-    return isQwen4Model(modelName) || super.supportsTemperatureForCapabilityModel(modelName);
+    return (
+      countsReasoningInMaxTokens(modelName) ||
+      super.supportsTemperatureForCapabilityModel(modelName)
+    );
   }
 
   override async getOpenAiBody(
@@ -294,18 +363,37 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
     const { body, config } = result;
-    if (typeof body.model !== 'string' || !isQwen4Model(body.model)) {
+    if (typeof body.model !== 'string' || !countsReasoningInMaxTokens(body.model)) {
       return result;
     }
 
-    // The base provider drops max_tokens for reasoning models. On Qwen4 it means
-    // max_completion_tokens, so send an explicit limit under that name. A
-    // prompt-level limit wins over a provider-level one; passthrough wins within
-    // each layer.
+    // The base provider drops max_tokens for reasoning models. A prompt-level
+    // limit wins over a provider-level one; passthrough wins within each layer.
     const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
     const promptPassthrough = promptConfig.passthrough as
       | { max_completion_tokens?: unknown; max_tokens?: unknown }
       | undefined;
+
+    // With thinking_budget set, glm-5.2's max_tokens limits only the answer, so
+    // send it unchanged.
+    if (
+      THINKING_BUDGET_SPLIT_LIMIT_MODELS.has(body.model) &&
+      body.thinking_budget !== undefined &&
+      body.thinking_budget !== null
+    ) {
+      const maxTokens =
+        promptPassthrough?.max_tokens ??
+        promptConfig.max_tokens ??
+        config.passthrough?.max_tokens ??
+        config.max_tokens;
+      if (maxTokens !== undefined) {
+        body.max_tokens = maxTokens;
+      }
+      return result;
+    }
+
+    // Otherwise max_tokens means max_completion_tokens, so send an explicit
+    // limit under that name.
     const maxCompletionTokens =
       promptPassthrough?.max_completion_tokens ??
       promptPassthrough?.max_tokens ??

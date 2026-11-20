@@ -72,6 +72,7 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 
 - `qwen3.8-omni-flash` - Text output from text, image, audio, and video input through Chat Completions; use the separate realtime API for `qwen3.8-omni-flash-realtime`
 - `qwen3-omni-flash` / `qwen3-omni-flash-2025-09-15` - Supports speech and vision in thinking and non-thinking modes
+- `qwen3.5-omni-plus` / `qwen3.5-omni-flash` and their `-2026-03-15` snapshots - Text, image, audio, and video input with text and speech output; use the separate realtime API for the `-realtime` variants
 - `qwen3-omni-flash-realtime` / `qwen3-omni-flash-realtime-2025-09-15` - Streaming realtime with audio stream input and VAD
 - `qwen3-omni-30b-a3b-captioner` - Dedicated audio captioning model (speech, ambient sounds, music)
 - `qwen2.5-omni-7b` - Qwen2.5-based multimodal model with text, image, speech, and video inputs
@@ -85,7 +86,8 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qvq-max` / `qvq-max-latest` / `qvq-max-2025-03-25` - Visual reasoning models (commercial)
 - `qvq-72b-preview` - Experimental visual reasoning research model
 - **DeepSeek models** (hosted by Alibaba Cloud):
-  - `deepseek-v4.1-flash` / `deepseek-v4-pro-0813` - Current hosted Flash and Pro models; these IDs differ from the direct DeepSeek API
+  - `deepseek-v4.1-flash` / `deepseek-v4.1-flash-1017` - Hosted DeepSeek V4.1 Flash models with text and image input; these IDs differ from the direct DeepSeek API
+  - `deepseek-v4-pro` / `deepseek-v4-pro-0813` / `deepseek-v4-flash-0731` - Hosted DeepSeek V4 Pro and Flash models
   - `deepseek-v3.2-exp` / `deepseek-v3.1` / `deepseek-v3` - DeepSeek V3 models
   - `deepseek-r1` / `deepseek-r1-0528` - DeepSeek reasoning models
   - `deepseek-r1-distill-qwen-{1.5b,7b,14b,32b}` - Distilled on Qwen2.5
@@ -99,7 +101,8 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qwen3-vl-flash` / `qwen3-vl-flash-2025-10-15` - Fast vision model with thinking mode support
 - `qwen-vl-max` - 7.5K context, 1,280 tokens/image
 - `qwen-vl-plus` - High-res image support
-- `qwen-vl-ocr` - OCR-optimized for documents, tables, handwriting (30+ languages)
+- `qwen-vl-ocr` / `qwen-vl-ocr-2025-11-20` / `qwen-vl-ocr-2024-10-28` - OCR-optimized for documents, tables, handwriting (30+ languages)
+- `qwen3.5-ocr` - OCR model for document parsing, text localization, and key information extraction
 
 **Open-source:**
 
@@ -108,6 +111,7 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qwen3-vl-30b-a3b-thinking` / `qwen3-vl-30b-a3b-instruct` - 30B parameter Qwen3-VL
 - `qwen3-vl-8b-thinking` / `qwen3-vl-8b-instruct` - 8B parameter Qwen3-VL
 - `qwen2.5-vl-{72b,7b,3b}-instruct` - Qwen 2.5 VL series
+- `qwen2-vl-{72b,7b,2b}-instruct` - Qwen 2 VL series
 
 ### Audio & Speech
 
@@ -123,7 +127,9 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qwen3-coder-flash` / `qwen3-coder-flash-2025-07-28` - Fast code generation
 - `qwen-math-plus` / `qwen-math-plus-latest` / `qwen-math-plus-2024-09-19` / `qwen-math-plus-2024-08-16` - Math problem solving
 - `qwen-math-turbo` / `qwen-math-turbo-latest` / `qwen-math-turbo-2024-09-19` - Fast math reasoning
-- `qwen-mt-{plus,turbo}` - Machine translation (92 languages)
+- `qwen-mt-{plus,flash,turbo}` - Machine translation (92 languages)
+- `qwen-mt-lite` - Lower-cost machine translation (32 languages)
+- `qwen-plus-character` / `qwen-flash-character` / `qwen-plus-character-ja` - Role-playing models (`-ja` for Japanese)
 - `qwen-doc-turbo` - Document mining and structured extraction
 
 **Open-source:**
@@ -154,6 +160,8 @@ All support 131K context (129,024 in, 8,192 out)
 
 Open-source Qwen3 models with thinking mode support:
 
+- `qwen3.8-2.4t-a95b` - Qwen3.8 MoE text model (2.4T total, about 95B active parameters) that always thinks
+- `qwen3.8-27b` / `qwen3.6-27b` - 27B dense vision-language models; `qwen3.8-27b` thinks by default
 - `qwen3-next-80b-a3b-thinking` / `qwen3-next-80b-a3b-instruct` - Next-gen 80B (September 2025)
 - `qwen3-235b-a22b-thinking-2507` / `qwen3-235b-a22b-instruct-2507` - 235B July 2025 versions
 - `qwen3-30b-a3b-thinking-2507` / `qwen3-30b-a3b-instruct-2507` - 30B July 2025 versions
@@ -167,11 +175,18 @@ Open-source Qwen3 models with thinking mode support:
 
 **Kimi (Moonshot AI):**
 
-- `kimi-k3` - Current Kimi model
-- `kimi-k2.6` - Previous Kimi model with a 256K context window
+- `kimi-k3.1-pro` - Kimi K3.1 Pro with text and image input, thinking on by default, and a 1M-token context window
+- `kimi-k3` - Kimi K3 with vision input and a 1M-token context window; `kimi/kimi-k3` is served directly by Moonshot AI
+- `kimi-k2.7-code` - Coding model with text, image, and video input that always thinks
+- `kimi-k2.6` - Earlier Kimi model with a 256K context window
+- `kimi-k2.5` - Earlier Kimi model with text and image input
 - `moonshot-kimi-k2-instruct` - First open-source trillion-parameter MoE model in China (activates 32B parameters)
 
-**Z.AI (GLM):** `ZHIPU/GLM-5.3` and `glm-5.2`. Check the [regional model catalog](https://www.alibabacloud.com/help/en/model-studio/models) for access and endpoint requirements.
+**Z.AI (GLM):** `glm-5.3` (always thinks), `glm-5.3-prime`, `glm-5.2`, `glm-5.2-fast-preview`, `glm-5.1`, and `glm-5`, plus `ZHIPU/GLM-5.3` and `ZHIPU/GLM-5.2` served directly by Zhipu AI. Check the [regional model catalog](https://www.alibabacloud.com/help/en/model-studio/models) for access and endpoint requirements.
+
+**MiniMax:** `MiniMax-M2.5`, which always thinks.
+
+**MindLab:** `mindlab/macaron-v1.1-venti-pro`, `mindlab/macaron-v1.1-venti`, `mindlab/macaron-v1.1-coding-venti`, and `mindlab/macaron-v1-tall`, available in the Singapore region.
 
 ### Embeddings
 
@@ -207,7 +222,7 @@ providers:
         enable_thinking: true
 ```
 
-Qwen4 models think by default, and their output limit covers the reasoning and the answer together. For these models, promptfoo omits its default `max_tokens` cap, forwards `reasoning_effort`, and sends an explicit `max_tokens` or `max_completion_tokens` as `max_completion_tokens`:
+Some models think by default and count their reasoning toward `max_tokens`: Qwen4, `deepseek-v4.1-flash`, `deepseek-v4-pro`, `deepseek-v4-pro-0813`, `deepseek-v4-flash-0731`, `glm-5.3`, and `glm-5.2`. For these models, promptfoo omits its default `max_tokens` cap, forwards `reasoning_effort`, and sends an explicit `max_tokens` or `max_completion_tokens` as `max_completion_tokens`:
 
 ```yaml
 providers:
@@ -217,7 +232,7 @@ providers:
       max_completion_tokens: 8192 # Reasoning and answer combined
 ```
 
-To limit reasoning by tokens instead, set `passthrough.thinking_budget` and leave `reasoning_effort` unset. Qwen4 does not accept both in one request.
+Supported `reasoning_effort` values vary by model; see [Alibaba's Chat Completions reference](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions). To limit Qwen4 reasoning by tokens instead, set `passthrough.thinking_budget` and leave `reasoning_effort` unset. Qwen4 does not accept both in one request. When a `glm-5.2` request sets `passthrough.thinking_budget`, its `max_tokens` limits only the answer, so promptfoo sends it unchanged. Set `passthrough.enable_thinking: false` to turn thinking off on models that support both modes; `glm-5.3` always thinks.
 
 Standard [OpenAI parameters](/docs/providers/openai/#configuring-parameters) (temperature, max_tokens) are supported. Base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (or `https://dashscope.aliyuncs.com/compatible-mode/v1` for the Beijing region).
 
