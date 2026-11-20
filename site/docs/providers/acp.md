@@ -18,7 +18,7 @@ Promptfoo starts the selected agent as a local subprocess and drives its [Agent 
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  - 'Return the first word in alphabetical order. Words: {{words}}.'
+  - 'Reply with only the first word alphabetically. Words: {{words}}.'
 providers:
   - acp:copilot
   - acp:cursor
@@ -26,7 +26,7 @@ tests:
   - vars:
       words: 'cedar, birch, maple'
     assert:
-      - type: icontains
+      - type: equals
         value: birch
 ```
 

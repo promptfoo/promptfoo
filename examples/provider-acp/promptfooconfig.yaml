@@ -15,5 +15,5 @@ tests:
   - vars:
       words: 'cedar, birch, maple'
     assert:
-      - type: icontains
+      - type: equals
         value: birch
