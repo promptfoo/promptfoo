@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { handleTrajectoryStepCount } from '../../src/assertions/trajectory';
 import {
   canonicalJson,
   canonicalPrml,
@@ -15,7 +16,8 @@ import {
   writeEvalLock,
 } from '../../src/node/evalLock';
 
-import type { Assertion, TestSuite } from '../../src/types';
+import type { Assertion, AssertionParams, TestSuite } from '../../src/types';
+import type { TraceData } from '../../src/types/tracing';
 
 function createSuite(expected = 'Paris', input = 'Paris'): TestSuite {
   return {
@@ -82,6 +84,130 @@ describe('evalLock', () => {
     expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).not.toThrow();
     suite.tests![0].vars = { object: { required: undefined } };
     expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow('undefined');
+  });
+
+  it.each(['test', 'defaultTest', 'scenarioConfig', 'scenarioTest'] as const)(
+    'rejects an explicitly undefined %s threshold before it can be erased',
+    (location) => {
+      const suite = createSuite();
+      if (location === 'defaultTest') {
+        suite.defaultTest = { threshold: undefined };
+      } else if (location === 'scenarioConfig') {
+        suite.scenarios = [{ config: [{ threshold: undefined }], tests: [{}] }];
+      } else if (location === 'scenarioTest') {
+        suite.scenarios = [{ config: [{ threshold: 0.5 }], tests: [{ threshold: undefined }] }];
+      } else {
+        suite.tests![0].threshold = undefined;
+      }
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('undefined threshold');
+    },
+  );
+
+  it.each(['disableDefaultAsserts', 'repeat'] as const)(
+    'rejects an undefined %s option that can clear an inherited setting',
+    (option) => {
+      const suite = createSuite();
+      suite.scenarios = [
+        {
+          config: [{ options: { disableDefaultAsserts: true, repeat: 2 } }],
+          tests: [{ options: { [option]: undefined } }],
+        },
+      ];
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
+        `undefined test option "${option}"`,
+      );
+    },
+  );
+
+  it('retains absent, null, zero, and numeric scenario thresholds as distinct criteria', () => {
+    const hashes = [{}, { threshold: null }, { threshold: 0 }, { threshold: 0.5 }].map((test) => {
+      const suite = createSuite();
+      suite.scenarios = [{ config: [{ threshold: 0.5 }], tests: [test as never] }];
+      return hashEvalBar(createEvalBar(suite, { repeat: 1 }));
+    });
+    expect(new Set(hashes).size).toBe(hashes.length);
+  });
+
+  it.each([
+    'trace-error-spans',
+    'trace-span-count',
+    'trace-span-duration',
+    'trajectory:step-count',
+    'trajectory:tool-args-match',
+    'trajectory:tool-sequence',
+    'trajectory:tool-used',
+  ])('rejects %s and its inverse until trace interpretation is committed', (type) => {
+    for (const assertionType of [type, `not-${type}`]) {
+      const suite = createSuite();
+      suite.tests![0].assert = [{ type: assertionType, value: {} } as Assertion];
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('data-only assertion criteria');
+    }
+  });
+
+  it.each(['defaultTest', 'nested', 'scenarioConfig', 'scenarioTest'] as const)(
+    'rejects trace criteria in %s',
+    (location) => {
+      const suite = createSuite();
+      const assert: Assertion[] = [{ type: 'trajectory:step-count', value: { max: 0 } }];
+      if (location === 'defaultTest') {
+        suite.defaultTest = { assert };
+      } else if (location === 'nested') {
+        suite.tests![0].assert = [{ type: 'assert-set', assert }];
+      } else if (location === 'scenarioConfig') {
+        suite.scenarios = [{ config: [{ assert }], tests: [{}] }];
+      } else {
+        suite.scenarios = [{ config: [{}], tests: [{ assert }] }];
+      }
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('data-only assertion criteria');
+    },
+  );
+
+  it('rejects locking a trajectory whose unchanged spans can be reclassified', () => {
+    const assertion: Assertion = {
+      type: 'trajectory:step-count',
+      value: { type: 'command', max: 0 },
+    };
+    const spans: TraceData['spans'] = [
+      {
+        spanId: 'shell-span',
+        name: 'tool.call',
+        startTime: 100,
+        endTime: 200,
+        attributes: { 'tool.name': 'bash', 'tool.arguments': '{"cmd":"echo actual"}' },
+      },
+    ];
+    for (const commandToolNames of [['bash'], []]) {
+      const trace: TraceData = {
+        traceId: 'trace',
+        evaluationId: 'eval',
+        testCaseId: 'test',
+        spans,
+        metadata: { commandToolNames },
+      };
+      const params: AssertionParams = {
+        assertion,
+        baseType: 'trajectory:step-count',
+        assertionValueContext: {
+          trace,
+          vars: {},
+          test: {},
+          prompt: 'actual',
+          provider: { id: () => 'echo', callApi: async () => ({ output: 'actual' }) },
+          logProbs: undefined,
+          providerResponse: { output: 'actual' },
+        },
+        output: 'actual',
+        outputString: 'actual',
+        providerResponse: { output: 'actual' },
+        test: {},
+        inverse: false,
+      };
+      expect(handleTrajectoryStepCount(params).pass).toBe(commandToolNames.length === 0);
+      const suite = createSuite();
+      suite.tracing = { enabled: true, commandToolNames };
+      suite.tests![0].assert = [assertion];
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('data-only assertion criteria');
+    }
   });
 
   it('rejects accessors in option and scenario envelopes before copying them', () => {

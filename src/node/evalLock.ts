@@ -144,13 +144,6 @@ const DATA_ONLY_ASSERTION_TYPES = new Set([
   'skill-used',
   'starts-with',
   'tool-call-f1',
-  'trace-error-spans',
-  'trace-span-count',
-  'trace-span-duration',
-  'trajectory:step-count',
-  'trajectory:tool-args-match',
-  'trajectory:tool-sequence',
-  'trajectory:tool-used',
   'word-count',
 ]);
 
@@ -390,6 +383,11 @@ function validateDataOnlyAssertions(assertions: unknown, disableTemplating: bool
 
 function validateDataOnlyTest(test: Record<string, unknown>, disableTemplating: boolean): void {
   assertPlainDataObject(test);
+  // Scenario spreads distinguish an undefined override from an absent property.
+  // Do not erase an override that can clear an inherited acceptance threshold.
+  if (Object.hasOwn(test, 'threshold') && test.threshold === undefined) {
+    throw new Error('Evaluation locks cannot include an explicitly undefined threshold');
+  }
   if (test.prompts !== undefined || test.providers !== undefined) {
     throw new Error(
       'Evaluation locks do not support prompt or provider selectors: every locked test must run for each selected target and prompt',
@@ -403,6 +401,15 @@ function validateDataOnlyTest(test: Record<string, unknown>, disableTemplating: 
   const options = asRecord(test.options);
   if (options) {
     assertPlainDataObject(options);
+    for (const [key, value] of Object.entries(options)) {
+      // These absent fields are added by the config loader and affect the target
+      // prompt or unsupported external graders, not data-only acceptance criteria.
+      if (value === undefined && !['prefix', 'suffix', 'provider'].includes(key)) {
+        throw new Error(
+          `Evaluation locks cannot include an undefined test option "${key}" that may override inherited settings`,
+        );
+      }
+    }
   }
   for (const key of DEFERRED_TEST_OPTION_KEYS) {
     if (options?.[key] != null) {

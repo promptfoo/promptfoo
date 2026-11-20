@@ -177,6 +177,90 @@ tests:
     expect(fs.existsSync(selectedLock)).toBe(false);
   });
 
+  it('rejects undefined scenario thresholds instead of erasing acceptance overrides', () => {
+    const selectedConfig = path.join(tempDir, 'scenario-threshold.cjs');
+    const selectedLock = path.join(tempDir, 'scenario-threshold.lock.json');
+    const outputPath = path.join(tempDir, 'scenario-threshold-output.json');
+    const config = (override: string) => `module.exports = {
+  providers: ['echo'], prompts: ['actual'],
+  scenarios: [{
+    config: [{ threshold: 0.5 }],
+    tests: [{ ${override}
+      assert: [{ type: 'equals', value: 'actual' }, { type: 'equals', value: 'different' }]
+    }]
+  }]
+};`;
+    const env = { PROMPTFOO_DISABLE_TEMPLATING: 'true' };
+
+    fs.writeFileSync(selectedConfig, config('threshold: undefined,'));
+    const unlocked = runEval(['-o', outputPath], '100', selectedConfig, env);
+    expect(unlocked.status, unlocked.stderr || unlocked.stdout).toBe(100);
+    expect(JSON.parse(fs.readFileSync(outputPath, 'utf8')).results.results[0]).toMatchObject({
+      success: false,
+      score: 0.5,
+      response: { output: 'actual' },
+    });
+    const rejected = runEval(['--lock', selectedLock], '100', selectedConfig, env);
+    expect(rejected.status, rejected.stderr || rejected.stdout).toBe(1);
+    expect(rejected.stdout + rejected.stderr).toContain('undefined threshold');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+
+    fs.writeFileSync(selectedConfig, config(''));
+    const locked = runEval(['--lock', selectedLock, '-o', outputPath], '100', selectedConfig, env);
+    expect(locked.status, locked.stderr || locked.stdout).toBe(0);
+    expect(JSON.parse(fs.readFileSync(outputPath, 'utf8')).results.results[0]).toMatchObject({
+      success: true,
+      score: 0.5,
+      response: { output: 'actual' },
+    });
+    const originalLock = fs.readFileSync(selectedLock, 'utf8');
+    fs.writeFileSync(selectedConfig, config('threshold: undefined,'));
+    const verified = runEval(['--verify', selectedLock], '100', selectedConfig, env);
+    expect(verified.status, verified.stderr || verified.stdout).toBe(3);
+    expect(verified.stdout + verified.stderr).toContain('undefined threshold');
+    expect(verified.stdout + verified.stderr).not.toContain('Evaluation lock passed');
+    expect(fs.readFileSync(selectedLock, 'utf8')).toBe(originalLock);
+  });
+
+  it.each(['trace-span-count', 'trajectory:step-count'])(
+    'rejects %s lock registration before executing a target provider',
+    (type) => {
+      const selectedConfig = path.join(tempDir, `${type.replace(':', '-')}.cjs`);
+      const selectedLock = `${selectedConfig}.lock.json`;
+      const marker = `${selectedConfig}.called`;
+      fs.writeFileSync(
+        selectedConfig,
+        `module.exports = {
+  providers: [{ id: () => 'trace-target', callApi: async () => {
+    require('fs').writeFileSync(${JSON.stringify(marker)}, 'called');
+    return { output: 'actual' };
+  } }],
+  prompts: ['actual'],
+  tracing: { enabled: true, commandToolNames: ['bash'] },
+  tests: [{ assert: [{ type: ${JSON.stringify(type)}, value: { type: 'command', max: 0 } }] }]
+};`,
+      );
+      const result = runEval(['--lock', selectedLock], '100', selectedConfig, {
+        PROMPTFOO_DISABLE_TEMPLATING: 'true',
+      });
+      expect(result.status, result.stderr || result.stdout).toBe(1);
+      expect(result.stdout + result.stderr).toContain('data-only assertion criteria');
+      expect(fs.existsSync(selectedLock)).toBe(false);
+      expect(fs.existsSync(marker)).toBe(false);
+
+      const baseline = runEval(['--lock', selectedLock], '100', FIXTURE_PATH);
+      expect(baseline.status, baseline.stderr || baseline.stdout).toBe(100);
+      const originalLock = fs.readFileSync(selectedLock, 'utf8');
+      const verified = runEval(['--verify', selectedLock], '100', selectedConfig, {
+        PROMPTFOO_DISABLE_TEMPLATING: 'true',
+      });
+      expect(verified.status, verified.stderr || verified.stdout).toBe(3);
+      expect(verified.stdout + verified.stderr).toContain('data-only assertion criteria');
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(fs.readFileSync(selectedLock, 'utf8')).toBe(originalLock);
+    },
+  );
+
   it('rejects a literal provider payload edit that would turn a failure into a pass', () => {
     const selectedConfig = path.join(tempDir, 'provider-payload.yaml');
     const selectedLock = path.join(tempDir, 'provider-payload.lock.json');
