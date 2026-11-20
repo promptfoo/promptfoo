@@ -2,7 +2,7 @@
  * Azure AI Foundry Image Provider for Microsoft MAI image models.
  *
  * Generates images from text prompts using Microsoft's MAI image models
- * (e.g. MAI-Image-2.6, MAI-Image-2.6-Flash, MAI-Image-2.5)
+ * (e.g. MAI-Image-2.7, MAI-Image-2.7-Flash, MAI-Image-2.6)
  * deployed in Microsoft Foundry.
  *
  * Unlike Azure OpenAI image models (DALL·E / gpt-image), MAI image models are
@@ -35,15 +35,16 @@ import type {
 } from '../../types/index';
 import type { AzureImageOptions, AzureProviderOptions } from './types';
 
-/** Minimum width/height accepted by the MAI image API, in pixels. */
+/** Minimum width/height accepted by every MAI image model, in pixels. */
 const MIN_DIMENSION = 768;
-/** Maximum total pixel count accepted by the MAI image API (1024x1024). */
-const MAX_PIXELS = 1_048_576;
 const DEFAULT_DIMENSION = 1024;
 
 /**
- * Validate MAI image dimensions against the documented constraints: each edge
- * must be at least 768px and the total pixel count must not exceed 1,048,576.
+ * Validate MAI image dimensions against the constraint every MAI image model
+ * shares: integer edges of at least 768px. The maximum pixel count depends on
+ * the model (about 1MP for MAI-Image-2.5, 2,359,296 for 2.6, 4,194,304 for
+ * 2.7), and the deployment name doesn't reliably identify the model, so the API
+ * enforces that limit and its 400 names the model's maximum.
  */
 export function validateMaiImageDimensions(
   width: number,
@@ -59,12 +60,6 @@ export function validateMaiImageDimensions(
       message: `Image width and height must each be at least ${MIN_DIMENSION} pixels (got ${width}x${height}).`,
     };
   }
-  if (width * height > MAX_PIXELS) {
-    return {
-      valid: false,
-      message: `Image width * height must not exceed ${MAX_PIXELS} pixels (got ${width}x${height} = ${width * height}).`,
-    };
-  }
   return { valid: true };
 }
 
@@ -77,7 +72,7 @@ export function validateMaiImageDimensions(
  */
 export function extractMaiImageTokenUsage(
   data: any,
-): { prompt: number; completion: number; total: number } | undefined {
+): { prompt: number; imagePrompt: number; completion: number; total: number } | undefined {
   const num = (value: unknown): number | undefined =>
     typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
@@ -87,9 +82,9 @@ export function extractMaiImageTokenUsage(
     return undefined;
   }
 
-  const prompt =
-    (num(usage?.num_input_text_tokens) ?? 0) + (num(usage?.num_input_image_tokens) ?? 0);
-  return { prompt, completion, total: prompt + completion };
+  const imagePrompt = num(usage?.num_input_image_tokens) ?? 0;
+  const prompt = (num(usage?.num_input_text_tokens) ?? 0) + imagePrompt;
+  return { prompt, imagePrompt, completion, total: prompt + completion };
 }
 
 /**
@@ -251,8 +246,8 @@ export class AzureImageProvider extends AzureGenericProvider {
       const images: ImageOutput[] = [{ data: dataUrl, mimeType: 'image/png' }];
 
       // The MAI image API bills per token. Token accounting tolerates both the
-      // legacy top-level `num_output_tokens` and the newer `usage` object, and
-      // prices input (text + image) tokens when the response reports them.
+      // legacy top-level `num_output_tokens` and the newer `usage` object.
+      // Text and reference-image input tokens have separate rates.
       const usage = extractMaiImageTokenUsage(data);
 
       let cost: number | undefined;
@@ -260,7 +255,16 @@ export class AzureImageProvider extends AzureGenericProvider {
         cost = 0;
       } else if (usage) {
         const costModelId = config.model || this.deploymentName;
-        cost = calculateAzureCost(costModelId, config, usage.prompt, usage.completion);
+        cost = calculateAzureCost(
+          costModelId,
+          config,
+          usage.prompt,
+          usage.completion,
+          undefined,
+          undefined,
+          undefined,
+          usage.imagePrompt,
+        );
       }
 
       const tokenUsage = usage

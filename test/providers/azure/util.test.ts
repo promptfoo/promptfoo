@@ -617,9 +617,21 @@ describe('calculateAzureCost', () => {
   });
 
   it('calculates cost for Microsoft MAI image models from output tokens', () => {
-    // MAI-Image-2.5 bills image output at $33/1M tokens; input is unused here.
+    // MAI-Image-2.5 bills image output at $47/1M tokens; input is unused here.
     const cost = calculateAzureCost('MAI-Image-2.5', {}, 0, 1000);
-    expect(cost).toBeCloseTo(0.033, 6);
+    expect(cost).toBeCloseTo(0.047, 6);
+  });
+
+  it.each([
+    // Global Standard meters per 1M tokens: input, cached input, output.
+    ['MAI-Thinking-1', 2, 0.2, 8],
+    ['mai-thinking-1', 2, 0.2, 8],
+    ['MAI-Code-1.1-Flash', 0.2, 0.02, 1.2],
+    ['mai-code-1.1-flash', 0.2, 0.02, 1.2],
+  ])('prices %s from Azure Global Standard meters', (id, input, cachedInput, output) => {
+    expect(calculateAzureCost(id, {}, 1_000_000, 0)).toBeCloseTo(input, 10);
+    expect(calculateAzureCost(id, {}, 0, 1_000_000)).toBeCloseTo(output, 10);
+    expect(calculateAzureCost(id, {}, 1_000_000, 0, 1_000_000)).toBeCloseTo(cachedInput, 10);
   });
 
   it.each(['MAI-Code-2-Flash', 'mai-code-2-flash'])(

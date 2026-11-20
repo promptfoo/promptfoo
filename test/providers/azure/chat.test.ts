@@ -305,6 +305,35 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
     });
 
+    it('prices a MAI-Thinking-1 deployment, including cached input and reasoning tokens', async () => {
+      // Usage shape returned live by a `mai-thinking-1` Global Standard deployment.
+      provider = new AzureChatCompletionProvider('mai-thinking-1', createAzureApiOptions());
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
+          choices: [
+            { index: 0, message: { role: 'assistant', content: '391' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 19,
+            completion_tokens: 149,
+            total_tokens: 168,
+            prompt_tokens_details: { cached_tokens: 2 },
+            completion_tokens_details: { reasoning_tokens: 141 },
+          },
+        }),
+      );
+
+      const result = await provider.callApi('What is 17*23?');
+
+      const body = JSON.parse((vi.mocked(fetchWithCache).mock.calls[0][1] as any).body);
+      expect(body).toMatchObject({ model: 'mai-thinking-1', reasoning_effort: 'medium' });
+      expect(body).not.toHaveProperty('temperature');
+      expect(result.tokenUsage).toMatchObject({ prompt: 19, completion: 149, cached: 2 });
+      // $2/1M input, $0.20/1M cached input, $8/1M output (reasoning tokens bill as output).
+      expect(result.cost).toBeCloseTo((17 * 2 + 2 * 0.2 + 149 * 8) / 1e6, 12);
+    });
+
     it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
       'uses modelName for %s cache pricing without changing the Azure deployment',
       async (modelName) => {
@@ -593,9 +622,12 @@ describe('AzureChatCompletionProvider', () => {
         const provider = new AzureChatCompletionProvider(name, { config: {} });
         expect((provider as any).isReasoningModel()).toBe(true);
       }
-      // MAI-Code-1-Flash is a fast coding model on the standard chat surface, not a reasoning model.
-      const code = new AzureChatCompletionProvider('mai-code-1-flash', { config: {} });
-      expect((code as any).isReasoningModel()).toBe(false);
+      // MAI-Code-1.x Flash models are fast coding models on the standard chat surface (their
+      // reasoning budget is adaptive, not configurable), not reasoning models.
+      for (const name of ['mai-code-1-flash', 'mai-code-1-1-flash']) {
+        const code = new AzureChatCompletionProvider(name, { config: {} });
+        expect((code as any).isReasoningModel()).toBe(false);
+      }
     });
 
     it('flags Claude Opus 4.7 and 4.8 as sampling-params-deprecated without treating them as reasoning', () => {

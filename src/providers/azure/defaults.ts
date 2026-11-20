@@ -783,20 +783,66 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // both and prices input + output. Cost lookup is keyed by the model id, so set
   // `model` in the provider config (deployment names can't contain the dots in
   // ids like `MAI-Image-2.5`) to enable cost reporting. Rates marked
-  // "provisional" are estimates pending published pricing.
+  // "provisional" are estimates pending published pricing; the others are the
+  // Global Standard meters from https://prices.azure.com/api/retail/prices
+  // (checked 2026-11-19). Data Zone deployments cost 10% to 20% more.
   // =============================================================================
   // Reasoning chat model (DeepSeek-R1 lineage). Provisional pricing mirrors
   // DeepSeek-R1 on Foundry pending a published MAI-DS-R1 rate.
   ...modelsWithCost(['MAI-DS-R1'], { input: 0.55 / 1000000, output: 2.19 / 1000000 }),
-  // Text-to-image. Text input $5/1M; image output $33/1M (Microsoft).
+  // Reasoning chat model (chat completions). The lowercase alias matches
+  // deployments named after the model ID.
+  ...modelsWithCost(['MAI-Thinking-1', 'mai-thinking-1'], {
+    input: 2 / 1000000,
+    output: 8 / 1000000,
+    cacheRead: 0.2 / 1000000,
+  }),
+  // Coding chat model (chat completions, limited access). The lowercase alias is
+  // the registry model ID.
+  ...modelsWithCost(['MAI-Code-1.1-Flash', 'mai-code-1.1-flash'], {
+    input: 0.2 / 1000000,
+    output: 1.2 / 1000000,
+    cacheRead: 0.02 / 1000000,
+  }),
+  // Image models: `input` is the text-prompt rate, `imageInput` the reference
+  // image rate (image edits), and `output` the generated-image rate.
   ...modelsWithCost(['MAI-Image-2'], { input: 5 / 1000000, output: 33 / 1000000 }),
-  // Efficient image. Text input $5/1M; image output $19.50/1M (Microsoft).
   ...modelsWithCost(['MAI-Image-2e'], { input: 5 / 1000000, output: 19.5 / 1000000 }),
-  // Flagship text-to-image + image edits. Text input $5/1M confirmed; image
-  // output rate provisional.
-  ...modelsWithCost(['MAI-Image-2.5'], { input: 5 / 1000000, output: 33 / 1000000 }),
-  // Efficient flagship image variant. Pricing provisional (flash tier).
-  ...modelsWithCost(['MAI-Image-2.5-Flash'], { input: 5 / 1000000, output: 19.5 / 1000000 }),
+  ...modelsWithCost(['MAI-Image-2.5'], {
+    input: 5 / 1000000,
+    imageInput: 8 / 1000000,
+    output: 47 / 1000000,
+  }),
+  ...modelsWithCost(['MAI-Image-2.5-Flash'], {
+    input: 1.75 / 1000000,
+    imageInput: 1.75 / 1000000,
+    output: 19.5 / 1000000,
+  }),
+  ...modelsWithCost(['MAI-Image-2.5-Pro'], {
+    input: 5 / 1000000,
+    imageInput: 8 / 1000000,
+    output: 106 / 1000000,
+  }),
+  ...modelsWithCost(['MAI-Image-2.6'], {
+    input: 5 / 1000000,
+    imageInput: 8 / 1000000,
+    output: 38 / 1000000,
+  }),
+  ...modelsWithCost(['MAI-Image-2.6-Flash'], {
+    input: 1.75 / 1000000,
+    imageInput: 2.5 / 1000000,
+    output: 19 / 1000000,
+  }),
+  ...modelsWithCost(['MAI-Image-2.7'], {
+    input: 5 / 1000000,
+    imageInput: 8 / 1000000,
+    output: 34 / 1000000,
+  }),
+  ...modelsWithCost(['MAI-Image-2.7-Flash'], {
+    input: 1.75 / 1000000,
+    imageInput: 2.5 / 1000000,
+    output: 10 / 1000000,
+  }),
   // Agentic coding reasoning model (Responses API, limited-access preview). Global Standard
   // meters from https://prices.azure.com/api/retail/prices (2026-11-17): input $0.05/1M, cached
   // input $0.005/1M, output $0.25/1M. Microsoft's launch benchmarks cite a 50% promotional
