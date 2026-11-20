@@ -39,7 +39,7 @@ The xAI provider includes support for the following model formats. [xAI recommen
 
 :::caution Legacy xAI model aliases
 
-[xAI periodically retires older model slugs](https://docs.x.ai/developers/migration/may-15-retirement) and keeps them working through redirects. As of the May 15, 2026 (12:00 PM PT) retirement, requests to the `grok-4-1-fast`, `grok-4-fast`, `grok-4-0709`, and `grok-3` families redirect to `grok-4.3` and use Grok 4.3 pricing. Requests to `grok-code-fast-1` route to `grok-build-0.1`, while `grok-imagine-image-pro` routes to `grok-imagine-image-quality`. For new configs, use a current canonical model ID directly.
+[xAI periodically retires older model slugs](https://docs.x.ai/developers/migration/may-15-retirement) and keeps them working through redirects. As of the May 15, 2026 (12:00 PM PT) retirement, requests to the `grok-4-1-fast`, `grok-4-fast`, `grok-4-0709`, and `grok-3` families redirect to `grok-4.3` and use Grok 4.3 pricing. Requests to `grok-code-fast-1` route to `grok-build-0.1`, while `grok-imagine-image-pro` and `grok-imagine-image-quality` route to `grok-imagine-image-2.0` at `low` quality. For new configs, use a current canonical model ID directly.
 
 :::
 
@@ -568,19 +568,19 @@ Current Grok Imagine image model IDs include:
 
 - `xai:image:grok-imagine-image`
 - `xai:image:grok-imagine-image-2.0`
-- `xai:image:grok-imagine-image-quality`
-- `xai:image:grok-imagine-image-pro`
 
 `grok-imagine-image-2.0` is xAI's latest image model. It prices per quality/resolution tier rather than at a flat per-image rate, and accepts only `low`, `medium`, and `auto` for `quality` (not `high`):
 
 | `quality`      | `resolution` | Price per image |
 | -------------- | ------------ | --------------- |
 | `low` / `auto` | `1k`         | $0.04           |
+| `low` / `auto` | `1.5k`       | $0.05           |
 | `low` / `auto` | `2k`         | $0.06           |
 | `medium`       | `1k`         | $0.06           |
+| `medium`       | `1.5k`       | $0.07           |
 | `medium`       | `2k`         | $0.08           |
 
-`grok-imagine-image-quality` remains available as a quality-oriented alternative. Older image-model aliases may continue to resolve through xAI-managed redirects.
+xAI has [retired](https://docs.x.ai/developers/migration/imagine-image-quality-nov-2) `grok-imagine-image-quality` and `grok-imagine-image-pro`. Requests to those slugs still work: xAI serves them with `grok-imagine-image-2.0` at `low` quality and bills its low-tier rates, plus $0.01 per source image on edits. Promptfoo's fallback estimate uses the same rates. Use `grok-imagine-image-2.0` directly to choose the quality.
 
 Example configuration for image generation:
 
