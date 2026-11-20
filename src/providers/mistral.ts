@@ -50,9 +50,19 @@ function getMistralApiUrl(
 
 const MISTRAL_CHAT_MODELS = [
   // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
-  ...modelsWithCost(['zai-glm-5-3'], {
+  ...modelsWithCost(['zai-glm-5-3', 'zai-glm-5', 'zai-glm-latest'], {
     input: 1.4 / 1000000,
     output: 4.4 / 1000000,
+  }),
+  // Z.ai GLM 5.3 Flash hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3-flash
+  ...modelsWithCost(['zai-glm-5-3-flash'], {
+    input: 0.15 / 1000000,
+    output: 0.5 / 1000000,
+  }),
+  // DeepSeek V4.1 Flash 1017 hosted by Mistral: https://docs.mistral.ai/models/deepseek-v4-flash-1017
+  ...modelsWithCost(['deepseek-v4-1-flash-1017'], {
+    input: 0.3 / 1000000,
+    output: 1.2 / 1000000,
   }),
   ...modelsWithCost(['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'], {
     input: 0.25 / 1000000,
@@ -114,9 +124,15 @@ const MISTRAL_CHAT_MODELS = [
     input: 3 / 1000000,
     output: 9 / 1000000,
   }),
-  ...modelsWithCost(['mistral-large-2512', 'mistral-large-latest'], {
+  // Mistral Large 3 (deprecated 2026-10-31) — historical pricing for cached results.
+  ...modelsWithCost(['mistral-large-2512'], {
     input: 0.5 / 1000000,
     output: 1.5 / 1000000,
+  }),
+  // Mistral Large 4 — `mistral-large-latest` resolves to it.
+  ...modelsWithCost(['mistral-large-4', 'mistral-large-4-0', 'mistral-large-latest'], {
+    input: 0.7 / 1000000,
+    output: 2.1 / 1000000,
   }),
   ...modelsWithCost(['codestral-2405'], {
     input: 1 / 1000000,
@@ -205,6 +221,19 @@ const MISTRAL_CHAT_MODELS = [
   }),
 ];
 
+// Models that always reason: they reject `reasoning_effort: none` and return a thinking chunk
+// before the answer, so the default 1024-token cap can be spent before any answer text.
+// https://docs.mistral.ai/inference/conversations/reasoning
+const MISTRAL_ALWAYS_REASONING_MODELS = new Set([
+  'mistral-large-4',
+  'mistral-large-4-0',
+  'mistral-large-latest',
+  'zai-glm-5-3',
+  'zai-glm-5',
+  'zai-glm-latest',
+  'zai-glm-5-3-flash',
+]);
+
 const MISTRAL_EMBEDDING_MODELS = [
   ...modelsWithCost(['mistral-embed', 'mistral-embed-2312'], {
     input: 0.1 / 1000000,
@@ -215,6 +244,10 @@ const MISTRAL_EMBEDDING_MODELS = [
     output: 0.15 / 1000000,
   }),
 ];
+
+// Accepted values vary by model: Mistral Small 4 and Medium 3.5 take `none | high`, Mistral
+// Large 4 takes `low | medium | high`, and Z.ai GLM 5.3 takes `low | high | max`.
+type MistralReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'max';
 
 interface MistralChatCompletionOptions {
   apiKey?: string;
@@ -249,7 +282,7 @@ interface MistralChatCompletionOptions {
         };
       };
   prompt_mode?: 'reasoning' | null;
-  reasoning_effort?: 'high' | 'none';
+  reasoning_effort?: MistralReasoningEffort;
   prompt_cache_key?: string;
   prediction?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
@@ -342,7 +375,7 @@ function getMistralRequestMetadata(params: {
   safe_prompt?: boolean;
   random_seed?: number | null;
   prompt_mode?: 'reasoning' | null;
-  reasoning_effort?: 'high' | 'none';
+  reasoning_effort?: MistralReasoningEffort;
   prediction?: unknown;
   metadata?: unknown;
   guardrails?: unknown;
@@ -414,13 +447,15 @@ function buildMistralChatParams(
   loadedTools: unknown,
 ) {
   const hasTools = Array.isArray(loadedTools) ? loadedTools.length > 0 : loadedTools !== undefined;
+  const maxTokens =
+    config.max_tokens ?? (MISTRAL_ALWAYS_REASONING_MODELS.has(modelName) ? undefined : 1024);
 
   return {
     model: modelName,
     messages,
     temperature: config.temperature,
     top_p: config.top_p ?? 1,
-    max_tokens: config.max_tokens ?? 1024,
+    ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
     ...(config.frequency_penalty === undefined
       ? {}
       : { frequency_penalty: config.frequency_penalty }),

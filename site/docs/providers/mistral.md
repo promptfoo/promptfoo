@@ -19,7 +19,7 @@ keywords:
 
 Use the [Mistral AI API](https://docs.mistral.ai/api/) for chat, reasoning, code generation, and image understanding. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) for capabilities and availability.
 
-For Mistral-hosted [Z.ai GLM 5.3](https://docs.mistral.ai/models/zai-glm-5-3), use `mistral:zai-glm-5-3`. Promptfoo includes standard input and output pricing for this model.
+For Mistral-hosted third-party models, use `mistral:zai-glm-5-3` ([Z.ai GLM 5.3](https://docs.mistral.ai/models/zai-glm-5-3)), `mistral:zai-glm-5-3-flash` ([Z.ai GLM 5.3 Flash](https://docs.mistral.ai/models/zai-glm-5-3-flash)), or `mistral:deepseek-v4-1-flash-1017` ([DeepSeek V4.1 Flash 1017](https://docs.mistral.ai/models/deepseek-v4-flash-1017)). Promptfoo includes standard input and output pricing for these models.
 
 ## API Key
 
@@ -52,7 +52,7 @@ providers:
       presence_penalty: 0.1 # Encourage diversity
       stop: ['END'] # Optional stop sequence(s)
       n: 1 # Number of completions
-      reasoning_effort: high # high | none on adjustable reasoning models
+      reasoning_effort: high # Accepted values vary by model; see Reasoning Models
       prompt_mode: reasoning # reasoning | null on native reasoning models
       prompt_cache_key: shared-prefix # Reuse Mistral's server-side prompt cache across requests
 ```
@@ -131,11 +131,11 @@ providers:
       max_tokens: 8000
       stop: ['```'] # Stop at code block end
 
-  # Current multimodal configuration
-  - id: mistral:mistral-large-2512
+  # Multimodal model that always reasons
+  - id: mistral:mistral-large-4
     config:
-      temperature: 0.5
-      max_tokens: 2000
+      reasoning_effort: medium # low | medium | high (default)
+      max_tokens: 8000
 
   # Recommended inline guardrails
   - id: mistral:mistral-small-latest
@@ -176,7 +176,7 @@ source of truth for availability and pricing.
 | Model                   | Context | Input Price                    | Output Price | Capabilities             | Best For                               |
 | ----------------------- | ------- | ------------------------------ | ------------ | ------------------------ | -------------------------------------- |
 | `mistral-medium-latest` | 256k    | $1.50/1M                       | $7.50/1M     | Text, vision, reasoning¹ | Agentic and coding-heavy workloads     |
-| `mistral-large-latest`  | 256k    | $0.50/1M                       | $1.50/1M     | Text, vision             | General-purpose multimodal tasks       |
+| `mistral-large-latest`  | 1M      | $0.70/1M                       | $2.10/1M     | Text, vision, reasoning² | General-purpose multimodal tasks       |
 | `mistral-small-latest`  | 256k    | $0.15/1M                       | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding |
 | `codestral-latest`      | 128k    | $0.30/1M                       | $0.90/1M     | Code, FIM                | Code generation and completion         |
 | `labs-leanstral-1-5`    | 256k    | $0 (Public Preview)            | $0           | Text, tools              | Lean 4 proof engineering               |
@@ -186,6 +186,10 @@ source of truth for availability and pricing.
 | `ministral-3b-latest`   | 256k    | $0.10/1M                       | $0.10/1M     | Text, vision             | Smallest multimodal deployments        |
 
 ¹ Enable adjustable reasoning with `reasoning_effort: high`.
+
+² Always reasons. Set `reasoning_effort` to `low`, `medium`, or `high` (the default). Promptfoo
+does not apply its default 1024-token `max_tokens` cap to models that always reason, so set
+`max_tokens` to limit output.
 
 Leanstral 1.5 is scheduled to retire September 30, 2026. The [Voxtral Small estimate](https://docs.mistral.ai/models/voxtral-small-25-07)
 adds $0.004 per audio minute when the API reports `usage.prompt_audio_seconds`, alongside text
@@ -205,7 +209,7 @@ stable pricing and behavior.
 | Published alias                                                      | Resolves to                               |
 | -------------------------------------------------------------------- | ----------------------------------------- |
 | `mistral-medium-latest`, `mistral-medium-3`, `mistral-medium-3-5`    | `mistral-medium-3-5` (Mistral Medium 3.5) |
-| `mistral-large-latest`                                               | `mistral-large-2512` (Mistral Large 3)    |
+| `mistral-large-latest`, `mistral-large-4`, `mistral-large-4-0`       | `mistral-large-4-0` (Mistral Large 4)     |
 | `mistral-small-latest`                                               | `mistral-small-2603` (Mistral Small 4)    |
 | `codestral-latest`, `mistral-code-latest`, `mistral-code-fim-latest` | `codestral-2508` (Codestral)              |
 
@@ -246,8 +250,8 @@ providers:
 
 Mistral's **Magistral** models are deprecated native-reasoning models.
 `magistral-small-latest` and `magistral-medium-latest` still point to their 2509 snapshots,
-which use tokenized thinking chunks and 128k context windows. For new evals, use Mistral Small 4
-or Mistral Medium 3.5 and enable reasoning with `reasoning_effort`.
+which use tokenized thinking chunks and 128k context windows. For new evals, use Mistral Small 4,
+Mistral Medium 3.5, or Mistral Large 4 and set `reasoning_effort`.
 
 ### Key Features of Magistral Models
 
@@ -259,6 +263,7 @@ wire format in new evals; migrate to `reasoning_effort` and assert on the final 
 - **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`) — deprecated native reasoning
 - **Magistral Small** (`magistral-small-latest` / `magistral-small-2509`) — deprecated native reasoning
 - **Mistral Small 4** (`mistral-small-latest` / `mistral-small-2603`) — current hybrid model; enable reasoning with `reasoning_effort: high`
+- **Mistral Large 4** (`mistral-large-latest` / `mistral-large-4-0`) — always reasons; set `reasoning_effort` to `low`, `medium`, or `high` (default). Mistral rejects `none` with HTTP 400
 
 ### Usage Recommendations
 
@@ -281,14 +286,14 @@ Mistral offers vision-capable models that can process both text and images:
 
 ### Image Understanding
 
-Use a current multimodal chat model such as `mistral-large-2512`:
+Use a current multimodal chat model such as `mistral-large-4`:
 
 ```yaml
 providers:
-  - id: mistral:mistral-large-2512
+  - id: mistral:mistral-large-4
     config:
       temperature: 0.7
-      max_tokens: 1000
+      max_tokens: 8000
 
 tests:
   - vars:
@@ -466,10 +471,10 @@ tests:
 description: 'Analyze documents with text and images'
 
 providers:
-  - id: mistral:mistral-large-2512
+  - id: mistral:mistral-large-4
     config:
       temperature: 0.5
-      max_tokens: 2000
+      max_tokens: 8000
 
 tests:
   - vars:
@@ -525,7 +530,7 @@ export MISTRAL_API_HOST="api.mistral.ai"
 | **Lower-cost comparisons** | `mistral-small-2603` | Lower listed token price    |
 | **Complex reasoning**      | `mistral-medium-3-5` | Adjustable reasoning effort |
 | **Code generation**        | `codestral-latest`   | Specialized for programming |
-| **Vision tasks**           | `mistral-large-2512` | Current multimodal model    |
+| **Vision tasks**           | `mistral-large-4`    | Current multimodal model    |
 
 ### Context Window Optimization
 

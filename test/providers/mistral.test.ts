@@ -315,8 +315,9 @@ describe('Mistral', () => {
 
       const result = await latestProvider.callApi('Test latest alias pricing');
 
-      // mistral-large-latest currently tracks mistral-large-2512 pricing: $0.5/M in, $1.5/M out
-      expect(result.cost).toBeCloseTo(0.0011, 6);
+      // mistral-large-latest resolves to Mistral Large 4: $0.7/M in, $2.1/M out
+      // 400 * 0.7/1M + 600 * 2.1/1M = 0.00028 + 0.00126 = 0.00154
+      expect(result.cost).toBeCloseTo(0.00154, 6);
     });
 
     it.each([
@@ -406,8 +407,20 @@ describe('Mistral', () => {
       ['mistral-code-latest', 0.00066],
       // Devstral 2 agent alias: $0.40/$2.00
       ['mistral-code-agent-latest', 0.00136],
-      // Z.ai GLM 5.3 hosted by Mistral: $1.40/$4.40
+      // Z.ai GLM 5.3 hosted by Mistral and its published aliases: $1.40/$4.40
       ['zai-glm-5-3', 0.0032],
+      ['zai-glm-5', 0.0032],
+      ['zai-glm-latest', 0.0032],
+      // Z.ai GLM 5.3 Flash hosted by Mistral: $0.15/$0.50
+      ['zai-glm-5-3-flash', 0.00036],
+      // DeepSeek V4.1 Flash 1017 hosted by Mistral: $0.30/$1.20
+      ['deepseek-v4-1-flash-1017', 0.00084],
+      // Mistral Large 4 and its published aliases: $0.70/$2.10
+      ['mistral-large-4', 0.00154],
+      ['mistral-large-4-0', 0.00154],
+      ['mistral-large-latest', 0.00154],
+      // Mistral Large 3 keeps its historical price: $0.50/$1.50
+      ['mistral-large-2512', 0.0011],
     ])('tracks catalog pricing for %s', async (model, expectedCost) => {
       const provider = new MistralChatCompletionProvider(model);
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
@@ -425,6 +438,93 @@ describe('Mistral', () => {
         model,
       );
       expect(result.cost).toBeCloseTo(expectedCost, 6);
+    });
+
+    it.each([
+      'mistral-large-4',
+      'mistral-large-4-0',
+      'mistral-large-latest',
+      'zai-glm-5-3',
+      'zai-glm-5-3-flash',
+    ])('omits the default max_tokens cap for always-reasoning model %s', async (model) => {
+      const reasoningProvider = new MistralChatCompletionProvider(model, {
+        config: { reasoning_effort: 'low' },
+      });
+      vi.spyOn(reasoningProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('ok'));
+
+      await reasoningProvider.callApi('Test prompt');
+
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).toMatchObject({ model, reasoning_effort: 'low', top_p: 1 });
+    });
+
+    it.each([
+      'mistral-large-2512',
+      'mistral-small-latest',
+      'mistral-medium-3-5',
+      'deepseek-v4-1-flash-1017',
+    ])('keeps the default 1024 max_tokens cap for %s', async (model) => {
+      const defaultProvider = new MistralChatCompletionProvider(model);
+      vi.spyOn(defaultProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('ok'));
+
+      await defaultProvider.callApi('Test prompt');
+
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.max_tokens).toBe(1024);
+    });
+
+    it('sends an explicit max_tokens and Large 4 reasoning effort', async () => {
+      const largeProvider = new MistralChatCompletionProvider('mistral-large-4', {
+        config: { max_tokens: 8000, reasoning_effort: 'medium' },
+      });
+      vi.spyOn(largeProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: [
+                  { type: 'thinking', thinking: [{ type: 'text', text: 'Working it out' }] },
+                  { type: 'text', text: '391' },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 1000, prompt_tokens: 400, completion_tokens: 600 },
+        }),
+      );
+
+      const result = await largeProvider.callApi('What is 17 * 23?');
+
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body).toMatchObject({ max_tokens: 8000, reasoning_effort: 'medium' });
+      expect(result).toMatchObject({ output: '391', cost: expect.closeTo(0.00154, 8) });
+    });
+
+    it('returns an error when Mistral rejects an unsupported reasoning effort', async () => {
+      const largeProvider = new MistralChatCompletionProvider('mistral-large-4', {
+        config: { reasoning_effort: 'none' },
+      });
+      vi.spyOn(largeProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          object: 'error',
+          message: 'reasoning_effort none is not supported for this model',
+          type: 'invalid_request_invalid_args',
+          code: '3051',
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await largeProvider.callApi('Test prompt');
+
+      expect(result.output).toBeUndefined();
+      expect(result.error).toContain('reasoning_effort none is not supported for this model');
     });
 
     it('forwards prompt_cache_key in the request body', async () => {
