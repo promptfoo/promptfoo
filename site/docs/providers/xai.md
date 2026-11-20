@@ -634,12 +634,15 @@ xAI supports the following Grok Imagine video IDs:
 | `grok-imagine-video-1.5`            | Text, image, and reference images or preset voices       | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-preview`    | Alias for Grok Imagine Video 1.5                         | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-2026-05-30` | Dated alias for Grok Imagine Video 1.5                   | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5-lite`       | Text and image                                           | 480p, 720p, 1080p |
 | `grok-imagine-video`                | Text, image, video editing, and reference-to-video input | 480p, 720p        |
 
 [Grok Imagine Video 1.5](https://docs.x.ai/developers/models/grok-imagine-video-1.5) supports
 text-to-video, image-to-video, and
 [reference-to-video](https://docs.x.ai/developers/model-capabilities/video/reference-to-video).
-Use the legacy `grok-imagine-video` model for video editing.
+[Grok Imagine Video 1.5 Lite](https://docs.x.ai/developers/models/grok-imagine-video-1.5-lite) is
+the lowest-priced option and supports text-to-video and image-to-video only; xAI upscales its
+1080p output from 720p. Use the legacy `grok-imagine-video` model for video editing.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -667,7 +670,7 @@ tests:
 | ------------------ | ------ | ------- | --------------------------------------------------------------------------- |
 | `duration`         | number | 8       | Video length in seconds (1-15)                                              |
 | `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                           |
-| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p                    |
+| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 and 1.5 Lite also support 1080p        |
 | `reference_images` | array  | -       | Up to 7 images for reference-to-video generation                            |
 | `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)                           |
 | `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                            |
@@ -732,16 +735,18 @@ requests require a non-empty prompt. Reference-to-video cannot be combined with 
 and its resolution is capped at 720p. The Video 1.5 family supports durations up to 15 seconds.
 The legacy `grok-imagine-video` model is limited to 10 seconds for reference-to-video, rejects
 starting-image/reference-image combinations, and does not support `reference_audios`. Preset voice IDs are case-insensitive and generally available. Uploaded audio references are
-restricted to trusted partners in the United States.
+restricted to trusted partners in the United States. Grok Imagine Video 1.5 Lite does not support
+`reference_images` or `reference_audios`.
 
 #### Pricing
 
 Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. For generation requests where the output resolution is known, Promptfoo falls back to the video provider's local duration-based estimate when the API omits usage.
 
-| Model                    | Media input                         | 480p output | 720p output | 1080p output  |
-| ------------------------ | ----------------------------------- | ----------- | ----------- | ------------- |
-| `grok-imagine-video-1.5` | $0.01 per image; preset voices free | $0.08/sec   | $0.14/sec   | $0.25/sec     |
-| `grok-imagine-video`     | $0.002/image or $0.01/video second  | $0.05/sec   | $0.07/sec   | Not supported |
+| Model                         | Media input                         | 480p output | 720p output | 1080p output  |
+| ----------------------------- | ----------------------------------- | ----------- | ----------- | ------------- |
+| `grok-imagine-video-1.5`      | $0.01 per image; preset voices free | $0.08/sec   | $0.14/sec   | $0.25/sec     |
+| `grok-imagine-video-1.5-lite` | $0.01 per image                     | $0.02/sec   | $0.03/sec   | $0.14/sec     |
+| `grok-imagine-video`          | $0.002/image or $0.01/video second  | $0.05/sec   | $0.07/sec   | Not supported |
 
 The local fallback includes image-input and output-video charges. For a video edit without API
 usage data, Promptfoo leaves cost undefined because the edit endpoint ignores the configured
