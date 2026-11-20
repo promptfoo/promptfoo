@@ -2120,7 +2120,7 @@ function usesTransforms(testSuite: TestSuite, tests: AtomicTestCase[]) {
 function usesExampleProvider(testSuite: TestSuite) {
   return testSuite.providers.some((provider) => {
     const url = typeof provider.config?.url === 'string' ? provider.config.url : '';
-    const label = provider.label || '';
+    const label = typeof provider.label === 'string' ? provider.label : '';
     return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
   });
 }
@@ -3678,18 +3678,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     this.store.setVars(Array.from(vars));
     await this.runAfterAllExtensions(testSuite);
-    this.recordEvalTelemetry({
-      assertionTypes,
-      concurrency,
-      evalTimedOut,
-      options,
-      prompts,
-      startTime,
-      testSuite,
-      tests,
-      usesConversationVar,
-      varNames,
-    });
+    // Every provider call has already run and the results are not saved yet, so a telemetry
+    // failure must never abort the eval.
+    try {
+      this.recordEvalTelemetry({
+        assertionTypes,
+        concurrency,
+        evalTimedOut,
+        options,
+        prompts,
+        startTime,
+        testSuite,
+        tests,
+        usesConversationVar,
+        varNames,
+      });
+    } catch (error) {
+      logger.debug('[Evaluator] Failed to record eval telemetry', { error });
+    }
 
     if (this.store.persisted) {
       await this.store.save();

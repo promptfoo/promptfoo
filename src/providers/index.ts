@@ -15,11 +15,12 @@ import { safeJsonStringify } from '../util/json';
 import {
   isProviderConfigFileReference,
   loadProviderConfigsFromFile,
+  normalizeProviderLabel,
   normalizeProviderRef,
   readProviderConfigFile,
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
-import { sanitizeObject } from '../util/sanitizer';
+import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -81,6 +82,25 @@ function describeInvalidProvider(provider: unknown): string {
     logger.debug('Failed to sanitize invalid provider for error message', { error: err });
     return Object.prototype.toString.call(provider);
   }
+}
+
+/**
+ * Returns the configured label as a string. YAML scalars such as `label: 2.5` become
+ * `"2.5"` so display, filtering, grouping and telemetry code always see a string label.
+ */
+function getConfiguredProviderLabel(label: unknown, providerPath: string): string {
+  const normalized = normalizeProviderLabel(label);
+  if (normalized === undefined && label !== undefined && label !== null) {
+    const kind = Array.isArray(label)
+      ? 'an array'
+      : typeof label === 'object'
+        ? 'an object'
+        : `a ${typeof label}`;
+    logger.warn(
+      `Ignoring the label of provider ${sanitizeUrl(providerPath)}: expected a string, got ${kind}. Quote the label in your config to use it.`,
+    );
+  }
+  return normalized ?? '';
 }
 
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
@@ -295,7 +315,7 @@ async function createApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
-      ret.label ||= renderTemplate(options.label || '');
+      ret.label ||= renderTemplate(getConfiguredProviderLabel(options.label, providerPath));
       ret.prompts = options.prompts;
       return ret;
     }

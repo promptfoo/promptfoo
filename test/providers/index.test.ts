@@ -1664,6 +1664,48 @@ describe('loadApiProvider', () => {
     expect(provider.label).toBe('API (staging)');
   });
 
+  // YAML parses unquoted labels such as `label: 2.5` as numbers and booleans.
+  it.each([
+    [2.5, '2.5'],
+    [3, '3'],
+    [0, '0'],
+    [true, 'true'],
+    [false, 'false'],
+  ])('converts the scalar label %j to the string %j', async (label, expected) => {
+    const provider = await loadApiProvider('echo', {
+      options: { label: label as unknown as string },
+    });
+
+    expect(provider.label).toBe(expected);
+  });
+
+  it('converts scalar labels from provider config files', async () => {
+    mockFsReadFileSync.mockReturnValue('- id: echo\n  label: 2.5\n- id: echo\n  label: 3\n');
+
+    const providers = await loadApiProviders('file://path/to/providers.yaml');
+
+    expect(providers.map((provider) => provider.label)).toEqual(['2.5', '3']);
+  });
+
+  it.each([
+    [{ name: 'not-a-string' }, 'an object'],
+    [['a', 'b'], 'an array'],
+  ])('ignores the non-scalar label %j with a warning', async (label, kind) => {
+    const warnSpy = vi.spyOn(logger, 'warn');
+    try {
+      const provider = await loadApiProvider('https://user:fixture-secret@example.com/api', {
+        options: { label: label as unknown as string, config: createEmptyHttpBody() },
+      });
+
+      expect(provider.label).toBe('');
+      const warning = warnSpy.mock.calls.map(([message]) => String(message)).join('\n');
+      expect(warning).toContain(`expected a string, got ${kind}`);
+      expect(warning).not.toContain('fixture-secret');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
