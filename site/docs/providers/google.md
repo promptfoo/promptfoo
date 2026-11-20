@@ -380,6 +380,8 @@ Use distinct serving models when comparing results. Google can redirect a Gemini
 
 ### Chat and Multimodal Models
 
+Chat models also accept `google:chat:<model-id>`, which calls `generateContent` like `google:<model-id>`. Native image models and models that run only through the Interactions API (file transcription, Gemini Omni, and Gemini Robotics ER) reject `google:chat:`; use `google:<model-id>` for them.
+
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-4-argon` - [Gemini 4 Argon](#gemini-4), Google's flagship reasoning model for complex coding, knowledge work, and agentic workflows ($2/1M input, $10/1M output through November 30, 2026)
