@@ -13,7 +13,7 @@ import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
-import { calculateAzureCost } from './util';
+import { calculateAzureCost, isMaiReasoningModel } from './util';
 
 import type {
   CallApiContextParams,
@@ -46,31 +46,41 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       costCalculator: (modelName: string, usage: any, config?: any, responseData?: any) => {
         const { service_tier: requestedServiceTier, ...costConfig } = config ?? {};
         const serviceTier = responseData?.service_tier ?? requestedServiceTier;
-        return calculateAzureCost(
-          typeof config?.model === 'string' ? config.model : modelName,
-          {
-            ...costConfig,
-            passthrough: {
-              ...costConfig.passthrough,
-              ...(serviceTier === undefined || serviceTier === null
-                ? {}
-                : { service_tier: serviceTier }),
+        const costFor = (costModelName: string) =>
+          calculateAzureCost(
+            costModelName,
+            {
+              ...costConfig,
+              passthrough: {
+                ...costConfig.passthrough,
+                ...(serviceTier === undefined || serviceTier === null
+                  ? {}
+                  : { service_tier: serviceTier }),
+              },
             },
-          },
-          usage?.prompt_tokens ?? usage?.input_tokens,
-          usage?.completion_tokens ?? usage?.output_tokens,
-          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
-          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
-          usage?.completion_tokens_details?.audio_tokens ??
-            usage?.output_tokens_details?.audio_tokens,
-          usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
-          usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
-            usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
-          usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
-            usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
-          usage?.completion_tokens_details?.image_tokens ??
-            usage?.output_tokens_details?.image_tokens,
-        );
+            usage?.prompt_tokens ?? usage?.input_tokens,
+            usage?.completion_tokens ?? usage?.output_tokens,
+            usage?.prompt_tokens_details?.cached_tokens ??
+              usage?.input_tokens_details?.cached_tokens,
+            usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
+            usage?.completion_tokens_details?.audio_tokens ??
+              usage?.output_tokens_details?.audio_tokens,
+            usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
+            usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
+              usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
+            usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
+              usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
+            usage?.completion_tokens_details?.image_tokens ??
+              usage?.output_tokens_details?.image_tokens,
+          );
+        // `config` is the request body: `model` is the deployment unless passthrough replaced it.
+        const requestModel = typeof config?.model === 'string' ? config.model : modelName;
+        if (requestModel !== this.deploymentName || !this.config.modelName) {
+          return costFor(requestModel);
+        }
+        // Price an aliased deployment by its provider-level modelName (the cost hook only sees the
+        // request body), keeping the deployment-name match as a fallback for priced deployments.
+        return costFor(this.config.modelName) ?? costFor(requestModel);
       },
     });
   }
@@ -107,6 +117,8 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       // Microsoft Phi reasoning models
       lowerName.includes('phi-4-reasoning') ||
       lowerName.includes('phi-4-mini-reasoning') ||
+      // Microsoft MAI reasoning models (MAI-Code-2 family is Responses-only on Foundry)
+      isMaiReasoningModel(lowerName) ||
       // xAI Grok reasoning models
       (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );

@@ -41,6 +41,7 @@ promptfoo view
 
 - `promptfooconfig.yaml` — generates images with `MAI-Image-2.5` (Preview) through the Microsoft `azure:image` provider, reporting per-image token usage and cost from the API's token counts
 - `promptfooconfig.vision-judge.yaml` — uses a vision LLM as a judge on the generated images (see below)
+- `promptfooconfig.code.yaml` — compares `MAI-Code-2-Flash` at low and max reasoning effort on coding tasks through `azure:responses` (limited-access preview; see below)
 - Shows how to wire reasoning/chat MAI models via `azure:chat` (these are deprecated/private-preview today — see [Notes](#notes))
 
 ## Providers
@@ -69,6 +70,22 @@ providers:
       max_completion_tokens: 2048
       # omitDefaults: true   # if the deployment rejects top_p / penalties
 ```
+
+### Agentic coding (`azure:responses`)
+
+`MAI-Code-2-Flash` is served only through the Responses API. It is a **limited-access preview** on Microsoft Foundry: a subscription without access gets `SpecialFeatureOrQuotaIdRequired` when it creates the deployment. Once you have access:
+
+```bash
+az cognitiveservices account deployment create \
+  --name <RESOURCE> --resource-group <RG> \
+  --deployment-name mai-code-2-flash \
+  --model-name mai-code-2-flash --model-format Microsoft \
+  --model-version 2026-11-17 --sku-name GlobalStandard --sku-capacity 10
+
+promptfoo eval -c promptfooconfig.code.yaml --no-cache
+```
+
+promptfoo detects deployments named `mai-code-2*` as reasoning models: `reasoning_effort` (`low`, `medium`, `high`, `xhigh`, or `max`) is sent as `reasoning.effort` and `temperature` is omitted. Cost estimates need the deployment to be named exactly `mai-code-2-flash` (or `MAI-Code-2-Flash`); for any other name, set `modelName: MAI-Code-2-Flash`. Reasoning tokens count toward `max_output_tokens`, so leave headroom at high effort. Cost is reported from Azure's Global Standard rates ($0.05/1M input, $0.005/1M cached input, $0.25/1M output).
 
 ## LLM-as-judge on images (vision grading)
 

@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: MAI-Code-2-Flash reasoning effort comparison
+
+# MAI-Code-2-Flash is Microsoft's fast agentic coding model. On Microsoft Foundry it is a
+# limited-access preview served only through the Responses API, so it uses
+# `azure:responses:<deployment>`. promptfoo detects deployments named `mai-code-2*` as
+# reasoning models: `reasoning_effort` becomes `reasoning.effort` and `temperature` is omitted.
+# Cost reporting (used by the `cost` assertion) needs the deployment named exactly
+# `mai-code-2-flash`; for any other name, add `modelName: MAI-Code-2-Flash` to each provider.
+#
+# Setup (requires limited-access approval for your subscription):
+#   1. Deploy the model to a Microsoft Foundry (AIServices) resource:
+#        az cognitiveservices account deployment create \
+#          --name <RESOURCE> --resource-group <RG> \
+#          --deployment-name mai-code-2-flash \
+#          --model-name mai-code-2-flash --model-format Microsoft \
+#          --model-version 2026-11-17 --sku-name GlobalStandard --sku-capacity 10
+#   2. Point promptfoo at the resource:
+#        export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
+#        export AZURE_API_KEY=<key>            # or use `az login` (Entra ID)
+#   3. Run:  promptfoo eval -c promptfooconfig.code.yaml --no-cache
+
+prompts:
+  - |
+    You are a senior software engineer. {{task}}
+    Reply with the code in a single fenced code block, then one sentence explaining it.
+
+providers:
+  # Same deployment at two reasoning efforts to compare quality, latency, and cost.
+  # Reasoning tokens count toward max_output_tokens, so leave headroom at high effort.
+  - id: azure:responses:mai-code-2-flash
+    label: mai-code-2-flash-low
+    config:
+      reasoning_effort: low
+      max_output_tokens: 16000
+  - id: azure:responses:mai-code-2-flash
+    label: mai-code-2-flash-max
+    config:
+      reasoning_effort: max
+      max_output_tokens: 64000
+
+defaultTest:
+  assert:
+    # MAI-Code-2-Flash costs $0.05/1M input and $0.25/1M output tokens on Azure Global Standard.
+    - type: cost
+      threshold: 0.02
+
+tests:
+  - description: Implement a function from a spec
+    vars:
+      task: >-
+        Write a Python function `is_palindrome(s: str) -> bool` that ignores case and
+        non-alphanumeric characters.
+    assert:
+      - type: contains
+        value: def is_palindrome
+      - type: regex
+        value: '```python'
+
+  - description: Find and fix a bug
+    vars:
+      task: |
+        This TypeScript function should return the average of a list, but it returns
+        NaN for an empty list. Fix it so an empty list returns 0.
+
+        function average(xs: number[]): number {
+          return xs.reduce((a, b) => a + b, 0) / xs.length;
+        }
+    assert:
+      # Accept `xs.length === 0`, `xs.length == 0`, or `!xs.length` guards.
+      - type: regex
+        value: 'length\s*===?\s*0|!\s*xs\.length'

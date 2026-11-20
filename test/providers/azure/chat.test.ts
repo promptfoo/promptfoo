@@ -528,11 +528,18 @@ describe('AzureChatCompletionProvider', () => {
     it('should detect reasoning models with o1 flag', sharedReasoningChecks.detectsO1Flag);
 
     it('auto-detects Microsoft MAI reasoning models by deployment name', () => {
-      for (const name of ['mai-thinking-1', 'MAI-Thinking-1', 'mai-ds-r1', 'prod-mai-reasoning']) {
+      for (const name of [
+        'mai-thinking-1',
+        'MAI-Thinking-1',
+        'mai-ds-r1',
+        'prod-mai-reasoning',
+        'MAI-Code-2-Flash',
+        'mai-code-2',
+      ]) {
         const provider = new AzureChatCompletionProvider(name, { config: {} });
         expect((provider as any).isReasoningModel()).toBe(true);
       }
-      // MAI-Code-* are fast coding models on the standard chat surface, not reasoning models.
+      // MAI-Code-1-Flash is a fast coding model on the standard chat surface, not a reasoning model.
       const code = new AzureChatCompletionProvider('mai-code-1-flash', { config: {} });
       expect((code as any).isReasoningModel()).toBe(false);
     });

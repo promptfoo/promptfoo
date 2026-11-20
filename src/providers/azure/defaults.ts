@@ -797,6 +797,16 @@ export const AZURE_MODELS: AzureModelCost[] = [
   ...modelsWithCost(['MAI-Image-2.5'], { input: 5 / 1000000, output: 33 / 1000000 }),
   // Efficient flagship image variant. Pricing provisional (flash tier).
   ...modelsWithCost(['MAI-Image-2.5-Flash'], { input: 5 / 1000000, output: 19.5 / 1000000 }),
+  // Agentic coding reasoning model (Responses API, limited-access preview). Global Standard
+  // meters from https://prices.azure.com/api/retail/prices (2026-11-17): input $0.05/1M, cached
+  // input $0.005/1M, output $0.25/1M. Microsoft's launch benchmarks cite a 50% promotional
+  // price, so recheck these meters when the promotion ends. The lowercase alias matches
+  // deployments named after the model ID.
+  ...modelsWithCost(['MAI-Code-2-Flash', 'mai-code-2-flash'], {
+    input: 0.05 / 1000000,
+    output: 0.25 / 1000000,
+    cacheRead: 0.005 / 1000000,
+  }),
 ];
 
 function modelsWithCost(ids: string[], cost: AzureModelCost['cost']): AzureModelCost[] {

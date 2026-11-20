@@ -138,6 +138,23 @@ const AZURE_SHORT_CONTEXT_PRIORITY_MULTIPLIERS = new Map<string, number>([
 ]);
 
 /**
+ * Detects Microsoft MAI reasoning models by model ID or deployment name (case-insensitive).
+ *
+ * MAI-Thinking-1 and MAI-DS-R1 (DeepSeek-R1 lineage) are reasoning chat models. The MAI-Code-2
+ * family (MAI-Code-2, MAI-Code-2-Flash) reasons with configurable effort (low through max) and
+ * reports `reasoning_tokens`. MAI-Code-1-Flash is excluded: it uses the standard chat surface.
+ */
+export function isMaiReasoningModel(modelName: string): boolean {
+  const lowerName = modelName.toLowerCase();
+  return (
+    lowerName.includes('mai-thinking') ||
+    lowerName.includes('mai-ds-r1') ||
+    lowerName.includes('mai-reasoning') ||
+    /mai[-_]code[-_]2(?!\d)/.test(lowerName)
+  );
+}
+
+/**
  * Throws a configuration error with standard formatting and documentation link
  */
 export function throwConfigurationError(message: string): never {

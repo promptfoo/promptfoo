@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AZURE_MODELS } from '../../../src/providers/azure/defaults';
-import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
+import {
+  calculateAzureCost,
+  isMaiReasoningModel,
+  throwConfigurationError,
+} from '../../../src/providers/azure/util';
 
 const createModelPricing = (
   id: string,
@@ -27,6 +31,28 @@ describe('throwConfigurationError', () => {
       `${message}\n\nSee https://www.promptfoo.dev/docs/providers/azure/ to learn more about Azure configuration.`,
     );
   });
+});
+
+describe('isMaiReasoningModel', () => {
+  it.each([
+    'MAI-Thinking-1',
+    'mai-ds-r1',
+    'prod-mai-reasoning',
+    'MAI-Code-2',
+    'MAI-Code-2-Flash',
+    'mai-code-2-flash',
+    'team-mai-code-2-flash-eastus',
+    'mai_code_2_flash',
+  ])('detects %s', (name) => {
+    expect(isMaiReasoningModel(name)).toBe(true);
+  });
+
+  it.each(['mai-code-1-flash', 'MAI-Code-1.1-Flash', 'mai-code-20', 'MAI-Image-2.6', 'gpt-4.1'])(
+    'does not detect %s',
+    (name) => {
+      expect(isMaiReasoningModel(name)).toBe(false);
+    },
+  );
 });
 
 describe('calculateAzureCost', () => {
@@ -582,6 +608,18 @@ describe('calculateAzureCost', () => {
     const cost = calculateAzureCost('MAI-Image-2.5', {}, 0, 1000);
     expect(cost).toBeCloseTo(0.033, 6);
   });
+
+  it.each(['MAI-Code-2-Flash', 'mai-code-2-flash'])(
+    'prices %s from Azure Global Standard meters',
+    (id) => {
+      // $0.05/1M input, $0.005/1M cached input, $0.25/1M output.
+      expect(calculateAzureCost(id, {}, 1_000_000, 1_000_000)).toBeCloseTo(0.3, 10);
+      expect(calculateAzureCost(id, {}, 1_000_000, 0, 400_000)).toBeCloseTo(
+        0.6 * 0.05 + 0.4 * 0.005,
+        10,
+      );
+    },
+  );
 
   it('calculates cost for the MAI-DS-R1 reasoning model', () => {
     const cost = calculateAzureCost('MAI-DS-R1', {}, 100, 50);

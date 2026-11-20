@@ -135,7 +135,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                   |
 | **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                        |
 | **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                   |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models) |
+| **Microsoft MAI**    | `MAI-Code-2-Flash` via `azure:responses`; `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash` via `azure:image`; `MAI-DS-R1` (deprecated), `MAI-Thinking-1`, `MAI-Code-1-Flash` via `azure:chat` — see [Using Microsoft MAI Models](#using-microsoft-mai-models) |
 | **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                   |
 | **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                  |
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                               |
@@ -252,6 +252,7 @@ The Responses API supports Azure deployments backed by current Azure OpenAI resp
 - **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
+- **Microsoft MAI**: `MAI-Code-2-Flash` — see [Agentic coding](#agentic-coding-azureresponses)
 - **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`, `codex-mini-latest`
 - **Deep Research Models**: `o3-deep-research`, `o4-mini-deep-research`
 
@@ -1202,8 +1203,9 @@ historical pricing metadata for those IDs so saved evaluation results can still 
 
 ## Using Microsoft MAI Models
 
-Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
+Microsoft's first-party **MAI** model family splits across three promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
+- **Agentic coding** model `MAI-Code-2-Flash` (limited-access preview) is served only through the Responses API and uses **`azure:responses`** — see [Agentic coding](#agentic-coding-azureresponses).
 - **Image generation** models (`MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. The provider supports text-to-image generation with explicit width and height. For MAI-Image-2.6 and MAI-Image-2.6-Flash, use `config.passthrough` to send the documented [`auto_aspect_ratio` and `web_grounding` boolean options](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#request-parameters). Image editing uses a separate multipart `/mai/v1/images/edits` request and requires additional provider support.
 - **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
 
@@ -1252,6 +1254,40 @@ The provider returns the generated image as a base64 PNG data URL (rendered inli
 
 To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. The [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) illustrates this grading pattern with a legacy 2.5 deployment; update its deployment and model settings for the 2.6 configuration above.
 
+### Agentic coding (`azure:responses`)
+
+[MAI-Code-2-Flash](https://microsoft.ai/news/introducing-mai-code-2-and-mai-code-2-flash/) is Microsoft's fast agentic coding model. On Microsoft Foundry it is a limited-access preview: a subscription without access gets `SpecialFeatureOrQuotaIdRequired` when it creates the deployment. It accepts text and image input, has a 1,050,000-token context window (up to 922,000 input and 128,000 output tokens), and is served only through the Responses API. The larger MAI-Code-2 model is available only in GitHub Copilot, which has no promptfoo provider.
+
+Once your subscription has access, deploy it with Global Standard:
+
+```bash
+az cognitiveservices account deployment create \
+  --name <RESOURCE> --resource-group <RG> \
+  --deployment-name mai-code-2-flash \
+  --model-name mai-code-2-flash --model-format Microsoft \
+  --model-version 2026-11-17 --sku-name GlobalStandard --sku-capacity 10
+```
+
+Promptfoo treats any deployment whose name contains `mai-code-2` as a reasoning model. It maps `reasoning_effort` (`low`, `medium`, `high`, `xhigh`, or `max`) to `reasoning.effort` and omits `temperature`. It applies no built-in output cap, though `OPENAI_MAX_COMPLETION_TOKENS` or `OPENAI_MAX_TOKENS` still sets one when exported, so set `max_output_tokens` when you want a limit. Higher effort spends more output tokens on reasoning, so a low cap can end a response before the answer. Built-in cost estimates match only a deployment named exactly `MAI-Code-2-Flash` or `mai-code-2-flash`. For any other name, set `modelName: MAI-Code-2-Flash` to enable both reasoning detection and cost estimates.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:responses:mai-code-2-flash
+    label: mai-code-2-flash-low
+    config:
+      apiHost: 'your-resource.services.ai.azure.com'
+      reasoning_effort: low
+      max_output_tokens: 16000
+  - id: azure:responses:mai-code-2-flash
+    label: mai-code-2-flash-max
+    config:
+      apiHost: 'your-resource.services.ai.azure.com'
+      reasoning_effort: max
+      max_output_tokens: 64000
+```
+
+Cost estimates use Azure's Global Standard rates for MAI-Code-2-Flash: $0.05 per 1M input tokens, $0.005 per 1M cached input tokens, and $0.25 per 1M output tokens, with reasoning tokens billed as output. Microsoft describes MAI-Code-2-Flash launch pricing as promotional, so check [Azure pricing](https://aka.ms/MAIModelPricing) for current rates. promptfoo records reasoning token counts in `tokenUsage.completionDetails.reasoning`.
+
 ### Reasoning chat (`azure:chat`)
 
 MAI text models run through the standard `azure:chat` provider. **Availability is limited:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and may not appear in the public CLI catalog. promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` once your subscription can deploy them — confirm availability with `az cognitiveservices model list`.
@@ -1269,7 +1305,7 @@ providers:
 ```
 
 :::note
-The MAI image models are in **Preview**, and the MAI text models roll out region-by-region (`MAI-DS-R1` deprecated; `MAI-Thinking-1` / `MAI-Code-1-Flash` private preview). Run `az cognitiveservices model list --location <region>` to see what your subscription can actually deploy.
+The MAI image models are in **Preview**, and the MAI text models roll out region-by-region (`MAI-DS-R1` deprecated; `MAI-Thinking-1` / `MAI-Code-1-Flash` private preview; `MAI-Code-2-Flash` limited-access preview). Run `az cognitiveservices model list --location <region>` to see what your subscription can actually deploy.
 :::
 
 ## Assistants
