@@ -694,6 +694,30 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     return metaToJSON('meta:messages', this.modelName, this.config as MetaMessagesConfig);
   }
 
+  // The base prices each request of a turn (pause_turn resumes, MCP tool
+  // loops) separately and sums the results. Price every request with Meta's
+  // rates here so a long-context tier is chosen per request, as Meta bills
+  // it, rather than from the turn's combined usage.
+  protected override calculateMessageCost(
+    config: AnthropicMessageOptions,
+    message: Parameters<AnthropicMessagesProvider['calculateMessageCost']>[1],
+    modelName = this.modelName,
+  ): number | undefined {
+    const usage = message.usage;
+    const cacheReadTokens = usage?.cache_read_input_tokens ?? 0;
+    const promptTokens =
+      usage?.input_tokens == null
+        ? undefined
+        : usage.input_tokens + cacheReadTokens + (usage.cache_creation_input_tokens ?? 0);
+    return calculateMetaCost(
+      modelName,
+      config as MetaMessagesConfig,
+      promptTokens,
+      usage?.output_tokens,
+      cacheReadTokens,
+    );
+  }
+
   override async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -703,6 +727,11 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     }
 
     const response = await super.callApi(prompt, context);
+
+    // Cache hits carry no cost, like the Meta chat and Responses surfaces.
+    if (response?.cached) {
+      return { ...response, cost: undefined };
+    }
 
     // The base class bills usage-bearing errors (e.g. an MCP loop that
     // exceeded max_tool_calls), so preserve that completed work's cost.

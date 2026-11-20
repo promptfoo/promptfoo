@@ -709,6 +709,24 @@ describe('MetaProvider callApi cost', () => {
     },
   );
 
+  it('bills a long-context Muse Ember chat request at the higher tier', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+        usage: {
+          total_tokens: 252_000,
+          prompt_tokens: 250_000,
+          completion_tokens: 2000,
+          prompt_tokens_details: { cached_tokens: 100_000 },
+        },
+      }) as any,
+    );
+    const provider = createMetaProvider('meta:chat:muse-ember-1.0', createApiKeyOptions('LLM|1|k'));
+    const result = await provider.callApi('Say hi');
+    // 150,000 * $0.30/M + 100,000 * $0.012/M + 2,000 * $1.50/M
+    expect(result.cost).toBeCloseTo(0.0492, 12);
+  });
+
   it('leaves cost undefined for unknown models without user pricing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
     const provider = createMetaProvider('meta:chat:muse-future', createApiKeyOptions('LLM|1|k'));
@@ -1151,10 +1169,47 @@ describe('MetaMessagesProvider', () => {
       expect(first.cached).not.toBe(true);
       expect(second.cached).toBe(true);
       expect(create).toHaveBeenCalledTimes(1);
+      // 2 input * $1.25/M + 1 output * $4.25/M; cache hits carry no cost.
+      expect(first.cost).toBeCloseTo(6.75e-6, 12);
+      expect(second.cost).toBeUndefined();
     } finally {
       await clearCache();
       restore();
     }
+  });
+
+  it('picks the Muse Ember price tier per request when a paused turn resumes', async () => {
+    const provider = createMetaProvider('meta:messages:muse-ember-1.0', {
+      config: { apiKey: 'LLM|1|k', stream: false },
+    }) as MetaMessagesProvider;
+    const usage = { input_tokens: 150_000, output_tokens: 1000, cache_read_input_tokens: 0 };
+    const paused = {
+      id: 'msg-paused',
+      type: 'message',
+      role: 'assistant',
+      model: 'muse-ember-1.0',
+      content: [{ type: 'text', text: 'Working on it.' }],
+      stop_reason: 'pause_turn',
+      stop_sequence: null,
+      usage,
+    };
+    const create = vi
+      .spyOn(provider.anthropic.messages, 'create')
+      .mockResolvedValueOnce(paused as any)
+      .mockResolvedValueOnce({
+        ...paused,
+        id: 'msg-done',
+        content: [{ type: 'text', text: 'Done.' }],
+        stop_reason: 'end_turn',
+      } as any);
+
+    const result = await provider.callApi('Summarize the attached records');
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(result.tokenUsage?.prompt).toBe(300_000);
+    // Two requests under 200K input each: 2 * (150,000 * $0.10/M + 1,000 * $0.50/M).
+    // Pricing the combined 300K would wrongly apply the long-context tier ($0.093).
+    expect(result.cost).toBeCloseTo(0.031, 12);
   });
 
   it('points the Anthropic SDK client at the bare Meta host with bearer auth', () => {

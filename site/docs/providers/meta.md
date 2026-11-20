@@ -55,7 +55,7 @@ providers:
 
 The provider accepts compatible [OpenAI provider](/docs/providers/openai/) options. Notable behavior:
 
-- `reasoning_effort` — `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. `max` runs on `muse-wonder-1.0`, `muse-spark-1.3`, and `muse-ember-1.0`, but not on `muse-spark-1.3-contributor`, `muse-spark-1.2`, or `muse-spark-1.1`. When omitted, Muse Spark reasons at `high` and Muse Wonder and Muse Ember at `max`. The models do not support `none`; the provider rejects it with a clear error. Reasoning tokens bill at the output rate and count toward the output cap.
+- `reasoning_effort` — `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. `max` runs on `muse-wonder-1.0`, `muse-spark-1.3`, and `muse-ember-1.0`, but not on the Contributor IDs, `muse-spark-1.2`, or `muse-spark-1.1`. When omitted, Muse Spark reasons at `high` and Muse Wonder and Muse Ember at `max`. The models do not support `none`; the provider rejects it with a clear error. Reasoning tokens bill at the output rate and count toward the output cap.
 - `max_completion_tokens` — caps generation on the chat endpoint (Meta accepts `max_tokens` only as a deprecated alias; if you set it, the provider forwards it as the canonical `max_completion_tokens`). On the [Responses API](#responses-api) the cap is `max_output_tokens`, and the provider maps `max_completion_tokens`/`max_tokens` onto it. When unset, no cap is sent so reasoning can use the full output budget.
 - `temperature` — supported (0–2, API default 1.0). Promptfoo sends its deterministic default of `0` unless you override it.
 - `response_format` — structured output with guaranteed JSON schema matching.
@@ -79,7 +79,7 @@ Promptfoo computes token cost from Meta's [published pricing](https://dev.meta.a
 | `muse-ember-1.0`, ≤200K input      | $0.10      | $0.004            | $0.50       |
 | `muse-ember-1.0`, >200K input      | $0.30      | $0.012            | $1.50       |
 
-Muse Ember bills a request with more than 200K input tokens, cached tokens included, at its long-context rates for the whole request; promptfoo picks the tier from each response's reported input tokens, which leave out history that a `previous_response_id` chain restores on the server. Contributor pricing requires opting into Meta's training data terms by selecting the Contributor model ID. Override token prices with `cost`, `inputCost`, `outputCost`, or `cacheReadCost` (USD per token) for custom rates. Token cost excludes web-search charges.
+Muse Ember bills a request with more than 200K input tokens, cached tokens included, at its long-context rates for the whole request; promptfoo picks the tier from each request's reported input tokens, which leave out history that a `previous_response_id` chain restores on the server. Contributor pricing requires opting into Meta's training data terms by selecting the Contributor model ID. Override token prices with `cost`, `inputCost`, `outputCost`, or `cacheReadCost` (USD per token) for custom rates. Token cost excludes web-search charges.
 
 ## Responses API
 
