@@ -5,11 +5,14 @@ prompts:
   - '{{prompt}}'
 
 providers:
+  # mistral-large-latest (Mistral Large 4) always reasons, and its thinking tokens count
+  # toward max_tokens. Keep reasoning low and leave room for the answer or tool call.
   - id: mistral:mistral-large-latest
     label: tool-any-inline
     config:
       temperature: 0
-      max_tokens: 128
+      reasoning_effort: low
+      max_tokens: 2048
       tool_choice: any
       parallel_tool_calls: false
       tools:
@@ -32,7 +35,8 @@ providers:
     label: tool-any-file
     config:
       temperature: 0
-      max_tokens: 128
+      reasoning_effort: low
+      max_tokens: 2048
       tool_choice: any
       parallel_tool_calls: false
       tools: 'file://tools/calculate.yaml'
@@ -40,7 +44,8 @@ providers:
     label: tool-auto-file
     config:
       temperature: 0
-      max_tokens: 128
+      reasoning_effort: low
+      max_tokens: 2048
       tool_choice: auto
       parallel_tool_calls: false
       tools: 'file://tools/calculate.yaml'
@@ -48,7 +53,8 @@ providers:
     label: plain-chat
     config:
       temperature: 0
-      max_tokens: 64
+      reasoning_effort: low
+      max_tokens: 2048
 
 tests:
   - description: Tool-only response with inline tools
