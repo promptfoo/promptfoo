@@ -8,7 +8,13 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
+import { hasUnpricedAzureResponsesToolUsage } from '../openai/billing';
+import {
+  applyGpt6RequestRules,
+  getGpt6ResponsesReasoning,
+  getGpt6Variant,
+  isGpt6Model,
+} from '../openai/gpt6';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
@@ -46,41 +52,38 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       costCalculator: (modelName: string, usage: any, config?: any, responseData?: any) => {
         const { service_tier: requestedServiceTier, ...costConfig } = config ?? {};
         const serviceTier = responseData?.service_tier ?? requestedServiceTier;
-        const costFor = (costModelName: string) =>
-          calculateAzureCost(
-            costModelName,
-            {
-              ...costConfig,
-              passthrough: {
-                ...costConfig.passthrough,
-                ...(serviceTier === undefined || serviceTier === null
-                  ? {}
-                  : { service_tier: serviceTier }),
-              },
-            },
-            usage?.prompt_tokens ?? usage?.input_tokens,
-            usage?.completion_tokens ?? usage?.output_tokens,
-            usage?.prompt_tokens_details?.cached_tokens ??
-              usage?.input_tokens_details?.cached_tokens,
-            usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
-            usage?.completion_tokens_details?.audio_tokens ??
-              usage?.output_tokens_details?.audio_tokens,
-            usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
-            usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
-              usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
-            usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
-              usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
-            usage?.completion_tokens_details?.image_tokens ??
-              usage?.output_tokens_details?.image_tokens,
-          );
-        // `config` is the request body: `model` is the deployment unless passthrough replaced it.
-        const requestModel = typeof config?.model === 'string' ? config.model : modelName;
-        if (requestModel !== this.deploymentName || !this.config.modelName) {
-          return costFor(requestModel);
+        const billingModel = typeof config?.model === 'string' ? config.model : modelName;
+        if (
+          getGpt6Variant(billingModel)?.startsWith('6.2-') &&
+          hasUnpricedAzureResponsesToolUsage(responseData)
+        ) {
+          return undefined;
         }
-        // Price an aliased deployment by its provider-level modelName (the cost hook only sees the
-        // request body), keeping the deployment-name match as a fallback for priced deployments.
-        return costFor(this.config.modelName) ?? costFor(requestModel);
+        return calculateAzureCost(
+          billingModel,
+          {
+            ...costConfig,
+            passthrough: {
+              ...costConfig.passthrough,
+              ...(serviceTier === undefined || serviceTier === null
+                ? {}
+                : { service_tier: serviceTier }),
+            },
+          },
+          usage?.prompt_tokens ?? usage?.input_tokens,
+          usage?.completion_tokens ?? usage?.output_tokens,
+          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
+          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
+          usage?.completion_tokens_details?.audio_tokens ??
+            usage?.output_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
+          usage?.completion_tokens_details?.image_tokens ??
+            usage?.output_tokens_details?.image_tokens,
+        );
       },
     });
   }
@@ -273,6 +276,10 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options ? { prompt_cache_options: config.prompt_cache_options } : {}),
       ...('parallel_tool_calls' in config
         ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
         : {}),
@@ -383,7 +390,19 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
-    const result = await this.processor.processResponseOutput(data, body, cached);
+    // Deployment aliases and local token prices belong to accounting, outside the API request.
+    const config = { ...this.config, ...context?.prompt?.config };
+    const model =
+      (config.passthrough as { model?: string } | undefined)?.model ??
+      config.modelName ??
+      body.model;
+    const { cost, inputCost, outputCost } = config;
+    const result = await this.processor.processResponseOutput(
+      data,
+      { ...body, model, cost, inputCost, outputCost },
+      cached,
+      { multiAgent: body.multi_agent?.enabled === true },
+    );
     const responseUsage = (data as any)?.usage;
     const cachedInputTokens =
       responseUsage?.prompt_tokens_details?.cached_tokens ??

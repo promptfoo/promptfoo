@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.125.1",
+  "version": "0.126.0",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -193,7 +193,7 @@
     "@ibm-cloud/watsonx-ai": "^1.7.17",
     "@langfuse/client": "^6.1.0",
     "@openai/agents": "^0.21.0",
-    "@openai/codex-sdk": "^0.165.0",
+    "@openai/codex-sdk": "^0.169.1",
     "@openai/codex-security": "^0.8.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
