@@ -1,7 +1,8 @@
 ---
 title: Morse
 sidebar_label: Morse
-description: Evaluate open-weight models on Morse's private OpenAI-compatible API in promptfoo, with a privacy tier per request and the built-in OpenAI provider.
+description: Evaluate open-weight models on Morse's private OpenAI-compatible API in promptfoo, setting a privacy tier per request through the built-in OpenAI provider.
+sidebar_position: 42
 ---
 
 # Morse
