@@ -764,6 +764,8 @@ Use `skill-used` when provider-level routing evidence is enough. If you also nee
 
 ### trajectory:tool-used {#trajectorytool-used}
 
+Trace and trajectory assertions cannot be used with [`--lock` or `--verify`](/docs/usage/command-line/#tamper-evident-eval-gates): the lock format does not commit trace interpretation settings. Ordinary evals continue to support these assertions.
+
 The `trajectory:tool-used` assertion checks traced tool steps rather than the model's final output. It works well for agent evals where the important question is "did the agent actually use the right tool?".
 
 :::note
