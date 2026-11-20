@@ -15,12 +15,12 @@ import type { GroqCompletionOptions, GroqProviderOptions } from './types';
  * Groq Chat Completions API Provider
  *
  * Extends OpenAI Chat Completions provider with Groq-specific configuration.
- * Supports reasoning models (GPT-OSS, Qwen) with temperature control.
+ * Supports reasoning models (GPT-OSS, Qwen, Muse Spark Open) with temperature control.
  *
  * Usage:
  *   groq:openai/gpt-oss-120b
  *   groq:openai/gpt-oss-20b
- *   groq:qwen/qwen3.6-27b
+ *   groq:qwen/qwen3.8-27b
  */
 export class GroqProvider extends OpenAiChatCompletionProvider {
   protected get apiKey(): string | undefined {

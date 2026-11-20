@@ -40,6 +40,13 @@ providers:
       temperature: 0.6
       max_completion_tokens: 1000
       include_reasoning: false
+  - id: groq:qwen/qwen3.8-27b
+    label: 'Qwen 3.8 27B (low reasoning effort)'
+    config:
+      max_completion_tokens: 1000
+      # Qwen 3.8 doesn't reason unless reasoning_effort is low, medium, or high.
+      reasoning_effort: 'low'
+      reasoning_format: 'hidden'
 
 tests:
   - vars:

@@ -14,7 +14,7 @@ import type { GroqResponsesProviderOptions } from './types';
  * Groq Responses API Provider
  *
  * Extends OpenAI Responses API provider with Groq-specific configuration.
- * Supports reasoning models (GPT-OSS, Qwen) with temperature control.
+ * Supports reasoning models (GPT-OSS, Qwen, Muse Spark Open) with temperature control.
  *
  * Note: Unlike the Chat Completions API, the Responses API does NOT support
  * `reasoning_format` or `include_reasoning` parameters. Reasoning is controlled
@@ -23,7 +23,7 @@ import type { GroqResponsesProviderOptions } from './types';
  * Usage:
  *   groq:responses:openai/gpt-oss-120b
  *   groq:responses:openai/gpt-oss-20b
- *   groq:responses:qwen/qwen3.6-27b
+ *   groq:responses:qwen/qwen3.8-27b
  */
 export class GroqResponsesProvider extends OpenAiResponsesProvider {
   protected get apiKey(): string | undefined {
