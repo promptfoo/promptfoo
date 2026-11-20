@@ -36,11 +36,11 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option         | Type   | Default | Description                                        |
-| -------------- | ------ | ------- | -------------------------------------------------- |
-| `duration`     | number | 8       | Video length in seconds (1-15)                     |
-| `aspect_ratio` | string | 16:9    | Aspect ratio (16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3) |
-| `resolution`   | string | 720p    | Output resolution (720p, 480p)                     |
+| Option         | Type   | Default | Description                                                   |
+| -------------- | ------ | ------- | ------------------------------------------------------------- |
+| `duration`     | number | 8       | Video length in seconds (1-15)                                |
+| `aspect_ratio` | string | 16:9    | Aspect ratio (16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3, 21:9, 5:2) |
+| `resolution`   | string | 720p    | Output resolution (720p, 480p)                                |
 
 ## Advanced Features
 
@@ -87,7 +87,7 @@ providers:
 
 `reference_images` cannot be combined with `image` or `video`, and reference-guided videos are limited to 10 seconds.
 
-Grok Imagine Video 1.5 also supports reference-to-video with up to seven images and three preset
+Grok Imagine Video 1.5 also supports reference-to-video with up to 14 images and three preset
 voices. Its reference-to-video duration can be up to 15 seconds and its resolution is capped at
 720p:
 

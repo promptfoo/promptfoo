@@ -64,7 +64,16 @@ export function resolveVideoModel(modelName: string): XaiVideoModel {
   return VIDEO_MODEL_ALIASES[modelName] ?? (modelName as XaiVideoModel);
 }
 
-export type XaiVideoAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3';
+export type XaiVideoAspectRatio =
+  | '16:9'
+  | '4:3'
+  | '1:1'
+  | '9:16'
+  | '3:4'
+  | '3:2'
+  | '2:3'
+  | '21:9'
+  | '5:2';
 
 export type XaiVideoResolution = '1080p' | '720p' | '480p';
 
@@ -155,7 +164,7 @@ const PROVIDER_NAME = 'xAI Video';
 const DEFAULT_MODEL: XaiVideoModel = 'grok-imagine-video';
 const DEFAULT_API_BASE_URL = 'https://api.x.ai/v1';
 
-/** Valid aspect ratios for Grok Imagine */
+/** Valid aspect ratios for Grok Imagine. Every video model accepts 21:9 and 5:2 (verified live 2026-11-20). */
 const VALID_ASPECT_RATIOS: readonly XaiVideoAspectRatio[] = [
   '16:9',
   '4:3',
@@ -164,6 +173,8 @@ const VALID_ASPECT_RATIOS: readonly XaiVideoAspectRatio[] = [
   '3:4',
   '3:2',
   '2:3',
+  '21:9',
+  '5:2',
 ] as const;
 
 const GROK_IMAGINE_VIDEO_15_MODELS = new Set<string>([
@@ -194,7 +205,13 @@ const DEFAULT_RESOLUTION: XaiVideoResolution = '720p';
 const MIN_DURATION = 1;
 const MAX_DURATION = 15;
 const LEGACY_MAX_REFERENCE_DURATION = 10;
-const MAX_REFERENCE_IMAGES = 7;
+/**
+ * Documented reference-image caps. xAI counts only `reference_images` (a Video 1.5 starting
+ * `image` is extra). The API currently enforces 14 for both models; the legacy model keeps its
+ * documented limit of 7.
+ */
+const LEGACY_MAX_REFERENCE_IMAGES = 7;
+const VIDEO_15_MAX_REFERENCE_IMAGES = 14;
 const MAX_REFERENCE_AUDIOS = 3;
 
 const LEGACY_VIDEO_COST_PER_SECOND: Record<'720p' | '480p', number> = {
@@ -587,8 +604,11 @@ export class XAIVideoProvider implements ApiProvider {
       return 'Reference-to-video requires a non-empty prompt.';
     }
 
-    if (referenceImageCount > MAX_REFERENCE_IMAGES) {
-      return `Invalid reference_images count "${referenceImageCount}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
+    const maxReferenceImages = isVideo15
+      ? VIDEO_15_MAX_REFERENCE_IMAGES
+      : LEGACY_MAX_REFERENCE_IMAGES;
+    if (referenceImageCount > maxReferenceImages) {
+      return `Invalid reference_images count "${referenceImageCount}". Must be between 1 and ${maxReferenceImages}.`;
     }
 
     if (referenceAudioCount > MAX_REFERENCE_AUDIOS) {

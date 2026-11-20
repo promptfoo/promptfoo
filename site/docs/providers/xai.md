@@ -669,9 +669,9 @@ tests:
 | Option             | Type   | Default | Description                                                                 |
 | ------------------ | ------ | ------- | --------------------------------------------------------------------------- |
 | `duration`         | number | 8       | Video length in seconds (1-15)                                              |
-| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                           |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3, 21:9, 5:2                |
 | `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 and 1.5 Lite also support 1080p        |
-| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation                            |
+| `reference_images` | array  | -       | Up to 14 reference images on Video 1.5, or 7 on `grok-imagine-video`        |
 | `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)                           |
 | `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                            |
 | `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                                              |
@@ -713,8 +713,9 @@ Video editing skips duration, aspect ratio, and resolution validation since thes
 
 #### Reference-to-Video
 
-Guide generation with up to seven reference images and, on Grok Imagine Video 1.5, up to three
-preset voices:
+Guide generation with reference images (up to 14 on Grok Imagine Video 1.5, or 7 on the legacy
+model) and, on Grok Imagine Video 1.5, up to three preset voices. A starting `image` does not
+count toward the reference-image limit:
 
 ```yaml
 providers:
