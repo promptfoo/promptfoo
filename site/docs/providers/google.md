@@ -294,7 +294,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
 | Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
 | File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                        |
-| Lyria music                                                   | No dedicated adapters                                                                                                                                     |
+| Lyria music                                                   | [Music generation](#music-generation) through `generateContent` with `google:lyria-3.5`; Lyria RealTime is not supported                                  |
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
 
@@ -400,6 +400,7 @@ Use distinct serving models when comparing results. Google can redirect a Gemini
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
 - `google:gemini-3.8-flash-tts` and `google:gemini-3.8-flash-lite-tts` - [Text-to-speech generation](#text-to-speech)
+- `google:lyria-3.5` and `google:lyria-3-clip-preview` - [Music generation](#music-generation) ($0.08 per song and $0.04 per 30-second clip)
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
 - `google:gemini-flash-latest` - Google-maintained alias for the current Gemini Flash release ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.5 Flash-Lite pricing)
@@ -508,6 +509,29 @@ prompts:
 For two speakers on the Gemini API, set `generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` to a list of `{speaker, voiceConfig: {prebuiltVoiceConfig: {voiceName}}}` objects. Vertex uses `{speaker, voiceConfig: {voice}}`. Include the matching `speechMetadata.speaker` on each text part. For a single speaker, `voiceConfig.voice` also accepts an existing stored voice ID; creating or replicating voices is outside this provider's scope. See the [GenerateContent speech guide](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) and [Vertex speech guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/text-to-speech/overview).
 
 The older 2.5 and 3.1 TTS previews have an earliest announced shutdown date of November 17, 2026. Check the [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before using them. Promptfoo's [cost estimates](https://ai.google.dev/gemini-api/docs/pricing) include the announced introductory discount through December 31, 2026 and the subsequent standard rates.
+
+### Music generation
+
+Use `google:lyria-3.5` for full-length songs or `google:lyria-3-clip-preview` for 30-second clips. The legacy `google:lyria-3-pro-preview` full-song model is also supported. Lyria returns 44.1 kHz stereo MP3 audio in `providerResponse.audio`, which plays in the web viewer. The generated lyrics, including section markers, are the text output and the audio transcript. Instrumental tracks return `<instrumental>`.
+
+Describe the genre, instruments, tempo, mood, structure, and target duration in the prompt; Lyria 3.5 treats duration as guidance rather than an exact length. Custom lyrics can use section tags such as `[Verse]` and `[Chorus]`, and timestamps such as `[0:00 - 0:10] Intro` control timing. To compose from images, include up to 10 images in the prompt, for example with a `file://` variable:
+
+```yaml
+providers:
+  - google:lyria-3.5
+prompts:
+  - |
+    {{image}}
+    An atmospheric ambient track inspired by the mood and colors in this image.
+tests:
+  - vars:
+      image: file://desert_sunset.jpg
+    assert:
+      - type: javascript
+        value: context.providerResponse.audio?.format === 'mpeg'
+```
+
+Lyria is available only on the paid tier, and each request generates one song. Promptfoo reports Google's [per-song price](https://ai.google.dev/gemini-api/docs/pricing#lyria-3-5) as the cost of each response that contains audio: $0.08 for `lyria-3.5` and `lyria-3-pro-preview`, and $0.04 for `lyria-3-clip-preview`. Lyria RealTime (`lyria-realtime-exp`) streams music over a WebSocket API that this provider does not support. See Google's [music generation guide](https://ai.google.dev/gemini-api/docs/music-generation) and the [google-lyria example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-lyria).
 
 ### Embedding Models
 
