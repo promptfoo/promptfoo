@@ -136,6 +136,52 @@ describe('ResponsesProcessor', () => {
       });
     });
 
+    it('grades the root final answer while running callbacks for subagents', async () => {
+      const subagentCall = {
+        type: 'function_call',
+        agent: { agent_name: '/root/reviewer' },
+        name: 'lookup',
+        arguments: '{"id":1}',
+      };
+      const data = {
+        output: [
+          subagentCall,
+          {
+            type: 'message',
+            role: 'assistant',
+            agent: subagentCall.agent,
+            phase: 'final_answer',
+            content: [{ type: 'refusal', refusal: 'Subagent refused' }],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            agent: { agent_name: '/root' },
+            phase: 'commentary',
+            content: [{ type: 'output_text', text: 'Checking' }],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            agent: { agent_name: '/root' },
+            phase: 'final_answer',
+            content: [{ type: 'output_text', text: 'Done' }],
+          },
+        ],
+        usage: { input_tokens: 30, output_tokens: 15 },
+      };
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue('tool output');
+      const result = await processor.processResponseOutput(data, {}, false, { multiAgent: true });
+      expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
+        subagentCall,
+        undefined,
+      );
+      expect(result.output).toBe('Done');
+      expect(result.isRefusal).toBeUndefined();
+      expect(result.tokenUsage?.total).toBe(45);
+      expect(result.raw).toBe(data);
+    });
+
     it('should process simple text output', async () => {
       const mockData = {
         id: 'resp_test123',
