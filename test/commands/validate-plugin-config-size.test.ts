@@ -140,6 +140,67 @@ describe('validate plugin config size for remote generation (#12513)', () => {
       expect(oversized).toHaveLength(1);
       expect(oversized[0].sizeBytes).toBe(expectedSize);
     });
+
+    it('measures each language separately, not the whole language array', () => {
+      // A near-limit prompt with 25 languages: over the limit only because the
+      // array lists every language name, but each language-specific request
+      // remote generation actually sends stays under it.
+      const languages = [
+        'en',
+        'fr',
+        'de',
+        'es',
+        'it',
+        'pt',
+        'nl',
+        'sv',
+        'da',
+        'fi',
+        'no',
+        'pl',
+        'cs',
+        'sk',
+        'hu',
+        'ro',
+        'bg',
+        'hr',
+        'sr',
+        'sl',
+        'et',
+        'lv',
+        'lt',
+        'el',
+        'tr',
+      ];
+      const pluginConfig = { systemPrompt: 'x'.repeat(29_900), language: languages };
+      const wholeArraySize = Buffer.byteLength(JSON.stringify(pluginConfig), 'utf8');
+      expect(wholeArraySize).toBeGreaterThan(REMOTE_PLUGIN_CONFIG_MAX_BYTES);
+      const largestSingleLanguageSize = Buffer.byteLength(
+        JSON.stringify({ systemPrompt: pluginConfig.systemPrompt, language: 'en' }),
+        'utf8',
+      );
+      expect(largestSingleLanguageSize).toBeLessThan(REMOTE_PLUGIN_CONFIG_MAX_BYTES);
+      const oversized = getOversizedRemotePluginConfigs(
+        configWithPlugin(pluginConfig) as unknown as UnifiedConfig,
+      );
+      expect(oversized).toEqual([]);
+    });
+
+    it('still flags a config over the limit for a single language', () => {
+      const languages = ['en', 'fr', 'de'];
+      const pluginConfig = { systemPrompt: 'x'.repeat(30_100), language: languages };
+      const expectedSize = Buffer.byteLength(
+        JSON.stringify({ systemPrompt: pluginConfig.systemPrompt, language: 'en' }),
+        'utf8',
+      );
+      expect(expectedSize).toBeGreaterThan(REMOTE_PLUGIN_CONFIG_MAX_BYTES);
+      const oversized = getOversizedRemotePluginConfigs(
+        configWithPlugin(pluginConfig) as unknown as UnifiedConfig,
+      );
+      expect(oversized).toHaveLength(1);
+      expect(oversized[0].pluginId).toBe('prompt-extraction');
+      expect(oversized[0].sizeBytes).toBe(expectedSize);
+    });
   });
 
   describe('doValidate', () => {

@@ -47,7 +47,10 @@ export interface OversizedPluginConfig {
  * Measure a plugin config the way remote generation sends it, so the size matches
  * what the server validates. Mirrors fetchRemoteTestCases in
  * src/redteam/plugins/index.ts: `graderExamples` are stripped before sending, and
- * a max-chars-per-message modifier is added when one applies.
+ * a max-chars-per-message modifier is added when one applies. `synthesize` in
+ * src/redteam/index.ts sends one remote request per language, replacing a
+ * `language` array with each single language in turn, so each language-specific
+ * request is measured and the largest is kept.
  */
 function getRemotePluginConfigSizeBytes(pluginConfig: Record<string, unknown>): number {
   const { graderExamples, ...configForRemote } = pluginConfig;
@@ -60,8 +63,21 @@ function getRemotePluginConfigSizeBytes(pluginConfig: Record<string, unknown>): 
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
-  const serialized = JSON.stringify(configForRemote) ?? '';
-  return Buffer.byteLength(serialized, 'utf8');
+  const languageConfig = configForRemote.language;
+  const languages = Array.isArray(languageConfig)
+    ? languageConfig
+    : languageConfig
+      ? [languageConfig]
+      : [undefined];
+  // An empty array sends no requests at all; measure the config as written.
+  const languageVariants = languages.length > 0 ? languages : [undefined];
+  let maxBytes = 0;
+  for (const lang of languageVariants) {
+    const languageConfigForRemote = lang ? { ...configForRemote, language: lang } : configForRemote;
+    const serialized = JSON.stringify(languageConfigForRemote) ?? '';
+    maxBytes = Math.max(maxBytes, Buffer.byteLength(serialized, 'utf8'));
+  }
+  return maxBytes;
 }
 
 /**
