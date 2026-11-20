@@ -18,7 +18,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
   - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
   - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
 - Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
-- Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
+- Includes **adversarial ML techniques** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
 - Integrates with [CI/CD](/docs/integrations/ci-cd/).
 - Tests via [HTTP API](#attacking-an-api-endpoint), [browser](/docs/providers/browser/), or [direct model access](#alternative-test-specific-prompts-and-models).
 
@@ -110,8 +110,6 @@ Check off the individual plugins you want to use, or select a preset that includ
 ### Select attack strategies
 
 Now we select strategies. [Strategies](/docs/red-team/strategies/) are techniques that wrap the generated inputs in a specific attack pattern.
-
-This is how Promptfoo generates more sophisticated jailbreaks and injections.
 
 ![llm red team setup](/img/docs/setup/strategy.png)
 
@@ -260,13 +258,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 ## Continuous improvement
 
-Red teaming is not a one-time activity but an ongoing process. As you develop and refine your LLM application, regularly running red team evaluations helps ensure that:
-
-1. New features or changes don't introduce unexpected vulnerabilities
-2. Your application remains robust against evolving attack techniques
-3. You can quantify and demonstrate improvements in safety and reliability over time
-
-Check out the [CI/CD integration](/docs/integrations/ci-cd/) docs for more info.
+Rerun red team tests after changes to prompts, models, tools, or guardrails. Compare failures and attack success rates with previous runs to identify regressions. See [CI/CD integration](/docs/integrations/ci-cd/).
 
 ## Resources
 
