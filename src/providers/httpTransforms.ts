@@ -19,7 +19,7 @@ export async function createTransformResponse(
   parser: string | Function | undefined,
 ): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
   if (!parser) {
-    return (data, text) => ({ output: data || text });
+    return (data, text) => ({ output: data ?? text });
   }
 
   if (typeof parser === 'function') {

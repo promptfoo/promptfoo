@@ -466,26 +466,31 @@ describe('runEval', () => {
   );
 
   it.each([
-    { native: '', expected: '' },
-    { native: undefined, expected: 'Display text' },
+    { native: '', output: 'Display text', expected: '' },
+    { native: undefined, output: 'Display text', expected: 'Display text' },
+    { native: undefined, output: false, expected: false },
+    { native: undefined, output: 0, expected: 0 },
   ])(
     'honors explicit empty conversation output and legacy fallback: %j',
-    async ({ native, expected }) => {
+    async ({ native, output, expected }) => {
       const conversations = {} as Record<string, any>;
       const provider: ApiProvider = {
         id: () => 'history-fallback',
-        callApi: vi.fn().mockResolvedValue({ output: 'Display text', conversationOutput: native }),
+        callApi: vi.fn().mockResolvedValue({ output, conversationOutput: native }),
       };
-      const [result] = await runEval({
+      const options = {
         ...defaultOptions,
         provider,
         prompt: { raw: '{{ _conversation | dump }}', label: 'history-fallback' },
         test: {},
         conversations,
         registers: {},
-      });
+      };
+      const [result] = await runEval(options);
       expect(result.success).toBe(true);
-      expect(Object.values(conversations)[0][0].output).toBe(expected);
+      await runEval(options);
+      const history = JSON.parse(vi.mocked(provider.callApi).mock.calls[1][0]);
+      expect(history[0].output).toBe(expected);
     },
   );
 

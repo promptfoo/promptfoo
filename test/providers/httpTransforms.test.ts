@@ -23,6 +23,17 @@ describe('createTransformResponse', () => {
     expect(result.output).toEqual({ key: 'value' });
   });
 
+  it.each([
+    { name: 'false', value: false },
+    { name: 'zero', value: 0 },
+    { name: 'an empty string', value: '' },
+  ])('should preserve parsed JSON $name when no parser is provided', async ({ value }) => {
+    const parser = await createTransformResponse(undefined);
+    const result = parser(value, JSON.stringify(value));
+
+    expect(result.output).toBe(value);
+  });
+
   it('should handle function parser returning an object', async () => {
     const parser = await createTransformResponse((data: any) => ({
       output: data.result,
