@@ -13,7 +13,7 @@ vi.mock('../../../src/cache', async (importOriginal) => ({
 vi.mock('../../../src/logger', () => createLoggerModule());
 
 // Shapes match live Groq Chat Completions responses for these models.
-const qwenParsedReasoningResponse = () =>
+const qwenParsedReasoningResponse = ({ includeReasoning = true } = {}) =>
   createMockFetchResponse({
     model: 'qwen/qwen3.8-27b',
     choices: [
@@ -21,7 +21,7 @@ const qwenParsedReasoningResponse = () =>
         message: {
           role: 'assistant',
           content: '391',
-          reasoning: '17 * 23 = 340 + 51 = 391',
+          ...(includeReasoning ? { reasoning: '17 * 23 = 340 + 51 = 391' } : {}),
         },
         finish_reason: 'stop',
       },
@@ -98,7 +98,9 @@ describe('Groq current catalog models', () => {
     });
 
     it('prices responses with explicit inputCost and outputCost', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce(qwenParsedReasoningResponse());
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        qwenParsedReasoningResponse({ includeReasoning: false }),
+      );
       const provider = new GroqProvider('qwen/qwen3.8-27b', {
         config: {
           reasoning_effort: 'low',
@@ -111,6 +113,7 @@ describe('Groq current catalog models', () => {
       const result = await provider.callApi('What is 17*23?');
 
       expect(sentBody()).toMatchObject({ include_reasoning: false, reasoning_effort: 'low' });
+      expect(result.output).toBe('391');
       expect(result.cost).toBeCloseTo(55 * (0.8 / 1e6) + 62 * (4 / 1e6), 12);
     });
 

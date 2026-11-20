@@ -178,7 +178,7 @@ Groq provides vision models that can process both text and image inputs. These m
 
 :::note
 
-Groq's multimodal lineup changes frequently. `qwen/qwen3.8-27b` is the current vision-capable model used in the example below, but Groq serves it as a **preview** model (intended for evaluation, not production). Check the [Groq Vision documentation](https://console.groq.com/docs/vision) for the latest production-ready vision options before deploying.
+Groq's multimodal lineup changes frequently. `qwen/qwen3.8-27b` is the vision-capable model used in the example below, but Groq serves it as a **preview** model (intended for evaluation, not production). Check the [Groq Vision documentation](https://console.groq.com/docs/vision) for the latest production-ready vision options before deploying.
 
 :::
 
@@ -186,7 +186,7 @@ Groq's multimodal lineup changes frequently. `qwen/qwen3.8-27b` is the current v
 
 - **Image URLs:** Maximum allowed size is 20MB
 - **Base64 Encoded Images:** Maximum allowed size is 4MB
-- **Multiple Images:** Qwen 3.8 27B accepts up to 3 images per request; check model documentation for other models
+- **Multiple Images:** Qwen 3.8 27B accepts up to 3 images per request and Muse Spark Open up to 5
 
 ### How to Use Vision in Promptfoo
 
