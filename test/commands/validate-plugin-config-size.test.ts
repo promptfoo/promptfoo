@@ -78,6 +78,37 @@ describe('validate plugin config size for remote generation (#12513)', () => {
       expect(REMOTE_PLUGIN_CONFIG_MAX_BYTES).toBe(30000);
     });
 
+    it('passes an oversized config for a local-only plugin (intent)', () => {
+      // IntentPlugin sets canGenerateRemote = false, so its config never goes
+      // to remote generation even when remote generation is selected globally.
+      const oversized = getOversizedRemotePluginConfigs(
+        configWithPlugin({ intent: 'x'.repeat(40_000) }, 'intent') as unknown as UnifiedConfig,
+      );
+      expect(oversized).toEqual([]);
+    });
+
+    it('passes an oversized config for a local-only plugin referenced by its full id', () => {
+      const oversized = getOversizedRemotePluginConfigs(
+        configWithPlugin(
+          { intent: 'x'.repeat(40_000) },
+          'promptfoo:redteam:intent',
+        ) as unknown as UnifiedConfig,
+      );
+      expect(oversized).toEqual([]);
+    });
+
+    it('still flags an oversized config for a remote-capable plugin', () => {
+      // prompt-extraction generates remotely, so the limit still applies.
+      const oversized = getOversizedRemotePluginConfigs(
+        configWithPlugin(
+          { systemPrompt: 'x'.repeat(40_000) },
+          'prompt-extraction',
+        ) as unknown as UnifiedConfig,
+      );
+      expect(oversized).toHaveLength(1);
+      expect(oversized[0].pluginId).toBe('prompt-extraction');
+    });
+
     it('measures UTF-8 bytes, not characters', () => {
       // 20,000 multi-byte chars: under 30,000 characters but over 30,000 bytes.
       const config = configWithPlugin({ systemPrompt: 'é'.repeat(20_000) });
@@ -219,6 +250,14 @@ describe('validate plugin config size for remote generation (#12513)', () => {
       expect(errorOutput).toContain('prompt-extraction');
       expect(errorOutput).toContain('30000');
       expect(errorOutput).toMatch(/40\d{3}/);
+    });
+
+    it('passes validation for an oversized local-only intent plugin config', async () => {
+      mockResolved(configWithPlugin({ intent: 'x'.repeat(40_000) }, 'intent'));
+      await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+      expect(process.exitCode).toBe(0);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Configuration is valid'));
     });
 
     it('passes validation when the plugin config is under the limit', async () => {

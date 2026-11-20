@@ -6,6 +6,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
+import { canPluginGenerateRemote } from '../redteam/plugins/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import {
   getMaxCharsPerMessageModifierValue,
@@ -83,7 +84,10 @@ function getRemotePluginConfigSizeBytes(pluginConfig: Record<string, unknown>): 
 /**
  * Return the plugins whose config would exceed the remote generation size limit.
  * Only the serialized `config` object is measured, matching the server-side
- * check on the `config` field of the remote generation request.
+ * check on the `config` field of the remote generation request. Plugins whose
+ * generation route never sends the config remotely (local-only plugins, per
+ * the plugin factory's canGenerateRemote flag) are skipped, as are plugins
+ * without a config. Unknown plugin ids fail closed and keep the check.
  */
 export function getOversizedRemotePluginConfigs(config: UnifiedConfig): OversizedPluginConfig[] {
   const plugins = config?.redteam?.plugins;
@@ -97,6 +101,9 @@ export function getOversizedRemotePluginConfigs(config: UnifiedConfig): Oversize
     }
     const { id, config: pluginConfig } = plugin as { id?: unknown; config?: unknown };
     if (typeof id !== 'string' || !pluginConfig || typeof pluginConfig !== 'object') {
+      continue;
+    }
+    if (!canPluginGenerateRemote(id)) {
       continue;
     }
     const sizeBytes = getRemotePluginConfigSizeBytes(pluginConfig as Record<string, unknown>);

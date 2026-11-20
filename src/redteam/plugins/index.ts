@@ -93,6 +93,13 @@ import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
+  /**
+   * Whether this plugin sends its config to remote generation when remote
+   * generation is selected. Mirrors the plugin class's static
+   * `canGenerateRemote` flag, which createPluginFactory honors before
+   * calling fetchRemoteTestCases. Undefined means remote-capable.
+   */
+  canGenerateRemote?: boolean;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
 }
@@ -455,6 +462,9 @@ function createPluginFactory<T extends PluginConfig>(
 ): PluginFactory {
   return {
     key,
+    // Same source of truth the action below uses: a plugin class that opts
+    // out of remote generation never sends its config to the remote service.
+    canGenerateRemote: (PluginClass as any).canGenerateRemote !== false,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({
       provider,
@@ -648,6 +658,8 @@ function createRemotePlugin<T extends PluginConfig>(
 ): PluginFactory {
   return {
     key,
+    // Remote plugins always send their config to remote generation.
+    canGenerateRemote: true,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({
       provider,
@@ -718,3 +730,19 @@ export const Plugins: PluginFactory[] = [
   ...biasPlugins,
   ...remotePlugins,
 ].map(withMaxCharsRetries);
+
+/**
+ * Whether the plugin with this id sends its config to remote generation when
+ * remote generation is selected. Resolves the id against the plugin factory
+ * registry, accepting both the short key (`intent`) and the full id
+ * (`promptfoo:redteam:intent`). Unknown plugin ids (custom file:// plugins
+ * and anything not registered) fail closed and return true, since their
+ * generation route is unknown.
+ */
+export function canPluginGenerateRemote(pluginId: string): boolean {
+  const factory = Plugins.find(
+    (pluginFactory) =>
+      pluginFactory.key === pluginId || pluginFactory.key === getShortPluginId(pluginId),
+  );
+  return factory?.canGenerateRemote !== false;
+}
