@@ -1,11 +1,11 @@
 ---
 sidebar_label: Meta Model API
-description: Configure Meta's Model API to evaluate Muse Spark reasoning models with reasoning effort, multimodal input, tool calling, and search grounding in promptfoo
+description: Configure Meta's Model API to evaluate Muse Wonder, Spark, and Ember with reasoning effort, multimodal input, tool calling, and search grounding in promptfoo
 ---
 
 # Meta Model API
 
-The [Meta Model API](https://dev.meta.ai/) (public preview) serves Meta Superintelligence Labs' Muse Spark models through an OpenAI-compatible API. The Meta provider extends the [OpenAI provider](/docs/providers/openai/) and supports its compatible options.
+The [Meta Model API](https://dev.meta.ai/) (public preview) serves Meta Superintelligence Labs' Muse Wonder, Muse Spark, and Muse Ember reasoning models through an OpenAI-compatible API. The Meta provider extends the [OpenAI provider](/docs/providers/openai/) and supports its compatible options.
 
 :::note
 
@@ -29,11 +29,16 @@ providers:
 
 Check the [models page](https://dev.meta.ai/docs/models) for the live list. As of writing:
 
-- `muse-spark-1.3` — latest model for coding and agentic workflows, with a 1,048,576-token context window, text/image/video/PDF input, tool calling, structured output, and search grounding.
+- `muse-wonder-1.0` — Meta's most capable model (in preview), for complex software engineering and long-horizon agentic work.
+- `muse-spark-1.3` — latest Muse Spark version, recommended by Meta for coding and agentic workflows.
 - `muse-spark-1.3-contributor` — the same model with discounted pricing. Selecting this ID permits Meta to use your prompts and completions to train future models.
+- `muse-spark-1.2`, `muse-spark-1.2-contributor` — the previous Muse Spark version, in Standard and Contributor mode.
 - `muse-spark-1.1` — original Muse Spark model, still supported.
+- `muse-ember-1.0` — the efficient, lowest-cost model for high-volume sub-agent tasks, tool calls, routing, and batch processing.
 
-Both 1.3 IDs work with the Responses, Chat Completions, and Messages APIs. Meta notes that audio understanding in 1.3 is not fully supported and may produce degraded responses.
+Every model ID works with the Responses, Chat Completions, and Messages APIs, with a 1,048,576-token context window, text/image/video/audio/PDF input, tool calling, structured output, and search grounding. Meta notes that audio understanding in Muse Spark 1.3 is not fully supported and may produce degraded responses; it recommends `muse-spark-1.2` for audio. To send video, audio, or PDF input, write the prompt as a JSON message array with the content parts from Meta's [media guide](https://dev.meta.ai/docs/media-understanding), such as `input_audio` or `input_video`; the provider forwards those parts unchanged.
+
+Muse Spark Open and Muse Glimmer are open-weight models that Meta does not serve on the Model API. Evaluate them through a hosted provider such as [OpenRouter](/docs/providers/openrouter/) (for example `openrouter:meta/muse-spark-open`) or your own OpenAI-compatible server. Muse Image, Muse Voice Transcribe, and SAM use dedicated endpoints this provider does not call.
 
 ## Configuration
 
@@ -50,7 +55,7 @@ providers:
 
 The provider accepts compatible [OpenAI provider](/docs/providers/openai/) options. Notable behavior:
 
-- `reasoning_effort` — `minimal`, `low`, `medium`, `high`, or `xhigh`. When omitted, the model picks its own reasoning depth. Muse Spark does not support `none`; the provider rejects it with a clear error. Reasoning tokens bill at the output rate and count toward the output cap.
+- `reasoning_effort` — `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. `max` runs on `muse-wonder-1.0`, `muse-spark-1.3`, and `muse-ember-1.0`, but not on `muse-spark-1.3-contributor`, `muse-spark-1.2`, or `muse-spark-1.1`. When omitted, Muse Spark reasons at `high` and Muse Wonder and Muse Ember at `max`. The models do not support `none`; the provider rejects it with a clear error. Reasoning tokens bill at the output rate and count toward the output cap.
 - `max_completion_tokens` — caps generation on the chat endpoint (Meta accepts `max_tokens` only as a deprecated alias; if you set it, the provider forwards it as the canonical `max_completion_tokens`). On the [Responses API](#responses-api) the cap is `max_output_tokens`, and the provider maps `max_completion_tokens`/`max_tokens` onto it. When unset, no cap is sent so reasoning can use the full output budget.
 - `temperature` — supported (0–2, API default 1.0). Promptfoo sends its deterministic default of `0` unless you override it.
 - `response_format` — structured output with guaranteed JSON schema matching.
@@ -66,10 +71,15 @@ Promptfoo computes token cost from Meta's [published pricing](https://dev.meta.a
 
 | Model                              | Input / 1M | Cached input / 1M | Output / 1M |
 | ---------------------------------- | ---------- | ----------------- | ----------- |
+| `muse-wonder-1.0`                  | $4.00      | $0.20             | $20.00      |
 | `muse-spark-1.3`, `muse-spark-1.1` | $1.25      | $0.15             | $4.25       |
+| `muse-spark-1.2`                   | $1.25      | $0.15             | $4.25       |
 | `muse-spark-1.3-contributor`       | $0.10      | $0.002            | $0.20       |
+| `muse-spark-1.2-contributor`       | $0.10      | $0.002            | $0.20       |
+| `muse-ember-1.0`, ≤200K input      | $0.10      | $0.004            | $0.50       |
+| `muse-ember-1.0`, >200K input      | $0.30      | $0.012            | $1.50       |
 
-Contributor pricing requires opting into Meta's training data terms by selecting the Contributor model ID. Override token prices with `cost`, `inputCost`, `outputCost`, or `cacheReadCost` (USD per token) for custom rates. Token cost excludes web-search charges.
+Muse Ember bills a request with more than 200K input tokens, cached tokens included, at its long-context rates for the whole request; promptfoo picks the tier from each response's reported input tokens, which leave out history that a `previous_response_id` chain restores on the server. Contributor pricing requires opting into Meta's training data terms by selecting the Contributor model ID. Override token prices with `cost`, `inputCost`, `outputCost`, or `cacheReadCost` (USD per token) for custom rates. Token cost excludes web-search charges.
 
 ## Responses API
 
@@ -103,7 +113,7 @@ Muse Spark's reasoning arrives on this surface as encrypted `redacted_thinking` 
 
 ## Using with coding-agent providers
 
-Meta positions Muse Spark as a backend for coding agents, and promptfoo's agentic providers can evaluate those setups end to end. In both recipes, set `apiKey` explicitly: the agent subprocesses inherit your shell environment, and an explicit key guarantees your Meta key is used instead of an ambient `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` that belongs to another service.
+Meta positions its Muse models as backends for coding agents, and promptfoo's agentic providers can evaluate those setups end to end. In both recipes, set `apiKey` explicitly: the agent subprocesses inherit your shell environment, and an explicit key guarantees your Meta key is used instead of an ambient `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` that belongs to another service.
 
 ### Codex CLI
 
@@ -139,11 +149,11 @@ providers:
         ANTHROPIC_BASE_URL: https://api.meta.ai
         ANTHROPIC_AUTH_TOKEN: '{{env.MODEL_API_KEY}}'
         ANTHROPIC_CUSTOM_HEADERS: ''
-        ANTHROPIC_MODEL: muse-spark-1.3
-        ANTHROPIC_DEFAULT_OPUS_MODEL: muse-spark-1.3
+        ANTHROPIC_MODEL: muse-wonder-1.0
+        ANTHROPIC_DEFAULT_OPUS_MODEL: muse-wonder-1.0
         ANTHROPIC_DEFAULT_SONNET_MODEL: muse-spark-1.3
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-spark-1.3
-        CLAUDE_CODE_SUBAGENT_MODEL: muse-spark-1.3
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: muse-ember-1.0
+        CLAUDE_CODE_SUBAGENT_MODEL: muse-ember-1.0
         ENABLE_TOOL_SEARCH: 'true' # Claude Code disables MCP tool search for non-first-party hosts
 ```
 
@@ -153,7 +163,7 @@ Do not omit `apiKey`, the empty `ANTHROPIC_CUSTOM_HEADERS` override, or the prov
 
 :::
 
-Pin every model alias as shown — Claude Code otherwise routes background tasks, Plan Mode, or subagents to Claude models the Meta API doesn't serve. See Meta's [coding agents guide](https://dev.meta.ai/docs/coding-agents) for the full setup pattern.
+Pin every model alias as shown — Claude Code otherwise routes background tasks, Plan Mode, or subagents to Claude models the Meta API doesn't serve. This mapping follows Meta's split: Muse Wonder runs the main loop, Muse Spark backs the `sonnet` alias, and Muse Ember takes background tasks and subagents. See Meta's [coding agents guide](https://dev.meta.ai/docs/coding-agents) for the full setup pattern.
 
 ## Example Usage
 
@@ -180,7 +190,7 @@ npx promptfoo@latest init --example provider-meta
 
 - Base URL: `https://api.meta.ai/v1` (override with `apiBaseUrl`; the Messages surface uses the bare host `https://api.meta.ai`).
 - OpenAI-compatible chat completions (`/chat/completions`) and Responses (`/responses`) endpoints, plus the Anthropic-compatible Messages (`/messages`) endpoint.
-- Rate limits apply per team, not per key: 3,000 RPM / 4M TPM for Standard models and 100 RPM / 3M TPM for Contributor models.
+- Rate limits apply per team and per model, not per key: 3,000 RPM / 4M TPM for each Standard model and 150 RPM / 3M TPM for each Contributor model.
 - Full [API documentation](https://dev.meta.ai/docs/overview).
 
 ## See Also
