@@ -182,9 +182,10 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        const optsWithAliases = normalizeTagOption(
-          opts as EvalCommandOptions & { tag?: Record<string, string> },
-        );
+        const optsWithAliases = normalizeTagOption({
+          ...opts,
+          envPath: command.optsWithGlobals().envPath,
+        } as EvalCommandOptions & { tag?: Record<string, string> });
         // Commander defaults a lone `--no-cache` to `true`. Only an explicit flag should
         // override the loaded config's `commandLineOptions.cache` / `evaluateOptions.cache`.
         if (command.getOptionValueSource('cache') !== 'cli') {

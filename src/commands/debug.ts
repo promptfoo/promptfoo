@@ -1,7 +1,7 @@
 import * as os from 'os';
 
 import chalk from 'chalk';
-import { getEnvBool, getEnvString } from '../envars';
+import { getEnvBool, getEnvString, isTelemetryDisabled } from '../envars';
 import logger from '../logger';
 import { resolveConfigs } from '../util/config/load';
 import { pathExists } from '../util/file';
@@ -34,7 +34,7 @@ async function doDebug(options: DebugOptions): Promise<void> {
       noProxy: getEnvString('NO_PROXY') || getEnvString('no_proxy'),
       nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
       nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
-      telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
+      telemetryDisabled: isTelemetryDisabled(),
       telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
     },
     configInfo: {

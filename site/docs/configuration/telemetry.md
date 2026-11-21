@@ -36,6 +36,10 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
+For a single eval, set `env: { PROMPTFOO_DISABLE_TELEMETRY: 'true' }` in its configuration. This setting is also accepted by API jobs. An eval or provider cannot re-enable telemetry disabled by the host or an environment file. Provider settings cannot override the eval's opt-out. Promptfoo sends no opt-out acknowledgment.
+
+For the web UI, set this variable when building the app. Changing the server environment does not change a prebuilt UI.
+
 ## Updates
 
 The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.
