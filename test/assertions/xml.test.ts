@@ -318,6 +318,14 @@ describe('validateXml', () => {
 });
 
 describe('containsXml', () => {
+  it('associates a declaration or external DOCTYPE with its own document only', () => {
+    const xml11 = '<?xml version="1.1"?>\n<!-- source --><root>&#x1;</root>';
+    const external = '<!DOCTYPE html SYSTEM "entities.dtd"><html>&nbsp;</html>';
+    expect(containsXml(`Prose ${xml11} then ${external}`, ['root', 'html']).isValid).toBe(true);
+    expect(containsXml(`${external} and <root>&nbsp;</root>`, ['root']).isValid).toBe(false);
+    expect(containsXml('<!DOCTYPE root [<!ENTITY text "data">]><root/>').isValid).toBe(false);
+  });
+
   it('should return true when valid XML is present', () => {
     const input = 'Some text <root><child>Content</child></root> more text';
     const result = containsXml(input);
