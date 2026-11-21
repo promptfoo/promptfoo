@@ -3644,22 +3644,6 @@ describe('OpenAiLiveProvider', () => {
 });
 
 describe('application transcription connection', () => {
-  it.each([
-    ['https://eu.api.openai.com/v1', 'Bearer scoped-fixture'],
-    ['https://eu.api.openai.com.example/v1', undefined],
-    ['http://eu.api.openai.com/v1', undefined],
-    ['https://eu.api.openai.com:8443/v1', undefined],
-  ] as const)(
-    'scopes the regional credential to the secure first-party origin (%s)',
-    (apiBaseUrl, expected) => {
-      const live = new OpenAiLiveProvider('gpt-live-1', {
-        config: { apiBaseUrl, apiKeyRequired: false },
-        env: { OPENAI_API_KEY: 'scoped-fixture' },
-      });
-      expect(live.getAppTranscriptionConnection().headers.Authorization).toBe(expected);
-    },
-  );
-
   it('keeps gateway credentials on the same prefixed origin and suppresses an ambient OpenAI key', () => {
     const p = new OpenAiLiveProvider('gpt-live-1', {
       config: {

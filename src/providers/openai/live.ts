@@ -37,6 +37,20 @@ function positiveTimeout(value: number, name: string): number {
   return value;
 }
 
+/** Live sockets and their speech preparation must never send a default credential to a gateway. */
+export function canUseDefaultLiveKey(url: URL, config?: OpenAiLiveOptions): boolean {
+  return (
+    config?.useDefaultApiKey !== false &&
+    config?.apiKey === undefined &&
+    config?.apiKeyEnvar === undefined &&
+    (url.protocol === 'wss:' || url.protocol === 'https:') &&
+    !url.port &&
+    !url.username &&
+    !url.password &&
+    isOpenAiFirstPartyApiUrl(url.origin)
+  );
+}
+
 /** One independent, finite capture per eval. Live has no authoritative voice-turn-done event. */
 export class OpenAiLiveProvider extends OpenAiGenericProvider {
   declare config: OpenAiLiveOptions;
@@ -92,12 +106,15 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     if (url.hash) {
       throw new Error('GPT-Live session URLs do not accept fragments.');
     }
-    const firstParty = isOpenAiFirstPartyApiUrl(url.href);
-    if (firstParty && !this.modelName.startsWith('gpt-live-')) {
+    if (!this.modelName.startsWith('gpt-live-') && isOpenAiFirstPartyApiUrl(url.origin)) {
       throw new Error(
         'The OpenAI Live API requires a gpt-live-* model. Use the matching provider or configure a compatible apiBaseUrl.',
       );
     }
+    const apiKey = this.getApiKey({
+      ...config,
+      useDefaultApiKey: canUseDefaultLiveKey(url, config),
+    });
     // Send URL userinfo as an explicit Basic credential, which diagnostics redact, instead of
     // leaving it in the socket URL.
     // Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written.
@@ -107,23 +124,15 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         : undefined;
     url.username = '';
     url.password = '';
-    // A prompt-level apiKey or apiKeyEnvar selects this call's credential.
-    const apiKey = this.getApiKey(config);
     const headers = Object.fromEntries(
       Object.entries(this.getOpenAiRequestHeaders(config.headers, config)).map(([name, value]) => [
         name,
         String(value),
       ]),
     );
-    // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
-    // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
-    const sendApiKey =
-      Boolean(config.apiKey || config.apiKeyEnvar) ||
-      (firstParty && url.protocol === 'wss:' && !url.port && !userinfo);
-    const authorization =
-      apiKey && sendApiKey
-        ? `Bearer ${apiKey}`
-        : userinfo && `Basic ${Buffer.from(userinfo).toString('base64')}`;
+    const authorization = apiKey
+      ? `Bearer ${apiKey}`
+      : userinfo && `Basic ${Buffer.from(userinfo).toString('base64')}`;
     if (authorization && !hasHeaderOverride(headers, 'Authorization')) {
       headers.Authorization = authorization;
     }

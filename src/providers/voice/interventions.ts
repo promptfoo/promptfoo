@@ -2,6 +2,7 @@ import { sha256 } from '../../util/createHash';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveOpenAiApiUrl } from '../openai';
 import { createOpenAiCredentialRedactor } from '../openai/credentialRedaction';
+import { canUseDefaultLiveKey } from '../openai/live';
 import { prepareLiveInput } from '../openai/liveInput';
 import { OpenAiTtsProvider } from '../openai/tts';
 import { decodeUrlComponent } from '../urlEncoding';
@@ -120,13 +121,8 @@ export async function prepareVoiceInterventions(
   if (url.protocol === 'wss:') {
     url.protocol = 'https:';
   }
-  const customEndpoint = url.hostname !== 'api.openai.com';
-  const useDefaultApiKey = customEndpoint ? false : caller?.useDefaultApiKey;
-  const apiKey = resolveProviderApiKey(
-    caller,
-    env,
-    useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
-  );
+  const useDefaultApiKey = canUseDefaultLiveKey(url, caller);
+  const apiKey = resolveProviderApiKey(caller, env, useDefaultApiKey ? ['OPENAI_API_KEY'] : []);
   // Match Live's HTTP conversion before validating or collecting YAML credentials.
   const headers = Object.fromEntries(
     Object.entries(caller?.headers ?? {}).map(([name, value]) => [name, String(value)]),

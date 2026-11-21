@@ -124,6 +124,38 @@ describe('prepareVoiceInterventions', () => {
     expect(onResponse.mock.calls[0][0].cost).toBeUndefined();
   });
 
+  it.each([
+    [{ apiBaseUrl: 'https://eu.api.openai.com/v1' }, 'Bearer scoped-fixture'],
+    [{ apiBaseUrl: 'wss://eu.api.openai.com/v1' }, 'Bearer scoped-fixture'],
+    [{ apiBaseUrl: 'https://eu.api.openai.com.example/v1' }, null],
+    [{ apiBaseUrl: 'http://eu.api.openai.com/v1' }, null],
+    [{ apiBaseUrl: 'https://eu.api.openai.com:8443/v1' }, null],
+    [{ apiHost: 'eu.api.openai.com', apiKey: '' }, null],
+    [{ apiHost: 'eu.api.openai.com', apiKeyEnvar: '' }, null],
+  ] as const)(
+    'uses the same scoped key for Live and prepared speech (%j)',
+    async (endpoint, expected) => {
+      const config = { ...endpoint, apiKeyRequired: expected !== null };
+      const env = { OPENAI_API_KEY: 'scoped-fixture' };
+      const live = new OpenAiLiveProvider('gpt-live-1', { config, env });
+      expect(new Headers(live.getAppTranscriptionConnection().headers).get('authorization')).toBe(
+        expected,
+      );
+      await prepareVoiceInterventions(
+        [{ atMs: 100, text: 'Caller interruption.' }],
+        config,
+        undefined,
+        2000,
+        env,
+        new AbortController().signal,
+        vi.fn(),
+      );
+      expect(new Headers(mockedFetch.mock.calls[0][1]?.headers).get('authorization')).toBe(
+        expected,
+      );
+    },
+  );
+
   it.each([{ apiBaseUrl: 'wss://gateway.example.test/v1' }, { apiHost: 'gateway.example.test' }])(
     'does not forward an ambient key to an explicitly configured gateway: %j',
     async (endpoint) => {
