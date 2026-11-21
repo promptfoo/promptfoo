@@ -1,6 +1,6 @@
 ---
 sidebar_position: 7
-description: 'Comprehensive overview of model-graded evaluation techniques leveraging AI models to assess quality, safety, and accuracy'
+description: Choose model-graded assertions to score LLM outputs against rubrics, references, retrieved context, conversations, and agent traces. See configuration examples.
 ---
 
 # Model-graded metrics
@@ -19,7 +19,7 @@ Output-based:
 - [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
 - [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
-- [`moderation`](/docs/configuration/expected-outputs/moderation) - Uses OpenAI's moderation API to ensure LLM outputs are safe and comply with usage policies. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - Checks outputs against configured moderation categories. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs from different prompts/providers and selects the best one based on custom criteria.
 - [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score based on other assertion results.
 
@@ -308,6 +308,8 @@ defaultTest:
 
 :::
 
+The [data-exfil red team grader](/docs/red-team/plugins/data-exfil#grading) uses confirmed page-tracking evidence when available. Missing or malformed tracking identifiers fall back to model grading rather than a deterministic pass.
+
 Use the `provider.config` field to set custom parameters such as `temperature`, the output token limit, or API host:
 
 ```yaml
@@ -464,9 +466,9 @@ defaultTest:
 
 #### Grading generated image outputs
 
-`llm-rubric` automatically attaches images from `ProviderResponse.images` when their `data` contains a data URI or raw base64 bytes. GPT Image and Gemini image routes return this format. For other `openai:image` compatibility routes, request `config.response_format: b64_json` from an endpoint that supports it. Custom providers must supply inline image data too.
+Without an assertion-level `transform`, `llm-rubric` automatically attaches images from `ProviderResponse.images` when their `data` contains a data URI or raw base64 bytes. GPT Image and Gemini image routes return this format. For other `openai:image` compatibility routes, request `config.response_format: b64_json` from an endpoint that supports it. Custom providers must supply inline image data too.
 
-Set `PROMPTFOO_INLINE_MEDIA=true` to preserve those bytes, then select a vision-capable model and write criteria for the image. Remote image URLs and stored blob references are not supported by this grading path; the inline-media setting does not download URLs.
+Set `PROMPTFOO_INLINE_MEDIA=true` to preserve those bytes, then select a vision-capable model and write criteria for the image. Remote image URLs and stored blob references are not supported by this grading path. The inline-media setting does not download URLs.
 
 ```yaml
 defaultTest:
@@ -482,7 +484,7 @@ tests:
 
 A custom rubric can stay text-only. Do not put `{{output}}` in an `image_url` block for generated images: during grading, it may be replaced with an attachment placeholder.
 
-See the [image eval guide](/docs/guides/image-evaluation) for a complete provider comparison and custom rubric example.
+See the [image eval guide](/docs/guides/image-evaluation) for a complete image evaluation and custom rubric example.
 
 #### select-best rubric prompt
 
@@ -754,8 +756,10 @@ tests:
 
 Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanisms:
 
-1. **Without threshold**: PASS depends only on the grader's `pass` field (defaults to `true` if omitted)
-2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
+1. **Without threshold**: An explicit `pass` determines the verdict. If it is omitted, a finite numeric score must be greater than zero to pass.
+2. **With threshold**: The score must meet `score >= threshold`, and an explicit `pass: false` still fails.
+
+A response with neither a verdict nor a finite numeric score is a grader error. It also fails a negated assertion such as `not-llm-rubric`.
 
 This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
 
@@ -766,13 +770,13 @@ omitted.
 **Common issue**: Tests show PASS even when scores are low
 
 ```yaml
-# ❌ Problem: All tests pass regardless of score
+# Problem: Partial credit passes without a threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # No threshold set - always passes if grader doesn't return explicit pass: false
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
+    # Any positive score passes when pass and threshold are omitted.
 ```
 
 **Solutions**:
@@ -782,8 +786,8 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
     threshold: 1 # Only pass when score >= 1
 
 # ✅ Option B: Have grader control pass explicitly
