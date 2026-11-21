@@ -248,6 +248,7 @@ describe('evaluator trace integration', () => {
     // Verify trace was fetched for assertion
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
+      excludeGraders: true,
     });
     expect(mockFlushOtel).toHaveBeenCalled();
     expect(mockShutdownOtel).toHaveBeenCalledOnce();
