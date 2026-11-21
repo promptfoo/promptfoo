@@ -251,7 +251,7 @@ As Dan Hendrycks (CAIS co-founder) notes:
 - Token budget increases alone don't guarantee accuracy improvements
 - Substantial gaps remain between AI and human expert performance
 
-Promptfoo provides HLE eval capabilities through automated dataset integration, parallel execution, and comprehensive results analysis.
+Promptfoo can load the HLE dataset, run cases in parallel, and report scores.
 
 ## Learn More
 
