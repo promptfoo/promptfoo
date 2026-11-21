@@ -359,6 +359,29 @@ describe('createDeepSeekProvider', () => {
     expect(body.thinking).toEqual({ type: 'enabled' });
   });
 
+  it.each([
+    ['provider config', { reasoning_effort: 'high' as const }, undefined, 'high'],
+    ['passthrough', { passthrough: { reasoning_effort: 'max' } }, undefined, 'max'],
+    ['prompt config', {}, { reasoning_effort: 'low' }, 'low'],
+  ])(
+    'lets a %s reasoning effort select thinking on the bare provider',
+    async (_source, config, promptConfig, effort) => {
+      const provider = createDeepSeekProvider('deepseek:', { config: { config } });
+      const { body } = await (
+        provider as unknown as {
+          getOpenAiBody(
+            prompt: string,
+            context?: { prompt: { config: Record<string, unknown> } },
+          ): Promise<{ body: Record<string, unknown> }>;
+        }
+      ).getOpenAiBody('hello', promptConfig ? { prompt: { config: promptConfig } } : undefined);
+
+      expect(body.model).toBe('deepseek-flash');
+      expect(body.reasoning_effort).toBe(effort);
+      expect(body).not.toHaveProperty('thinking');
+    },
+  );
+
   it('should keep the bare default when prompt passthrough replaces provider passthrough', async () => {
     const provider = createDeepSeekProvider('deepseek:', {
       config: {
