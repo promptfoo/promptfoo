@@ -2919,71 +2919,42 @@ describe('GoogleInteractionsProvider', () => {
       expect(deleteFromCache).toHaveBeenCalled();
     });
 
-    it('removes an in-progress interaction from the cache and polls for the result', async () => {
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      mockFetchWithCache
-        .mockResolvedValueOnce({
-          data: { id: 'interaction-slow', status: 'in_progress' },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          deleteFromCache,
-        } as any)
-        .mockResolvedValueOnce(completedText as any);
-      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
-      const result = await provider.callApi('Plan the next move');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('robot plan');
-      expect(deleteFromCache).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithCache).toHaveBeenLastCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/interactions/interaction-slow',
-        expect.objectContaining({ method: 'GET' }),
-        expect.any(Number),
-        'json',
-        true,
-      );
-    });
-
-    it.each(['cached', 'coalesced'])(
-      'never polls a %s pending ID from another caller',
+    it.each(['original', 'cached', 'coalesced'])(
+      'evicts a pending %s interaction and only polls an ID this caller owns',
       async (source) => {
+        const shared = source !== 'original';
         const deleteFromCache = vi.fn();
-        mockFetchWithCache
-          .mockResolvedValueOnce({
-            ...completedText,
-            data: { id: 'other', status: 'in_progress' },
-            cached: source === 'cached',
-            coalesced: source === 'coalesced',
-            deleteFromCache,
-          })
-          .mockResolvedValueOnce({
-            ...completedText,
-            data: { id: 'current', status: 'in_progress' },
-          })
-          .mockResolvedValueOnce(completedText);
+        const pending = { ...completedText, data: { id: 'current', status: 'in_progress' } };
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...pending,
+          data: { ...pending.data, id: shared ? 'other' : 'current' },
+          cached: source === 'cached',
+          coalesced: source === 'coalesced',
+          deleteFromCache,
+        });
+        if (shared) {
+          mockFetchWithCache.mockResolvedValueOnce(pending);
+        }
+        mockFetchWithCache.mockResolvedValueOnce(completedText);
         const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
           config: { apiKey: 'test-key' },
         });
-        expect(await provider.callApi('hello')).toMatchObject({
-          output: 'robot plan',
-          cached: false,
-        });
+
+        const result = await provider.callApi('Plan the next move');
+        expect(result.error).toBeUndefined();
+        expect(result).toMatchObject({ output: 'robot plan', cached: false });
         expect(deleteFromCache).toHaveBeenCalledTimes(1);
         const [endpoint, request, timeout, format] = mockFetchWithCache.mock.calls[0];
-        expect(mockFetchWithCache).toHaveBeenNthCalledWith(
-          2,
-          endpoint,
-          request,
-          timeout,
-          format,
-          true,
-        );
-        expect(mockFetchWithCache.mock.calls[2][0]).toBe(`${endpoint}/current`);
-        expect(mockFetchWithCache).toHaveBeenCalledTimes(3);
+        expect(mockFetchWithCache.mock.calls.slice(1)).toEqual([
+          ...(shared ? [[endpoint, request, timeout, format, true]] : []),
+          [
+            `${endpoint}/current`,
+            expect.objectContaining({ method: 'GET' }),
+            expect.any(Number),
+            'json',
+            true,
+          ],
+        ]);
       },
     );
 
