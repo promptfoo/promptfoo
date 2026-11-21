@@ -253,7 +253,7 @@ module.exports = transform;
       expect(mockSend).not.toHaveBeenCalled();
     });
 
-    it('should preserve metadata with transformed prompt when returning cached response', async () => {
+    it('removes original input from an older cache entry on a direct request', async () => {
       const mockCachedResponse = {
         output: 'cached response with metadata',
         tokenUsage: { total: 100 },
@@ -271,8 +271,8 @@ module.exports = transform;
       const result = await provider.callApi('test prompt');
 
       expect(result.cached).toBe(true);
-      expect(result.metadata?.transformed).toBe(true);
-      expect(result.metadata?.originalPrompt).toBe('original prompt');
+      expect(result.metadata?.transformed).toBe(false);
+      expect(result.metadata?.originalPrompt).toBeUndefined();
     });
   });
 
@@ -1081,6 +1081,7 @@ describe('SageMakerEmbeddingProvider', () => {
       .createHash('sha256')
       .update(
         JSON.stringify({
+          text: 'text',
           endpoint: 'first-endpoint',
           modelType: 'custom',
           contentType: 'application/json',
@@ -1088,10 +1089,9 @@ describe('SageMakerEmbeddingProvider', () => {
           region: 'us-east-1',
         }),
       )
-      .digest('hex')
-      .substring(0, 8);
+      .digest('hex');
     const key = mockCacheGet.mock.calls[0][0];
-    expect(key).toMatch(/^sagemaker:embedding:v3:first-endpoint:/);
+    expect(key).toMatch(/^sagemaker:embedding:[a-f0-9]{64}:/);
     expect(key.endsWith(`:${configHash}`)).toBe(true);
     expect(mockCacheSet.mock.calls[0][0]).toBe(key);
     expect(mockSend).toHaveBeenCalledWith(
@@ -1329,6 +1329,34 @@ describe.each(['completion', 'embedding'] as const)(
       },
     );
 
+    it('keeps pre-transform input out of cache records and diagnostics', async () => {
+      const provider = createProvider({
+        region: 'us-east-1',
+        accessKeyId: 'SYNTHETIC_KEY',
+        secretAccessKey: 'synthetic-private-key',
+        transform: () => 'shared',
+      });
+      const query = (value: string) =>
+        'callEmbeddingApi' in provider ? provider.callEmbeddingApi(value) : provider.callApi(value);
+      mockSend.mockResolvedValueOnce({
+        Body: new TextEncoder().encode('{"output":"ok","embedding":[1]}'),
+      });
+      const debug = vi.spyOn(logger, 'debug');
+      try {
+        expect((await query('original-fixture')).metadata?.transformed).toBe(true);
+        const record = mockCacheSet.mock.calls[0][1];
+        expect(record).not.toContain('original-fixture');
+        mockCacheGet.mockResolvedValue(record);
+        const replay = await query('shared');
+        expect(replay).toMatchObject({ cached: true, metadata: { transformed: false } });
+        expect(JSON.stringify(replay)).not.toContain('original-fixture');
+        expect(JSON.stringify(debug.mock.calls)).not.toContain('original-fixture');
+        expect(mockSend).toHaveBeenCalledOnce();
+      } finally {
+        provider.cleanup();
+      }
+    });
+
     it.each(['configuration', 'environment', 'shared profile'] as const)(
       'reuses a %s cache entry across provider instances without sharing another credential scope',
       async (source) => {
@@ -1342,7 +1370,6 @@ describe.each(['completion', 'embedding'] as const)(
         vi.stubEnv('AWS_ACCESS_KEY_ID', undefined);
         vi.stubEnv('AWS_SECRET_ACCESS_KEY', undefined);
         vi.stubEnv('AWS_SESSION_TOKEN', undefined);
-        const hash = vi.spyOn(crypto, 'hash');
         const entries = new Map<string, string>();
         mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
         mockCacheSet.mockImplementation(async (key: string, value: string) =>
@@ -1353,14 +1380,14 @@ describe.each(['completion', 'embedding'] as const)(
           .mockResolvedValueOnce({
             Body: new TextEncoder().encode('{"output":"first","embedding":[1]}'),
           })
-          .mockResolvedValueOnce({
+          .mockResolvedValue({
             Body: new TextEncoder().encode('{"output":"second","embedding":[2]}'),
           });
         const providers: ReturnType<typeof createProvider>[] = [];
-        const withIdentity = async (value: string) => {
-          const accessKeyId = `SYNTHETIC_${value.toUpperCase()}`;
-          const secretAccessKey = `synthetic-${value}-private-key`;
-          const sessionToken = `synthetic-${value}-session-token`;
+        const withIdentity = async (change?: 'id' | 'secret' | 'token') => {
+          const accessKeyId = change === 'id' ? 'SYNTHETIC_SECOND' : 'SYNTHETIC_FIRST';
+          const secretAccessKey = change === 'secret' ? 'second-private-key' : 'first-private-key';
+          const sessionToken = change === 'token' ? 'second-session-token' : 'first-session-token';
           const config: SageMakerCompletionProvider['config'] = { region: 'us-east-1' };
           if (source === 'configuration') {
             Object.assign(config, { accessKeyId, secretAccessKey, sessionToken });
@@ -1382,36 +1409,29 @@ describe.each(['completion', 'embedding'] as const)(
         const firstResult = kind === 'completion' ? { output: 'first' } : { embedding: [1] };
         const secondResult = kind === 'completion' ? { output: 'second' } : { embedding: [2] };
         try {
-          const first = await withIdentity('first');
+          const first = await withIdentity();
           expect(await call(first)).toMatchObject(firstResult);
           first.cleanup();
-          const freshInstance = await withIdentity('first');
+          const freshInstance = await withIdentity();
           const credentials = vi.spyOn(freshInstance, 'getCredentials');
           const runtime = vi.spyOn(freshInstance, 'getSageMakerRuntimeInstance');
           expect(await call(freshInstance)).toMatchObject({ ...firstResult, cached: true });
           expect(credentials).not.toHaveBeenCalled();
           expect(runtime).not.toHaveBeenCalled();
-          const differentScope = await withIdentity('second');
-          const second = await call(differentScope);
-          expect(second).toMatchObject(secondResult);
-          expect(second.cached).not.toBe(true);
-          expect(await call(await withIdentity('first'))).toMatchObject({
+          for (const change of ['id', 'secret', 'token'] as const) {
+            const second = await call(await withIdentity(change));
+            expect(second).toMatchObject(secondResult);
+            expect(second.cached).not.toBe(true);
+          }
+          expect(await call(await withIdentity())).toMatchObject({
             ...firstResult,
             cached: true,
           });
-          expect(mockSend).toHaveBeenCalledTimes(2);
+          expect(mockSend).toHaveBeenCalledTimes(4);
           const keys = new Set(mockCacheGet.mock.calls.map(([key]) => key as string));
-          expect(keys.size).toBe(2);
+          expect(keys.size).toBe(4);
           for (const key of keys) {
             expect(key).not.toMatch(/SYNTHETIC|private-key|session-token|cache-proof/);
-          }
-          const namespaceInputs = hash.mock.calls
-            .map(([, input]) => String(input))
-            .filter((input) => input.includes('promptfoo:sagemaker-cache-namespace:v1'));
-          expect(namespaceInputs.length).toBeGreaterThan(0);
-          for (const input of namespaceInputs) {
-            expect(input).toMatch(/SYNTHETIC_(FIRST|SECOND)/);
-            expect(input).not.toMatch(/private-key|session-token/);
           }
         } finally {
           for (const provider of providers) {

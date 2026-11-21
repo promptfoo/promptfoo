@@ -12,6 +12,7 @@ import { getCacheOperationScope } from '../util/cacheOperationScope';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import { resolveProviderEnv } from './env';
+import { shouldBustProviderCache, withResponseCacheMetadata } from './shared';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import type {
   AwsCredentialIdentity,
@@ -32,6 +33,17 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
+
+// Only matching identities in this process can reuse a response.
+const cacheSalt = crypto.randomBytes(32);
+
+function serializeCacheResult(result: ProviderResponse | ProviderEmbeddingResponse) {
+  // Transformations may remove private input shared by several requests with the same payload.
+  return JSON.stringify({
+    ...result,
+    metadata: { ...result.metadata, originalPrompt: undefined, originalText: undefined },
+  });
+}
 
 const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -934,24 +946,32 @@ abstract class SageMakerGenericProvider {
       return undefined;
     }
     const { credentialConfig, environment, files } = inputs;
-    let accessKeyId =
-      credentialConfig.accessKeyId && credentialConfig.secretAccessKey
-        ? credentialConfig.accessKeyId
-        : undefined;
-    if (
-      !accessKeyId &&
+    let identity: (string | undefined)[] | undefined;
+    let expires: string | undefined;
+    if (credentialConfig.accessKeyId && credentialConfig.secretAccessKey) {
+      identity = [
+        credentialConfig.accessKeyId,
+        credentialConfig.secretAccessKey,
+        credentialConfig.sessionToken,
+      ];
+    } else if (
       !credentialConfig.profile &&
       !environment.AWS_PROFILE &&
       environment.AWS_ACCESS_KEY_ID &&
       environment.AWS_SECRET_ACCESS_KEY
     ) {
-      accessKeyId = environment.AWS_ACCESS_KEY_ID;
+      identity = [
+        environment.AWS_ACCESS_KEY_ID,
+        environment.AWS_SECRET_ACCESS_KEY,
+        environment.AWS_SESSION_TOKEN,
+      ];
+      expires = environment.AWS_CREDENTIAL_EXPIRATION;
     }
     let smithyConfig: typeof import('@smithy/core/config');
     let endpoint: RuntimeEndpoint;
     try {
       smithyConfig = await import('@smithy/core/config');
-      if (!accessKeyId) {
+      if (!identity) {
         const profiles = await smithyConfig.parseKnownFiles({ ...files, ignoreCache: true });
         const profile = profiles[credentialConfig.profile || environment.AWS_PROFILE || 'default'];
         // Roles, credential processes and metadata may change identity without changing these inputs.
@@ -964,7 +984,12 @@ abstract class SageMakerGenericProvider {
           this.assertSharedFiles(inputs);
           return undefined;
         }
-        accessKeyId = profile.aws_access_key_id;
+        identity = [
+          profile.aws_access_key_id,
+          profile.aws_secret_access_key,
+          profile.aws_session_token,
+        ];
+        expires = profile.aws_credential_expiration;
       }
       endpoint = await this.getEndpointPolicy(
         smithyConfig,
@@ -998,18 +1023,36 @@ abstract class SageMakerGenericProvider {
         return undefined;
       }
     }
-    // An AWS access-key ID identifies the signer; its secret and session token never enter the cache key.
-    return crypto.hash(
+    if (expires && !(Date.parse(expires) > Date.now())) {
+      return undefined;
+    }
+    const key = crypto.hkdfSync(
       'sha256',
-      JSON.stringify([
-        'promptfoo:sagemaker-cache-namespace:v1',
-        accessKeyId,
-        origin,
-        endpoint.useFipsEndpoint,
-        endpoint.useDualstackEndpoint,
-      ]),
-      'hex',
+      JSON.stringify([identity, origin, endpoint.useFipsEndpoint, endpoint.useDualstackEndpoint]),
+      cacheSalt,
+      'promptfoo:sagemaker-cache-namespace:v2',
+      32,
     );
+    return Buffer.from(key).toString('hex');
+  }
+
+  protected runtimeCacheKey(
+    inputs: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
+    kind: 'completion' | 'embedding',
+    request: object,
+  ) {
+    let key: Promise<string | undefined> | undefined;
+    return () =>
+      (key ??= this.getRuntimeCacheNamespace(inputs).then((namespace) =>
+        namespace
+          ? [
+              'sagemaker',
+              kind,
+              namespace,
+              crypto.hash('sha256', JSON.stringify(request), 'hex'),
+            ].join(':')
+          : undefined,
+      ));
   }
 
   #trimRuntimeCacheEntries(entries: Map<string, RuntimeCacheEntry>) {
@@ -1879,9 +1922,6 @@ abstract class SageMakerGenericProvider {
 
         if (result === undefined) {
           logger.warn(`Path expression "${pathExpression}" did not match any data in the response`);
-          logger.debug(
-            `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-          );
           return responseJson;
         }
 
@@ -1892,7 +1932,6 @@ abstract class SageMakerGenericProvider {
       }
     } catch (error) {
       logger.warn(`Failed to extract data using path expression "${pathExpression}": ${error}`);
-      logger.debug(`Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`);
       return responseJson;
     }
   }
@@ -2097,9 +2136,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         return extracted;
       } catch (error) {
         logger.warn(`Failed to extract from path: ${responsePath}, Error: ${error}`);
-        logger.debug(
-          `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-        );
         return responseJson;
       }
     }
@@ -2205,24 +2241,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     if (isTransformed) {
       logger.debug(`Prompt transformed for SageMaker endpoint ${requestConfig.endpoint}`);
-      logger.debug(`Original: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
-      logger.debug(
-        `Transformed: ${transformedPrompt.substring(0, 100)}${transformedPrompt.length > 100 ? '...' : ''}`,
-      );
     }
 
     const payload = this.formatPayload(transformedPrompt, payloadParameters);
     const request = { payload, ...requestConfig };
-    let cacheKey: Promise<string | undefined> | undefined;
-    const getCacheKey = () =>
-      (cacheKey ??= this.getRuntimeCacheNamespace(runtimeInputs).then((namespace) => {
-        if (!namespace) {
-          return undefined;
-        }
-        const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
-        return `sagemaker:v5:${request.endpoint}:${namespace}:${hash}`;
-      }));
-    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
+    const getCacheKey = this.runtimeCacheKey(runtimeInputs, 'completion', request);
+    const bustCache = shouldBustProviderCache(context);
     const readCacheKey = isCacheEnabled() && !bustCache ? await getCacheKey() : undefined;
     if (readCacheKey) {
       const cache = getCache();
@@ -2234,21 +2258,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         logger.debug(`Using cached SageMaker response for ${request.endpoint}`);
 
         try {
-          // Parse the cached result
-          const parsedResult = JSON.parse(cachedResult) as ProviderResponse;
-
-          // Add cache flag to token usage
-          if (parsedResult.tokenUsage) {
-            parsedResult.tokenUsage.cached = parsedResult.tokenUsage.total || 0;
+          const parsed = JSON.parse(cachedResult) as ProviderResponse;
+          if (parsed.metadata) {
+            parsed.metadata.transformed = isTransformed;
+            parsed.metadata.originalPrompt = isTransformed ? prompt : undefined;
           }
-
-          // Add metadata about transformation if prompt was transformed
-          if (isTransformed && parsedResult.metadata) {
-            parsedResult.metadata.transformed = true;
-            parsedResult.metadata.originalPrompt = prompt;
-          }
-
-          return { ...parsedResult, cached: true };
+          return withResponseCacheMetadata(parsed, true);
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker response: ${_}`);
           // Continue with API call if parsing fails
@@ -2273,9 +2288,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     );
 
     logger.debug(`Calling SageMaker endpoint ${request.endpoint}`);
-    logger.debug(
-      `With payload: ${payload.length > 1000 ? payload.substring(0, 1000) + '...' : payload}`,
-    );
 
     try {
       const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
@@ -2304,9 +2316,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       }
 
       const responseBody = new TextDecoder().decode(response.Body);
-      logger.debug(
-        `SageMaker response (truncated): ${responseBody.length > 1000 ? responseBody.substring(0, 1000) + '...' : responseBody}`,
-      );
 
       const output = await this.parseResponse(responseBody, request.responsePath);
       abortSignal.throwIfAborted();
@@ -2354,7 +2363,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           : undefined;
       if (writeCacheKey) {
         const cache = getCache();
-        const resultToCache = JSON.stringify(result);
+        const resultToCache = serializeCacheResult(result);
         abortSignal.throwIfAborted();
         this.assertRuntimeGeneration(generation);
 
@@ -2393,29 +2402,6 @@ export class SageMakerEmbeddingProvider
     throw new Error(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',
     );
-  }
-
-  /**
-   * Generate a consistent cache key for SageMaker embedding requests
-   * Uses crypto.createHash to generate a shorter, more efficient key
-   */
-  private getCacheKey(
-    text: string,
-    namespace: string,
-    request: Pick<SageMakerConfig, 'modelType' | 'responseFormat'> & {
-      endpoint: string;
-      contentType: string;
-      acceptType: string;
-      region: string;
-    },
-  ): string {
-    const configStr = JSON.stringify(request);
-
-    // Generate shorter, more efficient hashed keys
-    const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
-
-    return `sagemaker:embedding:v3:${request.endpoint}:${namespace}:${textHash}:${configHash}`;
   }
 
   /**
@@ -2470,20 +2456,13 @@ export class SageMakerEmbeddingProvider
 
     if (isTransformed) {
       logger.debug(`Text transformed for SageMaker embedding endpoint ${request.endpoint}`);
-      logger.debug(`Original: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
-      logger.debug(
-        `Transformed: ${transformedText.substring(0, 100)}${transformedText.length > 100 ? '...' : ''}`,
-      );
     }
 
-    let cacheKey: Promise<string | undefined> | undefined;
-    const getCacheKey = () =>
-      (cacheKey ??= this.getRuntimeCacheNamespace(runtimeInputs).then((namespace) =>
-        namespace ? this.getCacheKey(transformedText, namespace, request) : undefined,
-      ));
-
-    // Check if we should use cache - use the transformed text for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
+    const getCacheKey = this.runtimeCacheKey(runtimeInputs, 'embedding', {
+      text: transformedText,
+      ...request,
+    });
+    const bustCache = shouldBustProviderCache(context);
     const readCacheKey = isCacheEnabled() && !bustCache ? await getCacheKey() : undefined;
     if (readCacheKey) {
       const cache = getCache();
@@ -2496,15 +2475,12 @@ export class SageMakerEmbeddingProvider
         logger.debug(`Using cached SageMaker embedding response for ${request.endpoint}`);
 
         try {
-          // Parse the cached result
-          const parsedResult = JSON.parse(cachedResult) as ProviderEmbeddingResponse;
-
-          // Add cache flag to token usage
-          if (parsedResult.tokenUsage) {
-            parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
+          const parsed = JSON.parse(cachedResult) as ProviderEmbeddingResponse;
+          if (parsed.metadata) {
+            parsed.metadata.transformed = isTransformed;
+            parsed.metadata.originalText = isTransformed ? text : undefined;
           }
-
-          return { ...parsedResult, cached: true };
+          return withResponseCacheMetadata(parsed, true);
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
           // Continue with API call if parsing fails
@@ -2559,7 +2535,6 @@ export class SageMakerEmbeddingProvider
     }
 
     logger.debug(`Calling SageMaker embedding endpoint ${request.endpoint}`);
-    logger.debug(`With payload: ${payload}`);
 
     try {
       const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
@@ -2588,14 +2563,13 @@ export class SageMakerEmbeddingProvider
       }
 
       const responseBody = new TextDecoder().decode(response.Body);
-      logger.debug(`SageMaker embedding response: ${responseBody.substring(0, 200)}...`);
 
       let responseJson;
       try {
         responseJson = JSON.parse(responseBody);
-      } catch (_) {
+      } catch {
         return {
-          error: `Failed to parse embedding response as JSON: ${_}`,
+          error: 'Failed to parse embedding response as JSON',
         };
       }
 
@@ -2644,16 +2618,13 @@ export class SageMakerEmbeddingProvider
           logger.warn(
             `Failed to extract embedding from path expression: ${request.responseFormat.path}, Error: ${error}`,
           );
-          logger.debug(
-            `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-          );
           // Continue to try other extraction methods
         }
       }
 
       if (!embedding || !Array.isArray(embedding)) {
         return {
-          error: `Invalid embedding response format. Could not find embedding array in: ${JSON.stringify(responseJson).substring(0, 100)}...`,
+          error: 'Invalid embedding response format. Could not find embedding array.',
         };
       }
 
@@ -2693,7 +2664,7 @@ export class SageMakerEmbeddingProvider
     context?: CallApiContextParams,
   ): Promise<void> {
     const { isCacheEnabled, getCache } = await import('../cache');
-    const bustCache = context?.debug === true;
+    const bustCache = shouldBustProviderCache(context);
 
     // Save result to cache if successful and caching enabled
     const cacheKey =
@@ -2703,7 +2674,7 @@ export class SageMakerEmbeddingProvider
     if (cacheKey) {
       const cache = getCache();
 
-      const resultToCache = JSON.stringify(result);
+      const resultToCache = serializeCacheResult(result);
 
       try {
         abortSignal.throwIfAborted();
