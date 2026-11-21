@@ -1,3 +1,5 @@
+/// <reference lib="es2022.error" />
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { pathToFileURL } from 'node:url';
 import * as fs from 'fs';
