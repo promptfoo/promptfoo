@@ -2,7 +2,6 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
-  escapeCsvFormula,
   evalTableToCsv,
   evalTableToJson,
   generateEvalCsv,
@@ -11,6 +10,7 @@ import {
   STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/util/eval/evalTableUtils';
+import { escapeCsvFormula } from '../../../src/util/text';
 import { createCompletedPrompt, createPromptMetrics } from '../../factories/eval';
 
 import type Eval from '../../../src/models/eval';

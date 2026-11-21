@@ -59,7 +59,17 @@ export function projectOutputMetadata<T>(
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
+  stripPromptText = false,
 ): T {
+  if (
+    stripPromptText &&
+    metadata &&
+    typeof metadata === 'object' &&
+    'redteamFinalPrompt' in metadata
+  ) {
+    const { redteamFinalPrompt: _prompt, ...rest } = metadata;
+    metadata = rest as T;
+  }
   if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
   }
@@ -80,13 +90,13 @@ export function projectOutputMetadata<T>(
 
 export function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean },
+  options: { stripMetadata: boolean; stripOutput: boolean; stripPromptText?: boolean },
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  if (!options.stripMetadata && !options.stripOutput && !options.stripPromptText) {
     return response;
   }
 
@@ -102,15 +112,19 @@ export function projectProviderResponse(
     delete projectedResponse.audio;
     delete projectedResponse.video;
     delete projectedResponse.images;
-    if (projectedResponse.metadata) {
-      projectedResponse.metadata = projectOutputMetadata(
-        projectedResponse.metadata,
-        true,
-        projectedResponse.metadata,
-      );
-    }
   }
-
+  if (options.stripPromptText) {
+    delete projectedResponse.prompt;
+  }
+  if (projectedResponse.metadata) {
+    projectedResponse.metadata = projectOutputMetadata(
+      projectedResponse.metadata,
+      options.stripOutput,
+      projectedResponse.metadata,
+      undefined,
+      options.stripPromptText,
+    );
+  }
   return projectedResponse;
 }
 
@@ -682,7 +696,7 @@ export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
 const REPEAT_LINKAGE_KEY = 'repeatLinkage';
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
@@ -919,6 +933,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     metadata: sanitizeForDb(artifactResult.metadata),
   });
   const response = projectProviderResponse(redacted.response ?? undefined, {
+    stripPromptText: shouldStripPromptText,
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
   });
@@ -970,6 +985,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           shouldStripResponseOutput,
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          shouldStripPromptText,
         ),
   } as T;
 }

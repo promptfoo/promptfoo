@@ -3,6 +3,7 @@ import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extrac
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
+  asRecord,
   getStripFlags,
   persistRepeatMetadata,
   persistTraceMetadata,
@@ -204,6 +205,45 @@ export default class EvalResult {
         ),
       );
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
+  static async findByEvalIdAndIndices(
+    evalId: string,
+    testIdx: number,
+    promptIdx: number,
+    resultId?: string,
+  ) {
+    const db = await getDb();
+    const rows = await db
+      .select()
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          resultId === undefined ? undefined : eq(evalResultsTable.id, resultId),
+          eq(evalResultsTable.testIdx, testIdx),
+          eq(evalResultsTable.promptIdx, promptIdx),
+        ),
+      )
+      .limit(resultId === undefined ? 2 : 1)
+      .all();
+    const result = rows.length === 1 ? rows[0] : undefined;
+    return result
+      ? new EvalResult({
+          ...result,
+          testCase: (asRecord(result.testCase) ?? { vars: {} }) as AtomicTestCase,
+          prompt: {
+            ...asRecord(result.prompt),
+            raw: typeof result.prompt?.raw === 'string' ? result.prompt.raw : '',
+            label: typeof result.prompt?.label === 'string' ? result.prompt.label : '',
+          },
+          provider: {
+            ...asRecord(result.provider),
+            id: typeof result.provider?.id === 'string' ? result.provider.id : '',
+          },
+          persisted: true,
+        })
+      : null;
   }
 
   static async findManyByEvalIdAndTestIndices(evalId: string, testIndices: number[]) {
@@ -430,6 +470,7 @@ export default class EvalResult {
     } = stripFlags;
 
     const response = projectProviderResponse(this.response, {
+      stripPromptText: shouldStripPromptText,
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
     });
@@ -492,6 +533,7 @@ export default class EvalResult {
             shouldStripResponseOutput,
             this.response?.metadata,
             this.testCase.metadata,
+            shouldStripPromptText,
           ),
       failureReason: this.failureReason,
     };

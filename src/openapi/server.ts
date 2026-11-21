@@ -102,6 +102,12 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
+const OpenApiResultRowParamsSchema = z.object({
+  id: z.string().min(1),
+  testIdx: z.number().int().nonnegative(),
+  promptIdx: z.number().int().nonnegative(),
+});
+
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
 type RegisteredRouteConfig = RouteConfig & {
@@ -244,17 +250,52 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'get',
+    path: '/api/results/{id}/tools',
+    operationId: 'getResultTools',
+    tags: ['Results'],
+    summary: 'Get saved tool definitions for an evaluation',
+    request: { params: ServerSchemas.ResultTools.Params },
+    responses: {
+      200: jsonResponse(ServerSchemas.ResultTools.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Result not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/results/{id}/rows/{testIdx}/{promptIdx}',
+    operationId: 'getResultRow',
+    tags: ['Results'],
+    summary: 'Get one evaluation result row',
+    request: {
+      params: OpenApiResultRowParamsSchema,
+      query: ServerSchemas.ResultRow.Query,
+    },
+    responses: {
+      200: jsonResponse(ServerSchemas.ResultRow.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Result row not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'get',
     path: '/api/results/{id}',
     operationId: 'getResult',
     tags: ['Results'],
     summary: 'Get one evaluation result',
     request: {
       params: ServerSchemas.Result.Params,
+      query: ServerSchemas.Result.Query,
     },
     responses: {
       200: jsonResponse(ServerSchemas.Result.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
       404: jsonResponse(ErrorResponseSchema, 'Result not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
 

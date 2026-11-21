@@ -41,5 +41,5 @@ export default function ReportPage() {
     return null;
   }
 
-  return evalId ? <Report /> : <ReportIndex />;
+  return evalId ? <Report evalId={evalId} /> : <ReportIndex />;
 }

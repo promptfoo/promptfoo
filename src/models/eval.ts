@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, type SQL, type SQLWrapper, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -14,11 +14,17 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { categoryAliasesReverse, PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
+import {
+  deserializePolicyIdFromMetric,
+  isPolicyMetric,
+  makeDefaultPolicyName,
+} from '../redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvalRuntimeOptions,
   type EvalSummary,
@@ -28,6 +34,7 @@ import {
   type EvaluateSummaryV3,
   type EvaluateTable,
   type EvaluateTableRow,
+  type GradingResult,
   type Prompt,
   type RepeatStabilitySummary,
   ResultFailureReason,
@@ -70,9 +77,16 @@ import EvalResult, {
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
+  sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 import { generateIdFromPrompt } from './prompt';
+import {
+  jsonObjectFieldOrEmpty,
+  MAX_REPORT_TEXT_LENGTH,
+  reportConfigProjection,
+  selectReportRows,
+} from './redteamReportSql';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -84,6 +98,825 @@ import type { EvalResultsFilterMode, TraceData } from '../types/index';
 /** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
+}
+
+type RedteamReportResultRow = Awaited<ReturnType<typeof selectReportRows>>[number];
+
+type RedteamReportStripFlags = ReturnType<typeof getStripFlags>;
+
+const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
+
+export type ResultsFileOptions = {
+  includeTraces?: boolean;
+  resultProjection?: 'full' | 'redteamReport';
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isResultSuggestionAction(
+  value: unknown,
+): value is NonNullable<GradingResult['suggestions']>[number]['action'] {
+  return (
+    value === 'replace-prompt' ||
+    value === 'pre-filter' ||
+    value === 'post-filter' ||
+    value === 'note'
+  );
+}
+
+function projectSuggestionsForRedteamReport(
+  suggestions: unknown,
+): GradingResult['suggestions'] | undefined {
+  if (!Array.isArray(suggestions)) {
+    return undefined;
+  }
+
+  return suggestions
+    .flatMap((suggestion) => {
+      if (
+        !isRecord(suggestion) ||
+        typeof suggestion.type !== 'string' ||
+        !isResultSuggestionAction(suggestion.action) ||
+        typeof suggestion.value !== 'string'
+      ) {
+        return [];
+      }
+      return [
+        {
+          type: suggestion.type,
+          action: suggestion.action,
+          value: suggestion.value.slice(0, MAX_REPORT_TEXT_LENGTH),
+        },
+      ];
+    })
+    .slice(0, 25);
+}
+
+function projectAssertionForRedteamReport(
+  assertion: unknown,
+): GradingResult['assertion'] | undefined {
+  if (!isRecord(assertion) || typeof assertion.type !== 'string') {
+    return undefined;
+  }
+
+  return {
+    type: assertion.type,
+    ...(typeof assertion.metric === 'string' && { metric: assertion.metric }),
+  } as GradingResult['assertion'];
+}
+
+const REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES = [
+  'PolicyViolation:',
+  ...Object.keys(categoryAliasesReverse).map((alias) => `${alias}/`),
+];
+
+function hasRedteamReportIdentity(result: unknown): boolean {
+  if (!isRecord(result) || !isRecord(result.assertion)) {
+    return false;
+  }
+
+  const metric = result.assertion.metric;
+  return (
+    typeof metric === 'string' &&
+    (Object.prototype.hasOwnProperty.call(categoryAliasesReverse, metric) ||
+      REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.some((prefix) => metric.startsWith(prefix)))
+  );
+}
+
+function reportIdentityFromMetric(metric: string | undefined | null): Record<string, string> {
+  if (!metric) {
+    return {};
+  }
+  if (isPolicyMetric(metric)) {
+    return { pluginId: 'policy', policyId: deserializePolicyIdFromMetric(metric) };
+  }
+  const pluginId =
+    categoryAliasesReverse[metric.split('/')[0] as keyof typeof categoryAliasesReverse];
+  return pluginId ? { pluginId } : {};
+}
+
+function hasExplicitReportIdentity(
+  metadata: Record<string, unknown> | undefined,
+  testMetadata: Record<string, unknown> | undefined,
+  harmCategory: unknown,
+): boolean {
+  const pluginIds = [metadata?.pluginId, testMetadata?.pluginId];
+  return (
+    pluginIds.some((id) => typeof id === 'string' && id !== 'policy') ||
+    (pluginIds.includes('policy') &&
+      typeof (testMetadata?.policyId ?? metadata?.policyId) === 'string') ||
+    Boolean(harmCategory)
+  );
+}
+
+function jsonReportIdentityMetric(value: SQLWrapper, selectIndex = false): SQL<string | null> {
+  return sql<string | null>`(
+    SELECT ${selectIndex ? sql`identity_component.key` : sql`json_extract(identity_component.value, '$.assertion.metric')`}
+    FROM json_each(${value}, '$.componentResults') AS identity_component
+    WHERE identity_component.type = 'object' AND (
+      json_extract(identity_component.value, '$.assertion.metric') IN (${sql.join(
+        Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
+        sql`, `,
+      )}) OR (${sql.join(
+        REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+          (prefix) =>
+            sql`substr(json_extract(identity_component.value, '$.assertion.metric'), 1, ${prefix.length}) = ${prefix}`,
+        ),
+        sql` OR `,
+      )})
+    ) ORDER BY identity_component.key LIMIT 1
+  )`;
+}
+
+function projectGradingResultForRedteamReport(
+  gradingResult: GradingResult,
+  includeComponents = true,
+): GradingResult {
+  const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
+  const suggestions = projectSuggestionsForRedteamReport(gradingResult.suggestions);
+
+  const components =
+    includeComponents && Array.isArray(gradingResult.componentResults)
+      ? gradingResult.componentResults
+      : undefined;
+  const identityIndex = components?.findIndex(hasRedteamReportIdentity);
+  const moderationIndex = components?.findIndex(
+    (component) => component?.assertion?.type === 'moderation' && component.pass === false,
+  );
+  const suggestionIndex = components?.findIndex(
+    (component) => projectSuggestionsForRedteamReport(component?.suggestions)?.length,
+  );
+  const compactComponents = components?.filter(
+    (_, index) =>
+      index < 25 ||
+      index === identityIndex ||
+      index === moderationIndex ||
+      index === suggestionIndex,
+  );
+  const componentResults = compactComponents
+    ?.filter(isRecord)
+    .map((componentResult) =>
+      projectGradingResultForRedteamReport(componentResult as unknown as GradingResult, false),
+    );
+
+  return {
+    pass: typeof gradingResult.pass === 'boolean' ? gradingResult.pass : false,
+    score:
+      typeof gradingResult.score === 'number' && Number.isFinite(gradingResult.score)
+        ? gradingResult.score
+        : 0,
+    reason:
+      typeof gradingResult.reason === 'string'
+        ? gradingResult.reason.slice(0, MAX_REPORT_TEXT_LENGTH)
+        : '',
+    ...(assertion && { assertion }),
+    ...(suggestions !== undefined && { suggestions }),
+    ...(componentResults !== undefined && { componentResults }),
+  };
+}
+
+function projectVarsForRedteamReport(
+  vars: EvaluateResult['vars'] | undefined,
+  injectVar: string,
+): EvaluateResult['vars'] {
+  if (!isRecord(vars)) {
+    return {};
+  }
+
+  const projectedVars: [string, EvaluateResult['vars'][string]][] = [];
+  for (const key of new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])) {
+    if (Object.prototype.hasOwnProperty.call(vars, key)) {
+      const value = vars[key];
+      if (typeof value === 'string') {
+        projectedVars.push([key, value.slice(0, MAX_REPORT_TEXT_LENGTH)]);
+      } else if (isRecord(value) || Array.isArray(value)) {
+        try {
+          if (JSON.stringify(value).length <= MAX_REPORT_TEXT_LENGTH) {
+            projectedVars.push([key, value]);
+          }
+        } catch {}
+      } else {
+        projectedVars.push([key, value]);
+      }
+    }
+  }
+  return Object.fromEntries(projectedVars);
+}
+
+function parseJsonFragment<T>(value: string | null): T | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function projectPromptForRedteamReport<T extends Prompt>(
+  prompt: T,
+  shouldStripPromptText: boolean,
+): T {
+  const reportPrompt = normalizePromptForRedteamReport(prompt);
+
+  return {
+    ...reportPrompt,
+    ...(shouldStripPromptText && {
+      raw: '[prompt stripped]',
+      label: '[prompt stripped]',
+      ...(prompt.display !== undefined && { display: '[prompt stripped]' }),
+    }),
+  } as T;
+}
+
+function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt {
+  if (!isRecord(prompt)) {
+    return { raw: '', label: '' };
+  }
+
+  const text = (value: unknown) =>
+    typeof value === 'string' ? (bound ? value.slice(0, MAX_REPORT_TEXT_LENGTH) : value) : '';
+  const raw = text(prompt.raw);
+  const metrics =
+    isRecord(prompt.metrics) && isRecord(prompt.metrics.tokenUsage)
+      ? { tokenUsage: prompt.metrics.tokenUsage }
+      : undefined;
+  return {
+    ...(typeof prompt.id === 'string' && { id: prompt.id }),
+    raw,
+    label: typeof prompt.label === 'string' ? text(prompt.label) : raw,
+    ...(typeof prompt.display === 'string' && { display: text(prompt.display) }),
+    ...(typeof prompt.provider === 'string' && { provider: text(prompt.provider) }),
+    ...(metrics && { metrics }),
+  };
+}
+
+function projectProviderForRedteamReport(
+  provider: EvaluateResult['provider'] | unknown,
+  bounded = true,
+): EvaluateResult['provider'] {
+  if (!isRecord(provider)) {
+    return { id: '' };
+  }
+  return {
+    id:
+      typeof provider.id === 'string'
+        ? bounded
+          ? provider.id.slice(0, MAX_REPORT_TEXT_LENGTH)
+          : provider.id
+        : '',
+    ...(typeof provider.label === 'string' && {
+      label: bounded ? provider.label.slice(0, MAX_REPORT_TEXT_LENGTH) : provider.label,
+    }),
+  };
+}
+
+function createProjectedGradingResult(row: RedteamReportResultRow): GradingResult | undefined {
+  if (!row.gradingResultExists) {
+    return undefined;
+  }
+
+  const assertion = projectAssertionForRedteamReport({
+    type: row.gradingAssertionType,
+    metric: row.gradingAssertionMetric,
+  });
+  const componentResults = parseJsonFragment<unknown[]>(row.gradingComponentResults)
+    ?.filter(isRecord)
+    .map((componentResult) => ({
+      ...componentResult,
+      pass: Boolean(componentResult.pass),
+    }));
+
+  return projectGradingResultForRedteamReport({
+    pass: Boolean(row.gradingPass),
+    score: row.gradingScore,
+    reason: row.gradingReason,
+    ...(assertion && { assertion }),
+    ...(row.gradingSuggestions !== null && {
+      suggestions: parseJsonFragment(row.gradingSuggestions),
+    }),
+    ...(componentResults && { componentResults }),
+  } as unknown as GradingResult);
+}
+
+function boundReportValue<T>(prompt: T): T | string | undefined {
+  if (prompt === null || typeof prompt === 'boolean' || typeof prompt === 'number') {
+    return prompt;
+  }
+  if (typeof prompt === 'string') {
+    return prompt.slice(0, MAX_REPORT_TEXT_LENGTH);
+  }
+  if (Array.isArray(prompt) || isRecord(prompt)) {
+    const serialized = JSON.stringify(prompt);
+    return serialized.length > MAX_REPORT_TEXT_LENGTH
+      ? serialized.slice(0, MAX_REPORT_TEXT_LENGTH)
+      : prompt;
+  }
+  return undefined;
+}
+
+function createRedteamReportResponse(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult['response'] {
+  const redteamFinalPrompt =
+    stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+      ? null
+      : (row.responseRedteamFinalPrompt ?? row.metadataRedteamFinalPrompt);
+  if (!row.responseExists && redteamFinalPrompt === null) {
+    return undefined;
+  }
+
+  return {
+    ...(row.responseExists && stripFlags.shouldStripResponseOutput
+      ? { output: '[output stripped]' }
+      : row.responseOutput !== null && {
+          output: parseJsonFragment(row.responseOutput),
+        }),
+    ...(!stripFlags.shouldStripPromptText &&
+      row.responsePrompt !== null && {
+        prompt: parseJsonFragment<NonNullable<EvaluateResult['response']>['prompt']>(
+          row.responsePrompt,
+        ),
+      }),
+    ...(row.responsePrompt === null &&
+      redteamFinalPrompt !== null && { metadata: { redteamFinalPrompt } }),
+  };
+}
+
+function createRedteamReportMetadata(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult['metadata'] {
+  if (stripFlags.shouldStripMetadata) {
+    return {};
+  }
+  const derivedIdentity =
+    !stripFlags.shouldStripGradingResult ||
+    hasExplicitReportIdentity(
+      { pluginId: row.metadataPluginId, policyId: row.metadataPolicyId },
+      { pluginId: row.testCasePluginId, policyId: row.testCasePolicyId },
+      parseJsonFragment<EvaluateResult['vars']>(row.vars)?.harmCategory || row.metadataHarmCategory,
+    )
+      ? {}
+      : reportIdentityFromMetric(row.identityMetric);
+  const metadata = {
+    ...(row.metadataPluginId !== null && { pluginId: row.metadataPluginId }),
+    ...(row.metadataPolicyId !== null && { policyId: row.metadataPolicyId }),
+    ...(row.metadataHarmCategory !== null && { harmCategory: row.metadataHarmCategory }),
+    ...derivedIdentity,
+  };
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function createRedteamReportResult(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult {
+  const {
+    shouldStripPromptText,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  } = stripFlags;
+  const vars = shouldStripTestVars
+    ? {}
+    : (parseJsonFragment<EvaluateResult['vars']>(row.vars) ?? {});
+  const storedPrompt: Prompt = {
+    ...(row.promptObjectId !== null && { id: row.promptObjectId }),
+    raw: row.promptRaw ?? '',
+    label: row.promptLabel ?? row.promptRaw ?? '',
+    ...(row.promptDisplay !== null && { display: row.promptDisplay }),
+  };
+  const prompt = projectPromptForRedteamReport(storedPrompt, shouldStripPromptText);
+  const response = createRedteamReportResponse(row, stripFlags);
+  const metadata = createRedteamReportMetadata(row, stripFlags);
+  const testCaseMetadata = shouldStripMetadata
+    ? {}
+    : {
+        ...(row.testCasePluginId !== null && { pluginId: row.testCasePluginId }),
+        ...(row.testCaseStrategyId !== null && { strategyId: row.testCaseStrategyId }),
+        ...(row.testCasePolicyId !== null && { policyId: row.testCasePolicyId }),
+      };
+
+  return {
+    ...(typeof row.id === 'string' && { id: row.id }),
+    ...(row.legacyResultIndex !== null && { legacyResultIndex: row.legacyResultIndex }),
+    promptIdx: row.promptIdx,
+    testIdx: row.testIdx,
+    testCase: {
+      ...(Object.keys(testCaseMetadata).length > 0 && { metadata: testCaseMetadata }),
+    },
+    promptId: shouldStripPromptText
+      ? (row.promptId ?? generateIdFromPrompt(storedPrompt))
+      : (row.promptId ?? generateIdFromPrompt(prompt)),
+    provider: {
+      id: row.providerId ?? '',
+      ...(row.providerLabel !== null && { label: row.providerLabel }),
+    },
+    prompt,
+    vars,
+    response,
+    error: row.errorExists ? REDTEAM_REPORT_ERROR_MARKER : null,
+    failureReason: (row.failureReason ??
+      (row.success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT)) as ResultFailureReason,
+    success: row.success,
+    score: row.score,
+    latencyMs: row.latencyMs ?? 0,
+    gradingResult: shouldStripGradingResult ? null : createProjectedGradingResult(row),
+    namedScores: {},
+    ...(metadata !== undefined && { metadata }),
+  };
+}
+
+function projectTestCaseForRedteamReport(
+  testCase: EvaluateResult['testCase'] | unknown,
+  shouldStripMetadata: boolean,
+): AtomicTestCase {
+  const metadata = !shouldStripMetadata && isRecord(testCase) ? testCase.metadata : undefined;
+  if (!isRecord(metadata)) {
+    return {};
+  }
+  return {
+    metadata: {
+      ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+      ...(typeof metadata.strategyId === 'string' && { strategyId: metadata.strategyId }),
+      ...(typeof metadata.policyId === 'string' && { policyId: metadata.policyId }),
+    },
+  };
+}
+
+function getRedteamReportPromptId(
+  result: EvaluateResult,
+  prompt: Prompt,
+  shouldStripPromptText: boolean,
+  alreadyOutputProjected: boolean,
+): string {
+  if (typeof result.promptId === 'string' && (!shouldStripPromptText || alreadyOutputProjected)) {
+    return result.promptId;
+  }
+  return generateIdFromPrompt(prompt);
+}
+
+function projectResultForRedteamReport(
+  result: EvaluateResult,
+  injectVar: string,
+  stripFlags: RedteamReportStripFlags,
+  alreadyOutputProjected = false,
+): EvaluateResult {
+  const metadata = stripFlags.shouldStripMetadata ? undefined : result.metadata;
+  const allowlistedMetadata = metadata
+    ? {
+        ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+        ...(typeof metadata.policyId === 'string' && { policyId: metadata.policyId }),
+        ...(typeof metadata.harmCategory === 'string' && { harmCategory: metadata.harmCategory }),
+      }
+    : undefined;
+  const identityMetric = Array.isArray(result.gradingResult?.componentResults)
+    ? result.gradingResult.componentResults.find(hasRedteamReportIdentity)?.assertion?.metric
+    : undefined;
+  const derivedIdentity =
+    !stripFlags.shouldStripGradingResult ||
+    stripFlags.shouldStripMetadata ||
+    hasExplicitReportIdentity(
+      metadata,
+      result.testCase?.metadata,
+      (!stripFlags.shouldStripTestVars && result.vars?.harmCategory) || metadata?.harmCategory,
+    )
+      ? {}
+      : reportIdentityFromMetric(identityMetric);
+  const projectedMetadata = Object.keys(derivedIdentity).length
+    ? { ...allowlistedMetadata, ...derivedIdentity }
+    : allowlistedMetadata;
+
+  const redteamFinalPromptCandidate =
+    result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
+  const redteamFinalPrompt =
+    stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+      ? undefined
+      : typeof redteamFinalPromptCandidate === 'string'
+        ? redteamFinalPromptCandidate.slice(0, MAX_REPORT_TEXT_LENGTH)
+        : undefined;
+  const responsePrompt = boundReportValue(result.response?.prompt);
+  const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
+  const response =
+    result.response || redteamFinalPrompt !== undefined
+      ? {
+          ...(result.response && stripFlags.shouldStripResponseOutput
+            ? { output: '[output stripped]' }
+            : { output: boundReportValue(result.response?.output) }),
+          ...(hasResponsePrompt && { prompt: responsePrompt }),
+          ...(!hasResponsePrompt &&
+            redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
+        }
+      : result.response;
+
+  const testCase = projectTestCaseForRedteamReport(result.testCase, stripFlags.shouldStripMetadata);
+
+  const gradingResult = stripFlags.shouldStripGradingResult
+    ? null
+    : isRecord(result.gradingResult)
+      ? projectGradingResultForRedteamReport(result.gradingResult)
+      : result.gradingResult === null
+        ? null
+        : undefined;
+  const normalizedPrompt = normalizePromptForRedteamReport(result.prompt);
+
+  return {
+    ...(typeof result.id === 'string' && { id: result.id }),
+    promptIdx: result.promptIdx,
+    testIdx: result.testIdx,
+    testCase,
+    promptId: getRedteamReportPromptId(
+      result,
+      normalizedPrompt,
+      stripFlags.shouldStripPromptText,
+      alreadyOutputProjected,
+    ),
+    provider: projectProviderForRedteamReport(result.provider),
+    prompt: projectPromptForRedteamReport(normalizedPrompt, stripFlags.shouldStripPromptText),
+    vars: stripFlags.shouldStripTestVars ? {} : projectVarsForRedteamReport(result.vars, injectVar),
+    response,
+    error: result.error ? REDTEAM_REPORT_ERROR_MARKER : result.error,
+    failureReason: result.failureReason,
+    success: result.success,
+    score: result.score,
+    latencyMs: result.latencyMs,
+    gradingResult,
+    namedScores: {},
+    metadata: stripFlags.shouldStripMetadata ? {} : projectedMetadata,
+  };
+}
+
+function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(tool)) {
+    return undefined;
+  }
+  if (typeof tool.type !== 'string') {
+    return typeof tool.name === 'string'
+      ? {
+          name: tool.name,
+          ...(typeof tool.description === 'string' && {
+            description: tool.description.slice(0, MAX_REPORT_TEXT_LENGTH),
+          }),
+        }
+      : {};
+  }
+  if (tool.type === 'function' && isRecord(tool.function)) {
+    return {
+      type: 'function',
+      function: {
+        ...(typeof tool.function.name === 'string' && { name: tool.function.name }),
+        ...(typeof tool.function.description === 'string' && {
+          description: tool.function.description.slice(0, MAX_REPORT_TEXT_LENGTH),
+        }),
+      },
+    };
+  }
+  if (tool.type === 'mcp') {
+    const allowedTools = Array.isArray(tool.allowed_tools)
+      ? tool.allowed_tools.filter(
+          (allowedTool): allowedTool is string => typeof allowedTool === 'string',
+        )
+      : undefined;
+    return {
+      type: 'mcp',
+      ...(typeof tool.server_label === 'string' && { server_label: tool.server_label }),
+      ...(allowedTools !== undefined && { allowed_tools: allowedTools }),
+    };
+  }
+  if (tool.type === 'preset' && tool.preset === 'claude_code') {
+    return { type: 'preset', preset: 'claude_code' };
+  }
+  return { type: tool.type };
+}
+
+function projectToolsForRedteamReport(
+  tools: unknown,
+  providerId: string,
+): (Record<string, unknown> | string)[] | undefined {
+  const supportsNamedTools =
+    providerId === 'anthropic:claude-agent-sdk' ||
+    providerId.startsWith('anthropic:claude-agent-sdk:') ||
+    providerId === 'anthropic:claude-code' ||
+    providerId.startsWith('anthropic:claude-code:');
+  const isSupportedSingletonPreset =
+    supportsNamedTools &&
+    isRecord(tools) &&
+    tools.type === 'preset' &&
+    tools.preset === 'claude_code';
+  const toolEntries = Array.isArray(tools) ? tools : isSupportedSingletonPreset ? [tools] : [];
+  const projectedTools = toolEntries
+    .map((tool) =>
+      supportsNamedTools && typeof tool === 'string' ? tool : projectToolForRedteamReport(tool),
+    )
+    .filter((tool): tool is Record<string, unknown> | string => tool !== undefined);
+  return projectedTools.length > 0 ? projectedTools : undefined;
+}
+
+function projectPluginForRedteamReport(
+  plugin: unknown,
+  stripPromptText = false,
+  policyIndex = 0,
+): unknown {
+  if (typeof plugin === 'string') {
+    return plugin;
+  }
+  if (!isRecord(plugin) || typeof plugin.id !== 'string') {
+    return undefined;
+  }
+
+  const projectedPlugin: Record<string, unknown> = {
+    id: plugin.id,
+    ...(typeof plugin.severity === 'string' && { severity: plugin.severity }),
+  };
+  if (plugin.id !== 'policy' || !isRecord(plugin.config)) {
+    return projectedPlugin;
+  }
+
+  const policy = plugin.config.policy;
+  if (typeof policy === 'string') {
+    projectedPlugin.config = {
+      policy: {
+        id: sha256(policy).slice(0, 12),
+        name: makeDefaultPolicyName(policyIndex),
+        ...(!stripPromptText && { text: policy.slice(0, MAX_REPORT_TEXT_LENGTH) }),
+      },
+    };
+  } else if (isRecord(policy)) {
+    const projectedPolicy = {
+      ...(typeof policy.id === 'string' && { id: policy.id }),
+      ...(typeof policy.name === 'string' && { name: policy.name }),
+      ...(!stripPromptText &&
+        typeof policy.text === 'string' && {
+          text: policy.text.slice(0, MAX_REPORT_TEXT_LENGTH),
+        }),
+    };
+    if (Object.keys(projectedPolicy).length > 0) {
+      projectedPlugin.config = { policy: projectedPolicy };
+    }
+  }
+  return projectedPlugin;
+}
+
+function projectConfigForRedteamReport(
+  config: Partial<UnifiedConfig>,
+  stripFlags: RedteamReportStripFlags,
+): Partial<UnifiedConfig> {
+  const firstProvider = Array.isArray(config.providers) ? config.providers[0] : undefined;
+  const providerRecord = isRecord(firstProvider) ? firstProvider : undefined;
+  const providerId = typeof providerRecord?.id === 'string' ? providerRecord.id : undefined;
+  const tools =
+    providerId !== undefined && isRecord(providerRecord?.config)
+      ? projectToolsForRedteamReport(providerRecord.config.tools, providerId)
+      : undefined;
+  const provider =
+    providerId === undefined
+      ? undefined
+      : {
+          id: providerId.slice(0, MAX_REPORT_TEXT_LENGTH),
+          ...(typeof providerRecord?.label === 'string' && {
+            label: providerRecord.label.slice(0, MAX_REPORT_TEXT_LENGTH),
+          }),
+          ...(tools !== undefined && { config: { tools } }),
+        };
+  let policyIndex = 0;
+  const plugins = (
+    Array.isArray(config.redteam?.plugins)
+      ? config.redteam.plugins
+          .map((plugin) =>
+            projectPluginForRedteamReport(
+              plugin,
+              stripFlags.shouldStripPromptText,
+              isRecord(plugin) && plugin.id === 'policy' ? policyIndex++ : 0,
+            ),
+          )
+          .filter((plugin) => plugin !== undefined)
+      : undefined
+  ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
+  const frameworks = Array.isArray(config.redteam?.frameworks)
+    ? config.redteam.frameworks.filter((framework) => typeof framework === 'string')
+    : undefined;
+
+  return {
+    ...(typeof config.description === 'string' && {
+      description: config.description.slice(0, MAX_REPORT_TEXT_LENGTH),
+    }),
+    ...(config.redteam && {
+      redteam: {
+        ...(config.redteam.injectVar !== undefined && { injectVar: config.redteam.injectVar }),
+        ...(frameworks !== undefined && { frameworks }),
+        ...(plugins !== undefined && { plugins }),
+      },
+    }),
+    ...(provider && { providers: [provider] }),
+  };
+}
+
+function projectSummaryForRedteamReport(
+  evaluateSummary: EvaluateSummaryV3 | EvaluateSummaryV2,
+  injectVar: string,
+  stripFlags: RedteamReportStripFlags,
+  alreadyOutputProjected = false,
+): EvaluateSummaryV3 | EvaluateSummaryV2 {
+  const results = evaluateSummary.results.map((result, index) =>
+    projectResultForRedteamReport(
+      { ...result, testIdx: result.testIdx ?? index, promptIdx: result.promptIdx ?? 0 },
+      injectVar,
+      stripFlags,
+      alreadyOutputProjected,
+    ),
+  );
+  if ('table' in evaluateSummary) {
+    return {
+      ...evaluateSummary,
+      results,
+      table: {
+        ...evaluateSummary.table,
+        head: {
+          ...evaluateSummary.table.head,
+          prompts: evaluateSummary.table.head.prompts.map((prompt) =>
+            projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+          ),
+        },
+        body: [],
+      },
+    };
+  }
+
+  return {
+    ...evaluateSummary,
+    prompts: evaluateSummary.prompts.map((prompt) =>
+      projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+    ),
+    results,
+  };
+}
+
+function normalizeLegacyResultForDetail(
+  value: unknown,
+  testIdx: number,
+  promptIdx: number,
+  stripFlags = getStripFlags(),
+): EvaluateResult | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const prompt = normalizePromptForRedteamReport(value.prompt, false);
+  const testCase = isRecord(value.testCase) ? (value.testCase as AtomicTestCase) : {};
+  const success = value.success === true;
+  const failureReason =
+    typeof value.failureReason === 'number' &&
+    Object.values(ResultFailureReason).includes(value.failureReason as ResultFailureReason)
+      ? (value.failureReason as ResultFailureReason)
+      : success
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT;
+  const normalizedResult: EvaluateResult = {
+    ...(typeof value.id === 'string' && { id: value.id }),
+    ...(typeof value.description === 'string' && { description: value.description }),
+    testIdx,
+    promptIdx,
+    testCase,
+    promptId:
+      !stripFlags.shouldStripPromptText && typeof value.promptId === 'string'
+        ? value.promptId
+        : generateIdFromPrompt(prompt),
+    provider: projectProviderForRedteamReport(value.provider, false),
+    prompt,
+    vars: isRecord(value.vars)
+      ? (value.vars as EvaluateResult['vars'])
+      : isRecord(testCase.vars)
+        ? testCase.vars
+        : {},
+    ...(isRecord(value.response) && {
+      response: value.response as EvaluateResult['response'],
+    }),
+    ...(typeof value.error === 'string' || value.error === null ? { error: value.error } : {}),
+    failureReason,
+    success,
+    score: typeof value.score === 'number' && Number.isFinite(value.score) ? value.score : 0,
+    latencyMs:
+      typeof value.latencyMs === 'number' && Number.isFinite(value.latencyMs) ? value.latencyMs : 0,
+    gradingResult: isRecord(value.gradingResult)
+      ? (value.gradingResult as unknown as GradingResult)
+      : value.gradingResult === null
+        ? null
+        : undefined,
+    namedScores: isRecord(value.namedScores) ? (value.namedScores as Record<string, number>) : {},
+    ...(typeof value.cost === 'number' && Number.isFinite(value.cost) && { cost: value.cost }),
+    ...(isRecord(value.metadata) && { metadata: value.metadata }),
+  };
+
+  const sanitized = sanitizeResultForJsonlArtifact(normalizedResult, stripFlags);
+  return {
+    ...sanitized,
+    provider: projectProviderForRedteamReport(sanitized.provider, false),
+  };
 }
 
 /** Result from queries selecting test_idx column */
@@ -216,12 +1049,13 @@ export class EvalQueries {
     }
 
     const evalIds = evals.map((e) => e.id);
+    const testCaseVarsJson = jsonObjectFieldOrEmpty(evalResultsTable.testCase, '$.vars');
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
       SELECT DISTINCT j.key, eval_id
       FROM (
-        SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+        SELECT eval_id, ${testCaseVarsJson} as vars
         FROM eval_results
         WHERE eval_id IN (${sql.join(evalIds, sql`, `)})
       ) t, json_each(t.vars) j
@@ -243,12 +1077,13 @@ export class EvalQueries {
 
   static async getVarsFromEval(evalId: string) {
     const db = await getDb();
+    const testCaseVarsJson = jsonObjectFieldOrEmpty(evalResultsTable.testCase, '$.vars');
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
       SELECT DISTINCT j.key
       FROM (
-        SELECT json_extract(eval_results.test_case, '$.vars') as vars
+        SELECT ${testCaseVarsJson} as vars
         FROM eval_results
         WHERE eval_results.eval_id = ${evalId}
       ) t, json_each(t.vars) j
@@ -419,10 +1254,28 @@ export default class Eval {
     return await Eval.findById(db_results[0].id);
   }
 
-  static async findById(id: string) {
+  static async findById(id: string, options: ResultsFileOptions = {}) {
     const db = await getDb();
 
-    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const columns = getTableColumns(evalsTable);
+    const results =
+      options.resultProjection === 'redteamReport'
+        ? sql`CASE WHEN json_valid(${evalsTable.results}) THEN json_object('durationMs', json_extract(${evalsTable.results}, '$.durationMs'), 'generationDurationMs', json_extract(${evalsTable.results}, '$.generationDurationMs'), 'evaluationDurationMs', json_extract(${evalsTable.results}, '$.evaluationDurationMs'), 'stats', json_extract(${evalsTable.results}, '$.stats'), 'table', json_object('head', json_extract(${evalsTable.results}, '$.table.head'), 'body', json('[]')), 'results', json('[]')) ELSE '{}' END`.mapWith(
+            evalsTable.results,
+          )
+        : evalsTable.results;
+    const evalData = await db
+      .select({
+        ...columns,
+        results,
+        config:
+          options.resultProjection === 'redteamReport'
+            ? reportConfigProjection()
+            : evalsTable.config,
+      })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, id))
+      .all();
 
     if (evalData.length === 0) {
       return undefined;
@@ -471,7 +1324,11 @@ export default class Eval {
       generationDurationMs,
       evaluationDurationMs,
     });
-    if (eval_.results && 'table' in eval_.results) {
+    if (
+      eval_.results &&
+      'table' in eval_.results &&
+      (eval_.results as EvaluateSummaryV2).table?.head
+    ) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
     }
 
@@ -483,6 +1340,104 @@ export default class Eval {
     }
 
     return evalInstance;
+  }
+
+  static async exists(id: string): Promise<boolean> {
+    const db = await getDb();
+    const row = await db
+      .select({ id: evalsTable.id })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, id))
+      .limit(1)
+      .get();
+    return row !== undefined;
+  }
+
+  static async getReportTools(evalId: string): Promise<unknown[] | undefined> {
+    const db = await getDb();
+    const evaluation = await db
+      .select({ config: evalsTable.config })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evaluation) {
+      return undefined;
+    }
+    const config = sanitizeConfigForOutput(evaluation.config, getStripFlags(evaluation.config.env));
+    const provider = Array.isArray(config.providers) ? config.providers[0] : undefined;
+    const tools =
+      isRecord(provider) && isRecord(provider.config) ? provider.config.tools : undefined;
+    return tools == null ? [] : Array.isArray(tools) ? tools : [tools];
+  }
+
+  static async getResultByIdAndIndices(
+    evalId: string,
+    testIdx: number,
+    promptIdx: number,
+    resultId?: string,
+    legacyResultIndex?: number,
+  ): Promise<EvaluateResult | undefined> {
+    const db = await getDb();
+    const evaluation = await db
+      .select({
+        config: sql`json_object('env', json_extract(${evalsTable.config}, '$.env'))`.mapWith(
+          evalsTable.config,
+        ),
+      })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evaluation) {
+      return undefined;
+    }
+    const stripFlags = getStripFlags(evaluation.config.env);
+    const normalizedResult =
+      legacyResultIndex === undefined &&
+      (await EvalResult.findByEvalIdAndIndices(evalId, testIdx, promptIdx, resultId));
+    if (normalizedResult) {
+      return sanitizeResultForJsonlArtifact(
+        normalizedResult.toEvaluateResult(stripFlags),
+        stripFlags,
+      );
+    }
+
+    const resultIdPredicate = resultId
+      ? sql`AND json_type(legacy_result.value, '$.id') = 'text'
+          AND json_extract(legacy_result.value, '$.id') = ${resultId}`
+      : sql``;
+    const legacyRows = await db.all<{ result: string }>(sql`
+      SELECT legacy_result.value AS result
+      FROM ${evalsTable}, json_each(
+        CASE
+          WHEN json_valid(${evalsTable.results})
+            AND json_type(${evalsTable.results}, '$.results') = 'array'
+          THEN json_extract(${evalsTable.results}, '$.results')
+          ELSE json('[]')
+        END
+      ) AS legacy_result
+      WHERE ${evalsTable.id} = ${evalId}
+        AND legacy_result.type = 'object'
+        AND COALESCE(json_extract(legacy_result.value, '$.testIdx'), legacy_result.key) = ${testIdx}
+        AND COALESCE(json_extract(legacy_result.value, '$.promptIdx'), 0) = ${promptIdx}
+        ${resultIdPredicate}
+        ${legacyResultIndex === undefined ? sql`` : sql`AND legacy_result.key = ${legacyResultIndex}`}
+      LIMIT 2
+    `);
+    const legacyRow = legacyRows.length === 1 ? legacyRows[0] : undefined;
+    if (!legacyRow) {
+      return undefined;
+    }
+
+    try {
+      return normalizeLegacyResultForDetail(
+        JSON.parse(legacyRow.result),
+        testIdx,
+        promptIdx,
+        stripFlags,
+      );
+    } catch {
+      return undefined;
+    }
   }
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
@@ -1510,13 +2465,41 @@ export default class Eval {
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return {
+      const legacy: EvaluateSummaryV2 = {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
         results: this.oldResults.results,
         table: this.oldResults.table,
         stats: this.oldResults.stats,
       };
+      const flags = getStripFlags(this.config.env);
+      if (Object.values(flags).some(Boolean)) {
+        legacy.results = legacy.results.map((row) =>
+          sanitizeResultForJsonlArtifact(
+            {
+              ...row,
+              ...(flags.shouldStripPromptText && {
+                promptId: generateIdFromPrompt(normalizePromptForRedteamReport(row.prompt, false)),
+                prompt: projectPromptForRedteamReport(row.prompt, true),
+              }),
+            },
+            flags,
+          ),
+        );
+        // The legacy table mirrors the original bytes. Rebuild it only from projected rows.
+        legacy.table = convertResultsToTable({
+          version: 4,
+          createdAt: legacy.timestamp,
+          results: legacy,
+          config: {},
+          author: null,
+          prompts: legacy.table.head.prompts.map((prompt) =>
+            flags.shouldStripPromptText ? projectPromptForRedteamReport(prompt, true) : prompt,
+          ),
+          vars: legacy.table.head.vars,
+        });
+      }
+      return legacy;
     }
     if (this.results.length === 0) {
       await this.loadResults();
@@ -1544,6 +2527,80 @@ export default class Eval {
       results,
       stats,
       ...(repeatStability && { repeatStability }),
+    };
+  }
+
+  private async toRedteamReportSummary(
+    injectVar: string,
+    stripFlags: RedteamReportStripFlags,
+  ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+    if (this.useOldResults() && !this.persisted) {
+      invariant(this.oldResults, 'Old results not found');
+      return projectSummaryForRedteamReport(
+        {
+          version: 2,
+          timestamp: new Date(this.createdAt).toISOString(),
+          results: this.oldResults.results,
+          table: this.oldResults.table,
+          stats: this.oldResults.stats,
+        },
+        injectVar,
+        stripFlags,
+      );
+    }
+
+    if (!this.persisted) {
+      return projectSummaryForRedteamReport(
+        {
+          version: 3,
+          timestamp: new Date(this.createdAt).toISOString(),
+          prompts: this.prompts,
+          results: this.results.map((result) =>
+            result.toEvaluateResult({ ...stripFlags, shouldStripGradingResult: false }),
+          ),
+          stats: this.getStats(),
+        },
+        injectVar,
+        stripFlags,
+        true,
+      );
+    }
+
+    const legacy = this.useOldResults();
+    const rows = await selectReportRows(
+      this.id,
+      legacy,
+      injectVar,
+      stripFlags,
+      jsonReportIdentityMetric,
+    );
+    const prompts = this.prompts.map((prompt) =>
+      projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+    );
+
+    if (legacy && this.oldResults) {
+      return {
+        version: 2,
+        timestamp: new Date(this.createdAt).toISOString(),
+        results: rows.map((row) => createRedteamReportResult(row, stripFlags)),
+        table: {
+          head: {
+            ...this.oldResults.table.head,
+            prompts: this.oldResults.table.head.prompts.map((prompt) =>
+              projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+            ),
+          },
+          body: [],
+        },
+        stats: this.oldResults.stats,
+      };
+    }
+    return {
+      version: 3,
+      timestamp: new Date(this.createdAt).toISOString(),
+      prompts,
+      results: rows.map((row) => createRedteamReportResult(row, stripFlags)),
+      stats: this.getStats(),
     };
   }
 
@@ -1592,25 +2649,36 @@ export default class Eval {
     }
   }
 
-  async toResultsFile(): Promise<ResultsFile> {
-    const traces = await this.getTraces();
+  async toResultsFile({
+    includeTraces = true,
+    resultProjection = 'full',
+  }: ResultsFileOptions = {}): Promise<ResultsFile> {
     const stripFlags = getStripFlags(this.config.env);
-
-    const results: ResultsFile = {
+    const traces = includeTraces ? await this.getTraces() : [];
+    const compact = resultProjection === 'redteamReport';
+    const injectVar =
+      typeof this.config.redteam?.injectVar === 'string' ? this.config.redteam.injectVar : 'prompt';
+    const config = sanitizeConfigForOutput(
+      compact ? projectConfigForRedteamReport(this.config, stripFlags) : this.config,
+      stripFlags,
+    );
+    return {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(),
-      config: sanitizeConfigForOutput(this.config, stripFlags),
+      results: compact
+        ? await this.toRedteamReportSummary(injectVar, stripFlags)
+        : await this.toEvaluateSummary(),
+      config,
       author: this.author || null,
       prompts: this.getPrompts().map((prompt) =>
-        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+        compact
+          ? projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText)
+          : projectPrompt(prompt, stripFlags.shouldStripPromptText),
       ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
-
-    return results;
   }
 
   async delete({ notify = true }: { notify?: boolean } = {}) {
