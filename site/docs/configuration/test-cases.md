@@ -352,19 +352,24 @@ At the assertion-string level, escape a literal double quote inside a quoted val
 
 ### Special CSV Columns
 
-| Column                                                      | Purpose                                                  | Example                                                           |
-| ----------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
-| `__expected`                                                | Single assertion                                         | `contains: Paris`                                                 |
-| `__expected1`, `__expected2`, ...                           | Multiple assertions                                      | `equals: 42`                                                      |
-| `__description`                                             | Test description                                         | `Basic math test`                                                 |
-| `__prefix`                                                  | Prepend to prompt                                        | `You must answer: `                                               |
-| `__suffix`                                                  | Append to prompt                                         | ` (be concise)`                                                   |
-| `__metric`                                                  | Display name in reports (does not change assertion type) | `accuracy`                                                        |
-| `__threshold`                                               | Pass threshold (applies to all asserts)                  | `0.8`                                                             |
-| `__metadata:*`                                              | Filterable metadata                                      | See below                                                         |
-| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for all or specific assertions         | `__config:__expected:threshold`, `__config:__expected2:threshold` |
+| Column                                                      | Purpose                                                                  | Example                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `__expected`                                                | Single assertion                                                         | `contains: Paris`                                                 |
+| `__expected1`, `__expected2`, ...                           | Multiple assertions                                                      | `equals: 42`                                                      |
+| `__description`                                             | Test description                                                         | `Basic math test`                                                 |
+| `__prefix`                                                  | Prepend to prompt                                                        | `You must answer: `                                               |
+| `__suffix`                                                  | Append to prompt                                                         | ` (be concise)`                                                   |
+| `__metric`                                                  | Display name in reports (does not change assertion type)                 | `accuracy`                                                        |
+| `__threshold`                                               | Pass threshold (applies to all asserts)                                  | `0.8`                                                             |
+| `__metadata:*`                                              | Filterable metadata                                                      | See below                                                         |
+| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for the first populated assertion or a numbered column | `__config:__expected:threshold`, `__config:__expected2:threshold` |
 
 Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
+Numbered assertion configuration follows its source column. For example,
+`__config:__expected3:threshold` sets the threshold on `__expected3` even if
+`__expected2` is blank or the columns are reordered. The unnumbered form
+(`__config:__expected:threshold`) still targets the first populated assertion.
+
 If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
 
 ### Metadata in CSV
