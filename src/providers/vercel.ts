@@ -109,7 +109,7 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
 }
 
 const sdkVersion = '^6.0.286';
-const installHint = optionalPackageInstallHint(`npm install promptfoo "ai@${sdkVersion}"`);
+const installHint = () => optionalPackageInstallHint(`npm install promptfoo "ai@${sdkVersion}"`);
 
 async function loadAiSdk() {
   try {
@@ -118,14 +118,14 @@ async function loadAiSdk() {
     });
     if (!semverSatisfies(metadata.version, sdkVersion)) {
       throw new Error(
-        `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ${installHint}`,
+        `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ${installHint()}`,
       );
     }
     return await import(/* webpackIgnore: true */ 'ai');
   } catch (error) {
     if (isMissingPackageImportError(error, 'ai')) {
       throw new Error(
-        `The Vercel AI Gateway provider requires the optional ai package. ${installHint}`,
+        `The Vercel AI Gateway provider requires the optional ai package. ${installHint()}`,
       );
     }
     throw error;
