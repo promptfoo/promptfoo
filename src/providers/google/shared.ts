@@ -46,6 +46,9 @@ export interface GoogleModel {
 // global-only availability or global as the broadly available endpoint:
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-4-carbon',
+  'gemini-4-carbon-cyber-permissive',
+  'gemini-4-neon',
   'gemini-4-argon',
   'gemini-4-argon-cyber-permissive',
   'gemini-4-hydrogen',
@@ -85,9 +88,14 @@ export const GEMINI_FLASH_MODELS = [
 ] as const;
 
 export const GEMINI_4_MODELS = [
-  { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
+  { id: 'gemini-4-carbon', name: 'Gemini 4 Carbon' },
+  { id: 'gemini-4-neon', name: 'Gemini 4 Neon' },
   { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' },
+  { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
 ] as const;
+
+// Gemini 4 models that accept the XHIGH thinking level. The others cap at HIGH.
+export const GEMINI_4_XHIGH_MODELS = ['gemini-4-neon', 'gemini-4-hydrogen'] as const;
 
 // Gemini models offered by `promptfoo redteam init`. All use the global Vertex endpoint.
 export const GEMINI_TARGET_MODELS = [...GEMINI_4_MODELS, ...GEMINI_FLASH_MODELS] as const;
@@ -104,6 +112,7 @@ export function getVertexApiHostForRegion(region: string): string {
   return `${region}-aiplatform.googleapis.com`;
 }
 
+// Gemini 4 Carbon and Argon share these rates.
 const GEMINI_4_ARGON_COST = {
   input: 4.0 / 1e6,
   output: 20.0 / 1e6,
@@ -147,6 +156,30 @@ const GEMINI_3_5_FLASH_LITE_COST = {
  * @see https://cloud.google.com/vertex-ai/generative-ai/pricing
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini 4 Carbon receives a 50% discount through 2026-11-30.
+  {
+    id: 'gemini-4-carbon',
+    cost: { ...GEMINI_4_ARGON_COST },
+    introductoryPricing: { expiresAt: Date.UTC(2026, 11, 1), multiplier: 0.5 },
+    vertexRegionalPremium: 1.1,
+  },
+  // Fairwind allowlisted Vertex model; the Carbon introductory discount does not apply.
+  {
+    id: 'gemini-4-carbon-cyber-permissive',
+    vertexCost: GEMINI_4_ARGON_COST,
+    vertexRegionalPremium: 1.1,
+  },
+  {
+    id: 'gemini-4-neon',
+    cost: {
+      input: 3.0 / 1e6,
+      output: 15.0 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    vertexRegionalPremium: 1.1,
+  },
   // Gemini 4 Argon receives a 50% discount through 2026-11-30.
   {
     id: 'gemini-4-argon',
