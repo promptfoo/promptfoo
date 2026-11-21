@@ -1,7 +1,8 @@
 # Agent Skill Fixtures
 
-Fixtures in this directory exercise the Codex plugin skills end to end. Keep
-them deterministic, small, and safe to run locally.
+Fixtures in this directory exercise the shared plugin skills end to end. Keep
+them small and safe to run locally. The eligibility eval uses a live agent;
+other fixtures are deterministic.
 
 ## Fixture Matrix
 
@@ -9,6 +10,7 @@ Use directory prefixes to show ownership:
 
 - `evals-*` for `promptfoo-evals`
 - `provider-setup-*` for `promptfoo-provider-setup`
+- `redteam-eligibility` for the live eligibility and routing eval
 - `redteam-setup-*` for `promptfoo-redteam-setup`
 - `redteam-run-*` for `promptfoo-redteam-run`
 
@@ -46,8 +48,13 @@ python3 -m ruff format --check
 From the repo root:
 
 ```bash
-npx vitest test/agentSkills/promptfooPlugin.test.ts --run
+npx vitest run test/agentSkills
 for config in $(find test/fixtures/agent-skills -name promptfooconfig.yaml -o -name redteam.yaml | sort); do
   npm run local -- validate config -c "$config"
 done
 ```
+
+The optional live eligibility eval uses the Claude Agent SDK with
+`ANTHROPIC_API_KEY`. Follow the command in `redteam-eligibility/promptfooconfig.yaml`.
+Keep the model's tools limited to bundled skills. The fixture supplies source
+text from a fixed file list and compares citations against those files locally.

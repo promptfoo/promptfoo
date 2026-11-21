@@ -58,8 +58,7 @@ describe('Chat completed quota during default disk publication', () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    // This test intentionally uses ordinary timers and the real filesystem: the
-    // default KeyvFile publication interval is the cancellation window under test.
+    // KeyvFile uses its real timer and writes to a fresh directory for each case.
     vi.useRealTimers();
     cacheDirectory = createTempDir('promptfoo-chat-disk-publication-quota-');
     restoreEnvironment = mockProcessEnv({
@@ -87,6 +86,7 @@ describe('Chat completed quota during default disk publication', () => {
     for (const registry of registries.splice(0)) {
       registry.dispose();
     }
+    vi.useRealTimers();
     await Promise.allSettled(pendingCalls.splice(0));
     // KeyvFile.disconnect does not flush writes. Drain real saves before removing
     // only this test's temporary directory; never clear an existing cache.
@@ -219,7 +219,10 @@ describe('Chat completed quota during default disk publication', () => {
         }
       });
 
-      const resetAt = Date.now() + 1000;
+      // The server's quota window is independent of the host's filesystem speed.
+      const windowStart = Date.now();
+      const quotaClock = vi.spyOn(Date, 'now').mockReturnValue(windowStart);
+      const resetAt = windowStart + 1000;
       const quotaHeaders = {
         ...headers,
         'ratelimit-limit': '10',
@@ -247,12 +250,18 @@ describe('Chat completed quota during default disk publication', () => {
         .mockImplementationOnce(async () => {
           events.push('B dispatched');
           secondDispatchAt = Date.now();
+          // Let B use the same native disk timer as A.
+          vi.useRealTimers();
           return secondResponse;
         });
 
       const first = runCall('A prompt', firstController.signal).catch((error: unknown) => error);
       pendingCalls.push(first);
       const disk = await publicationStarted.promise;
+      // A has already scheduled the real KeyvFile write. Only the subsequent
+      // cancellation and scheduler wake-up need a clock we can advance.
+      quotaClock.mockRestore();
+      vi.useFakeTimers({ now: windowStart, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
       expect(disk).toBeInstanceOf(modules.disk.KeyvFile);
       expect(disk.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
       expect(disk.opts.writeDelay).toBe(100);
@@ -289,6 +298,7 @@ describe('Chat completed quota during default disk publication', () => {
       });
       events.push('B queued');
       expect(release).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(30);
       expect(await first).toBe(reason);
       expect(abortedDuringPublication).toBe(true);
       expect(abortedAt).toBeLessThan(resetAt);
@@ -318,6 +328,9 @@ describe('Chat completed quota during default disk publication', () => {
       expect(await readFile(path.join(cacheDirectory, 'cache.json'), 'utf8')).toContain(
         'A completed response',
       );
+      await vi.advanceTimersByTimeAsync(resetAt - Date.now() - 1);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
       await expect(second).resolves.toMatchObject({
         value: boundary === 'wrapper' ? { output: JSON.stringify(grade) } : grade,
       });
