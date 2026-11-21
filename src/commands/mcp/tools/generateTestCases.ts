@@ -139,7 +139,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
             testCase.assert = assertionTypes.map((type) => ({ type }));
           } else {
             // Default assertions
-            testCase.assert = [{ type: 'is-json' }, { type: 'not-empty' }];
+            testCase.assert = [{ type: 'is-json' }];
           }
 
           return testCase;
