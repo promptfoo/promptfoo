@@ -9,7 +9,8 @@ import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 
 interface OverviewProps {
-  categoryStats: Record<PluginType, TestResultStats>;
+  // Keyed by resolved plugin IDs, including custom policy IDs.
+  categoryStats: Record<string, TestResultStats>;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
