@@ -542,6 +542,13 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // Anthropic Claude Models (via Azure AI Foundry)
   // =============================================================================
+  // Foundry hosts Fable/Mythos 5.2 on Anthropic infrastructure at first-party rates. Fast mode
+  // is a separate `claude-fable-5-2-fast` deployment, not priced here.
+  ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
+    input: 8 / 1000000,
+    output: 40 / 1000000,
+    cacheRead: 0.2 / 1000000,
+  }),
   ...modelsWithCost(['claude-fable-5-1'], {
     input: 10 / 1000000,
     output: 50 / 1000000,

@@ -452,7 +452,7 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking. Required paths match actual XML element names, including names such as `toString`; inherited JavaScript object properties do not count.
 
 #### How it works
 
@@ -619,6 +619,10 @@ This ensures that any JSON LLM output adheres to the schema specified in the `to
 - Pass if MCP tool calls succeed (output contains "MCP Tool Result")
 - Fail if MCP tool calls fail (output contains "MCP Tool Error")
 - Continue to validate traditional function tools as before
+
+`not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
+
+Negation checks for an invalid call, so a failed MCP call can also pass. To check that no tool was called, assert on the absence of tool calls instead. Custom provider validators should throw `InvalidToolCallError` from `promptfoo/contracts` for invalid calls and ordinary errors for configuration or operational failures.
 
 Example with MCP tools:
 
@@ -1006,6 +1010,8 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 ### Latency
 
 The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+
+When the provider does not supply latency, Promptfoo measures elapsed provider-call time with a monotonic clock, so wall-clock adjustments do not affect it. Provider-reported latency is used unchanged.
 
 Example:
 
@@ -1527,20 +1533,9 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores an output against reference text using exact word matches, Porter stemming, and WordNet synonyms. It combines precision and recall with a penalty for fragmented word order.
 
-**What makes METEOR special:**
-
-- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
-- **Handles word forms**: Knows that "running" and "ran" are the same verb
-- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
-- **Balanced scoring**: Combines precision, recall, AND word order into a single score
-
-**When to use METEOR:**
-
-- **High-quality translation**: When semantic accuracy matters more than exact wording
-- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
-- **Flexible matching**: When there are many valid ways to express the same idea
+Use it for translation or other tasks where a reference answer exists and some wording variation is acceptable. METEOR measures lexical overlap, not factual accuracy or general semantic understanding.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
@@ -1548,7 +1543,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.1.0
+npm install natural@^8.2.6
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
@@ -1659,7 +1654,7 @@ F-score (also F1 score) is used for measuring classification accuracy when you n
 
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
-- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+- **Precision and recall**: When both false positives and false negatives matter
 
 See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 
