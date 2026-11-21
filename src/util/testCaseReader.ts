@@ -199,6 +199,16 @@ function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExten
   return undefined;
 }
 
+// A literal generator filename can contain '#'. Prefer an existing workbook so
+// selecting a sheet never runs a sibling script of the same name.
+function testWorkbookPath(reference: string): string | undefined {
+  const workbook = getExcelWorkbookPath(reference);
+  const script = stripFunctionSuffix(reference);
+  return workbook && isJavascriptFile(script) && !fs.existsSync(workbook) && fs.existsSync(script)
+    ? undefined
+    : workbook;
+}
+
 async function readLocalStandaloneTestsFile(
   varsPath: string,
   basePath: string,
@@ -207,7 +217,7 @@ async function readLocalStandaloneTestsFile(
   const { resolvedVarsPath, pathWithoutFunction, maybeFunctionName, fileExtension } =
     getStandaloneTestsFileMetadata(varsPath, basePath);
 
-  if (getExcelWorkbookPath(pathWithoutFunction)) {
+  if (testWorkbookPath(pathWithoutFunction)) {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -934,7 +944,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
       { windowsPathsNoEscape: true },
     );
     if (matches.length > 0) {
-      return matches.map((match) => getExcelWorkbookPath(match) ?? match);
+      return matches.map((match) => testWorkbookPath(match) ?? match);
     }
     // No matches: fall through, since the reference may be a literal filename that
     // happens to contain a glob metacharacter.
@@ -942,7 +952,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   // A concrete path. Only strip a `:functionName` suffix for script references, so that
   // a vars file whose name legally contains a colon is still watched in full.
-  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
+  const withoutSheet = testWorkbookPath(resolved) ?? resolved;
   const withoutFunction = stripFunctionSuffix(withoutSheet);
   const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
   return [isScript ? withoutFunction : withoutSheet];
