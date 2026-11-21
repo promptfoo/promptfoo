@@ -106,6 +106,16 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
   });
 
+  it('should expose ends-with and its negation in the assertion type selector', async () => {
+    initialValues = [{ type: 'equals', value: 'initial value' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+
+    expect(screen.getByRole('option', { name: 'ends-with' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'not-ends-with' })).toBeInTheDocument();
+  });
+
   it.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)(
     'lets users select %s without losing the reference',
     async (type) => {

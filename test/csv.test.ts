@@ -747,6 +747,40 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('Expected');
   });
 
+  it('should create an ends-with assertion', () => {
+    const expected = 'ends-with:Expected';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('ends-with');
+    expect(result.value).toBe('Expected');
+  });
+
+  it('should not attach a dead threshold to ends-with', () => {
+    // handleEndsWith never reads `threshold`, so the shorthand should not
+    // synthesise a default one. (`starts-with` does, but that shape predates
+    // this assertion and is preserved for back-compat.)
+    const result: Assertion = assertionFromString('ends-with:END');
+    expect(result.type).toBe('ends-with');
+    expect(result.value).toBe('END');
+    expect(result.threshold).toBeUndefined();
+  });
+
+  it('should parse ends-with with a parenthesised threshold, keeping the threshold', () => {
+    // Parsing comes from getAssertionRegex() (built from BaseAssertionTypesSchema),
+    // so the `(0.9)` form is accepted, and like other types without a CSV default
+    // the explicit threshold is kept rather than dropped.
+    const result: Assertion = assertionFromString('ends-with(0.9):END');
+    expect(result.type).toBe('ends-with');
+    expect(result.value).toBe('END');
+    expect(result.threshold).toBe(0.9);
+  });
+
+  it('should parse not-ends-with shorthand', () => {
+    const result: Assertion = assertionFromString('not-ends-with:END');
+    expect(result.type).toBe('not-ends-with');
+    expect(result.value).toBe('END');
+  });
+
   it('should create a levenshtein assertion', () => {
     const expected = 'levenshtein(5):Expected output';
 

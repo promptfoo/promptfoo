@@ -1102,6 +1102,7 @@
         "context-relevance",
         "conversation-relevance",
         "cost",
+        "ends-with",
         "equals",
         "factuality",
         "finish-reason",
