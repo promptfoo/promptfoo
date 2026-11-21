@@ -527,6 +527,28 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   }
 }
 
+const PRIVACY_SETUP_ERROR =
+  'Declare privacy checks in the initial configuration. Setup hooks cannot change which tests are protected. Public inputs may already have been saved.';
+
+// Persistence precedes beforeAll. Snapshot declarations by position so an in-place
+// change in a mixed suite cannot promote a previously public test or drop a check.
+function suitePrivacyLayout(suite: TestSuite) {
+  if (!configRequiresTraceRedaction(suite)) {
+    return undefined;
+  }
+  // In scenarios an explicit false can override an inherited opt-out.
+  const missingOptOut = suite.scenarios?.length ? null : false;
+  const declaration = (test: Pick<AtomicTestCase, 'assert' | 'options'>) => [
+    requiresTraceRedaction(test.assert),
+    test.options?.disableDefaultAsserts ?? missingOptOut,
+  ];
+  return JSON.stringify([
+    declaration(getDefaultTest(suite) ?? {}),
+    suite.tests?.map(declaration),
+    suite.scenarios?.map(({ config, tests }) => [config.map(declaration), tests?.map(declaration)]),
+  ]);
+}
+
 async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.extensions?.length) {
     return testSuite;
@@ -555,16 +577,13 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
   }
 
   const run = () => runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
-  const privateSuite = configRequiresTraceRedaction(testSuite);
-  const { suite } = privateSuite
+  const privacyLayout = suitePrivacyLayout(testSuite);
+  const { suite } = privacyLayout
     ? await withPrivateEvaluation(run).catch(() => {
         throw new Error('Private suite setup failed.');
       })
     : await run();
-  invariant(
-    !privateSuite || configRequiresTraceRedaction(suite),
-    'Setup hooks cannot remove privacy checks.',
-  );
+  invariant(privacyLayout === suitePrivacyLayout(suite), PRIVACY_SETUP_ERROR);
   if (seededMap) {
     // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
     // untouched seeds must not merge duplicate providers or exclude newly added prompts.
@@ -2517,11 +2536,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           : run();
     // Ordinary cancellations must reach runEvalInternal to record their resume status.
     const prepared = setup ? await waitForPromiseWithAbort(hook, evalStep.abortSignal) : await hook;
-    invariant(
-      !privateTest || requiresTraceRedaction(prepared.test.assert),
-      'Setup hooks cannot remove privacy checks.',
-    );
-    this.privateSuite ||= requiresTraceRedaction(prepared.test.assert);
+    invariant(privateTest === requiresTraceRedaction(prepared.test.assert), PRIVACY_SETUP_ERROR);
     evalStep.test = prepared.test;
 
     const rows = await runEvalInternal(

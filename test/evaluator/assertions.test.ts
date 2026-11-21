@@ -392,10 +392,44 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
+  it.each(['beforeAll', 'beforeEach', 'inherited default'] as const)(
+    'rejects privacy introduced by %s before calling the target',
+    async (hook) => {
+      const assert = [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' as const }];
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Public prompt')],
+        extensions: ['file://setup.js'],
+        defaultTest: hook === 'inherited default' ? { assert } : {},
+        tests:
+          hook === 'beforeEach' ? [{}] : [{ options: { disableDefaultAsserts: true } }, { assert }],
+      };
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeAll' && 'suite' in context) {
+          const first = context.suite.tests![0];
+          if (hook === 'inherited default') {
+            first.options!.disableDefaultAsserts = false;
+          } else if (hook === 'beforeAll') {
+            first.assert = assert;
+          }
+        }
+        if (phase === 'beforeEach' && hook === phase && 'test' in context) {
+          context.test.assert = assert;
+        }
+        return context;
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await expect(evaluate(suite, record, { maxConcurrency: 1 })).rejects.toThrow(
+        'Declare privacy checks in the initial configuration',
+      );
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(
     (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
       [1, 2].flatMap((maxConcurrency) =>
-        ['missing', 'existing', 'unconfigured', 'declared-shared'].map((initial) => ({
+        ['missing', 'existing', 'declared-shared'].map((initial) => ({
           plugin,
           maxConcurrency,
           initial,
@@ -419,14 +453,6 @@ describeEvaluator('evaluator assertions', () => {
           if (phase === 'beforeEach' && 'test' in context) {
             const index = Number(context.test.vars?.index);
             fs.writeFileSync(receipts[index], secrets[index]);
-            if (initial.startsWith('unconfigured')) {
-              context.test.assert = [
-                {
-                  type: `promptfoo:redteam:${plugin}`,
-                  value: { rawReceiptPath: receipts[index] },
-                },
-              ];
-            }
             events.push(`hook-${index}`);
           } else if (phase === 'afterEach' && 'result' in context) {
             events.push(`after-${context.result.testIdx}`);
@@ -445,9 +471,7 @@ describeEvaluator('evaluator assertions', () => {
           extensions: ['file://initialize-receipts.js'],
           tests: receipts.map((receipt, index) => ({
             vars: { index },
-            assert: initial.startsWith('unconfigured')
-              ? undefined
-              : [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
+            assert: [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
           })),
         };
         const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
@@ -466,17 +490,7 @@ describeEvaluator('evaluator assertions', () => {
             ),
           ),
         ).toBe(true);
-        if (!initial.startsWith('unconfigured')) {
-          expect(events).toEqual([
-            'hook-0',
-            'target-0',
-            'after-0',
-            'hook-1',
-            'target-1',
-            'after-1',
-          ]);
-        }
-        expect(events.filter((event) => event.startsWith('hook-'))).toEqual(['hook-0', 'hook-1']);
+        expect(events).toEqual(['hook-0', 'target-0', 'after-0', 'hook-1', 'target-1', 'after-1']);
       } finally {
         fs.rmSync(directory, { recursive: true, force: true });
       }
