@@ -9,7 +9,7 @@ import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
 import { getSafeProviderId, sanitizeProviderObject } from './providerLogging';
-import { getRequestTimeoutMs } from './shared';
+import { getCallerAbortError, getRequestTimeoutMs } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { parseFileTransformReference } from './transformUtils';
 
@@ -241,6 +241,18 @@ export async function createStreamResponse(
   );
 }
 
+// Close codes that mean the transport died rather than the peer rejecting the
+// message: retrying a fresh connection can succeed. Everything else (protocol
+// or policy violations) keeps failing fast, since the same payload would lose
+// again on a new socket. See the IANA WebSocket close-code registry.
+const TRANSIENT_CLOSE_CODES: ReadonlySet<number> = new Set([1006, 1012, 1013]);
+const CLOSE_CODE_REASONS: Readonly<Record<number, string>> = {
+  1005: 'no status received',
+  1006: 'abnormal closure, connection dropped without a close frame',
+  1012: 'service restart',
+  1013: 'try again later',
+};
+
 export class WebSocketProvider implements ApiProvider {
   url: string;
   private readonly providerId: string;
@@ -289,7 +301,7 @@ export class WebSocketProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const signal = options?.abortSignal;
     if (signal?.aborted) {
-      throw new DOMException('WebSocket request aborted', 'AbortError');
+      throw getCallerAbortError(signal);
     }
     const vars = {
       ...(context?.vars || {}),
@@ -304,7 +316,7 @@ export class WebSocketProvider implements ApiProvider {
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       if (signal?.aborted) {
-        reject(new DOMException('WebSocket request aborted', 'AbortError'));
+        reject(getCallerAbortError(signal));
         return;
       }
       const wsOptions: ClientOptions = {};
@@ -338,7 +350,7 @@ export class WebSocketProvider implements ApiProvider {
           resolve(result);
         }
       };
-      const onAbort = () => settle(new DOMException('WebSocket request aborted', 'AbortError'));
+      const onAbort = () => settle(getCallerAbortError(signal!));
       const resetTimeout = () => {
         clearTimeout(timeout);
         timeout = setTimeout(() => {
@@ -405,8 +417,29 @@ export class WebSocketProvider implements ApiProvider {
         }
       };
 
-      ws.onclose = () => {
-        settle(new Error('WebSocket connection closed before the response completed'));
+      ws.onclose = (event) => {
+        const transientClose =
+          TRANSIENT_CLOSE_CODES.has(event.code) || (event.code === 1005 && !event.wasClean);
+        if (transientClose) {
+          const transient = new Error(
+            `WebSocket closed mid-stream by the peer with code ${event.code} (${
+              CLOSE_CODE_REASONS[event.code] ?? 'abnormal close'
+            })`,
+          ) as NodeJS.ErrnoException & { retryAfterMs?: number };
+          transient.code = 'ECONNRESET';
+          if (event.code === 1012) {
+            // IANA's 5 to 30 second reconnect window, with headroom for the
+            // default retry policy's additive jitter of up to 20 percent.
+            transient.retryAfterMs = 5000 + Math.random() * 20000;
+          }
+          settle(transient);
+          return;
+        }
+        settle(
+          new Error(
+            `WebSocket connection closed before the response completed (code ${event.code ?? 'unknown'})`,
+          ),
+        );
       };
 
       ws.onopen = () => {
