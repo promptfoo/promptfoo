@@ -545,6 +545,19 @@ describe('PythonWorkerPool worker failures', () => {
     await shutdown;
   });
 
+  it('retries only workers whose shutdown failed', async () => {
+    const first = createFakeWorker({ ready: true, busy: false, dead: false });
+    const second = createFakeWorker({ ready: true, busy: false, dead: false });
+    const { pool } = createPoolWithWorkers(first, second);
+    second.shutdown.mockRejectedValueOnce(new Error('still running'));
+    await expect(pool.shutdown()).rejects.toThrow('still running');
+    expect(pool.getWorkerCount()).toBe(1);
+    await pool.shutdown();
+    expect(first.shutdown).toHaveBeenCalledOnce();
+    expect(second.shutdown).toHaveBeenCalledTimes(2);
+    expect(pool.getWorkerCount()).toBe(0);
+  });
+
   it('should share one cleanup between concurrent shutdown calls', async () => {
     let finishWorkerShutdown: () => void = () => {};
     const worker = createFakeWorker({ ready: true, busy: false, dead: false });

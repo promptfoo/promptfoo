@@ -18,10 +18,12 @@ vi.mock('fs', async () => {
       ...actual,
       promises: {
         readFile: vi.fn(),
+        stat: vi.fn(async () => ({ isFile: () => true })),
       },
     },
     promises: {
       readFile: vi.fn(),
+      stat: vi.fn(async () => ({ isFile: () => true })),
     },
   };
 });
@@ -92,6 +94,21 @@ describe('fileReference utility functions', () => {
 
     importModule.mockResolvedValue({});
     runPython.mockResolvedValue({});
+  });
+
+  it('passes cancellation through nested file and Python references', async () => {
+    const { signal } = new AbortController();
+    readFileMock.mockResolvedValueOnce('content');
+    runPython.mockResolvedValueOnce({ value: 'local' });
+    await processConfigFileReferences(
+      { settings: ['file://sample.txt', 'file://config.py'] },
+      '/base',
+      signal,
+    );
+    expect(readFileMock).toHaveBeenCalledWith('/base/sample.txt', { encoding: 'utf8', signal });
+    expect(runPython).toHaveBeenCalledWith('/base/config.py', 'get_config', [], {
+      abortSignal: signal,
+    });
   });
 
   describe('loadFileReference', () => {
