@@ -794,10 +794,11 @@ describe('Report attack prompt groupings', () => {
   it.each(cases)(
     'uses $name in both groupings without mutating input',
     async ({ response, metadata, expected }) => {
+      const vars = Object.freeze({ prompt: 'seed prompt', query: 'auxiliary query' });
       const results = [false, true].map((pass, testIdx) => ({
         ...createComponentMockResult(0, 'plugin1', pass),
         testIdx,
-        vars: Object.freeze({ prompt: 'seed prompt' }),
+        vars,
         response: { output: 'safe output', ...response },
         metadata: { pluginId: 'plugin1', ...metadata },
       })) as EvaluateResult[];
@@ -808,10 +809,7 @@ describe('Report attack prompt groupings', () => {
       const groups = reportGroupings.mock.lastCall![0];
       expect(groups.failuresByPlugin.plugin1[0].prompt).toBe(expected);
       expect(groups.passesByPlugin.plugin1[0].prompt).toBe(expected);
-      expect(results.map((result) => result.vars)).toEqual([
-        { prompt: 'seed prompt' },
-        { prompt: 'seed prompt' },
-      ]);
+      expect(results.map((result) => result.vars)).toEqual([vars, vars]);
     },
   );
 

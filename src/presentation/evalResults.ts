@@ -87,10 +87,10 @@ export function getDisplayVars(
   return displayVars;
 }
 
-export function getReportPrompt(result: EvaluateResult, injectVar?: string): string {
+export function getReportPrompt(result: EvaluateResult, injectVar = 'prompt'): string {
   const vars = getDisplayVars(result, injectVar);
   return (
-    (injectVar && promptText(vars?.[injectVar])) ||
+    promptText(vars?.[injectVar]) ||
     promptText(vars?.query) ||
     promptText(vars?.prompt) ||
     promptText(result.prompt.raw)
