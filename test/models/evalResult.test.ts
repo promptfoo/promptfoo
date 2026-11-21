@@ -1375,42 +1375,52 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
-    it.each(['content', 'trace', 'additionalModelResponseFields'])(
-      'redacts restored test-owned %s before JSONL output',
-      (key) => {
-        const ownedValue = {
-          Authorization: 'Bearer fixture-test-secret',
-          apiKey: 'fixture-api-secret',
-          note: 'keep annotation',
-        };
-        const input = createEvaluateResult({
-          testCase: createAtomicTestCase({ metadata: { [key]: ownedValue } }),
-          metadata: { [key]: { value: 'provider-output-secret' } },
-          response: {
-            output: 'provider-output-secret',
-            metadata: { [key]: { value: 'provider-output-secret' } },
-          },
-        });
-        const projected = sanitizeResultForJsonlArtifact(
-          input,
-          getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' }),
-        );
-        expect(projected.metadata?.[key]).toEqual({
-          Authorization: '[REDACTED]',
-          apiKey: '[REDACTED]',
-          note: 'keep annotation',
-        });
-        expect(projected.metadata?.[key]).toEqual(projected.testCase.metadata?.[key]);
-        for (const secret of [
-          'fixture-test-secret',
-          'fixture-api-secret',
-          'provider-output-secret',
-        ]) {
-          expect(JSON.stringify(projected)).not.toContain(secret);
-        }
-        expect(input.testCase.metadata?.[key]).toEqual(ownedValue);
-      },
-    );
+    const outputMetadataKeys = [
+      'content',
+      'trace',
+      'additionalModelResponseFields',
+      'citations',
+      'returnControl',
+      'files',
+      'retrievalResults',
+    ] as const;
+
+    it.each(outputMetadataKeys)('redacts restored test-owned %s before JSONL output', (key) => {
+      const ownedValue = {
+        Authorization: 'Bearer fixture-test-secret',
+        apiKey: 'fixture-api-secret',
+        headers: { Authorization: 'Bearer fixture-nested-secret' },
+        note: 'keep annotation',
+      };
+      const providerValue = { value: 'provider-output-secret' };
+      const input = createEvaluateResult({
+        testCase: createAtomicTestCase({ metadata: { [key]: ownedValue } }),
+        metadata: { [key]: providerValue, annotation: 'keep separate annotation' },
+        response: { output: 'provider-output-secret', metadata: { [key]: providerValue } },
+      });
+      const projected = sanitizeResultForJsonlArtifact(
+        input,
+        getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' }),
+      );
+      expect(projected.metadata?.[key]).toEqual({
+        Authorization: '[REDACTED]',
+        apiKey: '[REDACTED]',
+        headers: { Authorization: '[REDACTED]' },
+        note: 'keep annotation',
+      });
+      expect(projected.metadata?.[key]).toEqual(projected.testCase.metadata?.[key]);
+      expect(projected.metadata?.annotation).toBe('keep separate annotation');
+      expect(projected.response?.metadata).not.toHaveProperty(key);
+      for (const secret of [
+        'fixture-test-secret',
+        'fixture-api-secret',
+        'fixture-nested-secret',
+        'provider-output-secret',
+      ]) {
+        expect(JSON.stringify(projected)).not.toContain(secret);
+      }
+      expect(input.testCase.metadata?.[key]).toEqual(ownedValue);
+    });
 
     it.each(
       ['present', 'removed', 'replaced'].flatMap((canonical) =>
@@ -1419,23 +1429,32 @@ describe('EvalResult', () => {
     )(
       'strips annotated reserved fields with canonical=$canonical and testOwned=$testOwned',
       async ({ canonical, testOwned }) => {
-        const nativeContent = [
-          { image: { format: 'png', source: { bytes: Buffer.from([1, 2, 3]) } } },
-          { reasoningContent: { redactedContent: new Uint8Array([4, 5, 6]) } },
-          { text: 'data:image/png;base64,AQID' },
-        ];
         const nativeMetadata = {
-          content: nativeContent,
+          content: [
+            { image: { format: 'png', source: { bytes: Buffer.from([1, 2, 3]) } } },
+            { reasoningContent: { redactedContent: new Uint8Array([4, 5, 6]) } },
+            { text: 'data:image/png;base64,AQID' },
+          ],
           trace: { image: Buffer.from([1, 2, 3]), redacted: new Uint8Array([4, 5, 6]) },
           additionalModelResponseFields: { bytes: 'AQID', output: 'provider secret' },
+          citations: [{ text: 'data:image/png;base64,AQID', bytes: Buffer.from([1, 2, 3]) }],
+          returnControl: [
+            { invocationInputs: [{ value: 'provider secret', bytes: new Uint8Array([4, 5, 6]) }] },
+          ],
+          files: [{ bytes: 'AQID', name: 'private.txt' }],
+          retrievalResults: [
+            { content: { text: 'provider secret', byteContent: new Uint8Array([4, 5, 6]) } },
+          ],
         };
-        const metadata = {
-          content: [...nativeContent, { text: 'hook annotation' }],
-          trace: { ...nativeMetadata.trace, annotation: 'hook annotation' },
-          additionalModelResponseFields: {
-            ...nativeMetadata.additionalModelResponseFields,
-            annotation: 'hook annotation',
-          },
+        const metadata: Record<string, unknown> = {
+          ...Object.fromEntries(
+            Object.entries(nativeMetadata).map(([key, value]) => [
+              key,
+              Array.isArray(value)
+                ? [...value, { annotation: 'hook annotation' }]
+                : { ...value, annotation: 'hook annotation' },
+            ]),
+          ),
           annotation: 'keep separate annotation',
         };
         const input = createEvaluateResult({
@@ -1460,12 +1479,10 @@ describe('EvalResult', () => {
           sanitizeResultForJsonlArtifact(input, flags),
         ]) {
           expect(projected.metadata?.annotation).toBe('keep separate annotation');
-          for (const key of Object.keys(nativeMetadata)) {
+          for (const key of outputMetadataKeys) {
             expect(projected.response?.metadata ?? {}).not.toHaveProperty(key);
             if (testOwned) {
-              expect(projected.metadata?.[key]).toEqual(
-                JSON.parse(JSON.stringify(metadata[key as keyof typeof metadata])),
-              );
+              expect(projected.metadata?.[key]).toEqual(JSON.parse(JSON.stringify(metadata[key])));
             } else {
               expect(projected.metadata).not.toHaveProperty(key);
             }
@@ -1488,11 +1505,34 @@ describe('EvalResult', () => {
           content: [{ text: 'private-native-output' }, { text: dataUrl }],
           trace: { guardrail: { modelOutput: ['private-native-output', dataUrl] } },
           additionalModelResponseFields: { text: 'private-native-output', image: dataUrl },
+          citations: [
+            {
+              generatedResponsePart: { textResponsePart: { text: 'private-native-output' } },
+              preview: dataUrl,
+            },
+          ],
+          returnControl: [
+            {
+              invocationInputs: [
+                {
+                  functionInvocationInput: {
+                    parameters: [{ value: 'private-native-output' }, { value: dataUrl }],
+                  },
+                },
+              ],
+            },
+          ],
+          files: [{ bytes: base64, name: 'private-native-output', preview: dataUrl }],
+          retrievalResults: [{ content: { text: 'private-native-output', image: dataUrl } }],
         };
         const ownedMetadata = {
           content: 'owned content',
           trace: { note: 'owned trace' },
           additionalModelResponseFields: { note: 'owned fields' },
+          citations: 'owned citations',
+          returnControl: { note: 'owned return control' },
+          files: { note: 'owned files' },
+          retrievalResults: { note: 'owned retrieval results' },
           annotation: 'keep separate annotation',
         };
         const metadata =
@@ -1511,7 +1551,7 @@ describe('EvalResult', () => {
                 persist: boundary === 'persisted' || boundary === 'legacy',
               });
         if (boundary === 'legacy') {
-          // Older rows retained the original mirrored data URL after canonical blob extraction.
+          // Older saved rows contain an unchanged root copy after canonical blob extraction.
           saved.metadata = metadata;
           await saved.save();
         }
@@ -1525,12 +1565,13 @@ describe('EvalResult', () => {
         ]) {
           expect(projected.response?.metadata).not.toHaveProperty('audio');
           expect(projected.metadata).not.toHaveProperty('audio');
-          for (const key of ['content', 'trace', 'additionalModelResponseFields']) {
+          expect(projected.metadata?.annotation).toBe(
+            owner === 'provider' ? undefined : ownedMetadata.annotation,
+          );
+          for (const key of outputMetadataKeys) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
             if (owner === 'test') {
-              expect(projected.metadata?.[key]).toEqual(
-                ownedMetadata[key as keyof typeof ownedMetadata],
-              );
+              expect(projected.metadata?.[key]).toEqual(ownedMetadata[key]);
             } else {
               expect(projected.metadata).not.toHaveProperty(key);
             }
@@ -1547,45 +1588,61 @@ describe('EvalResult', () => {
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].flatMap((strip) =>
-          ['provider', 'test', 'hook'].map((owner) => ({ boundary, strip, owner })),
+          ['provider', 'test', 'hook', 'collision', 'hook-with-test'].map((owner) => ({
+            boundary,
+            strip,
+            owner,
+          })),
         ),
       ),
     )(
       'projects native response metadata at $boundary output (strip: $strip, owner: $owner)',
       async ({ boundary, strip, owner }) => {
-        const nativeMetadata = {
-          content: [
-            { text: 'native-response-secret' },
-            { toolUse: { name: 'lookup', input: { value: 'native-response-secret' } } },
-          ],
-          trace: {
-            guardrail: {
-              modelOutput: ['native-response-secret'],
-              outputAssessments: { guardrail: [{ match: 'native-response-secret' }] },
+        const secret = 'native-response-secret';
+        const payloads = {
+          content: [{ text: secret }, { toolUse: { name: 'lookup', input: { value: secret } } }],
+          additionalModelResponseFields: { content: secret },
+          citations: [{ generatedResponsePart: { textResponsePart: { text: secret } } }],
+          returnControl: [
+            {
+              invocationInputs: [{ functionInvocationInput: { parameters: [{ value: secret }] } }],
             },
-          },
-          additionalModelResponseFields: { content: 'native-response-secret' },
+          ],
+          files: [{ bytes: Buffer.from(secret).toString('base64') }],
+          retrievalResults: [{ content: { text: secret } }],
+          trace: [
+            {
+              trace: {
+                orchestrationTrace: { modelInvocationOutput: { rawResponse: { content: secret } } },
+              },
+            },
+          ],
         };
-        const testMetadata = {
-          content: 'test-owned note',
+        const metadata = {
+          ...payloads,
+          sessionId: 'session-fixture',
+          latencyMs: 42,
+          note: 'retain diagnostics',
+        };
+        const testMetadata: Record<string, unknown> = {
+          ...Object.fromEntries(outputMetadataKeys.map((key) => [key, `test-owned ${key}`])),
           trace: { note: 'test-owned trace' },
           additionalModelResponseFields: { note: 'test-owned fields' },
         };
-        const ownedMetadata =
+        const hasTestMetadata = ['test', 'collision', 'hook-with-test'].includes(owner);
+        const configuredTestMetadata = hasTestMetadata ? testMetadata : {};
+        const ownedMetadata: Record<string, unknown> =
           owner === 'test'
             ? testMetadata
-            : {
-                content: 'hook-owned note',
-                trace: { note: 'hook-owned trace' },
-                additionalModelResponseFields: { note: 'hook-owned fields' },
-                annotation: 'keep hook annotation',
-              };
-        const metadata = { ...nativeMetadata, latencyMs: 42, note: 'retain diagnostics' };
+            : Object.fromEntries(outputMetadataKeys.map((key) => [key, `hook-owned ${key}`]));
+        if (owner.startsWith('hook')) {
+          ownedMetadata.annotation = 'keep hook annotation';
+        }
         const input = createEvaluateResult({
           id: `native-content-${boundary}-${strip}-${owner}`,
-          response: { output: 'native-response-secret', metadata },
-          metadata: owner === 'provider' ? metadata : ownedMetadata,
-          testCase: createAtomicTestCase({ metadata: testMetadata }),
+          response: { output: secret, metadata },
+          metadata: owner === 'provider' || owner === 'collision' ? metadata : ownedMetadata,
+          testCase: createAtomicTestCase({ metadata: configuredTestMetadata }),
         });
         const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
         let projected: EvaluateResult;
@@ -1601,30 +1658,36 @@ describe('EvalResult', () => {
           projected = loaded!.toEvaluateResult(flags);
           expect(loaded!.response?.metadata).toEqual(metadata);
         }
-        for (const [key, value] of Object.entries(nativeMetadata)) {
+        for (const [key, value] of Object.entries(payloads)) {
           if (strip) {
             expect(projected.response?.metadata).not.toHaveProperty(key);
-            expect(projected.metadata?.[key]).toEqual(
-              testMetadata[key as keyof typeof testMetadata],
-            );
+            if (hasTestMetadata) {
+              expect(projected.metadata?.[key]).toEqual(testMetadata[key]);
+            } else {
+              expect(projected.metadata).not.toHaveProperty(key);
+            }
           } else {
             expect(projected.response?.metadata?.[key]).toEqual(value);
-            if (owner === 'provider') {
+            if (owner === 'provider' || owner === 'collision') {
               expect(projected.metadata?.[key]).toEqual(value);
             }
           }
         }
         if (strip) {
-          expect(JSON.stringify(projected)).not.toContain('native-response-secret');
+          expect(JSON.stringify(projected)).not.toContain(secret);
+          expect(JSON.stringify(projected)).not.toContain(Buffer.from(secret).toString('base64'));
         }
-        if (owner !== 'provider') {
+        expect(projected.response?.metadata?.sessionId).toBe('session-fixture');
+        expect(projected.response?.metadata?.latencyMs).toBe(42);
+        expect(projected.testCase.metadata).toEqual(configuredTestMetadata);
+        expect(input.response?.metadata).toEqual(metadata);
+        if (owner === 'test' || owner.startsWith('hook')) {
           expect(projected.metadata).toEqual(
-            strip ? { ...ownedMetadata, ...testMetadata } : ownedMetadata,
+            strip && owner.startsWith('hook')
+              ? { annotation: 'keep hook annotation', ...(hasTestMetadata ? testMetadata : {}) }
+              : ownedMetadata,
           );
         }
-        expect(projected.response?.metadata?.latencyMs).toBe(42);
-        expect(projected.testCase.metadata).toEqual(testMetadata);
-        expect(input.response?.metadata).toEqual(metadata);
       },
     );
 

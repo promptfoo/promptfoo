@@ -146,6 +146,51 @@ config:
                   value: widget-pro
 ```
 
+### Native Runtime Controls and Results
+
+Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
+do not override a configured AWS profile or the default credential chain.
+
+The provider forwards `streamingConfigurations` (`streamFinalResponse` and
+`applyGuardrailInterval`), `promptCreationConfigurations`,
+`bedrockModelConfigurations`, and `sourceArn` using the
+[InvokeAgent request shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
+The full `sessionState` is supported, including conversation history, input files,
+Knowledge Base overrides, and return-control results. In JSON/YAML, encode input-file
+`source.byteContent.data` and return-control `responseBody.*.images[].source.bytes`
+as canonical padded or unpadded base64. Programmatic configs may use `Buffer` or
+`Uint8Array`; other native binary types are unsupported. Supported bytes survive
+saved-eval retries. Malformed base64 is rejected before invocation.
+
+Promptfoo and the AWS SDK make a single attempt for each `InvokeAgent` turn,
+regardless of `streamFinalResponse` or `AWS_BEDROCK_MAX_RETRIES`. A connection
+can fail after the agent has performed an action. Cancelling the eval aborts
+the request and stops reading the stream. Actions already performed can still take effect.
+
+Response metadata preserves the session and memory IDs, citations, traces,
+`returnControl` events, and generated `files`. Returned file `bytes` are base64
+strings. If the agent returns control without text, the eval output contains the
+return-control events as JSON; Promptfoo does not execute those requested actions.
+To resume, supply the same `sessionId` and the returned `invocationId` and
+`returnControlInvocationResults` in `sessionState`. Explicit session/memory calls,
+session-ending requests, tracing, return-control turns, knowledge base overrides, and S3
+locations bypass the response cache. Cached outputs omit resumable session/memory IDs.
+Use `--no-cache` when switching AWS identities or starting a conversation you intend to continue.
+
+Programmatic calls can set `bustCache: true` in the call context to bypass both cache
+reads and writes. Legacy `debug: true` has the same effect unless `bustCache` is set
+explicitly.
+
+With `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true`, `trace`, `citations`, `returnControl`,
+`files`, and `retrievalResults` are reserved output metadata keys and are
+removed from exports and shares even if a hook changes their values. Use a separate
+metadata key for hook annotations. Metadata explicitly supplied by a test case is preserved, including when a provider
+returns the same metadata key.
+
+All agent stream exception events become provider errors. With tracing enabled,
+a returned guardrail trace with action `INTERVENED` also sets
+`response.guardrails.flagged`.
+
 ### Action Groups (Tools)
 
 Configure action groups, their schemas, and Lambda executors in the deployed agent. Adding `actionGroups` to provider configuration does not create or enable a tool. For caller-side `RETURN_CONTROL` actions, use a custom orchestration provider if you need to execute the tools and continue automatically.

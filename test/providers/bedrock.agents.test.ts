@@ -148,7 +148,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
         region: 'us-east-1',
         retryMode: 'adaptive',
-        maxAttempts: 10,
+        maxAttempts: 1,
       });
     });
 
@@ -168,7 +168,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
         region: 'us-east-1',
         retryMode: 'adaptive',
-        maxAttempts: 10,
+        maxAttempts: 1,
         requestHandler,
       });
     });
