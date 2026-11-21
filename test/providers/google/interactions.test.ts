@@ -2616,12 +2616,130 @@ describe('GoogleInteractionsProvider', () => {
       modelName: string,
       config: Record<string, unknown>,
       context?: Record<string, unknown>,
+      prompt = 'Plan the next move',
     ) {
       mockFetchWithCache.mockResolvedValue(completedText as any);
       const provider = new GoogleInteractionsProvider(modelName, { config: config as any });
-      await provider.callApi('Plan the next move', context as any);
+      await provider.callApi(prompt, context as any);
       return mockFetchWithCache.mock.calls.at(-1)?.[4];
     }
+
+    it('treats reordered but equivalent request objects as the same entry', async () => {
+      const seedFirst = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { generation_config: { seed: 1, max_output_tokens: 20 } },
+      });
+      const limitFirst = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { generation_config: { max_output_tokens: 20, seed: 1 } },
+      });
+      const bodies = mockFetchWithCache.mock.calls.map(
+        ([, request]) => (request as RequestInit).body,
+      );
+
+      // The wire body keeps its order; only the cache identity is canonicalized.
+      expect(bodies[0]).not.toEqual(bodies[1]);
+      expect(seedFirst).toEqual(cacheableInteraction);
+      expect(limitFirst).toEqual(seedFirst);
+    });
+
+    it('keeps array order in the cache identity', async () => {
+      const first = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        stopSequences: ['alpha', 'beta'],
+      });
+      const second = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        stopSequences: ['beta', 'alpha'],
+      });
+
+      expect(first).toEqual(cacheableInteraction);
+      expect(second).toEqual(cacheableInteraction);
+      expect(second).not.toEqual(first);
+    });
+
+    const describeImage = (image: Record<string, unknown>) =>
+      JSON.stringify([image, { type: 'text', text: 'Describe the image.' }]);
+
+    it.each([
+      {
+        name: 'a signed Cloud Storage image URL',
+        prompt: describeImage({
+          type: 'image',
+          mime_type: 'image/png',
+          uri: 'https://storage.googleapis.com/bucket/cat.png?X-Goog-Signature=abc123&X-Goog-Expires=900',
+        }),
+      },
+      {
+        name: 'an image URL with a shared access signature',
+        prompt: describeImage({
+          type: 'image_url',
+          image_url: {
+            url: 'https://account.blob.core.windows.net/media/cat.png?sv=2026&sig=abc123',
+          },
+        }),
+      },
+      {
+        name: 'an image URL with userinfo',
+        prompt: describeImage({ type: 'image', uri: 'https://user:pass@media.example/cat.png' }),
+      },
+      {
+        name: 'a URL with a query string inside prompt text',
+        prompt: 'Describe https://media.example/cat.png?token=abc123 in one sentence.',
+      },
+      {
+        name: 'a token-like string inside prompt text',
+        prompt: 'Bearer abcdefghijklmnopqrstuvwxyz0123456789',
+      },
+    ])('bypasses the cache for a request body carrying $name', async ({ prompt }) => {
+      await expect(
+        getCacheArgument('gemini-robotics-er-2-preview', { apiKey: 'test-key' }, undefined, prompt),
+      ).resolves.toBe(true);
+      const body = (mockFetchWithCache.mock.calls[0]?.[1] as RequestInit).body as string;
+      expect(body).toContain(prompt.includes('Bearer') ? 'Bearer' : '://');
+    });
+
+    it.each([
+      {
+        name: 'a tool header map',
+        passthrough: {
+          tools: [
+            {
+              type: 'mcp_server',
+              name: 'docs',
+              url: 'https://mcp.example/sse',
+              headers: { Authorization: 'Bearer short' },
+            },
+          ],
+        },
+      },
+      { name: 'a secret-named field', passthrough: { api_key: 'not-a-real-key' } },
+    ])('bypasses the cache for a request body carrying $name', async ({ passthrough }) => {
+      await expect(
+        getCacheArgument('gemini-robotics-er-2-preview', { apiKey: 'test-key', passthrough }),
+      ).resolves.toBe(true);
+    });
+
+    it.each([
+      {
+        name: 'a Cloud Storage URL without a query',
+        image: { type: 'image', uri: 'https://storage.googleapis.com/bucket/cat.png' },
+      },
+      { name: 'a gs:// URI', image: { type: 'image', uri: 'gs://bucket/cat.png' } },
+      {
+        name: 'inline image bytes',
+        image: { type: 'image', mime_type: 'image/png', data: 'A'.repeat(256) },
+      },
+    ])('caches a request body with $name', async ({ image }) => {
+      await expect(
+        getCacheArgument(
+          'gemini-robotics-er-2-preview',
+          { apiKey: 'test-key' },
+          undefined,
+          describeImage(image),
+        ),
+      ).resolves.toEqual(cacheableInteraction);
+    });
 
     it('caches a self-contained interaction under a credential-free key', async () => {
       const first = await getCacheArgument('gemini-robotics-er-2-preview', {
