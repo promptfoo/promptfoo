@@ -5,6 +5,7 @@ import { getEventListeners } from 'node:events';
 import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as blobs from '../../src/blobs/index';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
@@ -968,7 +969,15 @@ describe('runEval', () => {
     },
   ])(
     'grades VLSU $name output through the existing refusal controls',
-    async ({ response, metadataGrade, value, nested, shouldGrade }) => {
+    async ({ name, response, metadataGrade, value, nested, shouldGrade }) => {
+      const ref = {
+        uri: 'promptfoo://blob/fixture',
+        hash: 'fixture',
+        mimeType: 'image/png',
+        provider: 'filesystem',
+        sizeBytes: 2048,
+      };
+      vi.spyOn(blobs, 'storeBlob').mockResolvedValue({ ref, deduplicated: false });
       const providerResponse: ProviderResponse = Object.freeze(response);
       const provider: ApiProvider = {
         id: () => 'local-vlsu-fixture',
@@ -1015,7 +1024,10 @@ describe('runEval', () => {
       }
       expect(result.success).toBe(!missingOutput && !shouldGrade);
       expect(result.score).toBe(missingOutput || shouldGrade ? 0 : 1);
-      expect(grade).toHaveBeenCalledTimes(Number(!missingOutput && shouldGrade));
+      expect(grade, result.error).toHaveBeenCalledTimes(Number(!missingOutput && shouldGrade));
+      if (name === 'safe image-only') {
+        expect(result.response?.images?.[0]).toMatchObject({ blobRef: ref, data: undefined });
+      }
       if (!missingOutput && shouldGrade) {
         expect(grade.mock.calls[0][1]).toBe('');
         if ('images' in response) {
