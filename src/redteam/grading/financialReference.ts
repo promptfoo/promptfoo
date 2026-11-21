@@ -1,7 +1,4 @@
 import { z } from 'zod';
-import { isApiProvider, isProviderOptions } from '../../types/providers';
-
-import type { ApiProvider, AssertionOrSet, AtomicTestCase, GradingResult } from '../../types/index';
 
 export const FINANCIAL_CALCULATION = 'promptfoo:redteam:financial:calculation-error';
 
@@ -48,41 +45,7 @@ export function isNumericReference(value: unknown): boolean {
   return value !== null && typeof value === 'object' && 'type' in value && value.type === 'numeric';
 }
 
-export function validateFinancialAssertions(test: AtomicTestCase, provider?: ApiProvider): void {
-  const check = (assertion: AssertionOrSet): void => {
-    if (assertion.type === 'assert-set') {
-      assertion.assert.forEach(check);
-    } else if (assertion.type === FINANCIAL_CALCULATION && isNumericReference(assertion.value)) {
-      const configured = test.provider;
-      const configuredId =
-        typeof configured === 'string'
-          ? configured
-          : isApiProvider(configured)
-            ? configured.id()
-            : isProviderOptions(configured)
-              ? configured.id
-              : undefined;
-      if (
-        !provider ||
-        provider.id().startsWith('promptfoo:redteam:') ||
-        configuredId?.startsWith('promptfoo:redteam:') ||
-        (test.metadata?.strategyId && test.metadata.strategyId !== 'basic') ||
-        provider.transform ||
-        test.options?.transform ||
-        test.options?.postprocess ||
-        assertion.transform
-      ) {
-        throw new Error(
-          'Financial numeric grading requires a direct provider without strategies or output transforms.',
-        );
-      }
-      parseReference(assertion.value);
-    }
-  };
-  test.assert?.forEach(check);
-}
-
-function parseReference(value: unknown) {
+export function parseFinancialReference(value: unknown) {
   const parsed = referenceSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
@@ -97,8 +60,8 @@ function abs(value: bigint): bigint {
 }
 
 /** The reviver receives the original JSON token before double rounding can lose precision. */
-export function gradeFinancialReference(output: string, reference: unknown): GradingResult {
-  const { expected, absoluteTolerance, relativeTolerance } = parseReference(reference);
+export function gradeFinancialReference(output: string, reference: unknown) {
+  const { expected, absoluteTolerance, relativeTolerance } = parseFinancialReference(reference);
   const grade = (pass: boolean, reason: string) => ({
     pass,
     score: Number(pass),

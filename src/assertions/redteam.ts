@@ -4,7 +4,7 @@ import { getGraderById } from '../redteam/graders';
 import {
   FINANCIAL_CALCULATION,
   isNumericReference,
-  validateFinancialAssertions,
+  parseFinancialReference,
 } from '../redteam/grading/financialReference';
 import {
   getGradingAssertionHash,
@@ -77,6 +77,31 @@ function getConfiguredProviderId(
       : isProviderOptions(configuredProvider)
         ? configuredProvider.id
         : undefined;
+}
+
+export function validateFinancialAssertion(
+  assertion: Assertion,
+  test: AtomicTestCase,
+  provider?: ApiProvider,
+) {
+  if (assertion.type !== FINANCIAL_CALCULATION || !isNumericReference(assertion.value)) {
+    return;
+  }
+  if (
+    !provider ||
+    provider.id().startsWith('promptfoo:redteam:') ||
+    getConfiguredProviderId(test, provider)?.startsWith('promptfoo:redteam:') ||
+    (test.metadata?.strategyId && test.metadata.strategyId !== 'basic') ||
+    provider.transform ||
+    test.options?.transform ||
+    test.options?.postprocess ||
+    assertion.transform
+  ) {
+    throw new Error(
+      'Financial numeric grading requires a direct provider without strategies or output transforms.',
+    );
+  }
+  parseFinancialReference(assertion.value);
 }
 
 function matchesStoredGraderResult(
@@ -200,7 +225,7 @@ export const handleRedteam = async (
     baseType === FINANCIAL_CALCULATION &&
     (isNumericReference(assertion.value) || isNumericReference(renderedValue))
   ) {
-    validateFinancialAssertions({ ...test, assert: [assertion] }, provider);
+    validateFinancialAssertion(assertion, test, provider);
     if (!isNumericReference(assertion.value)) {
       throw new Error('Financial numeric grading requires a trusted inline reference');
     }

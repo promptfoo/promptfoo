@@ -1,5 +1,9 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  hasTraceAwareAssertions,
+  runAssertions,
+  validateFinancialAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -9,7 +13,6 @@ import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
-import { validateFinancialAssertions } from '../redteam/grading/financialReference';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
 import { getSessionId } from '../redteam/util';

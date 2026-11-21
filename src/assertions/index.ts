@@ -79,7 +79,7 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { handleRedteam } from './redteam';
+import { handleRedteam, validateFinancialAssertion } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -183,6 +183,17 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
 
 export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
+}
+
+export function validateFinancialAssertions(test: AtomicTestCase, provider: ApiProvider): void {
+  const check = (assertion: AssertionOrSet): void => {
+    if (assertion.type === 'assert-set') {
+      assertion.assert.forEach(check);
+    } else {
+      validateFinancialAssertion(assertion, test, provider);
+    }
+  };
+  test.assert?.forEach(check);
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
