@@ -29,6 +29,13 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const textRoute = getBedrockTextRoute(providerPath);
+      if (modelType === 'api') {
+        const { AwsBedrockNativeApiProvider } = await import('../bedrock/nativeApi');
+        return new AwsBedrockNativeApiProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
 
       if (modelType === 'runtime') {
         const api = splits[2];

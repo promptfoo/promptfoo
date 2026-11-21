@@ -219,6 +219,10 @@ export abstract class AwsBedrockGenericProvider {
     return undefined;
   }
 
+  protected getMaxAttempts(): number {
+    return getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10);
+  }
+
   async getBedrockInstance() {
     if (!this.bedrock) {
       const handler = await createBedrockRequestHandler({ apiKey: this.getApiKey() });
@@ -229,7 +233,7 @@ export abstract class AwsBedrockGenericProvider {
 
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+          maxAttempts: this.getMaxAttempts(),
           retryMode: 'adaptive',
           requestHandler: handler,
           ...(credentials ? { credentials } : {}),
