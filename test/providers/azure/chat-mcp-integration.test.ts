@@ -180,7 +180,10 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
                 {
                   id: 'call_1',
                   type: 'function',
-                  function: { name: 'list_resources', arguments: '{"kind":"tokens"}' },
+                  function: {
+                    name: 'list_resources',
+                    arguments: '{"kind":"tokens","apiKey":"fixture-key"}',
+                  },
                 },
               ],
             },
@@ -196,12 +199,15 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
     const result = await provider.callApi('list the tokens');
 
-    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', { kind: 'tokens' });
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {
+      kind: 'tokens',
+      apiKey: 'fixture-key',
+    });
     expect(result.metadata?.toolCalls).toEqual([
       {
         id: 'call_1',
         name: 'list_resources',
-        input: { kind: 'tokens' },
+        input: { kind: 'tokens', apiKey: '[REDACTED]' },
         output: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
         is_error: false,
       },

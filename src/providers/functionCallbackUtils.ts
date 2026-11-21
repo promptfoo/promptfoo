@@ -6,7 +6,12 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { executeCallback, resolveCallback } from './functionCallbackExecutor';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
+import {
+  getMcpErrorMessage,
+  isMcpErrorResult,
+  normalizeMcpToolContent,
+  sanitizeMcpToolData,
+} from './mcp/util';
 import { throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
@@ -353,10 +358,15 @@ export class FunctionCallbackHandler {
     callId?: string,
     toolCalls?: McpToolCallEntry[],
   ): Promise<FunctionCallResult> {
-    // Preserve raw input only when argument parsing fails.
-    let input = args;
+    let input: unknown;
     const record = (output: unknown, is_error: boolean) => {
-      toolCalls?.push({ id: callId, name: toolName, input, output, is_error });
+      toolCalls?.push({
+        id: callId,
+        name: toolName,
+        input: sanitizeMcpToolData(input),
+        output: sanitizeMcpToolData(output),
+        is_error,
+      });
     };
 
     try {
@@ -380,7 +390,13 @@ export class FunctionCallbackHandler {
       record(content, false);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // A JSON parser error may quote the original arguments, including credentials.
+      const errorMessage =
+        input === undefined && error instanceof SyntaxError
+          ? 'Invalid JSON in MCP tool arguments'
+          : error instanceof Error
+            ? error.message
+            : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       record(errorMessage, true);
       return {

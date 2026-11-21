@@ -915,20 +915,21 @@ describe('FunctionCallbackHandler', () => {
       },
     );
 
-    it('records raw arguments when JSON parsing fails', async () => {
+    it('does not record malformed arguments or expose them in the error', async () => {
       mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
       const toolCalls: McpToolCallEntry[] = [];
 
-      await handler.processCall(
-        { name: 'local_tool', arguments: 'invalid JSON' },
+      const result = await handler.processCall(
+        { name: 'local_tool', arguments: 'fixture-password' },
         undefined,
         undefined,
         { toolCalls },
       );
 
       expect(mockMCPClient.callTool).not.toHaveBeenCalled();
+      expect(JSON.stringify([result, toolCalls])).not.toContain('fixture-password');
       expect(toolCalls).toEqual([
-        expect.objectContaining({ name: 'local_tool', input: 'invalid JSON', is_error: true }),
+        expect.objectContaining({ name: 'local_tool', input: undefined, is_error: true }),
       ]);
     });
 
