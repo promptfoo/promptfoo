@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 
 import { Spinner } from '@app/components/ui/spinner';
-import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -42,5 +41,5 @@ export default function ReportPage() {
     return null;
   }
 
-  return <UserProvider>{evalId ? <Report /> : <ReportIndex />}</UserProvider>;
+  return evalId ? <Report /> : <ReportIndex />;
 }

@@ -1,5 +1,5 @@
-import { getEnvString } from '../envars';
 import { renderVarsInObject } from '../util/render';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -26,10 +26,11 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
         ...providerOptions.config,
         apiBaseUrl:
           normalizeApiBaseUrl(providerOptions.config?.apiBaseUrl) ??
-          normalizeApiBaseUrl(providerOptions.env?.ABLIT_API_BASE_URL) ??
-          normalizeApiBaseUrl(getEnvString(ABLITERATION_API_BASE_URL_ENV_VAR)) ??
+          normalizeApiBaseUrl(
+            resolveProviderEnv(providerOptions.env, [ABLITERATION_API_BASE_URL_ENV_VAR])?.value,
+          ) ??
           ABLITERATION_API_BASE_URL,
-        // Keep blank selectors in Abliteration's credential namespace.
+        // Never let a blank selector fall back to an OpenAI key.
         apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'ABLIT_KEY',
         showThinking: providerOptions.config?.showThinking ?? false,
       },

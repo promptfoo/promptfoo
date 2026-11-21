@@ -57,7 +57,7 @@ export const FilterModeSelector = ({
       {/* Mobile: dropdown */}
       <div className="md:hidden">
         <Select value={filterMode} onValueChange={onChange}>
-          <SelectTrigger className="w-[140px] h-8 text-xs">
+          <SelectTrigger aria-label="Filter results" className="w-[140px] h-8 text-xs">
             <SelectValue placeholder="All results" />
           </SelectTrigger>
           <SelectContent>
@@ -71,18 +71,19 @@ export const FilterModeSelector = ({
       </div>
 
       {/* Desktop: toggle chips */}
-      <div className="hidden md:flex items-center gap-1.5">
+      <div className="hidden md:flex items-center gap-0.5 rounded-lg bg-muted/60 p-1">
         {options.map((option) => (
           <Tooltip key={option.value} disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 onClick={() => onChange(option.value)}
+                aria-pressed={filterMode === option.value}
                 className={cn(
-                  'px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-150 border cursor-pointer',
+                  'px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   filterMode === option.value
-                    ? 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
-                    : 'bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground',
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-card/60 hover:text-foreground',
                 )}
               >
                 {TOGGLE_LABELS[option.value]}

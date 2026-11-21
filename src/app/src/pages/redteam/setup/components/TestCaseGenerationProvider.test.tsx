@@ -17,6 +17,16 @@ import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfi
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
+const createHttpGenerationProvider = () => ({
+  id: 'http',
+  config: { url: 'http://localhost:7979', method: 'POST' },
+});
+
+const createUnsafeCodingProvider = () => ({
+  id: 'openinterpreter',
+  config: { sandbox_mode: 'danger-full-access' },
+});
+
 // ===================================================================
 // Mocks
 // ===================================================================
@@ -132,12 +142,14 @@ const TestConsumer = ({
   testStrategy,
   isPluginStatic = false,
   isStrategyStatic = false,
+  onError,
 }: {
   testPlugin: Plugin;
   pluginConfig?: PluginConfig;
   testStrategy: Strategy;
   isPluginStatic?: boolean;
   isStrategyStatic?: boolean;
+  onError?: (error: Error) => void;
 }) => {
   const { isGenerating, plugin, strategy, generateTestCase } = useTestCaseGeneration();
 
@@ -145,6 +157,8 @@ const TestConsumer = ({
     await generateTestCase(
       { id: testPlugin, config: pluginConfig, isStatic: isPluginStatic },
       { id: testStrategy, config: {}, isStatic: isStrategyStatic },
+      undefined,
+      onError,
     );
   }
 
@@ -168,6 +182,243 @@ describe('TestCaseGenerationProvider', () => {
     callApiMock.mockImplementation(defaultCallApiImplementation);
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
+
+  describe.each(['basic', 'goat'] as const)(
+    '%s generation request and failures',
+    (testStrategy) => {
+      it.each([
+        ['deadline', 'harmful:hate'],
+        ['unmount', 'harmful:hate'],
+        ['deadline', 'policy'],
+        ['unmount', 'policy'],
+      ] as const)(
+        'sends plugin configuration and propagates %s cancellation for %s',
+        async (cancellation, testPlugin) => {
+          const deadline = new AbortController();
+          const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+          callApiMock.mockImplementation(() => new Promise<Response>(() => {}));
+          const pluginConfig = {
+            language: 'Japanese',
+            applicationDefinition: { purpose: 'Plugin purpose' },
+            additionalConfig: { key: 'value' },
+            ...(testPlugin === 'policy' ? { policy: 'Do not disclose account balances' } : {}),
+          };
+          const view = render(
+            <ToastProvider>
+              <TestCaseGenerationProvider
+                redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+              >
+                <TestConsumer
+                  testPlugin={testPlugin}
+                  pluginConfig={pluginConfig}
+                  testStrategy={testStrategy}
+                />
+              </TestCaseGenerationProvider>
+            </ToastProvider>,
+          );
+          await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+          expect(timeout).toHaveBeenCalledWith(60000);
+          expect(callApiMock).toHaveBeenCalledWith(
+            '/redteam/generate-test',
+            expect.objectContaining({
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                Pragma: 'no-cache',
+              },
+            }),
+          );
+          const options = callApiMock.mock.calls[0][1]!;
+          expect(JSON.parse(options.body as string)).toMatchObject({
+            plugin: { id: testPlugin, config: pluginConfig },
+            strategy: { id: testStrategy, config: {} },
+            config: { applicationDefinition: { purpose: 'Test purpose' } },
+          });
+          expect(options.signal?.aborted).toBe(false);
+          if (cancellation === 'deadline') {
+            const reason = new DOMException('Generation deadline reached', 'TimeoutError');
+            deadline.abort(reason);
+            expect(options.signal?.reason).toBe(reason);
+          } else {
+            view.unmount();
+          }
+          expect(options.signal?.aborted).toBe(true);
+        },
+      );
+
+      it.each([
+        [
+          'Request timed out after 10000ms',
+          'Test generation timed out. Please try again or check your connection.',
+        ],
+        [
+          'The operation timed out',
+          'Test generation timed out. Please try again or check your connection.',
+        ],
+        [
+          'Connection timed out while waiting',
+          'Test generation timed out. Please try again or check your connection.',
+        ],
+        ['Internal server error', 'Internal server error'],
+        [null, 'Failed to generate test case'],
+        ['api-error', 'Invalid configuration provided'],
+      ])('reports %s through the real context and toast', async (message, expected) => {
+        const error = message === null ? 'non-Error rejection' : new Error(message);
+        if (message === 'api-error') {
+          callApiMock.mockResolvedValue(
+            createJsonResponse({ error: 'Invalid configuration provided' }),
+          );
+        } else {
+          callApiMock.mockRejectedValue(error);
+        }
+        const onError = vi.fn();
+        render(
+          <ToastProvider>
+            <TestCaseGenerationProvider
+              redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+            >
+              <TestConsumer testPlugin="bola" testStrategy={testStrategy} onError={onError} />
+            </TestCaseGenerationProvider>
+          </ToastProvider>,
+        );
+        await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+        await waitFor(() => expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'));
+        expect(screen.getByTestId('plugin')).toHaveTextContent('null');
+        expect(screen.getByTestId('strategy')).toHaveTextContent('null');
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        expect(screen.getByText(expected)).toBeInTheDocument();
+        expect(screen.getByText(expected).parentElement).toHaveClass('bg-red-50');
+        expect(onError).toHaveBeenCalledTimes(1);
+        if (message === 'api-error') {
+          expect(onError.mock.calls[0][0]).toEqual(new Error('Invalid configuration provided'));
+        } else if (message === null) {
+          expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+          expect(onError.mock.calls[0][0].message).toBe('Failed to generate test case');
+        } else {
+          expect(onError.mock.calls[0][0]).toBe(error);
+        }
+      });
+
+      it.each([undefined, null, { message: 'Structured rejection' }, 42])(
+        'normalizes non-Error generation rejection %j for error callbacks',
+        async (rejection) => {
+          callApiMock.mockRejectedValue(rejection);
+          const onError = vi.fn((error: Error) => error.message);
+          render(
+            <ToastProvider>
+              <TestCaseGenerationProvider
+                redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+              >
+                <TestConsumer testPlugin="bola" testStrategy={testStrategy} onError={onError} />
+              </TestCaseGenerationProvider>
+            </ToastProvider>,
+          );
+          await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+          await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+          expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+          expect(onError).toHaveReturnedWith('Failed to generate test case');
+          expect(screen.getByText('Failed to generate test case')).toBeInTheDocument();
+          await waitFor(() =>
+            expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'),
+          );
+        },
+      );
+
+      it.each([
+        new Error('Provider failed'),
+        'Non-Error provider failure',
+        undefined,
+        null,
+        { message: 'Structured provider failure' },
+      ])('reports target execution rejection %j as an Error', async (rejection) => {
+        callApiMock.mockImplementation((path, options) =>
+          path === '/providers/test'
+            ? Promise.reject(rejection)
+            : defaultCallApiImplementation(path, options),
+        );
+        const onError = vi.fn((error: Error) => error.message);
+        render(
+          <ToastProvider>
+            <TestCaseGenerationProvider
+              redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+            >
+              <TestConsumer testPlugin="bola" testStrategy={testStrategy} onError={onError} />
+            </TestCaseGenerationProvider>
+          </ToastProvider>,
+        );
+        await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+        await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+        expect(callApiMock).toHaveBeenCalledWith('/providers/test', expect.any(Object));
+        expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+        expect(onError).toHaveReturnedWith(
+          rejection instanceof Error ? rejection.message : 'Failed to run test against target',
+        );
+        if (rejection instanceof Error) {
+          expect(onError.mock.calls[0][0]).toBe(rejection);
+        }
+        await waitFor(() => expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'));
+      });
+    },
+  );
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui'] as const)(
+    'normalizes %s local generation and target requests separately',
+    async (type) => {
+      const target = {
+        id: 'openai:chat',
+        label: 'Local target',
+        config: {
+          type,
+          model: 'tenant/model:Q4',
+          apiBaseUrl: 'https://local.example.test/v1',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          useDefaultApiKey: '{{ env.LOCAL_SOURCE }}',
+          stop: ['<end>'],
+        },
+      };
+
+      const user = userEvent.setup();
+      const provider = {
+        ...target,
+        id: 'openai:chat:generation-model',
+        config: {
+          ...target.config,
+          apiBaseUrl: 'https://generation.example.test/v1',
+          apiKeyEnvar: 'GENERATION_KEY',
+        },
+      };
+      const config = { ...MOCK_CONFIG, target, provider };
+      const original = JSON.parse(JSON.stringify(config));
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={config}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() =>
+        expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(
+          1,
+        ),
+      );
+      const generation = callApiMock.mock.calls.find(
+        ([path]) => path === '/redteam/generate-test',
+      )!;
+      const execution = callApiMock.mock.calls.find(([path]) => path === '/providers/test')!;
+      expect(JSON.parse(generation[1]!.body as string).provider).toEqual({
+        ...provider,
+        config: { ...provider.config, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+      expect(JSON.parse(execution[1]!.body as string).providerOptions).toEqual({
+        ...target,
+        config: { ...target.config, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+      expect(config).toEqual(original);
+      await waitFor(() => expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'));
+    },
+  );
 
   it('should render', () => {
     render(
@@ -526,10 +777,7 @@ describe('TestCaseGenerationProvider', () => {
             <TestCaseGenerationProvider
               redTeamConfig={{
                 ...MOCK_CONFIG,
-                target: {
-                  id: 'openinterpreter',
-                  config: { sandbox_mode: 'danger-full-access' },
-                },
+                target: createUnsafeCodingProvider(),
               }}
             >
               <TestConsumer testPlugin="harmful:hate" testStrategy={strategy} />
@@ -569,10 +817,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'openinterpreter',
-                config: { sandbox_mode: 'danger-full-access' },
-              },
+              target: createUnsafeCodingProvider(),
             }}
           >
             <Start />
@@ -611,10 +856,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'http',
-                config: { url: 'http://localhost:7979', method: 'POST' },
-              },
+              target: createHttpGenerationProvider(),
             }}
           >
             <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
@@ -666,10 +908,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'http',
-                config: { url: 'http://localhost:7979', method: 'POST' },
-              },
+              target: createHttpGenerationProvider(),
             }}
           >
             <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
@@ -809,16 +1048,21 @@ describe('TestCaseGenerationProvider', () => {
       );
     });
 
-    it('should fetch new batch when cache is exhausted', async () => {
+    it('should fetch new batch when cache is exhausted after prefetch fails', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
-      // Track call count to make prefetch fail (simulating network failure)
       let callCount = 0;
+      let rejectPrefetch!: (error: Error) => void;
       callApiMock.mockImplementation((path, options) => {
         if (path === '/redteam/generate-test') {
           callCount++;
+          if (callCount === 2) {
+            return new Promise<Response>((_resolve, reject) => {
+              rejectPrefetch = reject;
+            });
+          }
           const body = options?.body ? JSON.parse(options.body as string) : {};
           const count = body.count || 1;
           const testCases = Array.from({ length: count }, (_, i) => ({
@@ -854,9 +1098,7 @@ describe('TestCaseGenerationProvider', () => {
 
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
 
-      // Click through all 5 test cases (using cache) - note: prefetch may add more
-      // We need to click regenerate multiple times to exhaust the batch
-      // Each click should use cache until batch is exhausted
+      // Keep prefetch pending while consuming all five cases from the first batch.
       for (let i = 0; i < 4; i++) {
         const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
           name: /regenerate/i,
@@ -864,11 +1106,25 @@ describe('TestCaseGenerationProvider', () => {
         await user.click(regenerateButton);
       }
 
-      // At this point we should have used 5 from first batch
-      // Verify we're showing test case #5 from first batch
+      expect(callCount).toBe(2);
       expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
         'Batch 1 test prompt #5',
       );
+      await act(async () => {
+        rejectPrefetch(new Error('Prefetch unavailable'));
+      });
+      expect(callCount).toBe(2);
+      await user.click(
+        within(testCaseDialogComponent).getByRole('button', { name: /regenerate/i }),
+      );
+      await waitFor(() =>
+        expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+          'Batch 3 test prompt #1',
+        ),
+      );
+      expect(
+        callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
+      ).toHaveLength(3);
     });
 
     it('should NOT use batch generation for multi-turn strategies', async () => {
@@ -881,10 +1137,7 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              target: {
-                id: 'http',
-                config: { url: 'http://localhost:7979', method: 'POST' },
-              },
+              target: createHttpGenerationProvider(),
             }}
           >
             <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />

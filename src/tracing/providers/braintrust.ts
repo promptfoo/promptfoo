@@ -2,7 +2,6 @@ import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
-  MAX_TRACE_RESPONSE_BYTES,
   readLimitedResponse,
   releaseResponse,
   validateTraceProviderEndpoint,
@@ -184,18 +183,6 @@ export class BraintrustProvider implements TraceProvider {
         { statusCode: response.status },
       );
     }
-    if (!response.ok) {
-      await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError(`Braintrust returned HTTP ${response.status}`, {
-        statusCode: response.status,
-        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-      });
-    }
-
-    if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
-      await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
-    }
     const body = await readLimitedResponse(response, 'Braintrust');
 
     const result = JSON.parse(body) as BraintrustQueryResponse;
@@ -208,7 +195,6 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const spans: SpanData[] = [];
-    const services = new Set<string>();
     for (const row of rows) {
       if (spans.length >= maxSpans) {
         break;
@@ -218,15 +204,9 @@ export class BraintrustProvider implements TraceProvider {
         logger.warn('[BraintrustProvider] Skipping malformed span');
         continue;
       }
-      const service = span.attributes?.['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
-      }
       spans.push(span);
     }
 
-    return spans.length > 0
-      ? { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() }
-      : null;
+    return spans.length > 0 ? { spans, fetchedAt: Date.now() } : null;
   }
 }
