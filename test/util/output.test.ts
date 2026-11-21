@@ -19,7 +19,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
-import { createEvaluateResult } from '../factories/eval';
+import { createEvaluateResult, createEvaluateSummaryV2 } from '../factories/eval';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -1946,12 +1946,16 @@ describe('writeOutput', () => {
     expect(templateContent).not.toContain('{% for variable in cell.variables %}');
   });
 
-  it('writeOutput with HTML includes report summary values', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+  async function renderHtmlReport(evalRecord: Eval) {
+    const { readFileSync } = await vi.importActual<typeof import('fs')>('fs');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      readFileSync(path.resolve(__dirname, '../../src/tableOutput.html'), 'utf-8'),
+    );
+    await writeOutput('output.html', evalRecord, null);
+    return vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+  }
 
+  it('writeOutput with HTML includes report summary values', async () => {
     const eval_ = new Eval({ description: 'HTML facelift report' });
     await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
     eval_.setVars(['input']);
@@ -1997,9 +2001,7 @@ describe('writeOutput', () => {
       },
     });
 
-    await writeOutput('output.html', eval_, null);
-
-    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const html = await renderHtmlReport(eval_);
     expect(html).toContain('HTML facelift report');
     expect(html).toContain('<p class="metric-label">Total Results</p>');
     expect(html).toContain('<p class="metric-value">2</p>');
@@ -2023,11 +2025,6 @@ describe('writeOutput', () => {
   });
 
   it('writeOutput with HTML classifies non-error failures as failures', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
-
     const eval_ = new Eval({ description: 'HTML failure classification' });
     await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
     eval_.setVars(['input']);
@@ -2048,19 +2045,12 @@ describe('writeOutput', () => {
       promptId: 'prompt',
     });
 
-    await writeOutput('output.html', eval_, null);
-
-    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const html = await renderHtmlReport(eval_);
     expect(html).toContain('data-status="fail"');
     expect(html).toContain('>FAIL<');
   });
 
   it('writeOutput with HTML keeps visible runtime errors searchable without pre-rendering row variables per output', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
-
     const eval_ = new Eval({ description: 'HTML error search' });
     await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
     eval_.setVars(['input']);
@@ -2087,15 +2077,117 @@ describe('writeOutput', () => {
       },
     });
 
-    await writeOutput('output.html', eval_, null);
-
-    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const html = await renderHtmlReport(eval_);
     expect(html).toContain(
-      'data-search="ERROR 0.00 provider timed out Evaluation failed provider timed out"',
+      'data-search="ERROR 0.00 Visible output despite failure Evaluation failed provider timed out"',
     );
     expect(html).toContain('data-variable-name="input"');
     expect(html).not.toContain('<span class="detail-variable-name">');
     expect(html).toContain('appendVariableDetails(trigger);');
+  });
+
+  it.each([
+    {
+      name: 'passing output',
+      pass: true,
+      reason: 'Passed',
+      output: 'reply',
+      fields: ['Reason', 'Output'],
+      open: true,
+    },
+    {
+      name: 'a partial reply',
+      reason: 'Grader reason',
+      error: 'Provider error',
+      output: 0,
+      fields: ['Error', 'Reason', 'Output'],
+      open: false,
+    },
+    {
+      name: 'a repeated error',
+      reason: 'Same',
+      error: 'Same',
+      output: false,
+      fields: ['Reason', 'Output'],
+      open: false,
+    },
+    {
+      name: 'a failure without a reason',
+      reason: ' ',
+      output: 'reply',
+      fields: ['Output'],
+      open: true,
+    },
+    {
+      name: 'a provider error without output',
+      reason: '',
+      error: 'Offline',
+      fields: ['Error'],
+      open: false,
+    },
+  ])(
+    'shows $name in the HTML table and drawer',
+    async ({ pass = false, reason, error, output, fields, open }) => {
+      const eval_ = new Eval({});
+      await eval_.addResult(
+        createEvaluateResult({
+          success: pass,
+          failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
+          testCase: { description: 'Description' },
+          response: { output },
+          error,
+          gradingResult: { pass, score: Number(pass), reason },
+        }),
+      );
+
+      const [table, drawer] = (await renderHtmlReport(eval_)).split('<template');
+      for (const [view, expectedFields] of [
+        [table, fields],
+        [drawer, [...fields, 'Test', 'Prompt']],
+      ] as const) {
+        const titles = [
+          ...view.matchAll(
+            /class="(?:output-section-label|detail-section-title)">(Error|Reason|Output|Test|Prompt)</g,
+          ),
+        ];
+        expect(titles.map(([, title]) => title)).toEqual(expectedFields);
+        const disclosure = view.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
+        if (output === undefined) {
+          expect(disclosure).toBeNull();
+        } else {
+          expect(disclosure?.[1].includes(' open')).toBe(open);
+          expect(disclosure?.[2]).toContain(`>${output}<`);
+        }
+      }
+    },
+  );
+
+  it('retains legacy display text instead of exposing a hidden response', async () => {
+    const eval_ = new Eval({ env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } });
+    eval_.oldResults = createEvaluateSummaryV2();
+    const cell = eval_.oldResults.table.body[0].outputs[0];
+    cell.pass = false;
+    cell.text = 'Stored display text';
+    cell.error = cell.text;
+    cell.response = { output: 'Hidden response' };
+    const html = await renderHtmlReport(eval_);
+    expect(html).toContain('<div class="output-text">Stored display text</div>');
+    expect(html).not.toContain('Hidden response');
+  });
+
+  it('respects output stripping for a partial provider response', async () => {
+    const eval_ = new Eval({ env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } });
+    await eval_.addResult(
+      createEvaluateResult({
+        success: false,
+        testCase: {},
+        error: 'Provider error',
+        response: { output: 'Hidden response' },
+      }),
+    );
+    const html = await renderHtmlReport(eval_);
+    expect(html).toContain('<div class="output-text">[output stripped]</div>');
+    expect(html).not.toContain('Hidden response');
   });
 
   it('writes output to Google Sheets', async () => {
