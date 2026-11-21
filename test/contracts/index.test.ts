@@ -97,6 +97,17 @@ describe('contracts leaf surface', () => {
       expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
     });
 
+    it("preserves the Anthropic SDK's OpenTelemetry settings", () => {
+      const env = {
+        ANTHROPIC_OPEN_TELEMETRY: 'true',
+        ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: 'false',
+        ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE: 'content',
+        ANTHROPIC_OPEN_TELEMETRY_TRACES_MAX_CONTENT_BYTES: '100000',
+      };
+
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
     it.each([
       { PROMPTFOO_PYTHON: 'python3', PROMPTFOO_PYTHON_WORKERS: '2' },
       { PROMPTFOO_PYTHON: '', PROMPTFOO_PYTHON_WORKERS: '' },

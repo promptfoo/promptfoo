@@ -63,6 +63,10 @@ The following providers support automatic tracing. Model and agent providers can
 | OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited)     |
 | Cloudflare AI                                  | ✓ (inherited)     |
 
+The Anthropic provider also sends its span's trace context with each request, so spans from
+[Claude API tracing](https://platform.claude.com/docs/en/manage-claude/opentelemetry/api) join the
+eval's trace. See [Anthropic tracing](/docs/providers/anthropic/#tracing).
+
 ### GenAI Span Attributes
 
 Instrumented model and agent calls can include these attributes on their GenAI spans:
@@ -89,6 +93,7 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 - `gen_ai.usage.cache_read.input_tokens` - Input tokens read from the provider's prompt cache
 - `gen_ai.usage.cache_creation.input_tokens` - Input tokens written to the provider's prompt cache
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
+- `gen_ai.response.id` and `gen_ai.response.model` - Response ID and model, when the provider reports them
 
 **Promptfoo-specific Attributes:**
 

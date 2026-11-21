@@ -9,7 +9,8 @@ import {
 import { getEnvInt, getEnvString, parseEnvFloat } from '../../envars';
 import logger from '../../logger';
 import {
-  type GenAISpanContext,
+  buildChatSpanContext,
+  GenAIAttributes,
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
@@ -55,6 +56,7 @@ import {
   resolveClaudeSamplingParams,
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { Span } from '@opentelemetry/api';
 
 import type {
   CallApiContextParams,
@@ -93,6 +95,32 @@ async function finalMessageWithStreamedStopDetails(
   return finalMessage.stop_details == null && streamedStopDetails != null
     ? { ...finalMessage, stop_details: streamedStopDetails }
     : finalMessage;
+}
+
+/** The request parameters as sent, which can differ from the config (defaults, dropped params). */
+function setRequestSpanAttributes(
+  span: Span,
+  params: Anthropic.Messages.MessageCreateParams &
+    Pick<AnthropicMessageOptions, 'temperature' | 'top_p' | 'top_k'>,
+) {
+  span.setAttribute(GenAIAttributes.REQUEST_MAX_TOKENS, params.max_tokens);
+  for (const [attribute, value] of [
+    [GenAIAttributes.REQUEST_TEMPERATURE, params.temperature],
+    [GenAIAttributes.REQUEST_TOP_P, params.top_p],
+    [GenAIAttributes.REQUEST_TOP_K, params.top_k],
+  ] as const) {
+    if (typeof value === 'number') {
+      span.setAttribute(attribute, value);
+    }
+  }
+}
+
+function setResponseSpanAttributes(span: Span, message: Anthropic.Messages.Message) {
+  span.setAttribute(GenAIAttributes.RESPONSE_ID, message.id);
+  span.setAttribute(GenAIAttributes.RESPONSE_MODEL, message.model);
+  if (message.stop_reason) {
+    span.setAttribute('anthropic.message.stop_reason', message.stop_reason);
+  }
 }
 
 function normalizeHeadersForCacheKey(headers: Record<string, string>) {
@@ -391,15 +419,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   /** Resume paused server-tool turns, retaining each request for usage and cost. */
   private async sendMessage(
     params: Anthropic.Messages.MessageCreateParams,
-    headers: Record<string, string>,
+    requestOptions: Anthropic.RequestOptions,
     shouldStream: boolean,
     responses: Anthropic.Messages.Message[],
-    signal?: AbortSignal,
   ): Promise<Anthropic.Messages.Message> {
-    const requestOptions = {
-      ...(Object.keys(headers).length > 0 && { headers }),
-      ...(signal && { signal }),
-    };
+    const { signal } = requestOptions;
     const send = async (requestParams: Anthropic.Messages.MessageCreateParams) => {
       signal?.throwIfAborted();
       requestParams = withTurnContainer(requestParams, responses);
@@ -456,21 +480,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   private async resolveMcpToolUse({
     config,
-    headers,
+    requestOptions,
     initialResponse,
     params,
     responses,
     shouldStream,
-    signal,
   }: {
     config: AnthropicMessageOptions;
-    headers: Record<string, string>;
+    requestOptions: Anthropic.RequestOptions;
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     /** Every API call made so far, for usage and cost. */
     responses: Anthropic.Messages.Message[];
     shouldStream: boolean;
-    signal?: AbortSignal;
   }): Promise<{
     error?: string;
     response: Anthropic.Messages.Message;
@@ -509,7 +531,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let executedMcpToolCalls = 0;
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
-      signal?.throwIfAborted();
+      requestOptions.signal?.throwIfAborted();
       const responseToolUses = response.content.filter(
         (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
       );
@@ -565,10 +587,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       response = await this.sendMessage(
         getMcpContinuationParams(params, messages),
-        headers,
+        requestOptions,
         shouldStream,
         responses,
-        signal,
       );
     }
 
@@ -696,23 +717,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
+    // Request parameters are recorded once they are resolved, since the model can drop some.
+    const spanContext = buildChatSpanContext({
       system: this.getGenAISystem(),
-      operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      // Promptfoo context from test case if available
-      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
-    };
+      prompt,
+      context,
+    });
 
     // Result extractor to set response attributes on the span
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
@@ -750,7 +762,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, options),
+      (span) => this.callApiInternal(prompt, span, context, options),
       resultExtractor,
     );
   }
@@ -905,6 +917,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    */
   private async callApiInternal(
     prompt: string,
+    span: Span,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -1067,6 +1080,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
+    setRequestSpanAttributes(span, params);
     logger.debug('Calling Anthropic Messages API', {
       params: getMessagesRequestMetadata(params),
     });
@@ -1171,12 +1185,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const responses: Anthropic.Messages.Message[] = [];
     try {
       const signal = options?.abortSignal;
+      const requestOptions = {
+        ...(Object.keys(headers).length > 0 && { headers }),
+        ...(signal && { signal }),
+        ...this.traceRequestOptions(span, !!context?.traceparent),
+      };
       const initialMessage = await this.sendMessage(
         params,
-        headers,
+        requestOptions,
         shouldStream,
         responses,
-        signal,
       );
       signal?.throwIfAborted();
 
@@ -1186,14 +1204,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         toolCalls,
       } = await this.resolveMcpToolUse({
         config,
-        headers,
+        requestOptions,
         initialResponse: initialMessage,
         params,
         responses,
         shouldStream,
-        signal,
       });
       const cost = this.calculateMessageCosts(config, responses);
+      setResponseSpanAttributes(span, responses[responses.length - 1]);
 
       // Only attach the key when a tool actually ran: an always-present empty array
       // would break downstream filters that test `metadata?.toolCalls?.length > 0`.

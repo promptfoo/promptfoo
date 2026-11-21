@@ -20,6 +20,24 @@ export const AnthropicSharedConfigInputSchema = z.strictObject({
   cost: z.number().optional(),
   inputCost: z.number().optional(),
   outputCost: z.number().optional(),
+  openTelemetry: z
+    .union([
+      z.boolean(),
+      z.strictObject({
+        propagation: z.boolean().optional(),
+        traces: z
+          .union([
+            z.boolean(),
+            z.strictObject({
+              enabled: z.boolean().optional(),
+              contentMode: z.enum(['metadata_only', 'content']).optional(),
+              maxContentBytes: z.number().int().positive().optional(),
+            }),
+          ])
+          .optional(),
+      }),
+    ])
+    .optional(),
 });
 const CacheControl = z.strictObject({
   type: z.literal('ephemeral'),

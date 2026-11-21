@@ -138,6 +138,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       response = await this.anthropic.post<CompletionResponse>('/v1/complete', {
         body: params,
         headers: this.config.headers,
+        ...this.traceRequestOptions(),
       });
     } catch (err) {
       return {

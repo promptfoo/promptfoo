@@ -71,6 +71,8 @@ export interface AnthropicBaseOptions {
   cost?: number;
   inputCost?: number;
   outputCost?: number;
+  /** Unset propagates promptfoo's span. True or options enable SDK tracing. False disables both. */
+  openTelemetry?: AnthropicMessagesConfigInput['openTelemetry'];
 }
 
 export interface AnthropicMessageOptions extends AnthropicBaseOptions {
@@ -108,7 +110,10 @@ export interface AnthropicMessageOptions extends AnthropicBaseOptions {
 }
 
 export interface AnthropicCompletionOptions
-  extends Pick<AnthropicBaseOptions, 'apiKey' | 'apiKeyEnvar' | 'apiBaseUrl' | 'headers'> {
+  extends Pick<
+    AnthropicBaseOptions,
+    'apiKey' | 'apiKeyEnvar' | 'apiBaseUrl' | 'headers' | 'openTelemetry'
+  > {
   max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;
