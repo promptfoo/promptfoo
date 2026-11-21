@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
+import { inheritProviderCapabilities } from '../types/providers';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
@@ -26,6 +27,10 @@ function formatVoyageApiError(status: number, statusText: string, data: any): st
 }
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VoyageEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   modelName: string;

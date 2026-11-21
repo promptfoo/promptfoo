@@ -11,6 +11,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
+import { inheritProviderCapabilities } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
@@ -532,6 +533,10 @@ export class ReplicateModerationProvider
   extends ReplicateProvider
   implements ApiModerationProvider
 {
+  static readonly declaredProviderCapabilities = ['callModerationApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    ReplicateModerationProvider.declaredProviderCapabilities,
+  );
   async callModerationApi(
     prompt: string,
     assistant: string,

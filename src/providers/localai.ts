@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, parseEnvFloat } from '../envars';
+import { inheritProviderCapabilities } from '../types/providers';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -105,6 +106,10 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    LocalAiEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   async callEmbeddingApi(

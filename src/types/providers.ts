@@ -136,16 +136,122 @@ export interface ProviderCleanupContext {
   reason: 'evaluation-complete';
 }
 
-export interface ApiProvider extends MinimalApiProvider {
+/** Identity and lifecycle shared by providers, independently of their operation. */
+export interface ProviderIdentity<TConfig = unknown> {
+  id(): string;
+  config?: TConfig;
+  /** Omit for legacy method-based detection; declare to exclude inherited stubs. */
+  promptfooCapabilities?: readonly ProviderCapability[];
+  /**
+   * Provider-wide cleanup hook for releasing long-lived resources such as worker
+   * processes, browser sessions, or pooled connections. The CLI calls it without
+   * arguments unless `cleanupAfterEvaluation` is implemented or the provider registers
+   * itself for shutdown; a registered provider's `shutdown()` may delegate to this hook.
+   * Request-scoped cancellation should be implemented with `abortSignal`.
+   */
+  cleanup?: () => void | Promise<void>;
+}
+
+export interface ProviderOperations {
   callApi: CallApiFunction;
-  callClassificationApi?: (
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callClassificationApi: (
     prompt: string,
     options?: CallApiOptionsParams,
   ) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callSimilarityApi: (
+    reference: string,
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderSimilarityResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
+}
+
+export type ProviderCapability = keyof ProviderOperations;
+
+const inheritedProviderCapabilities = Symbol.for('promptfoo.inheritedProviderCapabilities');
+
+/** Mark only the built-in declaration as inherited; a subclass assignment remains explicit. */
+export function inheritProviderCapabilities<T extends readonly ProviderCapability[]>(
+  declared: T,
+): T {
+  const inherited = [...declared] as unknown as T;
+  Object.defineProperty(inherited, inheritedProviderCapabilities, { value: true });
+  return inherited;
+}
+
+/** Check the implementation and the closest explicit declaration for a single operation. */
+export function hasProviderCapability<K extends ProviderCapability>(
+  provider: unknown,
+  capability: K,
+): provider is ProviderIdentity & { [P in K]: Pick<ProviderOperations, P> }[K] {
+  if (
+    typeof provider !== 'object' ||
+    provider === null ||
+    !('id' in provider) ||
+    typeof provider.id !== 'function' ||
+    typeof Reflect.get(provider, capability) !== 'function'
+  ) {
+    return false;
+  }
+
+  const capabilities =
+    'promptfooCapabilities' in provider ? provider.promptfooCapabilities : undefined;
+  if (capabilities === undefined) {
+    return true;
+  }
+  if (!Array.isArray(capabilities)) {
+    return false;
+  }
+  if (!Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) {
+    return capabilities.includes(capability);
+  }
+
+  // A wrapper's methods are forwarders. The delegate may restrict a built-in
+  // capability or replace an inherited stub even if the copied list says otherwise.
+  const delegate = Reflect.get(provider, Symbol.for('promptfoo.capabilityDelegate'));
+  if (delegate !== undefined && delegate !== provider) {
+    return hasProviderCapability(delegate, capability);
+  }
+
+  let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
+  let prototype = Object.getPrototypeOf(provider);
+  while (prototype && prototype !== Object.prototype) {
+    const explicit = Object.getOwnPropertyDescriptor(prototype, 'promptfooCapabilities');
+    if (explicit) {
+      const declared = explicit.get?.call(provider) ?? explicit.value;
+      return Array.isArray(declared) && declared.includes(capability);
+    }
+    const parent = Object.getPrototypeOf(prototype);
+    // The first declaring class owns the stubs. Only subclasses can override them.
+    if (
+      prototype.constructor?.declaredProviderCapabilities &&
+      !parent?.constructor?.declaredProviderCapabilities
+    ) {
+      return overridden || capabilities.includes(capability);
+    }
+    overridden ||= Object.prototype.hasOwnProperty.call(prototype, capability);
+    prototype = parent;
+  }
+  return capabilities.includes(capability);
+}
+
+// Keep the legacy text-provider shape and permissive default config at the public
+// boundary. Internal adapters can specify TConfig and use operation guards.
+export interface ApiProvider<TConfig = any> extends MinimalApiProvider, ProviderIdentity<TConfig> {
+  callApi: ProviderOperations['callApi'];
+  callClassificationApi?: ProviderOperations['callClassificationApi'];
+  callEmbeddingApi?: ProviderOperations['callEmbeddingApi'];
+  callSimilarityApi?: ProviderOperations['callSimilarityApi'];
+  callModerationApi?: ProviderOperations['callModerationApi'];
   /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
   supportsEmbeddingCancellation?: boolean;
-  config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
   handlesOwnDelay?: boolean;
@@ -165,20 +271,12 @@ export interface ApiProvider extends MinimalApiProvider {
   prompts?: string[];
   transform?: string | TransformFunction;
   toJSON?: () => any;
-  /**
-   * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections. The CLI calls it without
-   * arguments unless `cleanupAfterEvaluation` is implemented or the provider registers
-   * itself for shutdown; a registered provider's `shutdown()` may delegate to this hook.
-   * Request-scoped cancellation should be implemented with `abortSignal`.
-   */
-  cleanup?: () => void | Promise<void>;
   /** Release idle evaluation resources separately from an explicit `cleanup()` call. */
   cleanupAfterEvaluation?: (context: ProviderCleanupContext) => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: ProviderOperations['callEmbeddingApi'];
 }
 
 /** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */
@@ -192,23 +290,15 @@ export interface CancellableEmbeddingProvider extends ApiEmbeddingProvider {
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
-  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
+  callSimilarityApi: ProviderOperations['callSimilarityApi'];
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (
-    prompt: string,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: ProviderOperations['callClassificationApi'];
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (
-    prompt: string,
-    response: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderModerationResponse>;
+  callModerationApi: ProviderOperations['callModerationApi'];
 }
 
 export type FilePath = string;

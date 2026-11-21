@@ -1,6 +1,7 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { inheritProviderCapabilities } from '../types/providers';
 import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
@@ -300,6 +301,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 }
 
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = ['callClassificationApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    HuggingfaceTextClassificationProvider.declaredProviderCapabilities,
+  );
   modelName: string;
   config: HuggingfaceProviderOptions;
   env?: EnvOverrides;
@@ -406,6 +411,10 @@ type HuggingfaceInferenceOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    HuggingfaceFeatureExtractionProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   modelName: string;
@@ -505,6 +514,10 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
 }
 
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
+  static readonly declaredProviderCapabilities = ['callSimilarityApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    HuggingfaceSentenceSimilarityProvider.declaredProviderCapabilities,
+  );
   modelName: string;
   config: HuggingfaceInferenceOptions;
   env?: EnvOverrides;
@@ -610,6 +623,10 @@ type HuggingfaceTokenClassificationOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceTokenExtractionProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = ['callClassificationApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    HuggingfaceTokenExtractionProvider.declaredProviderCapabilities,
+  );
   modelName: string;
   config: HuggingfaceTokenClassificationOptions;
   env?: EnvOverrides;

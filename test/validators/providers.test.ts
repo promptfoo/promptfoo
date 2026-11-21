@@ -1,18 +1,25 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InputsSchema } from '../../src/contracts/shared';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import { type ApiProvider, hasProviderCapability } from '../../src/types/providers';
 import {
+  ApiProviderObjectSchema,
   ApiProviderSchema,
   ProviderOptionsSchema,
   ProviderSchema,
 } from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('ProviderOptionsSchema', () => {
   it('uses the canonical input schema for configured and callable providers', () => {
     expect(ProviderOptionsSchema.shape.inputs.unwrap()).toBe(InputsSchema);
-    expect(ApiProviderSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    expect(ApiProviderObjectSchema.shape.inputs.unwrap()).toBe(InputsSchema);
     const inputs = { question: 'User question', context: { type: 'text', description: 'Context' } };
     expect(ProviderOptionsSchema.parse({ inputs }).inputs).toEqual(inputs);
     expect(
@@ -87,19 +94,20 @@ describe('ProviderOptionsSchema', () => {
 });
 
 describe('ProviderSchema union', () => {
-  it('preserves the explicit embedding cancellation capability without requiring it', () => {
+  it('preserves the explicit embedding cancellation capability without requiring it', async () => {
     const provider = {
       id: () => 'custom-embedding',
       callApi: vi.fn(async () => ({ output: 'text' })),
       callEmbeddingApi: vi.fn(async () => ({ embedding: [1, 0] })),
     };
     expect(ApiProviderSchema.parse(provider)).not.toHaveProperty('supportsEmbeddingCancellation');
-    expect(
-      ProviderSchema.parse({ ...provider, supportsEmbeddingCancellation: true }),
-    ).toMatchObject({
+    const parsed = ProviderSchema.parse({
+      ...provider,
       supportsEmbeddingCancellation: true,
-      callEmbeddingApi: provider.callEmbeddingApi,
-    });
+    }) as ApiProvider;
+    expect(parsed.supportsEmbeddingCancellation).toBe(true);
+    expect(await parsed.callEmbeddingApi?.('input')).toEqual({ embedding: [1, 0] });
+    expect(provider.callEmbeddingApi).toHaveBeenCalledWith('input');
     expect(
       ApiProviderSchema.safeParse({ ...provider, supportsEmbeddingCancellation: 'true' }).success,
     ).toBe(false);
@@ -135,6 +143,91 @@ describe('ProviderSchema union', () => {
     // unknownField should be filtered by ProviderOptionsSchema
     expect(result.data).not.toHaveProperty('unknownField');
   });
+
+  it('preserves explicit provider capabilities', () => {
+    const input = {
+      id: () => 'embedding',
+      callApi: async () => ({}),
+      promptfooCapabilities: ['callEmbeddingApi'],
+    };
+
+    const result = ProviderSchema.parse(input);
+
+    expect(result).toMatchObject({ promptfooCapabilities: ['callEmbeddingApi'] });
+  });
+
+  it('preserves inherited capability delegation and grader operations', () => {
+    class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
+      override async callApi() {
+        return { output: 'text' };
+      }
+    }
+    const provider = ProviderSchema.parse(new TextEmbeddingProvider('fixture'));
+    expect(hasProviderCapability(provider, 'callApi')).toBe(true);
+
+    const custom = ProviderSchema.parse({
+      id: () => 'custom',
+      callApi: async () => ({ output: 'text' }),
+      callSimilarityApi: async () => ({ similarity: 1 }),
+      callModerationApi: async () => ({ flags: [] }),
+    });
+    expect(custom).toHaveProperty('callSimilarityApi');
+    expect(custom).toHaveProperty('callModerationApi');
+  });
+
+  it('preserves the receiver for parsed provider operations', async () => {
+    class StatefulProvider {
+      #value = 7;
+      id() {
+        return `stateful-${this.#value}`;
+      }
+      async callApi() {
+        return { output: this.#value };
+      }
+      async callEmbeddingApi() {
+        return { embedding: [this.#value] };
+      }
+      async callClassificationApi() {
+        return { classification: { fixture: this.#value } };
+      }
+      async callSimilarityApi() {
+        return { similarity: this.#value };
+      }
+      async callModerationApi() {
+        return { flags: [], value: this.#value };
+      }
+    }
+    const input = new StatefulProvider();
+    const provider = ProviderSchema.parse(input);
+    expect(typeof provider).toBe('object');
+    if (typeof provider === 'string' || !provider.callApi || typeof provider.id !== 'function') {
+      throw new Error('Expected a parsed API provider');
+    }
+
+    expect(provider.id()).toBe('stateful-7');
+    expect(await provider.callApi('')).toEqual({ output: 7 });
+    expect(await provider.callEmbeddingApi?.('')).toEqual({ embedding: [7] });
+    expect(await provider.callClassificationApi?.('')).toEqual({ classification: { fixture: 7 } });
+    expect(await provider.callSimilarityApi?.('', '')).toEqual({ similarity: 7 });
+    expect(await provider.callModerationApi?.('', '')).toEqual({ flags: [], value: 7 });
+  });
+
+  it.each([
+    { capabilities: ['misspelled'] },
+    { capabilities: ['callApi', 'third-party'] },
+    { capabilities: 'callApi' },
+  ])(
+    'rejects invalid capability declarations instead of returning options: %j',
+    ({ capabilities }) => {
+      const provider = {
+        id: () => 'custom',
+        callApi: async () => ({ output: 'fixture' }),
+        promptfooCapabilities: capabilities,
+      };
+
+      expect(ProviderSchema.safeParse(provider).success).toBe(false);
+    },
+  );
 
   it('should accept string provider', () => {
     const result = ProviderSchema.safeParse('openai:gpt-4');

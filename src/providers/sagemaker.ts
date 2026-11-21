@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { inheritProviderCapabilities } from '../types/providers';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import { resolveProviderEnv } from './env';
@@ -853,6 +854,10 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    SageMakerEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   async callApi(): Promise<ProviderResponse> {

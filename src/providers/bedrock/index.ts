@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { inheritProviderCapabilities } from '../../types/providers';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
@@ -3029,6 +3030,10 @@ export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AwsBedrockEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   declare config: BedrockEmbeddingOptions;

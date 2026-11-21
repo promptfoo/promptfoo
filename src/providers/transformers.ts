@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { inheritProviderCapabilities } from '../types/providers';
 import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
@@ -361,6 +362,10 @@ function handleTransformersError(
  * ```
  */
 export class TransformersEmbeddingProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    TransformersEmbeddingProvider.declaredProviderCapabilities,
+  );
   modelName: string;
   config: TransformersEmbeddingOptions;
   private pipelines = new Set<PipelineEntry>();

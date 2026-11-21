@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { getCache, isCacheEnabled } from '../../cache';
 import { type EnvVarKey, getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
+import { inheritProviderCapabilities } from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
@@ -146,6 +147,10 @@ export function getModerationCacheKey(
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
+  static readonly declaredProviderCapabilities = ['callModerationApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AzureModerationProvider.declaredProviderCapabilities,
+  );
   static MODERATION_MODELS = AZURE_MODERATION_MODELS;
   static MODERATION_MODEL_IDS = AZURE_MODERATION_MODELS.map((model) => model.id);
 
