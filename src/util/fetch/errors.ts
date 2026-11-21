@@ -470,7 +470,7 @@ export function isAbortError(error: unknown): boolean {
 
 export function getAbortError(signal: AbortSignal): Error {
   const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
+  if (reason instanceof Error && (reason.name === 'AbortError' || reason.name === 'TimeoutError')) {
     return reason;
   }
   const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
