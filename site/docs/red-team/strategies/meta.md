@@ -44,27 +44,29 @@ This provides broader coverage of potential vulnerabilities at the cost of more 
 
 ## Meta-Agent vs Standard Jailbreak
 
-| Aspect       | Meta-Agent                                  | Standard Iterative                    |
-| ------------ | ------------------------------------------- | ------------------------------------- |
-| **Approach** | Explores multiple distinct attack types     | Refines variations of single approach |
-| **Coverage** | Broad - tests different attack categories   | Deep - exhausts one approach          |
-| **Cost**     | Higher (more diverse attempts)              | Lower (focused refinement)            |
-| **Best For** | Finding any vulnerability in robust systems | Testing specific attack patterns      |
+| Aspect       | Meta-Agent                              | Standard Iterative                 |
+| ------------ | --------------------------------------- | ---------------------------------- |
+| **Approach** | Explores multiple distinct attack types | Refines variations of one approach |
+| **Coverage** | Tests different attack categories       | Focuses on one approach            |
+| **Cost**     | Higher (more diverse attempts)          | Lower (focused refinement)         |
+| **Best For** | Exploring alternative attack approaches | Testing specific attack patterns   |
 
-The meta-agent stops when it finds a vulnerability, determines the target is secure, or reaches max iterations.
+The meta-agent stops when the grader confirms a vulnerability or the maximum number of iterations is reached. A grader transport or parsing error is not a vulnerability verdict, so the strategy continues to the next iteration. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error. It also stops with an error if remote multi-input generation returns an invalid prompt format.
+
+If Cloud explicitly reports that the upstream provider rejected a coordination request as invalid JSON (`invalid_json`), the strategy stops and reports the error while retaining completed attempts. Other coordination errors continue through the existing retry and iteration behavior.
 
 ## When to Use
 
 **Use `jailbreak:meta` when:**
 
-- Testing production systems where you need comprehensive coverage of attack types
+- Exploring multiple attack types against a target
 - Your guardrails might block obvious approaches but miss alternative attack angles
-- Cost is less critical than finding all potential vulnerabilities
+- You can spend more API calls exploring different approaches
 
 **Use standard `jailbreak` when:**
 
 - Running large-scale tests where API cost is a primary concern
-- Testing early-stage systems without sophisticated defenses
+- Refining a specific attack pattern
 - Cloud access is unavailable
 
 ## Related Concepts

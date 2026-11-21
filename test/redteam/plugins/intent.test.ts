@@ -166,9 +166,7 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a CSV file', async () => {
     const mockFileContent = 'header\nintent1\nintent2\nintent3';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -188,9 +186,7 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a JSON file', async () => {
     const mockFileContent = '["intent1","intent2","intent3"]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -209,9 +205,7 @@ describe('IntentPlugin', () => {
 
   it('should load nested intent arrays from a JSON file', async () => {
     const mockFileContent = '[["step1", "step2"], ["other1", "other2"]]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -241,9 +235,7 @@ describe('IntentPlugin', () => {
 
   it('should handle empty JSON array', async () => {
     const mockFileContent = '[]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -259,9 +251,7 @@ describe('IntentPlugin', () => {
 
   it('should handle mixed string and array intents in JSON', async () => {
     const mockFileContent = '["single_intent", ["multi", "step"], "another_single"]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -295,9 +285,7 @@ describe('IntentPlugin', () => {
 
   it('should throw error for malformed JSON file', () => {
     const mockFileContent = '["invalid", json}';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
