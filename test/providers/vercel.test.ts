@@ -220,6 +220,34 @@ describe('VercelAiProvider', () => {
   });
 
   describe('configuration options', () => {
+    it.each([
+      { model: 'openai/gpt-6.2-astra', streaming: false },
+      { model: 'openai/gpt-6.2-sol', streaming: true },
+    ])(
+      'passes $model options to the SDK with streaming=$streaming',
+      async ({ model, streaming }) => {
+        const { generateText, streamText } = await import('ai');
+        vi.mocked(generateText).mockResolvedValueOnce(createFreshTextResult() as any);
+        vi.mocked(streamText).mockReturnValueOnce({
+          fullStream: [{ type: 'text-delta', text: 'Fresh response' }],
+          finishReason: Promise.resolve('stop'),
+        } as any);
+
+        const openai = { reasoningEffort: 'high', serviceTier: 'ultrafast' } as const;
+        const providerOptions = {
+          openai: { ...openai, unrelatedSetting: true },
+          gateway: { unrelatedSetting: true },
+        };
+        const provider = createVercelProvider(`vercel:${model}`, {
+          config: { providerOptions, streaming },
+        });
+        expect(await provider.callApi('Hello')).toMatchObject({ output: 'Fresh response' });
+        expect(streaming ? streamText : generateText).toHaveBeenCalledWith(
+          expect.objectContaining({ model: { modelName: model }, providerOptions: { openai } }),
+        );
+      },
+    );
+
     it('should store apiKeyEnvar in config', () => {
       const provider = new VercelAiProvider('openai/gpt-4o', {
         config: { apiKeyEnvar: 'MY_CUSTOM_API_KEY' },
@@ -384,6 +412,7 @@ describe('VercelAiProvider', () => {
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       const result = await provider.callApi('Hello');
 
+      expect(vi.mocked(generateText).mock.calls[0][0]).not.toHaveProperty('providerOptions');
       expect(result).toEqual({
         output: 'Hello from GPT-4o!',
         tokenUsage: {
@@ -615,6 +644,7 @@ describe('VercelAiProvider', () => {
       const provider = new VercelAiProvider('openai/gpt-4o', createStreamingOptions());
       const result = await provider.callApi('Hello');
 
+      expect(vi.mocked(streamText).mock.calls[0][0]).not.toHaveProperty('providerOptions');
       expect(result).toEqual({
         output: 'Hello from streaming!',
         tokenUsage: {
@@ -877,6 +907,28 @@ describe('VercelAiProvider', () => {
   });
 
   describe('caching', () => {
+    it('separates cache entries when OpenAI reasoning effort or service tier changes', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
+
+      for (const openai of [
+        { reasoningEffort: 'low', serviceTier: 'default' },
+        { reasoningEffort: 'high', serviceTier: 'default' },
+        { reasoningEffort: 'high', serviceTier: 'ultrafast' },
+        { serviceTier: 'ultrafast', reasoningEffort: 'high' },
+      ] as const) {
+        const provider = new VercelAiProvider('openai/gpt-6.2-sol', {
+          config: { providerOptions: { openai } },
+        });
+        await provider.callApi('Hello');
+      }
+
+      const keys = mockCache.get.mock.calls.map(([key]) => key);
+      expect(new Set(keys).size).toBe(3);
+      expect(keys[3]).toBe(keys[2]);
+    });
+
     it.each([
       ['tool-calls', 'tool_calls'],
       ['content-filter', 'content_filter'],

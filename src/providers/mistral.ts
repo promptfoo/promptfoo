@@ -272,8 +272,17 @@ function hashMistralCacheValue(value: unknown): string {
     .digest('hex');
 }
 
-function getMistralAuthCacheNamespace(apiKey: string): string {
-  return fingerprintCacheIdentity(apiKey, MISTRAL_CACHE_HASH_KEY);
+function getMistralCacheKey(
+  kind: 'chat' | 'embedding',
+  model: string,
+  apiUrl: string,
+  apiKey: string,
+  request: unknown,
+): string {
+  const prefix = `mistral:${kind}:${model}`;
+  const endpointHash = hashMistralCacheValue({ apiUrl });
+  const authNamespace = fingerprintCacheIdentity(apiKey, MISTRAL_CACHE_HASH_KEY);
+  return `${prefix}:${endpointHash}:${authNamespace}:${hashMistralCacheValue(request)}`;
 }
 
 function fetchMistralWithDedupe(
@@ -563,12 +572,6 @@ export class MistralChatCompletionProvider implements ApiProvider {
     return resolveMistralApiKey(this);
   }
 
-  private getCacheIdentityHash(apiUrl: string): string {
-    return hashMistralCacheValue({
-      apiUrl,
-    });
-  }
-
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config = {
@@ -617,9 +620,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       : undefined;
     const params = buildMistralChatParams(this.modelName, messages, config, loadedTools);
 
-    const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
-      apiUrl,
-    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
+    const cacheKey = getMistralCacheKey('chat', this.modelName, apiUrl, apiKey, params);
     if (isCacheEnabled()) {
       const cache = getCache();
       if (cache) {
@@ -776,12 +777,6 @@ export class MistralEmbeddingProvider implements ApiProvider {
     return resolveMistralApiKey(this);
   }
 
-  private getCacheIdentityHash(apiUrl: string): string {
-    return hashMistralCacheValue({
-      apiUrl,
-    });
-  }
-
   async callApi(text: string): Promise<ProviderResponse> {
     try {
       const embeddingResponse = await this.callEmbeddingApi(text);
@@ -815,9 +810,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     const apiUrl = this.getApiUrl();
     const url = `${apiUrl}/embeddings`;
-    const cacheKey = `mistral:embedding:${this.modelName}:${this.getCacheIdentityHash(
-      apiUrl,
-    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(body)}`;
+    const cacheKey = getMistralCacheKey('embedding', this.modelName, apiUrl, apiKey, body);
 
     let data;
     let cached = false;

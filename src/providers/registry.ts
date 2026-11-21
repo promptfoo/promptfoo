@@ -82,6 +82,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { shouldDefaultToOpenAiResponses } from './openai/routing';
 import { OpenAiTtsProvider } from './openai/tts';
 import {
   assertOpenAiApiModel,
@@ -179,7 +180,11 @@ function getProviderEnvAliasGroups(
   }
   if (providerPath.startsWith('bedrock:')) {
     const mode = getBedrockTextRoute(providerPath)?.apiMode;
-    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+    return mode === 'chat' ||
+      mode === 'messages' ||
+      mode === 'responses' ||
+      mode === 'runtime-chat' ||
+      mode === 'runtime-responses'
       ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
       : [];
   }
@@ -328,20 +333,6 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
   return typeof configuredModel === 'string' && configuredModel.trim().length > 0
     ? configuredModel
     : undefined;
-}
-
-function shouldDefaultToOpenAiResponses(modelName: string): boolean {
-  // Some compatible gateways spell the legacy GPT-3.5 family as GPT-35.
-  if (/^gpt-35(?:-|$)/.test(modelName)) {
-    return false;
-  }
-  const version = /^gpt-(\d+)(?:\.(\d+))?(?:-|$)/.exec(modelName);
-  if (!version) {
-    return false;
-  }
-  const major = Number(version[1]);
-  const minor = Number(version[2] ?? 0);
-  return major > 5 || (major === 5 && minor >= 6);
 }
 
 function configuredProviderFactory(
@@ -912,9 +903,12 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const [_, modelType, modelName] = providerPath.split(':');
+      const modelType = providerPath.split(':')[1];
       if (modelType === 'image') {
-        return new FalImageGenerationProvider(modelName, providerOptions);
+        return new FalImageGenerationProvider(
+          modelNameFromProviderPath(providerPath, 2),
+          providerOptions,
+        );
       }
       throw new Error(
         `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,

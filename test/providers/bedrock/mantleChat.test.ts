@@ -213,6 +213,22 @@ describe('bedrock mantle Chat Completions provider', () => {
       ).toThrow(/Use the bare "bedrock:openai\.gpt-future" id/);
     });
 
+    it.each(['openai.gpt-6.2-astra', 'openai.gpt-6.2-sol'])(
+      'sends %s to the configured Mantle Chat endpoint with GPT-6.2 parameters',
+      async (model) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('hello'));
+        const provider = createBedrockMantleChatProvider(model, {
+          config: { apiKey: 'test', region: 'us-east-1', reasoning_effort: 'max', temperature: 1 },
+        });
+        expect((await provider.callApi('hello')).output).toBe('hello');
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(url).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1/chat/completions');
+        const body = JSON.parse(String(request?.body));
+        expect(body).toMatchObject({ model, reasoning_effort: 'max' });
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
     it.each([
       ['openai.gpt-6-astra', 'us-west-2'],
       ['openai.gpt-6.1-sol', 'us-east-1'],
@@ -423,6 +439,95 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 4, completion: 6 });
       expect(result.cost).toBeCloseTo((4 * 4.4 + 6 * 22) / 1_000_000, 10);
       expect(result.error).toBeUndefined();
+    });
+
+    describe('regional pricing through custom endpoints', () => {
+      const proxy = 'https://bedrock-proxy.example/openai/v1';
+      const data = {
+        choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 500,
+          total_tokens: 1500,
+          prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 },
+        },
+      };
+
+      beforeEach(() => {
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
+      });
+
+      it.each([
+        ['openai.gpt-6-sol', 2.2, 0.22, 2.75, 11],
+        ['openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
+        ['openai.gpt-6.1-terra', 1.1, 0.055, 1.375, 5.5],
+      ] as const)(
+        'preserves Mantle rates for %s through a proxy',
+        async (model, input, read, write, output) => {
+          for (const apiBaseUrl of [undefined, proxy]) {
+            const provider = createBedrockMantleChatProvider(model, {
+              config: { apiKey: 'bedrock-key', region: 'us-east-1', apiBaseUrl },
+            });
+            const result = await provider.callApi('hello');
+            expect(result.error).toBeUndefined();
+            expect(result.cost).toBeCloseTo(
+              (700 * input + 200 * read + 100 * write + 500 * output) / 1e6,
+              12,
+            );
+          }
+        },
+      );
+
+      it.each(['provider', 'prompt'] as const)(
+        'uses the effective %s model for proxy pricing',
+        async (scope) => {
+          const passthrough = { model: 'openai.gpt-6.1-terra' };
+          const provider = createBedrockMantleChatProvider('openai.gpt-5.6-sol', {
+            config: {
+              apiKey: 'bedrock-key',
+              region: 'us-east-1',
+              apiBaseUrl: proxy,
+              ...(scope === 'provider' ? { passthrough } : {}),
+            },
+          });
+          const context =
+            scope === 'prompt'
+              ? { vars: {}, prompt: { raw: 'hello', label: 'test', config: { passthrough } } }
+              : undefined;
+          const result = await provider.callApi('hello', context);
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeCloseTo(0.0036685, 12);
+          const [, request] = vi.mocked(fetchWithCache).mock.calls.at(-1)!;
+          expect(JSON.parse(request?.body as string).model).toBe(passthrough.model);
+        },
+      );
+
+      it('keeps first-party OpenAI rates through the same proxy', async () => {
+        const provider = new OpenAiChatCompletionProvider('gpt-6.1-terra', {
+          config: { apiKey: 'openai-key', apiBaseUrl: proxy },
+        });
+        const result = await provider.callApi('hello');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeCloseTo(0.003335, 12);
+      });
+
+      it.each([
+        { name: 'cached response', cached: true, config: {}, expected: 0 },
+        {
+          name: 'explicit rates',
+          cached: false,
+          config: { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+          expected: 0.0035,
+        },
+      ])('preserves $name behind the proxy', async ({ cached, config, expected }) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(data, { cached }));
+        const provider = createBedrockMantleChatProvider('openai.gpt-6.1-terra', {
+          config: { apiKey: 'bedrock-key', region: 'us-east-1', apiBaseUrl: proxy, ...config },
+        });
+        const result = await provider.callApi('hello');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeCloseTo(expected, 12);
+      });
     });
 
     it.each([

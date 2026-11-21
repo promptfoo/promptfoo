@@ -6,7 +6,6 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GoogleVideoProvider,
-  generateVideoCacheKey,
   validateAspectRatio,
   validateDuration,
   validateResolution,
@@ -772,49 +771,6 @@ describe('GoogleVideoProvider', () => {
         ).toEqual({ valid: true });
       },
     );
-  });
-
-  describe('generateVideoCacheKey', () => {
-    it('should generate deterministic key', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).toBe(key2);
-    });
-
-    it('should generate different keys for different prompts', () => {
-      const key1 = generateVideoCacheKey('prompt1', 'veo-3.1', '16:9', '720p', 8);
-      const key2 = generateVideoCacheKey('prompt2', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should generate different keys for different models', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      const key2 = generateVideoCacheKey('prompt', 'veo-2', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should generate different keys for different durations', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 4);
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should include image data in cache key', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8, 'imageBase64');
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should include negative prompt in cache key', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8, undefined, 'blur');
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should return UUID-like format', () => {
-      const key = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
-    });
   });
 
   describe('callApi', () => {

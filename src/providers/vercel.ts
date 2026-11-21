@@ -8,7 +8,7 @@ import { normalizeFinishReason } from '../util/finishReason';
 import { fingerprintCacheIdentity } from './cacheFingerprint';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
-import type { LanguageModelUsage } from 'ai';
+import type { LanguageModelUsage, ProviderMetadata } from 'ai';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -21,6 +21,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
  * Message format for chat completions.
@@ -46,6 +47,12 @@ export interface VercelAiConfig {
   frequencyPenalty?: number;
   presencePenalty?: number;
   stopSequences?: string[];
+  providerOptions?: {
+    openai?: {
+      reasoningEffort?: OpenAiCompletionOptions['reasoning_effort'];
+      serviceTier?: NonNullable<OpenAiCompletionOptions['service_tier']>;
+    };
+  };
 
   // Request settings
   maxRetries?: number;
@@ -118,6 +125,15 @@ function mapTokenUsage(
   };
 }
 
+function getGatewayCost(metadata: ProviderMetadata | undefined): number | undefined {
+  const value = metadata?.gateway?.cost;
+  const cost =
+    typeof value === 'string' && /^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)
+      ? Number(value)
+      : value;
+  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
+}
+
 /** Normalize fresh and cached responses to the same provider contract. */
 function normalizeResponse(response: ProviderResponse): ProviderResponse {
   const normalized = {
@@ -165,9 +181,16 @@ function withSdkTraceContext<T>(context: CallApiContextParams | undefined, fn: (
   return otelContext.with(parentContext, fn);
 }
 
-/**
- * Picks defined generation options from config.
- */
+// Only these OpenAI options are forwarded and included in the generation cache key.
+function getSdkProviderOptions(config: VercelAiConfig) {
+  const { reasoningEffort, serviceTier } = config.providerOptions?.openai ?? {};
+  if (reasoningEffort === undefined && serviceTier === undefined) {
+    return undefined;
+  }
+  return { openai: { reasoningEffort, serviceTier } };
+}
+
+/** Picks defined generation options from config. */
 function pickGenerateOptions(config: VercelAiConfig) {
   const {
     temperature,
@@ -189,6 +212,7 @@ function pickGenerateOptions(config: VercelAiConfig) {
       presencePenalty,
       stopSequences,
       maxRetries,
+      providerOptions: getSdkProviderOptions(config),
     }).filter(([, v]) => v !== undefined),
   );
 }
@@ -305,6 +329,7 @@ export class VercelAiProvider implements ApiProvider {
           stopSequences: config.stopSequences,
           streaming: config.streaming,
           responseSchema: config.responseSchema,
+          providerOptions: getSdkProviderOptions(config),
         },
       }),
     )}`;
@@ -353,7 +378,11 @@ export class VercelAiProvider implements ApiProvider {
       if (streamError) {
         throw streamError.error;
       }
-      const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
+      const [usage, finishReason, providerMetadata] = await Promise.all([
+        result.usage,
+        result.finishReason,
+        result.providerMetadata,
+      ]);
       signal.throwIfAborted();
 
       logger.debug('Vercel AI Gateway streaming response received', {
@@ -364,6 +393,7 @@ export class VercelAiProvider implements ApiProvider {
 
       return {
         output,
+        cost: getGatewayCost(providerMetadata),
         tokenUsage: mapTokenUsage(usage),
         finishReason,
       };
@@ -468,6 +498,10 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal: signal,
         ...(config.responseSchema
           ? {
+              // The SDK reports billing before parsing structured output, which can still fail.
+              onFinish: ({ providerMetadata }) => {
+                response.cost = getGatewayCost(providerMetadata);
+              },
               output: Output.object({
                 schema: jsonSchema<Record<string, unknown>>({
                   ...config.responseSchema,
@@ -489,6 +523,7 @@ export class VercelAiProvider implements ApiProvider {
 
       // Reading structured output can throw even though the SDK returned usage and a finish reason.
       response = {
+        cost: getGatewayCost(result.providerMetadata),
         tokenUsage: mapTokenUsage(result.usage),
         finishReason: result.finishReason,
       };
@@ -499,6 +534,7 @@ export class VercelAiProvider implements ApiProvider {
       }
       if (sdk?.NoObjectGeneratedError.isInstance(error)) {
         response = {
+          ...response,
           tokenUsage: error.usage ? mapTokenUsage(error.usage) : undefined,
           finishReason: error.finishReason,
         };

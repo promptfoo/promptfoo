@@ -20,14 +20,38 @@ describe('media storage provider injection', () => {
     vi.restoreAllMocks();
   });
 
-  it.each(['true', 'TRUE', '1', 'yes', 'false', 'FALSE', '0', 'no'])(
-    'agrees with extraction for PROMPTFOO_INLINE_MEDIA=%s',
-    (value) => {
-      cliState.withEnv({ PROMPTFOO_INLINE_MEDIA: value }, () => {
-        expect(isMediaStorageEnabled()).toBe(isBlobStorageEnabled());
-      });
-    },
-  );
+  it.each([
+    ['', true],
+    ['0', true],
+    ['false', true],
+    ['FALSE', true],
+    ['no', true],
+    ['unsupported', true],
+    [' true ', true],
+    ['1', false],
+    ['true', false],
+    ['TRUE', false],
+    ['TrUe', false],
+    ['yes', false],
+    ['YES', false],
+    ['yup', false],
+    ['YePpErS', false],
+  ] as const)('agrees with extraction for PROMPTFOO_INLINE_MEDIA=%s', (value, enabled) => {
+    cliState.withEnv({ PROMPTFOO_INLINE_MEDIA: value }, () => {
+      expect(isMediaStorageEnabled()).toBe(enabled);
+      expect(isBlobStorageEnabled()).toBe(enabled);
+    });
+  });
+
+  it('enables storage when the inline toggle is unset', () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', undefined);
+    try {
+      expect(isMediaStorageEnabled()).toBe(true);
+      expect(isBlobStorageEnabled()).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
   it('keeps the first local provider when later scopes use a different media path', () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-media-lifetime-'));
