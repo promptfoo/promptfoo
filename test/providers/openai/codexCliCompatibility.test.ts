@@ -952,7 +952,7 @@ describe('checkCodexCliCompatibility', () => {
         });
         expect(outcome).toHaveProperty(
           'error.message',
-          expect.stringContaining('process-tree cleanup failed'),
+          expect.stringMatching(/stdout exceeded.*process-tree cleanup failed/),
         );
         expect(outcome).toHaveProperty(
           'error.message',

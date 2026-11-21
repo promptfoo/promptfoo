@@ -167,12 +167,14 @@ interface WindowsCleanupDetails {
   directChildExitedAtFailure: boolean;
 }
 
-class CodexCliCleanupError extends Error {
+export class CodexCliCleanupError extends Error {
   override name = 'CodexCliCleanupError';
   readonly cleanup: WindowsCleanupDetails;
 
   constructor(cleanup: WindowsCleanupDetails, cause?: Error) {
-    super(`Codex CLI process-tree cleanup failed: ${JSON.stringify(cleanup)}`);
+    super(
+      `${cause ? cause.message + '. ' : ''}Codex CLI process-tree cleanup failed: ${JSON.stringify(cleanup)}`,
+    );
     this.cleanup = cleanup;
     if (cause) {
       // This module is also typechecked against the app's ES2020 library target.
@@ -338,7 +340,7 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
         .catch((cleanupError: unknown) => {
           failure =
             cleanupError instanceof CodexCliCleanupError
-              ? new CodexCliCleanupError(cleanupError.cleanup, failure)
+              ? new CodexCliCleanupError(cleanupError.cleanup, error)
               : cleanupError instanceof Error
                 ? cleanupError
                 : new Error(String(cleanupError));
