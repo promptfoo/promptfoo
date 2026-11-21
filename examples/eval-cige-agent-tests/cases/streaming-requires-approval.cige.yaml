@@ -1,0 +1,53 @@
+# Same case as streaming-session.cige.yaml, but intent changes now require human approval as a
+# mandatory guardrail. This runner has no approval workflow, so it refuses before any tool runs
+# instead of silently treating the guardrail as advisory.
+context:
+  system: workspace streaming service
+  environment: staging
+  actor: standard enterprise test user
+  tools:
+    - open_client
+    - sign_in
+    - start_stream
+    - wait_for_state
+    - capture_screenshot
+    - read_connection_log
+  reveal_policy: Load login notes first; load diagnostics only if connection fails
+
+intent:
+  goal: Verify the user can start a streaming session
+  success_criteria:
+    - id: connected
+      description: connected state reached
+      check: { path: session.status, equals: connected }
+    - id: first-frame-latency
+      description: first frame within expected latency window
+      check: { path: session.firstFrameMs, lte: 2000 }
+    - id: no-auth-or-policy-error
+      description: no authentication or policy error
+      check: { path: session.error, equals: null }
+  required_evidence: [screenshot, connection_log]
+
+guardrails:
+  - rule: Do not delete resources
+    mandatory: true
+    enforce: { deny_tools: [delete_session] }
+  - rule: Never expose tokens or credentials in logs
+    mandatory: true
+    enforce: { forbid_output_pattern: 'tok_[A-Za-z0-9_]+' }
+  - Do not modify production configuration
+  - Do not mark pass based on UI text alone
+  - rule: Do not change intent without human approval
+    mandatory: true
+    enforce: { require_human_approval: [intent_change] }
+
+execution:
+  initial_path:
+    - tool: open_client
+    - tool: sign_in
+      args: { account: test-enterprise-user }
+    - tool: start_stream
+    - tool: wait_for_state
+      args: { state: connected }
+    - tool: capture_screenshot
+    - tool: read_connection_log
