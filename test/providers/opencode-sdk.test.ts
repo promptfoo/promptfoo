@@ -5068,7 +5068,9 @@ describe('OpenCodeSDKProvider', () => {
     );
 
     describe('restart_server_per_call', () => {
-      it('restarts the server when the traceparent changes', async () => {
+      it('restarts for a new traceparent and retains failed session deletions for cleanup', async () => {
+        mockSessionCreate.mockResolvedValueOnce(createMockSessionResponse('retry-first'));
+        mockSessionDelete.mockRejectedValueOnce(new Error('Temporary deletion failure'));
         const seen = captureSpawnEnv();
         const provider = new OpenCodeSDKProvider({
           config: { restart_server_per_call: true },
@@ -5084,6 +5086,10 @@ describe('OpenCodeSDKProvider', () => {
           TRACEPARENT_A,
           TRACEPARENT_B,
         ]);
+
+        await provider.cleanup();
+        expect(mockSessionDelete).toHaveBeenCalledTimes(3);
+        expect(mockSessionDelete.mock.calls[2][0].sessionID).toBe('retry-first');
       });
 
       it('reuses the server when the traceparent is unchanged', async () => {

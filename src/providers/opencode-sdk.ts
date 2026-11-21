@@ -2125,10 +2125,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
       logger.debug(
         `[OpenCode SDK] Restarting server to re-parent spans (traceparent ${this.activeTraceparent ?? 'none'} -> ${desiredTraceparent ?? 'none'})`,
       );
+      // A trace restart must preserve failed ephemeral deletions for explicit cleanup.
       await this.shutdown();
-      // Sessions lived on the server we just stopped; their handles are now dangling.
-      this.sessions.clear();
-      this.sessionsForCleanup.clear();
     }
     if (this.clientInitialization !== undefined) {
       return this.clientInitialization;
