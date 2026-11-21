@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 
 const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
@@ -1044,7 +1046,7 @@ describe('OpenAI Realtime Provider', () => {
 
       expect(directRequest).toHaveBeenCalledOnce();
       expect(persistentRequest).not.toHaveBeenCalled();
-      expect(provider.config.maintainContext).toBe(false);
+      expect(provider.config.maintainContext).toBe(true);
     });
 
     it('should maintain conversation context across multiple messages', async () => {
@@ -2243,6 +2245,55 @@ describe('OpenAI Realtime Provider', () => {
       }
     });
 
+    it("discards a failed turn's delayed tool result and handles errors until the old socket closes", async () => {
+      const result = createDeferred<string>();
+      const functionCallHandler = vi.fn(() => result.promise);
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          tools: [createRealtimeTool('lookup')],
+          functionCallHandler,
+        },
+      });
+      const retired = Object.assign(new EventEmitter(), {
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+        close: vi.fn(),
+      });
+      provider.persistentConnection = retired as unknown as WebSocket;
+      const first = provider.callApi('lookup', {
+        test: { metadata: { conversationId: 'a' } },
+      } as any);
+      await flushMicrotasks();
+      const emit = (data: Buffer) => retired.emit('message', data);
+      emitFunctionCall(emit, 'lookup');
+      emitFunctionCallArgumentsDone(emit);
+      emitResponseDone(emit);
+      expect(functionCallHandler).toHaveBeenCalledOnce();
+      emit(Buffer.from(JSON.stringify({ type: 'error', message: 'interrupted' })));
+      expect((await first).error).toContain('interrupted');
+
+      const second = provider.callApi('hi', { test: { metadata: { conversationId: 'b' } } } as any);
+      await flushMicrotasks();
+      mockHandlers.open.forEach((handler) => handler());
+      await flushMicrotasks();
+      expect(retired.close).toHaveBeenCalledOnce();
+      retired.emit('error', new Error('invalid close frame'));
+      retired.emit('close', 1006, Buffer.alloc(0));
+      expect(retired.listenerCount('error')).toBe(0);
+
+      const socket = provider.persistentConnection!;
+      const sent = sentWebSocketEvents(socket).length;
+      result.resolve('private output');
+      await flushMicrotasks();
+      expect(sentWebSocketEvents(socket)).toHaveLength(sent);
+      const handler = lastMessageHandler();
+      emitOutputTextDone(handler, 'ok');
+      emitResponseDone(handler);
+      await expect(second).resolves.toMatchObject({ output: 'ok' });
+      provider.cleanup();
+    });
+
     it('should reuse existing connection for subsequent requests', async () => {
       const provider = new OpenAiRealtimeProvider(
         'gpt-realtime-1.5',
@@ -2995,6 +3046,35 @@ describe('OpenAI Realtime Provider', () => {
         }
       },
     );
+
+    it('separates conversations after a header change rotates the persistent socket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'fixture-key', maintainContext: true },
+      });
+      try {
+        for (const [conversationId, safety_identifier] of [
+          ['first-conversation', 'first-user'],
+          ['first-conversation', 'second-user'],
+          ['second-conversation', 'second-user'],
+          ['second-conversation', 'second-user'],
+        ]) {
+          const pending = provider.callApi('hi', {
+            vars: {},
+            prompt: { raw: 'hi', label: 'hi', config: { safety_identifier } },
+            test: { metadata: { conversationId } },
+          });
+          await flushMicrotasks();
+          mockHandlers.open.forEach((handler) => handler());
+          await flushMicrotasks();
+          simulateGaFlow();
+          expect(await pending).toMatchObject({ output: 'ok' });
+        }
+        expect(safetyIdentifiers()).toEqual(['first-user', 'second-user', 'second-user']);
+        expect(mockWs.close).toHaveBeenCalledTimes(2);
+      } finally {
+        provider.cleanup();
+      }
+    });
 
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
