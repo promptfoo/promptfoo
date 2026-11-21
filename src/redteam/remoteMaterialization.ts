@@ -50,6 +50,7 @@ export function buildRemoteMaterializedInputVariables(
   response: RemoteMaterializationResponse,
   fallbackVars: Record<string, string>,
   inputs?: Inputs,
+  transformedVars?: Record<string, string>,
 ): MaterializedInputVariablesResult {
   const filteredFallbackVars = filterMaterializedVarsToInputs(fallbackVars, inputs, {
     // Raw fallback values are only safe for text inputs. Typed inputs such as DOCX/PDF/image
@@ -61,6 +62,9 @@ export function buildRemoteMaterializedInputVariables(
     response.materializedVars ?? {},
     inputs,
   );
+  const filteredTransformedVars = filterMaterializedVarsToInputs(transformedVars ?? {}, inputs, {
+    textOnly: true,
+  });
 
   return {
     ...(response.inputMaterialization
@@ -71,6 +75,7 @@ export function buildRemoteMaterializedInputVariables(
     vars: {
       ...filteredFallbackVars,
       ...filteredMaterializedVars,
+      ...filteredTransformedVars,
     },
   };
 }
