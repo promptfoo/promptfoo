@@ -3,11 +3,13 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import * as rubyUtils from '../../src/ruby/rubyUtils.js';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { runRubyCode } from '../../src/ruby/wrapper';
+import { createScriptAssertionParams } from '../factories/literalFixtures';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
+
+const { createPathFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
 
 vi.mock('../../src/ruby/wrapper', async () => {
   const actual =
@@ -28,18 +30,7 @@ vi.mock('../../src/ruby/rubyUtils.js', async () => {
   };
 });
 
-vi.mock('path', async () => {
-  const actualPath = await vi.importActual<typeof import('path')>('path');
-  const mocked = {
-    ...actualPath,
-    extname: vi.fn(),
-    resolve: vi.fn(),
-  };
-  return {
-    ...mocked,
-    default: mocked,
-  };
-});
+vi.mock('path', createPathFactory());
 
 describe('Ruby assertions', () => {
   const resetRubyMocks = () => {
@@ -48,9 +39,6 @@ describe('Ruby assertions', () => {
     vi.mocked(path.extname).mockReset();
     vi.mocked(runRubyCode).mockReset();
     vi.mocked(runRuby).mockReset();
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
   };
 
   beforeEach(() => {
@@ -129,12 +117,7 @@ describe('Ruby assertions', () => {
       };
       vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
 
-      const result = await runAssertion({
-        prompt: 'Test',
-        assertion: { type: 'ruby', value: 'unused' },
-        test: {},
-        providerResponse: { output: 'Test output' },
-      });
+      const result = await runAssertion(createScriptAssertionParams('ruby'));
 
       expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
       expect(result).toHaveProperty(mappedField, null);
@@ -170,12 +153,7 @@ describe('Ruby assertions', () => {
       };
       vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
 
-      const result = await runAssertion({
-        prompt: 'Test',
-        assertion: { type: 'ruby', value: 'unused' },
-        test: {},
-        providerResponse: { output: 'Test output' },
-      });
+      const result = await runAssertion(createScriptAssertionParams('ruby'));
 
       if (Number.isFinite(weight)) {
         expect(result.namedScoreWeights).toEqual({ quality: 3 });

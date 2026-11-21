@@ -8,6 +8,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 import type { StrategyRuntimeContext } from './types';
@@ -83,10 +84,7 @@ async function generateLikertPrompts(
             ...testCase.vars,
             [injectVar]: modifiedPrompt,
           },
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.metric ? `${assertion.metric}/Likert` : assertion.metric,
-          })),
+          assert: appendMetricSuffix(testCase, 'Likert'),
           metadata: {
             ...testCase.metadata,
             strategyId: 'jailbreak:likert',

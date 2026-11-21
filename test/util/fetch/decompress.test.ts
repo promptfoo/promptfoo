@@ -31,7 +31,10 @@ describe('createDecompressionInterceptor', () => {
     });
 
     expect(createDecompressionInterceptor()).toBe(interceptor);
-    expect(interceptors.decompress).toHaveBeenCalledWith({ skipErrorResponses: false });
+    expect(interceptors.decompress).toHaveBeenCalledWith({
+      skipErrorResponses: false,
+      maxSize: 64 * 1024 * 1024,
+    });
     expect(emitWarning).not.toHaveBeenCalled();
     expect(process.emitWarning).toBe(emitWarning);
   });
