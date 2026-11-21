@@ -92,18 +92,16 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   }
 
   // --- Reset time ---
-  // Retry-After is the server's own answer to when a retry can succeed, so it
-  // takes precedence over the limit reset headers.
-  if (result.retryAfterMs !== undefined) {
-    result.resetAt = Date.now() + result.retryAfterMs;
-    return result;
-  }
-
-  // Otherwise use the reset of the limit that ran out. The same header names
-  // can describe windows of different lengths: OpenAI reports two per-minute
-  // limits, while Groq's `-requests` headers describe a per-day limit and its
-  // `-tokens` headers a per-minute one. Taking the first reset header would let
-  // a day-long request window drive the wait for an exhausted token window.
+  // Use the reset of the limit that ran out. The same header names can describe
+  // windows of different lengths: OpenAI reports two per-minute limits, while
+  // Groq's `-requests` headers describe a per-day limit and its `-tokens`
+  // headers a per-minute one. Taking the first reset header would let a
+  // day-long request window drive the wait for an exhausted token window.
+  //
+  // Retry-After only fills in when no reset header is present. Callers that
+  // know the response was rate limited give Retry-After precedence; on a
+  // successful response (where a proxy may add Retry-After), the limit reset
+  // headers describe the quota.
   result.resetAt = selectResetAt([
     {
       remaining: result.remainingRequests,
@@ -121,6 +119,9 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
       resetAt: parseFirstReset(h, [OPENAI_HEADERS.resetTokens, ANTHROPIC_HEADERS.resetTokens]),
     },
   ]);
+  if (result.resetAt === undefined && result.retryAfterMs !== undefined) {
+    result.resetAt = Date.now() + result.retryAfterMs;
+  }
 
   return result;
 }

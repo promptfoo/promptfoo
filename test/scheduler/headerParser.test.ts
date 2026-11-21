@@ -270,7 +270,7 @@ describe('parseRateLimitHeaders', () => {
       'x-ratelimit-reset-requests': '43m12s',
     };
 
-    it('uses Retry-After for a Groq per-minute 429 instead of the per-day reset', () => {
+    it('reports Retry-After and the token reset for a Groq per-minute 429, not the per-day reset', () => {
       const now = Date.now();
       vi.spyOn(Date, 'now').mockReturnValue(now);
 
@@ -283,7 +283,7 @@ describe('parseRateLimitHeaders', () => {
       });
 
       expect(result.retryAfterMs).toBe(11_000);
-      expect(result.resetAt).toBe(now + 11_000);
+      expect(result.resetAt).toBe(now + 56_265);
     });
 
     it('uses the token reset when only the token limit is exhausted', () => {
@@ -386,8 +386,9 @@ describe('parseRateLimitHeaders', () => {
       expect(result.resetAt).toBe(now + 30000);
     });
 
-    it('lets retry-after take precedence over a limit reset header', () => {
+    it('should not override resetAt if already set', () => {
       const now = Date.now();
+      const futureTime = now + 120000;
       vi.spyOn(Date, 'now').mockReturnValue(now);
 
       const headers = {
@@ -397,8 +398,9 @@ describe('parseRateLimitHeaders', () => {
 
       const result = parseRateLimitHeaders(headers);
 
-      // Retry-After is the server's answer to when a retry can succeed.
-      expect(result.resetAt).toBe(now + 30000);
+      // resetAt describes the quota window; callers that know the response was
+      // rate limited give retryAfterMs precedence.
+      expect(result.resetAt).toBe(futureTime);
       expect(result.retryAfterMs).toBe(30000);
     });
 

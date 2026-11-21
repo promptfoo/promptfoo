@@ -737,6 +737,40 @@ describe('ProviderRateLimitState', () => {
         groq.dispose();
       });
 
+      it.each([
+        // A proxy-added Retry-After on a success must not lengthen or shorten
+        // the quota window its reset header reports.
+        { retryAfter: '60', reset: '1s', releasedAfterMs: 1_000 },
+        { retryAfter: '1', reset: '30s', releasedAfterMs: 30_000 },
+      ])(
+        'uses the reset header, not Retry-After $retryAfter, after a success that exhausts requests',
+        async ({ retryAfter, reset, releasedAfterMs }) => {
+          const proxied = createState(`proxy-retry-after-${retryAfter}`);
+          await proxied.executeWithRetry('req-1', async () => 'first', {
+            getHeaders: () => ({
+              'retry-after': retryAfter,
+              'x-ratelimit-limit-requests': '60',
+              'x-ratelimit-remaining-requests': '0',
+              'x-ratelimit-reset-requests': reset,
+            }),
+            isRateLimited: () => false,
+          });
+
+          let settled = false;
+          const second = proxied
+            .executeWithRetry('req-2', async () => 'second', { isRateLimited: () => false })
+            .then((value) => {
+              settled = true;
+              return value;
+            });
+          await vi.advanceTimersByTimeAsync(releasedAfterMs - 1);
+          expect(settled).toBe(false);
+          await vi.advanceTimersByTimeAsync(1);
+          await expect(second).resolves.toBe('second');
+          proxied.dispose();
+        },
+      );
+
       it('holds the queue at most 60s when a 429 reports only the per-day reset', async () => {
         const groq = createState('groq-header-only-429');
         const hits: any[] = [];
