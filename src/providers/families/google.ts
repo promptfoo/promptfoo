@@ -12,6 +12,11 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
 // Chat models that also accept google:interactions: but default to generateContent.
 const INTERACTIONS_OPT_IN_MODELS = new Set(['gemini-4-argon', 'gemini-4-hydrogen']);
 
+// Gemini managed agents (Deep Research, Antigravity) use the Interactions API `agent` field.
+function isManagedAgentId(modelName: string): boolean {
+  return modelName.startsWith('deep-research-') || modelName.startsWith('antigravity-');
+}
+
 function isLiveOnlyModel(modelName: string): boolean {
   return (
     modelName === 'gemini-3.5-live-translate-preview' ||
@@ -28,6 +33,11 @@ function validateGoogleModelRoute(
   if (modelName === GEMINI_DECISION_MODEL) {
     throw new Error(
       `Model "${modelName}" requires the Gemini Decisions API. Use google:decisions:${modelName}.`,
+    );
+  }
+  if (isManagedAgentId(modelName)) {
+    throw new Error(
+      `"${modelName}" is a Gemini managed agent. Use google:interactions:agent:${modelName}.`,
     );
   }
   if (isLiveOnlyModel(modelName) && serviceType !== 'live') {
@@ -96,6 +106,11 @@ export const googleProviderFactories: ProviderFactory[] = [
       const routedModelName = explicitServiceType
         ? splits.slice(2).join(':')
         : splits.slice(1).join(':');
+      if (explicitServiceType === 'interactions' && routedModelName.startsWith('agent:')) {
+        throw new Error(
+          `Gemini managed agents are supported only through the Gemini API. Use google:interactions:${routedModelName}.`,
+        );
+      }
       if (
         explicitServiceType === 'interactions' &&
         routedModelName === GEMINI_ROBOTICS_STANDARD_MODEL
@@ -178,6 +193,22 @@ export const googleProviderFactories: ProviderFactory[] = [
       }
       const { GoogleDecisionsProvider } = await import('../google/decisions');
       return new GoogleDecisionsProvider(modelName, {
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
+    test: (path) => /^(?:google|palm):interactions:agent(?:$|:)/.test(path),
+    create: async (providerPath, providerOptions, context) => {
+      const [prefix, , , ...rest] = providerPath.split(':');
+      const agentId = rest.join(':');
+      if (!agentId) {
+        throw new Error(`Missing agent ID. Use ${prefix}:interactions:agent:<agent-id>.`);
+      }
+      const { GoogleInteractionsAgentProvider } = await import('../google/interactionsAgent');
+      return new GoogleInteractionsAgentProvider(agentId, {
         ...providerOptions,
         id: providerOptions.id ?? providerPath,
         env: providerOptions.env ?? context.env,

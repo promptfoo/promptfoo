@@ -21,7 +21,7 @@ import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { CompletionOptions, GoogleProviderConfig } from './types';
 
-type InteractionContent = {
+export type InteractionContent = {
   type?: string;
   text?: string;
   data?: string;
@@ -37,7 +37,7 @@ type InteractionStep = {
   [key: string]: unknown;
 };
 
-type InteractionResponse = {
+export type InteractionResponse = {
   id?: string;
   status?: string;
   error?: { message?: string };
@@ -93,7 +93,7 @@ function getInteractionText(value: unknown): string[] {
   return getInteractionText(record.content ?? record.parts);
 }
 
-function parseInteractionInput(
+export function parseInteractionInput(
   prompt: string,
   extractSystemInstructions: boolean,
 ): ParsedInteractionInput {
@@ -258,7 +258,7 @@ function parseInteractionInput(
 
 const INTERACTION_INPUT_METADATA_FIELDS = new Set(['mime_type', 'mimeType', 'role', 'type']);
 
-function hasSemanticInteractionInput(value: unknown): boolean {
+export function hasSemanticInteractionInput(value: unknown): boolean {
   if (typeof value === 'string') {
     return value.trim().length > 0;
   }
@@ -525,7 +525,7 @@ function normalizeInteractionSafetySettings(
   }));
 }
 
-function calculateExplicitInteractionCost(
+export function calculateExplicitInteractionCost(
   config: CompletionOptions,
   promptTokens: number,
   completionTokens: number,
@@ -562,7 +562,7 @@ function calculateExplicitInteractionCost(
   return charges.reduce((total, [tokens, rate]) => total + tokens * (rate ?? 0), 0);
 }
 
-function getInteractionModalityTokenCount(
+export function getInteractionModalityTokenCount(
   details: Array<{ modality?: string; tokens?: number }> | undefined,
   modalities: string[],
 ): number {
@@ -571,7 +571,7 @@ function getInteractionModalityTokenCount(
     .reduce((total, detail) => total + Math.max(detail.tokens ?? 0, 0), 0);
 }
 
-function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
+export function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
   const steps = data.steps || [];
   const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
   const latestToolStep = steps
@@ -628,7 +628,7 @@ function getTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function normalizeInteractionCitation(
+export function normalizeInteractionCitation(
   annotation: unknown,
   text: string | undefined,
 ): Array<{ url?: string; source?: string; content: string }> {
@@ -712,7 +712,7 @@ function getInteractionGroundingMetadata(
   };
 }
 
-function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
+export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
   const endpointFromHost = (apiHost: string) => {
     const normalizedHost = /^https?:\/\//i.test(apiHost) ? apiHost : `https://${apiHost}`;
     return `${normalizedHost.replace(/\/$/, '')}/v1beta/interactions`;
@@ -825,7 +825,21 @@ function usesVertexExpressInteractions(
   );
 }
 
-function mergeGoogleInteractionsRequestConfig(
+/** Prompt overrides win across both config names and their wire-format aliases. */
+export function interactionFields<T extends GoogleProviderConfig>(
+  provider: T,
+  prompt?: Partial<T>,
+) {
+  return (name: keyof T & string, wireName: string = name) =>
+    prompt?.passthrough?.[wireName] ??
+    prompt?.passthrough?.[name] ??
+    prompt?.[name] ??
+    provider.passthrough?.[wireName] ??
+    provider.passthrough?.[name] ??
+    provider[name];
+}
+
+export function mergeGoogleInteractionsRequestConfig(
   providerConfig: GoogleProviderConfig,
   promptConfig?: Partial<GoogleProviderConfig>,
 ): GoogleProviderConfig {
@@ -932,13 +946,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (!hasSemanticInteractionInput(requestInput)) {
       return { error: 'Gemini Interactions prompt must contain at least one input item.' };
     }
-    const previousInteractionId =
-      promptPassthrough.previous_interaction_id ??
-      promptPassthrough.previousInteractionId ??
-      promptConfig?.previousInteractionId ??
-      providerPassthrough.previous_interaction_id ??
-      providerPassthrough.previousInteractionId ??
-      this.config.previousInteractionId;
+    const field = interactionFields(this.config, promptConfig);
+    const previousInteractionId = field('previousInteractionId', 'previous_interaction_id');
     const providerPassthroughResponseFormat =
       providerPassthrough.response_format ?? providerPassthrough.responseFormat;
     const promptPassthroughResponseFormat =
@@ -1290,11 +1299,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (promptConfig?.aspectRatio === undefined
         ? (providerPassthroughResponseFormat ?? generatedVideoResponseFormat)
         : generatedVideoResponseFormat);
-    const store =
-      promptPassthrough.store ??
-      promptConfig?.store ??
-      providerPassthrough.store ??
-      this.config.store;
+    const store = field('store');
     const providerSafetySettings =
       providerPassthrough.safety_settings ??
       (this.config.safetySettings
