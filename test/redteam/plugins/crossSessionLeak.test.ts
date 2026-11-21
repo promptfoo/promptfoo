@@ -56,6 +56,7 @@ describe('CrossSessionLeakPlugin', () => {
       pluginConfig: {
         excludeStrategies: [
           'crescendo',
+          'react-crescendo',
           'goat',
           'jailbreak:hydra',
           'jailbreak:goblin',
@@ -74,6 +75,7 @@ describe('CrossSessionLeakPlugin', () => {
       pluginConfig: {
         excludeStrategies: [
           'crescendo',
+          'react-crescendo',
           'goat',
           'jailbreak:hydra',
           'jailbreak:goblin',
@@ -100,6 +102,7 @@ describe('CrossSessionLeakPlugin', () => {
 
     expect(config.excludeStrategies).toEqual([
       'crescendo',
+      'react-crescendo',
       'goat',
       'jailbreak:hydra',
       'jailbreak:goblin',
@@ -116,6 +119,7 @@ describe('CrossSessionLeakPlugin', () => {
 
     expect(config.excludeStrategies).toEqual([
       'crescendo',
+      'react-crescendo',
       'goat',
       'jailbreak:hydra',
       'jailbreak:goblin',

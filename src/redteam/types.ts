@@ -185,6 +185,12 @@ export const ConversationMessageSchema = z.object({
 });
 export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
 
+export const ReactPreviewStateSchema = z.object({
+  observation: z.string().max(512),
+  strategyVector: z.string().regex(/^[a-z-]{1,64}$/),
+});
+export type ReactPreviewState = z.infer<typeof ReactPreviewStateSchema>;
+
 type ConfigurableObject = {
   id: string;
   config?: RedteamObjectConfig;
