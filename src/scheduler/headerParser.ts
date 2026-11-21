@@ -45,7 +45,10 @@ const STANDARD_HEADERS = {
 /**
  * Parse rate limit headers from response.
  */
-export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRateLimitHeaders {
+export function parseRateLimitHeaders(
+  headers: Record<string, string>,
+  unixSecondGraceMs = 0,
+): ParsedRateLimitHeaders {
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
@@ -105,12 +108,16 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   result.resetAt = selectResetAt([
     {
       remaining: result.remainingRequests,
-      resetAt: parseFirstReset(h, [
-        OPENAI_HEADERS.resetRequests,
-        ANTHROPIC_HEADERS.resetRequests,
-        STANDARD_HEADERS.resetAlt,
-        STANDARD_HEADERS.reset,
-      ]),
+      resetAt: parseFirstReset(
+        h,
+        [
+          OPENAI_HEADERS.resetRequests,
+          ANTHROPIC_HEADERS.resetRequests,
+          STANDARD_HEADERS.resetAlt,
+          STANDARD_HEADERS.reset,
+        ],
+        unixSecondGraceMs,
+      ),
     },
     {
       remaining: result.remainingTokens,
@@ -159,10 +166,17 @@ function selectResetAt(
   return Math.min(...resets.map((limit) => limit.resetAt));
 }
 
-function parseFirstReset(headers: Record<string, string>, names: string[]): number | undefined {
+function parseFirstReset(
+  headers: Record<string, string>,
+  names: string[],
+  unixSecondGraceMs = 0,
+): number | undefined {
   for (const name of names) {
     if (headers[name] !== undefined) {
-      const parsed = parseResetTime(headers[name]);
+      const parsed = parseResetTime(
+        headers[name],
+        name === STANDARD_HEADERS.resetAlt ? unixSecondGraceMs : 0,
+      );
       if (parsed !== null) {
         return parsed;
       }
@@ -226,7 +240,7 @@ const BARE_NUMBER_RE = /^\d+(?:\.\d+)?$/;
  * Parse reset time from various formats.
  * Returns absolute Unix timestamp in milliseconds.
  */
-function parseResetTime(value: string): number | null {
+function parseResetTime(value: string, unixSecondGraceMs: number): number | null {
   // Try duration format first (e.g., "1s", "100ms", "1m30s")
   const durationMs = parseDuration(value);
   if (durationMs !== null) {
@@ -244,7 +258,7 @@ function parseResetTime(value: string): number | null {
       if (num < 1_000_000_000) {
         return Date.now() + num * 1000;
       } else if (num < 10_000_000_000) {
-        return num * 1000;
+        return num * 1000 + unixSecondGraceMs;
       } else {
         return num;
       }

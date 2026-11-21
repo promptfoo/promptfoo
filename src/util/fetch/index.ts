@@ -423,42 +423,19 @@ export function isRateLimited(response: Response): boolean {
   );
 }
 
-/**
- * Compute how long to wait after a rate-limited response.
- * `retry-after-ms` and `Retry-After` take precedence. Otherwise the reset of the
- * exhausted limit (OpenAI-style headers, then `X-RateLimit-Reset`) applies, capped
- * at the 60s default because a reset window can be much longer than the limit
- * that was hit (Groq's `x-ratelimit-reset-requests` is a per-day window).
- */
+/** Honor Retry-After, otherwise cap the exhausted window's reset at the default wait. */
 export function computeRateLimitWaitMs(response: Response): number {
-  const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
-  if (parsedHeaders.retryAfterMs !== undefined) {
-    return parsedHeaders.retryAfterMs;
+  // Keep one second of grace for X-RateLimit-Reset timestamps rounded to Unix seconds.
+  const { retryAfterMs, resetAt } = parseRateLimitHeaders(
+    Object.fromEntries(response.headers),
+    1000,
+  );
+  if (retryAfterMs !== undefined) {
+    return retryAfterMs;
   }
-
-  const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const openaiReset =
-    response.headers.get('x-ratelimit-reset-requests') ||
-    response.headers.get('x-ratelimit-reset-tokens');
-
-  if (openaiReset) {
-    if (parsedHeaders.resetAt !== undefined) {
-      return capResetWait(parsedHeaders.resetAt - Date.now());
-    }
-  }
-
-  if (rateLimitReset) {
-    const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
-    if (Number.isFinite(resetAt) && resetAt >= 0) {
-      return capResetWait(resetAt - Date.now() + 1000);
-    }
-  }
-
-  return MAX_RESET_HEADER_WAIT_MS;
-}
-
-function capResetWait(waitMs: number): number {
-  return Math.min(Math.max(waitMs, 0), MAX_RESET_HEADER_WAIT_MS);
+  return resetAt === undefined
+    ? MAX_RESET_HEADER_WAIT_MS
+    : Math.min(MAX_RESET_HEADER_WAIT_MS, Math.max(0, resetAt - Date.now()));
 }
 
 /**

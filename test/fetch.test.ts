@@ -1597,6 +1597,22 @@ describe('computeRateLimitWaitMs', () => {
     });
   });
 
+  it.each([
+    ['X-RateLimit-Reset', '30', 30_000],
+    ['X-RateLimit-Reset', '1800000030', 31_000],
+    ['X-RateLimit-Reset', '1800000030000', 30_000],
+    ['RateLimit-Reset', '500ms', 500],
+    ['anthropic-ratelimit-tokens-reset', new Date(1800000030000).toISOString(), 30_000],
+  ] as const)('uses the shared reset parser for %s=%s', (name, value, expected) => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+    try {
+      const response = createMockResponse({ headers: new Headers({ [name]: value }) });
+      expect(computeRateLimitWaitMs(response)).toBe(expected);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('caps an X-RateLimit-Reset timestamp an hour away', () => {
     vi.useFakeTimers();
     try {
