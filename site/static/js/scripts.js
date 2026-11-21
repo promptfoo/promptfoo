@@ -95,7 +95,7 @@ vector.load('18d08a7d-45cf-4805-b8b1-978305be5dd4');
           u.people = u.people || [],
           u.toString = function (t) {
             var e = 'posthog';
-            return 'posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e;
+            return ('posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e);
           },
           u.people.toString = function () {
             return u.toString(1) + '.people (stub)';
