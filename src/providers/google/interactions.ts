@@ -287,31 +287,14 @@ function getRequestedVideoAspectRatio(responseFormat: unknown): string | undefin
   return typeof videoFormat?.aspect_ratio === 'string' ? videoFormat.aspect_ratio : undefined;
 }
 
-function canonicalizeInteractionCacheValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(canonicalizeInteractionCacheValue);
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort()
-        .map((key) => [
-          key,
-          canonicalizeInteractionCacheValue((value as Record<string, unknown>)[key]),
-        ]),
-    );
-  }
-  return value;
-}
-
 /**
- * Credential-free cache identity: the endpoint (which carries the Vertex project and region)
- * plus the canonicalized request body. API keys and OAuth tokens are never part of the key.
+ * Credential-free cache identity: the endpoint, API revision, and the exact serialized body.
+ * The body is not re-sorted because key order is meaningful in response schemas. API keys and
+ * OAuth tokens are never part of the key, so requests that differ only in credentials share an
+ * entry; Vertex OAuth endpoints still separate projects and regions.
  */
-function getInteractionsCacheKey(endpoint: string, body: Record<string, unknown>): string {
-  return `google:interactions:v1:${sha256(
-    JSON.stringify(canonicalizeInteractionCacheValue({ endpoint, body })),
-  )}`;
+function getInteractionsCacheKey(endpoint: string, apiRevision: string, body: string): string {
+  return `google:interactions:v1:${sha256(JSON.stringify([endpoint, apiRevision, body]))}`;
 }
 
 function getLiveOnlyModelRouteError(modelName: string): string | undefined {
@@ -1384,6 +1367,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       previousInteractionId !== undefined ||
       store === true ||
       Object.keys(config.headers ?? {}).length > 0;
+    const requestBody = JSON.stringify(body);
 
     let data: InteractionResponse;
     let cached: boolean;
@@ -1402,12 +1386,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
         {
           method: 'POST',
           headers,
-          body: JSON.stringify(body),
+          body: requestBody,
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
         // An explicit key keeps API keys and OAuth tokens out of the cache, even as fingerprints.
-        bypassCache ? true : { cacheKey: getInteractionsCacheKey(endpoint, body) },
+        bypassCache
+          ? true
+          : {
+              cacheKey: getInteractionsCacheKey(endpoint, headers['Api-Revision'], requestBody),
+            },
       )) as {
         data: InteractionResponse;
         cached: boolean;

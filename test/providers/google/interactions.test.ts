@@ -2625,24 +2625,57 @@ describe('GoogleInteractionsProvider', () => {
 
     it('caches a self-contained interaction under a credential-free key', async () => {
       const first = await getCacheArgument('gemini-robotics-er-2-preview', {
-        apiKey: 'first-secret-key',
-        passthrough: { generation_config: { seed: 1, max_output_tokens: 64 } },
+        apiKey: 'first-key',
+        passthrough: { generation_config: { seed: 1 } },
       });
       const otherCredential = await getCacheArgument('gemini-robotics-er-2-preview', {
-        apiKey: 'second-secret-key',
-        passthrough: { generation_config: { max_output_tokens: 64, seed: 1 } },
+        apiKey: 'second-key',
+        passthrough: { generation_config: { seed: 1 } },
       });
       const otherBody = await getCacheArgument('gemini-robotics-er-2-preview', {
-        apiKey: 'first-secret-key',
-        passthrough: { generation_config: { seed: 2, max_output_tokens: 64 } },
+        apiKey: 'first-key',
+        passthrough: { generation_config: { seed: 2 } },
       });
 
       expect(first).toEqual(cacheableInteraction);
-      expect(JSON.stringify(first)).not.toContain('secret');
-      // Equivalent requests share a key regardless of credentials or key order.
+      // The API key is not part of the identity; the request body is.
       expect(otherCredential).toEqual(first);
       expect(otherBody).toEqual(cacheableInteraction);
       expect(otherBody).not.toEqual(first);
+    });
+
+    it('keeps response schemas with different property order in separate entries', async () => {
+      // Structured output follows schema property order, so these requests can differ.
+      const schema = (properties: Record<string, unknown>) => ({
+        apiKey: 'test-key',
+        responseSchema: { type: 'object', properties },
+      });
+      const answerFirst = await getCacheArgument(
+        'gemini-robotics-er-2-preview',
+        schema({ answer: { type: 'string' }, reasoning: { type: 'string' } }),
+      );
+      const reasoningFirst = await getCacheArgument(
+        'gemini-robotics-er-2-preview',
+        schema({ reasoning: { type: 'string' }, answer: { type: 'string' } }),
+      );
+
+      expect(answerFirst).toEqual(cacheableInteraction);
+      expect(reasoningFirst).toEqual(cacheableInteraction);
+      expect(reasoningFirst).not.toEqual(answerFirst);
+    });
+
+    it('keys requests by the serialized value of non-plain objects such as dates', async () => {
+      // YAML timestamps load as Date objects and are sent as ISO strings.
+      const first = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { metadata: { asOf: new Date('2026-01-01T00:00:00Z') } },
+      });
+      const second = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { metadata: { asOf: new Date('2026-02-01T00:00:00Z') } },
+      });
+
+      expect(second).not.toEqual(first);
     });
 
     it('scopes the cache key to the Vertex project endpoint', async () => {
@@ -2672,7 +2705,19 @@ describe('GoogleInteractionsProvider', () => {
         name: 'a passthrough follow-up interaction',
         config: { passthrough: { previous_interaction_id: 'interaction-0' } },
       },
+      {
+        name: 'a prompt-level camelCase passthrough follow-up',
+        config: {},
+        context: {
+          prompt: { config: { passthrough: { previousInteractionId: 'interaction-0' } } },
+        },
+      },
       { name: 'an explicitly stored interaction', config: { store: true } },
+      {
+        name: 'a prompt-level stored interaction',
+        config: {},
+        context: { prompt: { config: { store: true } } },
+      },
       { name: 'custom headers', config: { headers: { 'x-tenant': 'tenant-a' } } },
     ])('bypasses the cache for $name', async ({ config, context }) => {
       await expect(
