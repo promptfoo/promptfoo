@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import crypto from 'crypto';
 
+import { LRUCache } from 'lru-cache';
 import { z } from 'zod';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -34,8 +35,9 @@ import type {
 } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
 
-// Only matching identities in this process can reuse a response.
-const cacheSalt = crypto.randomBytes(32);
+// Credential fingerprints stay in memory. Only independent UUIDs reach the response cache.
+const fingerprintKey = crypto.randomBytes(32);
+const cacheScopes = new LRUCache<string, string>({ max: 256 });
 
 function serializeCacheResult(result: ProviderResponse | ProviderEmbeddingResponse) {
   // Transformations may remove private input shared by several requests with the same payload.
@@ -1047,14 +1049,18 @@ abstract class SageMakerGenericProvider {
     if (expires && !(Date.parse(expires) > Date.now())) {
       return undefined;
     }
-    const key = crypto.hkdfSync(
-      'sha256',
-      JSON.stringify([identity, origin, endpoint.useFipsEndpoint, endpoint.useDualstackEndpoint]),
-      cacheSalt,
-      'promptfoo:sagemaker-cache-namespace:v2',
-      32,
-    );
-    return Buffer.from(key).toString('hex');
+    const fingerprint = crypto
+      .createHmac('sha256', fingerprintKey)
+      .update(
+        JSON.stringify([identity, origin, endpoint.useFipsEndpoint, endpoint.useDualstackEndpoint]),
+      )
+      .digest('hex');
+    let scope = cacheScopes.get(fingerprint);
+    if (!scope) {
+      scope = crypto.randomUUID();
+      cacheScopes.set(fingerprint, scope);
+    }
+    return scope;
   }
 
   protected runtimeCacheKey(

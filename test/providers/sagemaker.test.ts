@@ -1091,7 +1091,7 @@ describe('SageMakerEmbeddingProvider', () => {
       )
       .digest('hex');
     const key = mockCacheGet.mock.calls[0][0];
-    expect(key).toMatch(/^sagemaker:embedding:[a-f0-9]{64}:/);
+    expect(key).toMatch(/^sagemaker:embedding:/);
     expect(key.endsWith(`:${configHash}`)).toBe(true);
     expect(mockCacheSet.mock.calls[0][0]).toBe(key);
     expect(mockSend).toHaveBeenCalledWith(
@@ -1301,6 +1301,9 @@ describe.each(['completion', 'embedding'] as const)(
           const keys = mockCacheGet.mock.calls.slice(0, 2).map(([key]) => key as string);
           expect(keys[1]).not.toBe(keys[0]);
           for (const key of keys) {
+            expect(key.split(':')[2]).toMatch(
+              /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+            );
             expect(key).not.toMatch(/CONFIGURED_[AB]|synthetic-(?:secret|token)-[ab]|runtime-[ab]/);
           }
           expect(credentials).toHaveBeenCalledTimes(2);
@@ -1445,6 +1448,9 @@ describe.each(['completion', 'embedding'] as const)(
           const keys = new Set(mockCacheGet.mock.calls.map(([key]) => key as string));
           expect(keys.size).toBe(4);
           for (const key of keys) {
+            expect(key.split(':')[2]).toMatch(
+              /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+            );
             expect(key).not.toMatch(/SYNTHETIC|private-key|session-token|cache-proof/);
           }
         } finally {
