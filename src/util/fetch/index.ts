@@ -21,6 +21,7 @@ import {
   extractRateLimitErrorType,
   getAbortError,
   HttpRateLimitError,
+  isDefinitiveBillingCode,
   isHardQuotaCode,
   isTransientRateLimitCode,
   type SystemError,
@@ -664,10 +665,12 @@ export function classifySdkRateLimit({
     ...texts.flatMap((text) => text?.toLowerCase().match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []),
   ].filter((code): code is string => Boolean(code));
   const types = records.map((record) => extractRateLimitErrorType(record)?.toLowerCase());
+  const quota = (values: Array<string | undefined>) =>
+    values.find(isDefinitiveBillingCode) ?? values.find(isHardQuotaCode);
   return new HttpRateLimitError({
     status: 429,
-    code: codes.find(isHardQuotaCode) ?? codes.find(isTransientRateLimitCode) ?? codes[0],
-    type: types.find((type) => type && isHardQuotaCode(type)) ?? types.find(Boolean),
+    code: quota(codes) ?? codes.find(isTransientRateLimitCode) ?? codes[0],
+    type: quota(types) ?? types.find(Boolean),
     ...rateLimitTimingFromHeaders(headers),
   });
 }

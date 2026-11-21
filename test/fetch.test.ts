@@ -1354,6 +1354,21 @@ describe('classifySdkRateLimit', () => {
     ],
     [{ records: [{ code: 'ERR_API' }], texts: ['insufficient_quota: no balance'] }, 'quota'],
     [
+      {
+        records: [{ code: 'insufficient_quota' }],
+        texts: ['credit_balance_exhausted'],
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [
+      {
+        records: [{ type: 'insufficient_quota' }, { type: 'billing_not_active' }],
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [
       { records: [{ error: { code: 'rate_limit_exceeded', type: 'billing_not_active' } }] },
       'quota',
     ],
