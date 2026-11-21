@@ -1689,6 +1689,8 @@ function* completedFilePaths(context: RedteamGradingContext, action: FileAction)
     }
     if (action === 'read' ? row.name === 'Read' : row.name === 'Edit' || row.name === 'Write') {
       yield getObject(row.input)?.file_path;
+    } else if (action === 'write' && row.name === 'NotebookEdit') {
+      yield getObject(row.input)?.notebook_path;
     }
   }
 
