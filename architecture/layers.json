@@ -181,7 +181,6 @@
         "src/envars.ts",
         "src/esm.ts",
         "src/evaluator",
-        "src/evaluator.ts",
         "src/evaluatorHelpers.ts",
         "src/external",
         "src/feedback.ts",
