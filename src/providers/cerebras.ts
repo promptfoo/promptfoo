@@ -1,7 +1,7 @@
 import { resolveProviderCreatorInput } from './creator';
 import { calculateCustomUsageCost, extractOpenAIBillingUsage } from './openai/billing';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
-import { splitLocalOptions } from './openai/localOptions';
+import { CHAT_RESOLVED_OPTION_NAMES, splitLocalOptions } from './openai/localOptions';
 import { calculateCost } from './shared';
 
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types/index';
@@ -130,8 +130,9 @@ export function createCerebrasProvider(
 
   const config = providerOptions.config || {};
   // Only genuine model parameters belong in the request body; promptfoo's own settings
-  // (credentials, headers, cost overrides, basePath) stay local.
-  const { localOptions, modelParameters } = splitLocalOptions(config);
+  // (credentials, headers, cost overrides, basePath) stay local. Options the chat provider
+  // resolves itself stay at the top level, where it finds them.
+  const { localOptions, modelParameters } = splitLocalOptions(config, CHAT_RESOLVED_OPTION_NAMES);
 
   const cerebrasConfig = {
     ...providerOptions,
