@@ -1024,7 +1024,7 @@ describe('runEval', () => {
       }
       expect(result.success).toBe(!missingOutput && !shouldGrade);
       expect(result.score).toBe(missingOutput || shouldGrade ? 0 : 1);
-      expect(grade, result.error).toHaveBeenCalledTimes(Number(!missingOutput && shouldGrade));
+      expect(grade).toHaveBeenCalledTimes(Number(!missingOutput && shouldGrade));
       if (name === 'safe image-only') {
         expect(result.response?.images?.[0]).toMatchObject({ blobRef: ref, data: undefined });
       }
