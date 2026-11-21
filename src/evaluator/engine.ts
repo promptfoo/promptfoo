@@ -2153,7 +2153,6 @@ interface EvaluationDeadline {
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
-  options: InternalEvaluateOptions & { timeoutMs: number; maxEvalTimeMs: number };
   private cancelEvalTimeout?: () => void;
   stats: EvaluateStats;
   conversations: EvalConversations;
@@ -2168,18 +2167,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
-    options: InternalEvaluateOptions,
+    readonly options: InternalEvaluateOptions & { timeoutMs: number; maxEvalTimeMs: number },
     runtime: EvaluatorRuntime<TEvaluation, TResult>,
   ) {
     this.testSuite = testSuite;
     this.store = store;
-    const { timeoutMs = getEvalTimeoutMs(), maxEvalTimeMs = getMaxEvalTimeMs() } = options;
-    for (const [name, value] of Object.entries({ timeoutMs, maxEvalTimeMs })) {
-      if (!Number.isFinite(value) || value < 0) {
-        throw new Error(`${name} must be a finite, nonnegative number of milliseconds`);
-      }
-    }
-    this.options = { ...options, timeoutMs, maxEvalTimeMs };
     this.stats = {
       successes: 0,
       failures: 0,
@@ -4334,13 +4326,21 @@ export function evaluate<
           defaultTest: testSuite.defaultTest ?? evalRecord.config.defaultTest,
           redteam: testSuite.redteam ?? evalRecord.config.redteam,
         },
-        async () => {
+        () => {
+          const { timeoutMs = getEvalTimeoutMs(), maxEvalTimeMs = getMaxEvalTimeMs() } = options;
+          for (const [name, value] of Object.entries({ timeoutMs, maxEvalTimeMs })) {
+            if (!Number.isFinite(value) || value < 0) {
+              return Promise.reject(
+                new Error(`${name} must be a finite, nonnegative number of milliseconds`),
+              );
+            }
+          }
           const runtimeTestSuite = runtime.resolveRuntimeTestSuite?.(testSuite) ?? testSuite;
           const store = runtime.createEvaluationStore(evalRecord);
           const ev = new Evaluator(
             withTracingInputDefaults(runtimeTestSuite),
             store,
-            options,
+            { ...options, timeoutMs, maxEvalTimeMs },
             runtime,
           );
           // Capture this entry point's policy for providers and graders loaded
