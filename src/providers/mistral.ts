@@ -11,8 +11,10 @@ import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { isNonTransientHttpStatus } from '../util/fetch/errors';
+import { isSafeTokenCount } from '../util/numeric';
 import { resolveProviderEnv } from './env';
-import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { calculateCost, clampCachedTokens, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -25,9 +27,19 @@ import type {
   TokenUsage,
 } from '../types/index';
 
-function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
+// `cacheRead` is the per-token price of prompt tokens served from Mistral's prompt cache, as
+// listed on https://docs.mistral.ai/inference/pricing. Models without a listed rate use
+// MISTRAL_DEFAULT_CACHE_READ_RATIO of the input price.
+function modelsWithCost(
+  ids: string[],
+  cost: { input: number; output: number; cacheRead?: number },
+) {
   return ids.map((id) => ({ id, cost: { ...cost } }));
 }
+
+// Mistral bills cached prompt tokens at 10% of the input price:
+// https://docs.mistral.ai/inference/conversations/advanced/prompt-caching
+const MISTRAL_DEFAULT_CACHE_READ_RATIO = 0.1;
 
 function getMistralApiUrl(
   config: { apiHost?: string; apiBaseUrl?: string },
@@ -50,9 +62,22 @@ function getMistralApiUrl(
 
 const MISTRAL_CHAT_MODELS = [
   // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
-  ...modelsWithCost(['zai-glm-5-3'], {
+  ...modelsWithCost(['zai-glm-5-3', 'zai-glm-5', 'zai-glm-latest'], {
     input: 1.4 / 1000000,
     output: 4.4 / 1000000,
+    cacheRead: 0.14 / 1000000,
+  }),
+  // Z.ai GLM 5.3 Flash hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3-flash
+  ...modelsWithCost(['zai-glm-5-3-flash'], {
+    input: 0.15 / 1000000,
+    output: 0.5 / 1000000,
+    cacheRead: 0.03 / 1000000,
+  }),
+  // DeepSeek V4.1 Flash 1017 hosted by Mistral: https://docs.mistral.ai/models/deepseek-v4-flash-1017
+  ...modelsWithCost(['deepseek-v4-1-flash-1017'], {
+    input: 0.3 / 1000000,
+    output: 1.2 / 1000000,
+    cacheRead: 0.007 / 1000000,
   }),
   ...modelsWithCost(['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'], {
     input: 0.25 / 1000000,
@@ -79,6 +104,7 @@ const MISTRAL_CHAT_MODELS = [
   ...modelsWithCost(['mistral-small-2603', 'mistral-small-latest'], {
     input: 0.15 / 1000000,
     output: 0.6 / 1000000,
+    cacheRead: 0.015 / 1000000,
   }),
   // Mistral Medium 1 (retired) — historical pricing for cached results.
   ...modelsWithCost(['mistral-medium-2312'], {
@@ -114,9 +140,16 @@ const MISTRAL_CHAT_MODELS = [
     input: 3 / 1000000,
     output: 9 / 1000000,
   }),
-  ...modelsWithCost(['mistral-large-2512', 'mistral-large-latest'], {
+  // Mistral Large 3 (deprecated 2026-10-31) — historical pricing for cached results.
+  ...modelsWithCost(['mistral-large-2512'], {
     input: 0.5 / 1000000,
     output: 1.5 / 1000000,
+  }),
+  // Mistral Large 4 — `mistral-large-latest` resolves to it.
+  ...modelsWithCost(['mistral-large-4', 'mistral-large-4-0', 'mistral-large-latest'], {
+    input: 0.7 / 1000000,
+    output: 2.1 / 1000000,
+    cacheRead: 0.07 / 1000000,
   }),
   ...modelsWithCost(['codestral-2405'], {
     input: 1 / 1000000,
@@ -128,6 +161,7 @@ const MISTRAL_CHAT_MODELS = [
     {
       input: 0.3 / 1000000,
       output: 0.9 / 1000000,
+      cacheRead: 0.03 / 1000000,
     },
   ),
   ...modelsWithCost(['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'], {
@@ -171,14 +205,17 @@ const MISTRAL_CHAT_MODELS = [
   ...modelsWithCost(['ministral-3b-2512', 'ministral-3b-latest'], {
     input: 0.1 / 1000000,
     output: 0.1 / 1000000,
+    cacheRead: 0.01 / 1000000,
   }),
   ...modelsWithCost(['ministral-8b-2512', 'ministral-8b-latest'], {
     input: 0.15 / 1000000,
     output: 0.15 / 1000000,
+    cacheRead: 0.015 / 1000000,
   }),
   ...modelsWithCost(['ministral-14b-2512', 'ministral-14b-latest'], {
     input: 0.2 / 1000000,
     output: 0.2 / 1000000,
+    cacheRead: 0.02 / 1000000,
   }),
   // Leanstral 1.5 public preview (retires 2026-09-30).
   ...modelsWithCost(['labs-leanstral-1-5'], {
@@ -205,6 +242,19 @@ const MISTRAL_CHAT_MODELS = [
   }),
 ];
 
+// Models that always reason: they reject `reasoning_effort: none` and return a thinking chunk
+// before the answer, so the default 1024-token cap can be spent before any answer text.
+// https://docs.mistral.ai/inference/conversations/reasoning
+const MISTRAL_ALWAYS_REASONING_MODELS = new Set([
+  'mistral-large-4',
+  'mistral-large-4-0',
+  'mistral-large-latest',
+  'zai-glm-5-3',
+  'zai-glm-5',
+  'zai-glm-latest',
+  'zai-glm-5-3-flash',
+]);
+
 const MISTRAL_EMBEDDING_MODELS = [
   ...modelsWithCost(['mistral-embed', 'mistral-embed-2312'], {
     input: 0.1 / 1000000,
@@ -215,6 +265,10 @@ const MISTRAL_EMBEDDING_MODELS = [
     output: 0.15 / 1000000,
   }),
 ];
+
+// Accepted values vary by model: Mistral Small 4 and Medium 3.5 take `none | high`, Mistral
+// Large 4 takes `low | medium | high`, and Z.ai GLM 5.3 takes `low | high | max`.
+type MistralReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'max';
 
 interface MistralChatCompletionOptions {
   apiKey?: string;
@@ -249,7 +303,7 @@ interface MistralChatCompletionOptions {
         };
       };
   prompt_mode?: 'reasoning' | null;
-  reasoning_effort?: 'high' | 'none';
+  reasoning_effort?: MistralReasoningEffort;
   prompt_cache_key?: string;
   prediction?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
@@ -257,6 +311,8 @@ interface MistralChatCompletionOptions {
   cost?: number;
   inputCost?: number;
   outputCost?: number;
+  /** Per-token price for prompt tokens Mistral reports as served from its prompt cache. */
+  cacheReadCost?: number;
 }
 
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
@@ -342,7 +398,7 @@ function getMistralRequestMetadata(params: {
   safe_prompt?: boolean;
   random_seed?: number | null;
   prompt_mode?: 'reasoning' | null;
-  reasoning_effort?: 'high' | 'none';
+  reasoning_effort?: MistralReasoningEffort;
   prediction?: unknown;
   metadata?: unknown;
   guardrails?: unknown;
@@ -398,12 +454,76 @@ function getMistralEmbeddingResponseMetadata(data: any) {
   };
 }
 
-function getMistralErrorMetadata(error: any) {
+const MAX_MISTRAL_ERROR_DETAIL_LENGTH = 500;
+
+function isHttpFailure(status: number | undefined): status is number {
+  return status !== undefined && (status < 200 || status >= 300);
+}
+
+/**
+ * Human-readable message from a Mistral error body. Shapes per
+ * https://docs.mistral.ai/resources/error-glossary:
+ * - most errors: `{ object: 'error', message, type, param, code, raw_status_code }`
+ * - 401: `{ detail: 'Invalid API Key' }`
+ * - 422: `{ detail: [{ loc, msg, ... }] }`
+ * - OpenAI-compatible endpoint: the error object wrapped in `error`
+ */
+function getMistralErrorMessage(data: unknown): string | undefined {
+  if (typeof data === 'string') {
+    return data.trim() || undefined;
+  }
+  if (!data || typeof data !== 'object') {
+    return undefined;
+  }
+  const body = data as Record<string, any>;
+  if (typeof body.error === 'string') {
+    return body.error;
+  }
+  const error = body.error && typeof body.error === 'object' ? body.error : body;
+  if (typeof error.message === 'string') {
+    const details = [
+      typeof error.type === 'string' ? error.type : undefined,
+      typeof error.code === 'string' || typeof error.code === 'number'
+        ? `code ${error.code}`
+        : undefined,
+    ].filter(Boolean);
+    return details.length > 0 ? `${error.message} (${details.join(', ')})` : error.message;
+  }
+  if (typeof body.detail === 'string') {
+    return body.detail;
+  }
+  if (Array.isArray(body.detail)) {
+    // Only field locations and messages: a 422 item's `input` echoes the request.
+    const issues = body.detail
+      .map((issue: any) => {
+        const location = Array.isArray(issue?.loc) ? issue.loc.join('.') : undefined;
+        const message = typeof issue?.msg === 'string' ? issue.msg : undefined;
+        return location && message ? `${location}: ${message}` : message;
+      })
+      .filter(Boolean);
+    if (issues.length > 0) {
+      return issues.join('; ');
+    }
+  }
+  return undefined;
+}
+
+function safeErrorText(value: string, apiKey: string): string {
+  // Gateways can echo the rejected key. Redact before truncating to avoid exposing a prefix.
+  return value.split(apiKey).join('[REDACTED]').slice(0, MAX_MISTRAL_ERROR_DETAIL_LENGTH);
+}
+
+function formatMistralHttpError(
+  status: number,
+  text: string | undefined,
+  data: unknown,
+  apiKey: string,
+) {
+  const statusText = safeErrorText(text ?? '', apiKey);
+  const detail = safeErrorText(getMistralErrorMessage(data) ?? '', apiKey);
   return {
-    code:
-      typeof error?.code === 'string' || typeof error?.code === 'number' ? error.code : undefined,
-    hasMessage: typeof error?.message === 'string',
-    type: typeof error?.type === 'string' ? error.type : undefined,
+    message: `${status}${statusText ? ` ${statusText}` : ''}${detail ? `: ${detail}` : ''}`,
+    http: { status, statusText },
   };
 }
 
@@ -414,13 +534,15 @@ function buildMistralChatParams(
   loadedTools: unknown,
 ) {
   const hasTools = Array.isArray(loadedTools) ? loadedTools.length > 0 : loadedTools !== undefined;
+  const maxTokens =
+    config.max_tokens ?? (MISTRAL_ALWAYS_REASONING_MODELS.has(modelName) ? undefined : 1024);
 
   return {
     model: modelName,
     messages,
     temperature: config.temperature,
     top_p: config.top_p ?? 1,
-    max_tokens: config.max_tokens ?? 1024,
+    ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
     ...(config.frequency_penalty === undefined
       ? {}
       : { frequency_penalty: config.frequency_penalty }),
@@ -444,16 +566,26 @@ function buildMistralChatParams(
   };
 }
 
+/** Prompt tokens Mistral served from its prompt cache (`usage.prompt_tokens_details.cached_tokens`). */
+function getMistralCachedPromptTokens(usage: any): number | undefined {
+  const cachedTokens = usage?.prompt_tokens_details?.cached_tokens;
+  return isSafeTokenCount(cachedTokens) ? cachedTokens : undefined;
+}
+
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
     } else {
+      // A prompt-cache hit is server-side usage, not a promptfoo response-cache hit, so it is
+      // reported like other OpenAI-compatible providers rather than in `tokenUsage.cached`.
+      const cacheReadInputTokens = getMistralCachedPromptTokens(data.usage);
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
         numRequests: 1,
+        ...(cacheReadInputTokens ? { completionDetails: { cacheReadInputTokens } } : {}),
       };
     }
   }
@@ -490,11 +622,31 @@ function calculateMistralCost(
   promptTokens?: number,
   completionTokens?: number,
   promptAudioSeconds?: unknown,
+  cachedPromptTokens?: number,
 ): number | undefined {
-  const tokenCost = calculateCost(modelName, config, promptTokens, completionTokens, [
-    ...MISTRAL_CHAT_MODELS,
-    ...MISTRAL_EMBEDDING_MODELS,
-  ]);
+  const models = [...MISTRAL_CHAT_MODELS, ...MISTRAL_EMBEDDING_MODELS];
+  const billableCachedTokens =
+    typeof promptTokens === 'number' && Number.isFinite(promptTokens)
+      ? clampCachedTokens(cachedPromptTokens, promptTokens)
+      : 0;
+  let tokenCost = calculateCost(
+    modelName,
+    config,
+    typeof promptTokens === 'number' ? promptTokens - billableCachedTokens : promptTokens,
+    completionTokens,
+    models,
+  );
+  const model = models.find((m) => m.id === modelName);
+  if (tokenCost !== undefined && model && billableCachedTokens > 0) {
+    const modelCost: { input: number; cacheRead?: number } = model.cost;
+    const cacheReadCost =
+      config.cacheReadCost ??
+      config.inputCost ??
+      config.cost ??
+      modelCost.cacheRead ??
+      modelCost.input * MISTRAL_DEFAULT_CACHE_READ_RATIO;
+    tokenCost += cacheReadCost * billableCachedTokens;
+  }
   if (modelName !== 'voxtral-small-2507' || promptAudioSeconds == null) {
     return tokenCost;
   }
@@ -532,6 +684,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
   static MISTRAL_CHAT_MODELS = MISTRAL_CHAT_MODELS;
 
   static MISTRAL_CHAT_MODELS_NAMES = MISTRAL_CHAT_MODELS.map((model) => model.id);
+
+  private readonly loggedStatuses = new Set<number>();
 
   constructor(
     modelName: string,
@@ -645,10 +799,12 @@ export class MistralChatCompletionProvider implements ApiProvider {
     });
 
     let data,
-      cached = false;
+      cached = false,
+      status: number | undefined,
+      statusText: string | undefined;
 
     try {
-      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
+      ({ data, cached, status, statusText } = await fetchMistralWithDedupe(cacheKey, async () => {
         return (await fetchWithCache(
           url,
           {
@@ -667,21 +823,29 @@ export class MistralChatCompletionProvider implements ApiProvider {
       }));
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${safeErrorText(String(err), apiKey)}`,
       };
     }
 
     logger.debug('Mistral API response', getMistralResponseMetadata(data));
 
-    if (data.error) {
-      return {
-        error: `API call error: ${data.error}`,
-      };
+    if (isHttpFailure(status)) {
+      const { message, http } = formatMistralHttpError(status, statusText, data, apiKey);
+      const error = `Mistral API error ${message}`;
+      // The eval aborts on these statuses and prints only the status code, so show
+      // Mistral's message once per provider.
+      if (isNonTransientHttpStatus(status) && !this.loggedStatuses.has(status)) {
+        this.loggedStatuses.add(status);
+        logger.error(error);
+      }
+      return { error, metadata: { http } };
     }
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
-      };
+    if (data?.error) {
+      const detail = getMistralErrorMessage(data) ?? 'Unknown Mistral error';
+      return { error: `API call error: ${safeErrorText(detail, apiKey)}` };
+    }
+    if (!data?.choices?.[0]?.message) {
+      return { error: 'Malformed response data: missing Mistral message' };
     }
 
     const message = data.choices[0].message;
@@ -705,6 +869,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
         data.usage?.prompt_audio_seconds,
+        getMistralCachedPromptTokens(data.usage),
       ),
       ...(data.choices.length > 1 && {
         metadata: {
@@ -863,12 +1028,14 @@ export class MistralEmbeddingProvider implements ApiProvider {
         ));
       } catch (err) {
         options?.abortSignal?.throwIfAborted();
-        logger.error(`API call error: ${err}`);
-        throw err;
+        const message = safeErrorText(String(err), apiKey);
+        logger.error(`API call error: ${message}`);
+        throw message === String(err) ? err : new Error(message);
       }
 
-      if (status !== undefined && (status < 200 || status >= 300)) {
-        throw new Error(`Mistral embeddings API error: ${status} ${statusText}`);
+      if (isHttpFailure(status)) {
+        const { message } = formatMistralHttpError(status, statusText, data, apiKey);
+        throw new Error(`Mistral embeddings API error: ${message}`);
       }
     }
 
@@ -900,7 +1067,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       }
       return result;
     } catch (err) {
-      logger.error('Mistral embeddings API error', getMistralErrorMetadata(data?.error));
+      logger.error('Mistral embeddings API error');
       throw err;
     }
   }

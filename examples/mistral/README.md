@@ -35,7 +35,7 @@ This example requires:
 ### Chat Models
 
 - **Mistral Medium 3.5** (`mistral-medium-latest` / `mistral-medium-3-5`): Text, vision, and reasoning model
-- **Mistral Large 3** (`mistral-large-latest` → `mistral-large-2512`): Text and vision model
+- **Mistral Large 4** (`mistral-large-latest` → `mistral-large-4-0`): Text and vision model that always reasons
 - **Mistral Small 4** (`mistral-small-latest` → `mistral-small-2603`): Text, vision, and reasoning model
 
 ### Evaluation Models
