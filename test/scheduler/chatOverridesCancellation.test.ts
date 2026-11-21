@@ -360,7 +360,6 @@ describe('public Chat overrides preserve caller cancellation through the schedul
         failedRequests: 1,
         retriedRequests: 0,
         rateLimitHits: 0,
-        avgLatencyMs: 1000,
       });
 
       const response = successResponse();
@@ -384,7 +383,6 @@ describe('public Chat overrides preserve caller cancellation through the schedul
         failedRequests: 1,
         retriedRequests: 0,
         rateLimitHits: 0,
-        avgLatencyMs: 500,
       });
       expect(vi.getTimerCount()).toBe(0);
     },

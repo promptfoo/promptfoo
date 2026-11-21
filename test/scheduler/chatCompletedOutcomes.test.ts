@@ -237,7 +237,6 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
           failedRequests: cancelsWhileHeld ? 1 : 0,
           retriedRequests: 0,
           rateLimitHits: 0,
-          avgLatencyMs: cancelsWhileHeld ? 1000 : 1100,
         });
 
         await vi.advanceTimersByTimeAsync(resetAt - Date.now() - 1);
@@ -267,7 +266,6 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
           failedRequests: cancelsWhileHeld ? 1 : 0,
           retriedRequests: 0,
           rateLimitHits: 0,
-          avgLatencyMs: cancelsWhileHeld ? 500 : 550,
         });
         if (cancelsWhileHeld) {
           expect(events).not.toContain('A callback settled');

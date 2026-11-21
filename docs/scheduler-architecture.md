@@ -72,7 +72,7 @@ Per-provider state manager that:
 - Tracks rate limit headers from responses
 - Implements retry logic with exponential backoff
 - Adapts concurrency based on success/failure patterns
-- Collects latency metrics
+- Maintains request and retry counters
 
 ### SlotQueue
 
@@ -192,29 +192,33 @@ The scheduler wraps `provider.callApi()` without changing the interface. Existin
 
 ## Metrics
 
-The scheduler tracks:
+The scheduler exposes internal diagnostics for debug logging and regression tests. These classes and events are not exported from the published package entry points.
 
+The diagnostic snapshot includes:
+
+- `activeRequests`, `queueDepth`, `maxConcurrency` - Current slot ownership and capacity
 - `totalRequests` - All requests attempted
 - `completedRequests` - Successful completions
 - `failedRequests` - Permanent failures (after retries)
 - `rateLimitHits` - Times 429 was encountered
 - `retriedRequests` - Requests that required retry
-- `avgLatencyMs`, `p50LatencyMs`, `p99LatencyMs` - Latency distribution
 
 ## Events
 
 For monitoring/debugging, the scheduler emits:
 
-- `slot:acquired` / `slot:released` - Concurrency tracking
 - `ratelimit:hit` - Rate limit encountered
 - `ratelimit:learned` - First time seeing provider's limits
 - `ratelimit:warning` - Approaching rate limit
 - `concurrency:increased` / `concurrency:decreased` - Adaptive changes
 - `request:retrying` - Retry in progress
+- `request:started` / `request:completed` / `request:failed` - Request lifecycle
+
+The provider state also emits `queue:timeout` and `queue:cancelled` for queue failures. Slot allocation is observable through the diagnostic snapshot rather than separate slot events.
 
 ## Testing
 
-256 tests covering:
+Regression tests cover:
 
 - Unit tests for each component
 - Edge cases (negative values, zero values, overflow)
@@ -225,4 +229,3 @@ For monitoring/debugging, the scheduler emits:
 
 - **Overhead**: Minimal - just slot acquisition and header parsing
 - **Memory**: O(providers) - one state object per unique rate limit key
-- **Latency buffer**: Circular buffer, last 100 requests, O(1) insertion
