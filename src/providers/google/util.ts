@@ -9,6 +9,8 @@ import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/da
 import {
   getLoadedFileMimeType,
   maybeLoadFromExternalFile,
+  maybeLoadResponseSchemaFromExternalFileWithVars,
+  maybeLoadStructuredConfigFromExternalFileWithVars,
   maybeLoadToolsFromExternalFile,
 } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -1664,26 +1666,24 @@ export function loadFile(
   config_var: Tool[] | string | undefined,
   context_vars: Record<string, VarValue> | undefined,
 ) {
-  // Ensures that files are loaded correctly. Files may be defined in multiple ways:
-  // 1. Directly in the provider:
-  //    config_var will be the file path, which will be loaded here in maybeLoadFromExternalFile.
-  // 2. In a test variable that is used in the provider via a nunjucks:
-  //    context_vars will contain a string of the contents of the file with whitespace.
-  //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
-  const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
+  // System instructions are already rendered. Only tool config needs typed interpolation.
+  let fileContents = context_vars
+    ? maybeLoadStructuredConfigFromExternalFileWithVars(config_var, context_vars)
+    : maybeLoadFromExternalFile(config_var);
   if (typeof fileContents === 'string') {
     try {
-      const parsedContents = JSON.parse(fileContents);
-      return Array.isArray(parsedContents) ? normalizeTools(parsedContents) : parsedContents;
-    } catch (err) {
-      logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
+      fileContents = JSON.parse(fileContents);
+    } catch {
       return fileContents;
     }
   }
 
-  // If fileContents is already an array of tools, normalize them
   if (Array.isArray(fileContents)) {
-    return normalizeTools(fileContents);
+    const tools = fileContents.flat();
+    if (tools.some((tool) => !tool || typeof tool !== 'object' || Array.isArray(tool))) {
+      throw new InvalidToolSchemaError('Google tools must be an array of tool objects');
+    }
+    return normalizeTools(tools);
   }
 
   return fileContents;
@@ -2111,23 +2111,11 @@ export function parseConfigResponseSchema(
   contextVars?: Record<string, VarValue>,
   basePath?: string,
 ): unknown {
-  const renderedSchema = renderVarsInObject(configResponseSchema, contextVars);
-  const schemaReference =
-    typeof renderedSchema === 'string'
-      ? resolveGoogleConfigFileReference(renderedSchema, basePath)
-      : renderedSchema;
-  let responseSchema = maybeLoadFromExternalFile(schemaReference);
-  if (typeof responseSchema === 'string') {
-    try {
-      responseSchema = JSON.parse(responseSchema);
-    } catch (error) {
-      throw new Error(`Invalid JSON in responseSchema: ${error}`);
-    }
-  }
-  // Inline schemas were rendered before loading. Only external contents still need rendering.
-  return typeof schemaReference === 'string' && schemaReference.startsWith('file://')
-    ? renderVarsInObject(responseSchema, contextVars)
-    : responseSchema;
+  return maybeLoadResponseSchemaFromExternalFileWithVars(
+    configResponseSchema,
+    contextVars,
+    (reference) => maybeLoadFromExternalFile(resolveGoogleConfigFileReference(reference, basePath)),
+  );
 }
 
 /** Resolve only relative Google config file references against their owning base path. */

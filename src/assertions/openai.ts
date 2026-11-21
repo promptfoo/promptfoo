@@ -1,8 +1,7 @@
+import { loadOpenAiToolDefinitions } from '../providers/openai/prepare';
 import { validateFunctionCall } from '../providers/openai/util';
-import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { toolCallErrorVerdict, toolCallVerdict } from './functionToolCall';
 
-import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleIsValidOpenAiToolsCall = async ({
@@ -57,13 +56,10 @@ export const handleIsValidOpenAiToolsCall = async ({
     );
   }
 
-  let tools: unknown = (provider as OpenAiChatCompletionProvider).config?.tools;
+  let tools: unknown = provider?.config?.tools;
   try {
     if (tools) {
-      const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
-      if (loadedTools !== undefined) {
-        tools = loadedTools;
-      }
+      tools = await loadOpenAiToolDefinitions(tools, test.vars ?? {});
     }
   } catch (err) {
     return toolCallErrorVerdict(assertion, inverse, err, 'OpenAI tools call');
@@ -103,7 +99,6 @@ export const handleIsValidOpenAiToolsCall = async ({
         tools
           .filter((tool) => tool.type === 'function' && 'function' in tool)
           .map((tool) => tool.function),
-        test.vars,
       );
     });
     return verdict(true, 'Assertion passed');

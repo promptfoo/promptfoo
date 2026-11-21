@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../util/file';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderStructuredConfig,
+} from '../../util/file';
 import { renderVarsInObject } from '../../util/render';
 import { waitForPromiseWithAbort } from '../shared';
 
@@ -37,17 +41,22 @@ function isFileReference(value: unknown): value is string {
 }
 
 /** Render authored values once. Loaded files are new authored input, not rendered output. */
-function loadAndRender(value: unknown, vars: Record<string, VarValue>) {
+function loadAndRender(
+  value: unknown,
+  vars?: Record<string, VarValue>,
+  inserted?: WeakSet<object>,
+): unknown {
   if (isFileReference(value)) {
     const reference = renderVarsInObject(value, vars);
     const loaded: unknown = maybeLoadFromExternalFile(reference);
-    return renderVarsInObject(loaded, vars);
+    return renderStructuredConfig(loaded, vars, true, inserted);
   }
-  return renderVarsInObject(value, vars);
+  return renderStructuredConfig(value, vars, true, inserted);
 }
 
 export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string, VarValue> = {}) {
-  const loaded = loadAndRender(value, vars);
+  const inserted = new WeakSet<object>();
+  const loaded = loadAndRender(value, vars, inserted);
   if (loaded == null) {
     return undefined;
   }
@@ -56,9 +65,9 @@ export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string,
     const schema = loaded.schema ?? nested?.schema;
     // The format's single pass already rendered the path. Only render the newly
     // loaded document here; inline schema values must never be rendered twice.
-    if (isFileReference(schema)) {
+    if (isFileReference(schema) && !inserted.has(loaded) && !(nested && inserted.has(nested))) {
       const document: unknown = maybeLoadFromExternalFile(schema);
-      const resolved = renderVarsInObject(document, vars);
+      const resolved = renderStructuredConfig(document, vars);
       return ResponseFormat.parse(
         loaded.schema === undefined
           ? { ...loaded, json_schema: { ...nested, schema: resolved } }
@@ -69,7 +78,7 @@ export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string,
   return ResponseFormat.parse(loaded);
 }
 
-export function prepareOpenAiFunctions(value: unknown, vars: Record<string, VarValue> = {}) {
+export function prepareOpenAiFunctions(value: unknown, vars?: Record<string, VarValue>) {
   const loaded = loadAndRender(value, vars);
   if (loaded !== undefined && !Array.isArray(loaded)) {
     throw new Error('Expected the loaded functions to be an array');
@@ -77,7 +86,7 @@ export function prepareOpenAiFunctions(value: unknown, vars: Record<string, VarV
   return loaded === undefined ? undefined : z.array(FunctionDefinition).parse(loaded);
 }
 
-async function loadToolDefinitions(
+export async function loadOpenAiToolDefinitions(
   value: unknown,
   vars: Record<string, VarValue>,
   abortSignal?: AbortSignal,
@@ -90,15 +99,15 @@ async function loadToolDefinitions(
       maybeLoadToolsFromExternalFile(reference, undefined, abortSignal),
       abortSignal,
     );
-    return renderVarsInObject(loaded, vars);
+    return renderStructuredConfig(loaded, vars);
   }
   if (Array.isArray(value)) {
     const loaded = await Promise.all(
-      value.map((entry) => loadToolDefinitions(entry, vars, abortSignal)),
+      value.map((entry) => loadOpenAiToolDefinitions(entry, vars, abortSignal)),
     );
-    return loaded.every(Array.isArray) ? loaded.flat() : loaded;
+    return loaded.flat();
   }
-  return renderVarsInObject(value, vars);
+  return renderStructuredConfig(value, vars);
 }
 
 export async function prepareOpenAiTools(
@@ -110,7 +119,7 @@ export async function prepareOpenAiTools(
     return undefined;
   }
   abortSignal?.throwIfAborted();
-  const loaded = await loadToolDefinitions(value, vars, abortSignal);
+  const loaded = await loadOpenAiToolDefinitions(value, vars, abortSignal);
   return loaded == null ? undefined : Tools.parse(loaded);
 }
 

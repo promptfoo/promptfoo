@@ -92,8 +92,8 @@ vi.mock('path', async () => {
     resolve: mocks.mockPathResolve,
   };
 });
-vi.mock('../../src/util', async () => {
-  const actual = await vi.importActual('../../src/util');
+vi.mock('../../src/util/file', async () => {
+  const actual = await vi.importActual('../../src/util/file');
   return {
     ...actual,
     maybeLoadToolsFromExternalFile: mocks.mockMaybeLoadToolsFromExternalFile,
@@ -451,6 +451,42 @@ describe('OpenAI assertions', () => {
   });
 
   describe('is-valid-openai-tools-call assertion', () => {
+    it('grades against the same literal schema used for the request', async () => {
+      const schema = {
+        type: 'object',
+        properties: { value: { type: 'string', enum: ['{{literal}}'] } },
+        required: ['value'],
+      };
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'example',
+                parameters: '{{ schema }}' as unknown as OpenAiTool['function']['parameters'],
+              },
+            },
+          ],
+        },
+      });
+      const output = [
+        {
+          type: 'function',
+          function: { name: 'example', arguments: JSON.stringify({ value: '{{literal}}' }) },
+        },
+      ];
+      const result = await runAssertion({
+        assertion: toolsAssertion,
+        provider,
+        test: { vars: { schema, literal: 'replacement' } },
+        prompt: 'Return the literal fixture value.',
+        providerResponse: { output },
+      });
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
     it('should pass for a valid tools call with correct arguments', async () => {
       const output = [
         { type: 'function', function: { arguments: '{"x": 10, "y": 20}', name: 'add' } },
@@ -644,7 +680,8 @@ describe('OpenAI assertions', () => {
       // Verify mocks.mockMaybeLoadToolsFromExternalFile was called with the file path
       expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         'file://./test/fixtures/weather_tools.json',
-        {},
+        undefined,
+        undefined,
       );
     });
 
@@ -810,7 +847,7 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it('should use maybeLoadToolsFromExternalFile to process tools', async () => {
+    it('does not reload inline tools from files', async () => {
       const toolOutput = {
         tool_calls: [
           {
@@ -819,11 +856,6 @@ describe('OpenAI assertions', () => {
           },
         ],
       };
-
-      const mockTools = [createTemperatureTool()];
-
-      // Set up the mock to return processed tools
-      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockTools);
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -837,12 +869,7 @@ describe('OpenAI assertions', () => {
         providerResponse: { output: toolOutput },
       });
 
-      expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
-        mockProvider.config.tools,
-        {
-          city: 'San Francisco, CA',
-        },
-      );
+      expect(mocks.mockMaybeLoadToolsFromExternalFile).not.toHaveBeenCalled();
 
       expect(result).toEqual({
         pass: true,
@@ -852,7 +879,7 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it('should handle external file references for tools', async () => {
+    it('renders newly loaded tool definitions when validating the call', async () => {
       const toolOutput = {
         tool_calls: [
           {
@@ -869,15 +896,15 @@ describe('OpenAI assertions', () => {
         },
       });
 
-      // Set up the mock to return processed tools from the external file
-      const mockToolsFromFile = [createTemperatureTool()];
-      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockToolsFromFile);
+      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue([
+        { type: 'function', function: createTemplatedTemperatureFunction() },
+      ]);
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolOutput,
         provider: fileProvider,
-        test: { vars: {} },
+        test: { vars: { unit: 'Fahrenheit' } },
         baseType: toolsAssertion.type,
         assertionValueContext: { ...mockContext, provider: fileProvider },
         inverse: false,
@@ -888,7 +915,8 @@ describe('OpenAI assertions', () => {
       // Check that the function was called with the file path
       expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         'file://./test/fixtures/weather_tools.json',
-        {},
+        undefined,
+        undefined,
       );
 
       expect(result).toEqual({
@@ -921,25 +949,6 @@ describe('OpenAI assertions', () => {
         },
       });
 
-      // Set up the mock to return tools with variables resolved
-      const processedTools = [
-        {
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            parameters: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['custom_unit'] },
-              },
-              required: ['location', 'unit'],
-            },
-          },
-        },
-      ];
-      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(processedTools);
-
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
         output: toolOutput,
@@ -951,14 +960,6 @@ describe('OpenAI assertions', () => {
         outputString: JSON.stringify(toolOutput),
         providerResponse: { output: toolOutput },
       });
-
-      // Verify the function was called with variables
-      expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
-        varProvider.config.tools,
-        {
-          unit: 'custom_unit',
-        },
-      );
 
       expect(result).toEqual({
         pass: true,

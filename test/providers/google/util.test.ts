@@ -59,7 +59,7 @@ import {
 } from '../../../src/providers/google/util';
 import { setLoadedFileMimeTypes } from '../../../src/util/file';
 
-import type { Tool } from '../../../src/providers/google/types';
+import type { Schema, Tool } from '../../../src/providers/google/types';
 
 const { createEmptyGlobFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
 const { readFileSync: readFixture } = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -570,6 +570,87 @@ describe('util', () => {
         ],
       },
     ];
+
+    it('validates inserted schemas without reinterpreting their literal values', () => {
+      const schema = {
+        type: 'object',
+        properties: { value: { type: 'string', enum: ['{{literal}}'] } },
+        required: ['value'],
+      };
+      const tools: Tool[] = [
+        {
+          functionDeclarations: [
+            { name: 'example', parameters: '{{ schema }}' as unknown as Schema },
+          ],
+        },
+      ];
+      const vars = { schema, literal: 'replacement' };
+      expect(() =>
+        validateFunctionCall(
+          [{ functionCall: { name: 'example', args: { value: '{{literal}}' } } }],
+          tools,
+          vars,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        validateFunctionCall(
+          [{ functionCall: { name: 'example', args: { value: 'replacement' } } }],
+          tools,
+          vars,
+        ),
+      ).toThrow('does not match schema');
+    });
+
+    it('validates shared tool lists alongside inline declarations', () => {
+      const sharedTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'shared',
+              parameters: { type: 'object', properties: { value: { type: 'string' } } },
+            },
+          ],
+        },
+      ];
+      const tools = [
+        '{{ sharedTools }}',
+        { functionDeclarations: [{ name: 'inline' }] },
+      ] as unknown as Tool[];
+      expect(() =>
+        validateFunctionCall(
+          [
+            { functionCall: { name: 'shared', args: { value: 'fixture' } } },
+            { functionCall: { name: 'inline', args: {} } },
+          ],
+          tools,
+          { sharedTools },
+        ),
+      ).not.toThrow();
+    });
+
+    it.each(['file://literal.json', '{{ literal }}', null, false])(
+      'rejects non-object substituted tools without loading them: %s',
+      (entry) => {
+        expect(() =>
+          validateFunctionCall([{ functionCall: { name: 'example', args: {} } }], '{{ tools }}', {
+            tools: [entry],
+          } as Record<string, any>),
+        ).toThrow('Google tools must be an array of tool objects');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it('validates JSON tool text without a second rendering pass', () => {
+      const tools = [{ functionDeclarations: [{ name: '{{ literal }}' }] }];
+      expect(() =>
+        validateFunctionCall(
+          [{ functionCall: { name: '{{ literal }}', args: {} } }],
+          '{{ tools }}',
+          { tools: JSON.stringify(tools), literal: 'replacement' },
+        ),
+      ).not.toThrow();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
 
     it('should validate Vertex/AIS format function call', () => {
       const output = [
