@@ -43,7 +43,7 @@ redteam:
         enabled: false
 ```
 
-Relative paths and `file://fixtures/invoice.pdf` references resolve from the configuration file. Absolute paths and standard local file URLs, such as `file:///path/to/invoice%20copy.pdf`, are also supported. Disable `basic` if the target requires the templated PDF variants exclusively.
+Relative paths and `file://fixtures/invoice.pdf` references resolve from the configuration file. Absolute paths and standard local file URLs, such as `file:///path/to/invoice%20copy.pdf`, are also supported. Generation checks the file against the saved template hash before reusing previously generated PDF tests. Disable `basic` if the target requires the templated PDF variants exclusively.
 
 ### Generated templates
 
@@ -104,6 +104,8 @@ Set `PROMPTFOO_INLINE_MEDIA=true` to skip separate media-storage writes. Attacke
 Each test's `metadata.pdf` records `input`, `mode`, readable `text`, `templateText`, `templateStorageKey`, `templateHash`, `storageKey`, `contentHash`, and `companionHashes`. The companion hash map records decoded bytes for declared non-text companions; `null` records an absent companion. Hashes are computed directly from PDF bytes and use `sha256:<hex digest>` identifiers so exports distinguish them from opaque credentials. The result table links to the attacked PDF and clean template when those storage files remain available.
 
 The server requires private revalidation for PDFs and other documents. A custom storage provider must enable `allowOpaqueMediaKeys` to serve media by keys outside the built-in hash formats. Enable this only for a media-only namespace that enforces access control. The endpoint rejects absolute paths and traversal. Direct provider URLs follow the provider’s cache policy.
+
+Hashes detect changes to attachments when the generated test metadata is trusted. Anyone who can edit the tests can also replace the recorded hashes.
 
 Before evaluation calls a target, it checks the selected PDF and declared companion attachments against their recorded hashes, including fields in a serialized `__prompt` input object. That object must retain every recorded attachment, even when the individual test variables still contain the files. A plain task string can accompany attachments supplied through individual variables. `transformVars` and other input edits may change text companions or use equivalent attachment encodings. Changing, adding, or removing a recorded attachment produces an error. Regenerate PDF tests to change a document so its artifact, readable grading text, and hash stay consistent.
 
