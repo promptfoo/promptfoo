@@ -595,35 +595,37 @@ describe('matchesLlmRubric', () => {
     },
   );
 
-  it.each(['plain', 'json'])(
-    'preserves captions without inline image bytes in %s text',
-    async (shape) => {
-      const caption = 'A blue bicycle.';
-      const other = 'data:image/webp;base64,rQ==';
-      const text = `data:image/png;base64,q+/z\n${caption} ${other}`;
-      const output = shape === 'plain' ? text : JSON.stringify({ text });
-      const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
-      const result = await matchesLlmRubric(
-        'Check the image',
-        output,
-        { provider, rubricPrompt: 'Grade {{ output }}' },
-        {},
-        undefined,
-        {
-          providerResponse: { output, images: [{ data: 'q-_z' }] },
-        },
-      );
-      const content = JSON.parse(provider.callApi.mock.calls[0][0] as string)[0].content;
-      expect(content[0].text).not.toContain('q+/z');
-      expect(content).toContainEqual({
-        type: 'image_url',
-        image_url: { url: 'data:image/png;base64,q+/z' },
-      });
-      expect(result.metadata?.renderedGradingPrompt).not.toContain('q+/z');
-      expect(result.metadata?.renderedGradingPrompt).toContain(caption);
-      expect(result.metadata?.renderedGradingPrompt).toContain(other);
-    },
-  );
+  it.each([
+    { shape: 'plain', payload: 'q+/zQUJD' },
+    { shape: 'plain', payload: 'q+/z\nQUJD' },
+    { shape: 'quoted', payload: 'q+/z\nQUJD' },
+    { shape: 'json', payload: 'q+/z\nQUJD' },
+  ])('preserves captions without inline image bytes in $shape text', async ({ shape, payload }) => {
+    const caption = 'A blue bicycle.';
+    const other = 'data:image/webp;base64,rQ==';
+    const text = `data:image/png;base64,${payload}\n${caption} ${other}`;
+    const output = shape === 'plain' ? text : JSON.stringify(shape === 'json' ? { text } : text);
+    const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+    const result = await matchesLlmRubric(
+      'Check the image',
+      output,
+      { provider, rubricPrompt: 'Grade {{ output }}' },
+      {},
+      undefined,
+      {
+        providerResponse: { output, images: [{ data: 'q-_zQUJD' }] },
+      },
+    );
+    const content = JSON.parse(provider.callApi.mock.calls[0][0] as string)[0].content;
+    expect(content[0].text).not.toContain('q+/z');
+    expect(content).toContainEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,q+/zQUJD' },
+    });
+    expect(result.metadata?.renderedGradingPrompt).not.toMatch(/q\+\/z|QUJD/);
+    expect(result.metadata?.renderedGradingPrompt).toContain(caption);
+    expect(result.metadata?.renderedGradingPrompt).toContain(other);
+  });
 
   it('redacts only attached images in mixed JSON output', async () => {
     const output = JSON.stringify({

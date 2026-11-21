@@ -188,12 +188,40 @@ function getGradingOutputForImages(
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
-  // Inline output can mix an attached image URI with a caption or other images.
-  const redactUris = (text: string) =>
-    text.replace(/\bdata:image\/[^\s,]{1,256};base64,([\w+/=-]+)/gi, (uri, payload: string) =>
-      isImageValue(payload) ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER : uri,
-    );
-  if (!parsed || typeof parsed !== 'object') {
+  // Line breaks can separate base64 chunks or introduce a caption. Only
+  // consume a sequence of chunks that decodes to an attached image.
+  const lengths = new Set(imageData.map(({ base64Data }) => base64Data.length));
+  const maxLength = Math.max(...lengths);
+  const redactUris = (text: string) => {
+    const chunks = /\s*([\w+/=-]+)/y;
+    let cursor = 0;
+    let result = '';
+    for (const header of text.matchAll(/\bdata:image\/[^\s,]{1,256};base64,/gi)) {
+      const start = header.index + header[0].length;
+      chunks.lastIndex = start;
+      let length = 0;
+      let end = start;
+      while (length < maxLength) {
+        const chunk = chunks.exec(text);
+        if (!chunk) {
+          break;
+        }
+        length += chunk[1].length;
+        if (
+          lengths.has(Math.ceil(length / 4) * 4) &&
+          isImageValue(text.slice(start, chunks.lastIndex))
+        ) {
+          end = chunks.lastIndex;
+        }
+      }
+      if (end > start) {
+        result += text.slice(cursor, header.index) + ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+        cursor = end;
+      }
+    }
+    return result + text.slice(cursor);
+  };
+  if (parsed === trimmedOutput) {
     return redactUris(llmOutput);
   }
 
