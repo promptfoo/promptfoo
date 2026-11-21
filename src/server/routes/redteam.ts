@@ -20,7 +20,6 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
-import { RedteamSetupPlanSchema, RedteamSetupRequestSchema } from '../../types/api/redteamSetup';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { looksLikeSecret, sanitizeObject } from '../../util/sanitizer';
 import { evalJobService } from '../services/evalJobService';
@@ -362,7 +361,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
     res.status(403).json({ error: 'Remote generation is disabled. Set up your tests manually.' });
     return;
   }
-  const input = RedteamSetupRequestSchema.safeParse(req.body);
+  const input = RedteamSchemas.SetupPlan.Request.safeParse(req.body);
   if (!input.success) {
     res.status(400).json({ error: 'Check your description and try again.' });
     return;
@@ -411,7 +410,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
       return;
     }
     if (response.ok) {
-      const plan = RedteamSetupPlanSchema.safeParse(await response.json());
+      const plan = RedteamSchemas.SetupPlan.Response.safeParse(await response.json());
       if (plan.success) {
         res.json(plan.data);
         return;

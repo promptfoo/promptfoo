@@ -3,6 +3,7 @@ import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
+  RedteamSetupPlanSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
 import { BaseTokenUsageSchema } from '../shared';
@@ -134,6 +135,14 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
+  SetupPlan: {
+    Request: z.strictObject({
+      description: z.string().trim().min(1).max(2000),
+      previous: RedteamSetupPlanSchema.optional(),
+      refinement: z.string().trim().min(1).max(1000).optional(),
+    }),
+    Response: RedteamSetupPlanSchema,
+  },
   GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
   Run: { Request: RedteamRunRequestSchema, Response: RedteamRunResponseSchema },
   Cancel: { Response: RedteamCancelResponseSchema },

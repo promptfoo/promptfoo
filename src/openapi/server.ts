@@ -16,7 +16,6 @@ import { MediaSchemas } from '../types/api/media';
 import { ModelAuditSchemas } from '../types/api/modelAudit';
 import { JsonProviderOptionsWithIdSchema, ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
-import { RedteamSetupPlanSchema, RedteamSetupRequestSchema } from '../types/api/redteamSetup';
 import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
 import { UserSchemas } from '../types/api/user';
@@ -1026,9 +1025,9 @@ export function createServerOpenApiRegistry() {
     summary: 'Draft or refine a starter test plan with the hosted agent',
     description:
       'Send an app description without credentials. Drafting does not contact the target or start a run.',
-    request: { body: jsonBody(RedteamSetupRequestSchema) },
+    request: { body: jsonBody(RedteamSchemas.SetupPlan.Request) },
     responses: {
-      200: jsonResponse(RedteamSetupPlanSchema),
+      200: jsonResponse(RedteamSchemas.SetupPlan.Response),
       400: jsonResponse(ErrorResponseSchema, 'Invalid input'),
       403: jsonResponse(ErrorResponseSchema, 'Remote generation disabled'),
       429: jsonResponse(ErrorResponseSchema, 'Remote rate limit'),

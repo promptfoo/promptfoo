@@ -4,7 +4,7 @@ import {
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
 import { isPlainObject } from '@app/utils/isPlainObject';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { type Plugin, REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getProviderType, withLocalProviderType } from '../components/Targets/helpers';
@@ -15,7 +15,6 @@ import {
   registerTargetConfigReconciler,
   useRedTeamTargetConfigValidation,
 } from './useRedTeamTargetConfigValidation';
-import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
 
