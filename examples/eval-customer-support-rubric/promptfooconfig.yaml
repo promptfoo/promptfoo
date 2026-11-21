@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade support replies with severity-based failure gates
+
+prompts:
+  - file://prompt.txt
+
+# The echo provider stands in for the real bot: it returns the canned reply
+# from each CSV row, so the whole example runs with the one API key that the
+# rubric judge below needs. Point `providers` at your bot to reuse the harness.
+providers:
+  - id: echo
+    label: Mock support assistant
+
+tests: file://tests.csv
+
+defaultTest:
+  options:
+    # One grader for every dimension.
+    provider: openai:gpt-6-luna
+  assert:
+    - type: llm-rubric
+      metric: correct
+      threshold: 0.8
+      value: >-
+        The support agent's reply is factually correct for the issue in
+        "{{customer_message}}" (account context: {{context}}). It quotes no
+        wrong prices, dates, or policy terms.
+    - type: llm-rubric
+      metric: resolved
+      threshold: 0.8
+      value: >-
+        The support agent's reply resolves the customer's issue in
+        "{{customer_message}}" or gives the exact steps to finish it, without
+        leaving the customer to re-ask the same question. Account context: {{context}}.
+    - type: llm-rubric
+      metric: honest
+      threshold: 0.8
+      value: >-
+        The support agent's reply is honest about what it can and cannot do
+        for "{{customer_message}}": no invented policies, no promised refunds
+        or callbacks it cannot deliver, no made-up answers. Account context: {{context}}.
+    - type: llm-rubric
+      metric: handoff
+      threshold: 0.8
+      value: >-
+        The support agent's reply offers a human handoff if and only if the
+        issue in "{{customer_message}}" needs one (money movement, complaints,
+        anything outside the bot's scope), and points to a reachable channel.
+        Account context: {{context}}.
+    - type: llm-rubric
+      metric: language_fit
+      threshold: 0.8
+      value: >-
+        The support agent's reply is written in the same language as the
+        customer message ({{language}}), in a natural support register for
+        that language, with no mixed-language sentences.

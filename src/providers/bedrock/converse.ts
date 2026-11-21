@@ -52,7 +52,11 @@ import {
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockCost } from './pricing';
+import {
+  calculateBedrockCost,
+  getBedrockRuntimeBillingRegion,
+  isBedrockGrokRuntimeProfile,
+} from './pricing';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -76,6 +80,17 @@ import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../
 import type { TokenUsage, VarValue } from '../../types/shared';
 import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
+
+function getOneHourCacheWriteTokens(
+  cacheDetails?: ReadonlyArray<{ ttl?: string; inputTokens?: number }>,
+): number {
+  return (
+    cacheDetails?.reduce(
+      (total, detail) => total + (detail.ttl === '1h' ? (detail.inputTokens ?? 0) : 0),
+      0,
+    ) ?? 0
+  );
+}
 
 /**
  * Configuration options for the Bedrock Converse API provider
@@ -107,7 +122,7 @@ export interface BedrockConverseOptions extends BedrockOptions {
     latency: 'standard' | 'optimized';
   };
   serviceTier?: {
-    type: 'priority' | 'default' | 'flex';
+    type: 'priority' | 'default' | 'flex' | 'reserved';
   };
 
   // Tool configuration
@@ -1074,6 +1089,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     if (!this.config.serviceTier) {
       return undefined;
     }
+    if (
+      isBedrockGrokRuntimeProfile(this.modelName) &&
+      this.modelName.endsWith('grok-4.7') &&
+      this.config.serviceTier.type !== 'default'
+    ) {
+      throw new Error(
+        'Grok 4.7 Converse supports the default service tier only. Use Runtime Chat, Responses, or InvokeModel for Priority or Flex.',
+      );
+    }
     return {
       type: this.config.serviceTier.type,
     };
@@ -1414,6 +1438,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const totalTokens = usage?.totalTokens;
     const cacheReadTokens = usage?.cacheReadInputTokens;
     const cacheWriteTokens = usage?.cacheWriteInputTokens;
+    const cacheWrite1hTokens = getOneHourCacheWriteTokens(usage?.cacheDetails);
 
     const tokenUsage: Partial<TokenUsage> = {
       prompt: promptTokens,
@@ -1429,8 +1454,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       completionTokens,
       cacheReadTokens,
       cacheWriteTokens,
-      this.getRegion(),
-      this.config.serviceTier,
+      getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
+      response.serviceTier?.type ? { type: response.serviceTier.type } : this.config.serviceTier,
+      cacheWrite1hTokens,
     );
 
     // Build metadata
@@ -1684,12 +1710,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let output = '';
       let reasoning = '';
       let stopReason: string | undefined;
+      let billedTier = this.config.serviceTier;
       let usage: {
         inputTokens?: number;
         outputTokens?: number;
         totalTokens?: number;
         cacheReadInputTokens?: number;
         cacheWriteInputTokens?: number;
+        cacheDetails?: Array<{
+          ttl?: string;
+          inputTokens?: number;
+        }>;
       } = {};
 
       // Track tool use blocks being streamed
@@ -1737,8 +1768,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           if ('messageStop' in event && event.messageStop) {
             stopReason = event.messageStop.stopReason;
           }
-          if ('metadata' in event && event.metadata?.usage) {
-            usage = event.metadata.usage;
+          if ('metadata' in event && event.metadata) {
+            usage = event.metadata.usage ?? usage;
+            if (event.metadata.serviceTier?.type) {
+              billedTier = { type: event.metadata.serviceTier.type };
+            }
           }
         }
       }
@@ -1792,8 +1826,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.outputTokens,
         usage.cacheReadInputTokens,
         usage.cacheWriteInputTokens,
-        this.getRegion(),
-        this.config.serviceTier,
+        getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
+        billedTier,
+        getOneHourCacheWriteTokens(usage.cacheDetails),
       );
 
       // Model output errors take precedence over tool failures.

@@ -29,7 +29,17 @@ export type FunctionCallback = (args: string, context?: any) => string | Promise
  */
 export type FunctionCallbackConfig = Record<string, FunctionCallback | string>;
 
-/** Result of one call, with MCP failures distinguished from ordinary callbacks. */
-export type FunctionCallResult =
-  | { output: string | any; isError: false }
-  | { output: string | any; isError: true; isMcpError?: boolean };
+/**
+ * Result of processing function calls
+ */
+export interface FunctionCallResult {
+  output: string | any;
+  isError: boolean;
+}
+
+/** A callback result before conversion to a provider's tool-result wire format. */
+export type CallbackExecutionRecord = {
+  name: string;
+  arguments: string;
+  callId?: string;
+} & ({ output: unknown; isError: false } | { output?: undefined; isError: true; error: unknown });

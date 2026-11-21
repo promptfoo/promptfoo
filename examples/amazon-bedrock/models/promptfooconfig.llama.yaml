@@ -1,17 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Bedrock Llama Text Models'
 
-# For Llama 3.2 Vision models, see promptfooconfig.llama-vision.yaml
+# These Legacy profiles require existing model access in your AWS account.
 
 prompts:
   - 'Translate to {{language}}: {{input}}'
 
 providers:
-  - id: bedrock:us.meta.llama3-2-3b-instruct-v1:0
-    label: Llama 3.2 3B
-    config:
-      region: us-west-2
-
   - id: bedrock:us.meta.llama4-scout-17b-instruct-v1:0
     label: Llama 4 Scout 17B
     config:

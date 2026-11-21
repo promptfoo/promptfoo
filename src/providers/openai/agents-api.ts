@@ -12,6 +12,7 @@ import {
 import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
+import { decodeUrlComponent } from '../urlEncoding';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
@@ -63,6 +64,8 @@ interface Session {
 
 interface Turn {
   id: string;
+  created_at?: number;
+  started_at?: number | null;
   subagent_id: string | null;
   status: 'queued' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
   error?: { code?: string; message: string } | null;
@@ -161,14 +164,6 @@ function addCredential(credentials: Set<string>, value: unknown): void {
       credentials.add(candidate);
       credentials.add(encodeURIComponent(candidate));
     }
-  }
-}
-
-function decodeUrlComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
   }
 }
 
@@ -985,6 +980,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
           apiUrl: this.getApiUrl(),
+          createdAt: turn.started_at ?? turn.created_at,
           serviceTier: finished.agent.service_tier ?? this.config.agent?.service_tier,
         });
       }
