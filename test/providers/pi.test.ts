@@ -455,7 +455,7 @@ describe('PiProvider', () => {
           'hello',
         );
         const { env } = spawnedOptions();
-        expect(env.PI_CODING_AGENT_DIR).toBe(fs.realpathSync(agent_dir));
+        expect(env.PI_CODING_AGENT_DIR).toBe(fs.realpathSync.native(agent_dir));
         expect(env.ANTHROPIC_API_KEY).toBeUndefined();
         expect(env.ANTHROPIC_OAUTH_TOKEN).toBeUndefined();
       } finally {
