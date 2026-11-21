@@ -356,7 +356,7 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 
 Supply `image.url` as an inline base64 image data URL. Codex rejects HTTP and HTTPS image URLs at turn start. Use `local_image` or `localImage` for a file on the host when local environment access is enabled.
 
-With `environment_access: false`, a structured prompt can contain text, an inline base64 image data URL, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files. The [receipt comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/comparison) isolates its Codex home and supplies a single receipt reader.
+With `environment_access: false`, a structured prompt can contain text, an inline base64 image data URL, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files.
 
 ## Metadata
 
