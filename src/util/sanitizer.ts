@@ -697,6 +697,285 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+const JSON_SCHEMA_MAP_KEYWORDS = new Set([
+  '$defs',
+  'definitions',
+  'properties',
+  'patternProperties',
+  'dependentSchemas',
+  'dependencies',
+  'dependentRequired',
+]);
+const JSON_SCHEMA_CHILD_KEYWORDS = new Set([
+  'additionalProperties',
+  'unevaluatedProperties',
+  'propertyNames',
+  'items',
+  'additionalItems',
+  'unevaluatedItems',
+  'contains',
+  'not',
+  'if',
+  'then',
+  'else',
+  'contentSchema',
+  'allOf',
+  'anyOf',
+  'oneOf',
+  'prefixItems',
+]);
+// These keywords describe structure or validation rules, rather than example data.
+const JSON_SCHEMA_STRUCTURAL_KEYWORDS = new Set([
+  '$schema',
+  '$id',
+  '$ref',
+  '$anchor',
+  '$dynamicRef',
+  '$dynamicAnchor',
+  '$recursiveRef',
+  '$recursiveAnchor',
+  '$vocabulary',
+  'type',
+  'format',
+  'required',
+  'multipleOf',
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'minLength',
+  'maxLength',
+  'minItems',
+  'maxItems',
+  'uniqueItems',
+  'minContains',
+  'maxContains',
+  'minProperties',
+  'maxProperties',
+  'contentEncoding',
+  'contentMediaType',
+  'readOnly',
+  'writeOnly',
+  'deprecated',
+  'nullable',
+]);
+
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+const SCHEMA_REFS = new Set(['$ref', '$dynamicRef', '$recursiveRef']);
+
+function credentialSchemaName(name: string): boolean {
+  return (
+    name.toLowerCase() === 'headers' ||
+    (normalizeFieldName(name) !== 'key' && isSecretParameter(name, undefined))
+  );
+}
+
+function pointerToken(name: string): string {
+  return encodeURIComponent(name.replace(/~/g, '~0').replace(/\//g, '~1'));
+}
+
+// Return both the source spelling and decoded key so unchanged tokens stay intact.
+function localSchemaPointer(ref: string) {
+  if (/^#%2f/i.test(ref)) {
+    try {
+      ref = decodeURIComponent(ref);
+    } catch {
+      return [{ raw: REDACTED, name: REDACTED }];
+    }
+  }
+  if (ref === '#') {
+    return [];
+  }
+  if (!ref.startsWith('#/')) {
+    return undefined;
+  }
+  // Accept a literal URL at the end of a pointer as a single map key.
+  ref = ref.replace(/\/([a-z][a-z0-9+.-]*:\/\/.*)$/i, (_, url) => '/' + pointerToken(url));
+  return ref
+    .slice(2)
+    .split('/')
+    .map((raw) => {
+      let name = raw;
+      try {
+        name = decodeURIComponent(raw);
+      } catch {
+        // Invalid URI escapes can still contain credentials.
+      }
+      return { raw, name: name.replace(/~1/g, '/').replace(/~0/g, '~') };
+    });
+}
+
+function indexSchema(root: unknown) {
+  const sensitive = new WeakSet<object>();
+  const names = new Set<string>();
+  function collect(value: unknown, credential = false, map = false, resource = root): void {
+    if (!value || typeof value !== 'object' || sensitive.has(value)) {
+      return;
+    }
+    if (
+      !map &&
+      isSchemaObject(value) &&
+      typeof value.$id === 'string' &&
+      !value.$id.startsWith('#')
+    ) {
+      resource = value;
+    }
+    if (credential) {
+      sensitive.add(value);
+    }
+    for (const [key, child] of Object.entries(value)) {
+      names.add(key);
+      if (credential && !map && SCHEMA_REFS.has(key) && typeof child === 'string') {
+        const pointer = localSchemaPointer(child);
+        if (pointer) {
+          // A credential's constraints may live under an innocently named definition.
+          // Follow only own properties inside this snapshot. The weak set breaks cycles.
+          const target = pointer.reduce<unknown>(
+            (node, { name }) =>
+              node && typeof node === 'object' && Object.prototype.hasOwnProperty.call(node, name)
+                ? (node as Record<string, unknown>)[name]
+                : undefined,
+            resource,
+          );
+          collect(target ?? resource, true, false, resource);
+        } else if (child.startsWith('#')) {
+          // Named anchors can occur anywhere within the resource.
+          collect(resource, true, false, resource);
+        }
+      }
+      collect(
+        child,
+        credential || (map && credentialSchemaName(key)),
+        !map && JSON_SCHEMA_MAP_KEYWORDS.has(key),
+        resource,
+      );
+    }
+  }
+  collect(root);
+
+  // Use one namespace for nested property lists and local pointers.
+  const renamed = new Map<string, string>();
+  let suffix = 0;
+  for (const name of Array.from(names)) {
+    const safe = URL_REFERENCE.test(name) ? sanitizeUrl(name) : name;
+    if (safe === name) {
+      continue;
+    }
+    let unique = safe;
+    while (names.has(unique)) {
+      unique = `${safe}#${++suffix}`;
+    }
+    names.add(unique);
+    renamed.set(name, unique);
+  }
+  return { renamed, sensitive };
+}
+
+/** Schema property names describe data. Their literal constraints can carry credentials. */
+function sanitizeAssertionJsonSchema(root: unknown): unknown {
+  const options = { sanitizeUrls: true, throwOnError: true, maxDepth: Number.POSITIVE_INFINITY };
+  const { renamed: names, sensitive } = indexSchema(root);
+  const sanitizeName = (name: unknown) =>
+    (typeof name === 'string' ? names.get(name) : undefined) ?? sanitizeObject(name, options);
+
+  function visit(schema: unknown): unknown {
+    if (!isSchemaObject(schema)) {
+      return sanitizeObject(schema, options);
+    }
+    const credential = sensitive.has(schema);
+    return Object.fromEntries(
+      Object.entries(schema).flatMap(([keyword, value]) => {
+        if (JSON_SCHEMA_MAP_KEYWORDS.has(keyword) && isSchemaObject(value)) {
+          const entries = Object.entries(value).map(([name, child]) => [
+            names.get(name) ?? name,
+            isSchemaObject(child) || typeof child === 'boolean'
+              ? visit(child)
+              : (keyword === 'dependencies' || keyword === 'dependentRequired') &&
+                  Array.isArray(child)
+                ? child.map(sanitizeName)
+                : credential || credentialSchemaName(name)
+                  ? REDACTED
+                  : sanitizeObject(child, options),
+          ]);
+          return [[keyword, Object.fromEntries(entries)]];
+        }
+        if (JSON_SCHEMA_CHILD_KEYWORDS.has(keyword)) {
+          return [[keyword, Array.isArray(value) ? value.map(visit) : visit(value)]];
+        }
+        if (credential && !JSON_SCHEMA_STRUCTURAL_KEYWORDS.has(keyword)) {
+          const redacted =
+            keyword === 'pattern'
+              ? String.raw`^\[REDACTED\]$`
+              : keyword === 'enum' && Array.isArray(value) && value.length > 0
+                ? [REDACTED]
+                : Array.isArray(value)
+                  ? value.map(() => REDACTED)
+                  : REDACTED;
+          return [[keyword, redacted]];
+        }
+        if (SCHEMA_REFS.has(keyword) && typeof value === 'string') {
+          const pointer = localSchemaPointer(value);
+          if (pointer) {
+            const tokens = pointer.map(({ raw, name }) => {
+              const safe = names.get(name) ?? (URL_REFERENCE.test(name) ? sanitizeUrl(name) : name);
+              return safe === name ? raw : pointerToken(safe);
+            });
+            return [[keyword, ['#', ...tokens].join('/')]];
+          }
+        }
+        if ((keyword === 'required' || keyword === 'enum') && Array.isArray(value)) {
+          return [[keyword, value.map(sanitizeName)]];
+        }
+        if (keyword === 'const' && typeof value === 'string' && names.has(value)) {
+          return [[keyword, names.get(value)]];
+        }
+        return Object.entries(sanitizeObject({ [keyword]: value }, options));
+      }),
+    );
+  }
+  return visit(root);
+}
+
+/** Repair only the schema-valued assertions, including nested assertion sets. */
+function preserveAssertionSchemas(source: unknown, sanitized: unknown): void {
+  if (!Array.isArray(source) || !Array.isArray(sanitized)) {
+    return;
+  }
+  for (const [index, assertion] of source.entries()) {
+    const output = sanitized[index];
+    if (!isSchemaObject(assertion) || !isSchemaObject(output)) {
+      continue;
+    }
+    if (assertion.type === 'assert-set') {
+      preserveAssertionSchemas(assertion.assert, output.assert);
+    } else if (
+      ['is-json', 'not-is-json', 'contains-json', 'not-contains-json'].includes(
+        assertion.type as string,
+      )
+    ) {
+      const schema = assertion.value;
+      if (isSchemaObject(schema)) {
+        // Match sanitizeObject's JSON snapshot, including its handling of circular values.
+        output.value = sanitizeAssertionJsonSchema(JSON.parse(safeStringify(schema)));
+      } else if (typeof schema === 'string') {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(schema);
+        } catch {
+          // File references and YAML strings retain their existing sanitization.
+          continue;
+        }
+        if (isSchemaObject(parsed)) {
+          output.value = JSON.stringify(sanitizeAssertionJsonSchema(parsed));
+        }
+      }
+    }
+  }
+}
+
 /** Project direct providers and provider/type maps without changing their local configuration. */
 export function stripProviderPromptSelectors<T>(providers: T): T {
   if (Array.isArray(providers)) {
@@ -853,6 +1132,14 @@ export function sanitizeConfigForOutput(
       continue;
     }
     const sourceTest = sourceTests[index];
+    if (
+      sourceTest &&
+      typeof sourceTest === 'object' &&
+      'assert' in sourceTest &&
+      'assert' in test
+    ) {
+      preserveAssertionSchemas(sourceTest.assert, test.assert);
+    }
     const sourceMetadata =
       sourceTest && typeof sourceTest === 'object' && 'metadata' in sourceTest
         ? sourceTest.metadata?.__promptfoo
