@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
 import { InputsSchema } from '../contracts/shared';
 import { StringOrFunctionSchema } from '../contracts/validators/shared';
-import { inheritProviderCapabilities } from '../types/providers';
 
 import type {
   CallApiFunction,
@@ -77,37 +76,8 @@ export const ApiProviderSchema = z.unknown().transform((input, ctx) => {
     ctx.addIssue({ code: 'custom', message: result.error.message });
     return z.NEVER;
   }
-  if (
-    result.data.promptfooCapabilities &&
-    typeof input === 'object' &&
-    input !== null &&
-    Object.prototype.hasOwnProperty.call(
-      (input as { promptfooCapabilities?: unknown }).promptfooCapabilities ?? [],
-      Symbol.for('promptfoo.inheritedProviderCapabilities'),
-    )
-  ) {
-    result.data.promptfooCapabilities = inheritProviderCapabilities(
-      result.data.promptfooCapabilities,
-    );
-  }
-  for (const method of [
-    'id',
-    'callApi',
-    'callEmbeddingApi',
-    'callClassificationApi',
-    'callSimilarityApi',
-    'callModerationApi',
-  ] as const) {
-    const operation = result.data[method];
-    if (operation) {
-      Object.assign(result.data, { [method]: operation.bind(input) });
-    }
-  }
-  // Keep subclass declarations available after Zod copies the provider object.
-  Object.defineProperty(result.data, Symbol.for('promptfoo.capabilityDelegate'), {
-    value: input,
-  });
-  return result.data;
+  // Keep the live instance, including private state, prototype hooks and scheduler symbols.
+  return input as typeof result.data;
 });
 
 export const ProvidersSchema = z.union([

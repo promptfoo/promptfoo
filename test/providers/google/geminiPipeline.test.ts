@@ -69,7 +69,16 @@ it('retains terminal AI Studio safety ratings without dropping streamed output',
 describe.each(facades)('%s shared Gemini pipeline', (facade) => {
   it('retains content when streaming ends with an empty STOP and usage-only frame', () => {
     const data = [
-      { candidates: [{ content: { parts: [{ text: 'Hello ' }] } }] },
+      {
+        candidates: [
+          {
+            content: { parts: [{ text: 'Hello ' }] },
+            safetyRatings: [
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', probability: 'HIGH', blocked: false },
+            ],
+          },
+        ],
+      },
       { candidates: [{ content: { parts: [{ text: 'world' }] } }] },
       { candidates: [{ finishReason: 'STOP' }] },
       { usageMetadata: { promptTokenCount: 2, candidatesTokenCount: 3, totalTokenCount: 5 } },
@@ -80,6 +89,7 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
       expect(parsed.output).toBe('Hello world');
       expect(parsed.lastData.usageMetadata?.totalTokenCount).toBe(5);
       expect(parsed.candidate.content?.parts).toEqual([{ text: 'world' }]);
+      expect(parsed.candidate.safetyRatings).toMatchObject([{ probability: 'HIGH' }]);
     }
   });
 
@@ -172,10 +182,10 @@ it('disables executable tools consistently while retaining built-in tools', asyn
     .mockResolvedValue([{ functionDeclarations: [{ name: 'fixture' }] }, { googleSearch: {} }]);
   const { mergedTools, toolsDisabled } = await prepareGeminiRequest(
     {
-      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
     },
     'Hello',
-    undefined,
+    { prompt: { raw: 'Hello', label: 'fixture', config: { tool_choice: 'none' } }, vars: {} },
     getTools,
   );
   expect(toolsDisabled).toBe(true);

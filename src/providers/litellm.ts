@@ -123,7 +123,11 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
 
 class LiteLLMChatProvider extends LiteLLMProviderWrapper<OpenAiChatCompletionProvider> {
   constructor(modelName: string, options: ProviderOptions = {}) {
-    super(new OpenAiChatCompletionProvider(modelName, options), 'chat', options.id);
+    super(
+      new OpenAiChatCompletionProvider(modelName, { ...options, bridgesGpt62ChatTools: true }),
+      'chat',
+      options.id,
+    );
   }
 }
 

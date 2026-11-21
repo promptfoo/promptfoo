@@ -142,17 +142,19 @@ export interface ProviderIdentity<TConfig = unknown> {
   config?: TConfig;
   /** Omit for legacy method-based detection; declare to exclude inherited stubs. */
   promptfooCapabilities?: readonly ProviderCapability[];
-  /** Release long-lived resources. Request cancellation uses abortSignal instead. */
+  /**
+   * Provider-wide cleanup hook for releasing long-lived resources such as worker
+   * processes, browser sessions, or pooled connections. The CLI calls it without
+   * arguments unless `cleanupAfterEvaluation` is implemented or the provider registers
+   * itself for shutdown; a registered provider's `shutdown()` may delegate to this hook.
+   * Request-scoped cancellation should be implemented with `abortSignal`.
+   */
   cleanup?: () => void | Promise<void>;
 }
 
 export interface ProviderOperations {
   callApi: CallApiFunction;
-  callEmbeddingApi: (
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
   callClassificationApi: (
     prompt: string,
     options?: CallApiOptionsParams,
@@ -184,78 +186,21 @@ export function inheritProviderCapabilities<T extends readonly ProviderCapabilit
   return inherited;
 }
 
-/** A subclass may replace a built-in stub, but the nearest explicit declaration takes precedence. */
-function getSubclassCapabilityOverride(
-  provider: object,
-  capability: ProviderCapability,
-): boolean | undefined {
-  const ownDeclaration = Object.getOwnPropertyDescriptor(provider, 'promptfooCapabilities');
-  if (ownDeclaration) {
-    const capabilities = ownDeclaration.get?.call(provider) ?? ownDeclaration.value;
-    if (
-      capabilities !== undefined &&
-      !Object.prototype.hasOwnProperty.call(capabilities ?? [], inheritedProviderCapabilities)
-    ) {
-      return Array.isArray(capabilities) && capabilities.includes(capability);
-    }
-  }
-  let prototype = Object.getPrototypeOf(provider);
-  let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
-  while (prototype && prototype !== Object.prototype) {
-    const hasDeclaration =
-      prototype.constructor &&
-      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
-    // A declaring class owns its stubs; subclasses may override even a map-backed wrapper.
-    const parentCapabilities = (
-      Object.getPrototypeOf(prototype)?.constructor as { declaredProviderCapabilities?: unknown }
-    )?.declaredProviderCapabilities;
-    if (
-      Object.prototype.hasOwnProperty.call(prototype, capability) &&
-      (!hasDeclaration || parentCapabilities !== undefined)
-    ) {
-      overridden = true;
-    }
-    const declaration = Object.getOwnPropertyDescriptor(prototype, 'promptfooCapabilities');
-    if (declaration) {
-      const capabilities = declaration.get?.call(provider) ?? declaration.value;
-      if (Array.isArray(capabilities)) {
-        return capabilities.includes(capability);
-      }
-    }
-    if (hasDeclaration) {
-      const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
-      return (
-        (overridden &&
-          Array.isArray(capabilities) &&
-          Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) ||
-        undefined
-      );
-    }
-    prototype = Object.getPrototypeOf(prototype);
-  }
-  return undefined;
-}
-
-/** Check both the implementation and any explicit capability declaration. */
+/** Check the implementation and the closest explicit declaration for a single operation. */
 export function hasProviderCapability<K extends ProviderCapability>(
   provider: unknown,
   capability: K,
-): provider is ProviderIdentity & Pick<ProviderOperations, K> {
+): provider is ProviderIdentity & { [P in K]: Pick<ProviderOperations, P> }[K] {
   if (
     typeof provider !== 'object' ||
     provider === null ||
     !('id' in provider) ||
     typeof provider.id !== 'function' ||
-    !(capability in provider) ||
-    typeof (provider as Record<string, unknown>)[capability] !== 'function'
+    typeof Reflect.get(provider, capability) !== 'function'
   ) {
     return false;
   }
 
-  const override = getSubclassCapabilityOverride(provider, capability);
-  if (override !== undefined) {
-    return override;
-  }
   const capabilities =
     'promptfooCapabilities' in provider ? provider.promptfooCapabilities : undefined;
   if (capabilities === undefined) {
@@ -264,15 +209,35 @@ export function hasProviderCapability<K extends ProviderCapability>(
   if (!Array.isArray(capabilities)) {
     return false;
   }
-  const delegate = (provider as Record<symbol, unknown>)[
-    Symbol.for('promptfoo.capabilityDelegate')
-  ];
-  if (
-    Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities) &&
-    delegate !== undefined &&
-    delegate !== provider
-  ) {
+  if (!Object.hasOwn(capabilities, inheritedProviderCapabilities)) {
+    return capabilities.includes(capability);
+  }
+
+  // A wrapper's methods are forwarders. The delegate may restrict a built-in
+  // capability or replace an inherited stub even if the copied list says otherwise.
+  const delegate = Reflect.get(provider, Symbol.for('promptfoo.capabilityDelegate'));
+  if (delegate !== undefined && delegate !== provider) {
     return hasProviderCapability(delegate, capability);
+  }
+
+  let overridden = Object.hasOwn(provider, capability);
+  let prototype = Object.getPrototypeOf(provider);
+  while (prototype && prototype !== Object.prototype) {
+    const explicit = Object.getOwnPropertyDescriptor(prototype, 'promptfooCapabilities');
+    if (explicit) {
+      const declared = explicit.get?.call(provider) ?? explicit.value;
+      return Array.isArray(declared) && declared.includes(capability);
+    }
+    const parent = Object.getPrototypeOf(prototype);
+    // The first declaring class owns the stubs. Only subclasses can override them.
+    if (
+      prototype.constructor?.declaredProviderCapabilities &&
+      !parent?.constructor?.declaredProviderCapabilities
+    ) {
+      return overridden || capabilities.includes(capability);
+    }
+    overridden ||= Object.hasOwn(prototype, capability);
+    prototype = parent;
   }
   return capabilities.includes(capability);
 }
@@ -282,7 +247,7 @@ export function hasProviderCapability<K extends ProviderCapability>(
 export interface ApiProvider<TConfig = any> extends MinimalApiProvider, ProviderIdentity<TConfig> {
   callApi: ProviderOperations['callApi'];
   callClassificationApi?: ProviderOperations['callClassificationApi'];
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi?: ProviderOperations['callEmbeddingApi'];
   callSimilarityApi?: ProviderOperations['callSimilarityApi'];
   callModerationApi?: ProviderOperations['callModerationApi'];
   /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
@@ -306,19 +271,12 @@ export interface ApiProvider<TConfig = any> extends MinimalApiProvider, Provider
   prompts?: string[];
   transform?: string | TransformFunction;
   toJSON?: () => any;
-  /**
-   * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections. The CLI calls it without
-   * arguments unless `cleanupAfterEvaluation` is implemented or the provider registers
-   * itself for shutdown; a registered provider's `shutdown()` may delegate to this hook.
-   * Request-scoped cancellation should be implemented with `abortSignal`.
-   */
   /** Release idle evaluation resources separately from an explicit `cleanup()` call. */
   cleanupAfterEvaluation?: (context: ProviderCleanupContext) => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: ProviderOperations['callEmbeddingApi'];
 }
 
 /** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */

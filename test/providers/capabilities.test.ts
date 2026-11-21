@@ -20,6 +20,7 @@ import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import {
   type ApiProvider,
+  type CancellableEmbeddingProvider,
   hasProviderCapability,
   type ProviderIdentity,
   type ProviderOperations,
@@ -52,6 +53,13 @@ it('represents an embedding capability without a text operation', async () => {
     callEmbeddingApi: async () => ({ embedding: [1, 2] }),
   };
   expectTypeOf(provider.config).toEqualTypeOf<{ dimensions: number } | undefined>();
+  expectTypeOf(provider.callEmbeddingApi).parameters.toEqualTypeOf<[string]>();
+  const candidate: unknown = provider;
+  const operation = 'callEmbeddingApi' as 'callApi' | 'callEmbeddingApi';
+  if (hasProviderCapability(candidate, operation)) {
+    expectTypeOf(candidate).not.toExtend<Pick<ProviderOperations, 'callApi'>>();
+    expectTypeOf(candidate).not.toExtend<Pick<ProviderOperations, 'callEmbeddingApi'>>();
+  }
   expect(hasProviderCapability(provider, 'callEmbeddingApi')).toBe(true);
   expect(hasProviderCapability(provider, 'callApi')).toBe(false);
   expect(await provider.callEmbeddingApi('hello')).toEqual({ embedding: [1, 2] });
@@ -270,6 +278,10 @@ it('preserves subclass text capability through a rate-limit object wrapper', asy
     execute: vi.fn(async (_provider: unknown, call: () => Promise<unknown>) => call()),
   } as unknown as RateLimitRegistry;
   const wrapped = wrapProviderWithRateLimiting(new TextEmbeddingProvider('fixture'), registry);
+  const parsed = ProviderSchema.parse(wrapped) as ApiProvider;
+  expect(parsed).toBe(wrapped);
+  expect(wrapProviderWithRateLimiting(parsed, registry)).toBe(wrapped);
+  expect(hasProviderCapability(parsed, 'callApi')).toBe(true);
   expect(await getAndCheckProvider('text', wrapped, null, 'rubric')).toBe(wrapped);
   expect((await wrapped.callApi('hello')).output).toBe('subclass text');
   wrapped.promptfooCapabilities = ['callEmbeddingApi'];
@@ -443,7 +455,8 @@ describe.each(['chat', 'completion', 'embedding'] as const)('LiteLLM %s forwardi
         : vi.spyOn(delegate.prototype, 'callApi').mockResolvedValue({ output: 'hello' });
     const provider = createLiteLLMProvider(`litellm:${kind}:fixture`);
     if (hasProviderCapability(provider, 'callEmbeddingApi')) {
-      await provider.callEmbeddingApi('hello', context, options);
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+      await (provider as CancellableEmbeddingProvider).callEmbeddingApi('hello', context, options);
     } else {
       await provider.callApi('hello', context, options);
     }

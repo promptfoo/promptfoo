@@ -39,7 +39,11 @@ export async function prepareGeminiRequest(
     },
   );
 
-  const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
+  // A prompt can disable calling with a different alias from the provider default.
+  const promptPolicy = promptConfig && resolveGoogleToolConfig(promptConfig);
+  const { toolConfig, toolsDisabled } = promptPolicy?.toolConfig?.functionCallingConfig?.mode
+    ? promptPolicy
+    : resolveGoogleToolConfig(config);
   const allTools = await getTools({
     skipExecutableToolFiles: toolsDisabled,
   });
@@ -121,6 +125,7 @@ export function parseGeminiContent(
       continue;
     }
     const current = getCandidate(datum);
+    const safetyRatings = current.safetyRatings ?? candidate?.safetyRatings;
     const failure =
       facade === 'vertex' ? getCandidateFailure(datum, current, data, safetyAsOutput) : undefined;
     if (failure) {
@@ -130,14 +135,14 @@ export function parseGeminiContent(
       candidate = {
         ...current,
         content: candidate?.content ?? current.content,
-        safetyRatings: current.safetyRatings ?? candidate?.safetyRatings,
+        safetyRatings,
       };
       continue;
     }
     if (facade === 'vertex' && !current.content?.parts) {
       return respond({ error: `No output found in response: ${JSON.stringify(data)}` });
     }
-    candidate = current;
+    candidate = { ...current, safetyRatings };
     output = mergeParts(output, formatCandidateContents(current));
   }
   if (output === undefined || output === '' || candidate === undefined) {

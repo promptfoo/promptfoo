@@ -518,7 +518,11 @@ export class XAIVoiceProvider implements ApiProvider {
 
                   if (functionCallHandler) {
                     try {
-                      const result = await functionCallHandler(call.name, call.arguments);
+                      const result = await functionCallHandler.call(
+                        this.config,
+                        call.name,
+                        call.arguments,
+                      );
                       functionCallResults.push(result);
 
                       // Track function call with full details for assertions

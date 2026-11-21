@@ -294,6 +294,56 @@ describe('LiteLLM Provider', () => {
     });
   });
 
+  describe('GPT-6.2 chat tool routing', () => {
+    it.each([
+      ['litellm:gpt-6.2-astra', 'gpt-6.2-astra'],
+      ['litellm:chat:openai/gpt-6.2-sol', 'openai/gpt-6.2-sol'],
+    ])('sends %s tool calls to the proxy', async (id, model) => {
+      mockFetchWithCache.mockResolvedValue(createMockChatResponse());
+      const tool = {
+        type: 'function',
+        function: { name: 'lookup', parameters: { type: 'object', properties: {} } },
+      };
+      const provider = createLiteLLMProvider(id, {
+        providerOptions: {
+          config: {
+            apiBaseUrl: 'http://proxy.example/v1',
+            tools: [tool],
+            tool_choice: 'required',
+            reasoning_effort: 'max',
+            max_tokens: 120,
+            passthrough: { temperature: 1, top_p: 0.8, logprobs: true },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Find the answer');
+
+      expect(result.error).toBeUndefined();
+      const [url, request] = mockFetchWithCache.mock.calls[0]!;
+      expect(url).toBe('http://proxy.example/v1/chat/completions');
+      expect(JSON.parse(request!.body as string)).toEqual({
+        model,
+        messages: [{ role: 'user', content: 'Find the answer' }],
+        tools: [tool],
+        tool_choice: 'required',
+        reasoning_effort: 'max',
+        max_completion_tokens: 120,
+      });
+    });
+
+    it('rejects an unsupported reasoning effort before contacting the proxy', async () => {
+      const provider = createLiteLLMProvider('litellm:gpt-6.2-sol', {
+        providerOptions: { config: { reasoning_effort: 'none' } },
+      });
+
+      await expect(provider.callApi('Find the answer')).rejects.toThrow(
+        'GPT-6.2 Sol supports reasoning effort',
+      );
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Embedding Provider Functionality', () => {
     it('should have callEmbeddingApi method', () => {
       const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {});
