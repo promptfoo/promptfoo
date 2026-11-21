@@ -1,56 +1,10 @@
-import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
-
-export interface AimlApiModel {
-  id: string;
-}
-
-let modelCache: AimlApiModel[] | null = null;
-
-export function clearAimlApiModelsCache() {
-  modelCache = null;
-}
-
-export async function fetchAimlApiModels(env?: EnvOverrides): Promise<AimlApiModel[]> {
-  if (modelCache) {
-    return modelCache;
-  }
-
-  try {
-    const apiKey = env?.AIML_API_KEY || getEnvString('AIML_API_KEY');
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-
-    const { data } = await fetchWithCache<any>(
-      'https://api.aimlapi.com/models',
-      { headers },
-      getRequestTimeoutMs(),
-    );
-
-    const models = data?.data || data?.models || data;
-    if (Array.isArray(models)) {
-      modelCache = models.map((m: any) => ({ id: m.id || m.model || m.name || m }));
-    } else {
-      modelCache = [];
-    }
-  } catch (err) {
-    logger.warn(`Failed to fetch aimlapi models: ${String(err)}`);
-    modelCache = [];
-  }
-
-  return modelCache;
-}
 
 /**
  * Factory for creating AI/ML API providers using OpenAI-compatible endpoints.

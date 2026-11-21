@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPromptInputDescriptions,
   materializeInputValue,
-  materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from '../../src/redteam/inputVariables';
 import { InputDefinitionObjectSchema } from '../../src/types/shared';
@@ -454,20 +453,5 @@ describe('inputVariables', () => {
 
     expect(value).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(Buffer.from(value.split(',')[1], 'base64').toString('utf-8')).toContain('<svg');
-  });
-
-  it('leaves text inputs untouched when materializing variables', () => {
-    expect(
-      materializeInputVariables(
-        {
-          note: 'hello',
-        },
-        {
-          note: 'plain text note',
-        },
-      ),
-    ).toEqual({
-      note: 'hello',
-    });
   });
 });

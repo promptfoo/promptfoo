@@ -26,6 +26,8 @@ describe('Scanner fork PR auth rejection', () => {
     }));
     vi.doMock('../../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
+      countUncommittedFiles: vi.fn().mockResolvedValue(0),
+      getDefaultBaseBranch: vi.fn().mockResolvedValue('main'),
     }));
     vi.doMock('../../../src/codeScan/git/metadata', () => ({
       extractMetadata: vi.fn().mockResolvedValue({
@@ -50,13 +52,9 @@ describe('Scanner fork PR auth rejection', () => {
         diffsOnly: options.diffsOnly ?? config.diffsOnly,
       })),
       resolveGuidance: vi.fn().mockReturnValue(undefined),
-      resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
     }));
-    vi.doMock('simple-git', () => ({
-      default: vi.fn(() => ({
-        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
-        revparse: vi.fn().mockResolvedValue('abc123'),
-      })),
+    vi.doMock('../../../src/util/runCommand', () => ({
+      runCommand: vi.fn().mockResolvedValue({ stdout: 'abc123', stderr: '' }),
     }));
     vi.doMock('../../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({
@@ -83,7 +81,8 @@ describe('Scanner fork PR auth rejection', () => {
       createSpinner: vi.fn().mockReturnValue(undefined),
       displayScanResults: vi.fn(),
     }));
-    vi.doMock('../../../src/codeScan/scanner/request', () => ({
+    vi.doMock('../../../src/codeScan/scanner/request', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../../../src/codeScan/scanner/request')>()),
       buildScanRequest: vi.fn().mockReturnValue({ request: 'test' }),
       executeScanRequestWithRetry: vi
         .fn()
@@ -137,9 +136,11 @@ describe('Scanner fork PR auth rejection', () => {
     vi.doUnmock('../../../src/codeScan/scanner/output');
 
     const stdoutSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
     const cliState = (await import('../../../src/cliState')).default;
+    const logger = (await import('../../../src/logger')).default;
 
     await executeScan('/test/repo', {
       format: 'sarif',
@@ -150,6 +151,10 @@ describe('Scanner fork PR auth rejection', () => {
     await cliState.postActionCallback?.();
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(stderrSpy).toHaveBeenCalledWith(
+      `Scan skipped: ${SKIP_MESSAGE} SARIF output was not generated because the scan did not complete.`,
+    );
+    expect(logger.error).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
   });
 

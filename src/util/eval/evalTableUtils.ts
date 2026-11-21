@@ -1,11 +1,10 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
-import { escapeCsvFormula } from '../../csv';
-import { getEnvBool } from '../../envars';
 import { ResultFailureReason } from '../../types/index';
 
 import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
+  EnvOverrides,
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateTableRow,
@@ -39,6 +38,14 @@ export interface GenerateEvalCsvOptions {
    * If not provided, comparison exports will throw an error.
    */
   findEvalById?: (id: string) => Promise<Eval | null | undefined>;
+}
+
+/** Options shared by direct table-to-CSV exports. */
+export interface EvalTableCsvOptions {
+  /** Whether to include redteam metadata columns. */
+  isRedteam?: boolean;
+  /** Evaluation-level environment overrides, which take precedence over process.env. */
+  env?: EnvOverrides;
 }
 
 /**
@@ -113,19 +120,8 @@ function formatNamedScoreValue(value: number | undefined): string {
   return typeof value === 'number' && !Number.isNaN(value) ? value.toFixed(2) : '';
 }
 
-/**
- * Build a per-prompt list of `Metric: <name>` column names, deduplicated and
- * sorted with `localeCompare`. Shared shell for both the row-scanning helper
- * (WebUI path) and the aggregate-reading helper (streaming CLI path); see the
- * two call sites below.
- */
-function collectMetricNamesByPrompt<T>(
-  items: T[],
-  namesFor: (item: T, index: number) => Iterable<string>,
-): string[][] {
-  return items.map((item, index) =>
-    [...new Set(namesFor(item, index))].sort((a, b) => a.localeCompare(b)),
-  );
+function compareMetricNames(a: string, b: string): number {
+  return a.localeCompare(b);
 }
 
 /**
@@ -140,8 +136,8 @@ function collectNamedScoreNamesByPrompt(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 }): string[][] {
-  return collectMetricNamesByPrompt(table.head.prompts, (_, promptIndex) => {
-    const names: string[] = [];
+  return table.head.prompts.map((_, promptIndex) => {
+    const names = new Set<string>();
     for (const row of table.body) {
       const namedScores = row.outputs[promptIndex]?.namedScores;
       if (!namedScores) {
@@ -149,11 +145,11 @@ function collectNamedScoreNamesByPrompt(table: {
       }
       for (const [name, value] of Object.entries(namedScores)) {
         if (typeof value === 'number' && !Number.isNaN(value)) {
-          names.push(name);
+          names.add(name);
         }
       }
     }
-    return names;
+    return [...names].sort(compareMetricNames);
   });
 }
 
@@ -174,12 +170,14 @@ function collectNamedScoreNamesByPrompt(table: {
  * the latter requires a row-scan pre-pass.
  */
 function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
-  return collectMetricNamesByPrompt(prompts, (prompt) => {
+  return prompts.map((prompt) => {
     const counts = (prompt as CompletedPrompt).metrics?.namedScoresCount;
     if (!counts) {
       return [];
     }
-    return Object.keys(counts).filter((name) => (counts[name] ?? 0) > 0);
+    return Object.keys(counts)
+      .filter((name) => (counts[name] ?? 0) > 0)
+      .sort(compareMetricNames);
   });
 }
 
@@ -253,7 +251,6 @@ function scanBatchForDiscovery(
 }
 
 type StreamRow = {
-  testIdx: number;
   vars: string[];
   outputs: Array<{
     text: string;
@@ -294,7 +291,6 @@ function batchToStreamRows(
     let row = rowsByTestIdx.get(result.testIdx);
     if (!row) {
       row = {
-        testIdx: result.testIdx,
         vars: varNames.map((varName) => {
           const value = result.testCase?.vars?.[varName];
           return value === undefined ? '' : String(value);
@@ -446,13 +442,57 @@ export function tableRowToCsvValues(
  */
 function escapeCsvRowsForFormulaInjection(
   rows: (string | number | boolean)[][],
+  env?: EnvOverrides,
 ): (string | number | boolean)[][] {
-  if (getEnvBool('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING')) {
+  // Resolve the persisted evaluation config before process.env, matching the
+  // environment precedence used by the rest of promptfoo without importing the
+  // legacy runtime environment module into this node-layer export path.
+  const configuredValue =
+    env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING ??
+    process.env.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING;
+  const disableEscaping = ['1', 'true', 'yes', 'yup', 'yeppers'].includes(
+    configuredValue?.toLowerCase() ?? '',
+  );
+  if (disableEscaping) {
     return rows;
   }
   return rows.map((row) =>
     row.map((cell) => (typeof cell === 'string' ? escapeCsvFormula(cell) : cell)),
   );
+}
+
+function isNumericCell(value: string): boolean {
+  return value.trim() !== '' && Number.isFinite(Number(value));
+}
+
+/**
+ * Neutralize spreadsheet formula (CSV) injection at eval export time (CWE-1236).
+ *
+ * Spreadsheet applications execute cells beginning with `=`, `+`, `-`, or `@`
+ * as formulas. Exported eval data can contain attacker-controlled model output,
+ * variables, and grader comments, and CSV quoting alone does not neutralize
+ * those formulas. Prefix dangerous values with the spreadsheet-native text
+ * marker while preserving finite signed numbers.
+ *
+ * Leading whitespace and zero-width characters are ignored when identifying a
+ * trigger because spreadsheet applications can strip them before evaluation.
+ */
+export function escapeCsvFormula(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+
+  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
+  const firstChar = unpadded[0];
+  if (firstChar === undefined) {
+    return value;
+  }
+
+  const isFormulaTrigger =
+    firstChar === '=' ||
+    firstChar === '@' ||
+    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
+  return isFormulaTrigger ? `'${value}` : value;
 }
 
 /**
@@ -479,26 +519,17 @@ function escapeCsvRowsForFormulaInjection(
  */
 export function evalTableToCsv(
   table: { head: { prompts: Prompt[]; vars: string[] }; body: EvaluateTableRow[] },
-  options: { isRedteam?: boolean } = { isRedteam: false },
+  options: EvalTableCsvOptions = {},
 ): string {
-  const { isRedteam } = options;
+  const { env, isRedteam = false } = options;
   const hasDescriptions = table.body.some((row) => row.test.description);
 
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
-  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
-    hasDescriptions,
-    isRedteam,
-    namedScoreNamesByPrompt,
-  });
+  const columnOptions = { hasDescriptions, isRedteam, namedScoreNamesByPrompt };
+  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, columnOptions);
+  const csvRows = [headers, ...table.body.map((row) => tableRowToCsvValues(row, columnOptions))];
 
-  const csvRows = [
-    headers,
-    ...table.body.map((row) =>
-      tableRowToCsvValues(row, { hasDescriptions, isRedteam, namedScoreNamesByPrompt }),
-    ),
-  ];
-
-  return csvStringify(escapeCsvRowsForFormulaInjection(csvRows));
+  return csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env));
 }
 
 /**
@@ -683,6 +714,7 @@ export async function generateEvalCsv(
   }
 
   return evalTableToCsv(finalTable, {
+    env: eval_.config.env,
     isRedteam: Boolean(eval_.config.redteam),
   });
 }
@@ -711,6 +743,7 @@ export interface StreamCsvOptions {
  */
 export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
   const { isRedteam = false, write } = options;
+  const env = eval_.config?.env;
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
@@ -745,9 +778,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const hasDescriptions = accumulator.hasDescriptions;
   for (const promptIndex of fallbackPromptIndices) {
     const names = accumulator.metricNamesByPrompt.get(promptIndex);
-    namedScoreNamesByPrompt[promptIndex] = names
-      ? [...names].sort((a, b) => a.localeCompare(b))
-      : [];
+    namedScoreNamesByPrompt[promptIndex] = names ? [...names].sort(compareMetricNames) : [];
   }
 
   const headers = buildCsvHeaders(varNames, prompts, {
@@ -755,7 +786,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     isRedteam,
     namedScoreNamesByPrompt,
   });
-  await write(csvStringify(escapeCsvRowsForFormulaInjection([headers])));
+  await write(csvStringify(escapeCsvRowsForFormulaInjection([headers], env)));
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
@@ -768,7 +799,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     );
 
     if (csvRows.length > 0) {
-      await write(csvStringify(escapeCsvRowsForFormulaInjection(csvRows)));
+      await write(csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env)));
     }
   }
 }

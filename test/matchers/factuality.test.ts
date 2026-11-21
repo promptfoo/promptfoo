@@ -6,17 +6,25 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
+const createLegacyCategoryResponse = () => ({
+  output:
+    '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
+const createJsonCategoryResponse = () => ({
+  output:
+    '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
 describe('matchesFactuality', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-      output:
-        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue(createLegacyCategoryResponse());
   });
 
   afterEach(() => {
@@ -29,11 +37,7 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = vi.fn().mockResolvedValue({
-      output:
-        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    const mockCallApi = vi.fn().mockResolvedValue(createLegacyCategoryResponse());
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
@@ -56,11 +60,7 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = vi.fn().mockResolvedValue({
-      output:
-        '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    const mockCallApi = vi.fn().mockResolvedValue(createJsonCategoryResponse());
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
@@ -167,11 +167,7 @@ describe('matchesFactuality', () => {
       },
     };
 
-    const mockCallApi = vi.fn().mockResolvedValue({
-      output:
-        '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    const mockCallApi = vi.fn().mockResolvedValue(createJsonCategoryResponse());
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
@@ -236,6 +232,55 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
       }),
+      // An uninterpretable grader response is a grader failure, not evidence
+      // that the answer is not factual: inverse-aware callers
+      // (e.g. not-model-graded-factuality) must propagate it verbatim.
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag a grading provider error as a grader failure', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({ error: 'Grader provider unavailable' });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(
+      matchesFactuality('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Grader provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag an uninterpretable grader response as a grader failure', async () => {
+    // Neither the JSON format nor the legacy "(A) ..." pattern: the grader
+    // answered in prose. That is a grader failure, and inverse-aware callers
+    // must not flip it into a pass for `not-model-graded-factuality`.
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'I am not able to grade this submission.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(
+      matchesFactuality('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Factuality checker output did not match expected format: I am not able to grade this submission.',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+      metadata: { graderError: true },
     });
   });
 
@@ -392,5 +437,40 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
     expect(actualPrompt).not.toContain('{{input}}');
     expect(actualPrompt).not.toContain('{{ideal}}');
     expect(actualPrompt).not.toContain('{{completion}}');
+  });
+
+  it('should keep reserved factuality vars ahead of user vars', async () => {
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
+
+    await matchesFactuality(
+      'input from prompt',
+      'ideal from assertion',
+      'completion from provider',
+      {
+        rubricPrompt:
+          'input={{ input }}\nideal={{ ideal }}\ncompletion={{ completion }}\nextra={{ extra }}',
+      },
+      {
+        input: 'vars input sentinel',
+        ideal: 'vars ideal sentinel',
+        completion: 'vars completion sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [prompt, callApiContext] = mockCallApi.mock.calls[0];
+    expect(prompt).toContain('input=input from prompt');
+    expect(prompt).toContain('ideal=ideal from assertion');
+    expect(prompt).toContain('completion=completion from provider');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars input sentinel');
+    expect(prompt).not.toContain('vars ideal sentinel');
+    expect(prompt).not.toContain('vars completion sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      input: 'input from prompt',
+      ideal: 'ideal from assertion',
+      completion: 'completion from provider',
+      extra: 'kept user var',
+    });
   });
 });

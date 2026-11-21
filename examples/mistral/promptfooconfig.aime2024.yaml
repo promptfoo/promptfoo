@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Reproduce Mistral Magistral AIME2024 benchmark
+description: Evaluate Mistral reasoning models on AIME2024
 
 prompts:
   - |
@@ -11,15 +11,18 @@ prompts:
     End with: "Therefore, the answer is [your answer]."
 
 providers:
-  - id: mistral:magistral-medium-latest
-    label: Magistral Medium
+  - id: mistral:mistral-medium-3-5
+    label: Mistral Medium 3.5
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
-  - id: mistral:magistral-small-latest
-    label: Magistral Small
+  # Use Small 4 with explicit reasoning instead of the deprecated Magistral snapshot.
+  - id: mistral:mistral-small-latest
+    label: Mistral Small 4
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
@@ -28,6 +31,8 @@ tests:
   - huggingface://datasets/sea-snell/aime-2024?split=test
 
 defaultTest:
+  options:
+    provider: mistral:mistral-large-latest
   assert:
     - type: llm-rubric
       value: |

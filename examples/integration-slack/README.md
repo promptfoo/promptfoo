@@ -4,11 +4,9 @@ This example shows how to collect human feedback via Slack for evaluating AI res
 
 ## Prerequisites
 
-1. **Install the Slack Web API** (optional dependency):
+1. **Install Promptfoo and the Slack Web API together** in the example directory, as shown below. The SDK is not installed by default.
 
-   ```bash
-   npm install @slack/web-api
-   ```
+   Slack Web API v8 supports `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` through Promptfoo's Slack provider.
 
 2. **Create a Slack App**:
    - Go to https://api.slack.com/apps
@@ -48,12 +46,13 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example integration-slack
 cd integration-slack
+npm install promptfoo @slack/web-api@^8.1.1
 ```
 
 Then update the channel ID in `promptfooconfig.yaml` and run:
 
 ```bash
-npx promptfoo@latest eval
+npx promptfoo eval
 ```
 
 ## Configuration

@@ -148,6 +148,73 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
+    it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
+      const artifactId = randomUUID();
+      const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const completedPrompt = { ...prompt, provider: 'selected-target' };
+      const evalRecord = await Eval.create(
+        {
+          prompts: [prompt.raw],
+          providers: [{ id: 'echo', label: 'selected-target' }],
+          tests: [{ vars: { name: 'World' } }],
+        },
+        [prompt],
+        {
+          id: uniqueEvalId(),
+          runtimeOptions: { providerFilter: 'selected-target' },
+          completedPrompts: [completedPrompt],
+        },
+      );
+      const db = await getDb();
+      const staleResultId = `${evalRecord.id}-stale-error`;
+      await db.insert(evalResultsTable).values({
+        id: staleResultId,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt,
+        testCase: { vars: { name: 'World' } },
+        provider: { id: 'echo', label: 'selected-target' },
+        response: { output: 'stale error' },
+        error: 'stale error',
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        namedScores: {},
+      });
+      fs.writeFileSync(
+        configPath,
+        [
+          'providers:',
+          '  - id: echo',
+          '    label: replacement-target',
+          'prompts:',
+          `  - "${prompt.raw}"`,
+          'tests:',
+          '  - vars:',
+          '      name: World',
+        ].join('\n'),
+      );
+
+      try {
+        const persistedEval = await Eval.findById(evalRecord.id);
+        expect(persistedEval?.runtimeOptions?.providerFilter).toBe('selected-target');
+        expect(persistedEval?.prompts).toEqual([expect.objectContaining(completedPrompt)]);
+
+        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
+          `Stored provider filter "selected-target" matched no providers in the retry config "${configPath}"`,
+        );
+
+        expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
+        expect((await Eval.findById(evalRecord.id))?.prompts).toEqual([
+          expect.objectContaining(completedPrompt),
+        ]);
+      } finally {
+        fs.rmSync(configPath, { force: true });
+      }
+    });
+
     it('rewrites the original JSONL output after partial cleanup with an override config', async () => {
       const artifactId = randomUUID();
       const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.JSONL`);
@@ -1366,6 +1433,137 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.total).toBe(125); // 50 + 75
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.prompt).toBe(75); // 30 + 45
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.completion).toBe(50); // 20 + 30
+    });
+
+    it('preserves cached usage and incurred costs when recalculating persisted results', async () => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = await getDb();
+      const mockProvider = { id: 'test-provider' };
+      const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
+
+      await evalRecord.addPrompts([mockPrompt]);
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-cached-target`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          cost: 0.5,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          response: {
+            output: 'cached target response',
+            cached: true,
+            tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'fresh grading result',
+            tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          },
+        },
+        {
+          id: `${evalRecord.id}-cached-grader`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 1,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          cost: 0.25,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          response: {
+            output: 'fresh target response',
+            tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'cached grading result',
+            metadata: { cachedResponse: true },
+            tokensUsed: { total: 23, prompt: 15, completion: 8, cached: 23, numRequests: 1 },
+          },
+        },
+        {
+          id: `${evalRecord.id}-mixed-graders`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 2,
+          prompt: mockPrompt,
+          testCase: { vars: {} },
+          provider: mockProvider,
+          success: true,
+          score: 1,
+          cost: 0.5,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          response: {
+            output: 'another fresh target response',
+            incurredCost: 0.25,
+            tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'mixed grading result',
+            tokensUsed: {
+              total: 60,
+              prompt: 38,
+              completion: 22,
+              cached: 37,
+              numRequests: 2,
+              completionDetails: { reasoning: 13 },
+              incurredTokenUsage: {
+                total: 23,
+                prompt: 15,
+                completion: 8,
+                numRequests: 1,
+                completionDetails: { reasoning: 4 },
+              },
+            },
+          },
+        },
+      ]);
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(evalRecord.prompts[0].metrics).toMatchObject({ cost: 1.25, incurredCost: 0.5 });
+      expect(evalRecord.prompts[0].metrics?.tokenUsage).toMatchObject({
+        total: 445,
+        cached: 295,
+        numRequests: 3,
+        assertions: {
+          total: 120,
+          prompt: 76,
+          completion: 44,
+          cached: 60,
+          numRequests: 4,
+          completionDetails: { reasoning: 13 },
+        },
+        incurredTokenUsage: {
+          total: 150,
+          numRequests: 2,
+          assertions: {
+            total: 60,
+            prompt: 38,
+            completion: 22,
+            numRequests: 2,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      });
+
+      const persistedEval = await Eval.findById(evalRecord.id);
+      expect(persistedEval?.prompts[0].metrics).toMatchObject({ cost: 1.25, incurredCost: 0.5 });
     });
 
     it('should skip results with invalid promptIdx', async () => {

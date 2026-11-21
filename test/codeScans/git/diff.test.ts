@@ -1,180 +1,58 @@
-/**
- * Git Diff Tests
- */
-
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { extractDiff, validateOnBranch } from '../../../src/codeScan/git/diff';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  countUncommittedFiles,
+  getDefaultBaseBranch,
+  validateOnBranch,
+} from '../../../src/codeScan/git/diff';
 import { GitError } from '../../../src/types/codeScan';
-import type { SimpleGit, StatusResult } from 'simple-git';
+import { runCommand } from '../../../src/util/runCommand';
 
-// Define a partial mock type for the SimpleGit methods we use
-type MockSimpleGit = Pick<SimpleGit, 'status' | 'branch' | 'diff' | 'log'> & {
-  status: Mock;
-  branch: Mock;
-  diff: Mock;
-  log: Mock;
-};
+vi.mock('../../../src/util/runCommand', () => ({ runCommand: vi.fn() }));
 
-// Mock simple-git with a factory that returns a mock instance
-const mockGit: MockSimpleGit = {
-  status: vi.fn(),
-  branch: vi.fn(),
-  diff: vi.fn(),
-  log: vi.fn(),
-};
+afterEach(() => vi.resetAllMocks());
 
-vi.mock('simple-git', () => ({
-  default: vi.fn(() => mockGit),
-}));
-
-describe('Git Diff', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('Git branch selection', () => {
+  it.each([
+    ['master\nmain', 'main'],
+    ['master\norigin/main', 'master'],
+    ['origin/master', 'origin/master'],
+    ['origin/main', 'origin/main'],
+    ['feature', 'main'],
+  ])('resolves %s to %s', async (stdout, expected) => {
+    vi.mocked(runCommand).mockResolvedValue({ stdout, stderr: '' });
+    await expect(getDefaultBaseBranch('/repo')).resolves.toBe(expected);
   });
 
-  describe('validateOnBranch', () => {
-    it('should return current branch name when on a branch', async () => {
-      mockGit.status.mockResolvedValue({
-        current: 'feature/test-branch',
-        detached: false,
-      } as StatusResult);
+  it('wraps failures outside a repository', async () => {
+    vi.mocked(runCommand).mockRejectedValue(
+      Object.assign(new Error('not a git repository'), { code: 128 }),
+    );
+    const validation = validateOnBranch('/repo');
+    await expect(validation).rejects.toThrow(GitError);
+    await expect(validation).rejects.toThrow('Failed to validate branch: not a git repository');
+  });
+});
 
-      const branchName = await validateOnBranch(mockGit as unknown as SimpleGit);
-
-      expect(branchName).toBe('feature/test-branch');
-    });
-
-    it('should throw GitError when in detached HEAD state', async () => {
-      mockGit.status.mockResolvedValue({
-        current: null,
-        detached: true,
-      } as StatusResult);
-
-      await expect(validateOnBranch(mockGit as unknown as SimpleGit)).rejects.toThrow(GitError);
-      await expect(validateOnBranch(mockGit as unknown as SimpleGit)).rejects.toThrow(
-        'Not on a branch',
-      );
-    });
+describe('dirty file count', () => {
+  it('ignores the stash header from a clean worktree with status.showStash enabled', async () => {
+    vi.mocked(runCommand).mockResolvedValue({ stdout: '# stash 1\0', stderr: '' });
+    await expect(countUncommittedFiles('/repo')).resolves.toBe(0);
   });
 
-  describe('extractDiff', () => {
-    it('should extract diff comparing against main branch', async () => {
-      const mockDiff = `diff --git a/file.ts b/file.ts
-index 123..456 100644
---- a/file.ts
-+++ b/file.ts
-@@ -1,3 +1,4 @@
-+const newLine = 'test';
- const existingLine = 'existing';`;
-
-      // Mock status (for validateOnBranch)
-      mockGit.status.mockResolvedValue({
-        current: 'feature/test',
-        detached: false,
-      } as StatusResult);
-
-      // Mock main branch exists
-      mockGit.branch.mockResolvedValue({
-        all: ['main', 'feature/test'],
-        branches: {},
-        current: 'feature/test',
-        detached: false,
-      } as any);
-      mockGit.diff.mockResolvedValue(mockDiff);
-
-      const result = await extractDiff('/fake/repo');
-
-      expect(result).toEqual({
-        diff: mockDiff,
-        baseBranch: 'main',
+  it.each(['2 old\nname', '# original'])(
+    'treats the rename source %j as a literal path',
+    async (source) => {
+      vi.mocked(runCommand).mockResolvedValue({
+        stdout: [
+          '# stash 1',
+          '2 R. N... 100644 100644 100644 a b R100 # destination',
+          source,
+          '? # other',
+          '',
+        ].join('\0'),
+        stderr: '',
       });
-      expect(mockGit.diff).toHaveBeenCalledWith(['main...HEAD']);
-    });
-
-    it('should fall back to master branch if main does not exist', async () => {
-      const mockDiff = 'diff content';
-
-      // Mock status (for validateOnBranch)
-      mockGit.status.mockResolvedValue({
-        current: 'feature/test',
-        detached: false,
-      } as StatusResult);
-
-      // Mock main branch does not exist, master does
-      mockGit.branch.mockResolvedValue({
-        all: ['master', 'feature/test'],
-        branches: {},
-        current: 'feature/test',
-        detached: false,
-      } as any);
-      mockGit.diff.mockResolvedValue(mockDiff);
-
-      const result = await extractDiff('/fake/repo');
-
-      expect(result).toEqual({
-        diff: mockDiff,
-        baseBranch: 'master',
-      });
-      expect(mockGit.diff).toHaveBeenCalledWith(['master...HEAD']);
-    });
-
-    it('should throw GitError when neither main nor master exists', async () => {
-      // Mock status (for validateOnBranch)
-      mockGit.status.mockResolvedValue({
-        current: 'feature/test',
-        detached: false,
-      } as StatusResult);
-
-      // Mock neither branch exists - should throw error
-      mockGit.branch.mockResolvedValue({
-        all: ['feature/test'],
-        branches: {},
-        current: 'feature/test',
-        detached: false,
-      } as any);
-
-      await expect(extractDiff('/fake/repo')).rejects.toThrow(GitError);
-    });
-
-    it('should throw GitError if no changes detected', async () => {
-      // Mock status (for validateOnBranch)
-      mockGit.status.mockResolvedValue({
-        current: 'feature/test',
-        detached: false,
-      } as StatusResult);
-
-      mockGit.branch.mockResolvedValue({
-        all: ['main', 'feature/test'],
-        branches: {},
-        current: 'feature/test',
-        detached: false,
-      } as any);
-
-      // Mock empty diff
-      mockGit.diff.mockResolvedValue('');
-
-      await expect(extractDiff('/fake/repo')).rejects.toThrow(GitError);
-      await expect(extractDiff('/fake/repo')).rejects.toThrow('No changes detected');
-    });
-
-    it('should throw GitError if diff extraction fails', async () => {
-      // Mock status (for validateOnBranch)
-      mockGit.status.mockResolvedValue({
-        current: 'feature/test',
-        detached: false,
-      } as StatusResult);
-
-      mockGit.branch.mockResolvedValue({
-        all: ['main', 'feature/test'],
-        branches: {},
-        current: 'feature/test',
-        detached: false,
-      } as any);
-
-      mockGit.diff.mockRejectedValue(new Error('git diff failed'));
-
-      await expect(extractDiff('/fake/repo')).rejects.toThrow(GitError);
-      await expect(extractDiff('/fake/repo')).rejects.toThrow('Failed to extract diff');
-    });
-  });
+      await expect(countUncommittedFiles('/repo')).resolves.toBe(2);
+    },
+  );
 });

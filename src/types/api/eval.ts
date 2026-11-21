@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -82,8 +83,8 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 // GET /api/evals/:id/table
 
-/** Upper bound on `limit` for non-export page requests; must stay >= the UI's largest page-size option. */
-export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
+// Compatibility export for existing API schema consumers.
+export { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z
@@ -142,12 +143,14 @@ export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
  * Based on EvaluateTestSuiteWithEvaluateOptions type.
  * Note: prompts must be an array for this endpoint (evaluate() expects array).
  */
-export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
-  // Override prompts to require array - evaluate() calls .map() on prompts
-  prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
-  evaluateOptions: EvaluateOptionsSchema.optional(),
-  sourceEvalId: z.string().min(1).optional(),
-}).passthrough();
+export const CreateJobRequestSchema = TestSuiteConfigSchema.omit({ basePath: true })
+  .extend({
+    // Override prompts to require array - evaluate() calls .map() on prompts
+    prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
+    evaluateOptions: EvaluateOptionsSchema.optional(),
+    sourceEvalId: z.string().min(1).optional(),
+  })
+  .passthrough();
 
 export const CreateJobResponseSchema = z.object({
   id: z.string().uuid(),

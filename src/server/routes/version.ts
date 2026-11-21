@@ -42,6 +42,26 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
   return latestVersion !== currentVersion;
 }
 
+/**
+ * Build the version-response fields shared by the success and error paths: the environment-derived
+ * update commands. All inputs are synchronous and cannot throw, so this is safe to call from the
+ * 500 fallback handler.
+ */
+function buildBaseVersionFields() {
+  const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
+  const isContainer = getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER');
+  const isOfficialDockerImage = getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE');
+  const isNpx = isRunningUnderNpx();
+  const updateCommands = getUpdateCommands({ isContainer, isOfficialDockerImage, isNpx });
+  return {
+    currentVersion: VERSION,
+    selfHosted,
+    isNpx,
+    updateCommands,
+    commandType: updateCommands.commandType,
+  };
+}
+
 const router = express.Router();
 
 // Cache for the latest version check
@@ -64,13 +84,17 @@ const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
-    let latestVersion = versionCache.latestVersion;
+    const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+    let latestVersion = updateChecksDisabled ? VERSION : versionCache.latestVersion;
 
-    const cacheExpired = now - versionCache.timestamp > CACHE_DURATION;
-    const canRetry = now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
+    // A wall-clock rollback must not pin stale cache or failure-rate-limit state indefinitely.
+    const cacheExpired =
+      now < versionCache.timestamp || now - versionCache.timestamp > CACHE_DURATION;
+    const canRetry =
+      now < versionCache.lastAttempt || now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
 
     // Fetch if: (no cache OR cache expired) AND we haven't tried recently
-    if ((!latestVersion || cacheExpired) && canRetry) {
+    if (!updateChecksDisabled && (!latestVersion || cacheExpired) && canRetry) {
       versionCache.lastAttempt = now; // Mark attempt time before trying
       try {
         latestVersion = await getLatestVersion();
@@ -89,39 +113,22 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       }
     }
 
-    const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
-    const isNpx = isRunningUnderNpx();
-    const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
-
     const response = {
-      currentVersion: VERSION,
+      ...buildBaseVersionFields(),
       latestVersion: resolvedLatestVersion,
       updateAvailable: isUpdateAvailable(resolvedLatestVersion, VERSION),
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
     };
 
     res.json(VersionSchemas.Response.parse(response));
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
-    const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
-    const isNpx = isRunningUnderNpx();
-    const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-
     res.status(500).json({
+      ...buildBaseVersionFields(),
       error: 'Failed to check version',
-      currentVersion: VERSION,
       latestVersion: VERSION,
       updateAvailable: false,
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
     });
   }
 });

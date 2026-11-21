@@ -7,7 +7,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -16,6 +21,8 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  isTargetCallAbortError,
+  preserveSelectedError,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -309,7 +316,8 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+      accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
 
       if (redteamResp.error) {
         logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);
@@ -393,6 +401,9 @@ async function runRedteamConversation({
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         // Keep lastResponse with its output so final result can surface mapped output while marking error
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
         continue;
       }
 
@@ -428,10 +439,7 @@ async function runRedteamConversation({
             undefined,
             options,
           );
-          // Vision analysis calls are internal and should not count as target probes.
-          accumulateResponseTokenUsage(totalTokenUsage, visionResponse, {
-            countAsRequest: false,
-          });
+          accumulateGradingResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionProvider.delay) {
             await sleep(visionProvider.delay);
@@ -499,11 +507,12 @@ async function runRedteamConversation({
         undefined,
         options,
       );
+      accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
       if (redteamProvider.delay) {
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), judgeResp.tokenUsage);
+      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), judgeResp);
 
       let score: number;
       let scoreComponents: JudgeResponse['currentResponse']['components'];
@@ -570,7 +579,7 @@ async function runRedteamConversation({
       }
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (isTargetCallAbortError(err, options?.abortSignal)) {
         throw err;
       }
       logger.error(`Iteration ${i + 1} failed: ${err}`);
@@ -578,22 +587,25 @@ async function runRedteamConversation({
     }
   }
 
-  return {
-    output:
-      bestResponse?.output ||
-      (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
-    prompt: targetPrompt || undefined,
-    metadata: {
-      finalIteration,
-      highestScore,
-      redteamHistory,
-      redteamFinalPrompt: targetPrompt || undefined,
-      bestImageUrl: bestResponse?.imageUrl,
-      bestImageDescription: bestResponse?.imageDescription,
+  return preserveSelectedError(
+    {
+      output:
+        bestResponse?.output ||
+        (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+      prompt: targetPrompt || undefined,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory,
+        redteamFinalPrompt: targetPrompt || undefined,
+        bestImageUrl: bestResponse?.imageUrl,
+        bestImageDescription: bestResponse?.imageDescription,
+      },
+      tokenUsage: totalTokenUsage,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     },
-    tokenUsage: totalTokenUsage,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-  };
+    lastResponse,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { loadYaml } from '../../util/yamlLoad';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -26,16 +27,12 @@ export function getServerConfigPath(): string | null {
   // Get config directory (default to ~/.promptfoo)
   const configDir = getEnvString('PROMPTFOO_CONFIG_DIR') || join(homedir(), '.promptfoo');
 
-  // Check for ui-providers.yaml
-  const yamlPath = join(configDir, 'ui-providers.yaml');
-  if (existsSync(yamlPath)) {
-    return yamlPath;
-  }
-
-  // Check for alternate .yml extension
-  const ymlPath = join(configDir, 'ui-providers.yml');
-  if (existsSync(ymlPath)) {
-    return ymlPath;
+  // Check for ui-providers.yaml, then the alternate .yml extension.
+  for (const filename of ['ui-providers.yaml', 'ui-providers.yml']) {
+    const configPath = join(configDir, filename);
+    if (existsSync(configPath)) {
+      return configPath;
+    }
   }
 
   // No config file found
@@ -54,82 +51,64 @@ export function loadServerConfig(): ServerConfig {
 
   const configPath = getServerConfigPath();
 
-  if (!configPath) {
+  if (configPath) {
+    try {
+      const content = readFileSync(configPath, 'utf8');
+      const config = loadYaml(content) as ServerConfig;
+
+      // Validate basic structure
+      if (config && typeof config !== 'object') {
+        logger.error('Invalid ui-providers.yaml: root must be an object, using defaults', {
+          configPath,
+          actualType: typeof config,
+        });
+      } else if (config?.providers && !Array.isArray(config.providers)) {
+        logger.error('Invalid ui-providers.yaml: providers must be an array, using defaults', {
+          configPath,
+          actualType: typeof config.providers,
+        });
+      } else {
+        logger.info('Loaded server configuration', {
+          configPath,
+          providerCount: config?.providers?.length || 0,
+        });
+
+        cachedConfig = config || {};
+        return cachedConfig;
+      }
+    } catch (err) {
+      // Differentiate error types for better debugging
+      if (err instanceof yaml.YAMLException) {
+        logger.error('Invalid YAML syntax in ui-providers.yaml, using defaults', {
+          configPath,
+          error: err,
+          yamlError: err.message,
+          line: err.mark?.line,
+          column: err.mark?.column,
+        });
+      } else if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        // File not found - already logged in getServerConfigPath, this is unexpected
+        logger.warn('Config file disappeared between check and read, using defaults', {
+          configPath,
+          error: err,
+        });
+      } else if ((err as NodeJS.ErrnoException).code === 'EACCES') {
+        logger.error('Permission denied reading ui-providers.yaml, using defaults', {
+          configPath,
+          error: err,
+        });
+      } else {
+        logger.error('Unexpected error loading ui-providers.yaml, using defaults', {
+          configPath,
+          error: err,
+        });
+      }
+    }
+  } else {
     logger.debug('No server config file found, using defaults');
-    cachedConfig = {};
-    return cachedConfig;
   }
-
-  try {
-    const content = readFileSync(configPath, 'utf8');
-    const config = yaml.load(content) as ServerConfig;
-
-    // Validate basic structure
-    if (config && typeof config !== 'object') {
-      logger.error('Invalid ui-providers.yaml: root must be an object, using defaults', {
-        configPath,
-        actualType: typeof config,
-      });
-      cachedConfig = {};
-      return cachedConfig;
-    }
-
-    if (config?.providers && !Array.isArray(config.providers)) {
-      logger.error('Invalid ui-providers.yaml: providers must be an array, using defaults', {
-        configPath,
-        actualType: typeof config.providers,
-      });
-      cachedConfig = {};
-      return cachedConfig;
-    }
-
-    logger.info('Loaded server configuration', {
-      configPath,
-      providerCount: config?.providers?.length || 0,
-    });
-
-    cachedConfig = config || {};
-    return cachedConfig;
-  } catch (err) {
-    // Differentiate error types for better debugging
-    if (err instanceof yaml.YAMLException) {
-      logger.error('Invalid YAML syntax in ui-providers.yaml, using defaults', {
-        configPath,
-        error: err,
-        yamlError: err.message,
-        line: err.mark?.line,
-        column: err.mark?.column,
-      });
-    } else if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      // File not found - already logged in getServerConfigPath, this is unexpected
-      logger.warn('Config file disappeared between check and read, using defaults', {
-        configPath,
-        error: err,
-      });
-    } else if ((err as NodeJS.ErrnoException).code === 'EACCES') {
-      logger.error('Permission denied reading ui-providers.yaml, using defaults', {
-        configPath,
-        error: err,
-      });
-    } else {
-      logger.error('Unexpected error loading ui-providers.yaml, using defaults', {
-        configPath,
-        error: err,
-      });
-    }
-    cachedConfig = {};
-    return cachedConfig;
-  }
-}
-
-/**
- * Clear the cached config and reload from file
- * Useful for hot-reloading configuration
- * @returns Newly loaded server configuration
- */
-export function reloadServerConfig(): ServerConfig {
-  cachedConfig = null;
-  return loadServerConfig();
+  cachedConfig = {};
+  return cachedConfig;
 }
 
 /**

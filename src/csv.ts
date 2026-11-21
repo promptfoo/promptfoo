@@ -3,6 +3,7 @@ import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
+import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValues';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
@@ -11,12 +12,32 @@ const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
-    const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
+    // Longer names must be tried first. `similar` is a prefix of `similar:cosine`,
+    // `similar:dot`, and `similar:euclidean`, and the value is also introduced by `:`.
+    // Left-to-right alternation would accept the shorter type and swallow the metric.
+    const assertionTypesRegex = [...BaseAssertionTypesSchema.options]
+      .sort((a, b) => b.length - a.length)
+      .join('|');
     _assertionRegex = new RegExp(
       `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
     );
   }
   return _assertionRegex;
+}
+
+/**
+ * Parse a CSV cell into a finite number, returning `undefined` when the cell is empty
+ * or not a complete numeric literal. Used for threshold fields so that a meaningful `0`
+ * is preserved while a blank/garbage cell is treated as "unset" rather than leaking
+ * `NaN` into the TestCase.
+ */
+function parseFiniteNumber(value: string | undefined): number | undefined {
+  const trimmed = value?.trim() ?? '';
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 export function assertionFromString(expected: string): Assertion {
@@ -75,8 +96,7 @@ export function assertionFromString(expected: string): Assertion {
       string?,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
-    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
+    const threshold = parseFiniteNumber(thresholdStr);
 
     if (
       type === 'contains-all' ||
@@ -86,7 +106,7 @@ export function assertionFromString(expected: string): Assertion {
     ) {
       return {
         type: fullType as AssertionType,
-        value: value ? value.split(',').map((s) => s.trim()) : value,
+        value: value ? parseCommaSeparatedValues(value) : value,
       };
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
@@ -104,7 +124,9 @@ export function assertionFromString(expected: string): Assertion {
       type === 'levenshtein' ||
       type === 'perplexity-score' ||
       type === 'perplexity' ||
+      type === 'rouge-l' ||
       type === 'rouge-n' ||
+      type === 'rouge-s' ||
       type === 'similar' ||
       type === 'starts-with'
     ) {
@@ -115,9 +137,12 @@ export function assertionFromString(expected: string): Assertion {
         threshold: threshold ?? defaultThreshold,
       };
     } else {
+      // Keep an explicit `type(threshold):value` threshold (e.g. llm-rubric, bleu,
+      // javascript) so the handler doesn't silently fall back to its default.
       return {
         type: fullType as AssertionType,
         value: value?.trim?.(),
+        ...(threshold === undefined ? {} : { threshold }),
       };
     }
   }
@@ -185,7 +210,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     } else if (key === '__metric') {
       metric = value;
     } else if (key === '__threshold') {
-      threshold = Number.parseFloat(value);
+      threshold = parseFiniteNumber(value);
     } else if (key.startsWith('__metadata:')) {
       const metadataKey = key.slice('__metadata:'.length);
       if (metadataKey.endsWith('[]')) {
@@ -196,7 +221,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           const values = value
             .split(/(?<!\\),/)
             .map((v) => v.trim())
-            .map((v) => v.replace('\\,', ','));
+            .map((v) => v.replace(/\\,/g, ','));
           metadata[arrayKey] = values;
         }
       } else {
@@ -226,7 +251,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
           const indexMatch = expectedKey.match(/^__expected(\d+)$/);
           if (indexMatch) {
-            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
+            const oneBasedIndex = Number.parseInt(indexMatch[1], 10);
+            // Indices are 1-based (__expected1 -> 0). Reject 0 so it falls
+            // through to the "positive integer" error below instead of
+            // silently writing the config to assertionConfigs[-1].
+            if (oneBasedIndex >= 1) {
+              targetIndex = oneBasedIndex - 1;
+            }
           }
         }
 
@@ -252,16 +283,12 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           assertionConfigs[targetIndex] = {};
         }
 
-        // Parse the value based on the config key
-        let parsedValue: string | number = value.trim();
-        if (configKey === 'threshold') {
-          parsedValue = Number.parseFloat(value);
-          if (!Number.isFinite(parsedValue)) {
-            logger.error(
-              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
-            );
-            throw new Error(`Invalid numeric value for ${configKey}`);
-          }
+        const parsedValue = parseFiniteNumber(value);
+        if (parsedValue === undefined) {
+          logger.error(
+            `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+          );
+          throw new Error(`Invalid numeric value for ${configKey}`);
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
@@ -297,7 +324,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     options,
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
-    ...(threshold ? { threshold } : {}),
+    // Gate on `=== undefined`, not a truthy check: a threshold of 0 is meaningful
+    // ("collect assertion scores without letting failures fail the test") and must
+    // be preserved. parseFiniteNumber already normalizes blank/invalid cells to undefined.
+    ...(threshold === undefined ? {} : { threshold }),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 }
@@ -310,9 +340,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 export function serializeObjectArrayAsCSV(vars: object[]): string {
   invariant(vars.length > 0, 'No variables to serialize');
   const columnNames = Object.keys(vars[0]).join(',');
-  // NOTE: values here are intentionally NOT formula-escaped (see escapeCsvFormula).
-  // This output is a generated test-case dataset meant to be re-imported via the
-  // CSV test loader, and prefixing a cell would corrupt vars on round-trip.
+  // This generated test-case dataset is intentionally not formula-escaped because
+  // prefixing a cell would corrupt vars on round-trip. Formula escaping is applied
+  // only by the eval result export path.
   const rows = vars
     .map(
       (result) =>
@@ -322,51 +352,4 @@ export function serializeObjectArrayAsCSV(vars: object[]): string {
     )
     .join('\n');
   return [columnNames, rows].join('\n') + '\n';
-}
-
-function isNumericCell(value: string): boolean {
-  // Only finite numbers are safe to leave unescaped — `Number('-Infinity')` is a
-  // valid (non-NaN) number, so guard with isFinite so "-Infinity"/"+Infinity"
-  // (and overflow like "-1e400") are still treated as formula triggers.
-  return value.trim() !== '' && Number.isFinite(Number(value));
-}
-
-/**
- * Neutralize spreadsheet formula (CSV) injection — CWE-1236, OWASP "CSV Injection".
- *
- * Excel, Google Sheets and LibreOffice execute a cell as a formula when its text
- * begins with `=`, `+`, `-`, `@`, a TAB or a carriage return. promptfoo's exported
- * eval/redteam results contain model output, test vars and grader comments —
- * attacker-influenced, especially under red teaming — so an exported CSV opened in
- * a spreadsheet could run code, exfiltrate data, or phish via a hyperlink.
- * csv-stringify's quoting does NOT prevent this; the cell value itself must be
- * prefixed.
- *
- * We prepend a single apostrophe, the spreadsheet-native "treat the rest as text"
- * marker (it is not shown in the cell). To stay minimally disruptive we only touch
- * genuinely dangerous values: a leading `-`/`+` on an otherwise-numeric value
- * (e.g. "-5", "+3.14", a score) is left alone because spreadsheets read those as
- * numbers, not formulas. Empty strings are returned unchanged.
- *
- * Apply this only at export time. promptfoo's CSV import path and any user-authored
- * CSVs must never be mutated, so round-trips stay lossless.
- */
-export function escapeCsvFormula(value: string): string {
-  if (value.length === 0) {
-    return value;
-  }
-  // Spreadsheets strip leading whitespace AND zero-width characters before parsing,
-  // so inspect the first visible character after removing both (this also covers
-  // leading TAB / CR obfuscation). JS `\s` already covers BOM/NBSP but misses the
-  // zero-width space/non-joiner/joiner (U+200B–U+200D), so strip those explicitly.
-  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
-  const firstChar = unpadded[0];
-  if (firstChar === undefined) {
-    return value;
-  }
-  const isFormulaTrigger =
-    firstChar === '=' ||
-    firstChar === '@' ||
-    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
-  return isFormulaTrigger ? `'${value}` : value;
 }

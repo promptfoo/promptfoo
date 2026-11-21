@@ -9,19 +9,20 @@ import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
-import { resolveConfigs } from '../util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
+import {
+  filterProviders,
+  getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
+} from '../util/eval/filterProviders';
+import { createDefaultPromptMetrics, updatePromptResultCounts } from '../util/eval/promptMetrics';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
-import {
-  accumulateAssertionTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyAssertions,
-  createEmptyTokenUsage,
-} from '../util/tokenUsageUtils';
+import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { TokenUsage } from '../types/index';
+import type { PromptMetrics } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -36,6 +37,61 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
   return (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
     (path): path is string => typeof path === 'string' && getOutputFileFormat(path) === 'jsonl',
   );
+}
+
+function assertRetryProviderFilterMatched(
+  providerFilter: string | undefined,
+  providerCount: number,
+  configPath?: string,
+): void {
+  if (!providerFilter || providerCount > 0) {
+    return;
+  }
+
+  const configDescription = configPath ? `retry config "${configPath}"` : 'saved evaluation config';
+  throw new ConfigResolutionError(
+    `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
+  );
+}
+
+async function resolveRetryConfigs(
+  originalEval: Eval,
+  cmdObj: RetryCommandOptions,
+): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+  const providerFilterOptions = getPersistedProviderFilterOptions(
+    originalEval.runtimeOptions?.providerFilter,
+  );
+  const providerFilter = providerFilterOptions.filterProviders;
+
+  // Validate the stored pattern up front so a regex failure is attributed to the filter,
+  // while unrelated resolution errors (missing prompt files, provider load failures)
+  // propagate unchanged with their original class and stack.
+  const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
+  if (providerFilter && regexError) {
+    const configDescription = cmdObj.config
+      ? `retry config "${cmdObj.config}"`
+      : 'saved evaluation config';
+    throw new ConfigResolutionError(
+      `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${regexError}. Existing ERROR results were preserved.`,
+    );
+  }
+
+  const configs = cmdObj.config
+    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+    : await resolveConfigs(providerFilterOptions, originalEval.config);
+
+  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
+  // providers by live id()/label in doEval. Replay both stages so the retried provider
+  // set matches the original even when an instantiated id or label diverges from its
+  // raw config reference.
+  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
+
+  assertRetryProviderFilterMatched(
+    providerFilter,
+    configs.testSuite.providers.length,
+    cmdObj.config,
+  );
+  return configs;
 }
 
 async function restoreJsonlOutputsAfterPersistenceFailure(
@@ -122,40 +178,9 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   let totalProcessed = 0;
 
   // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<
-    number,
-    {
-      score: number;
-      testPassCount: number;
-      testFailCount: number;
-      testErrorCount: number;
-      assertPassCount: number;
-      assertFailCount: number;
-      totalLatencyMs: number;
-      tokenUsage: TokenUsage;
-      namedScores: Record<string, number>;
-      namedScoresCount: Record<string, number>;
-      namedScoreWeights?: Record<string, number>;
-      cost: number;
-    }
-  >();
-
-  // Initialize metrics for each prompt
+  const promptMetricsMap = new Map<number, PromptMetrics>();
   for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, {
-      score: 0,
-      testPassCount: 0,
-      testFailCount: 0,
-      testErrorCount: 0,
-      assertPassCount: 0,
-      assertFailCount: 0,
-      totalLatencyMs: 0,
-      tokenUsage: createEmptyTokenUsage(),
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-      cost: 0,
-    });
+    promptMetricsMap.set(promptIdx, createDefaultPromptMetrics());
   }
 
   // Stream results in batches to avoid OOM with large evaluations
@@ -176,18 +201,17 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           continue;
         }
 
-        // Update test counts
-        if (result.success) {
-          metrics.testPassCount++;
-        } else if (result.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount++;
-        } else {
-          metrics.testFailCount++;
-        }
+        updatePromptResultCounts(metrics, result);
 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
+        const incurredCost =
+          result.response?.incurredCost ?? (result.response?.cached ? 0 : undefined);
+        if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
+          metrics.incurredCost =
+            (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
+        }
         metrics.cost += result.cost || 0;
 
         for (const [key, value] of Object.entries(result.namedScores || {})) {
@@ -211,20 +235,14 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
         // Update token usage
         if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
+          accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
         }
 
         // Update assertion token usage
         if (result.gradingResult?.tokensUsed) {
-          if (!metrics.tokenUsage.assertions) {
-            metrics.tokenUsage.assertions = createEmptyAssertions();
-          }
-          accumulateAssertionTokenUsage(
-            metrics.tokenUsage.assertions,
-            result.gradingResult.tokensUsed,
-          );
+          accumulateGradingTokenUsage(metrics.tokenUsage, result.gradingResult.tokensUsed, {
+            cached: result.gradingResult.metadata?.cachedResponse,
+          });
         }
       }
 
@@ -294,22 +312,24 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  let testSuite;
-  let commandLineOptions: Record<string, unknown> | undefined;
-  let config: Record<string, unknown> | undefined;
-  if (cmdObj.config) {
-    // Load configuration from the provided config file
-    const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  } else {
-    // Load configuration from the original evaluation
-    const configs = await resolveConfigs({}, originalEval.config);
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  }
+  const resolvedConfig = await resolveRetryConfigs(originalEval, cmdObj);
+  return cliState.withConfig(
+    resolvedConfig.config,
+    () =>
+      cliState.withEnv(resolvedConfig.testSuite.env, () =>
+        retryWithConfig(originalEval, errorResultIds, cmdObj, resolvedConfig),
+      ),
+    resolvedConfig.selectedProviderConfigs,
+  );
+}
+
+async function retryWithConfig(
+  originalEval: Eval,
+  errorResultIds: string[],
+  cmdObj: RetryCommandOptions,
+  { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
+) {
+  const evalId = originalEval.id;
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -326,6 +346,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Enable retry mode so getCompletedIndexPairs excludes ERROR results
   cliState.resume = true;
   cliState.retryMode = true;
+  cliState._retryErrorResultIds = errorResultIds;
 
   // Calculate effective maxConcurrency from CLI or config (commandLineOptions)
   // Priority: CLI flag > config file's commandLineOptions
@@ -355,6 +376,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
+    restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 
@@ -436,6 +458,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     // Always clear the state flags to prevent stale state
     cliState.resume = false;
     cliState.retryMode = false;
+    delete cliState._retryErrorResultIds;
     cliState.maxConcurrency = undefined;
   }
 }

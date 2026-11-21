@@ -219,7 +219,7 @@ export async function checkEmailStatus(options?: {
           setUserEmailValidated(false);
           setUserEmailNeedsValidation(true);
         }
-        // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
+        // Tracking filtered emails via this telemetry endpoint for now to gauge sensitivity of validation
         // We should take it out once we're happy with the sensitivity
         if (
           data.status === EmailValidationStatus.RISKY_EMAIL ||

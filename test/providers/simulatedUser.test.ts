@@ -10,6 +10,11 @@ import {
 
 import type { ApiProvider } from '../../src/types/index';
 
+const createAgentResponse = () => ({
+  output: 'agent response',
+  tokenUsage: { numRequests: 1 },
+});
+
 vi.mock('../../src/util/time', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -46,10 +51,7 @@ describe('SimulatedUser', () => {
     originalProvider = createMockProvider({
       id: 'test-agent',
       callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
-        return {
-          output: 'agent response',
-          tokenUsage: { numRequests: 1 },
-        };
+        return createAgentResponse();
       }),
     });
 
@@ -139,6 +141,57 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.prompt).toBe(67); // 10+12+20+25
       expect(result.tokenUsage?.completion).toBe(36); // 5+6+10+15
       expect(result.tokenUsage?.total).toBe(103); // 15+18+30+40
+    });
+
+    it('should stringify non-string agent outputs before adding them to message history', async () => {
+      const objectOutputProvider = createMockProvider({ id: 'object-output-agent' });
+      objectOutputProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: { event: 'party-plan', ideas: ['karaoke', 'cake'] },
+          tokenUsage: { numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'final response',
+          tokenUsage: { numRequests: 1 },
+        });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: objectOutputProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      const expectedOutput = '{"event":"party-plan","ideas":["karaoke","cake"]}';
+      expect(result.output).toContain(`Assistant: ${expectedOutput}`);
+      expect(result.output).not.toContain('[object Object]');
+
+      const secondTargetPrompt = vi.mocked(objectOutputProvider.callApi).mock.calls[1][0];
+      expect(JSON.parse(secondTargetPrompt)).toContainEqual({
+        role: 'assistant',
+        content: expectedOutput,
+      });
+    });
+
+    it('should stringify non-string simulated user outputs before adding them to message history', async () => {
+      mockUserProviderCallApi.mockResolvedValueOnce({
+        output: { reply: 'I like that idea', preference: 'outdoor' },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toContain('User: {"reply":"I like that idea","preference":"outdoor"}');
+      expect(result.output).not.toContain('[object Object]');
+      expect(originalProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '{"role":"user","content":"{\\"reply\\":\\"I like that idea\\",\\"preference\\":\\"outdoor\\"}"}',
+        ),
+        expect.anything(),
+      );
     });
 
     it('should respect maxTurns configuration', async () => {
@@ -251,10 +304,7 @@ describe('SimulatedUser', () => {
         id: 'mutating-provider',
         callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
           delete context?.originalProvider;
-          return {
-            output: 'agent response',
-            tokenUsage: { numRequests: 1 },
-          };
+          return createAgentResponse();
         }),
       });
 

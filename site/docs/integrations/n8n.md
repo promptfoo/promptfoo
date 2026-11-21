@@ -30,6 +30,7 @@ The easiest way is to bake Promptfoo into your n8n image so every workflow run a
 FROM n8nio/n8n:latest          # or a fixed tag
 USER root                      # gain perms to install packages
 RUN npm install -g promptfoo   # installs CLI system‑wide
+ENV PROMPTFOO_RUNNING_IN_DOCKER=1
 USER node                      # drop back to non‑root
 ```
 

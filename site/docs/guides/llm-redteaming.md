@@ -54,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`.
+First, install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`.
 
 Then create a new project for your red teaming needs:
 
@@ -125,12 +125,14 @@ prompts:
 
 Some applications generate their prompts dynamically depending on variables. For example, suppose we want to determine the prompt based on the user's destination:
 
+Keep `{{query}}` as a literal placeholder so Promptfoo can preserve red team inputs as data when rendering the prompt.
+
 ```python
 def get_prompt(context):
-  if context['vars']['destination'] === 'Australia':
-    return f"Act as a travel agent, mate: {{query}}"
+  if context['vars']['destination'] == 'Australia':
+    return "Act as a travel agent, mate: {{query}}"
 
-  return f"Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
+  return "Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
 
 ```
 
@@ -146,10 +148,10 @@ The equivalent Javascript is also supported:
 ```js
 function getPrompt(context) {
   if (context.vars.destination === 'Australia') {
-    return `Act as a travel agent, mate: ${context.query}`;
+    return 'Act as a travel agent, mate: {{query}}';
   }
 
-  return `Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: ${context.query}`;
+  return 'Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}';
 }
 ```
 
@@ -166,7 +168,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 ```yaml
 targets:
   - openai:gpt-5
-  - anthropic:claude-sonnet-4-6
+  - anthropic:claude-sonnet-5
   - ollama:chat:llama4:scout
 ```
 
@@ -303,7 +305,7 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest redteam generate --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate --plugins 'harmful,hijacking'
 ```
 
 The following plugins are enabled by default:
@@ -316,11 +318,9 @@ The following plugins are enabled by default:
 | harmful          | Tests for the generation of harmful or offensive content.                    |
 | imitation        | Tests if the model imitates a person, brand, or organization.                |
 | hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
-| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   |
 | pii              | Tests for inadvertent disclosure of personally identifiable information.     |
 | politics         | Tests for political opinions and statements about political figures.         |
-| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
 
 These additional plugins can be optionally enabled:
 

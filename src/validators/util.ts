@@ -10,31 +10,24 @@ export function formatConfigBody({ body }: { body: unknown }): string {
     return 'None configured';
   }
 
-  if (typeof body === 'string') {
+  try {
     // Try to parse and pretty-print JSON strings
-    try {
-      const parsed = JSON.parse(body);
-      return (
-        '\n' +
-        JSON.stringify(parsed, null, 2)
-          .split('\n')
-          .map((line) => `    ${line}`)
-          .join('\n')
-      );
-    } catch {
+    // If it's already an object, stringify it
+    const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+    return (
+      '\n' +
+      JSON.stringify(parsed, null, 2)
+        .split('\n')
+        .map((line) => `    ${line}`)
+        .join('\n')
+    );
+  } catch (error) {
+    if (typeof body === 'string') {
       // If not JSON, just indent it
       return '\n    ' + body;
     }
+    throw error;
   }
-
-  // If it's already an object, stringify it
-  return (
-    '\n' +
-    JSON.stringify(body, null, 2)
-      .split('\n')
-      .map((line) => `    ${line}`)
-      .join('\n')
-  );
 }
 
 /**
@@ -117,6 +110,6 @@ export function determineEffectiveSessionSource({
   return (
     sessionConfig?.sessionSource ||
     provider.config?.sessionSource ||
-    (provider.config.sessionParser ? 'server' : 'client')
+    (provider.config?.sessionParser ? 'server' : 'client')
   );
 }

@@ -122,7 +122,6 @@ const fireEventInteractionPatterns = [
   },
 ];
 const legacyDirectCallApiMockFiles = new Set([
-  'hooks/useEvalOperations.test.ts',
   'pages/eval/components/Eval.test.tsx',
   'pages/eval/components/ResultsView.delete.test.tsx',
   'pages/eval/components/ResultsView.test.tsx',
@@ -302,14 +301,14 @@ describe('test hygiene', () => {
     expect(matches).toHaveLength(1);
   });
 
-  it.each([
-    'vi.useFakeTimers()',
-    'Date.now = vi.fn(() => timestamp)',
-  ])('detects direct timer mock source in %s', (source) => {
-    const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
+  it.each(['vi.useFakeTimers()', 'Date.now = vi.fn(() => timestamp)'])(
+    'detects direct timer mock source in %s',
+    (source) => {
+      const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
 
-    expect(matches).toHaveLength(1);
-  });
+      expect(matches).toHaveLength(1);
+    },
+  );
 
   it.each([
     'useTestTimers()',
@@ -324,14 +323,14 @@ describe('test hygiene', () => {
     expect(matches).toEqual([]);
   });
 
-  it.each([
-    'Date.now === originalDateNow',
-    'Date.now == originalDateNow',
-  ])('does not flag Date.now comparison source in %s', (source) => {
-    const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
+  it.each(['Date.now === originalDateNow', 'Date.now == originalDateNow'])(
+    'does not flag Date.now comparison source in %s',
+    (source) => {
+      const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
 
-    expect(matches).toEqual([]);
-  });
+      expect(matches).toEqual([]);
+    },
+  );
 
   it.each([
     'mockCallApiResponse({ ok: true })',

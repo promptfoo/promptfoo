@@ -1,11 +1,324 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG, useStore } from './evalConfig';
+
+import type { UnifiedConfig } from '../../../types/index';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
     localStorage.clear();
     // Reset the store state before each test
     useStore.getState().reset();
+  });
+
+  afterEach(() => {
+    useStore.getState().reset();
+    localStorage.clear();
+  });
+
+  describe('typed local provider imports', () => {
+    const locals = [
+      { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
+      { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+      { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
+    ];
+    const entries = ['setConfig', 'updateConfig', 'rehydrate'] as const;
+
+    it.each(locals.flatMap((local) => entries.map((entry) => ({ ...local, entry }))))(
+      'normalizes $type through $entry before persistence or job creation',
+      async ({ type, apiBaseUrl, entry }) => {
+        const config = { providers: [{ id: 'openai:chat:gpt-4o', config: { type } }] };
+        if (entry === 'rehydrate') {
+          localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+          await useStore.persist.rehydrate();
+        } else {
+          useStore.getState()[entry](config);
+        }
+        const expected = [
+          {
+            id: 'openai:chat:gpt-4o',
+            config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+          },
+        ];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(useStore.getState().getTestSuite().providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
+
+    it.each(['object', 'map', 'array-map'])(
+      'retains the %s provider shape while normalizing local options',
+      (shape) => {
+        const options = { label: 'Imported local', config: { type: 'vllm' } };
+        // Legacy imports can contain a single options object or provider map.
+        const providers: unknown =
+          shape === 'object'
+            ? { id: 'openai:chat:gpt-4o', ...options }
+            : shape === 'map'
+              ? { 'openai:chat:gpt-4o': options }
+              : [{ 'openai:chat:gpt-4o': options }];
+        useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
+        const expectedOptions = {
+          ...options,
+          config: {
+            type: 'vllm',
+            apiBaseUrl: 'http://localhost:8000/v1',
+            apiKeyRequired: false,
+            useDefaultApiKey: false,
+          },
+        };
+        expect(useStore.getState().config.providers).toEqual(
+          shape === 'object'
+            ? { id: 'openai:chat:gpt-4o', ...expectedOptions }
+            : shape === 'map'
+              ? { 'openai:chat:gpt-4o': expectedOptions }
+              : [{ 'openai:chat:gpt-4o': expectedOptions }],
+        );
+      },
+    );
+
+    it.each([false, true])('preserves explicit options with authentication policy %s', (flag) => {
+      const provider = {
+        id: 'openai:chat:tenant/model.py:Q4_K_M',
+        label: 'Private local',
+        config: {
+          type: 'vllm',
+          apiBaseUrl: 'https://base.example.test/v1',
+          apiHost: 'host.example.test',
+          apiKey: 'synthetic-inline-key',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          apiKeyRequired: flag,
+          useDefaultApiKey: flag,
+          model: 'served-model',
+          stop: ['<end>'],
+          passthrough: { chat_template_kwargs: { enable_thinking: false } },
+        },
+      };
+      useStore.getState().setConfig({ providers: [provider] });
+      expect(useStore.getState().config.providers).toEqual([provider]);
+      expect(useStore.getState().getTestSuite().providers).toEqual([provider]);
+    });
+
+    it('uses the provider-map ID when an imported options ID is blank', () => {
+      const providers: unknown = {
+        'openai:chat:gpt-4o': { id: '', config: { type: 'vllm' } },
+      };
+      useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
+      expect(useStore.getState().config.providers).toEqual({
+        'openai:chat:gpt-4o': {
+          id: '',
+          config: {
+            type: 'vllm',
+            apiBaseUrl: 'http://localhost:8000/v1',
+            apiKeyRequired: false,
+            useDefaultApiKey: false,
+          },
+        },
+      });
+    });
+
+    it.each(
+      [
+        { route: 'openai:chat:gpt-4o', id: 'local-target', local: true },
+        { route: 'openai:chat:gpt-4o', id: 'anthropic:messages:identity', local: true },
+        { route: 'anthropic:messages:claude-sonnet', id: 'openai:chat:identity', local: false },
+      ].flatMap((target) => entries.map((entry) => ({ ...target, entry }))),
+    )(
+      'normalizes map route $route with identity $id through $entry',
+      async ({ route, id, local, entry }) => {
+        const options = {
+          id,
+          label: 'Imported identity',
+          config: { type: 'vllm', temperature: 0.2 },
+        };
+        const config = { providers: [{ [route]: options }] };
+        if (entry === 'rehydrate') {
+          localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+          await useStore.persist.rehydrate();
+        } else {
+          useStore.getState()[entry](config);
+        }
+        const expected = [
+          {
+            [route]: {
+              ...options,
+              config: local
+                ? {
+                    ...options.config,
+                    apiBaseUrl: 'http://localhost:8000/v1',
+                    apiKeyRequired: false,
+                    useDefaultApiKey: false,
+                  }
+                : options.config,
+            },
+          },
+        ];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(useStore.getState().getTestSuite().providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
+
+    it('does not repair malformed configs or change nonlocal providers', () => {
+      const providers = [
+        ...[null, [], 'invalid'].map((config) => ({ id: 'openai:chat:gpt-4o', config })),
+        { id: 'anthropic:messages:claude-sonnet', config: { type: 'vllm' } },
+        { id: 'openai:chat:gpt-4o', config: { temperature: 0.2 } },
+      ];
+      useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
+      expect(useStore.getState().config.providers).toEqual(providers);
+    });
+  });
+
+  describe('default API key selector persistence', () => {
+    const names = ['useDefaultApiKey', 'use_default_api_key', 'use-default-api-key'];
+    const malformed = [
+      'short-local-secret',
+      '{{vars.short_local_secret}}',
+      1,
+      null,
+      { value: 'short-local-secret' },
+      ['short-local-secret'],
+    ];
+
+    it.each(
+      names.flatMap((name) =>
+        ['setConfig', 'updateConfig', 'rehydrate'].flatMap((entry) =>
+          [
+            '{{ local_secret }}',
+            '{{ local_secret | trim }}',
+            '{{ local_secret | unsafe_filter }}',
+          ].map((value) => ({ name, entry, value })),
+        ),
+      ),
+    )('removes the source of $name=$value through $entry', async ({ name, entry, value }) => {
+      const config = {
+        providers: [{ id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } }],
+        defaultTest: { vars: { local_secret: 'synthetic-short-value', visible: 'keep' } },
+        tests: [{ vars: { local_secret: 'synthetic-test-value', visible: 'also keep' } }],
+      };
+      if (entry === 'rehydrate') {
+        localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+        await useStore.persist.rehydrate();
+      } else {
+        useStore.getState()[entry as 'setConfig' | 'updateConfig'](config);
+        expect(useStore.getState().config).toMatchObject(config);
+      }
+      const saved = localStorage.getItem('promptfoo')!;
+      const persisted = JSON.parse(saved).state.config;
+      expect(persisted.providers[0].config).toEqual({ temperature: 0.2 });
+      expect(persisted.defaultTest.vars).toEqual({ visible: 'keep' });
+      expect(persisted.tests[0].vars).toEqual({ visible: 'also keep' });
+      expect(saved).not.toContain('local_secret');
+      expect(saved).not.toContain('synthetic-short-value');
+      expect(saved).not.toContain('synthetic-test-value');
+      if (entry === 'rehydrate') {
+        expect(useStore.getState().config.providers).toEqual(persisted.providers);
+        expect(useStore.getState().config.defaultTest).toEqual(persisted.defaultTest);
+      }
+    });
+
+    it('removes an environment source without touching unrelated variables or tool schemas', () => {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'read',
+            parameters: {
+              type: 'object',
+              properties: { useDefaultApiKey: { type: 'string', description: '{{ ordinary }}' } },
+            },
+          },
+        },
+      ];
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'openai:chat:gpt-4o',
+            config: { useDefaultApiKey: '{{ env.LOCAL_SOURCE }}', tools },
+          },
+        ],
+        env: { LOCAL_SOURCE: 'synthetic-environment-value', VISIBLE: 'keep' },
+        defaultTest: { vars: { ordinary: 'unreferenced content' } },
+      });
+      const persisted = JSON.parse(localStorage.getItem('promptfoo')!).state.config;
+      expect(persisted.env).toEqual({ VISIBLE: 'keep' });
+      expect(persisted.defaultTest.vars).toEqual({ ordinary: 'unreferenced content' });
+      expect(persisted.providers[0].config).toEqual({ tools });
+    });
+
+    it('also removes a source independently referenced by an API key', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'openai:chat:gpt-4o',
+            config: { useDefaultApiKey: '{{ local_secret }}', apiKey: '{{ local_secret }}' },
+          },
+        ],
+        defaultTest: { vars: { local_secret: 'synthetic-independent-value', visible: 'keep' } },
+      });
+      const persisted = JSON.parse(localStorage.getItem('promptfoo')!).state.config;
+      expect(persisted.providers[0].config).toEqual({ apiKey: '{{ local_secret }}' });
+      expect(persisted.defaultTest.vars).toEqual({ visible: 'keep' });
+    });
+
+    it.each(names.flatMap((name) => [false, true].map((value) => ({ name, value }))))(
+      'preserves the literal $value selector $name through persistence and rehydration',
+      async ({ name, value }) => {
+        const provider = { id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } };
+        useStore.getState().setConfig({ providers: [provider] });
+        const saved = localStorage.getItem('promptfoo')!;
+        expect(JSON.parse(saved).state.config.providers).toEqual([provider]);
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', saved);
+        await useStore.persist.rehydrate();
+        expect(useStore.getState().config.providers).toEqual([provider]);
+      },
+    );
+
+    it.each(names.flatMap((name) => malformed.map((value) => ({ name, value }))))(
+      'drops malformed $name=$value from persistence without changing the live config',
+      ({ name, value }) => {
+        const provider = { id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } };
+        useStore.getState().updateConfig({ providers: [provider] });
+        expect(useStore.getState().config.providers).toEqual([provider]);
+        const saved = localStorage.getItem('promptfoo')!;
+        expect(JSON.parse(saved).state.config.providers[0].config).toEqual({ temperature: 0.2 });
+        expect(saved).not.toContain('short-local-secret');
+        expect(saved).not.toContain('short_local_secret');
+      },
+    );
+
+    it.each(names.flatMap((name) => malformed.map((value) => ({ name, value }))))(
+      'removes historical malformed $name=$value on rehydrate and rewrites storage',
+      async ({ name, value }) => {
+        localStorage.setItem(
+          'promptfoo',
+          JSON.stringify({
+            state: {
+              config: {
+                providers: [
+                  {
+                    id: 'openai:chat:gpt-4o',
+                    config: { [name]: value, temperature: 0.2 },
+                  },
+                ],
+              },
+            },
+            version: 0,
+          }),
+        );
+        await useStore.persist.rehydrate();
+        const expected = [{ id: 'openai:chat:gpt-4o', config: { temperature: 0.2 } }];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
   });
 
   describe('config management', () => {
@@ -881,6 +1194,7 @@ describe('evalConfig store', () => {
               googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
               apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
               apiKeyRequired: false,
+              useDefaultApiKey: false,
               isPayPerToken: true,
               prompt_cache_key: 'partition-a',
               max_new_tokens: 32,
@@ -889,6 +1203,10 @@ describe('evalConfig store', () => {
               max_thinking_tokens: 4096,
               endpoint: 'https://example.com',
             } as any,
+          },
+          {
+            id: 'openai:chat:local-model',
+            config: { useDefaultApiKey: 'short-local-secret' as any },
           },
         ],
         env: {
@@ -903,6 +1221,7 @@ describe('evalConfig store', () => {
         googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
         apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
         apiKeyRequired: false,
+        useDefaultApiKey: false,
         isPayPerToken: true,
         prompt_cache_key: 'partition-a',
         max_new_tokens: 32,
@@ -911,6 +1230,7 @@ describe('evalConfig store', () => {
         max_thinking_tokens: 4096,
         endpoint: 'https://example.com',
       });
+      expect(persisted.providers[1].config).toEqual({});
       expect(persisted.env.LANGFUSE_SECRET_KEY).toBeUndefined();
       expect(persisted.env.LANGFUSE_PUBLIC_KEY).toBe('pk-langfuse-public-id');
     });
@@ -1013,6 +1333,213 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('neutral-tracing-token');
       expect(serialized).not.toContain('collector-password');
       expect(serialized).not.toContain('tracing-url-secret');
+    });
+
+    it.each([
+      {
+        name: 'bearer token',
+        auth: { token: 'tempo-bearer-secret' },
+        expectedAuth: {},
+        secret: 'tempo-bearer-secret',
+      },
+      {
+        name: 'basic-auth password',
+        auth: { username: 'tempo-user', password: 'tempo-password-secret' },
+        expectedAuth: { username: 'tempo-user' },
+        secret: 'tempo-password-secret',
+      },
+    ])(
+      'redacts tracing provider $name and credential headers before persistence',
+      ({ auth, expectedAuth, secret }) => {
+        useStore.getState().setConfig({
+          tracing: {
+            enabled: true,
+            queryDelay: 1250,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth,
+              timeout: 5000,
+              headers: {
+                Authorization: 'Bearer tempo-header-secret',
+                'X-Api-Key': 'tempo-api-key-secret',
+                'X-Honeycomb-Team': 'tempo-honeycomb-secret',
+                'X-Tempo-Reader': 'short-reader-value',
+                'X-Scope-OrgID': 'tenant-a',
+              },
+            },
+          },
+        });
+
+        expect(JSON.stringify(useStore.getState().config.tracing)).toContain(secret);
+
+        const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+        expect(persisted.tracing).toEqual({
+          enabled: true,
+          queryDelay: 1250,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: expectedAuth,
+            timeout: 5000,
+            headers: { 'X-Scope-OrgID': 'tenant-a' },
+          },
+        });
+
+        const serialized = JSON.stringify(persisted);
+        expect(serialized).not.toContain(secret);
+        expect(serialized).not.toContain('tempo-header-secret');
+        expect(serialized).not.toContain('tempo-api-key-secret');
+        expect(serialized).not.toContain('tempo-honeycomb-secret');
+        expect(serialized).not.toContain('short-reader-value');
+      },
+    );
+
+    it('preserves tracing provider credential templates while dropping referenced values', () => {
+      useStore.getState().setConfig({
+        env: {
+          TEMPO_VALUE: 'opaque-tempo-secret',
+          TEMPO_HEADER: 'opaque-tempo-header',
+          TEMPO_CUSTOM_READER: 'tiny',
+          REGION: 'us-west-2',
+        },
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: '{{ env.TEMPO_VALUE }}' },
+            headers: {
+              Authorization: 'Bearer {{ env.TEMPO_HEADER | trim }}',
+              'X-Tempo-Reader': '{{ env.TEMPO_CUSTOM_READER }}',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.provider).toEqual({
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com',
+        auth: { token: '{{ env.TEMPO_VALUE }}' },
+        headers: {
+          Authorization: 'Bearer {{ env.TEMPO_HEADER | trim }}',
+          'X-Tempo-Reader': '{{ env.TEMPO_CUSTOM_READER }}',
+          'X-Scope-OrgID': 'tenant-a',
+        },
+      });
+      expect(persisted.env).toEqual({ REGION: 'us-west-2' });
+      expect(JSON.stringify(persisted)).not.toContain('opaque-tempo-secret');
+      expect(JSON.stringify(persisted)).not.toContain('opaque-tempo-header');
+      expect(JSON.stringify(persisted)).not.toContain('"tiny"');
+    });
+
+    it.each([
+      'https://tempo.example.com/tempo?token=endpoint-secret',
+      'https://tempo.example.com/tempo?opaque=endpoint-secret',
+      'https://tempo.example.com/tempo#token=endpoint-secret',
+      'https://reader:endpoint-secret@tempo.example.com/tempo',
+    ])('removes trace endpoint credentials before browser persistence: %s', (endpoint) => {
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          provider: { id: 'tempo', endpoint },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(useStore.getState().config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persisted.tracing.provider.endpoint).toBe('https://tempo.example.com/tempo');
+      expect(JSON.stringify(persisted)).not.toContain('endpoint-secret');
+    });
+
+    it.each([
+      'token-privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])('redacts credential-like endpoint path segments in browser storage: %s', (credential) => {
+      const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          provider: { id: 'tempo', endpoint },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(useStore.getState().config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persisted.tracing.provider.endpoint).toBe(
+        'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+      );
+      expect(JSON.stringify(persisted)).not.toContain(credential);
+    });
+
+    it('redacts trace forwarding and provider credentials independently', () => {
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          forwarding: {
+            enabled: true,
+            endpoint: 'https://collector.example.com/v1/traces',
+            headers: { Authorization: 'Bearer forwarding-secret' },
+          },
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: 'tempo-provider-secret' },
+            headers: { Authorization: 'Bearer tempo-provider-header' },
+          },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.forwarding.headers).toEqual({});
+      expect(persisted.tracing.provider.auth).toEqual({});
+      expect(persisted.tracing.provider.headers).toEqual({});
+      expect(JSON.stringify(persisted)).not.toContain('forwarding-secret');
+      expect(JSON.stringify(persisted)).not.toContain('tempo-provider-secret');
+      expect(JSON.stringify(persisted)).not.toContain('tempo-provider-header');
+    });
+
+    it('removes previously persisted tracing provider credentials during rehydration', async () => {
+      localStorage.setItem(
+        'promptfoo',
+        JSON.stringify({
+          state: {
+            config: {
+              tracing: {
+                enabled: true,
+                provider: {
+                  id: 'tempo',
+                  endpoint: 'https://tempo.example.com',
+                  auth: { token: 'previously-persisted-tempo-token' },
+                  headers: {
+                    Authorization: 'Bearer previously-persisted-header',
+                    'X-Scope-OrgID': 'tenant-a',
+                  },
+                },
+              },
+            },
+          },
+          version: 0,
+        }),
+      );
+
+      await useStore.persist.rehydrate();
+
+      const expectedProvider = {
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com',
+        auth: {},
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      };
+      expect(useStore.getState().config.tracing?.provider).toEqual(expectedProvider);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.provider).toEqual(expectedProvider);
+      expect(JSON.stringify(persisted)).not.toContain('previously-persisted-tempo-token');
+      expect(JSON.stringify(persisted)).not.toContain('previously-persisted-header');
     });
 
     it('redacts raw HTTP request strings and multipart form-field values', () => {
@@ -1221,6 +1748,237 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('map-user');
       expect(JSON.stringify(persisted)).not.toContain('map-password');
       expect(JSON.stringify(persisted)).not.toContain('map-secret');
+    });
+
+    // Pins that the credential-bearing provider-options-map KEY is scrubbed (not just the
+    // value): `tests: [{ providers: [{ 'https://user:pass@host?token=secret': {...} }] }]`.
+    it('redacts provider-map identifiers in raw test filters', () => {
+      const urlProvider =
+        'https://filter-user:filter-password@api.example.com/v1?token=filter-secret&region=us';
+      const scrubbedUrlProvider =
+        'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us';
+      const sasProvider =
+        'az://account/container/provider.yaml?sp=r&sig=filter-sas-secret&se=2026-06-01';
+      const scrubbedSasProvider =
+        'az://account/container/provider.yaml?sp=r&sig=[REDACTED]&se=2026-06-01';
+      const providerMaps = [
+        { [urlProvider]: { config: { region: 'url-region' } } },
+        { [sasProvider]: { config: { region: 'sas-region' } } },
+      ];
+      const scrubbedProviderMaps = [
+        { [scrubbedUrlProvider]: { config: { region: 'url-region' } } },
+        { [scrubbedSasProvider]: { config: { region: 'sas-region' } } },
+      ];
+
+      useStore.getState().setConfig({
+        defaultTest: { providers: providerMaps },
+        tests: [{ providers: providerMaps }],
+        scenarios: [{ tests: [{ providers: providerMaps }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.providers).toEqual(scrubbedProviderMaps);
+      expect(persisted.tests[0].providers).toEqual(scrubbedProviderMaps);
+      expect(persisted.scenarios[0].tests[0].providers).toEqual(scrubbedProviderMaps);
+      expect(JSON.stringify(persisted)).not.toContain('filter-user');
+      expect(JSON.stringify(persisted)).not.toContain('filter-password');
+      expect(JSON.stringify(persisted)).not.toContain('filter-secret');
+      expect(JSON.stringify(persisted)).not.toContain('filter-sas-secret');
+    });
+
+    it('redacts provider-map identifiers that share an entry with a non-record sibling', () => {
+      // Regression: a provider-options map that pairs a credential-bearing id key
+      // with a non-record sibling (e.g. `prompts: [...]`) previously failed the
+      // `every(isRecord)` map check, fell through to value-only scrubbing, and
+      // persisted the credential URL verbatim in the key. No shape may bypass
+      // redaction. This malformed shape takes the walk path: an id key whose name
+      // matches the credential patterns (`token`) is dropped entirely (fail
+      // closed), while a userinfo-only id key is preserved with the key scrubbed.
+      const credentialNamedKeyProvider =
+        'https://mixed-user:mixed-password@api.example.com/v1?token=mixed-token-secret&region=us';
+      const userinfoOnlyProvider = 'https://mixed-svc:mixed-hunter2@api.example.com/v1?region=us';
+      const scrubbedUserinfoOnlyProvider = 'https://[REDACTED]@api.example.com/v1?region=us';
+      const providerMap = {
+        [credentialNamedKeyProvider]: { config: { region: 'us' } },
+        [userinfoOnlyProvider]: { config: { region: 'eu' } },
+        prompts: ['Hello {{topic}}'],
+      };
+
+      useStore.getState().setConfig({
+        defaultTest: { providers: [providerMap] },
+        tests: [{ providers: [providerMap] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const expectedEntry = {
+        [scrubbedUserinfoOnlyProvider]: { config: { region: 'eu' } },
+        prompts: ['Hello {{topic}}'],
+      };
+      expect(persisted.tests[0].providers[0]).toEqual(expectedEntry);
+      expect(persisted.defaultTest.providers[0]).toEqual(expectedEntry);
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('mixed-user');
+      expect(persistedJson).not.toContain('mixed-password');
+      expect(persistedJson).not.toContain('mixed-token-secret');
+      expect(persistedJson).not.toContain('mixed-svc');
+      expect(persistedJson).not.toContain('mixed-hunter2');
+    });
+
+    it('redacts credentials in object-shaped providers within test filters', () => {
+      const provider = {
+        id: 'http',
+        config: {
+          apiKey: 'object-provider-secret',
+          headers: {
+            Authorization: 'Bearer object-provider-token',
+            'x-request-id': 'visible-id',
+          },
+          endpoint: 'https://example.com',
+        },
+      };
+      useStore.getState().setConfig({
+        defaultTest: { providers: [provider] },
+        tests: [{ providers: [provider] }],
+        scenarios: [{ tests: [{ providers: [provider] }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const expectedConfig = {
+        headers: { 'x-request-id': 'visible-id' },
+        endpoint: 'https://example.com',
+      };
+      expect(persisted.defaultTest.providers[0].config).toEqual(expectedConfig);
+      expect(persisted.tests[0].providers[0].config).toEqual(expectedConfig);
+      expect(persisted.scenarios[0].tests[0].providers[0].config).toEqual(expectedConfig);
+      expect(JSON.stringify(persisted)).not.toContain('object-provider-secret');
+      expect(JSON.stringify(persisted)).not.toContain('object-provider-token');
+
+      // Persistence redaction must not mutate the live store: eval runs read the
+      // in-memory config and need the real credentials.
+      const inMemory = useStore.getState().config as any;
+      expect(inMemory.tests[0].providers[0].config.apiKey).toBe('object-provider-secret');
+      expect(inMemory.tests[0].providers[0].config.headers.Authorization).toBe(
+        'Bearer object-provider-token',
+      );
+    });
+
+    it('redacts a single non-array provider in raw test filters', () => {
+      // Schema says providers is an array, but the raw YAML editor can persist a
+      // single provider object or map; no shape may bypass redaction.
+      useStore.getState().setConfig({
+        tests: [
+          {
+            providers: {
+              id: 'http',
+              config: { apiKey: 'single-provider-secret', endpoint: 'https://example.com' },
+            },
+          },
+          {
+            providers: {
+              'https://map-user:map-pass@api.example.com/v1': { config: { region: 'us' } },
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].providers.config).toEqual({ endpoint: 'https://example.com' });
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('single-provider-secret');
+      expect(persistedJson).not.toContain('map-user');
+      expect(persistedJson).not.toContain('map-pass');
+    });
+
+    it('keeps ordinary provider ids intact in test filters', () => {
+      useStore.getState().setConfig({
+        tests: [{ providers: ['openai:gpt-4o', 'file://provider.py'] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].providers).toEqual(['openai:gpt-4o', 'file://provider.py']);
+    });
+
+    it('redacts provider-map identifiers in every singular provider slot', () => {
+      // Userinfo-only credential: the key name itself does not match the credential
+      // name patterns, so nothing masks a key-scrubbing bypass by luck.
+      const urlProvider = 'https://svc-account:hunter2value@grader.example.com/v1?region=us';
+      const scrubbedUrlProvider = 'https://[REDACTED]@grader.example.com/v1?region=us';
+      const providerMap = { [urlProvider]: { config: { temperature: 0 } } };
+      const scrubbedProviderMap = { [scrubbedUrlProvider]: { config: { temperature: 0 } } };
+
+      useStore.getState().setConfig({
+        defaultTest: { provider: providerMap },
+        tests: [{ provider: providerMap, assert: [{ type: 'llm-rubric', provider: providerMap }] }],
+        scenarios: [{ tests: [{ provider: providerMap }] }],
+        redteam: { provider: providerMap },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.provider).toEqual(scrubbedProviderMap);
+      expect(persisted.tests[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.tests[0].assert[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.scenarios[0].tests[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.redteam.provider).toEqual(scrubbedProviderMap);
+      expect(JSON.stringify(persisted)).not.toContain('hunter2value');
+    });
+
+    it('drops stray top-level credential fields on provider objects', () => {
+      // A credential mistakenly placed at provider top level (outside config) must
+      // still be dropped: the stray key must not flip the object into the
+      // options-map path, which only URL-scrubs keys.
+      useStore.getState().setConfig({
+        providers: [{ id: 'http', apiKey: 'top-level-stray-credential' }],
+        targets: [{ id: 'http', accessToken: 'stray-target-credential' }],
+        tests: [{ providers: [{ id: 'http', apiKey: 'filter-stray-credential' }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers).toEqual([{ id: 'http' }]);
+      expect(persisted.targets).toEqual([{ id: 'http' }]);
+      expect(persisted.tests[0].providers).toEqual([{ id: 'http' }]);
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('top-level-stray-credential');
+      expect(persistedJson).not.toContain('stray-target-credential');
+      expect(persistedJson).not.toContain('filter-stray-credential');
+    });
+
+    it('scrubs a top-level headers bag on provider objects with stray fields', () => {
+      // The non-record stray field keeps this off the options-map path, so the
+      // walk's header-aware scrubbing must still apply to the headers bag.
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            stray: 'unrelated',
+            headers: { 'X-Auth': 'short-header-credential', 'Content-Type': 'application/json' },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].headers).toEqual({ 'Content-Type': 'application/json' });
+      expect(JSON.stringify(persisted)).not.toContain('short-header-credential');
+    });
+
+    it('preserves opaque tool schemas on provider objects with stray fields', () => {
+      // tools/functions schemas are model-facing contracts: a parameter literally
+      // named `password` must survive persistence even when a stray field keeps
+      // the provider off the canonical shape.
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'login',
+            parameters: { type: 'object', properties: { password: { type: 'string' } } },
+          },
+        },
+      ];
+      useStore.getState().setConfig({
+        providers: [{ id: 'openai:gpt-4', config: {}, stray: 'unrelated', tools }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].tools).toEqual(tools);
     });
 
     it('redacts provider identifiers in raw editor providerPromptMap fields', () => {
@@ -1735,6 +2493,26 @@ describe('evalConfig store', () => {
 
       const testSuite = useStore.getState().getTestSuite();
       expect(testSuite.derivedMetrics).toEqual(derivedMetrics);
+    });
+
+    it('includes runtime trace-provider configuration without persisting its credentials', () => {
+      const tracing = {
+        enabled: true,
+        queryDelay: 3000,
+        provider: {
+          id: 'tempo' as const,
+          endpoint: 'https://tempo.example.com/team-west',
+          auth: { token: 'browser-runtime-secret' },
+          headers: { 'X-Scope-OrgID': 'tenant-a' },
+        },
+      };
+      useStore.getState().updateConfig({ tracing });
+
+      expect(useStore.getState().getTestSuite().tracing).toEqual(tracing);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(JSON.stringify(persisted.tracing)).not.toContain('browser-runtime-secret');
+      expect(persisted.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
     });
   });
 });

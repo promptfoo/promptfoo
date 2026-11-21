@@ -1,114 +1,64 @@
 /**
- * Git Diff Extraction
- *
- * Extracts git diffs between the current branch and the base branch.
+ * Git Branch Validation
  */
 
-import simpleGit, { type SimpleGit } from 'simple-git';
 import { GitError } from '../../types/codeScan';
-
-/**
- * Get the base branch name by detecting the remote's default branch
- * Falls back to local branch detection (main or master)
- * @param git Simple git instance
- * @returns Base branch name
- */
-async function getBaseBranch(git: SimpleGit): Promise<string> {
-  try {
-    // First, try to detect the remote's default branch
-    try {
-      const remoteHead = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
-      if (remoteHead) {
-        // Parse branch name from "refs/remotes/origin/main" -> "main"
-        const match = remoteHead.trim().match(/refs\/remotes\/origin\/(.+)/);
-        if (match && match[1]) {
-          return match[1];
-        }
-      }
-    } catch {
-      // Remote HEAD not set or no remote, fall back to local detection
-    }
-
-    // Fallback: Check local branches for main or master
-    const branches = await git.branch();
-    if (branches.all.includes('main')) {
-      return 'main';
-    }
-    if (branches.all.includes('master')) {
-      return 'master';
-    }
-
-    throw new GitError(
-      'Could not find a default base branch (main or master). Please specify a base branch or commit to compare against with --base',
-    );
-  } catch (error) {
-    if (error instanceof GitError) {
-      throw error;
-    }
-    throw new GitError(
-      `Failed to determine base branch: ${error instanceof Error ? error.message : String(error)}. Please specify a base branch or commit to compare against with --base`,
-    );
-  }
-}
+import { runGit } from './command';
 
 /**
  * Validate that we're on a branch (not detached HEAD)
- * @param git Simple git instance
  * @throws GitError if not on a branch
  */
-export async function validateOnBranch(git: SimpleGit): Promise<string> {
+export async function validateOnBranch(repoPath: string): Promise<string> {
+  let ref: string;
   try {
-    const status = await git.status();
-    if (status.detached) {
-      throw new GitError('Not on a branch. Please checkout a branch before running the scan.');
-    }
-    if (!status.current) {
-      throw new GitError('Could not determine current branch.');
-    }
-    return status.current;
+    ref = await runGit(repoPath, ['symbolic-ref', '--quiet', 'HEAD']);
   } catch (error) {
-    if (error instanceof GitError) {
-      throw error;
+    if (error instanceof Error && 'code' in error && error.code === 1) {
+      throw new GitError('Not on a branch. Please checkout a branch before running the scan.');
     }
     throw new GitError(
       `Failed to validate branch: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  const prefix = 'refs/heads/';
+  if (!ref.startsWith(prefix)) {
+    throw new GitError('Failed to validate branch: HEAD points outside refs/heads/.');
+  }
+  return ref.slice(prefix.length);
 }
 
-/**
- * Extract git diff between current branch and base branch
- * @param repoPath Path to the git repository
- * @returns Git diff string
- * @throws GitError if diff extraction fails or if there are no diffs
- */
-export async function extractDiff(repoPath: string): Promise<{ diff: string; baseBranch: string }> {
-  const git = simpleGit(repoPath);
+export async function getDefaultBaseBranch(repoPath: string): Promise<string> {
+  const stdout = await runGit(repoPath, [
+    'for-each-ref',
+    '--format=%(refname:lstrip=2)',
+    'refs/heads',
+    'refs/remotes/origin',
+  ]);
+  const refs = new Set(stdout.split('\n'));
+  return ['main', 'master', 'origin/main', 'origin/master'].find((ref) => refs.has(ref)) ?? 'main';
+}
 
-  // Validate we're on a branch
-  await validateOnBranch(git);
-
-  // Get base branch
-  const baseBranch = await getBaseBranch(git);
-
-  try {
-    // Get diff using three-dot syntax (merge base)
-    const diff = await git.diff([`${baseBranch}...HEAD`]);
-
-    if (!diff || diff.trim().length === 0) {
-      throw new GitError(
-        `No changes detected between current branch and ${baseBranch}. ` +
-          'Please commit your changes or ensure your branch has diverged from the base branch.',
-      );
+export async function countUncommittedFiles(repoPath: string): Promise<number> {
+  const stdout = await runGit(repoPath, [
+    '--no-optional-locks',
+    '-c',
+    'core.fsmonitor=false',
+    'status',
+    '--porcelain=v2',
+    '--untracked-files=all',
+    '-z',
+  ]);
+  const records = stdout.split('\0');
+  let count = 0;
+  for (let i = 0; i < records.length && records[i]; i++) {
+    if (records[i].startsWith('# ')) {
+      continue; // Porcelain v2 headers describe repository state, not files.
     }
-
-    return { diff, baseBranch };
-  } catch (error) {
-    if (error instanceof GitError) {
-      throw error;
+    count++;
+    if (records[i].startsWith('2 ')) {
+      i++; // A rename or copy has a second NUL-delimited path.
     }
-    throw new GitError(
-      `Failed to extract diff: ${error instanceof Error ? error.message : String(error)}`,
-    );
   }
+  return count;
 }

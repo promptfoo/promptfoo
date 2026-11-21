@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
@@ -113,7 +113,11 @@ export class QuiverAiProvider implements ApiProvider {
     const { config, id, env, mode = 'generation' } = options;
     this.modelName = modelName;
     this.mode = mode;
-    this.apiKey = config?.apiKey || env?.QUIVERAI_API_KEY || getEnvString('QUIVERAI_API_KEY') || '';
+    this.apiKey =
+      config?.apiKey ||
+      getProviderEnvString(env, 'QUIVERAI_API_KEY') ||
+      getEnvString('QUIVERAI_API_KEY') ||
+      '';
     this.apiBaseUrl = config?.apiBaseUrl || QUIVERAI_API_BASE_URL;
     if (id) {
       this.id = () => id;
@@ -234,7 +238,7 @@ export class QuiverAiProvider implements ApiProvider {
     return {
       cached,
       output: extractSvgOutput(response),
-      tokenUsage: mapTokenUsage(response.usage, cached ? 0 : 1),
+      tokenUsage: mapTokenUsage(response.usage),
       metadata: buildMetadata({
         responseId: response.id,
         credits: response.credits,
@@ -390,7 +394,7 @@ async function readSSEStream(
 
   return {
     output,
-    tokenUsage: mapTokenUsage(lastUsage, 1),
+    tokenUsage: mapTokenUsage(lastUsage),
     metadata: buildMetadata({ responseId, credits: totalCredits }),
   };
 }
@@ -407,12 +411,13 @@ function formatError(err: QuiverAiErrorResponse): string {
   return err.request_id ? `${base} (request_id: ${err.request_id})` : base;
 }
 
-function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
+function mapTokenUsage(usage: SvgUsage | undefined) {
   return {
     total: usage?.total_tokens || 0,
     prompt: usage?.input_tokens || 0,
     completion: usage?.output_tokens || 0,
-    numRequests,
+    // A response always represents one logical request, cached or not.
+    numRequests: 1,
   };
 }
 

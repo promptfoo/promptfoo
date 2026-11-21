@@ -5,11 +5,7 @@ description: 'Compare GPT, Claude, and Gemini performance on your own data with 
 
 # GPT vs Claude vs Gemini: Benchmark on Your Own Data
 
-When evaluating the performance of LLMs, generic benchmarks will only get you so far. Model capabilities set a _ceiling_ on what you're able to accomplish, but in our experience most LLM apps are highly dependent on their prompting and use case.
-
-So, the sensible thing to do is run an eval on your own data.
-
-This guide will walk you through setting up a comparison between OpenAI's GPT-5.4, Anthropic's Claude Sonnet 4.6, and Google's Gemini 3.1 Pro Preview using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+Compare OpenAI's GPT-5.4, Anthropic's Claude Sonnet 5, and Google's Gemini 3.1 Pro Preview on the same custom tasks using Promptfoo:
 
 <div style={{textAlign: 'center'}}><img src="/img/docs/gpt-vs-claude-vs-gemini-overview.jpg" alt="LLM model comparison" style={{maxWidth: '80%'}} /></div>
 
@@ -41,20 +37,19 @@ Specify the models you want to compare under `providers`:
 ```yaml
 providers:
   - openai:chat:gpt-5.4
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
   - google:gemini-3.1-pro-preview
 ```
 
-You can optionally set parameters like temperature and max tokens for each model:
+Configure token limits separately for each model. Claude Sonnet 5 uses `effort` to control reasoning depth and does not support `temperature`, `top_p`, or `top_k`:
 
 ```yaml
 providers:
   - id: openai:chat:gpt-5.4
     config:
       max_tokens: 1024
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      temperature: 0.3
       max_tokens: 1024
   - id: google:gemini-3.1-pro-preview
     config:
@@ -106,7 +101,7 @@ providers:
   - id: openai:chat:gpt-5.4
     prompts:
       - gpt_prompt
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     prompts:
       - gpt_prompt
 ```
@@ -181,7 +176,7 @@ With the evaluation complete, it's time to dig into the results and see how the 
 
 Some key things to look for:
 
-- Which model had a higher overall pass rate on the test assertions? In this case, all three models got the riddles correct, which is great - these riddles often trip up less powerful models.
+- Which model had a higher overall pass rate on the test assertions? In this run, all three models answered the riddles correctly.
 - Were there specific test cases where one model significantly outperformed the other?
 - How did the models compare on other output quality metrics.
 - Consider model properties like speed and cost in addition to quality.
@@ -274,7 +269,7 @@ If you're working on an application that involves classifying images, you can se
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:chat:gpt-5.4
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
   - google:gemini-3.1-pro-preview
 
 prompts:
@@ -299,7 +294,7 @@ tests:
         value: 'dog'
 ```
 
-Run the comparison with the `promptfoo eval` command to see how each model performs on your image classification task. While larger models may provide higher accuracy, smaller models' lower cost makes them an attractive option for applications where cost-efficiency is crucial.
+Run the comparison with the `promptfoo eval` command to see how each model performs on your image classification task. Compare accuracy and cost on the same images before choosing a model.
 
 The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own evaluation.
 

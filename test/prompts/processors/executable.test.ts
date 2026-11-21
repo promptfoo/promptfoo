@@ -3,7 +3,9 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider } from '../../../src/types/index';
 
@@ -36,6 +38,28 @@ describe('processExecutableFile', () => {
   const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
   // Cross-platform tests
+  it('passes scoped env-file values to overlapping executable prompts', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-env-'));
+    const scriptPath = path.join(tempDir, 'prompt.cjs');
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    try {
+      fs.writeFileSync(scriptPath, 'process.stdout.write(process.env.PROMPTFOO_REVIEW_ENV_PROBE);');
+      const [prompt] = await processExecutableFile(`"${process.execPath}" "${scriptPath}"`, {});
+      const outputs = await Promise.all(
+        ['first', 'second'].map((value) =>
+          cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: value }, () =>
+            prompt.function!({ vars: {}, provider: mockProvider }),
+          ),
+        ),
+      );
+      expect(outputs).toEqual(['first', 'second']);
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      restoreEnv();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('should process a script with exec: prefix', async () => {
     const scriptPath =
       process.platform === 'win32' ? 'cmd.exe /c echo "test"' : '/usr/bin/echo "test"';
