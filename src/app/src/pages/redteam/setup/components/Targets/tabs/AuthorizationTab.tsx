@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -11,11 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { Check, Eye, EyeOff, File, Key, Upload, X } from 'lucide-react';
+import { Check, File, Key, Upload, X } from 'lucide-react';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
+import SensitiveTextField from './SensitiveTextField';
 
 import type { HttpProviderOptions } from '../../../types';
 
@@ -24,79 +24,14 @@ interface AuthorizationTabProps {
   updateCustomTarget: (field: string, value: unknown) => void;
 }
 
-// Password field with visibility toggle
-const PasswordField: React.FC<{
-  id?: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  helperText?: string;
-  required?: boolean;
-  showValue: boolean;
-  onToggleVisibility: () => void;
-}> = ({
-  id,
-  label,
-  value,
-  onChange,
-  placeholder,
-  helperText,
-  required,
-  showValue,
-  onToggleVisibility,
-}) => (
-  <div className="space-y-2">
-    <Label htmlFor={id}>
-      {label}
-      {required && <span className="text-destructive"> *</span>}
-    </Label>
-    <div className="relative">
-      <Input
-        id={id}
-        type={showValue ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="pr-10"
-        autoComplete="off"
-      />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-            onClick={onToggleVisibility}
-            aria-label={showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-          >
-            {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-        </TooltipContent>
-      </Tooltip>
-    </div>
-    {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}
-  </div>
-);
-
 const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   selectedTarget,
   updateCustomTarget,
 }) => {
   const { showToast } = useToast();
 
-  // Visibility state for password fields
-  const [showClientSecret, setShowClientSecret] = useState(false);
-  const [showOAuthPassword, setShowOAuthPassword] = useState(false);
-  const [showBasicPassword, setShowBasicPassword] = useState(false);
-  const [showBearerToken, setShowBearerToken] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [showKeystorePassword, setShowKeystorePassword] = useState(false);
-  const [showPfxPassword, setShowPfxPassword] = useState(false);
+  const privateKeyId = useId();
+  const signatureHelpId = `${privateKeyId}-help`;
 
   // Auth configuration helpers
   const getAuthType = (): string | undefined => {
@@ -288,17 +223,15 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 )}
               </div>
 
-              <PasswordField
+              <SensitiveTextField
                 id="client-secret"
                 label="Client Secret"
                 value={auth?.clientSecret || ''}
-                onChange={(value) => updateAuthField('clientSecret', value)}
+                onChange={(event) => updateAuthField('clientSecret', event.target.value)}
                 required={auth?.grantType !== 'password'}
                 helperText={
                   auth?.grantType === 'password' ? 'Optional for password grant' : undefined
                 }
-                showValue={showClientSecret}
-                onToggleVisibility={() => setShowClientSecret(!showClientSecret)}
               />
 
               {/* Show username/password fields only for password grant type */}
@@ -315,14 +248,12 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     />
                   </div>
 
-                  <PasswordField
+                  <SensitiveTextField
                     id="oauth-password"
                     label="Password"
                     value={auth?.password || ''}
-                    onChange={(value) => updateAuthField('password', value)}
+                    onChange={(event) => updateAuthField('password', event.target.value)}
                     required
-                    showValue={showOAuthPassword}
-                    onToggleVisibility={() => setShowOAuthPassword(!showOAuthPassword)}
                   />
                 </>
               )}
@@ -370,14 +301,12 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 />
               </div>
 
-              <PasswordField
+              <SensitiveTextField
                 id="basic-password"
                 label="Password"
                 value={auth?.password || ''}
-                onChange={(value) => updateAuthField('password', value)}
+                onChange={(event) => updateAuthField('password', event.target.value)}
                 required
-                showValue={showBasicPassword}
-                onToggleVisibility={() => setShowBasicPassword(!showBasicPassword)}
               />
             </div>
           );
@@ -393,16 +322,14 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             <div className="mt-6 space-y-4">
               <p className="font-medium">Bearer Token Authentication Configuration</p>
 
-              <PasswordField
+              <SensitiveTextField
                 id="bearer-token"
                 label="Token"
                 value={auth?.token || ''}
-                onChange={(value) => updateAuthField('token', value)}
+                onChange={(event) => updateAuthField('token', event.target.value)}
                 placeholder="Enter your Bearer token"
                 helperText="This token will be sent in the Authorization header as: Bearer {token}"
                 required
-                showValue={showBearerToken}
-                onToggleVisibility={() => setShowBearerToken(!showBearerToken)}
               />
             </div>
           );
@@ -451,15 +378,13 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 </p>
               </div>
 
-              <PasswordField
+              <SensitiveTextField
                 id="api-key-value"
                 label="API Key Value"
                 value={auth?.value || ''}
-                onChange={(value) => updateAuthField('value', value)}
+                onChange={(event) => updateAuthField('value', event.target.value)}
                 placeholder="Enter your API key"
                 required
-                showValue={showApiKey}
-                onToggleVisibility={() => setShowApiKey(!showApiKey)}
               />
             </div>
           );
@@ -503,9 +428,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
       {/* Digital Signature Auth Form */}
       {getAuthType() === 'digital_signature' && (
         <div className="mt-6 space-y-6">
-          <p className="text-sm">
-            Configure signature-based authentication for secure API calls. Your private key is never
-            sent to Promptfoo and will always be stored locally on your system. See{' '}
+          <p id={signatureHelpId} className="text-sm">
+            Pasted or uploaded private keys are included in this provider configuration and may
+            appear in copied or downloaded YAML. Use a file path to keep the key contents out of the
+            configuration. See{' '}
             <a
               href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
               target="_blank"
@@ -711,7 +637,15 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
             selectedTarget.config?.signatureAuth?.keyInputType === 'base64' && (
               <div className="space-y-4 rounded-lg border border-border p-6">
+                <Label htmlFor={privateKeyId}>Private Key</Label>
                 <textarea
+                  id={privateKeyId}
+                  autoComplete="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
+                  aria-describedby={signatureHelpId}
                   className="h-32 w-full rounded-md border border-border bg-transparent p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
                   value={selectedTarget.config?.signatureAuth?.privateKey || ''}
@@ -797,20 +731,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 </p>
               </div>
 
-              <PasswordField
+              <SensitiveTextField
                 id="keystore-password"
                 label="Keystore Password"
                 value={selectedTarget.config?.signatureAuth?.keystorePassword || ''}
-                onChange={(value) => {
+                onChange={(event) => {
                   updateCustomTarget('signatureAuth', {
                     ...selectedTarget.config?.signatureAuth,
-                    keystorePassword: value,
+                    keystorePassword: event.target.value,
                   });
                 }}
                 placeholder="Enter keystore password"
                 helperText="Password for the JKS keystore. Can also be set via PROMPTFOO_JKS_PASSWORD environment variable."
-                showValue={showKeystorePassword}
-                onToggleVisibility={() => setShowKeystorePassword(!showKeystorePassword)}
               />
 
               <div className="space-y-2">
@@ -903,20 +835,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     </p>
                   </div>
 
-                  <PasswordField
+                  <SensitiveTextField
                     id="pfx-password"
                     label="PFX Password"
                     value={selectedTarget.config?.signatureAuth?.pfxPassword || ''}
-                    onChange={(value) => {
+                    onChange={(event) => {
                       updateCustomTarget('signatureAuth', {
                         ...selectedTarget.config?.signatureAuth,
-                        pfxPassword: value,
+                        pfxPassword: event.target.value,
                       });
                     }}
                     placeholder="Enter PFX password"
                     helperText="Password for the PFX certificate file. Can also be set via PROMPTFOO_PFX_PASSWORD environment variable."
-                    showValue={showPfxPassword}
-                    onToggleVisibility={() => setShowPfxPassword(!showPfxPassword)}
                   />
                 </>
               )}
