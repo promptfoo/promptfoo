@@ -35,13 +35,17 @@ export function markEvaluatorSpan(
   );
 }
 
-export function setReceivedSpanOwnership({ traceId, span }: ParsedTrace): void {
-  const attributes = span.attributes;
+// Verify the original wire tuple. Only remove fields from the destination so
+// a redaction policy can still scrub echoes and withhold the role itself.
+export function setReceivedSpanOwnership(
+  { traceId, span }: ParsedTrace,
+  attributes = span.attributes,
+): void {
   if (!attributes) {
     return;
   }
-  const role = attributes[SPAN_ROLE_ATTRIBUTE];
-  const received = attributes[SPAN_ORIGIN_ATTRIBUTE];
+  const role = span.attributes?.[SPAN_ROLE_ATTRIBUTE];
+  const received = span.attributes?.[SPAN_ORIGIN_ATTRIBUTE];
   delete attributes[SPAN_ORIGIN_ATTRIBUTE];
   if (
     typeof role !== 'string' ||

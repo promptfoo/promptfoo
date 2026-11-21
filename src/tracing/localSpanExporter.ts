@@ -71,7 +71,11 @@ export class LocalSpanExporter implements SpanExporter {
       span.droppedAttributesCount > 0 ||
       (Number.isFinite(this.attributeValueLengthLimit) &&
         this.attributeValueLengthLimit > 0 &&
-        reachesAttributeLimit(span.attributes, this.attributeValueLengthLimit))
+        Object.entries(span.attributes).some(
+          ([key, value]) =>
+            key !== SPAN_ORIGIN_ATTRIBUTE &&
+            reachesAttributeLimit(value, this.attributeValueLengthLimit),
+        ))
     );
   }
 
