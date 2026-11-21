@@ -29,7 +29,7 @@ import {
   readTextDecisionRubric,
   resolveDecisionThreshold,
 } from '../decisionGrading';
-import { normalizeResponsesInput } from '../responses/input';
+import { parseResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { getRequestTimeoutMs } from '../shared';
 import { decodeUrlComponent } from '../urlEncoding';
@@ -473,15 +473,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         error: `OpenAI Decisions cannot grade \`${label}\` assertions. Use \`llm-rubric\` or \`classifier\`.`,
       };
     }
-    let input: unknown = prompt;
-    if (prompt.trimStart().startsWith('[')) {
-      try {
-        input = normalizeResponsesInput(JSON.parse(prompt));
-      } catch {
-        // Brackets also begin ordinary text, such as log prefixes and Markdown checklists.
-      }
-    }
-    return this.ask(input, config, context, options);
+    return this.ask(parseResponsesInput(prompt), config, context, options);
   }
 
   async callClassificationApi(

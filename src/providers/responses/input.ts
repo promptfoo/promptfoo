@@ -56,6 +56,9 @@ function normalizeResponsesInput(input: unknown[]): unknown[] {
 
 /** Parse JSON message arrays; send plain text and other JSON values verbatim. */
 export function parseResponsesInput(prompt: string): unknown {
+  if (!prompt.trimStart().startsWith('[')) {
+    return prompt;
+  }
   try {
     const parsed = JSON.parse(prompt);
     return Array.isArray(parsed) ? normalizeResponsesInput(parsed) : prompt;
