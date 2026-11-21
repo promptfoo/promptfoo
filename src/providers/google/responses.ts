@@ -1,4 +1,3 @@
-import { getEnvString, getProviderEnvString } from '../../envars';
 import { resolveProviderEnv } from '../env';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import { waitForPromiseWithAbort } from '../shared';
@@ -84,10 +83,7 @@ export class VertexResponsesProvider extends OpenAiResponsesProvider {
       googleAuthOptions?.apiKey;
     const keyFilename =
       this.config.keyFilename ??
-      (explicitAuth
-        ? undefined
-        : (getProviderEnvString(this.env, 'GOOGLE_APPLICATION_CREDENTIALS') ??
-          getEnvString('GOOGLE_APPLICATION_CREDENTIALS')));
+      (explicitAuth ? undefined : GoogleAuthManager.getAdcFilename(this.env));
     if (keyFilename !== undefined && !keyFilename.trim()) {
       throw new Error('Vertex Responses credential file path is empty.');
     }
