@@ -18,7 +18,8 @@ OpenRouter's catalog changes quickly. These are popular model IDs that work well
 
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
-| [openai/gpt-6-sol](https://openrouter.ai/openai/gpt-6-sol)                                                 |        1,050,000 | Complex reasoning and coding       |
+| [openai/gpt-6.2-astra](https://openrouter.ai/openai/gpt-6.2-astra)                                         |        1,050,000 | Complex reasoning and coding       |
+| [openai/gpt-6.2-sol](https://openrouter.ai/openai/gpt-6.2-sol)                                             |        1,050,000 | Multistep agent workflows          |
 | [anthropic/claude-opus-5.5](https://openrouter.ai/anthropic/claude-opus-5.5)                               |        1,000,000 | Long-running agentic workflows     |
 | [openai/gpt-6-luna](https://openrouter.ai/openai/gpt-6-luna)                                               |        1,050,000 | Fast, lower-cost OpenAI evals      |
 | [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             |          200,000 | Lower-latency Claude runs          |
@@ -35,15 +36,16 @@ For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https
 
 The `openrouter:<model>` provider uses Chat Completions.
 
-For Responses, use `openai:responses:openai/gpt-6-sol` with `apiBaseUrl: https://openrouter.ai/api/v1` and `apiKeyEnvar: OPENROUTER_API_KEY` in its config. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
+For Responses, use `openai:responses:openai/gpt-6.2-sol` with `apiBaseUrl: https://openrouter.ai/api/v1` and `apiKeyEnvar: OPENROUTER_API_KEY` in its config. OpenRouter Responses is stateless. Replay the conversation for each request.
+
+OpenRouter also offers `openai/gpt-6.2-astra-pro` and `openai/gpt-6.2-sol-pro`. These gateway model IDs select pro reasoning mode. [OpenRouter's OpenAI catalog](https://openrouter.ai/openai/)
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openrouter:openai/gpt-6-sol
+  - id: openrouter:openai/gpt-6.2-sol
     config:
-      reasoning_effort: none
-      temperature: 0.7
+      reasoning_effort: medium
       max_completion_tokens: 1000
 
   - id: openrouter:anthropic/claude-opus-5
@@ -71,7 +73,9 @@ providers:
 
 ## Cost reporting
 
-By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. This also applies to the generic OpenAI Chat and Responses providers when their `apiBaseUrl` points to `https://openrouter.ai/api/v1`. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
+By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. This also applies to the generic OpenAI Chat and Responses providers at `https://openrouter.ai/api/v1`, `https://eu.openrouter.ai/api/v1`, and `https://us.openrouter.ai/api/v1`. Check the regional host's `/api/v1/models` endpoint for model availability. [OpenRouter in-region routing](https://openrouter.ai/blog/announcements/us-in-region-routing/)
+
+Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
 
 For responses explicitly marked `usage.is_byok: true`, generic `cost` is unavailable unless you configure complete, valid token rates. With [Bring Your Own Key (BYOK)](https://openrouter.ai/docs/guides/overview/auth/byok), your upstream provider bills inference separately, so a zero or fee-only OpenRouter charge does not establish the combined cost. Responses with a missing or invalid BYOK flag continue to use the reported account charge; their route remains unknown in metadata.
 
@@ -102,6 +106,29 @@ OpenRouter can report a [provider error alongside partial output](https://openro
 - Support for text and multimodal (vision) models
 - Compatible with OpenAI API format
 - Pay-as-you-go pricing
+
+## Structured content parts
+
+Some models return OpenAI-style structured content instead of a plain string — that is,
+`message.content` is an array of `{ type: 'text', ... }` and `{ type: 'image_url', ... }` parts.
+When there is no plain-string content to use, promptfoo preserves that array as the output value
+rather than stringifying it.
+
+Because the output is an array rather than a string, string assertions such as `contains` will not
+match it directly. Use a `transform` to pull out the parts you want to assert on:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - vars:
+      question: Describe this chart
+    assert:
+      - type: contains
+        value: revenue
+        transform: |
+          Array.isArray(output)
+            ? output.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
+            : output
+```
 
 ## Thinking/Reasoning Models
 

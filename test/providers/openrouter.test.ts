@@ -1,18 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, isCacheEnabled, withCacheEnabled } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
+import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import * as fetchModule from '../../src/util/fetch/index';
+import { createChatCompletion } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
+import { createInvalidRequestResponse } from './mockProviderResponses';
+
+const { createFileUtilitiesFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createFinishedChatResponse = () => ({
+  choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+  usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+});
+
+const createWeatherFunctionCall = () => ({
+  name: 'get_current_weather',
+  arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
+});
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
-vi.mock('../../src/util', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x),
-  };
-});
+vi.mock('../../src/util', createFileUtilitiesFactory());
 
 vi.mock('../../src/util/fetch/index');
 
@@ -21,6 +31,7 @@ describe('OpenRouter', () => {
 
   afterEach(async () => {
     await clearCache();
+    mockedFetchWithRetries.mockReset();
     vi.clearAllMocks();
   });
 
@@ -173,17 +184,11 @@ describe('OpenRouter', () => {
           },
         });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
+        const response = new Response(JSON.stringify(createFinishedChatResponse()), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         await provider.callApi('Test prompt');
@@ -230,6 +235,1027 @@ describe('OpenRouter', () => {
     });
 
     it.each([
+      ['a null body', null, 'Malformed response data: null'],
+      ['missing choices', {}, 'Malformed response data: expected choices[0].message'],
+      ['null choices', { choices: null }, 'Malformed response data: expected choices[0].message'],
+      [
+        'non-array choices',
+        { choices: { 0: { message: { content: 'wrong shape' } } } },
+        'Malformed response data: expected choices[0].message',
+      ],
+      ['empty choices', { choices: [] }, 'Malformed response data: expected choices[0].message'],
+      [
+        'a null first choice',
+        { choices: [null] },
+        'Malformed response data: expected choices[0].message',
+      ],
+      [
+        'a missing message',
+        { choices: [{}] },
+        'Malformed response data: expected choices[0].message',
+      ],
+      [
+        'a null message',
+        { choices: [{ message: null }] },
+        'Malformed response data: expected choices[0].message',
+      ],
+      [
+        'a primitive message',
+        { choices: [{ message: 'wrong shape' }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an array message',
+        { choices: [{ message: [] }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an empty message',
+        { choices: [{ message: {} }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'object content',
+        { choices: [{ message: { content: { private: 'secret' } } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'numeric content',
+        { choices: [{ message: { content: 42 } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'true content',
+        { choices: [{ message: { content: true } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'false content',
+        { choices: [{ message: { content: false } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'zero content',
+        { choices: [{ message: { content: 0 } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'null content',
+        { choices: [{ message: { content: null } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'empty content',
+        { choices: [{ message: { content: '' } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'blank content',
+        { choices: [{ message: { content: '   ' } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an empty content array',
+        { choices: [{ message: { content: [] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an invalid content array',
+        { choices: [{ message: { content: [42] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an incomplete structured content part',
+        { choices: [{ message: { content: [{ type: 'text' }] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'a malformed first choice even when a later choice is usable',
+        { choices: [{ message: {} }, { message: { content: 'must not bypass first choice' } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an invalid function call',
+        { choices: [{ message: { function_call: { name: 42 } } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'a function call without arguments',
+        { choices: [{ message: { function_call: { name: 'lookup' } } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an invalid tool call',
+        { choices: [{ message: { tool_calls: [null] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'a tool call without an id',
+        {
+          choices: [
+            {
+              message: {
+                tool_calls: [{ type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+              },
+            },
+          ],
+        },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'a custom tool call without input',
+        {
+          choices: [
+            {
+              message: {
+                tool_calls: [{ id: 'call_custom', type: 'custom', custom: { name: 'shell' } }],
+              },
+            },
+          ],
+        },
+        'Malformed response data: unusable choices[0].message',
+      ],
+    ])('returns a structured error for %s', async (_description, responseBody, expectedError) => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        // A malformed 200 response must resolve through the provider error contract.
+        const response = new Response(JSON.stringify(responseBody), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toBe(expectedError);
+        // The bounded error never echoes body fields into the eval row.
+        expect(result.error).not.toContain('secret');
+        expect(result.cached).toBe(false);
+        expect(result.output).toBeUndefined();
+        expect(result.tokenUsage).toEqual({ numRequests: 1 });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves structured array content allowed by OpenRouter', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+        const content = [
+          { type: 'text', text: 'Hello' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } },
+        ];
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content }, finish_reason: 'stop' }],
+              usage: { total_tokens: 2, prompt_tokens: 1, completion_tokens: 1 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toEqual(content);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      [
+        'an explicit refusal',
+        { message: { refusal: 'Cannot comply' }, finish_reason: 'stop' },
+        'Cannot comply',
+        'stop',
+      ],
+      [
+        'a content-filter response',
+        { message: { content: null }, finish_reason: 'content_filter' },
+        'Content filtered by the model provider.',
+        'content_filter',
+      ],
+      [
+        'a refusal carrying structured partial output',
+        {
+          message: {
+            content: [{ type: 'text', text: 'Partial answer before the cutoff' }],
+            refusal: 'Stopped for policy reasons',
+          },
+          finish_reason: 'content_filter',
+        },
+        [{ type: 'text', text: 'Partial answer before the cutoff' }],
+        'content_filter',
+      ],
+    ])('preserves %s as a flagged refusal', async (_description, choice, output, finishReason) => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify({ choices: [choice] }), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result).toMatchObject({
+          output,
+          finishReason,
+          isRefusal: true,
+          guardrails: { flagged: true },
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('accepts an audio-only completion message', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('openai/gpt-4o-audio-preview', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: null,
+                    audio: {
+                      id: 'audio-1',
+                      expires_at: 1730000000,
+                      data: 'UklGRg==',
+                      transcript: 'Hello there',
+                    },
+                  },
+                  finish_reason: 'stop',
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Hello there');
+        expect(result.audio).toEqual({
+          id: 'audio-1',
+          expiresAt: 1730000000,
+          data: 'UklGRg==',
+          transcript: 'Hello there',
+          format: 'wav',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('falls back to the requested audio format when the response omits it', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('openai/gpt-4o-audio-preview', {
+          config: { audio: { voice: 'alloy', format: 'mp3' } },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: null,
+                    audio: { id: 'audio-2', data: 'UklGRg==', transcript: 'Hello there' },
+                  },
+                  finish_reason: 'stop',
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        // The blob extractor picks the stored MIME type from this field, so a
+        // requested MP3 must not come back labeled as WAV.
+        expect(result.audio?.format).toBe('mp3');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('evicts malformed responses while preserving bounded accounting metadata', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {
+          config: { inputCost: 0.001, outputCost: 0.002 },
+        });
+        const malformedResponse = new Response(
+          JSON.stringify({
+            choices: [],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+            private: 'must-not-appear',
+            padding: 'x'.repeat(10_000),
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        const recoveredResponse = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(malformedResponse)
+          .mockResolvedValueOnce(recoveredResponse);
+
+        const malformed = await provider.callApi('Test prompt');
+        expect(malformed).toEqual({
+          error: 'Malformed response data: expected choices[0].message',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          cached: false,
+          cost: 0.007,
+        });
+        // The bounded error must not leak body fields into the eval row.
+        expect(malformed.error).not.toContain('must-not-appear');
+
+        const recovered = await provider.callApi('Test prompt');
+        expect(recovered.output).toBe('Recovered');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('treats a documented choice-level error as an error and evicts it', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const privateDiagnostic = `PRIVATE_DIAGNOSTIC_${'x'.repeat(10_000)}`;
+        const provider = new OpenRouterProvider('gpt-4o', {
+          config: { inputCost: 0.001, outputCost: 0.002 },
+        });
+        const choiceErrorResponse = new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: { content: 'partial output must not be graded' },
+                finish_reason: 'error',
+                error: { code: 502, message: privateDiagnostic },
+              },
+            ],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        const recoveredResponse = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(choiceErrorResponse)
+          .mockResolvedValueOnce(recoveredResponse);
+
+        const failed = await provider.callApi('Test prompt');
+        // The provider's choice-level error message is surfaced as the error;
+        // the partial output that rode along must never be graded.
+        expect(failed.error).toBe(`API error: ${privateDiagnostic}`);
+        expect(failed.error).not.toContain('partial output must not be graded');
+        expect(failed).toMatchObject({
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          cached: false,
+          cost: 0.007,
+          finishReason: 'error',
+        });
+        expect(failed.output).toBeUndefined();
+
+        const recovered = await provider.callApi('Test prompt');
+        expect(recovered.output).toBe('Recovered');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('treats finish_reason=error as a failure even without a choice error object', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output must not be graded' },
+                  finish_reason: 'error',
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result).toEqual({
+          error: 'API error: OpenRouter provider returned a generation error',
+          tokenUsage: { numRequests: 1 },
+          cached: false,
+          cost: undefined,
+          finishReason: 'error',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves a safe OpenRouter-reported cost', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('openai/gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Complete' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2, cost: 0.0042 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBe(0.0042);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('bounds malformed usage on a successful completion', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('openai/gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Complete' }, finish_reason: 'stop' }],
+              usage: {
+                total_tokens: { private: 'must-not-appear' },
+                prompt_tokens: -1,
+                completion_tokens: 2,
+                cost: 'free',
+              },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result).toMatchObject({
+          output: 'Complete',
+          tokenUsage: { completion: 2, numRequests: 1 },
+        });
+        expect(result.cost).toBeUndefined();
+        expect(JSON.stringify(result)).not.toContain('must-not-appear');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('retries a documented choice-level rate limit without exposing its diagnostic', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {
+          config: { maxRetries: 1, inputCost: 0.001, outputCost: 0.002 },
+        });
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: { content: 'partial output' },
+                    finish_reason: 'error',
+                    error: { code: 429, message: 'PRIVATE_RATE_LIMIT_DIAGNOSTIC' },
+                  },
+                ],
+                usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+                usage: { total_tokens: 10, prompt_tokens: 7, completion_tokens: 3 },
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          );
+
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          ...createProviderRateLimitOptions(),
+          getRetryAfter: () => 0,
+        });
+
+        expect(result.output).toBe('Recovered');
+        // The recovered attempt is returned as-is: usage merging across the
+        // rate-limited attempt is the transient-availability contract, not
+        // the rate-limit one.
+        expect(result.tokenUsage).toMatchObject({
+          total: 10,
+          prompt: 7,
+          completion: 3,
+          numRequests: 1,
+        });
+        expect(result.cost).toBeCloseTo(0.013, 8);
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_RATE_LIMIT_DIAGNOSTIC');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      {
+        name: 'billing code with a 503 status',
+        code: 503,
+        metadata: { provider_code: 'credit_balance_exhausted' },
+        kind: 'quota',
+        requests: 1,
+      },
+      {
+        name: 'billing code with an overload marker',
+        code: 429,
+        metadata: {
+          provider_code: 'credit_balance_exhausted',
+          error_type: 'provider_overloaded',
+        },
+        kind: 'quota',
+        requests: 1,
+      },
+      {
+        name: 'typed rate limit with a 503 status',
+        code: 503,
+        metadata: { error_type: 'rate_limit_exceeded' },
+        kind: 'rate_limit',
+        requests: 2,
+      },
+    ])('preserves gateway classification for $name', async ({ code, metadata, kind, requests }) => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', { config: { maxRetries: 1 } });
+        mockedFetchWithRetries.mockImplementation(async () =>
+          Response.json({
+            choices: [
+              {
+                message: { content: 'partial output' },
+                finish_reason: 'error',
+                error: { code, message: 'upstream failure', metadata },
+              },
+            ],
+            usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+          }),
+        );
+
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          ...createProviderRateLimitOptions(),
+          getRetryAfter: () => 0,
+        });
+
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(requests);
+        expect(result.error).toContain('upstream failure');
+        expect(result.output).toBeUndefined();
+        expect(result.metadata?.rateLimitKind).toBe(kind);
+        expect(result.metadata?.retryableErrorKind).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ total: 3, numRequests: 1 });
+      } finally {
+        registry.dispose();
+        restoreEnv();
+      }
+    });
+
+    it('retries a transient choice-level generation error', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', { config: { maxRetries: 1 } });
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: { content: 'partial output' },
+                    finish_reason: 'error',
+                    error: { code: 503, message: 'temporary upstream failure' },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          );
+
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          ...createProviderRateLimitOptions(),
+          getRetryAfter: () => 0,
+        });
+
+        expect(result.output).toBe('Recovered');
+        expect(result.tokenUsage?.numRequests).toBe(2);
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
+        restoreEnv();
+      }
+    });
+
+    it('returns the structured rate-limit response when retries are exhausted', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', { config: { maxRetries: 0 } });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: { code: 429, message: 'PRIVATE_RATE_LIMIT_DIAGNOSTIC' },
+                },
+              ],
+              usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2, cost: 0.0042 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          ...createProviderRateLimitOptions(),
+          getRetryAfter: () => 0,
+        });
+
+        expect(result).toMatchObject({
+          error: 'API error: PRIVATE_RATE_LIMIT_DIAGNOSTIC',
+          finishReason: 'error',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          cost: 0.0042,
+          // The transport really was a 200; the choice-level code drives the
+          // rate_limit classification the scheduler retries on.
+          metadata: { rateLimitKind: 'rate_limit', http: { status: 200 } },
+        });
+      } finally {
+        registry.dispose();
+        restoreEnv();
+      }
+    });
+
+    it('preserves Retry-After headers on a choice-level rate limit', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: { code: 429, message: 'rate limited' },
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({
+                'Content-Type': 'application/json',
+                'Retry-After': '30',
+                'X-RateLimit-Remaining': '0',
+              }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        // The scheduler reads rate-limit headers off metadata.http.headers only.
+        expect(result.metadata?.http?.headers).toMatchObject({
+          'retry-after': '30',
+          'x-ratelimit-remaining': '0',
+        });
+
+        const options = createProviderRateLimitOptions();
+        expect(options.getHeaders?.(result)).toMatchObject({ 'retry-after': '30' });
+        // Without the headers this falls through to blind exponential backoff.
+        expect(options.getRetryAfter?.(result, undefined)).toBe(30_000);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves Retry-After headers on a transient choice-level generation error', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: { code: 503, message: 'temporary upstream failure' },
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({
+                'Content-Type': 'application/json',
+                'Retry-After': '12',
+              }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toMatchObject({
+          retryableErrorKind: 'transient_availability',
+          // The transport exchange really was a 200; the choice-level code
+          // drives the retryable classification, not the recorded status.
+          http: { status: 200, headers: { 'retry-after': '12' } },
+        });
+        expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(12_000);
+      } finally {
+        restoreEnv();
+        restoreEnv();
+      }
+    });
+
+    // error_type values follow OpenRouter's documented vocabulary
+    // (https://openrouter.ai/docs/api_reference/errors-and-debugging)
+    it.each([
+      ['provider_unavailable', 502],
+      ['provider_overloaded', 503],
+      ['timeout', 504],
+      ['server', 500],
+    ])('tags a choice-level %s error as transient availability', async (errorType, code) => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: { code, message: 'upstream failure', metadata: { error_type: errorType } },
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('upstream failure');
+        expect(result.metadata?.retryableErrorKind).toBe('transient_availability');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      // An access-revocation refusal falls through the policy-refusal
+      // interceptor and reaches the classifier
+      ['refusal', 403, 'Your account access to the provider has been revoked'],
+      ['authentication', 401, 'Invalid credentials'],
+      ['payment_required', 402, 'Insufficient credits'],
+      ['invalid_request', 400, 'Bad request'],
+      ['context_length_exceeded', 400, 'Context window exceeded'],
+    ])(
+      'does not mark a permanent choice-level %s error as retryable',
+      async (errorType, code, message) => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+        try {
+          const provider = new OpenRouterProvider('gpt-4o', {});
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: { content: '' },
+                    finish_reason: 'error',
+                    error: { code, message, metadata: { error_type: errorType } },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          );
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toContain(message);
+          expect(result.metadata?.retryableErrorKind).toBeUndefined();
+          expect(result.metadata?.rateLimitKind).toBeUndefined();
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('surfaces a choice-level policy refusal as a flagged refusal, not a retryable error', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: {
+                    code: 403,
+                    message: 'The provider declined this request',
+                    metadata: { error_type: 'content_policy_violation' },
+                  },
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.isRefusal).toBe(true);
+        expect(result.metadata?.retryableErrorKind).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      ['unmapped', 502, 'transient_availability'],
+      ['unmapped', 400, undefined],
+    ])(
+      'falls back to the status code for an undocumented error_type (%s, %i)',
+      async (errorType, code, expectedKind) => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+        try {
+          const provider = new OpenRouterProvider('gpt-4o', {});
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: { content: '' },
+                    finish_reason: 'error',
+                    error: { code, message: 'mystery', metadata: { error_type: errorType } },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          );
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.metadata?.retryableErrorKind).toBe(expectedKind);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it.each([
       {
         apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/',
         expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
@@ -255,17 +1281,11 @@ describe('OpenRouter', () => {
             },
           });
 
-          const response = new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          );
+          const response = new Response(JSON.stringify(createFinishedChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          });
           mockedFetchWithRetries.mockResolvedValueOnce(response);
 
           await provider.callApi('Test prompt');
@@ -292,17 +1312,11 @@ describe('OpenRouter', () => {
           },
         });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
+        const response = new Response(JSON.stringify(createFinishedChatResponse()), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         await provider.callApi('Test prompt');
@@ -1065,6 +2079,7 @@ describe('OpenRouter', () => {
 
         // Should return tool_calls directly without any reasoning
         expect(result.output).toEqual([mockToolCall]);
+
         expect(result.tokenUsage).toEqual({
           total: 60,
           prompt: 25,
@@ -1164,10 +2179,7 @@ describe('OpenRouter', () => {
         const mockToolCall = {
           id: 'call_abc123',
           type: 'function',
-          function: {
-            name: 'get_current_weather',
-            arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
-          },
+          function: createWeatherFunctionCall(),
         };
 
         const mockResponse = {
@@ -1205,10 +2217,7 @@ describe('OpenRouter', () => {
         const mockToolCall = {
           id: 'call_def456',
           type: 'function',
-          function: {
-            name: 'get_current_weather',
-            arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
-          },
+          function: createWeatherFunctionCall(),
         };
 
         const mockResponse = {
@@ -1319,6 +2328,45 @@ describe('OpenRouter', () => {
           completion: 35,
           numRequests: 1,
         });
+      });
+      it('keeps a complete function call whose type discriminator is omitted', async () => {
+        // OpenRouter sometimes sends tool_calls entries with no `type`; the
+        // payload is unambiguous, so the call must survive rather than take
+        // the whole message down as malformed.
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+        const quirksToolCall = {
+          id: 'call_abc123',
+          function: {
+            name: 'get_weather',
+            arguments: '{"location": "San Francisco"}',
+          },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                { message: { content: null, tool_calls: [quirksToolCall] }, finish_reason: 'stop' },
+              ],
+              usage: { total_tokens: 60, prompt_tokens: 25, completion_tokens: 35 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Weather?');
+
+        expect(result.error).toBeUndefined();
+        // the call survives verbatim; no synthetic discriminator is added
+        expect(result.output).toEqual([
+          {
+            id: 'call_abc123',
+            function: { name: 'get_weather', arguments: '{"location": "San Francisco"}' },
+          },
+        ]);
       });
 
       it('should prioritize tool calls over content+reasoning when all three are present (fixes Qwen thinking models)', async () => {
@@ -1491,18 +2539,7 @@ describe('OpenRouter', () => {
       });
 
       it('should handle API errors', async () => {
-        const errorResponse = {
-          error: {
-            message: 'API Error',
-            type: 'invalid_request_error',
-          },
-        };
-
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
+        const response = createInvalidRequestResponse();
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
@@ -1576,16 +2613,7 @@ describe('OpenRouter', () => {
           },
         });
 
-        const mockResponse = {
-          choices: [
-            {
-              message: {
-                content: '{"name": "John Doe", "age": 30}',
-              },
-            },
-          ],
-          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-        };
+        const mockResponse = createChatCompletion('{"name": "John Doe", "age": 30}', 50, 20, 30);
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -1660,16 +2688,7 @@ describe('OpenRouter', () => {
       it('should not parse JSON when response_format.type is not json_schema', async () => {
         const regularProvider = new OpenRouterProvider('google/gemini-2.5-pro', {});
 
-        const mockResponse = {
-          choices: [
-            {
-              message: {
-                content: '{"name": "John Doe", "age": 30}',
-              },
-            },
-          ],
-          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-        };
+        const mockResponse = createChatCompletion('{"name": "John Doe", "age": 30}', 50, 20, 30);
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
