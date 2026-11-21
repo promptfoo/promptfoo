@@ -6,6 +6,7 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { executeCallback, resolveCallback } from './functionCallbackExecutor';
+import { MCPToolContractError } from './mcp/errors';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
 import { throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
@@ -345,6 +346,9 @@ export class FunctionCallbackHandler {
       const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
+      if (error instanceof MCPToolContractError) {
+        throw error;
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {

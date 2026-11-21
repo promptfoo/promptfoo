@@ -14,6 +14,7 @@ import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import { MCPToolContractError } from '../../../src/providers/mcp/errors';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import { createMcpServerOptions, createTypeConfig } from '../../factories/literalFixtures';
@@ -2154,6 +2155,32 @@ describe('AnthropicMessagesProvider', () => {
         tool_choice: { type: 'any' },
       });
       expect(createSpy.mock.calls[1][0]).not.toHaveProperty('tool_choice');
+    });
+
+    it('stops Anthropic MCP conversation on invalidated contract instead of asking for a second answer', async () => {
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+      mcpMocks.callTool.mockRejectedValueOnce(
+        new MCPToolContractError(
+          'MCP server #1 tool contract drift: search_companies (description)',
+        ),
+      );
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Should not be requested' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const failure = await provider.callApi('Find solar companies').then(
+        (result) => result.error ?? '',
+        (error) => String(error),
+      );
+
+      expect(failure).toMatch(/tool contract drift: search_companies \(description\)/);
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(mcpMocks.callTool).toHaveBeenCalledOnce();
     });
 
     it.each([

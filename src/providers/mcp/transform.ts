@@ -153,6 +153,16 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
     );
   }
 
+  if (
+    [...(config.servers ?? []), ...(config.server ? [config.server] : [])].some(
+      (server) => server.expectedTools !== undefined,
+    )
+  ) {
+    throw new Error(
+      'Claude Agent SDK MCP integration does not support `expectedTools`; use a provider with the shared MCP client or remove the tool contract pin.',
+    );
+  }
+
   const namespaces = new Map<string, number>();
   for (const [index, server] of getServerConfigs(config).entries()) {
     const name = getClaudeCodeServerName(server);

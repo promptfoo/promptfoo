@@ -8,6 +8,8 @@ description: Use Model Context Protocol (MCP) servers as providers in promptfoo 
 
 The `mcp` provider calls Model Context Protocol (MCP) tools directly, so you can test or red team the server itself.
 
+To detect tool-contract drift during the evaluation connection, set `server.expectedTools` (or `servers[].expectedTools`) to the reviewed list of tool names, descriptions, and input schemas. Connection fails before any tool call if the visible tool set differs, and each pinned call rechecks `tools/list` so a server change during an evaluation cannot silently reach the target tool. This adds one list request per pinned call. Use the `tools` / `exclude_tools` filters to constrain the snapshot to the tools the evaluation uses. Without `expectedTools`, Promptfoo does not pin tool definitions across runs. When any server has `expectedTools`, visible tool names must be unique across servers or connection fails to prevent ambiguous dispatch.
+
 To give MCP tools to a model you're testing, use the [MCP integration for other providers](../integrations/mcp.md).
 
 ## Setup

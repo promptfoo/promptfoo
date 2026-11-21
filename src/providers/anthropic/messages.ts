@@ -19,6 +19,7 @@ import {
 } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { MCPToolContractError } from '../mcp/errors';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
@@ -612,6 +613,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         content: normalizeMcpToolContent(result.content),
       };
     } catch (error) {
+      if (error instanceof MCPToolContractError) {
+        throw error;
+      }
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,

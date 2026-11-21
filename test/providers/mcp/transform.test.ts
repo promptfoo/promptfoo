@@ -420,6 +420,19 @@ describe('transformMCPConfigToClaudeCode', () => {
     },
   );
 
+  it('rejects expectedTools pins rather than silently dropping the contract in Claude Agent SDK', () => {
+    expect(() =>
+      validateMCPConfigForClaudeCode({
+        servers: [
+          {
+            command: 'node',
+            expectedTools: [{ name: 'echo', description: '', inputSchema: {} }],
+          },
+        ],
+      }),
+    ).toThrow(/Claude Agent SDK.*does not support `expectedTools`/);
+  });
+
   it('rejects colliding tool namespaces before a cached provider response can be returned', async () => {
     const cache = await getCache();
     const read = vi

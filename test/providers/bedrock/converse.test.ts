@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import logger from '../../../src/logger';
+import { MCPToolContractError } from '../../../src/providers/mcp/errors';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
@@ -937,6 +938,26 @@ describe('AwsBedrockConverseProvider', () => {
 
       expect(result.error).toBe('MCP Tool Error (list_resources): connection refused');
       expect(result.output).toContain('MCP Tool Error (list_resources)');
+    });
+
+    it('fails a Bedrock evaluation when the MCP contract invalidates during tool dispatch', async () => {
+      mcpMocks.mockCallTool.mockRejectedValueOnce(
+        new MCPToolContractError('MCP server #1 tool contract drift: list_resources (description)'),
+      );
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createListResourcesToolTurn()));
+
+      const failure = await provider.callApi('List resources').then(
+        (result) => result.error ?? '',
+        (error) => String(error),
+      );
+
+      expect(failure).toMatch(/tool contract drift: list_resources \(description\)/);
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledOnce();
+      expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
     it('should not crash on malformed JSON tool_use input from the model', async () => {

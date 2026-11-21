@@ -25,6 +25,18 @@ export const McpServerFieldsSchema = z.looseObject({
     .record(z.string(), z.string())
     .optional()
     .describe('Environment variables for a stdio server process'),
+  expectedTools: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1),
+        description: z.string(),
+        inputSchema: JsonObjectInputSchema,
+      }),
+    )
+    .optional()
+    .describe(
+      'Approved tool contracts for this server. Startup fails if the available selected tools differ in name, description, or input schema.',
+    ),
 });
 
 export const McpServerInputSchema = z
