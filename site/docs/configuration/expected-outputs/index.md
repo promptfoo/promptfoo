@@ -228,6 +228,8 @@ A chain can have several checks marked `fallback: next`. Each source must be `eq
 
 The final assertion can use a normal deterministic or model-graded check. Assertion sets, comparisons (`select-best` and `max-score`), guardrails, and custom redteam checks cannot be fallback targets. A chain must stay within one configured assertion list: it cannot join `defaultTest`, a test, or scenario lists. Chains inside an assertion set are supported. Independent assertions outside the chain keep running normally.
 
+A skipped trace-aware fallback does not fetch the trace. When an assertion needs it, Promptfoo loads the target spans and excludes grader spans and their descendants. See [tracing](/docs/tracing/).
+
 ## Weighted assertions
 
 In some cases, you might want to assign different weights to your assertions depending on their importance. The `weight` property is a number that determines the relative importance of the assertion. The default weight is 1.
