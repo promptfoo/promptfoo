@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { fetchWithTimeout } from '../../util/fetch/index';
+import { computeRateLimitWaitMs, fetchWithTimeout } from '../../util/fetch/index';
 import { getCallerAbortError } from '../../util/fetch/requestSignal';
 import { readWithResponseDeadline } from '../../util/fetch/responseDeadline';
 import { sanitizeUrl } from '../../util/sanitizer';
@@ -11,12 +11,18 @@ import {
   getModelOutputContent,
   hasSemanticInteractionInput,
   type InteractionResponse,
+  interactionFields,
   mergeGoogleInteractionsRequestConfig,
   normalizeInteractionCitation,
   parseInteractionInput,
 } from './interactions';
 import { GOOGLE_MODELS } from './shared';
-import { calculateGoogleCost, getNativeGeminiApiKey, normalizeGoogleServiceTier } from './util';
+import {
+  calculateGoogleCost,
+  getNativeGeminiApiKey,
+  normalizeGoogleServiceTier,
+  resolveGoogleToolConfig,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -73,9 +79,7 @@ type AgentRequestResult =
   | { ok: true; data: AgentInteractionResponse }
   | {
       ok: false;
-      status?: number;
-      statusText?: string;
-      headers?: Record<string, string>;
+      response?: Response;
       message: string;
       transient: boolean;
     };
@@ -146,7 +150,7 @@ function getAgentConfigError(
   if (config.vertexai) {
     return 'Gemini managed agents are supported only through the Gemini API. Remove vertexai: true and use a Gemini API key.';
   }
-  if ((passthrough.store ?? config.store) === false) {
+  if (passthrough.store !== undefined && passthrough.store !== true) {
     return 'Gemini managed agents run in the background, which requires store: true.';
   }
   if (Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools)) {
@@ -170,29 +174,12 @@ function getInteractionErrorMessage(data: AgentInteractionResponse): string | un
   return messages.length > 0 ? messages.join('; ') : undefined;
 }
 
-function getRetryAfterMs(headers: Record<string, string> | undefined, attempt: number): number {
-  const retryAfter = Number(headers?.['retry-after']);
-  const delay =
-    Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : 5_000 * 2 ** attempt;
-  return Math.min(delay, MAX_POLL_BACKOFF_MS);
-}
-
 function waitForPoll(ms: number, signal?: AbortSignal): Promise<void> {
-  throwIfAborted(signal);
-  if (!signal) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(getCallerAbortError(signal));
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    signal.addEventListener('abort', onAbort, { once: true });
+  let timer: NodeJS.Timeout;
+  const elapsed = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
   });
+  return waitForPromiseWithAbort(elapsed, signal).finally(() => clearTimeout(timer));
 }
 
 async function readInteractionResponse(response: Response): Promise<AgentRequestResult> {
@@ -213,9 +200,7 @@ async function readInteractionResponse(response: Response): Promise<AgentRequest
     `HTTP ${response.status} ${response.statusText}${data ? '' : ': non-JSON response'}`.trim();
   return {
     ok: false,
-    status: response.status,
-    statusText: response.statusText,
-    headers: Object.fromEntries(response.headers.entries()),
+    response,
     message,
     transient: response.ok
       ? data === undefined
@@ -262,7 +247,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
     }
     const deadline = Date.now() + request.maxPollTimeMs;
 
-    const created = await this.createInteraction(request, signal);
+    const created = await this.createInteraction(request, deadline, signal);
     if (!('data' in created)) {
       return created;
     }
@@ -314,10 +299,16 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
       this.config,
       promptConfig,
     ) as GoogleInteractionsAgentConfig;
-    const passthrough = {
-      ...(this.config.passthrough || {}),
-      ...(promptConfig?.passthrough || {}),
+    const field = interactionFields(this.config, promptConfig);
+    const passthrough: Record<string, unknown> = {
+      ...this.config.passthrough,
+      ...promptConfig?.passthrough,
+      store: field('store'),
     };
+    if (resolveGoogleToolConfig(config).toolsDisabled) {
+      delete config.tools;
+      delete passthrough.tools;
+    }
     const configError = getAgentConfigError(config, passthrough);
     if (configError) {
       return { error: configError };
@@ -342,19 +333,13 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
     }
 
     const builtInType = getBuiltInAgentType(this.agentId);
-    const configuredAgentConfig =
-      passthrough.agent_config ?? passthrough.agentConfig ?? config.agentConfig;
+    const configuredAgentConfig = field('agentConfig', 'agent_config');
     const agentConfig = isPlainObject(configuredAgentConfig)
       ? { ...(builtInType ? { type: builtInType } : {}), ...configuredAgentConfig }
       : undefined;
     const environment =
-      passthrough.environment ??
-      config.environment ??
-      (builtInType === 'antigravity' ? 'remote' : undefined);
-    const previousInteractionId =
-      passthrough.previous_interaction_id ??
-      passthrough.previousInteractionId ??
-      config.previousInteractionId;
+      field('environment') ?? (builtInType === 'antigravity' ? 'remote' : undefined);
+    const previousInteractionId = field('previousInteractionId', 'previous_interaction_id');
     const extraFields = Object.fromEntries(
       Object.entries(passthrough).filter(([field]) => !RESERVED_AGENT_REQUEST_FIELDS.has(field)),
     );
@@ -392,9 +377,12 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
    */
   private async createInteraction(
     request: PreparedAgentRequest,
+    deadline: number,
     signal?: AbortSignal,
   ): Promise<{ data: AgentInteractionResponse } | ProviderResponse> {
+    const body = JSON.stringify(request.body);
     for (let attempt = 0; ; attempt++) {
+      throwIfAborted(signal);
       // The request itself is not tied to the caller's signal: once Google receives it, the task
       // exists, and its ID is needed to cancel it.
       const pending = fetchWithTimeout(
@@ -402,7 +390,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
         {
           method: 'POST',
           headers: request.headers,
-          body: JSON.stringify(request.body),
+          body,
           disableTransientRetries: true,
         },
         getRequestTimeoutMs(),
@@ -434,29 +422,30 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
       if (created.ok) {
         return { data: created.data };
       }
-      if (created.status === 429 && attempt < MAX_CREATE_RATE_LIMIT_RETRIES) {
-        const delay = getRetryAfterMs(created.headers, attempt);
-        logger.debug('[Google Interactions Agent] Rate limited before the task started', {
-          attempt: attempt + 1,
-          delay,
-        });
-        await waitForPoll(delay, signal);
-        continue;
+      const { response } = created;
+      if (response?.status === 429 && attempt < MAX_CREATE_RATE_LIMIT_RETRIES) {
+        const delay = response.headers.has('retry-after')
+          ? computeRateLimitWaitMs(response)
+          : 5_000 * 2 ** attempt;
+        if (delay < deadline - Date.now()) {
+          await waitForPoll(delay, signal);
+          if (Date.now() < deadline) {
+            continue;
+          }
+        }
       }
       return {
         error: `Gemini agent API error: ${created.message}`,
         metadata: {
           agent: this.agentId,
           rateLimitRetryable: false,
-          ...(created.status
-            ? {
-                http: {
-                  status: created.status,
-                  statusText: created.statusText ?? '',
-                  ...(created.headers ? { headers: created.headers } : {}),
-                },
-              }
-            : {}),
+          ...(response && {
+            http: {
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers),
+            },
+          }),
         },
       };
     }
@@ -476,7 +465,18 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
     let pollCount = 0;
     const retrieveHint = `Retrieve it with GET ${sanitizeUrl(interactionUrl)}.`;
     while (data.status === 'in_progress') {
-      if (Date.now() >= deadline) {
+      // Status checks are idempotent, so transient failures back off until the deadline.
+      const delay = Math.min(
+        request.pollIntervalMs * 2 ** consecutiveFailures,
+        Math.max(request.pollIntervalMs, MAX_POLL_BACKOFF_MS),
+        deadline - Date.now(),
+      );
+      if (delay > 0) {
+        await waitForPoll(delay, signal);
+      }
+      throwIfAborted(signal);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
         return this.errorResponse(
           data,
           interactionId,
@@ -484,16 +484,6 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
           request.billing,
         );
       }
-      // Status checks are idempotent, so transient failures back off until the deadline.
-      const delay =
-        consecutiveFailures === 0
-          ? request.pollIntervalMs
-          : Math.min(
-              request.pollIntervalMs * 2 ** consecutiveFailures,
-              Math.max(request.pollIntervalMs, MAX_POLL_BACKOFF_MS),
-            );
-      await waitForPoll(Math.min(delay, Math.max(deadline - Date.now(), 0)), signal);
-
       let polled: AgentRequestResult;
       try {
         const response = await fetchWithTimeout(
@@ -504,7 +494,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
             disableTransientRetries: true,
             ...(signal ? { signal } : {}),
           },
-          Math.min(getRequestTimeoutMs(), Math.max(deadline - Date.now(), 5_000)),
+          Math.min(getRequestTimeoutMs(), remaining),
         );
         polled = await readInteractionResponse(response);
       } catch (err) {
@@ -527,7 +517,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
       lastFailure = polled.message;
       logger.debug('[Google Interactions Agent] Poll failed', {
         consecutiveFailures,
-        status: polled.status,
+        status: polled.response?.status,
         message: polled.message,
       });
       if (!polled.transient) {

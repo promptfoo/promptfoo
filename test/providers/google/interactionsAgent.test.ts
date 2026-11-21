@@ -1,17 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { googleProviderFactories } from '../../../src/providers/families/google';
-import { GoogleInteractionsAgentProvider } from '../../../src/providers/google/interactionsAgent';
+import {
+  type GoogleInteractionsAgentConfig,
+  GoogleInteractionsAgentProvider,
+} from '../../../src/providers/google/interactionsAgent';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 import { trackResponseDeadline } from '../../../src/util/fetch/responseDeadline';
 import { mockProcessEnv } from '../../util/utils';
 
-vi.mock('../../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
+vi.mock(import('../../../src/util/fetch/index'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithTimeout: vi.fn(),
+}));
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 const DEEP_RESEARCH = 'deep-research-preview-04-2026';
 const ANTIGRAVITY = 'antigravity-preview-09-2026';
+
+function researchAgent(config?: GoogleInteractionsAgentConfig) {
+  return new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+    config: { apiKey: 'test-key', ...config },
+  });
+}
 
 function jsonResponse(body: unknown, status = 200, statusText = 'OK') {
   return new Response(JSON.stringify(body), {
@@ -242,9 +254,7 @@ describe('GoogleInteractionsAgentProvider', () => {
 
   it('returns immediately when the create response is already complete', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -369,9 +379,7 @@ describe('GoogleInteractionsAgentProvider', () => {
 
   it('uses configured per-token costs for agents without catalog pricing', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', inputCost: 2e-6, outputCost: 10e-6 },
-    });
+    const provider = researchAgent({ inputCost: 2e-6, outputCost: 10e-6 });
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -390,9 +398,7 @@ describe('GoogleInteractionsAgentProvider', () => {
           usage: { total_input_tokens: 10, total_output_tokens: 2 },
         }),
       );
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 1 });
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -418,9 +424,7 @@ describe('GoogleInteractionsAgentProvider', () => {
           error: { message: 'Maximum research time exceeded' },
         }),
       );
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 1 });
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -434,19 +438,17 @@ describe('GoogleInteractionsAgentProvider', () => {
     mockFetch.mockImplementation(async () =>
       jsonResponse({ id: 'interaction-slow', status: 'in_progress' }),
     );
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 10_000, maxPollTimeMs: 60_000 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 10_000, maxPollTimeMs: 52_000 });
     const startedAt = Date.now();
 
     const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toContain(
-      'Gemini agent interaction interaction-slow did not finish within 60000ms (last status: in_progress)',
+      'Gemini agent interaction interaction-slow did not finish within 52000ms (last status: in_progress)',
     );
-    // One status check every 10 s, the last one at the deadline.
-    expect(getCount()).toBe(6);
-    expect(Date.now() - startedAt).toBe(60_000);
+    expect(getCount()).toBe(5);
+    expect(mockFetch.mock.lastCall?.[2]).toBe(2_000);
+    expect(Date.now() - startedAt).toBe(52_000);
     expect(result.error).toContain(`GET ${ENDPOINT}/interaction-slow`);
     expect(result.metadata).toMatchObject({
       interactionId: 'interaction-slow',
@@ -467,9 +469,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       }
       return jsonResponse({ id: 'interaction-abort', status: 'in_progress' });
     });
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 1 });
 
     await expect(
       settle(provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal })),
@@ -494,9 +494,7 @@ describe('GoogleInteractionsAgentProvider', () => {
         releaseCreate = resolve;
       });
     });
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     const call = provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal });
     await vi.advanceTimersByTimeAsync(0);
@@ -519,9 +517,7 @@ describe('GoogleInteractionsAgentProvider', () => {
   it('does not send a request when already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     await expect(
       provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal }),
@@ -531,9 +527,7 @@ describe('GoogleInteractionsAgentProvider', () => {
 
   it('does not retry a create request that fails without a response', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Request timed out after 300000 ms'));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -558,9 +552,7 @@ describe('GoogleInteractionsAgentProvider', () => {
     mockFetch
       .mockResolvedValueOnce(rateLimited())
       .mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
     const startedAt = Date.now();
 
     const result = await settle(provider.callApi('Research TPUs'));
@@ -572,9 +564,7 @@ describe('GoogleInteractionsAgentProvider', () => {
 
   it('reports a persistent 429 after bounded create retries', async () => {
     mockFetch.mockImplementation(async () => rateLimited());
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -584,6 +574,18 @@ describe('GoogleInteractionsAgentProvider', () => {
       http: { status: 429, statusText: 'Too Many Requests' },
     });
     expect(postCount()).toBe(4);
+  });
+
+  it('does not resubmit a billed request if Retry-After exceeds the remaining budget', async () => {
+    mockFetch.mockResolvedValueOnce(rateLimited());
+    const provider = researchAgent({ maxPollTimeMs: 1_000 });
+    const startedAt = Date.now();
+
+    const result = await settle(provider.callApi('Research TPUs'));
+
+    expect(result.metadata).toMatchObject({ rateLimitRetryable: false, http: { status: 429 } });
+    expect(postCount()).toBe(1);
+    expect(Date.now()).toBe(startedAt);
   });
 
   it.each([
@@ -596,9 +598,7 @@ describe('GoogleInteractionsAgentProvider', () => {
   ])('is never replayed by the scheduler after %s', async (_name, respond) => {
     mockFetch.mockImplementation(async () => respond());
     const registry = new RateLimitRegistry({ maxConcurrency: 1 });
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     try {
       const call = registry.execute(
@@ -623,9 +623,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       .mockRejectedValueOnce(new Error('socket hang up'))
       .mockResolvedValueOnce(jsonResponse({ error: { message: 'backend' } }, 503, 'Unavailable'))
       .mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 1 });
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -642,9 +640,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       );
     }
     mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 10_000 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 10_000 });
     const startedAt = Date.now();
 
     const result = await settle(provider.callApi('Research TPUs'));
@@ -662,17 +658,14 @@ describe('GoogleInteractionsAgentProvider', () => {
       .mockImplementation(async () =>
         jsonResponse({ error: { message: 'backend unavailable' } }, 503, 'Unavailable'),
       );
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 10_000, maxPollTimeMs: 120_000 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 10_000, maxPollTimeMs: 120_000 });
 
     const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toContain(
       'Gemini agent interaction interaction-down did not finish within 120000ms (last status: in_progress; last status check failed: backend unavailable)',
     );
-    // 10 s, 20 s, 40 s, then the remaining 50 s up to the deadline.
-    expect(getCount()).toBe(4);
+    expect(getCount()).toBe(3);
     expect(postCount()).toBe(1);
   });
 
@@ -700,9 +693,7 @@ describe('GoogleInteractionsAgentProvider', () => {
 
   it('bounds a stalled create response body by the request timeout', async () => {
     mockFetch.mockImplementation(async () => stalledResponse(30_000));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = researchAgent();
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -718,9 +709,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       .mockResolvedValueOnce(jsonResponse({ id: 'interaction-1', status: 'in_progress' }))
       .mockImplementationOnce(async () => stalledResponse(15_000))
       .mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 10_000 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 10_000 });
     const startedAt = Date.now();
 
     const result = await settle(provider.callApi('Research TPUs'));
@@ -735,9 +724,7 @@ describe('GoogleInteractionsAgentProvider', () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse({ id: 'interaction-gone', status: 'in_progress' }))
       .mockResolvedValueOnce(jsonResponse({ error: { message: 'Not found' } }, 404, 'Not Found'));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1 },
-    });
+    const provider = researchAgent({ pollIntervalMs: 1 });
 
     const result = await settle(provider.callApi('Research TPUs'));
 
@@ -786,42 +773,56 @@ describe('GoogleInteractionsAgentProvider', () => {
     });
   });
 
-  it('forwards passthrough fields without letting them override promptfoo-owned fields', async () => {
+  it.each(['auto', 'none'])('honors prompt overrides with tool_choice: %s', async (tool_choice) => {
     mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
-    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: {
-        apiKey: 'test-key',
-        previousInteractionId: 'previous-1',
-        passthrough: {
-          tools: [{ type: 'google_search' }],
-          agent_config: { collaborative_planning: true },
-          background: false,
-          stream: true,
-          model: 'gemini-9.99-fakemodel',
-        },
+    const tools = [{ type: 'google_search' }];
+    const provider = researchAgent({
+      passthrough: {
+        tools,
+        agent_config: { collaborative_planning: false },
+        environment: 'provider-sandbox',
+        previous_interaction_id: 'provider-id',
+        background: false,
+        stream: true,
+        model: 'gemini-9.99-fakemodel',
       },
     });
 
-    await settle(
-      provider.callApi('Plan the research', {
-        prompt: {
-          raw: 'Plan the research',
-          label: 'p',
-          config: { passthrough: { service_tier: 'flex' } },
+    await provider.callApi('Plan the research', {
+      prompt: {
+        raw: 'Plan the research',
+        label: 'p',
+        config: {
+          agentConfig: { collaborative_planning: true },
+          environment: 'remote',
+          previousInteractionId: 'prompt-id',
+          tool_choice,
+          passthrough: { service_tier: 'flex' },
         },
-        vars: {},
-      }),
-    );
+      },
+      vars: {},
+    });
 
     expect(requestAt(0).body).toEqual({
       agent: DEEP_RESEARCH,
       input: 'Plan the research',
       agent_config: { type: 'deep-research', collaborative_planning: true },
-      previous_interaction_id: 'previous-1',
-      tools: [{ type: 'google_search' }],
+      environment: 'remote',
+      previous_interaction_id: 'prompt-id',
+      ...(tool_choice === 'auto' ? { tools } : {}),
       service_tier: 'flex',
       background: true,
     });
+  });
+
+  it('honors a prompt storage opt-out even when provider passthrough enables storage', async () => {
+    const provider = researchAgent({ passthrough: { store: true } });
+    const result = await provider.callApi('Private', {
+      prompt: { raw: 'Private', label: 'p', config: { store: false } },
+      vars: {},
+    });
+    expect(result.error).toContain('requires store: true');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it.each([

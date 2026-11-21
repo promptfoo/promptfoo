@@ -825,6 +825,20 @@ function usesVertexExpressInteractions(
   );
 }
 
+/** Prompt overrides win across both config names and their wire-format aliases. */
+export function interactionFields<T extends GoogleProviderConfig>(
+  provider: T,
+  prompt?: Partial<T>,
+) {
+  return (name: keyof T & string, wireName: string = name) =>
+    prompt?.passthrough?.[wireName] ??
+    prompt?.passthrough?.[name] ??
+    prompt?.[name] ??
+    provider.passthrough?.[wireName] ??
+    provider.passthrough?.[name] ??
+    provider[name];
+}
+
 export function mergeGoogleInteractionsRequestConfig(
   providerConfig: GoogleProviderConfig,
   promptConfig?: Partial<GoogleProviderConfig>,
@@ -932,13 +946,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (!hasSemanticInteractionInput(requestInput)) {
       return { error: 'Gemini Interactions prompt must contain at least one input item.' };
     }
-    const previousInteractionId =
-      promptPassthrough.previous_interaction_id ??
-      promptPassthrough.previousInteractionId ??
-      promptConfig?.previousInteractionId ??
-      providerPassthrough.previous_interaction_id ??
-      providerPassthrough.previousInteractionId ??
-      this.config.previousInteractionId;
+    const field = interactionFields(this.config, promptConfig);
+    const previousInteractionId = field('previousInteractionId', 'previous_interaction_id');
     const providerPassthroughResponseFormat =
       providerPassthrough.response_format ?? providerPassthrough.responseFormat;
     const promptPassthroughResponseFormat =
@@ -1290,11 +1299,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (promptConfig?.aspectRatio === undefined
         ? (providerPassthroughResponseFormat ?? generatedVideoResponseFormat)
         : generatedVideoResponseFormat);
-    const store =
-      promptPassthrough.store ??
-      promptConfig?.store ??
-      providerPassthrough.store ??
-      this.config.store;
+    const store = field('store');
     const providerSafetySettings =
       providerPassthrough.safety_settings ??
       (this.config.safetySettings
