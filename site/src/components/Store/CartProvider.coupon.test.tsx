@@ -2,7 +2,10 @@ import React from 'react';
 
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBrowserHistory, router } from '../../test/storeRouter';
 import { CartProvider, useCartContext } from './CartProvider';
+
+vi.mock('@docusaurus/router', async () => (await import('../../test/storeRouter')).router);
 
 function Coupon() {
   const { couponCode } = useCartContext();
@@ -22,19 +25,25 @@ afterEach(() => {
 });
 
 function renderCoupon() {
-  return render(
-    <CartProvider>
-      <Coupon />
-    </CartProvider>,
+  const history = createBrowserHistory();
+  render(
+    <router.Router history={history}>
+      <CartProvider>
+        <Coupon />
+      </CartProvider>
+    </router.Router>,
   );
+  return history;
 }
 
 describe('coupon URL cleanup', () => {
   it.each([
     ['/store?coupon=save10#size-guide', '/store#size-guide'],
+    ['/discount-25%25/?coupon=save10', '/discount-25%25/'],
+    ['/s%2574ore/?coupon=save10', '/s%2574ore/'],
     ['/store?coupon=save10&utm_source=mail#size-guide', '/store?utm_source=mail#size-guide'],
   ])('preserves the fragment when consuming %s on mount', (entry, expected) => {
-    const historyState = { position: 'store-entry' };
+    const historyState = { key: 'entry', position: 'store-entry', state: { existing: true } };
     window.history.replaceState(historyState, '', entry);
     const historyLength = window.history.length;
 
@@ -48,21 +57,20 @@ describe('coupon URL cleanup', () => {
   });
 
   it('preserves encoded fragments and unrelated query values after client-side navigation', () => {
-    renderCoupon();
+    const history = renderCoupon();
     const historyState = { position: 'new-route' };
 
     act(() => {
-      window.history.pushState(
-        historyState,
-        '',
-        '/store?coupon=save20&campaign=summer#size%20guide',
-      );
+      history.push('/store?coupon=save20&campaign=summer#size%20guide', historyState);
     });
 
     expect(screen.getByLabelText('Coupon')).toHaveTextContent('SAVE20');
+    // Docusaurus resets keyboard focus only for a PUSH transition.
+    expect(history.action).toBe('PUSH');
+    expect(history.location.search).toBe('?campaign=summer');
     expect(window.location.search).toBe('?campaign=summer');
     expect(window.location.hash).toBe('#size%20guide');
-    expect(window.history.state).toEqual(historyState);
+    expect(window.history.state.state).toEqual(historyState);
   });
 
   it('preserves the fragment even when coupon storage is unavailable', () => {
