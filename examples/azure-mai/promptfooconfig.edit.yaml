@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Microsoft MAI image edits with reference images
+
+# Edits existing images with MAI-Image-2.7-Flash. Setting `images` on an
+# `azure:image` provider sends the prompt and 1 to 5 JPEG or PNG reference
+# images to the multipart `/mai/v1/images/edits` route instead of generating
+# from text alone.
+#
+# Setup: deploy MAI-Image-2.7-Flash as `mai-image-2-7-flash` (see
+# promptfooconfig.yaml), set AZURE_API_HOST and AZURE_API_KEY, then run:
+#   promptfoo eval -c promptfooconfig.edit.yaml --no-cache
+
+prompts:
+  - '{{instruction}}'
+
+providers:
+  - id: azure:image:mai-image-2-7-flash
+    label: MAI-Image-2.7-Flash edit
+    config:
+      model: MAI-Image-2.7-Flash
+      images:
+        # A test var loaded from a file arrives as a data URL.
+        - '{{photo}}'
+        # file:// paths resolve against this config file's directory.
+        - file://assets/red-panda.jpg
+
+tests:
+  - vars:
+      photo: file://assets/raccoon.jpg
+      instruction: >-
+        Show the raccoon from the first image and the red panda from the second
+        image sitting together on a mossy log, as a soft watercolor painting.
+    assert:
+      - type: javascript
+        value: |
+          return typeof output === 'string' &&
+            (output.startsWith('promptfoo://blob/') || output.startsWith('data:image/'));
+      # The two 640x427 reference images are about 532 image input tokens.
+      # Without width and height, the API keeps their aspect ratio (1248x832),
+      # so the edit costs about $0.012 on MAI-Image-2.7-Flash.
+      - type: cost
+        threshold: 0.03

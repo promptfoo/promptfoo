@@ -99,7 +99,7 @@ providers:
 - `azure:assistant:<assistant id>` - Legacy Azure OpenAI Assistants (retired August 26, 2026)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
-- `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.7) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
+- `azure:image:<deployment name>` - For Microsoft MAI image generation and editing (e.g., MAI-Image-2.7) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
 
 Vision-capable GPT-6, GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
 
@@ -1228,7 +1228,7 @@ historical pricing metadata for those IDs so saved evaluation results can still 
 Microsoft's first-party **MAI** model family splits across three promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
 - **Agentic coding** model `MAI-Code-2-Flash` (limited-access preview) is served only through the Responses API and uses **`azure:responses`** — see [Agentic coding](#agentic-coding-azureresponses).
-- **Image generation** models (`MAI-Image-2.7` and `MAI-Image-2.7-Flash` in preview, `MAI-Image-2.6` and `MAI-Image-2.6-Flash` generally available, and the retiring 2.5 models) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. The provider supports text-to-image generation with explicit width and height. Image editing uses a separate multipart `/mai/v1/images/edits` request and requires additional provider support.
+- **Image generation** models (`MAI-Image-2.7` and `MAI-Image-2.7-Flash` in preview, `MAI-Image-2.6` and `MAI-Image-2.6-Flash` generally available, and the retiring 2.5 models) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from Microsoft-managed `/mai/v1/images/generations` and `/mai/v1/images/edits` routes, and use the dedicated **`azure:image`** provider. The provider supports text-to-image generation and [image-to-image edits](#image-editing) with up to five reference images.
 - **Text / reasoning / coding** models (`MAI-Thinking-1`, `MAI-Code-1.1-Flash`, `MAI-DS-R1`) speak the standard chat-completions API and use **`azure:chat`** — see [Reasoning chat](#reasoning-chat-azurechat).
 
 Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint. This example uses the [documented MAI-Image-2.7 version `2026-11-02`](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#mai-image-models-at-a-glance); confirm regional availability before deploying:
@@ -1274,6 +1274,29 @@ tests:
 Each side must be at least 768 pixels, which promptfoo checks before sending. The maximum total pixel count depends on the model: 4,194,304 (2048×2048) for the 2.7 models, 2,359,296 (1536×1536) for the 2.6 models, and about 1,048,576 (1024×1024) for the 2.5 models. The API rejects a larger request with a 400 that names the limit. Other model options go in `config.passthrough`: `background: transparent` for the 2.7 models, and the [`auto_aspect_ratio` and `web_grounding` options](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image#request-parameters) documented for the 2.6 models. With `auto_aspect_ratio`, the model can return a larger image than you requested and bill it accordingly.
 
 The provider returns the generated image as a base64 PNG data URL (rendered inline in the web viewer) and reports token usage from the API's token counts. Cost estimates use Azure's Global Standard rates for the model named in `model`: prompt text at the input rate, reference images at the image-input rate, and the generated image at the output rate. For MAI-Image-2.7 those are $5, $8, and $34 per 1M tokens, and a generated image costs 1 output token per 1,024 pixels, so a 1024×1024 image is 1,024 tokens. Web grounding is billed separately per call and isn't included in the estimate. The MAI image API has shipped two response shapes — a `usage` object (`num_output_tokens` plus `num_input_text_tokens`/`num_input_image_tokens`) and a legacy top-level `num_output_tokens` — and the provider reads both. The model's `revised_prompt` is surfaced in `metadata.revisedPrompt`.
+
+#### Image editing
+
+Set `images` to edit existing images instead. The provider then sends the prompt and 1 to 5 reference images to the multipart `/mai/v1/images/edits` route. Each entry is a `file://` path, resolved against the config file's directory, or a base64 data URL. Entries are rendered with the test's vars, so `'{{photo}}'` picks up a var loaded with `file://`. When providers are loaded from a separate file with `file://`, promptfoo reads `file://` values in that file as text, so pass images through test vars there. Reference images must be JPEG or PNG, and the API rejects palette-based (indexed-color) PNGs.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Put the product from the first image on the beach from the second image.'
+
+providers:
+  - id: azure:image:mai-image-2-7-flash
+    config:
+      model: MAI-Image-2.7-Flash
+      images:
+        - '{{photo}}'
+        - file://assets/beach.png
+
+tests:
+  - vars:
+      photo: file://assets/product.jpg
+```
+
+Without `width` and `height`, the API chooses the output size and keeps the reference image's aspect ratio. Set them to request a size within the same limits as generation. `passthrough` options, such as `background: transparent` for the 2.7 models, are sent as form fields. Reference images are billed as image input tokens at the model's image-input rate, one token per 1,024 pixels, so editing one 1024×1024 image into a 1024×1024 result costs about $0.013 on MAI-Image-2.7-Flash. The cache key for an edit includes a hash of each reference image, so changing an image file sends a new request.
 
 To grade generated images with a vision LLM, use an `llm-rubric` assertion with a vision-capable grader and a custom `rubricPrompt` that passes the image as an `image_url` block, and run with `PROMPTFOO_INLINE_MEDIA=true` so `{{output}}` is an inline data URL the grader can read. The [`azure-mai` example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-mai) illustrates this grading pattern.
 
