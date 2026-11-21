@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
+import { addCompletionDetails } from '../contracts/completionDetails';
 import { getEnvBool } from '../envars';
 import { asGradingResult } from './scriptResultNormalization';
 
@@ -90,20 +91,10 @@ function accumulateNormalizedAssertionTokenUsage(
   }
 
   if (update.completionDetails) {
-    const currentDetails = target.completionDetails;
-    const incomingDetails = update.completionDetails;
-    target.completionDetails = {
-      reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
-      acceptedPrediction:
-        (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
-      rejectedPrediction:
-        (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
-      cacheReadInputTokens:
-        (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
-      cacheCreationInputTokens:
-        (currentDetails?.cacheCreationInputTokens ?? 0) +
-        (incomingDetails.cacheCreationInputTokens ?? 0),
-    };
+    target.completionDetails = addCompletionDetails(
+      target.completionDetails,
+      update.completionDetails!,
+    );
   }
 
   if (trackIncurredUsage && target.incurredTokenUsage) {
@@ -280,9 +271,11 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
+    // Zero-weight assertions collect measurements without affecting the aggregate score.
+    const metricWeight = weight === 0 ? 1 : weight;
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
     if (result.namedScores) {
@@ -293,7 +286,7 @@ export class AssertionsResult {
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
               ? (result.namedScoreWeights[metricName] ?? 1)
               : 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const weightedIncomingWeight = incomingWeight * metricWeight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
@@ -331,11 +324,8 @@ export class AssertionsResult {
 
     if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
       // A numeric test threshold overrides the pass/fail status of individual assertions.
-      // Gate on `typeof === 'number'` (not a truthy check) so a threshold of 0 is honored —
-      // `score >= 0` is always true, i.e. "collect assertion scores but never fail on an
-      // individual failure". Guarding on the type (rather than `!== undefined`) keeps a
-      // `null`/`NaN` threshold — e.g. an empty `threshold:` in YAML — from silently
-      // force-passing every assertion via `score >= null`.
+      // Honor zero and negative thresholds, but do not coerce an empty YAML threshold
+      // (null) to zero. A zero threshold can still fail when the aggregate score is negative.
       pass = score >= this.threshold;
       const comparator = pass ? '≥' : '<';
       reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;

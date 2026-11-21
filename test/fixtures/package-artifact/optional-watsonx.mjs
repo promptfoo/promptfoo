@@ -87,7 +87,7 @@ try {
         assert(error.message.includes(packageName));
         assert.match(
           error.message,
-          /npm install promptfoo @ibm-cloud\/watsonx-ai@\^1\.7\.16 ibm-cloud-sdk-core@\^5\.6\.2/,
+          /npm install promptfoo @ibm-cloud\/watsonx-ai@\^1\.7\.16 ibm-cloud-sdk-core@5\.6\.2\nnpm install --save-exact ibm-cloud-sdk-core@5\.6\.2/,
         );
         assert.match(
           error.message,

@@ -13,9 +13,12 @@ vi.mock('../../src/providers/transformersAvailability', () => ({
 vi.mock('../../src/providers/providerRegistry', () => ({
   providerRegistry: {
     register: vi.fn(),
+    useResource: vi.fn(),
+    throwIfResourceUseAborted: (signal?: AbortSignal) => signal?.throwIfAborted(),
   },
 }));
 
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   disposePipelines,
   pipelineCache,
@@ -96,6 +99,53 @@ describe('TransformersEmbeddingProvider', () => {
   });
 
   describe('callEmbeddingApi', () => {
+    it('waits for a preceding shared pipeline shutdown before using the extractor', async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(providerRegistry.useResource).mockReturnValue(pending);
+      const provider = new TransformersEmbeddingProvider('model');
+      const result = provider.callEmbeddingApi('test text');
+      try {
+        await Promise.resolve();
+        expect(mockPipeline).not.toHaveBeenCalled();
+        release();
+        await expect(result).resolves.toMatchObject({ embedding: expect.any(Array) });
+        expect(providerRegistry.useResource).toHaveBeenCalledOnce();
+      } finally {
+        release();
+        await Promise.allSettled([result]);
+      }
+    });
+
+    it('does not initialize or use the extractor after cancellation during shared shutdown', async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(providerRegistry.useResource).mockReturnValue(pending);
+      const provider = new TransformersEmbeddingProvider('model');
+      const controller = new AbortController();
+      const reason = new Error('embedding timed out');
+      const result = provider.callEmbeddingApi('test text', { abortSignal: controller.signal });
+      const rejected = expect(result).rejects.toBe(reason);
+      try {
+        expect(providerRegistry.useResource).toHaveBeenCalledWith(
+          expect.any(Object),
+          controller.signal,
+        );
+        controller.abort(reason);
+        release();
+        await rejected;
+        expect(mockPipeline).not.toHaveBeenCalled();
+        expect(mockExtractor).not.toHaveBeenCalled();
+      } finally {
+        release();
+        await Promise.allSettled([result]);
+      }
+    });
+
     it('should call embedding API and return normalized embedding', async () => {
       const provider = new TransformersEmbeddingProvider('Xenova/all-MiniLM-L6-v2');
       const result = await provider.callEmbeddingApi('test text');
@@ -233,6 +283,33 @@ describe('TransformersTextGenerationProvider', () => {
   });
 
   describe('callApi', () => {
+    it('does not initialize or invoke text generation after cancellation during shared shutdown', async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(providerRegistry.useResource).mockReturnValue(pending);
+      const provider = new TransformersTextGenerationProvider('model');
+      const controller = new AbortController();
+      const reason = new Error('generation timed out');
+      const result = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      const rejected = expect(result).rejects.toBe(reason);
+      try {
+        expect(providerRegistry.useResource).toHaveBeenCalledWith(
+          expect.any(Object),
+          controller.signal,
+        );
+        controller.abort(reason);
+        release();
+        await rejected;
+        expect(mockPipeline).not.toHaveBeenCalled();
+        expect(mockGenerator).not.toHaveBeenCalled();
+      } finally {
+        release();
+        await Promise.allSettled([result]);
+      }
+    });
+
     it('should generate text with default options', async () => {
       const provider = new TransformersTextGenerationProvider('Xenova/gpt2');
       const result = await provider.callApi('Hello');
@@ -643,6 +720,51 @@ describe('provider-owned pipeline cleanup', () => {
     await first.cleanup();
     expect(dispose).toHaveBeenCalledOnce();
   });
+
+  it.each(['succeeds', 'fails'])(
+    'keeps a replacement cached when released initialization %s',
+    async (outcome) => {
+      const initialized = createDeferred<void>();
+      const ready = createDeferred<unknown>();
+      const lateDispose = vi.fn().mockResolvedValue(undefined);
+      const lateExtractor = Object.assign(vi.fn(), { dispose: lateDispose });
+      pipeline.mockImplementationOnce(() => {
+        initialized.resolve();
+        return ready.promise;
+      });
+
+      const provider = new TransformersEmbeddingProvider('fixture');
+      const releasedCall = provider.callEmbeddingApi('released');
+      await initialized.promise;
+      await provider.cleanup();
+      expect(await provider.callEmbeddingApi('replacement')).toMatchObject({ embedding: [0.25] });
+
+      if (outcome === 'succeeds') {
+        ready.resolve(lateExtractor);
+      } else {
+        ready.reject(new Error('fixture initialization failed'));
+      }
+      expect(await releasedCall).toMatchObject({
+        error: expect.stringContaining(
+          outcome === 'succeeds' ? 'released' : 'initialization failed',
+        ),
+      });
+      expect(lateExtractor).not.toHaveBeenCalled();
+      expect(lateDispose).toHaveBeenCalledTimes(outcome === 'succeeds' ? 1 : 0);
+      expect(pipelineCache.size).toBe(1);
+
+      const borrower = new TransformersEmbeddingProvider('fixture');
+      expect(await borrower.callEmbeddingApi('shared replacement')).toMatchObject({
+        embedding: [0.25],
+      });
+      expect(pipeline).toHaveBeenCalledTimes(2);
+      await provider.cleanup();
+      expect(dispose).not.toHaveBeenCalled();
+      await borrower.cleanup();
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(pipelineCache.size).toBe(0);
+    },
+  );
 
   it('removes failed initialization from every sharing owner', async () => {
     pipeline.mockRejectedValueOnce(new Error('fixture initialization failed'));

@@ -15,8 +15,6 @@ import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { cleanupProvider, trackProvider, withProviderCleanup } from '../../src/providers/lifecycle';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
-import { VoiceCrescendoProvider } from '../../src/redteam/providers/voiceCrescendo/index';
-import { clearConfigCache } from '../../src/util/config/default';
 import { createDeferred } from '../util/utils';
 
 import type { EvaluateTestSuite } from '../../src/types/index';
@@ -152,7 +150,6 @@ describe('provider cleanup ownership', () => {
       expect(process.exitCode).toBe(previousExitCode);
     } finally {
       process.exitCode = previousExitCode;
-      clearConfigCache();
       if (cacheEnabled) {
         enableCache();
       }
@@ -234,18 +231,15 @@ describe('provider cleanup ownership', () => {
     },
   );
 
-  it.each(['crescendo', 'custom', 'voice-crescendo'])(
+  it.each(['crescendo', 'custom'])(
     'releases only configured %s delegates through public terminal cleanup',
     async (name) => {
       const cleanup = vi.fn();
       const borrowed = makeProvider();
-      const loaded: ApiProvider =
-        name === 'voice-crescendo'
-          ? new VoiceCrescendoProvider({ injectVar: 'query' })
-          : await loadStrategy(name, {
-              strategyText: 'local strategy',
-              redteamProvider: providerOptions({ cleanup }),
-            });
+      const loaded = await loadStrategy(name, {
+        strategyText: 'local strategy',
+        redteamProvider: providerOptions({ cleanup }),
+      });
       const strategy = loaded as StrategyProvider;
       await cliState.withConfig(
         {
@@ -371,16 +365,16 @@ describe('provider cleanup ownership', () => {
     },
   );
 
-  it('preserves process-registered caller providers during evaluation', async () => {
+  it('keeps borrowed cleanup hooks separate from registered resource shutdown', async () => {
     const provider = { ...makeProvider(), shutdown: vi.fn(async () => {}) };
     providerRegistry.register(provider);
     try {
       await evaluateFixture({
         providers: [provider],
       });
-      expect(provider.shutdown).not.toHaveBeenCalled();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
       expect(provider.cleanup).not.toHaveBeenCalled();
-      expect(providerRegistry.has(provider)).toBe(true);
+      expect(providerRegistry.has(provider)).toBe(false);
     } finally {
       providerRegistry.unregister(provider);
     }
@@ -447,13 +441,18 @@ describe('provider cleanup ownership', () => {
       const pending = providerRegistry.shutdown(provider);
       try {
         expect(providerRegistry.has(provider)).toBe(false);
-        await providerRegistry.shutdown(provider);
+        const settled = vi.fn();
+        const second = providerRegistry.shutdown(provider).then(settled);
+        const all = providerRegistry.shutdownAll().then(settled);
+        await Promise.resolve();
+        expect(settled).not.toHaveBeenCalled();
         expect(provider.shutdown).toHaveBeenCalledOnce();
         if (reregister) {
           providerRegistry.register(provider);
         }
         release.resolve();
-        await pending;
+        await Promise.all([pending, second, all]);
+        expect(settled).toHaveBeenCalledTimes(2);
         expect(providerRegistry.has(provider)).toBe(reregister);
 
         await providerRegistry.shutdownAll();

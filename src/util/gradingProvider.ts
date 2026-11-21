@@ -1,5 +1,7 @@
 import { type ApiProvider, isApiProvider, type ProviderTypeMap } from '../types/providers';
 
+import type { Assertion, AssertionOrSet, TestCase } from '../types/index';
+
 type ProviderTypeValue = NonNullable<ProviderTypeMap[keyof ProviderTypeMap]>;
 
 export const GRADING_PROVIDER_TYPE_KEYS = [
@@ -112,4 +114,50 @@ export function resolveConfiguredProviderReference<T>(
   }
 
   return (resolvedTypeMap ?? provider) as T | ApiProvider;
+}
+
+/** Resolve labels and typed graders without replacing unchanged test or assertion objects. */
+export function resolveRuntimeGradingProviderReferences(
+  testCase: Pick<TestCase, 'options' | 'assert'>,
+  providerMap: Record<string, ApiProvider>,
+  used?: Set<ApiProvider>,
+): void {
+  function resolve<T>(value: T) {
+    const result = resolveConfiguredProviderReference(value, providerMap);
+    if (used) {
+      const providers = isProviderTypeMap(result)
+        ? GRADING_PROVIDER_TYPE_KEYS.map((type) => result[type])
+        : [result];
+      for (const provider of providers) {
+        if (isApiProvider(provider)) {
+          used.add(provider);
+        }
+      }
+    }
+    return result;
+  }
+
+  function resolveAssertion(assertion: AssertionOrSet): AssertionOrSet {
+    if (assertion.type === 'assert-set') {
+      const children = assertion.assert.map((child) => resolveAssertion(child) as Assertion);
+      return children.every((child, index) => child === assertion.assert[index])
+        ? assertion
+        : { ...assertion, assert: children };
+    }
+    const provider = resolve(assertion.provider);
+    return provider === assertion.provider ? assertion : { ...assertion, provider };
+  }
+
+  if (testCase.options?.provider) {
+    const provider = resolve(testCase.options.provider);
+    if (provider !== testCase.options.provider) {
+      testCase.options = { ...testCase.options, provider };
+    }
+  }
+  if (testCase.assert) {
+    const assertions = testCase.assert.map(resolveAssertion);
+    if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
+      testCase.assert = assertions;
+    }
+  }
 }

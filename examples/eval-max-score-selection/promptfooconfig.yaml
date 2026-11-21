@@ -12,7 +12,7 @@ prompts:
 providers:
   - openai:o4-mini
   - anthropic:claude-sonnet-5
-  - google:gemini-2.5-flash
+  - google:gemini-3.5-flash-lite
 
 tests:
   - vars:

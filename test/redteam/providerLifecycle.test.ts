@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { SingleBar } from 'cli-progress';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { synthesize } from '../../src/redteam/index';
@@ -114,10 +115,42 @@ describe('generation provider cleanup ownership', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it('bounds cancellation when the only active call ignores its signal', async () => {
+    vi.useFakeTimers();
+    const started = createDeferred<void>();
+    const release = createDeferred<void>();
+    const controller = new AbortController();
+    const cleanup = vi.fn();
+    const call = vi.fn(() => {
+      started.resolve();
+      return release.promise;
+    });
+    const stop = vi.spyOn(SingleBar.prototype, 'stop');
+    const result = synthesize({
+      ...options,
+      showProgressBar: true,
+      abortSignal: controller.signal,
+      provider: providerOptions({ cleanup, call }),
+    }).catch((error: unknown) => error);
+    try {
+      await started.promise;
+      controller.abort();
+      expect(stop).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await result).toMatchObject({ message: 'Operation cancelled' });
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      release.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      vi.useRealTimers();
+    }
+    expect(call).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['plugin', 'during drain'],
     ['plugin', 'after drain timeout'],
-    ['scheduler', 'after drain timeout'],
+    ['scheduler', 'immediately on cancellation'],
   ] as const)(
     'blocks %s retries and cleans once when a concurrent provider settles %s',
     async (retry, completion) => {
@@ -141,7 +174,7 @@ describe('generation provider cleanup ownership', () => {
           started.resolve();
           await releaseSecond.promise;
           if (registry) {
-            // The real scheduler retries this error after the cleanup deadline.
+            // The real scheduler must cancel this retry before the cleanup deadline.
             throw new Error('HTTP 429 retry after 2');
           }
           // The real plugin will retry an empty response unless cancellation stops it.
@@ -190,7 +223,7 @@ describe('generation provider cleanup ownership', () => {
         expect(cleanup).toHaveBeenCalledOnce();
         // The third queued plugin and the second plugin's late retry must never call the provider.
         expect(call).toHaveBeenCalledTimes(2);
-        expect(cleanupWhileSecondPending).toBe(0);
+        expect(cleanupWhileSecondPending).toBe(registry ? 1 : 0);
         if (registry) {
           expect(Object.values(registry.getMetrics())[0]).toMatchObject({
             completedRequests: 1,

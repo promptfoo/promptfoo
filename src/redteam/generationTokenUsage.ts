@@ -13,6 +13,7 @@ type GenerationUsageRecorder = (response: GenerationUsageResponse) => void;
 interface GenerationUsageContext {
   record: GenerationUsageRecorder;
   abortSignal?: AbortSignal;
+  calls?: Set<Promise<unknown>>;
 }
 type TrackedGenerationProvider = ApiProvider & {
   [generationUsageContext]?: GenerationUsageContext;
@@ -28,15 +29,22 @@ function trackProvider<T extends ApiProvider>(provider: T, context: GenerationUs
         ? AbortSignal.any([abortSignal, args[2].abortSignal])
         : abortSignal;
     signal?.throwIfAborted();
+    let call;
     try {
-      const response = await (signal
+      call = signal
         ? callApi(args[0], args[1], { ...args[2], abortSignal: signal })
-        : callApi(...args));
+        : callApi(...args);
+      context.calls?.add(call);
+      const response = await call;
       record(response);
       return response;
     } catch (error) {
       record({ tokenUsage: getErrorTokenUsage(error) });
       throw error;
+    } finally {
+      if (call) {
+        context.calls?.delete(call);
+      }
     }
   };
   trackedCallApi.label = provider.callApi.label;
@@ -61,9 +69,11 @@ export function trackGenerationTokenUsage<T extends ApiProvider>(
   provider: T,
   tokenUsage: TokenUsage,
   abortSignal?: AbortSignal,
+  calls?: Set<Promise<unknown>>,
 ): T {
   return trackProvider(provider, {
     abortSignal,
+    calls,
     record: (response) => {
       accumulateResponseTokenUsage(
         tokenUsage,

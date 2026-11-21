@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqProvider } from '../../../src/providers/groq/index';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { GroqCompletionOptions } from '../../../src/providers/groq/types';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import type { CallApiContextParams } from '../../../src/types/index';
 
@@ -16,6 +17,7 @@ describe('GroqProvider', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     restoreEnv();
     await clearCache();
   });
@@ -106,6 +108,75 @@ describe('GroqProvider', () => {
       const provider = new GroqProvider('o1-mini', {});
       expect(provider['supportsTemperature']()).toBe(false);
     });
+  });
+
+  it.each([
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: undefined,
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'qwen/qwen3.6-27b',
+      maxCompletionTokens: undefined,
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 40,
+      expected: { max_completion_tokens: 40 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 0,
+      expected: { max_completion_tokens: 0 },
+    },
+    {
+      model: 'tenant/custom-served-model',
+      maxCompletionTokens: undefined,
+      expected: { max_tokens: 100 },
+    },
+  ])(
+    'preserves the token limit for $model ($maxCompletionTokens)',
+    async ({ model, maxCompletionTokens, expected }) => {
+      const provider = new GroqProvider(model, {
+        config: { max_tokens: 100, max_completion_tokens: maxCompletionTokens },
+      });
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body).toMatchObject({ model, ...expected });
+      if ('max_completion_tokens' in expected) {
+        expect(body).not.toHaveProperty('max_tokens');
+      }
+    },
+  );
+
+  it.each(
+    ['qwen/qwen3.6-27b', 'openai/gpt-oss-120b'].flatMap((model) => [
+      { model, envCap: undefined, omitDefaults: false, expected: undefined },
+      { model, envCap: '321', omitDefaults: false, expected: undefined },
+      { model, envCap: '0', omitDefaults: false, expected: undefined },
+      { model, envCap: '321', omitDefaults: true, expected: undefined },
+      { model, envCap: undefined, omitDefaults: true, expected: undefined },
+    ]),
+  )(
+    'omits non-reasoning defaults for reasoning passthrough $model (env=$envCap, omitDefaults=$omitDefaults)',
+    async ({ model, envCap, omitDefaults, expected }) => {
+      vi.stubEnv('OPENAI_MAX_TOKENS', envCap);
+      const provider = new GroqProvider('llama-3.3-70b-versatile', {
+        config: { omitDefaults, passthrough: { model } },
+      });
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body.model).toBe(model);
+      expect(body.max_completion_tokens).toBe(expected);
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
+
+  it('preserves an explicit passthrough token limit', async () => {
+    const provider = new GroqProvider('openai/gpt-oss-120b', {
+      config: { max_tokens: 100, passthrough: { max_completion_tokens: 20 } },
+    });
+    expect((await provider.getOpenAiBody('Hello')).body.max_completion_tokens).toBe(20);
   });
 
   describe('serialization', () => {
@@ -310,6 +381,77 @@ describe('GroqProvider', () => {
       expect(body.include_reasoning).toBe(false);
       expect(body.compound_custom).toBeDefined();
       expect(body.search_settings).toBeDefined();
+    });
+
+    describe('prompt configuration overrides', () => {
+      const cases = [
+        {
+          key: 'include_reasoning',
+          model: 'openai/gpt-oss-120b',
+          providerValue: true,
+          promptValue: false,
+        },
+        {
+          key: 'reasoning_format',
+          model: 'qwen/qwen3.6-27b',
+          providerValue: 'parsed',
+          promptValue: 'hidden',
+        },
+        {
+          key: 'compound_custom',
+          model: 'groq/compound',
+          providerValue: { tools: { enabled_tools: ['web_search'] } },
+          promptValue: { tools: { enabled_tools: ['code_interpreter'] } },
+        },
+        {
+          key: 'search_settings',
+          model: 'groq/compound',
+          providerValue: { country: 'US', include_domains: ['example.com'] },
+          promptValue: { country: 'GB' },
+        },
+      ] as const;
+
+      function request(provider: GroqProvider, config: GroqCompletionOptions) {
+        return provider.getOpenAiBody('Test prompt', {
+          prompt: { raw: 'Test prompt', label: 'Test prompt', config },
+          vars: {},
+        });
+      }
+
+      it.each(cases)(
+        'overrides $key for one prompt only',
+        async ({ key, model, providerValue, promptValue }) => {
+          const defaults = { [key]: providerValue, temperature: 0.8 };
+          const provider = new GroqProvider(model, { config: defaults });
+          const overrides = { [key]: promptValue, temperature: 0.25 };
+          const overridden = await request(provider, overrides);
+          expect(overridden.body[key]).toEqual(promptValue);
+          expect(overridden.body.temperature).toBe(overrides.temperature);
+          expect(overridden.config).toMatchObject(overrides);
+
+          const next = await request(provider, { temperature: 0.5 });
+          expect(next.body[key]).toEqual(providerValue);
+          expect(next.body.temperature).toBe(0.5);
+          expect(provider.config).toMatchObject(defaults);
+        },
+      );
+
+      it.each(cases)(
+        'forwards prompt-only $key without setting a default',
+        async ({ key, model, promptValue }) => {
+          const provider = new GroqProvider(model, {});
+          expect((await request(provider, { [key]: promptValue })).body[key]).toEqual(promptValue);
+          expect((await request(provider, {})).body).not.toHaveProperty(key);
+        },
+      );
+
+      it.each(cases)(
+        'omits $key when explicitly set to undefined',
+        async ({ key, model, providerValue }) => {
+          const provider = new GroqProvider(model, { config: { [key]: providerValue } });
+          expect((await request(provider, { [key]: undefined })).body).not.toHaveProperty(key);
+        },
+      );
     });
 
     it('should build correct message structure', async () => {

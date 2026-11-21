@@ -424,23 +424,10 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
 interface GeneratedQuestion {
   label: string;
   question: string;
-  question_source: string;
-  question_type: string;
 }
 
 export async function synthesize(options: SynthesizeOptions): Promise<Assertion[]> {
-  return withProviderCleanup(() => synthesizeWithProvider(options));
-}
-
-async function synthesizeWithProvider({
-  prompts,
-  instructions,
-  numQuestions = 5,
-  tests,
-  provider,
-  type = 'pi',
-}: SynthesizeOptions): Promise<Assertion[]> {
-  if (prompts.length < 1) {
+  if (!options.prompts.length) {
     throw new Error('Assertion synthesis requires at least one prompt.');
   }
 
@@ -451,9 +438,20 @@ async function synthesizeWithProvider({
       { gracefulExit: true },
       cliProgress.Presets.shades_classic,
     );
-    progressBar.start(1 + numQuestions, 0);
   }
 
+  try {
+    return await withProviderCleanup(() => synthesizeWithProvider(options, progressBar));
+  } finally {
+    progressBar?.stop();
+  }
+}
+
+async function synthesizeWithProvider(
+  { prompts, instructions, numQuestions = 5, tests, provider, type = 'pi' }: SynthesizeOptions,
+  progressBar?: SingleBar,
+): Promise<Assertion[]> {
+  progressBar?.start(1 + numQuestions, 0);
   logger.debug(`Starting assertion synthesis. We'll begin by generating a set of questions`);
 
   logger.debug(
@@ -480,16 +478,32 @@ async function synthesizeWithProvider({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for questions, got ${respObjects.length}`,
   );
-  const questionsWrapper = respObjects[0] as { questions: GeneratedQuestion[] };
+  const questionsWrapper = respObjects.find((obj): obj is { questions: GeneratedQuestion[] } => {
+    const questions = (obj as { questions?: unknown }).questions;
+    return (
+      Array.isArray(questions) &&
+      questions.every(
+        (question) =>
+          question !== null &&
+          typeof question === 'object' &&
+          typeof question.label === 'string' &&
+          typeof question.question === 'string',
+      )
+    );
+  });
+  invariant(
+    questionsWrapper,
+    () =>
+      `Expected a JSON object of the form {questions: [...]} in the questions response, but the provider returned a different shape. ` +
+      `Check the provider's transformResponse and that it returns the model's text content.`,
+  );
   const questions = sampleArray(questionsWrapper.questions, numQuestions);
 
   logger.debug(
     `Generated ${questions.length} question${questions.length === 1 ? '' : 's'}:\n${questions.map((p) => `  - ${p.question}`).join('\n')}`,
   );
 
-  if (progressBar) {
-    progressBar.increment();
-  }
+  progressBar?.increment();
   // Determine which dimensions should be objectively answered with python. If so, generate the python.
   providerModel.config = {
     maxTokens: 3000,
@@ -501,9 +515,7 @@ async function synthesizeWithProvider({
       abortSignal: controller.signal,
     });
     const output: string = resp.output;
-    if (progressBar) {
-      progressBar.increment();
-    }
+    progressBar?.increment();
 
     if (output.toLowerCase().trim() == 'none') {
       return { type, metric: q.label, value: q.question };
@@ -523,8 +535,6 @@ async function synthesizeWithProvider({
     controller.abort(error);
     await waitForSettled(conversions, 1000);
     throw error;
-  } finally {
-    progressBar?.stop();
   }
 }
 

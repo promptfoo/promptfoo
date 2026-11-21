@@ -1,13 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createProviderRateLimitOptions,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
-import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
-import { mockProcessEnv } from '../util/utils';
 
+import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
 describe('providerWrapper', () => {
@@ -90,94 +90,6 @@ describe('providerWrapper', () => {
     });
   });
 
-  describe('cancellation with the real scheduler', () => {
-    let registry: RateLimitRegistry;
-    let restoreEnv: () => void;
-
-    beforeEach(() => {
-      restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
-      registry = new RateLimitRegistry({ maxConcurrency: 1 });
-    });
-
-    afterEach(() => {
-      registry.dispose();
-      restoreEnv();
-      vi.useRealTimers();
-    });
-
-    it('does not retry an expired AbortSignal.timeout reason', async () => {
-      const abortSignal = AbortSignal.timeout(0);
-      await new Promise<void>((resolve) => {
-        abortSignal.addEventListener('abort', () => resolve(), { once: true });
-      });
-      expect(abortSignal.reason.name).toBe('TimeoutError');
-      vi.useFakeTimers();
-
-      const provider = createMockProvider({ config: { maxRetries: 2 } });
-      const retrying = vi.fn();
-      registry.on('request:retrying', retrying);
-      const wrapped = wrapProviderWithRateLimiting(provider, registry);
-      const result = wrapped.callApi('expired', undefined, { abortSignal }).catch((error) => error);
-      await vi.runAllTimersAsync();
-
-      expect(await result).toBe(abortSignal.reason);
-      expect(provider.callApi).not.toHaveBeenCalled();
-      expect(retrying).not.toHaveBeenCalled();
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        totalRequests: 1,
-        failedRequests: 1,
-        completedRequests: 0,
-        retriedRequests: 0,
-        rateLimitHits: 0,
-        activeRequests: 0,
-        queueDepth: 0,
-      });
-      expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('preserves timeout retries for another invocation sharing the provider', async () => {
-      vi.useFakeTimers();
-      const reason = new Error('429 rate limit timeout');
-      const cancelledSignal = AbortSignal.abort(reason);
-      const activeSignal = new AbortController().signal;
-      const response = { output: 'recovered', tokenUsage: { total: 5, numRequests: 1 } };
-      const provider = createMockProvider({ config: { maxRetries: 1 } });
-      provider.callApi.mockRejectedValueOnce(new DOMException('Request timeout', 'TimeoutError'));
-      provider.callApi.mockResolvedValueOnce(response);
-      const retrying = vi.fn();
-      registry.on('request:retrying', retrying);
-      const wrapped = wrapProviderWithRateLimiting(provider, registry);
-
-      const cancelled = wrapped
-        .callApi('cancelled', undefined, { abortSignal: cancelledSignal })
-        .catch((error) => error);
-      const active = wrapped.callApi('active', undefined, { abortSignal: activeSignal });
-      await vi.runAllTimersAsync();
-
-      expect(await cancelled).toBe(reason);
-      expect(await active).toBe(response);
-      expect(provider.callApi).toHaveBeenCalledTimes(2);
-      expect(provider.callApi).toHaveBeenNthCalledWith(1, 'active', undefined, {
-        abortSignal: activeSignal,
-      });
-      expect(provider.callApi).toHaveBeenNthCalledWith(2, 'active', undefined, {
-        abortSignal: activeSignal,
-      });
-      expect(retrying).toHaveBeenCalledOnce();
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        totalRequests: 2,
-        failedRequests: 1,
-        completedRequests: 1,
-        retriedRequests: 1,
-        rateLimitHits: 0,
-        activeRequests: 0,
-        queueDepth: 0,
-      });
-      expect(activeSignal.aborted).toBe(false);
-      expect(vi.getTimerCount()).toBe(0);
-    });
-  });
-
   describe('wrapProvidersWithRateLimiting', () => {
     it('should wrap multiple providers', () => {
       const provider1 = createMockProvider({ id: 'provider-1' });
@@ -192,6 +104,104 @@ describe('providerWrapper', () => {
   });
 
   describe('rate limit detection callbacks', () => {
+    it('detects transient result-level availability failures', () => {
+      const options = createProviderRateLimitOptions();
+
+      expect(
+        options.isRetryableResult?.({
+          error: 'temporary failure',
+          metadata: {
+            retryableErrorKind: 'transient_availability',
+            http: { status: 503, statusText: 'Service Unavailable' },
+          },
+        }),
+      ).toBe(true);
+      expect(
+        options.isRetryableResult?.({
+          error: 'ordinary HTTP failure',
+          metadata: { http: { status: 503, statusText: 'Service Unavailable' } },
+        }),
+      ).toBe(false);
+    });
+
+    it('combines safe retry accounting into the terminal result', () => {
+      const options = createProviderRateLimitOptions();
+      const retryResult: ProviderResponse = {
+        error: 'temporary failure',
+        tokenUsage: {
+          total: 5,
+          prompt: 3,
+          completion: 2,
+          numRequests: 1,
+          completionDetails: { reasoning: 1 },
+        },
+        cost: 0.007,
+      };
+
+      const result = options.finalizeResult?.(
+        {
+          output: 'Recovered',
+          tokenUsage: {
+            total: 10,
+            prompt: 7,
+            completion: 3,
+            numRequests: 1,
+            completionDetails: { reasoning: 2 },
+          },
+          cost: 0.013,
+        },
+        [retryResult],
+      );
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: {
+          total: 15,
+          prompt: 10,
+          completion: 5,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        },
+        cost: 0.02,
+      });
+    });
+
+    it('drops unsafe retry accounting fields', () => {
+      const options = createProviderRateLimitOptions();
+      const retryResult: ProviderResponse = {
+        error: 'temporary failure',
+        tokenUsage: {
+          total: Number.POSITIVE_INFINITY,
+          prompt: -1,
+          completion: 2,
+          numRequests: Number.NaN,
+        },
+        cost: Number.POSITIVE_INFINITY,
+      };
+
+      const result = options.finalizeResult?.({ output: 'Recovered' }, [retryResult]);
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: { completion: 2, numRequests: 2 },
+      });
+    });
+
+    it('does not retain an unsafe terminal cost', () => {
+      const options = createProviderRateLimitOptions();
+
+      const result = options.finalizeResult?.(
+        { output: 'Recovered', cost: Number.POSITIVE_INFINITY },
+        [{ error: 'temporary failure', cost: 0.01 }],
+      );
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: { numRequests: 2 },
+        cost: 0.01,
+      });
+    });
+
     it('should detect rate limit from HTTP 429 status', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {

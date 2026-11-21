@@ -2,7 +2,13 @@ import logger from '../logger';
 import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 /**
  * Common options for all Transformers.js providers
@@ -163,12 +169,79 @@ function getPipelineCacheKey(
   return `${task}:${model}:${device}:${dtype}`;
 }
 
+async function initializePipeline(
+  task: string,
+  model: string,
+  options: TransformersBaseOptions,
+  cacheKey: string,
+): Promise<Pipeline> {
+  type PipelineFn = (
+    task: string,
+    model: string,
+    options?: Record<string, unknown>,
+  ) => Promise<Pipeline>;
+
+  // The shared loader validates the optional SDK before initializing its pipelines.
+  const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
+  const pipelineFn = transformers.pipeline;
+
+  const pipelineOptions: Record<string, unknown> = {
+    progress_callback: (progress: {
+      status: string;
+      name?: string;
+      file?: string;
+      progress?: number;
+      loaded?: number;
+      total?: number;
+      task?: string;
+      model?: string;
+    }) => {
+      if (progress.status === 'progress' && progress.file) {
+        const percent = progress.progress?.toFixed(1) || '?';
+        logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
+      } else if (progress.status === 'ready') {
+        logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
+      }
+    },
+  };
+
+  // Apply options
+  for (const [source, target] of [
+    ['device', 'device'],
+    ['dtype', 'dtype'],
+    ['cacheDir', 'cache_dir'],
+    ['localFilesOnly', 'local_files_only'],
+    ['revision', 'revision'],
+    ['sessionOptions', 'session_options'],
+  ] as const) {
+    if (options[source]) {
+      pipelineOptions[target] = source === 'localFilesOnly' ? true : options[source];
+    }
+  }
+
+  logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
+    device: pipelineOptions.device,
+    dtype: pipelineOptions.dtype,
+  });
+
+  const startTime = Date.now();
+  const pipe = await pipelineFn(task, model, pipelineOptions);
+  const loadTime = Date.now() - startTime;
+
+  logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
+
+  return pipe;
+}
+
 async function getOrCreatePipeline(
   task: string,
   model: string,
   options: TransformersBaseOptions,
   owned: Set<PipelineEntry>,
+  signal?: AbortSignal,
 ): Promise<Pipeline> {
+  await providerRegistry.useResource(pipelineCleanup, signal);
+  providerRegistry.throwIfResourceUseAborted(signal);
   providerRegistry.register(pipelineCleanup);
   const cacheKey = getPipelineCacheKey(task, model, options);
 
@@ -176,71 +249,7 @@ async function getOrCreatePipeline(
   if (entry) {
     logger.debug(`[Transformers] Using shared pipeline: ${cacheKey}`);
   } else {
-    // Start new initialization
-    const initPromise = (async (): Promise<Pipeline> => {
-      type PipelineFn = (
-        task: string,
-        model: string,
-        options?: Record<string, unknown>,
-      ) => Promise<Pipeline>;
-
-      // The shared loader validates the optional SDK before initializing its pipelines.
-      const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
-      const pipelineFn = transformers.pipeline;
-
-      const pipelineOptions: Record<string, unknown> = {
-        progress_callback: (progress: {
-          status: string;
-          name?: string;
-          file?: string;
-          progress?: number;
-          loaded?: number;
-          total?: number;
-          task?: string;
-          model?: string;
-        }) => {
-          if (progress.status === 'progress' && progress.file) {
-            const percent = progress.progress?.toFixed(1) || '?';
-            logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
-          } else if (progress.status === 'ready') {
-            logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
-          }
-        },
-      };
-
-      // Apply options
-      if (options.device) {
-        pipelineOptions.device = options.device;
-      }
-      if (options.dtype) {
-        pipelineOptions.dtype = options.dtype;
-      }
-      if (options.cacheDir) {
-        pipelineOptions.cache_dir = options.cacheDir;
-      }
-      if (options.localFilesOnly) {
-        pipelineOptions.local_files_only = true;
-      }
-      if (options.revision) {
-        pipelineOptions.revision = options.revision;
-      }
-      if (options.sessionOptions) {
-        pipelineOptions.session_options = options.sessionOptions;
-      }
-
-      logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
-        device: pipelineOptions.device,
-        dtype: pipelineOptions.dtype,
-      });
-
-      const startTime = Date.now();
-      const pipe = await pipelineFn(task, model, pipelineOptions);
-      const loadTime = Date.now() - startTime;
-
-      logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
-
-      return pipe;
-    })();
+    const initPromise = initializePipeline(task, model, options, cacheKey);
 
     const newEntry: PipelineEntry = {
       key: cacheKey,
@@ -319,6 +328,29 @@ async function disposePipelines(): Promise<void> {
 
 const pipelineCleanup = { shutdown: disposePipelines };
 
+function handleTransformersError(
+  error: Error,
+  provider: { modelName: string },
+  kind: 'embedding' | 'generation',
+): { error: string } {
+  // Check for model not found
+  if (error.message?.includes('Could not locate file')) {
+    return {
+      error:
+        `Model not found: ${provider.modelName}. ` +
+        'Make sure the model exists on HuggingFace Hub and has ONNX weights available. ' +
+        'Browse models at: https://huggingface.co/models?library=transformers.js',
+    };
+  }
+
+  logger.error(`[Transformers] ${kind === 'embedding' ? 'Embedding' : 'Generation'} error:`, {
+    error: error.message,
+  });
+  return {
+    error: `Transformers.js ${kind} error: ${error.message}`,
+  };
+}
+
 /**
  * Provider for local text embeddings using Transformers.js feature extraction.
  *
@@ -365,14 +397,19 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     try {
       const extractor = await getOrCreatePipeline(
         'feature-extraction',
         this.modelName,
         this.config,
         this.pipelines,
+        options?.abortSignal,
       );
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
 
       // Apply prefix if configured (critical for BGE, E5, Instructor models)
       const inputText = this.config.prefix ? `${this.config.prefix}${text}` : text;
@@ -409,22 +446,8 @@ export class TransformersEmbeddingProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
-      const error = err as Error;
-
-      // Check for model not found
-      if (error.message?.includes('Could not locate file')) {
-        return {
-          error:
-            `Model not found: ${this.modelName}. ` +
-            'Make sure the model exists on HuggingFace Hub and has ONNX weights available. ' +
-            'Browse models at: https://huggingface.co/models?library=transformers.js',
-        };
-      }
-
-      logger.error(`[Transformers] Embedding error:`, { error: error.message });
-      return {
-        error: `Transformers.js embedding error: ${error.message}`,
-      };
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      return handleTransformersError(err as Error, this, 'embedding');
     }
   }
 }
@@ -471,14 +494,21 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     return releasePipelines(pipelines);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     try {
       const generator = await getOrCreatePipeline(
         'text-generation',
         this.modelName,
         this.config,
         this.pipelines,
+        options?.abortSignal,
       );
+
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
 
       // Build generation options (convert camelCase to snake_case for library)
       const generationOptions: Record<string, unknown> = {
@@ -487,26 +517,18 @@ export class TransformersTextGenerationProvider implements ApiProvider {
       };
 
       // Only include defined options
-      if (this.config.temperature !== undefined) {
-        generationOptions.temperature = this.config.temperature;
-      }
-      if (this.config.topK !== undefined) {
-        generationOptions.top_k = this.config.topK;
-      }
-      if (this.config.topP !== undefined) {
-        generationOptions.top_p = this.config.topP;
-      }
-      if (this.config.doSample !== undefined) {
-        generationOptions.do_sample = this.config.doSample;
-      }
-      if (this.config.repetitionPenalty !== undefined) {
-        generationOptions.repetition_penalty = this.config.repetitionPenalty;
-      }
-      if (this.config.noRepeatNgramSize !== undefined) {
-        generationOptions.no_repeat_ngram_size = this.config.noRepeatNgramSize;
-      }
-      if (this.config.numBeams !== undefined) {
-        generationOptions.num_beams = this.config.numBeams;
+      for (const [source, target] of [
+        ['temperature', 'temperature'],
+        ['topK', 'top_k'],
+        ['topP', 'top_p'],
+        ['doSample', 'do_sample'],
+        ['repetitionPenalty', 'repetition_penalty'],
+        ['noRepeatNgramSize', 'no_repeat_ngram_size'],
+        ['numBeams', 'num_beams'],
+      ] as const) {
+        if (this.config[source] !== undefined) {
+          generationOptions[target] = this.config[source];
+        }
       }
 
       logger.debug(`[Transformers] Generating text for prompt (length: ${prompt.length})`, {
@@ -551,21 +573,8 @@ export class TransformersTextGenerationProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
-      const error = err as Error;
-
-      if (error.message?.includes('Could not locate file')) {
-        return {
-          error:
-            `Model not found: ${this.modelName}. ` +
-            'Make sure the model exists on HuggingFace Hub and has ONNX weights available. ' +
-            'Browse models at: https://huggingface.co/models?library=transformers.js',
-        };
-      }
-
-      logger.error(`[Transformers] Generation error:`, { error: error.message });
-      return {
-        error: `Transformers.js generation error: ${error.message}`,
-      };
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      return handleTransformersError(err as Error, this, 'generation');
     }
   }
 }

@@ -1,3 +1,4 @@
+import { SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -110,6 +111,15 @@ describe('synthesize', () => {
 
     expect(provider.callApi).toHaveBeenCalledOnce();
     expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('stops the progress bar if provider setup fails', async () => {
+    const stop = vi.spyOn(SingleBar.prototype, 'stop');
+    vi.mocked(loadApiProvider).mockRejectedValueOnce(new Error('setup failed'));
+    await expect(
+      synthesize({ provider: 'fixture-provider', prompts: ['Hello'], tests: [] }),
+    ).rejects.toThrow('setup failed');
+    expect(stop).toHaveBeenCalledOnce();
   });
 
   it('reports a cleanup failure after successful synthesis', async () => {
@@ -226,6 +236,98 @@ describe('synthesize', () => {
     expect(provider.callApi).toHaveBeenCalledTimes(2);
     expect(provider.callApi.mock.calls[0][0]).toContain('Return a greeting.');
     expect(provider.cleanup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '[{"label": "metric1"}, {"label": "metric2"}]',
+    { questions: [null] },
+    { questions: ['not a question object'] },
+    { questions: [{ label: 'metric1', question: 42 }] },
+    { questions: 'not a question list' },
+    { questions: [{ label: 'metric1' }] },
+    { questions: [{ label: 1, question: 'Is it correct?' }] },
+  ])('rejects an unexpected questions response: %j', async (output) => {
+    // Valid JSON, but not the expected {questions: [...]} shape. Previously
+    // sampleArray(undefined) threw an unhandled TypeError.
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+        numQuestions: 1,
+        type: 'pi',
+      }),
+    ).rejects.toThrow(/Expected a JSON object of the form \{questions: \[\.\.\.\]\}/);
+  });
+
+  it('rejects non-JSON model text before attempting assertion generation', async () => {
+    const mockProvider = createMockProvider({
+      response: { output: 'Model temporarily unavailable' },
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    await expect(
+      synthesize({ provider: 'mock-provider', prompts: ['Answer'], tests: [] }),
+    ).rejects.toThrow('Expected at least one JSON object in the response for questions');
+    expect(mockProvider.callApi).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a generated Python assertion from a structured questions response', async () => {
+    const code = "return {'pass': len(output) > 0, 'score': 1.0}";
+    const mockProvider = createMockProvider({
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          output: { questions: [{ label: 'Nonempty', question: 'Does the answer contain text?' }] },
+        })
+        .mockResolvedValueOnce({ output: code }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Answer the question'],
+      tests: [],
+      numQuestions: 1,
+      instructions: 'Only generate a nonempty-answer check.',
+    });
+    expect(result).toEqual([{ metric: 'Nonempty', type: 'python', value: code }]);
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(mockProvider.callApi).mock.calls[0][0]).toContain(
+      'Only generate a nonempty-answer check.',
+    );
+  });
+
+  it('should find the questions object even when it is not the first JSON object in the response', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          return Promise.resolve({
+            output:
+              '{"note": "here are the questions"}\n{"questions": [{"label": "metric1", "question": "test question"}]}',
+          });
+        }
+        return Promise.resolve({ output: 'None' });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numQuestions: 1,
+      type: 'pi',
+    });
+
+    expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
   });
 });
 

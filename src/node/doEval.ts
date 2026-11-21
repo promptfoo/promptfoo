@@ -6,11 +6,13 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache, withCacheEnabled } from '../cache';
+import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { EvalRunError } from '../evaluator/errors';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -24,16 +26,27 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { withProviderCleanup } from '../providers/lifecycle';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
-import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
+import {
+  type CommandLineOptions,
+  CommandLineOptionsSchema,
+  type EnvOverrides,
+  type EvalRuntimeOptions,
+  MAX_SUGGESTIONS_COUNT,
+  type TestCase,
+  type TestSuite,
+  TestSuiteSchema,
+  type UnifiedConfig,
+} from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
@@ -49,7 +62,10 @@ import {
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
-import { maybeLoadFromExternalFile } from '../util/file';
+import {
+  buildConfiguredProviderMap,
+  resolveRuntimeGradingProviderReferences,
+} from '../util/gradingProvider';
 import {
   printBorder,
   setupEnv,
@@ -57,25 +73,17 @@ import {
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import { checkProviderApiKeys, isProviderAllowed } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
-import type {
-  CommandLineOptions,
-  EnvOverrides,
-  EvalRuntimeOptions,
-  Scenario,
-  TestSuite,
-  UnifiedConfig,
-} from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
@@ -111,9 +119,14 @@ function selectEligibleProviders(testSuite: TestSuite): TestSuite['providers'] {
       }
     }
   }
-  return testSuite.providers.filter((provider) =>
-    restrictions.some((allowed) => isProviderAllowed(provider, allowed)),
-  );
+  return testSuite.providers.filter((provider) => {
+    const prompts =
+      getProviderPromptOverride(provider, testSuite.providerPromptMap) ?? provider.prompts;
+    return (
+      restrictions.some((allowed) => isProviderAllowed(provider, allowed)) &&
+      testSuite.prompts.some((prompt) => isPromptAllowed(prompt, prompts))
+    );
+  });
 }
 
 function runtimeTagsForEval(
@@ -166,16 +179,23 @@ async function resolveReplayConfigs(
   return configs;
 }
 
-export class EvalRunError extends Error {
-  readonly exitCode: number;
+// Compatibility export for existing source consumers.
+export { EvalRunError } from '../evaluator/errors';
 
-  constructor(message: string, exitCode: number = 1) {
-    super(message);
-    this.name = 'EvalRunError';
-    // POSIX exit codes are 1-255 (0 means success). Coerce silly values to the
-    // default rather than letting `exitCode = 0` silently mask a real failure.
-    this.exitCode = Number.isInteger(exitCode) && exitCode >= 1 && exitCode <= 255 ? exitCode : 1;
+function failEvalRun(
+  message: string,
+  isCliInvocation: boolean,
+  options: { logForCli?: () => void; cliFallback?: Eval } = {},
+): Eval {
+  if (isCliInvocation) {
+    (options.logForCli ?? (() => logger.error(chalk.red(message))))();
+    process.exitCode = 1;
+    // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
+    // failure like watch-mode setup) so downstream summaries don't misreport.
+    return options.cliFallback ?? new Eval({}, { persisted: false });
   }
+
+  throw new EvalRunError(message);
 }
 
 function handleRecoverableWatchError(error: unknown): boolean {
@@ -231,6 +251,39 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
       process.on(signal, onSignal);
     }
   });
+}
+
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+async function cleanupOnSigterm(): Promise<void> {
+  // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
+  await flushOtel();
+  try {
+    await providerRegistry.shutdownForProcess();
+  } catch (error) {
+    logger.debug('Provider cleanup failed during SIGTERM', { error });
+  }
+  await shutdownOtel();
+}
+
+/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([cleanupOnSigterm(), timeout]);
+    } finally {
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    }
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => process.removeListener('SIGTERM', onSigterm);
 }
 
 function resolveSuggestionOptions(
@@ -316,11 +369,8 @@ async function doEvalWithEnv(
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
   const isMcpInvocation = evaluateOptions.eventSource === 'mcp';
-
-  let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
-  let _basePath: string | undefined = undefined;
-  let commandLineOptions: Record<string, any> | undefined = undefined;
+  const inputCommand = cmdObj;
+  const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -362,26 +412,17 @@ async function doEvalWithEnv(
 
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
-    runState: { failed: boolean },
+    envFileOverrides: EnvOverrides | undefined,
+    cmdObj: DoEvalCommandOptions,
+    defaultConfig: Partial<UnifiedConfig>,
+    evaluateOptions: InternalEvaluateOptions,
     initialization?: boolean,
   ) => {
-    function failEvalRun(
-      message: string,
-      options: { logForCli?: () => void; cliFallback?: Eval } = {},
-    ): Eval {
-      if (isCliInvocation) {
-        (options.logForCli ?? (() => logger.error(chalk.red(message))))();
-        process.exitCode = 1;
-        runState.failed = true;
-        // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
-        // failure like watch-mode setup) so downstream summaries don't misreport.
-        return options.cliFallback ?? new Eval({}, { persisted: false });
-      }
-
-      throw new EvalRunError(message);
-    }
-
     const startTime = Date.now();
+    let config: Partial<UnifiedConfig>;
+    let testSuite: TestSuite;
+    let _basePath: string | undefined;
+    let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     let selectedProviderConfigs: Awaited<
       ReturnType<typeof resolveConfigs>
@@ -390,7 +431,7 @@ async function doEvalWithEnv(
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+      ...(Boolean(defaultConfig.redteam) && { isRedteam: true }),
     });
 
     if (cmdObj.write) {
@@ -438,9 +479,13 @@ async function doEvalWithEnv(
       if (configlessDirs.length > 0 && resolvedConfigPaths.length === 0) {
         return failEvalRun(
           `No configuration file found in ${configlessDirs.join(', ')}. ${noConfigHint}`,
+          isCliInvocation,
         );
       }
       cmdObj.config = resolvedConfigPaths;
+      if (initialization) {
+        inputCommand.config = resolvedConfigPaths;
+      }
     }
 
     // Check for conflicting options
@@ -450,6 +495,7 @@ async function doEvalWithEnv(
     if (resumeRaw && retryErrors) {
       return failEvalRun(
         'Cannot use --resume and --retry-errors together. Please use one or the other.',
+        isCliInvocation,
       );
     }
 
@@ -457,11 +503,13 @@ async function doEvalWithEnv(
     if (resumeRaw && hasRuntimeTags) {
       return failEvalRun(
         'Cannot use --tag with --resume. Resumed evaluations keep their original tags.',
+        isCliInvocation,
       );
     }
     if (retryErrors && hasRuntimeTags) {
       return failEvalRun(
         'Cannot use --tag with --retry-errors. Retried evaluations keep their original tags.',
+        isCliInvocation,
       );
     }
 
@@ -475,12 +523,13 @@ async function doEvalWithEnv(
       if (cmdObj.write === false) {
         return failEvalRun(
           'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
+          isCliInvocation,
         );
       }
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
         const message = `Could not find evaluation to resume: ${resumeId}`;
-        return failEvalRun(message, {
+        return failEvalRun(message, isCliInvocation, {
           logForCli: () => logger.error(message),
         });
       }
@@ -492,22 +541,12 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
-      // Ensure prompts exactly match the previous run to preserve IDs and content
-      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
-      }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
       if (cmdObj.write === false) {
         return failEvalRun(
           'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
+          isCliInvocation,
         );
       }
 
@@ -517,7 +556,7 @@ async function doEvalWithEnv(
       const latestEval = await Eval.latest();
       if (!latestEval) {
         const message = 'No previous evaluation found to retry errors from';
-        return failEvalRun(message, {
+        return failEvalRun(message, isCliInvocation, {
           logForCli: () => logger.error(message),
         });
       }
@@ -548,18 +587,6 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
-
-      // Ensure prompts exactly match the previous run to preserve IDs and content
-      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
-      }
     } else {
       ({
         config,
@@ -571,9 +598,14 @@ async function doEvalWithEnv(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    // Clean up the providers this run loaded once no evaluation is using them.
+    await providerRegistry.cleanupWhenIdle(testSuite.providers, evaluateOptions.abortSignal);
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
+    if (commandLineOptions?.safeMode) {
+      cliState.safeMode = true;
+    }
 
     // Application callers can select resolved inputs inside the evaluation's env scope.
     // Keep this callback separate from options loaded from user configuration.
@@ -596,13 +628,31 @@ async function doEvalWithEnv(
       if (configs.length !== originalProviders.length) {
         throw new Error('Could not preserve the selected provider configurations.');
       }
+      const selectedTests = testsBySource
+        ? testSuite.tests?.map((test) => testsBySource.get(test)!)
+        : testConfigs;
       const selected = new Set(testSuite.providers);
+      // Resolve grading with the complete lookup. Only generation targets become columns.
+      // Keep the original configs for permission checks, sharing and persistence.
+      const providerMap = buildConfiguredProviderMap(originalProviders);
+      function withGraders<T extends Partial<TestCase>>(test: T): T {
+        const copy = { ...test };
+        resolveRuntimeGradingProviderReferences(copy, providerMap, selected);
+        return copy;
+      }
+      testSuite.tests = testSuite.tests?.map(withGraders);
+      if (testSuite.defaultTest && typeof testSuite.defaultTest === 'object') {
+        testSuite.defaultTest = withGraders(testSuite.defaultTest);
+      }
+      testSuite.scenarios = testSuite.scenarios?.map((scenario) => ({
+        ...scenario,
+        config: scenario.config.map(withGraders),
+        tests: scenario.tests?.map(withGraders),
+      }));
       config = {
         ...config,
         providers: configs.filter((_, index) => selected.has(originalProviders[index])),
-        tests: testsBySource
-          ? testSuite.tests?.map((test) => testsBySource.get(test)!)
-          : testConfigs,
+        tests: selectedTests,
       };
     }
 
@@ -622,6 +672,7 @@ async function doEvalWithEnv(
     if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
       return failEvalRun(
         `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
+        isCliInvocation,
       );
     }
     if (resumeEval) {
@@ -670,12 +721,12 @@ async function doEvalWithEnv(
       };
     }
 
-    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
+    // Resume and error retries must preserve the original expansion and cache settings.
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
     let delay: number;
-    if (resumeRaw) {
+    if (resumeEval) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
@@ -712,7 +763,7 @@ async function doEvalWithEnv(
     // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
-    const explicitMaxConcurrency = resumeRaw
+    const explicitMaxConcurrency = resumeEval
       ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
@@ -840,7 +891,7 @@ async function doEvalWithEnv(
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
         .map(([envVar, providerDescriptions]) => `${envVar} (${providerDescriptions.join(', ')})`)
         .join('; ')}`;
-      return failEvalRun(missingKeysMessage, {
+      return failEvalRun(missingKeysMessage, isCliInvocation, {
         logForCli: () => {
           for (const [envVar, providerDescriptions] of missingApiKeys) {
             logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerDescriptions.join(', ')})`));
@@ -859,10 +910,13 @@ async function doEvalWithEnv(
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
-    // Strip any providerFilter a config file injected via evaluateOptions — only the
-    // normalized CLI/persisted value above may be persisted and replayed.
-    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
-      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
+    // Strip orchestration keys from config-supplied options. Only the normalized
+    // provider filter is persisted; saved-column restoration is set at the call site.
+    const {
+      providerFilter: _ignoredProviderFilter,
+      restorePromptColumns: _ignoredRestorePromptColumns,
+      ...safeEvaluateOptions
+    } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
       timeoutMs: cmdObj.timeoutMs ?? evaluateOptions.timeoutMs,
@@ -915,21 +969,10 @@ async function doEvalWithEnv(
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
-    if (isMcpInvocation && options.generateSuggestions) {
+    if (isMcpInvocation && !resumeEval && options.generateSuggestions) {
       throw new Error(
         'Interactive prompt suggestions are not supported over MCP. Disable generateSuggestions or run this evaluation in an interactive terminal.',
       );
-    }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
     }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
@@ -977,10 +1020,6 @@ async function doEvalWithEnv(
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
-    const previousAbortSignal = evaluateOptions.abortSignal;
-    evaluateOptions.abortSignal = previousAbortSignal
-      ? AbortSignal.any([previousAbortSignal, abortController.signal])
-      : abortController.signal;
 
     let paused = false;
     let sigintHandler: NodeJS.SignalsListener | undefined;
@@ -995,8 +1034,6 @@ async function doEvalWithEnv(
         clearTimeout(forceExitTimeout);
         forceExitTimeout = undefined;
       }
-      // Restore original abort signal for watch mode
-      evaluateOptions.abortSignal = previousAbortSignal;
     };
 
     // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
@@ -1038,14 +1075,37 @@ async function doEvalWithEnv(
 
     let ret;
     try {
-      ret = await withCacheEnabled(cache === false ? false : undefined, () =>
-        evaluate(testSuite!, evalRecord, {
-          ...options,
-          filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-          abortSignal: evaluateOptions.abortSignal,
-          isRedteam: Boolean(config?.redteam),
-        }),
-      );
+      if (resumeRaw && !evalRecord.useOldResults()) {
+        // Older evals lack this counter. Recover it without recalculating other metrics.
+        const missingCacheCounts = evalRecord.prompts.map(({ metrics }) =>
+          metrics && metrics.testCacheHitCount === undefined ? { metrics, count: 0 } : undefined,
+        );
+        if (missingCacheCounts.some(Boolean)) {
+          for await (const batch of evalRecord.fetchResultsBatched()) {
+            for (const result of batch) {
+              const pending = missingCacheCounts[result.promptIdx];
+              if (pending && result.response?.cached) {
+                pending.count++;
+              }
+            }
+          }
+          // Publish only after every batch succeeds; a failed read must not leave partial counts.
+          for (const pending of missingCacheCounts) {
+            if (pending) {
+              pending.metrics.testCacheHitCount = pending.count;
+            }
+          }
+        }
+      }
+
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        restorePromptColumns: Boolean(resumeEval),
+        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+        abortSignal: evaluateOptions.abortSignal,
+        pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
+        isRedteam: Boolean(config.redteam),
+      });
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
@@ -1118,28 +1178,7 @@ async function doEvalWithEnv(
       });
     }
 
-    let successes = 0;
-    let failures = 0;
-    let errors = 0;
-    const tokenUsage = createEmptyTokenUsage();
-
-    // Calculate our total successes and failures
-    for (const prompt of evalRecord.prompts) {
-      if (prompt.metrics?.testPassCount) {
-        successes += prompt.metrics.testPassCount;
-      }
-      if (prompt.metrics?.testFailCount) {
-        failures += prompt.metrics.testFailCount;
-      }
-      if (prompt.metrics?.testErrorCount) {
-        errors += prompt.metrics.testErrorCount;
-      }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
-    }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
-    if (generationTokenUsage) {
-      tokenUsage.generation = generationTokenUsage;
-    }
+    const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
@@ -1178,6 +1217,9 @@ async function doEvalWithEnv(
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    const repeatStability = resumeEval
+      ? await evalRecord.getRepeatStability()
+      : await evalRecord.getObservedRepeatStability();
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
@@ -1193,32 +1235,19 @@ async function doEvalWithEnv(
       successes,
       failures,
       errors,
+      cacheHits,
       duration,
       maxConcurrency,
       tracker,
       targetErrorStatus,
+      repeatStability,
     });
 
-    // Special case: show cloud signup instructions when user wants to share but can't
-    if (cmdObj.write && wantsToShare && !canShareEval) {
-      logger.info(summaryLines[0]); // Show just the completion message
-      notCloudEnabledShareInstructions();
-      // Skip the guidance lines and show the rest
-      for (let i = 1; i < summaryLines.length; i++) {
-        if (summaryLines[i].includes('View results:')) {
-          // Skip guidance section
-          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
-            i++;
-          }
-          i--; // Back up one so the for loop increment works
-        } else {
-          logger.info(summaryLines[i]);
-        }
-      }
-    } else {
-      // Normal case: show all summary lines
-      for (const line of summaryLines) {
-        logger.info(line);
+    const showShareInstructions = cmdObj.write && wantsToShare && !canShareEval;
+    for (const [index, line] of summaryLines.entries()) {
+      logger.info(line);
+      if (index === 0 && showShareInstructions) {
+        notCloudEnabledShareInstructions();
       }
     }
 
@@ -1288,7 +1317,7 @@ async function doEvalWithEnv(
           const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
             ',',
           )}}.`;
-          return failEvalRun(message, {
+          return failEvalRun(message, isCliInvocation, {
             logForCli: () => logger.error(message),
             cliFallback: ret,
           });
@@ -1334,7 +1363,12 @@ async function doEvalWithEnv(
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
+        const watcher = chokidar.watch(watchPaths, {
+          atomic: true,
+          ignored: /^\./,
+          persistent: true,
+        });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
@@ -1345,7 +1379,8 @@ async function doEvalWithEnv(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            clearConfigCache();
+            // Watch reruns have always reloaded CommonJS .js default configurations.
+            clearCjsModuleCache();
             try {
               await runEvaluation();
             } catch (error) {
@@ -1379,7 +1414,6 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        runState.failed = process.exitCode !== 0;
         // A run that failed its tests returns here, as it always has. A run stopped by its
         // target goes on to clean up its providers, as it did when it still exited with 0.
         if (targetErrorStatus == null) {
@@ -1394,20 +1428,45 @@ async function doEvalWithEnv(
     return ret;
   };
 
-  const runEvaluation = (initialization?: boolean) => {
-    // Each watch run starts clean and retains its resolved env through output and cleanup.
+  const runEvaluation = async (initialization?: boolean) => {
+    // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
-    const runState = { failed: false };
-    return cliState.withConfig(undefined, () =>
-      cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, () =>
-          withProviderCleanup(
-            () => runEvaluationWithEnv(runEnv, runState, initialization),
-            () => runState.failed,
+    const runEnvFileOverrides =
+      initialization || !initialEnvFileOverrides
+        ? envFileOverrides
+        : { ...initialEnvFileOverrides };
+    const runCommand = { ...cmdObj };
+    const runDefaults = { ...defaultConfig };
+    const runOptions = { ...evaluateOptions };
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    // Keep it until the whole run settles, including sharing and output files after evaluate().
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    try {
+      return await cliState.withSafeMode(
+        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        () =>
+          cliState.withConfig(undefined, () =>
+            cliState.withBasePath(undefined, () =>
+              cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+                cliState.withEnv(runEnv, () =>
+                  providerRegistry.withEvaluation(() =>
+                    runEvaluationWithEnv(
+                      runEnv,
+                      runEnvFileOverrides,
+                      runCommand,
+                      runDefaults,
+                      runOptions,
+                      initialization,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+      );
+    } finally {
+      removeSigtermHandler?.();
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);

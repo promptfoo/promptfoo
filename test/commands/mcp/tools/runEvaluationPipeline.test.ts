@@ -73,14 +73,11 @@ describe('MCP evaluation execution contract', () => {
     vi.mocked(isSharingEnabled).mockReset().mockReturnValue(true);
     directory = await mkdtemp(path.join(os.tmpdir(), 'mcp-evaluation-pipeline-'));
     configPath = path.join(directory, 'promptfooconfig.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['echo'],
-        prompts: ['Hello {{name}}'],
-        tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'equals', value: 'Hello Ada' }] }],
-      }),
-    );
+    await writeConfig({
+      providers: ['echo'],
+      prompts: ['Hello {{name}}'],
+      tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'equals', value: 'Hello Ada' }] }],
+    });
     await runDbMigrations();
   });
 
@@ -101,6 +98,10 @@ describe('MCP evaluation execution contract', () => {
     restoreEnv();
     await rm(directory, { recursive: true, force: true });
   });
+
+  function writeConfig(config: Record<string, unknown>) {
+    return writeFile(configPath, JSON.stringify(config));
+  }
 
   async function run(options: Record<string, unknown>) {
     const tool = vi.fn();
@@ -127,15 +128,12 @@ describe('MCP evaluation execution contract', () => {
           .spyOn(suggestions, 'generatePrompts')
           .mockResolvedValue({ prompts: ['Suggested prompt'], tokensUsed: {} });
         const prompt = vi.spyOn(readline, 'promptYesNo').mockResolvedValue(false);
-        await writeFile(
-          configPath,
-          JSON.stringify({
-            providers: ['echo'],
-            prompts: ['Hello'],
-            tests: [{ vars: {} }],
-            [source]: { generateSuggestions: true },
-          }),
-        );
+        await writeConfig({
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          [source]: { generateSuggestions: true },
+        });
         const response = await run(filters);
         expect(response.success).toBe(false);
         expect(response.error).toContain(
@@ -156,15 +154,12 @@ describe('MCP evaluation execution contract', () => {
       vi.stubEnv('PROMPTFOO_PYTHON_WORKERS', undefined);
       try {
         cliState.maxConcurrency = priorConcurrency;
-        await writeFile(
-          configPath,
-          JSON.stringify({
-            providers: ['echo'],
-            prompts: ['Hello'],
-            tests: [{ vars: {} }],
-            evaluateOptions: { generateSuggestions: true },
-          }),
-        );
+        await writeConfig({
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          evaluateOptions: { generateSuggestions: true },
+        });
         const response = await run({ testCaseIndices: 0, maxConcurrency: 20, write: false });
         expect(response.success).toBe(false);
         expect(response.error).toContain('Interactive prompt suggestions are not supported');
@@ -200,10 +195,7 @@ describe('MCP evaluation execution contract', () => {
       observations[prompt].push(cliState.maxConcurrency);
       return { output: prompt };
     });
-    await writeFile(
-      configPath,
-      JSON.stringify({ providers: ['echo'], prompts: ['A', 'B'], tests: [{ vars: {} }] }),
-    );
+    await writeConfig({ providers: ['echo'], prompts: ['A', 'B'], tests: [{ vars: {} }] });
     const pending: Promise<unknown>[] = [];
     try {
       cliState.maxConcurrency = undefined;
@@ -235,16 +227,13 @@ describe('MCP evaluation execution contract', () => {
     'honors explicit false over enabled suggestion defaults for $label',
     async ({ filters }) => {
       const generate = vi.spyOn(suggestions, 'generatePrompts');
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: ['echo'],
-          prompts: ['Hello'],
-          tests: [{ vars: {} }],
-          evaluateOptions: { generateSuggestions: true },
-          commandLineOptions: { generateSuggestions: false },
-        }),
-      );
+      await writeConfig({
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+        evaluateOptions: { generateSuggestions: true },
+        commandLineOptions: { generateSuggestions: false },
+      });
       const response = await run(filters);
       expect(response.success, response.error).toBe(true);
       expect(response.data.results.totalEvals).toBe(1);
@@ -257,14 +246,11 @@ describe('MCP evaluation execution contract', () => {
     const providerId =
       'https://fixture-user:fixture-password@example.test/eval?api_key=fixture-query-secret';
     const filter = 'unmatched-filter-secret';
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: [{ id: providerId, config: { body: { prompt: '{{prompt}}' } } }],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-      }),
-    );
+    await writeConfig({
+      providers: [{ id: providerId, config: { body: { prompt: '{{prompt}}' } } }],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+    });
     const response = await run({ providerFilter: filter });
     expect(response.success).toBe(false);
     expect(response.error).toContain(`No providers matched filter: ${filter}`);
@@ -291,19 +277,16 @@ describe('MCP evaluation execution contract', () => {
       expect(address && typeof address !== 'string').toBe(true);
       const secret = 'fixture-failed-assertion-query-secret';
       const providerId = `http://127.0.0.1:${(address as { port: number }).port}/eval?api_key=${secret}`;
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: [
-            {
-              id: providerId,
-              config: { body: { prompt: '{{prompt}}' }, responseParser: 'json.output' },
-            },
-          ],
-          prompts: ['Hello'],
-          tests: [{ assert: [{ type: 'equals', value: 'expected output' }] }],
-        }),
-      );
+      await writeConfig({
+        providers: [
+          {
+            id: providerId,
+            config: { body: { prompt: '{{prompt}}' }, responseParser: 'json.output' },
+          },
+        ],
+        prompts: ['Hello'],
+        tests: [{ assert: [{ type: 'equals', value: 'expected output' }] }],
+      });
 
       const response = await run({ ...filters, write: false });
       expect(response.success, response.error).toBe(true);
@@ -329,17 +312,14 @@ describe('MCP evaluation execution contract', () => {
     await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
     const address = server.address() as { port: number };
     const secret = 'fixture-token-summary-query-secret';
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['one', 'two'].map((name) => ({
-          id: `http://127.0.0.1:${address.port}/${name}?api_key=${secret}`,
-          config: { body: { prompt: '{{prompt}}' }, responseParser: 'json.output' },
-        })),
-        prompts: ['Hello'],
-        tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
-      }),
-    );
+    await writeConfig({
+      providers: ['one', 'two'].map((name) => ({
+        id: `http://127.0.0.1:${address.port}/${name}?api_key=${secret}`,
+        config: { body: { prompt: '{{prompt}}' }, responseParser: 'json.output' },
+      })),
+      prompts: ['Hello'],
+      tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+    });
     const response = await run({ testCaseIndices: 0, write: false });
     expect(response.success, response.error).toBe(true);
     expect(response.data.results.stats).toMatchObject({ successes: 2, failures: 0, errors: 0 });
@@ -423,15 +403,12 @@ describe('MCP evaluation execution contract', () => {
         throw new Error('Expected TCP address');
       }
       const localUrl = `http://127.0.0.1:${address.port}`;
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: ['echo'],
-          prompts: ['Hello'],
-          tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
-          sharing: { apiBaseUrl: localUrl, appBaseUrl: localUrl },
-        }),
-      );
+      await writeConfig({
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+        sharing: { apiBaseUrl: localUrl, appBaseUrl: localUrl },
+      });
       const response = await run({
         ...(filtered ? { testCaseIndices: 0 } : {}),
         share: true,
@@ -445,14 +422,11 @@ describe('MCP evaluation execution contract', () => {
 
   it('runs a selected test without requiring keys for its excluded providers', async () => {
     vi.stubEnv('OPENAI_API_KEY', undefined);
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['echo', 'openai:gpt-4.1'],
-        prompts: ['Hello'],
-        tests: [{ providers: ['echo'], assert: [{ type: 'equals', value: 'Hello' }] }],
-      }),
-    );
+    await writeConfig({
+      providers: ['echo', 'openai:gpt-4.1'],
+      prompts: ['Hello'],
+      tests: [{ providers: ['echo'], assert: [{ type: 'equals', value: 'Hello' }] }],
+    });
     const response = await run({ testCaseIndices: 0, write: false });
     expect(response.success, response.error).toBe(true);
     expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
@@ -476,22 +450,19 @@ describe('MCP evaluation execution contract', () => {
       if (!address || typeof address === 'string') {
         throw new Error('Expected TCP address');
       }
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: [
-            {
-              id: 'openai:tts:tts-1',
-              config: {
-                apiBaseUrl: `http://127.0.0.1:${address.port}/v1`,
-                headers: { [header]: 'Bearer owned-synthetic-header' },
-              },
+      await writeConfig({
+        providers: [
+          {
+            id: 'openai:tts:tts-1',
+            config: {
+              apiBaseUrl: `http://127.0.0.1:${address.port}/v1`,
+              headers: { [header]: 'Bearer owned-synthetic-header' },
             },
-          ],
-          prompts: ['Hello'],
-          tests: [{ vars: {} }],
-        }),
-      );
+          },
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      });
       const response = await run({ testCaseIndices: 0, write: false });
       expect(response.success, response.error).toBe(true);
       expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
@@ -514,15 +485,12 @@ describe('MCP evaluation execution contract', () => {
           throw new Error('Excluded target denied');
         }
       });
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: [allowed, excluded],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-        metadata: { teamId: 'fixture-team' },
-      }),
-    );
+    await writeConfig({
+      providers: [allowed, excluded],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+      metadata: { teamId: 'fixture-team' },
+    });
 
     const response = await run({ providerFilter: 'Allowed target', write: false });
     expect(response.success, response.error).toBe(true);
@@ -546,14 +514,11 @@ describe('MCP evaluation execution contract', () => {
       await cloud.checkCloudPermissions(evalRecord.config);
       return 'https://example.test/selected';
     });
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: [selected, { id: 'echo', label: 'Excluded' }],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-      }),
-    );
+    await writeConfig({
+      providers: [selected, { id: 'echo', label: 'Excluded' }],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+    });
 
     const response = await run({ providerFilter: 'Allowed', share: true, write: true });
     expect(response.success, response.error).toBe(true);
@@ -574,25 +539,22 @@ describe('MCP evaluation execution contract', () => {
             throw new Error('Excluded target denied');
           }
         });
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: [selected, { id: 'echo', label: 'Excluded' }],
-          prompts: ['Hello'],
-          ...(source === 'scenario'
-            ? { scenarios: [{ config: [{ providers: ['Allowed'] }], tests: [{ vars: {} }] }] }
-            : {
-                tests:
-                  source === 'test'
-                    ? [
-                        { vars: {}, providers: ['Allowed'] },
-                        { vars: {}, providers: ['Excluded'] },
-                      ]
-                    : [{ vars: {} }],
-                ...(source === 'default' ? { defaultTest: { providers: ['Allowed'] } } : {}),
-              }),
-        }),
-      );
+      await writeConfig({
+        providers: [selected, { id: 'echo', label: 'Excluded' }],
+        prompts: ['Hello'],
+        ...(source === 'scenario'
+          ? { scenarios: [{ config: [{ providers: ['Allowed'] }], tests: [{ vars: {} }] }] }
+          : {
+              tests:
+                source === 'test'
+                  ? [
+                      { vars: {}, providers: ['Allowed'] },
+                      { vars: {}, providers: ['Excluded'] },
+                    ]
+                  : [{ vars: {} }],
+              ...(source === 'default' ? { defaultTest: { providers: ['Allowed'] } } : {}),
+            }),
+      });
 
       const response = await run({
         ...(source === 'test' ? { testCaseIndices: 0 } : { promptFilter: '0' }),
@@ -612,17 +574,14 @@ describe('MCP evaluation execution contract', () => {
         { id: 'echo', label: 'Excluded' },
       ];
       const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: configured,
-          prompts: ['Hello'],
-          tests: [
-            { vars: {}, providers: ['Allowed'] },
-            { vars: {}, providers },
-          ],
-        }),
-      );
+      await writeConfig({
+        providers: configured,
+        prompts: ['Hello'],
+        tests: [
+          { vars: {}, providers: ['Allowed'] },
+          { vars: {}, providers },
+        ],
+      });
       const response = await run({ testCaseIndices: [0, 1], write: false });
       expect(response.success, response.error).toBe(true);
       expect(permissions.mock.calls[0][0].providers).toEqual(configured);
@@ -636,17 +595,14 @@ describe('MCP evaluation execution contract', () => {
       const selected = { id: 'echo', label: 'Override' };
       const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
       const test = { vars: {}, providers: ['Override'] };
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: [{ id: 'echo', label: 'Default' }, selected],
-          prompts: ['Hello'],
-          defaultTest: { providers: ['Default'] },
-          ...(source === 'scenario'
-            ? { scenarios: [{ config: [{ providers: ['Default'] }], tests: [test] }] }
-            : { tests: [test] }),
-        }),
-      );
+      await writeConfig({
+        providers: [{ id: 'echo', label: 'Default' }, selected],
+        prompts: ['Hello'],
+        defaultTest: { providers: ['Default'] },
+        ...(source === 'scenario'
+          ? { scenarios: [{ config: [{ providers: ['Default'] }], tests: [test] }] }
+          : { tests: [test] }),
+      });
       const response = await run({ promptFilter: '0', write: false });
       expect(response.success, response.error).toBe(true);
       expect(permissions.mock.calls[0][0].providers).toEqual([selected]);
@@ -654,25 +610,75 @@ describe('MCP evaluation execution contract', () => {
     },
   );
 
+  it('excludes targets with no selected prompt columns from permission checks', async () => {
+    const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
+    const target = { id: 'echo', label: 'Selected', prompts: ['first'] };
+    await writeConfig({
+      providers: [target, { id: 'echo', label: 'Other', prompts: ['second'] }],
+      prompts: ['first', 'second'],
+      tests: [{ vars: {} }],
+    });
+    const response = await run({ promptFilter: '0', write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(response.data.results.totalEvals).toBe(1);
+    expect(permissions.mock.calls[0][0].providers).toEqual([target]);
+  });
+
+  it.each(['assertion', 'options'])(
+    'retains a configured %s grader without generating extra columns',
+    async (location) => {
+      const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
+      const providers = [
+        { id: 'echo', label: 'Target' },
+        { id: 'echo', label: 'Grader' },
+      ];
+      const call = vi.spyOn(EchoProvider.prototype, 'callApi').mockImplementation(async function (
+        this: EchoProvider,
+        prompt,
+      ) {
+        return {
+          output: this.label === 'Grader' ? '{"pass":true,"score":1,"reason":"local"}' : prompt,
+        };
+      });
+      const assertion = { type: 'llm-rubric', value: 'a greeting' };
+      await writeConfig({
+        prompts: ['Hello'],
+        providers,
+        tests: [
+          {
+            providers: ['Target'],
+            vars: {},
+            ...(location === 'assertion'
+              ? { assert: [{ ...assertion, provider: 'Grader' }] }
+              : { options: { provider: { text: 'Grader' } }, assert: [assertion] }),
+          },
+        ],
+      });
+      const response = await run({ testCaseIndices: 0, providerFilter: 'Target', write: false });
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 1, errors: 0 });
+      expect(call).toHaveBeenCalledTimes(2);
+      expect(response.data.results.totalEvals).toBe(1);
+      expect(permissions.mock.calls[0][0].providers).toEqual(providers);
+    },
+  );
+
   it('preserves the linked cloud identity of a selected local provider', async () => {
     const target = 'promptfoo://provider/33333333-3333-4333-8333-333333333333';
     vi.spyOn(cloud, 'validateLinkedTargetId').mockResolvedValue();
     const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: [
-          {
-            id: 'echo',
-            label: 'Selected',
-            config: { linkedTargetId: target, apiKey: 'fixture-secret' },
-          },
-          { id: 'echo', label: 'Excluded' },
-        ],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-      }),
-    );
+    await writeConfig({
+      providers: [
+        {
+          id: 'echo',
+          label: 'Selected',
+          config: { linkedTargetId: target, apiKey: 'fixture-secret' },
+        },
+        { id: 'echo', label: 'Excluded' },
+      ],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+    });
     const response = await run({ providerFilter: 'Selected', write: false });
     expect(response.success, response.error).toBe(true);
     expect(permissions).toHaveBeenCalledOnce();
@@ -696,14 +702,11 @@ describe('MCP evaluation execution contract', () => {
 
   it('cleans constructed providers when a later test source fails to resolve', async () => {
     const cleanup = vi.spyOn(AwsBedrockConverseProvider.prototype, 'cleanup').mockResolvedValue();
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
-        prompts: ['Hello'],
-        tests: 'file://missing-tests.json',
-      }),
-    );
+    await writeConfig({
+      providers: ['bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+      prompts: ['Hello'],
+      tests: 'file://missing-tests.json',
+    });
     const response = await run({ testCaseIndices: 0, write: false });
     expect(response.success).toBe(false);
     expect(response.error).toContain('missing-tests.json');
@@ -714,15 +717,12 @@ describe('MCP evaluation execution contract', () => {
     'cleans providers removed by selection after suggestions=%s',
     async (generateSuggestions) => {
       const cleanup = vi.spyOn(AwsBedrockConverseProvider.prototype, 'cleanup').mockResolvedValue();
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
-          prompts: ['Hello'],
-          tests: [{ vars: {} }],
-          evaluateOptions: { generateSuggestions },
-        }),
-      );
+      await writeConfig({
+        providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+        evaluateOptions: { generateSuggestions },
+      });
       const response = await run({ providerFilter: 'echo', write: false });
       expect(response.success).toBe(!generateSuggestions);
       if (generateSuggestions) {
@@ -742,17 +742,14 @@ describe('MCP evaluation execution contract', () => {
         provider: 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0',
         vars: {},
       };
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: ['echo'],
-          prompts: ['Hello'],
-          tests: location === 'test' ? [test] : [{ vars: {} }],
-          ...(location === 'default' ? { defaultTest: test } : {}),
-          ...(location === 'scenario' ? { scenarios: [{ config: [{}], tests: [test] }] } : {}),
-          evaluateOptions: { generateSuggestions: true },
-        }),
-      );
+      await writeConfig({
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: location === 'test' ? [test] : [{ vars: {} }],
+        ...(location === 'default' ? { defaultTest: test } : {}),
+        ...(location === 'scenario' ? { scenarios: [{ config: [{}], tests: [test] }] } : {}),
+        evaluateOptions: { generateSuggestions: true },
+      });
       const response = await run({ testCaseIndices: 0, write: false });
       expect(response.success).toBe(false);
       expect(response.error).toContain('Interactive prompt suggestions are not supported over MCP');
@@ -765,19 +762,16 @@ describe('MCP evaluation execution contract', () => {
       .spyOn(AwsBedrockConverseProvider.prototype, 'cleanup')
       .mockResolvedValue()
       .mockRejectedValueOnce(new Error('Owned cleanup failure'));
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: [
-          'echo',
-          'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0',
-          'bedrock:converse:anthropic.claude-3-haiku-20240307-v1:0',
-        ],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-        evaluateOptions: { generateSuggestions: true },
-      }),
-    );
+    await writeConfig({
+      providers: [
+        'echo',
+        'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0',
+        'bedrock:converse:anthropic.claude-3-haiku-20240307-v1:0',
+      ],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+      evaluateOptions: { generateSuggestions: true },
+    });
     const response = await run({ providerFilter: 'echo', write: false });
     expect(response.success).toBe(false);
     expect(response.error).toContain('Interactive prompt suggestions are not supported over MCP');
@@ -785,7 +779,7 @@ describe('MCP evaluation execution contract', () => {
   });
 
   it.each([undefined, 42])(
-    'reports MCP cleanup failure with ambient exit code %s',
+    'keeps completed MCP results after cleanup failure with ambient exit code %s',
     async (exitCode) => {
       const previousExitCode = process.exitCode;
       process.exitCode = exitCode;
@@ -793,17 +787,14 @@ describe('MCP evaluation execution contract', () => {
         const cleanup = vi
           .spyOn(AwsBedrockConverseProvider.prototype, 'cleanup')
           .mockRejectedValue(new Error('Owned cleanup failure'));
-        await writeFile(
-          configPath,
-          JSON.stringify({
-            providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
-            prompts: ['Hello'],
-            tests: [{ vars: {} }],
-          }),
-        );
+        await writeConfig({
+          providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+        });
         const response = await run({ providerFilter: 'echo', write: false });
-        expect(response.success).toBe(false);
-        expect(response.error).toContain('Owned cleanup failure');
+        expect(response.success, response.error).toBe(true);
+        expect(process.exitCode).toBe(exitCode);
         expect(cleanup).toHaveBeenCalledOnce();
       } finally {
         process.exitCode = previousExitCode;
@@ -828,14 +819,11 @@ describe('MCP evaluation execution contract', () => {
           vi.stubEnv(key, undefined);
         }
         const call = vi.spyOn(prototype, 'callApi');
-        await writeFile(
-          configPath,
-          JSON.stringify({
-            providers: [id],
-            prompts: ['Hello'],
-            tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
-          }),
-        );
+        await writeConfig({
+          providers: [id],
+          prompts: ['Hello'],
+          tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+        });
         const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
         if (filtered) {
           expect(response.success, response.error).toBe(true);
@@ -905,16 +893,17 @@ describe('MCP evaluation execution contract', () => {
         vi.stubEnv(key, undefined);
       }
       const call = vi.spyOn(prototype, 'callApi').mockResolvedValue({ output: 'Hello' });
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: [{ id, config }],
-          prompts: ['Hello'],
-          tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
-        }),
-      );
+      await writeConfig({
+        providers: [{ id, config }],
+        prompts: ['Hello'],
+        tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+      });
       const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
-      if (filtered || ('apiKeyRequired' in config && config.apiKeyRequired === false)) {
+      if (
+        filtered ||
+        ('projectId' in config && id.startsWith('google:')) ||
+        ('apiKeyRequired' in config && config.apiKeyRequired === false)
+      ) {
         expect(response.success, response.error).toBe(true);
         expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
         expect(call).toHaveBeenCalledOnce();
@@ -931,14 +920,11 @@ describe('MCP evaluation execution contract', () => {
       vi.stubEnv(key, undefined);
     }
     const call = vi.spyOn(OpenCodeSDKProvider.prototype, 'callApi');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['opencode:sdk'],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-      }),
-    );
+    await writeConfig({
+      providers: ['opencode:sdk'],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+    });
     const response = await run({ write: false });
     expect(response.success).toBe(false);
     expect(response.error).toContain('Missing required API keys');
@@ -980,14 +966,11 @@ describe('MCP evaluation execution contract', () => {
   });
 
   it('preserves numeric prompt order, duplicates and result pagination', async () => {
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['echo'],
-        prompts: ['first', 'second'],
-        tests: [{ vars: {} }, { vars: {} }],
-      }),
-    );
+    await writeConfig({
+      providers: ['echo'],
+      prompts: ['first', 'second'],
+      tests: [{ vars: {} }, { vars: {} }],
+    });
     const response = await run({
       promptFilter: ['1', '0', '1'],
       testCaseIndices: [1],
@@ -1029,25 +1012,22 @@ describe('MCP evaluation execution contract', () => {
     if (!address || typeof address === 'string') {
       throw new Error('Expected a TCP server address');
     }
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: [
-          {
-            id: 'http',
-            config: {
-              url: `http://127.0.0.1:${address.port}/fixture`,
-              method: 'POST',
-              body: { prompt: '{{prompt}}' },
-              transformResponse: 'json.output',
-            },
+    await writeConfig({
+      providers: [
+        {
+          id: 'http',
+          config: {
+            url: `http://127.0.0.1:${address.port}/fixture`,
+            method: 'POST',
+            body: { prompt: '{{prompt}}' },
+            transformResponse: 'json.output',
           },
-        ],
-        prompts: ['Hello'],
-        evaluateOptions: { timeoutMs: configTimeout },
-        tests: [{ assert: [{ type: 'equals', value: 'PONG' }] }],
-      }),
-    );
+        },
+      ],
+      prompts: ['Hello'],
+      evaluateOptions: { timeoutMs: configTimeout },
+      tests: [{ assert: [{ type: 'equals', value: 'PONG' }] }],
+    });
     return calls;
   }
 
@@ -1096,15 +1076,12 @@ describe('MCP evaluation execution contract', () => {
   it.each([{ testCaseIndices: [1] }, { promptFilter: '0' }])(
     'keeps explicit MCP selection independent of configured ranges: %j',
     async (filters) => {
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: ['echo'],
-          prompts: ['Hello {{name}}'],
-          tests: [{ vars: { name: 'Ada' } }, { vars: { name: 'Grace' } }],
-          evaluateOptions: { filterRange: '1:2' },
-        }),
-      );
+      await writeConfig({
+        providers: ['echo'],
+        prompts: ['Hello {{name}}'],
+        tests: [{ vars: { name: 'Ada' } }, { vars: { name: 'Grace' } }],
+        evaluateOptions: { filterRange: '1:2' },
+      });
       const response = await run(filters);
       expect(response.success, response.error).toBe(true);
       expect(
@@ -1122,15 +1099,12 @@ describe('MCP evaluation execution contract', () => {
       .spyOn(accounts, 'promptForEmailUnverified')
       .mockRejectedValue(new Error('Unexpected interactive prompt'));
     vi.spyOn(accounts, 'getUserEmail').mockReturnValue(null);
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['echo'],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-        redteam: { plugins: ['harmful:hate'] },
-      }),
-    );
+    await writeConfig({
+      providers: ['echo'],
+      prompts: ['Hello'],
+      tests: [{ vars: {} }],
+      redteam: { plugins: ['harmful:hate'] },
+    });
     const response = await run({ testCaseIndices: 0 });
     expect(response.success).toBe(false);
     expect(response.error).toContain('email verification');
@@ -1149,15 +1123,12 @@ describe('MCP evaluation execution contract', () => {
       vi.spyOn(accounts, 'getUserEmailNeedsValidation').mockReturnValue(true);
       vi.spyOn(accounts, 'getUserEmailValidated').mockReturnValue(false);
       const check = vi.spyOn(accounts, 'checkEmailStatusAndMaybeExit').mockResolvedValue(status);
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          providers: ['echo'],
-          prompts: ['Hello'],
-          tests: [{ vars: {} }],
-          redteam: { plugins: ['harmful:hate'] },
-        }),
-      );
+      await writeConfig({
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+        redteam: { plugins: ['harmful:hate'] },
+      });
       const response = await run({ testCaseIndices: 0 });
       expect(response.success).toBe(status === EMAIL_OK_STATUS);
       if (status !== EMAIL_OK_STATUS) {

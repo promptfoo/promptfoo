@@ -88,6 +88,9 @@ function selectTestCases(tests: NonNullable<TestSuite['tests']>, indices: TestCa
 
 /** Run a config through the evaluation pipeline with optional test, prompt, and provider filters. */
 export function registerRunEvaluationTool(server: McpServer) {
+  const index = z.number().int().nonnegative();
+  const selector = z.string().min(1);
+  const filter = z.union([selector, z.array(selector).min(1)]);
   server.tool(
     'run_evaluation',
     {
@@ -103,11 +106,11 @@ export function registerRunEvaluationTool(server: McpServer) {
         ),
       testCaseIndices: z
         .union([
-          z.number(),
-          z.array(z.number()),
+          index,
+          z.array(index).min(1),
           z.object({
-            start: z.number().describe('Start index (inclusive)'),
-            end: z.number().describe('End index (exclusive)'),
+            start: index.describe('Start index (inclusive)'),
+            end: index.describe('End index (exclusive)'),
           }),
         ])
         .optional()
@@ -115,29 +118,23 @@ export function registerRunEvaluationTool(server: McpServer) {
           dedent`
             Specify which test cases to run:
             - Single zero-based index: 0
-            - Multiple indices: [0, 2, 5]  
+            - Multiple indices: [0, 2, 5]
             - Range with inclusive start and exclusive end: {"start": 0, "end": 3}
             If not specified, runs all test cases.
           `,
         ),
-      promptFilter: z
-        .union([z.string(), z.array(z.string())])
-        .optional()
-        .describe(
-          dedent`
+      promptFilter: filter.optional().describe(
+        dedent`
             Filter prompts by id/label (regex match) or index (numeric strings).
             Examples: "my-prompt", "prompt.*", ["morning", "evening"], "0", ["0", "2"]
           `,
-        ),
-      providerFilter: z
-        .union([z.string(), z.array(z.string())])
-        .optional()
-        .describe(
-          dedent`
+      ),
+      providerFilter: filter.optional().describe(
+        dedent`
             Filter to specific providers by ID.
             Examples: "openai:gpt-5.6", ["openai:gpt-5.6", "anthropic:claude-sonnet-5"]
           `,
-        ),
+      ),
       maxConcurrency: z
         .number()
         .min(1)
