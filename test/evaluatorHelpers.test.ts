@@ -233,6 +233,21 @@ describe('evaluatorHelpers', () => {
       );
     });
 
+    it.each(['Alice', 'notes\\draft', 'first line\nsecond line'])(
+      'should apply custom filters without losing JSON escaping for %j',
+      async (name) => {
+        const prompt = toPrompt('[{"content": "{{ name | wrapLabel }}"}]');
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          { name },
+          {
+            wrapLabel: (value: string) => `"${value}"`,
+          },
+        );
+        expect(JSON.parse(renderedPrompt)).toEqual([{ content: `"${name}"` }]);
+      },
+    );
+
     it('should render nested variables in JSON prompts', async () => {
       const prompt = toPrompt('{"text": "{{ outer[inner] }}"}');
       const renderedPrompt = await renderPrompt(
