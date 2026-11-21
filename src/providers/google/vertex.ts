@@ -352,7 +352,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ? 'vertex:llama'
           : 'vertex:palm2';
 
-    const sampling =
+    const requestedSampling =
       system === 'vertex:llama'
         ? this.getLlamaSamplingOptions()
         : system === 'vertex:anthropic'
@@ -363,10 +363,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: sampling?.temperature ?? this.config.temperature,
-      topP: sampling?.top_p ?? this.config.topP,
-      topK: sampling?.top_k,
-      maxTokens: sampling?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
+      temperature: requestedSampling?.temperature ?? this.config.temperature,
+      topP: requestedSampling?.top_p ?? this.config.topP,
+      topK: requestedSampling?.top_k,
+      maxTokens:
+        requestedSampling?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -398,6 +399,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
   private getClaudeSamplingOptions() {
     const generationConfig = this.config.generationConfig;
     return {
+      // Claude rejects max_tokens: 0, so a 0 means unset here, as it already did at the top level.
       max_tokens:
         generationConfig?.maxOutputTokens || this.config.max_tokens || this.config.maxOutputTokens,
       temperature: generationConfig?.temperature ?? this.config.temperature,

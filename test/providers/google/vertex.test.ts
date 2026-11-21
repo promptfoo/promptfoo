@@ -3951,6 +3951,28 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
+  it('keeps nested max tokens but omits nested sampling for models that deprecate it', async () => {
+    const request = mockVertexRequest({
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 5, output_tokens: 1 },
+    });
+    provider = new VertexChatProvider('claude-opus-4-7', {
+      config: {
+        region: 'global',
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.2, topP: 0.9, topK: 40 },
+      },
+    });
+
+    await provider.callApi('test prompt');
+
+    const body = request.mock.calls[0][0].data;
+    expect(body.max_tokens).toBe(2048);
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+    expect(body).not.toHaveProperty('top_k');
+  });
+
   it('should accept anthropicVersion parameter', async () => {
     provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
