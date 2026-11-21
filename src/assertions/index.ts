@@ -144,11 +144,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
 
 const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
 
-export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
-  if (assertion.type === 'assert-set') {
-    return assertion.assert.some(assertionRequiresTrace);
-  }
-  const type = getAssertionBaseType(assertion);
+function isTraceAssertionType(type: string): boolean {
   return (
     type.startsWith('trace-') ||
     type.startsWith('trajectory:') ||
@@ -156,14 +152,21 @@ export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
   );
 }
 
+export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
+  if (assertion.weight === 0) {
+    return false;
+  }
+  return assertion.type === 'assert-set'
+    ? assertion.assert.some(assertionRequiresTrace)
+    : isTraceAssertionType(getAssertionBaseType(assertion));
+}
+
 export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   if (assertion.type === 'assert-set') {
     return assertion.assert.some(assertionUsesTrace);
   }
-  return (
-    SCRIPT_RESULT_ASSERTIONS.has(getAssertionBaseType(assertion)) ||
-    assertionRequiresTrace(assertion)
-  );
+  const type = getAssertionBaseType(assertion);
+  return SCRIPT_RESULT_ASSERTIONS.has(type) || isTraceAssertionType(type);
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
