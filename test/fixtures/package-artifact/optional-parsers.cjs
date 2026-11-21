@@ -55,18 +55,23 @@ async function main() {
 
   const filename = path.join(process.cwd(), 'optional-parser-fixture.pdf');
   writePdf(filename);
-  const result = parser === 'pdf-parse' ? await run({
-    prompts: ['{{ document }}'],
-    tests: [
-      {
-        vars: { document: `file://${filename}` },
-        assert: [{ type: 'contains', value: 'Optional parser fixture' }],
-      },
-    ],
-  }) : await run({
-    prompts: ['SELECT name FROM users'],
-    tests: [{ assert: [{ type: 'is-sql', value: { allowedTables: ['select::null::users'] } }] }],
-  });
+  const result =
+    parser === 'pdf-parse'
+      ? await run({
+          prompts: ['{{ document }}'],
+          tests: [
+            {
+              vars: { document: `file://${filename}` },
+              assert: [{ type: 'contains', value: 'Optional parser fixture' }],
+            },
+          ],
+        })
+      : await run({
+          prompts: ['SELECT name FROM users'],
+          tests: [
+            { assert: [{ type: 'is-sql', value: { allowedTables: ['select::null::users'] } }] },
+          ],
+        });
   if (mode === 'installed') {
     assert.equal(result.results?.[0].success, true, JSON.stringify(result));
     assert.equal(result.results[0].score, 1);
@@ -81,12 +86,12 @@ async function main() {
     assert.equal(denied.results[0].score, 0);
   } else {
     const range = parser === 'pdf-parse' ? '^2.4.5' : '^5.4.0';
-      const serialized = JSON.stringify(result);
-      assert.ok(serialized.includes(`npm install promptfoo ${parser}@${range}`), serialized);
-      assert.ok(
-        serialized.includes(mode === 'missing' ? 'is not installed' : 'is not supported'),
-        serialized,
-      );
+    const serialized = JSON.stringify(result);
+    assert.ok(serialized.includes(`npm install promptfoo ${parser}@${range}`), serialized);
+    assert.ok(
+      serialized.includes(mode === 'missing' ? 'is not installed' : 'is not supported'),
+      serialized,
+    );
   }
 }
 
