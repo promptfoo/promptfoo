@@ -4808,31 +4808,30 @@ describe('AwsBedrockCompletionProvider', () => {
     }
   });
 
-  it('should keep Bedrock auth cache metadata stable across module reloads', async () => {
+  it('reuses public identities across reloads and isolates explicit credentials', async () => {
     const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     try {
-      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
-      const region = 'us-east-1';
+      const input = { params: { prompt: 'PFQA_BEDROCK_PROMPT' }, region: 'us-east-1' };
       const config = {
-        region,
         accessKeyId: 'PFQA_BEDROCK_RELOAD_ACCESS_KEY',
         secretAccessKey: 'PFQA_BEDROCK_RELOAD_SECRET_KEY',
-      } as BedrockClaudeMessagesCompletionOptions;
+      };
 
-      async function getCacheKeyFromFreshModule() {
+      async function keysAfterReload() {
         vi.resetModules();
-        const { createBedrockCacheKeyHash: createFreshBedrockCacheKeyHash } = await import(
-          '../../../src/providers/bedrock/base'
-        );
-        return createFreshBedrockCacheKeyHash({ config, params, region });
+        const { createBedrockCacheKeyHash } = await import('../../../src/providers/bedrock/base');
+        return {
+          profile: createBedrockCacheKeyHash({ ...input, config: { profile: 'fixture' } }),
+          explicit: createBedrockCacheKeyHash({ ...input, config }),
+        };
       }
 
-      const firstCacheKey = await getCacheKeyFromFreshModule();
-      const secondCacheKey = await getCacheKeyFromFreshModule();
-
-      expect(firstCacheKey).toBe(secondCacheKey);
-      expect(firstCacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
-      expect(firstCacheKey).not.toContain('PFQA_BEDROCK');
+      const first = await keysAfterReload();
+      const second = await keysAfterReload();
+      expect(first.profile).toBe(second.profile);
+      expect(first.explicit).not.toBe(second.explicit);
+      expect(first.explicit).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(first.explicit).not.toContain('PFQA_BEDROCK');
     } finally {
       restoreEnv();
     }

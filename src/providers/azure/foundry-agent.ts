@@ -22,8 +22,9 @@ import {
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
-import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from '../credentialCache';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { FunctionCallbackHandler, loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
+import { getOpaqueCredentialCacheNamespace } from '../opaqueCredentialCache';
 import { hasUnpricedAzureResponsesToolUsage } from '../openai/billing';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, getGpt6Variant } from '../openai/gpt6';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';

@@ -25,8 +25,9 @@ import {
   parseMessages,
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
-import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from '../credentialCache';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { resolveProviderEnv } from '../env';
+import { getOpaqueCredentialCacheNamespace } from '../opaqueCredentialCache';
 import {
   getRequestTimeoutMs,
   parseChatPrompt,
