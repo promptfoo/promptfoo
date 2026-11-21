@@ -6,7 +6,7 @@ import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
-import type { TraceData } from '../types/tracing';
+import type { TraceData, TraceSpanEvent } from '../types/tracing';
 
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
@@ -21,6 +21,7 @@ export interface SpanData {
   startTime: number;
   endTime?: number;
   attributes?: Record<string, any>;
+  events?: TraceSpanEvent[];
   statusCode?: number;
   statusMessage?: string;
 }
@@ -47,25 +48,70 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
+function normalizeEvents(events: unknown): TraceSpanEvent[] | undefined {
+  if (!Array.isArray(events)) {
+    return undefined;
+  }
+  return events.flatMap((event) => {
+    if (
+      !event ||
+      typeof event !== 'object' ||
+      typeof event.name !== 'string' ||
+      typeof event.timestamp !== 'number' ||
+      !Number.isFinite(event.timestamp)
+    ) {
+      return [];
+    }
+    return [
+      {
+        name: event.name,
+        timestamp: event.timestamp,
+        ...(event.attributes &&
+        typeof event.attributes === 'object' &&
+        !Array.isArray(event.attributes)
+          ? { attributes: event.attributes }
+          : {}),
+      },
+    ];
+  });
+}
+
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
   rawAttributes = span.attributes || undefined,
 ): SpanData {
+  const redactedValues = new Set<string>();
+  const truncatedValues = new Map<string, string>();
+  const sanitization = { redactedValues, truncatedValues };
+  const attributes =
+    rawAttributes && shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(rawAttributes, sanitization)
+      : rawAttributes;
+  const events = normalizeEvents(span.events)?.map((event) => ({
+    ...event,
+    attributes: shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(event.attributes, sanitization)
+      : event.attributes,
+  }));
+  // Keep exact echoes aligned with their attributes for later export/custom redaction.
+  const scrubEcho = <T extends string | null | undefined>(value: T): T =>
+    typeof value === 'string'
+      ? ((redactedValues.has(value) ? '<redacted>' : (truncatedValues.get(value) ?? value)) as T)
+      : value;
+
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
-    name: span.name,
+    name: scrubEcho(span.name),
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes:
-      rawAttributes === undefined
-        ? undefined
-        : shouldSanitizeAttributes
-          ? sanitizeTraceAttributes(rawAttributes)
-          : rawAttributes,
+    attributes,
+    ...(events
+      ? { events: events.map((event) => ({ ...event, name: scrubEcho(event.name) })) }
+      : {}),
     statusCode: span.statusCode ?? undefined,
-    statusMessage: span.statusMessage ?? undefined,
+    statusMessage: scrubEcho(span.statusMessage) ?? undefined,
   };
 }
 
@@ -168,6 +214,7 @@ export class TraceStore {
           startTime: span.startTime,
           endTime: span.endTime,
           attributes: span.attributes,
+          events: normalizeEvents(span.events),
           statusCode: span.statusCode,
           statusMessage: span.statusMessage,
         };
@@ -400,23 +447,21 @@ export class TraceStore {
           }
         }
 
-        const spanData = serializeSpan(row, shouldSanitize, rawAttributes);
-
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
+        if (hasExplicitFilter && !matchesSpanFilter(row.name, spanFilter!)) {
           continue;
         }
 
         if (
           !includeInternalSpans &&
           !hasExplicitFilter &&
-          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: row.statusCode ?? undefined })
         ) {
           continue;
         }
 
-        spanMap.set(spanData.spanId, spanData);
+        spanMap.set(row.spanId, serializeSpan(row, shouldSanitize, rawAttributes));
       }
 
       let spans = Array.from(spanMap.values());
