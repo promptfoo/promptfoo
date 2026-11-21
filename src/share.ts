@@ -28,9 +28,7 @@ import {
   MAX_SPANS_PER_APPEND_REQUEST,
   MAX_SPANS_PER_TRACE,
   MAX_TRACES_PER_APPEND_REQUEST,
-  type Prompt,
-  type TestCase,
-} from './types';
+} from './types/evalConstants';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -43,6 +41,7 @@ import { sanitizeConfigForOutput } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
+import type { Prompt, TestCase } from './types';
 
 interface ShareDomainResult {
   domain: string;

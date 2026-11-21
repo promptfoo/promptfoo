@@ -6,6 +6,7 @@ import { extractAndStoreBinaryData } from '../../../src/blobs/extractor';
 import { recordBlobReference, storeBlob } from '../../../src/blobs/index';
 
 vi.mock('../../../src/blobs/index', () => ({
+  hasBlobReferenceOwner: async (id: string) => id === 'saved-eval',
   storeBlob: vi.fn(),
   recordBlobReference: vi.fn(),
 }));
@@ -20,6 +21,13 @@ const audioAssertions = [...guide.matchAll(/```yaml[^\n]*\n([\s\S]*?)\n```/g)]
       typeof assertion.value === 'string' &&
       assertion.value.includes('providerResponse.audio'),
   );
+
+function extractAudio(audio: Buffer) {
+  return extractAndStoreBinaryData(
+    { output: 'Generated speech', audio: { data: audio.toString('base64'), format: 'mp3' } },
+    { evalId: 'saved-eval' },
+  );
+}
 
 function evaluateAudioAssertions(providerResponse: unknown) {
   expect(audioAssertions).toHaveLength(2);
@@ -47,10 +55,7 @@ afterEach(() => {
 describe('ElevenLabs guide audio assertions', () => {
   it('accepts normal-sized speech after the evaluator externalizes it to a blob reference', async () => {
     const audio = readFileSync('examples/provider-elevenlabs/stt/audio/sample1.mp3');
-    const response = await extractAndStoreBinaryData({
-      output: 'Generated speech',
-      audio: { data: audio.toString('base64'), format: 'mp3' },
-    });
+    const response = await extractAudio(audio);
     expect(storeBlob).toHaveBeenCalledWith(audio, 'audio/mpeg', expect.anything());
     expect(response?.audio?.data).toBeUndefined();
     expect(response?.audio?.blobRef).toBeDefined();
@@ -58,10 +63,7 @@ describe('ElevenLabs guide audio assertions', () => {
   });
 
   it('accepts inline audio that is below the storage threshold', async () => {
-    const response = await extractAndStoreBinaryData({
-      output: 'Generated speech',
-      audio: { data: Buffer.from('short fixture').toString('base64'), format: 'mp3' },
-    });
+    const response = await extractAudio(Buffer.from('short fixture'));
     expect(storeBlob).not.toHaveBeenCalled();
     expect(response?.audio?.data).toBeDefined();
     expect(evaluateAudioAssertions(response)).toEqual([true, true]);
