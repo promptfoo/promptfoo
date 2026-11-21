@@ -839,7 +839,7 @@ describe('is-sql parser loading', () => {
           inverse: false,
         } as AssertionParams),
       ).rejects.toThrow(
-        `node-sql-parser ${version ?? '(unknown version)'} is not supported. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0`,
+        `node-sql-parser ${version ?? '(unknown version)'} is not supported. Install it with: npm install promptfoo node-sql-parser@^5.4.0`,
       );
     },
   );
@@ -861,7 +861,7 @@ describe('is-sql parser loading', () => {
         inverse: false,
       } as AssertionParams),
     ).rejects.toThrow(
-      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0',
+      'node-sql-parser is not installed. Install it with: npm install promptfoo node-sql-parser@^5.4.0',
     );
   });
 
@@ -909,8 +909,6 @@ describe('is-sql parser loading', () => {
         outputString: 'SELECT 1',
         inverse: false,
       } as AssertionParams),
-    ).rejects.toThrow(
-      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0',
-    );
+    ).rejects.toThrow('node-sql-parser has no Parser export');
   });
 });

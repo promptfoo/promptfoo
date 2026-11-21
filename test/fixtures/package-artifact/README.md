@@ -19,8 +19,8 @@ with caching disabled and isolated configuration paths. CommonJS also checks
 writable exports and Zod constructor identity.
 
 Both profiles check ordinary evaluations and actionable PDF/SQL installation errors
-without either parser installed, through ESM and CommonJS. The default profile also
-checks incompatible versions, then installs supported parsers and exercises a local
+through ESM and CommonJS with each parser absent or incompatible. The default
+profile also installs supported parsers and exercises a local
 PDF file variable plus SQL table allowlisting through the public evaluation API.
 
 Both profiles check that `jks-js` and `node-forge` are absent from the default

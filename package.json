@@ -253,8 +253,6 @@
     "google-auth-library": "^11.3.4",
     "hono": "^4.13.18",
     "natural": "^8.2.6",
-    "node-sql-parser": "^5.4.0",
-    "pdf-parse": "^2.4.5",
     "read-excel-file": "^9.3.13",
     "sharp": "^0.35.5"
   },

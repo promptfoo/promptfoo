@@ -624,36 +624,6 @@ function writeConsumerScripts(consumerDir: string): void {
   );
 }
 
-async function runInstalledParserChecks(
-  consumerDir: string,
-  configDir: string,
-  npmEnv: NodeJS.ProcessEnv,
-  installParsers: boolean,
-): Promise<void> {
-  const modes = installParsers ? ['missing', 'incompatible', 'installed'] : ['missing'];
-  for (const mode of modes) {
-    if (mode !== 'missing') {
-      installConsumerPackages(
-        `install ${mode} document parsers`,
-        mode === 'incompatible'
-          ? ['pdf-parse@1.1.1', 'node-sql-parser@4.18.0']
-          : ['pdf-parse@^2.4.5', 'node-sql-parser@^5.4.0'],
-        consumerDir,
-        npmEnv,
-      );
-    }
-    for (const format of ['esm', 'cjs']) {
-      await runAsync(process.execPath, ['optional-parsers.cjs', mode, format], consumerDir, {
-        NODE_PATH: '',
-        PROMPTFOO_CONFIG_DIR: configDir,
-        PROMPTFOO_DISABLE_TELEMETRY: '1',
-        PROMPTFOO_DISABLE_UPDATE: 'true',
-        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
-      });
-    }
-  }
-}
-
 async function runInstalledCodexSecurityEval(
   consumerDir: string,
   configDir: string,
@@ -1677,6 +1647,20 @@ async function main(): Promise<void> {
         ),
       );
     }
+    for (const [parser, version] of Object.entries({
+      'pdf-parse': '^2.4.5',
+      'node-sql-parser': '^5.4.0',
+    })) {
+      await timeAsyncPhase(`check optional ${parser}`, () =>
+        runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+          name: parser,
+          package: parser,
+          version,
+          script: 'optional-parsers.cjs',
+          env: { PARSER: parser, PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' },
+        }),
+      );
+    }
     await timeAsyncPhase('check optional JKS support', () =>
       runOptionalJksChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
     );
@@ -1690,14 +1674,6 @@ async function main(): Promise<void> {
     );
     await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
       runOptionalOpenAiAgentsChecks(
-        consumerDir,
-        configDir,
-        consumerNpmEnv,
-        values.profile === 'default',
-      ),
-    );
-    await timeAsyncPhase('check optional PDF and SQL parsers', () =>
-      runInstalledParserChecks(
         consumerDir,
         configDir,
         consumerNpmEnv,

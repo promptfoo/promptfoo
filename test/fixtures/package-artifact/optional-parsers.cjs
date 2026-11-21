@@ -2,7 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const [mode, format] = process.argv.slice(2);
+const [format, mode] = process.argv.slice(2);
+const parser = process.env.PARSER;
+assert.ok(parser === 'node-sql-parser' || parser === 'pdf-parse');
 
 // A complete, local PDF lets the public file-variable path exercise real extraction.
 function writePdf(filename) {
@@ -32,9 +34,7 @@ function writePdf(filename) {
 async function main() {
   const { evaluate } = format === 'esm' ? await import('promptfoo') : require('promptfoo');
   if (mode === 'missing') {
-    for (const parser of ['pdf-parse', 'node-sql-parser']) {
-      assert.throws(() => require.resolve(parser), { code: 'MODULE_NOT_FOUND' });
-    }
+    assert.throws(() => require.resolve(parser), { code: 'MODULE_NOT_FOUND' });
   }
   async function run(suite) {
     try {
@@ -55,7 +55,7 @@ async function main() {
 
   const filename = path.join(process.cwd(), 'optional-parser-fixture.pdf');
   writePdf(filename);
-  const pdf = await run({
+  const result = parser === 'pdf-parse' ? await run({
     prompts: ['{{ document }}'],
     tests: [
       {
@@ -63,15 +63,15 @@ async function main() {
         assert: [{ type: 'contains', value: 'Optional parser fixture' }],
       },
     ],
-  });
-  const sql = await run({
+  }) : await run({
     prompts: ['SELECT name FROM users'],
     tests: [{ assert: [{ type: 'is-sql', value: { allowedTables: ['select::null::users'] } }] }],
   });
   if (mode === 'installed') {
-    for (const result of [pdf, sql]) {
-      assert.equal(result.results?.[0].success, true, JSON.stringify(result));
-      assert.equal(result.results[0].score, 1);
+    assert.equal(result.results?.[0].success, true, JSON.stringify(result));
+    assert.equal(result.results[0].score, 1);
+    if (parser === 'pdf-parse') {
+      return;
     }
     const denied = await run({
       prompts: ['SELECT secret FROM secrets'],
@@ -80,17 +80,13 @@ async function main() {
     assert.equal(denied.results?.[0].success, false, JSON.stringify(denied));
     assert.equal(denied.results[0].score, 0);
   } else {
-    for (const [parser, range, result] of [
-      ['pdf-parse', '^2.4.5', pdf],
-      ['node-sql-parser', '^5.4.0', sql],
-    ]) {
+    const range = parser === 'pdf-parse' ? '^2.4.5' : '^5.4.0';
       const serialized = JSON.stringify(result);
       assert.ok(serialized.includes(`npm install promptfoo ${parser}@${range}`), serialized);
       assert.ok(
         serialized.includes(mode === 'missing' ? 'is not installed' : 'is not supported'),
         serialized,
       );
-    }
   }
 }
 

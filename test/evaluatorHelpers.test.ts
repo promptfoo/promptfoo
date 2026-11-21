@@ -184,14 +184,11 @@ describe('evaluatorHelpers', () => {
       "Cannot find module 'pdf-parse'",
       "Cannot find package 'pdf-parse' imported from /project/dist/evaluatorHelpers.js",
     ])('should explain how to install pdf-parse for %s', async (message) => {
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
-      const pdfParse = await import('pdf-parse');
-      vi.mocked(pdfParse.PDFParse).mockImplementationOnce(function () {
+      vi.mocked(nodeModule.createRequire('').resolve).mockImplementationOnce(() => {
         throw new Error(message);
       });
-
       await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
-        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5',
+        'pdf-parse is not installed. Install it with: npm install promptfoo pdf-parse@^2.4.5',
       );
     });
 
