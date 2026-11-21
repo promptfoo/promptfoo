@@ -1,57 +1,40 @@
 import { describe, expect, it } from 'vitest';
+import { operatorFilterFn } from './data-table-filter';
 
 // Mock row object for testing
 const createMockRow = (value: unknown) => ({
   getValue: () => value,
 });
 
-// Import the filter function - we'll need to export it from data-table.tsx
-// For now, let's recreate it here to test the logic
-const operatorFilterFn = (
-  row: { getValue: (columnId: string) => unknown },
-  columnId: string,
-  filterValue: unknown,
-): boolean => {
-  if (!filterValue || typeof filterValue !== 'object') {
-    return true;
-  }
-
-  const { operator, value } = filterValue as { operator: string; value: string | string[] };
-
-  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
-  if (!hasValue) {
-    return true;
-  }
-
-  const cellValue = row.getValue(columnId);
-  const cellString = String(cellValue ?? '').toLowerCase();
-
-  switch (operator) {
-    case 'equals': {
-      const filterString = String(value).toLowerCase();
-      return cellString === filterString;
-    }
-    case 'notEquals': {
-      const filterString = String(value).toLowerCase();
-      return cellString !== filterString;
-    }
-    case 'isAny': {
-      if (!Array.isArray(value)) {
-        return false;
-      }
-      const filterValues = value.map((v) => String(v).toLowerCase());
-      return filterValues.includes(cellString);
-    }
-    case 'contains': {
-      const filterString = String(value).toLowerCase();
-      return cellString.includes(filterString);
-    }
-    default:
-      return true;
-  }
-};
-
 describe('DataTable Filter Operators', () => {
+  it.each([
+    ['contains', 'BETA', true],
+    ['contains', 'delta', false],
+    ['startsWith', 'ALPHA', true],
+    ['startsWith', 'beta', false],
+    ['endsWith', 'GAMMA', true],
+    ['endsWith', 'beta', false],
+  ] as const)(
+    'dispatches %s with %s to the correct string operation',
+    (operator, value, expected) => {
+      expect(operatorFilterFn(createMockRow('Alpha-beta-Gamma'), 'name', { operator, value })).toBe(
+        expected,
+      );
+    },
+  );
+
+  it.each(['contains', 'startsWith', 'endsWith'] as const)(
+    '%s treats missing cell values as empty strings',
+    (operator) => {
+      expect(operatorFilterFn(createMockRow(null), 'name', { operator, value: 'alpha' })).toBe(
+        false,
+      );
+      expect(operatorFilterFn(createMockRow(undefined), 'name', { operator, value: 'alpha' })).toBe(
+        false,
+      );
+    },
+  );
+
   describe('Select Filter - equals', () => {
     it('should match when value equals (case-insensitive)', () => {
       const row = createMockRow('Critical');
