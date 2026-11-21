@@ -5,7 +5,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { generateSignature } from '../../src/providers/http';
+import { generateSignature, HttpProviderConfigSchema } from '../../src/providers/http';
 import { readPfxPrivateKey } from '../../src/util/pfx';
 import { runCommand } from '../../src/util/runCommand';
 
@@ -20,10 +20,11 @@ describe('PFX signature paths (generateSignature)', () => {
     vi.restoreAllMocks();
   });
 
-  it('throws when PFX password is missing', async () => {
+  it.each([undefined, null])('throws when PFX password is missing (%s)', async (password) => {
     const signatureAuth = {
       type: 'pfx' as const,
       pfxContent: 'BASE64',
+      pfxPassword: password,
       signatureDataTemplate: '{{signatureTimestamp}}',
       signatureAlgorithm: 'SHA256',
       signatureValidityMs: 300000,
@@ -32,6 +33,70 @@ describe('PFX signature paths (generateSignature)', () => {
     await expect(generateSignature(signatureAuth, Date.now())).rejects.toThrow(
       /PFX certificate password is required/,
     );
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: 'explicit empty password',
+      passwords: { pfxPassword: '' },
+      env: undefined,
+      expected: '',
+    },
+    {
+      label: 'empty PFX password before generic and environment values',
+      passwords: { pfxPassword: '', certificatePassword: 'generic-password' },
+      env: 'environment-password',
+      expected: '',
+    },
+    {
+      label: 'empty generic password before environment value',
+      passwords: { certificatePassword: '' },
+      env: 'environment-password',
+      expected: '',
+    },
+    { label: 'empty environment password', passwords: {}, env: '', expected: '' },
+    {
+      label: 'generic password before environment value',
+      passwords: { certificatePassword: 'generic-password' },
+      env: 'environment-password',
+      expected: 'generic-password',
+    },
+    {
+      label: 'environment fallback',
+      passwords: {},
+      env: 'environment-password',
+      expected: 'environment-password',
+    },
+  ])('signs with $label', async ({ passwords, env, expected }) => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    vi.mocked(runCommand).mockResolvedValue({
+      stdout: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+      stderr: '',
+    });
+    const { signatureAuth } = HttpProviderConfigSchema.parse({
+      signatureAuth: {
+        type: 'pfx',
+        pfxContent: Buffer.from('fixture').toString('base64'),
+        ...passwords,
+      },
+    });
+    const timestamp = Date.now();
+
+    const signature = await cliState.withEnv({ PROMPTFOO_PFX_PASSWORD: env }, () =>
+      generateSignature(signatureAuth, timestamp),
+    );
+
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runCommand).mock.calls[0][2]?.input).toBe(`${expected}\n`);
+    expect(
+      crypto.verify(
+        'SHA256',
+        Buffer.from(String(timestamp)),
+        publicKey,
+        Buffer.from(signature, 'base64'),
+      ),
+    ).toBe(true);
   });
 
   it('throws when PFX file path does not exist', async () => {

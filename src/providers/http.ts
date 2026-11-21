@@ -163,7 +163,7 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
         if (certificateContent && !processedAuth.pfxContent) {
           processedAuth.pfxContent = certificateContent;
         }
-        if (certificatePassword && !processedAuth.pfxPassword) {
+        if (certificatePassword != null && processedAuth.pfxPassword == null) {
           processedAuth.pfxPassword = certificatePassword;
         }
         if (certificateFilename && !processedAuth.pfxPath) {
@@ -516,11 +516,11 @@ export async function generateSignature(
         if (hasPfxPath || hasPfxContent) {
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword =
-            signatureAuth.pfxPassword ||
-            signatureAuth.certificatePassword ||
+            signatureAuth.pfxPassword ??
+            signatureAuth.certificatePassword ??
             getEnvString('PROMPTFOO_PFX_PASSWORD');
 
-          if (!pfxPassword) {
+          if (pfxPassword == null) {
             throw new Error(
               'PFX certificate password is required. Provide it via config pfxPassword/certificatePassword or PROMPTFOO_PFX_PASSWORD environment variable',
             );

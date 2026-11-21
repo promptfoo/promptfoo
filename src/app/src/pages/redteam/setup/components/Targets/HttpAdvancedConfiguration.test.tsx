@@ -292,7 +292,7 @@ describe('HttpAdvancedConfiguration', () => {
     expect(screen.getByLabelText('PFX Password')).toBeVisible();
   });
 
-  it('should call `updateCustomTarget` with the updated pfxPassword when the user enters a value in the PFX configuration field', async () => {
+  it('sets PFX passwords and omits cleared values so the environment can supply them', async () => {
     const user = userEvent.setup();
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
@@ -300,6 +300,7 @@ describe('HttpAdvancedConfiguration', () => {
         signatureAuth: {
           enabled: true,
           certificateType: 'pfx',
+          pfxPassword: 'previous',
         },
       },
     };
@@ -316,6 +317,11 @@ describe('HttpAdvancedConfiguration', () => {
     await user.click(authorizationTab);
 
     const pfxPasswordInput = screen.getByLabelText('PFX Password') as HTMLInputElement;
+    await user.clear(pfxPasswordInput);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+      'signatureAuth',
+      expect.objectContaining({ pfxPassword: undefined }),
+    );
     await user.click(pfxPasswordInput);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('test-password');
