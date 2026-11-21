@@ -352,16 +352,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ? 'vertex:llama'
           : 'vertex:palm2';
 
-    const llama = system === 'vertex:llama' ? this.getLlamaSamplingOptions() : undefined;
+    const requestedSampling =
+      system === 'vertex:llama'
+        ? this.getLlamaSamplingOptions()
+        : system === 'vertex:anthropic'
+          ? this.getClaudeSamplingOptions()
+          : undefined;
     const spanContext: GenAISpanContext = {
       system,
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: llama?.temperature ?? this.config.temperature,
-      topP: llama?.top_p ?? this.config.topP,
-      topK: llama?.top_k,
-      maxTokens: llama?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
+      temperature: requestedSampling?.temperature ?? this.config.temperature,
+      topP: requestedSampling?.top_p ?? this.config.topP,
+      topK: requestedSampling?.top_k,
+      maxTokens:
+        requestedSampling?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -388,6 +394,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return this.callLlamaApi(prompt, context);
     }
     return this.callPalm2Api(prompt, context);
+  }
+
+  private getClaudeSamplingOptions() {
+    const generationConfig = this.config.generationConfig;
+    return {
+      // Claude rejects max_tokens: 0, so a 0 means unset here, as it already did at the top level.
+      max_tokens:
+        generationConfig?.maxOutputTokens ||
+        this.config.max_tokens ||
+        this.config.maxOutputTokens ||
+        undefined,
+      temperature: generationConfig?.temperature ?? this.config.temperature,
+      top_p: generationConfig?.topP ?? this.config.top_p ?? this.config.topP,
+      top_k: generationConfig?.topK ?? this.config.top_k ?? this.config.topK,
+    };
   }
 
   async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -447,7 +468,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // `thinking` field — so the 512 default would truncate ordinary replies.
     const thinkingConsumesTokens = claudeThinkingConsumesTokens(this.modelName, thinkingConfig);
 
-    let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
+    const requestedSampling = this.getClaudeSamplingOptions();
+    let maxTokens = requestedSampling.max_tokens || 0;
     if (!maxTokens) {
       maxTokens = thinkingConsumesTokens ? 2048 : 512;
     }
@@ -457,13 +479,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // level — the underlying Anthropic API returns 400 for any request that
     // pins `temperature`, `top_p`, or `top_k`. Vertex forwards the request body
     // verbatim to rawPredict, so suppress all three here too.
-    const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
-    const resolvedTopP = samplingParamsDeprecated
+    const resolvedTemperature = samplingParamsDeprecated
       ? undefined
-      : (this.config.top_p ?? this.config.topP);
-    const resolvedTopK = samplingParamsDeprecated
-      ? undefined
-      : (this.config.top_k ?? this.config.topK);
+      : requestedSampling.temperature;
+    const resolvedTopP = samplingParamsDeprecated ? undefined : requestedSampling.top_p;
+    const resolvedTopK = samplingParamsDeprecated ? undefined : requestedSampling.top_k;
 
     // Vertex forwards the body verbatim, so apply the same combination rules the Anthropic
     // API enforces (temperature vs top_p, and the limits extended thinking imposes).

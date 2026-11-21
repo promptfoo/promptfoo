@@ -199,6 +199,8 @@ Supported Claude models require explicit access enablement through the [Vertex A
 Claude context limits vary by model. Fable and Mythos 5 through 5.2, Opus 5.5, Opus 5, and
 Sonnet 5 have a 1M-token context window.
 
+Set Claude sampling options at the top level (`max_tokens`, `temperature`, `top_p`, `top_k`) or in `generationConfig` (`maxOutputTokens`, `temperature`, `topP`, `topK`). A nested setting takes precedence over the same top-level setting, except that a `maxOutputTokens` of `0` counts as unset.
+
 ### Llama Models
 
 Use `vertex:<model-id>` with a hosted Llama model. You can include the `meta/` publisher prefix used by Google's Chat Completions API. Check [Google's Llama model guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/llama/use-llama) for model IDs, regions, and quotas.
