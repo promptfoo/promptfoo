@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hkdfSync, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -1423,14 +1423,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
   private loadedSdk?: Awaited<ReturnType<typeof loadClaudeCodeSDK>>;
+  readonly #cacheSalt = randomBytes(32);
   #cacheScope?: { fingerprint: string; id: string };
 
-  // Credentials can appear under arbitrary environment names. Keep the fingerprint
+  // Credentials can appear under arbitrary environment names. Keep the derived fingerprint
   // in memory and give each environment a random ID for the persistent cache.
   private getCacheScope(env: Record<string, string>): string {
-    const fingerprint = createHash('sha256')
-      .update(JSON.stringify(env, Object.keys(env).sort()))
-      .digest('hex');
+    const input = JSON.stringify(env, Object.keys(env).sort());
+    const key = hkdfSync('sha256', input, this.#cacheSalt, 'promptfoo:claude-agent-cache:v1', 32);
+    const fingerprint = Buffer.from(key).toString('hex');
     if (this.#cacheScope?.fingerprint !== fingerprint) {
       this.#cacheScope = { fingerprint, id: crypto.randomUUID() };
     }
