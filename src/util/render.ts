@@ -152,7 +152,7 @@ function mapObjectValues(
   for (const key in value) {
     // Callback registries authorize execution. Never promote inherited entries or
     // invoke callback functions as runtime template factories.
-    if (key === 'functionToolCallbacks' && !Object.hasOwn(value, key)) {
+    if (key === 'functionToolCallbacks' && !Object.prototype.hasOwnProperty.call(value, key)) {
       continue;
     }
     const child = (value as Record<string, unknown>)[key];
