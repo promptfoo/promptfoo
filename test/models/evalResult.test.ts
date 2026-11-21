@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getBlobByHash } from '../../src/blobs';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
 import EvalResult, {
   getStripFlags,
   projectPrompt,
@@ -19,6 +23,7 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -43,6 +48,38 @@ const createUserTraceMetadataFixture = () => ({
     retained: 'user-metadata',
   },
 });
+
+function withSnapshotOwnership(input: EvaluateResult, ownership: string): EvaluateResult {
+  switch (ownership) {
+    case 'clone-result':
+      return structuredClone(input);
+    case 'json-result':
+      return JSON.parse(JSON.stringify(input));
+    case 'clone-metadata':
+      return { ...input, metadata: structuredClone(input.metadata) };
+    case 'json-metadata':
+      return { ...input, metadata: JSON.parse(JSON.stringify(input.metadata)) };
+    case 'test-owned':
+      return {
+        ...input,
+        testCase: { ...input.testCase, metadata: structuredClone(input.metadata) },
+      };
+    case 'hook-calls': {
+      const metadata = structuredClone(input.metadata!);
+      metadata.completedTargetResponses[0].response.metadata.functionToolCalls = [
+        'intentional hook calls',
+      ];
+      return { ...input, metadata };
+    }
+    case 'hook-prompt': {
+      const metadata = structuredClone(input.metadata!);
+      metadata.completedTargetResponses[0].prompt = 'Intentional hook prompt';
+      return { ...input, metadata };
+    }
+    default:
+      return input;
+  }
+}
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -1374,6 +1411,327 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(
+      [
+        { media: 'none', size: 0, ownership: 'provider' },
+        { media: 'image/png', size: 16, ownership: 'provider' },
+        { media: 'image/png', size: 2048, ownership: 'provider' },
+        { media: 'audio/wav', size: 2048, ownership: 'provider' },
+        ...[
+          'clone-result',
+          'json-result',
+          'clone-metadata',
+          'json-metadata',
+          'test-owned',
+          'hook-calls',
+          'hook-prompt',
+        ].map((ownership) => ({ media: 'image/png', size: 2048, ownership })),
+      ].flatMap((variant) =>
+        ['memory', 'single', 'batch'].flatMap((boundary) =>
+          [false, true].map((strip) => ({ ...variant, boundary, strip })),
+        ),
+      ),
+    )(
+      'preserves ownership through media extraction at $boundary ($media/$size, $ownership, strip: $strip)',
+      async ({ media, size, ownership, boundary, strip }) => {
+        const bytes = Buffer.alloc(size, 0x61);
+        const output = size
+          ? `data:${media};base64,${bytes.toString('base64')}`
+          : 'Callback completed';
+        const functionToolCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"private-media-arguments"}' },
+          },
+        ];
+        const target = { output, metadata: { functionToolCalls } };
+        const snapshots = [
+          {
+            prompt: 'Target prompt',
+            response: {
+              ...target,
+              metadata: {
+                ...target.metadata,
+                completedTargetResponses: [{ prompt: 'Nested target prompt', response: target }],
+              },
+            },
+          },
+        ];
+        let input = createEvaluateResult({
+          response: {
+            output,
+            metadata: { functionToolCalls, completedTargetResponses: snapshots },
+          },
+          metadata: { functionToolCalls, completedTargetResponses: snapshots },
+        });
+        input = withSnapshotOwnership(input, ownership);
+        const original = structuredClone(input);
+        const evaluation = await Eval.create({}, [input.prompt], { id: randomUUID() });
+        const saved =
+          boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], evaluation.id))[0]
+            : await EvalResult.createFromEvaluateResult(evaluation.id, input, {
+                persist: boundary === 'single',
+              });
+        const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+        const canonical = loaded!.response!.metadata!.completedTargetResponses;
+        expect(canonical[0].response.output).toBe(
+          size >= 1024 ? `promptfoo://blob/${sha256(bytes)}` : output,
+        );
+        if (size >= 1024) {
+          expect((await getBlobByHash(sha256(bytes))).data).toEqual(bytes);
+        }
+        const userOwned = ['test-owned', 'hook-calls', 'hook-prompt'].includes(ownership);
+        expect(loaded!.metadata.completedTargetResponses).toEqual(
+          userOwned ? input.metadata!.completedTargetResponses : canonical,
+        );
+        expect(JSON.stringify(loaded!.response)).toContain('private-media-arguments');
+        expect(JSON.stringify(loaded!.metadata)).toContain('private-media-arguments');
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        for (const projected of [
+          loaded!.toEvaluateResult(flags),
+          sanitizeResultForJsonlArtifact(loaded!, flags),
+        ]) {
+          const projectedSnapshot = projected.metadata!.completedTargetResponses[0];
+          expect(JSON.stringify(projected.response).includes('private-media-arguments')).toBe(
+            !strip,
+          );
+          expect(JSON.stringify(projected.metadata).includes('private-media-arguments')).toBe(
+            !strip || userOwned,
+          );
+          expect(projectedSnapshot.prompt).toBe(input.metadata!.completedTargetResponses[0].prompt);
+          if (ownership === 'hook-calls') {
+            expect(projectedSnapshot.response.metadata.functionToolCalls).toEqual([
+              'intentional hook calls',
+            ]);
+          }
+          if (ownership === 'test-owned') {
+            expect(projected.metadata).toEqual(input.metadata);
+          }
+        }
+        expect(input).toEqual(original);
+      },
+    );
+
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((strip) => ({ boundary, strip })),
+      ),
+    )(
+      'projects retained calls inside completed target snapshots at $boundary (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const functionToolCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"private-snapshot-arguments"}' },
+          },
+        ];
+        const target = {
+          output: 'Callback completed',
+          raw: { note: 'existing raw snapshot' },
+          tokenUsage: { total: 3 },
+          metadata: { functionToolCalls, note: 'ordinary target metadata' },
+        };
+        const snapshots = [
+          { prompt: 'First target prompt', response: target },
+          {
+            prompt: 'Nested strategy prompt',
+            response: {
+              ...target,
+              metadata: {
+                ...target.metadata,
+                completedTargetResponses: [{ prompt: 'Nested target prompt', response: target }],
+              },
+            },
+          },
+          null,
+          { response: 'ordinary user value' },
+        ];
+        const metadata = {
+          completedTargetResponses: snapshots,
+          application: {
+            response: { metadata: { functionToolCalls: ['intentional user value'] } },
+          },
+        };
+        const input = createEvaluateResult({
+          response: { output: 'Callback completed', metadata },
+          metadata,
+        });
+        const original = structuredClone(input);
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult('snapshot-projection', input, {
+            persist: boundary === 'persisted',
+          });
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded!.response?.metadata?.completedTargetResponses).toEqual(snapshots);
+          expect(loaded!.metadata.completedTargetResponses).toEqual(snapshots);
+        }
+        const projectedTarget = { ...target, metadata: { note: 'ordinary target metadata' } };
+        const expected = strip
+          ? {
+              ...metadata,
+              completedTargetResponses: [
+                { prompt: 'First target prompt', response: projectedTarget },
+                {
+                  prompt: 'Nested strategy prompt',
+                  response: {
+                    ...projectedTarget,
+                    metadata: {
+                      ...projectedTarget.metadata,
+                      completedTargetResponses: [
+                        { prompt: 'Nested target prompt', response: projectedTarget },
+                      ],
+                    },
+                  },
+                },
+                null,
+                { response: 'ordinary user value' },
+              ],
+            }
+          : metadata;
+        expect(projected.response?.metadata).toEqual(expected);
+        expect(projected.metadata).toEqual(expected);
+        expect(JSON.stringify(projected).includes('private-snapshot-arguments')).toBe(!strip);
+        expect(input).toEqual(original);
+      },
+    );
+
+    it.each(['test-owned', 'hook-owned'])(
+      'preserves %s completed snapshots when stripping provider output',
+      async (ownership) => {
+        const providerSnapshots = [
+          {
+            prompt: 'Provider prompt',
+            response: {
+              output: 'Callback completed',
+              metadata: { functionToolCalls: ['provider call arguments'] },
+            },
+          },
+        ];
+        const userSnapshots =
+          ownership === 'test-owned'
+            ? providerSnapshots
+            : [{ response: { metadata: { functionToolCalls: ['intentional hook value'] } } }];
+        const input = createEvaluateResult({
+          testCase: createAtomicTestCase({
+            metadata: ownership === 'test-owned' ? { completedTargetResponses: userSnapshots } : {},
+          }),
+          response: {
+            output: 'Callback completed',
+            metadata: { completedTargetResponses: providerSnapshots },
+          },
+          metadata: { completedTargetResponses: userSnapshots },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        const model = await EvalResult.createFromEvaluateResult('snapshot-ownership', input, {
+          persist: false,
+        });
+        for (const projected of [
+          model.toEvaluateResult(flags),
+          sanitizeResultForJsonlArtifact(input, flags),
+        ]) {
+          expect(projected.metadata?.completedTargetResponses).toEqual(userSnapshots);
+          expect(projected.response?.metadata?.completedTargetResponses).toEqual([
+            { prompt: 'Provider prompt', response: { output: 'Callback completed', metadata: {} } },
+          ]);
+        }
+      },
+    );
+
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((strip) => ({ boundary, strip })),
+      ),
+    )(
+      'projects retained function calls at $boundary (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const functionToolCalls = [
+          {
+            id: 'call-1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"private-retained-arguments"}' },
+          },
+        ];
+        const metadata = { functionToolCalls, note: 'ordinary metadata' };
+        const response = { output: 'Callback completed', metadata };
+        const input = createEvaluateResult({ response, metadata });
+        const original = structuredClone(input);
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'retained-call-projection',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded?.response?.metadata?.functionToolCalls).toEqual(functionToolCalls);
+          expect(loaded?.metadata.functionToolCalls).toEqual(functionToolCalls);
+        }
+        const expectedMetadata = strip ? { note: 'ordinary metadata' } : metadata;
+        expect(projected.response).toEqual({
+          output: strip ? '[output stripped]' : 'Callback completed',
+          metadata: expectedMetadata,
+        });
+        expect(projected.metadata).toEqual(expectedMetadata);
+        if (strip) {
+          expect(JSON.stringify(projected)).not.toContain('private-retained-arguments');
+        }
+        expect(input).toEqual(original);
+      },
+    );
+
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((override) => ({ boundary, override })),
+      ),
+    )(
+      'preserves test-owned retained-call metadata at $boundary (override: $override)',
+      async ({ boundary, override }) => {
+        const testMetadata = { functionToolCalls: ['intentional user metadata'], note: 'keep' };
+        const responseMetadata = {
+          functionToolCalls: override
+            ? [{ type: 'function', function: { name: 'lookup', arguments: 'private-call' } }]
+            : testMetadata.functionToolCalls,
+        };
+        const input = createEvaluateResult({
+          testCase: createAtomicTestCase({ metadata: testMetadata }),
+          response: { output: 'Callback completed', metadata: responseMetadata },
+          metadata: { ...testMetadata, ...responseMetadata },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'retained-call-provenance',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          projected = loaded!.toEvaluateResult(flags);
+        }
+        expect(projected.testCase.metadata).toEqual(testMetadata);
+        expect(projected.metadata).toEqual(override ? { note: 'keep' } : testMetadata);
+        expect(projected.response?.metadata).toEqual({});
+        expect(input.response?.metadata).toEqual(responseMetadata);
+        expect(input.testCase.metadata).toEqual(testMetadata);
+      },
+    );
+
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].flatMap((strip) =>

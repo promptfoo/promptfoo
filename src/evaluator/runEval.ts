@@ -48,6 +48,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
+import { synchronizeProviderMetadata } from './resultProcessing';
 import type winston from 'winston';
 
 import type {
@@ -852,13 +853,19 @@ function updateConversationHistory({
     return;
   }
 
+  // Retained tool calls are grading evidence, not conversation context. Keep them
+  // on the response for assertions without copying their arguments into later turns.
+  const metadata = response.metadata ? { ...response.metadata } : response.metadata;
+  if (metadata) {
+    delete metadata.functionToolCalls;
+  }
   const conversationLastInput = getConversationLastInput(renderedJson);
   conversations[conversationKey] = conversations[conversationKey] || [];
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
     output: response.conversationOutput ?? (response.output || ''),
-    metadata: response.metadata,
+    metadata,
   });
 }
 
@@ -1116,6 +1123,13 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  ret.metadata = synchronizeProviderMetadata(
+    ret.metadata,
+    response.metadata,
+    ret.metadata,
+    processedResponse.metadata,
+    test.metadata,
+  );
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
