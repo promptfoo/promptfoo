@@ -54,9 +54,10 @@ describe('createMoonshotProvider routing', () => {
   });
 
   it('falls back to the default model for a bare prefix', () => {
-    expect(asChat(createMoonshotProvider('moonshot:')).modelName).toBe('kimi-k3');
-    expect(asChat(createMoonshotProvider('moonshot:chat')).modelName).toBe('kimi-k3');
-    expect(asChat(createMoonshotProvider('moonshot:chat:')).modelName).toBe('kimi-k3');
+    expect(asChat(createMoonshotProvider('moonshot:')).modelName).toBe('kimi-k3.1-pro');
+    expect(asChat(createMoonshotProvider('moonshot:chat')).modelName).toBe('kimi-k3.1-pro');
+    expect(asChat(createMoonshotProvider('moonshot:chat:')).modelName).toBe('kimi-k3.1-pro');
+    expect(createMoonshotProvider('moonshot:').id()).toBe('moonshot:kimi-k3.1-pro');
   });
 });
 
@@ -222,6 +223,23 @@ describe('MoonshotProvider sampling-param handling', () => {
     expect(body.max_tokens).toBeUndefined();
     expect(body.top_p).toBeUndefined();
   });
+
+  it.each(['kimi-k3.1-pro', 'kimi-k3.1-pro-highspeed'])(
+    'sends %s with only the K3-series controls',
+    async (model) => {
+      const provider = asChat(
+        createMoonshotProvider(`moonshot:${model}`, { config: { reasoning_effort: 'low' } }),
+      );
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body.model).toBe(model);
+      expect(body.reasoning_effort).toBe('low');
+      // K3.1 Pro rejects any temperature but 1 and defaults to a 131k output budget.
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('top_p');
+    },
+  );
 
   it('forwards an explicit reasoning_effort for kimi-k3 models', async () => {
     const provider = asChat(createMoonshotProvider('moonshot:kimi-k3', createMaxReasoningConfig()));
@@ -394,6 +412,60 @@ describe('MoonshotProvider callApi cost', () => {
     expect(result.cost).toBeCloseTo(6 * 0.000002 + 4 * 0.0000002 + 5 * 0.000004, 12);
     // The cache hit must also land in token usage stats, not just cost.
     expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(4);
+  });
+
+  // Usage shapes and rates below mirror live kimi-k3.1-pro responses and the
+  // published $2.00 input / $0.20 cached input / $10.00 output per-1M rates.
+  const k31ProPricing = {
+    apiKey: 'k',
+    inputCost: 2 / 1_000_000,
+    cacheReadCost: 0.2 / 1_000_000,
+    outputCost: 10 / 1_000_000,
+  };
+
+  it('bills kimi-k3.1-pro cache reads from prompt_tokens_details at the cached rate', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        model: 'kimi-k3.1-pro',
+        choices: [{ message: { content: 'YES' }, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 3167,
+          completion_tokens: 34,
+          total_tokens: 3201,
+          cached_tokens: 3072,
+          completion_tokens_details: { reasoning_tokens: 18 },
+          prompt_tokens_details: { cached_tokens: 3072, cache_write_tokens: 0 },
+        },
+      }) as any,
+    );
+    const provider = createMoonshotProvider('moonshot:kimi-k3.1-pro', { config: k31ProPricing });
+    const result = await provider.callApi('Reply with YES');
+    // 95 uncached input, 3072 cached input, 34 output tokens.
+    expect(result.cost).toBeCloseTo((95 * 2 + 3072 * 0.2 + 34 * 10) / 1_000_000, 12);
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(3072);
+  });
+
+  it('bills kimi-k3.1-pro default-TTL cache writes at the input rate', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        model: 'kimi-k3.1-pro',
+        choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 3167,
+          completion_tokens: 22,
+          total_tokens: 3189,
+          completion_tokens_details: { reasoning_tokens: 6 },
+          prompt_tokens_details: { cache_write_tokens: 3072 },
+        },
+      }) as any,
+    );
+    const provider = createMoonshotProvider('moonshot:kimi-k3.1-pro', { config: k31ProPricing });
+    const result = await provider.callApi('Reply with OK');
+    // A 5m cache write costs the same as uncached input, so all 3167 prompt
+    // tokens bill at $2.00/1M.
+    expect(result.cost).toBeCloseTo((3167 * 2 + 22 * 10) / 1_000_000, 12);
+    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(3072);
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBeUndefined();
   });
 
   it('honours prompt-level cost overrides', async () => {

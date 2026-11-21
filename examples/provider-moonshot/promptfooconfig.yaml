@@ -5,26 +5,24 @@ prompts:
   - 'In one sentence, summarise: {{passage}}'
 
 # Both models run on a single `MOONSHOT_API_KEY`.
-#   - kimi-k3 is Moonshot's flagship Kimi "thinking" model (1M context, always
-#     reasoning). It pins temperature and the other sampling params to fixed
-#     values, so the provider sends no sampling defaults for kimi-* models —
-#     just leave them unset. `showThinking: false` keeps its reasoning out of
-#     the graded answer.
-#   - kimi-k2.6 is the cheaper previous-generation thinking model; here we turn
-#     its reasoning off entirely via the K2.x-only `thinking` passthrough for a
-#     fast, low-cost comparison point.
-# (The legacy moonshot-v1 generation models are closed to new accounts and
-# sunset on August 31, 2026, so this example sticks to the Kimi models.)
+#   - kimi-k3.1-pro is Moonshot's flagship Kimi "thinking" model (1M context,
+#     always reasoning). It pins temperature and the other sampling params to
+#     fixed values, so the provider sends no sampling defaults for kimi-*
+#     models — just leave them unset. `showThinking: false` keeps its reasoning
+#     out of the graded answer.
+#   - kimi-k3 is the previous-generation K3 model; here it runs at
+#     `reasoning_effort: low` (the K3-series control; default is `max`) for a
+#     faster comparison point.
 providers:
-  - id: moonshot:kimi-k3
-    label: 'Kimi K3'
+  - id: moonshot:kimi-k3.1-pro
+    label: 'Kimi K3.1 Pro'
     config:
       showThinking: false
-  - id: moonshot:kimi-k2.6
-    label: 'Kimi K2.6 (thinking off)'
+  - id: moonshot:kimi-k3
+    label: 'Kimi K3 (low effort)'
     config:
-      passthrough:
-        thinking: { type: disabled }
+      showThinking: false
+      reasoning_effort: low
 
 tests:
   - vars:
