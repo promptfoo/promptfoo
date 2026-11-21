@@ -92,6 +92,7 @@ describe('OTLPTracingExporter', () => {
           request: "curl --header 'X-Api-Key: sensitive header value'",
           assigned: 'env HOME=/tmp curl -u buildbot:sensitive https://host',
           argv: ['/usr/bin/env', 'HOME=/tmp', 'curl', '-u', 'buildbot:sensitive'],
+          envFile: 'PASSWORD=\\sensitive/value\npassword=opaque\\sensitive\nREGION=west',
           config: '"password" = "sensitive value"',
           folded: 'Authorization:\r\n Bearer sensitive',
           callback: 'https://host/cb?code=sensitive&count=2',
@@ -111,6 +112,7 @@ describe('OTLPTracingExporter', () => {
         },
       );
       expect(JSON.stringify(payload)).not.toContain('sensitive');
+      expect(attributes.envFile).toBe('PASSWORD=<redacted>\npassword=<redacted>\nREGION=west');
       expect(attributes.callback).toBe('https://host/cb?code=<redacted>&count=2');
       expect(attributes.source).toBe('next=%2Fsettings');
       expect(JSON.parse(attributes.duplicate as string)).toEqual({ body: 'ok' });
