@@ -10,7 +10,6 @@ const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/sema
 
 // Configure OTLP exporter
 const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
-console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
 const exporter = new OTLPTraceExporter({
   url: exporterUrl,
 });
@@ -40,27 +39,8 @@ propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
 // Run a callback in a span and record its result.
-async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
-  let span;
-  let fn;
-  let attributes = {};
-
-  // Handle overloaded parameters
-  if (typeof spanOrName === 'string') {
-    // Called with (name, attributes, fn) or (name, fn)
-    if (typeof attributesOrFn === 'function') {
-      fn = attributesOrFn;
-    } else {
-      attributes = attributesOrFn || {};
-      fn = maybeFn;
-    }
-    span = tracer.startSpan(spanOrName, { attributes });
-  } else {
-    // Called with (span, fn) - original pattern
-    span = spanOrName;
-    fn = attributesOrFn;
-  }
-
+async function runInSpan(name, attributes, fn) {
+  const span = tracer.startSpan(name, { attributes });
   const ctx = trace.setSpan(context.active(), span);
 
   try {
@@ -279,7 +259,7 @@ class SimpleTracedProvider {
             ];
 
             for (const step of reasoningSteps) {
-              await runInSpan(`reasoning_${step.step}`, async () => {
+              await runInSpan(`reasoning_${step.step}`, {}, async () => {
                 const stepSpan = trace.getSpan(context.active());
                 await new Promise((resolve) => setTimeout(resolve, step.duration));
 
