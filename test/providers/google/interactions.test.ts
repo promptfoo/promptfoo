@@ -2948,6 +2948,45 @@ describe('GoogleInteractionsProvider', () => {
       );
     });
 
+    it.each(['cached', 'coalesced'])(
+      'never polls a %s pending ID from another caller',
+      async (source) => {
+        const deleteFromCache = vi.fn();
+        mockFetchWithCache
+          .mockResolvedValueOnce({
+            ...completedText,
+            data: { id: 'other', status: 'in_progress' },
+            cached: source === 'cached',
+            coalesced: source === 'coalesced',
+            deleteFromCache,
+          })
+          .mockResolvedValueOnce({
+            ...completedText,
+            data: { id: 'current', status: 'in_progress' },
+          })
+          .mockResolvedValueOnce(completedText);
+        const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+          config: { apiKey: 'test-key' },
+        });
+        expect(await provider.callApi('hello')).toMatchObject({
+          output: 'robot plan',
+          cached: false,
+        });
+        expect(deleteFromCache).toHaveBeenCalledTimes(1);
+        const [endpoint, request, timeout, format] = mockFetchWithCache.mock.calls[0];
+        expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+          2,
+          endpoint,
+          request,
+          timeout,
+          format,
+          true,
+        );
+        expect(mockFetchWithCache.mock.calls[2][0]).toBe(`${endpoint}/current`);
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(3);
+      },
+    );
+
     it('keeps a completed interaction in the cache', async () => {
       const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       mockFetchWithCache.mockResolvedValue({ ...completedText, deleteFromCache } as any);

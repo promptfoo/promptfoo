@@ -1441,19 +1441,29 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let httpStatusText: string;
     let deleteFromCache: (() => Promise<void>) | undefined;
     try {
-      const response = await fetchWithCache<InteractionResponse>(
-        endpoint,
-        {
-          method: 'POST',
-          headers,
-          body: requestBody,
-        } as RequestInit,
-        getRequestTimeoutMs(),
-        'json',
-        bypassCache
-          ? true
-          : getInteractionsCacheOptions(endpoint, headers['Api-Revision'], requestBody),
-      );
+      const submit = (skipCache: boolean) =>
+        fetchWithCache<InteractionResponse>(
+          endpoint,
+          { method: 'POST', headers, body: requestBody } as RequestInit,
+          getRequestTimeoutMs(),
+          'json',
+          skipCache
+            ? true
+            : getInteractionsCacheOptions(endpoint, headers['Api-Revision'], requestBody),
+        );
+      let response = await submit(bypassCache);
+      if (
+        (response.cached || response.coalesced) &&
+        response.data.status === 'in_progress' &&
+        !response.data.error &&
+        response.status >= 200 &&
+        response.status < 300
+      ) {
+        // Only the POST owner can safely poll this ID. Start this caller's own
+        // interaction once, without sharing or caching the pending response.
+        await response.deleteFromCache?.();
+        response = await submit(true);
+      }
       ({ status: httpStatus, statusText: httpStatusText, deleteFromCache } = response);
       cached = response.cached || response.coalesced === true;
       // A shared ID can belong to another account or outlive Google's retention window.
