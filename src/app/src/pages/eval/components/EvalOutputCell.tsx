@@ -7,8 +7,12 @@ import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
 import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
+  isLegacyMediaPath,
+  isMediaRef,
+  mapMediaText,
   normalizeMediaText,
   resolveAudioSource,
+  resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
@@ -34,7 +38,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import { REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -50,6 +54,52 @@ import {
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
 };
+
+// Resolve complete Markdown destinations after parsing, so quoted, escaped, and
+// angle-bracket links cannot append path syntax to a validated reference prefix.
+const transformMarkdownUrl = (url: string) =>
+  isMediaRef(url) || isLegacyMediaPath(url) ? resolveBlobUri(url) : url;
+
+type MarkdownDisplayNode = {
+  type: string;
+  value?: string;
+  alt?: string | null;
+  title?: string | null;
+  children?: MarkdownDisplayNode[];
+};
+
+function remarkNormalizeMediaText() {
+  function normalize(node: MarkdownDisplayNode, inLink: boolean): MarkdownDisplayNode[] {
+    if (!inLink && node.type === 'text' && node.value) {
+      return mapMediaText(node.value, (value, isUrl) => {
+        const text = { ...node, value };
+        return isUrl && /^https?:\/\//i.test(value)
+          ? { type: 'link', url: value, children: [text] }
+          : text;
+      });
+    }
+    // Keep URL destinations and reference identifiers intact for urlTransform.
+    if (node.value && ['text', 'inlineCode', 'code'].includes(node.type)) {
+      node.value = normalizeMediaText(node.value);
+    }
+    if (node.alt) {
+      node.alt = normalizeMediaText(node.alt);
+    }
+    if (node.title) {
+      node.title = normalizeMediaText(node.title);
+    }
+    if (node.children) {
+      const nested = inLink || node.type === 'link' || node.type === 'linkReference';
+      node.children = node.children.flatMap((child) => normalize(child, nested));
+    }
+    return [node];
+  }
+  return (tree: MarkdownDisplayNode) => {
+    normalize(tree, false);
+  };
+}
+
+const EVAL_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkNormalizeMediaText];
 
 function scoreToString(score: number | null | undefined) {
   if (typeof score !== 'number' || score === 0 || score === 1) {
@@ -412,13 +462,11 @@ function renderMediaNode({
 
 function renderMarkdownOrJsonNode({
   text,
-  normalizedText,
   renderMarkdown,
   prettifyJson,
   markdownComponents,
 }: {
   text: string;
-  normalizedText: string;
   renderMarkdown: boolean;
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
@@ -448,11 +496,11 @@ function renderMarkdownOrJsonNode({
   return {
     node: (
       <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        urlTransform={IDENTITY_URL_TRANSFORM}
+        remarkPlugins={EVAL_REMARK_PLUGINS}
+        urlTransform={transformMarkdownUrl}
         components={markdownComponents}
       >
-        {normalizedText}
+        {text}
       </ReactMarkdown>
     ),
     renderedMarkdownOutput: true,
@@ -579,7 +627,6 @@ function renderOutputNode({
   if (!node && !showDiffs) {
     const formattedNode = renderMarkdownOrJsonNode({
       text,
-      normalizedText,
       renderMarkdown,
       prettifyJson,
       markdownComponents,

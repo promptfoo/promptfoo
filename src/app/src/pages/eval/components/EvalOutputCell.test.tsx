@@ -1,3 +1,4 @@
+import useApiConfig from '@app/stores/apiConfig';
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
@@ -171,6 +172,161 @@ describe('EvalOutputCell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockStoreState();
+  });
+
+  it.each([
+    [`See promptfoo://blob/${'A'.repeat(64)}.`, `See /api/blobs/${'a'.repeat(64)}.`],
+    ['Stored at storageRef:images/a.png', 'Stored at /api/media/images/a.png'],
+    ['**Stored at storageRef:images/a.png**', 'Stored at /api/media/images/a.png'],
+    ['`storageRef:images/a.png`', '/api/media/images/a.png'],
+    ['```text\nstorageRef:images/a.png\n```', '/api/media/images/a.png'],
+  ])(
+    'normalizes parsed Markdown display text without rewriting destinations: %j',
+    (text, expected) => {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={10000}
+          output={{ ...defaultProps.output, text }}
+        />,
+      );
+      expect(container).toHaveTextContent(expected);
+      expect(container.textContent).not.toContain('storageRef:');
+      expect(container.textContent).not.toContain('promptfoo://blob/');
+    },
+  );
+
+  it('normalizes a Markdown link label while rejecting its complete unsafe destination', () => {
+    const hash = 'a'.repeat(64);
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{
+          ...defaultProps.output,
+          text: `[See promptfoo://blob/${hash}.](storageRef:video/a'/../../../eval/private)`,
+        }}
+      />,
+    );
+    const label = screen.getByText(`See /api/blobs/${hash}.`);
+    expect(label.closest('a[href]')).toBeNull();
+    dispatchClick(label);
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('links absolute media references in prose without nesting links or linking code', () => {
+    const base = 'https://api.example.com';
+    const ref = 'storageRef:images/a.png';
+    const hash = 'a'.repeat(64);
+    const original = useApiConfig.getState().apiBaseUrl;
+    useApiConfig.setState({ apiBaseUrl: base });
+    try {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={10000}
+          output={{
+            ...defaultProps.output,
+            text: `See **${ref}** and promptfoo://blob/${hash}. [**${ref}**](/help) \`${ref}\``,
+          }}
+        />,
+      );
+      expect(
+        Array.from(container.querySelectorAll('a[href]'), (link) => link.getAttribute('href')),
+      ).toEqual([`${base}/api/media/images/a.png`, `${base}/api/blobs/${hash}`, '/help']);
+      expect(container.querySelector('a a, code a')).toBeNull();
+    } finally {
+      useApiConfig.setState({ apiBaseUrl: original });
+    }
+  });
+
+  it('normalizes image alternative text without changing destination validation', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{
+          ...defaultProps.output,
+          text: "![Stored at storageRef:images/a.png](storageRef:video/a'/../../../eval/private)",
+        }}
+      />,
+    );
+    const image = screen.getByRole('img', { name: 'Stored at /api/media/images/a.png' });
+    expect(image.getAttribute('src') || '').toBe('');
+  });
+
+  it.each([
+    '[label](storageRef:images/a.png "Stored at storageRef:images/a.png")',
+    '[label][storageRef:label]\n\n[storageRef:label]: storageRef:images/a.png "Stored at storageRef:images/a.png"',
+  ])('normalizes Markdown titles while preserving reference identifiers: %j', (text) => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{ ...defaultProps.output, text }}
+      />,
+    );
+    const link = screen.getByRole('link', { name: 'label' });
+    expect(link).toHaveAttribute('href', '/api/media/images/a.png');
+    expect(link).toHaveAttribute('title', 'Stored at /api/media/images/a.png');
+  });
+
+  it.each([
+    "storageRef:video/a'/../../../eval/private",
+    'storageRef:video/a"/../../../eval/private',
+    'storageRef:video/a`/../../../eval/private',
+    'storageRef:video/a(b)/../../../eval/private',
+    '<storageRef:video/a /../../../eval/private>',
+    '<storageRef:video/a\t/../../../eval/private>',
+    `promptfoo://blob/${'a'.repeat(64)}'/../../eval/private`,
+    `<promptfoo://blob/${'a'.repeat(64)} /../../eval/private>`,
+    'storageRef:video/%252e%252e/../eval/private',
+    '/api/media/video/safe.png/../../../eval/private',
+    '/api/%6dedia/video/safe.png/../../../eval/private',
+    '/api/%256Dedia/video/%zz/../../../eval/private',
+    '/%61pi/%62lobs/safe/../../eval/private',
+    '/api/MeDiA/video/safe.png/../../../eval/private',
+    '/api/media/video/%252e%252e/../../eval/private',
+    `/api/blobs/${'a'.repeat(64)}/../../eval/private`,
+  ])('rejects the complete parsed Markdown media destination: %j', (destination) => {
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{ ...defaultProps.output, text: `![media](${destination})` }}
+      />,
+    );
+    const image = container.querySelector('img[alt="media"]');
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute('src') || '').toBe('');
+  });
+
+  it.each([
+    ['storageRef:video/safe.png', '/api/media/video/safe.png'],
+    ['<STORAGEREF:video/my image.png>', '/api/media/video/my%20image.png'],
+    [`PROMPTFOO://BLOB/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    [`promptfoo://blob/${'A'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    [
+      `/api/blobs/${'%41'.repeat(64)}/?download=MyFile#Preview`,
+      `/api/blobs/${'a'.repeat(64)}/?download=MyFile#Preview`,
+    ],
+    ['https://example.com/image.png', 'https://example.com/image.png'],
+    [
+      '/api/media/image/safe.png?download=1#preview',
+      '/api/media/image/safe.png?download=1#preview',
+    ],
+    ['/api/MeDiA/image/my%20image.png', '/api/MeDiA/image/my%20image.png'],
+    [`/api/blobs/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+    ['/api/output/image/legacy.png', '/api/output/image/legacy.png'],
+  ])('renders a complete valid Markdown media destination: %j', (destination, expected) => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        maxTextLength={10000}
+        output={{ ...defaultProps.output, text: `![media](${destination})` }}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'media' })).toHaveAttribute('src', expected);
   });
 
   afterEach(() => {
