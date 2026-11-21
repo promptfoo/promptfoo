@@ -4,7 +4,7 @@ import {
   TracerProvider,
 } from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { markEvaluatorSpan } from '../../src/tracing/otlpOwnership';
+import { markEvaluatorSpan, SPAN_ORIGIN_ATTRIBUTE } from '../../src/tracing/otlpOwnership';
 
 const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
@@ -325,9 +325,20 @@ describe('fetchTraceContext', () => {
     const [exported] = exporter.getFinishedSpans();
     await provider.shutdown();
     const { traceId, spanId } = exported.spanContext();
-    mockExternalTrace([{ spanId, name, startTime: 1, attributes: exported.attributes }], traceId);
-    await fetchTraceContext(traceId, { providerConfig, queryDelay: 0, maxRetries: 0 });
+    const signature = String(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]);
+    mockExternalTrace(
+      [{ spanId, name, statusMessage: signature, startTime: 1, attributes: exported.attributes }],
+      traceId,
+    );
+    await fetchTraceContext(traceId, {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['origin'],
+    });
     expect(storedSpans[0].attributes).toEqual({ 'promptfoo.span.role': 'grader' });
+    expect(storedSpans[0].statusMessage).toBe('[REDACTED]');
+    expect(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]).toBe(signature);
   });
 
   it.each([false, true])(
