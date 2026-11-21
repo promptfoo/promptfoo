@@ -298,15 +298,16 @@ describe('HydraProvider', () => {
           output: 'Green',
           sessionId: mode === 'changed session' ? 'second' : 'first',
         });
+      const test: AtomicTestCase = {
+        provider: 'promptfoo:redteam:hydra',
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { goal: 'test goal', pluginId: 'pii', strategyId: 'hydra' },
+      };
       const context: CallApiContextParams = {
         originalProvider: mockTargetProvider,
         vars: { input: 'test goal' },
         prompt: { raw: '{{input}}', label: 'fixture' },
-        test: {
-          provider: 'promptfoo:redteam:hydra',
-          assert: [{ type: 'promptfoo:redteam:pii' }],
-          metadata: { goal: 'test goal', pluginId: 'pii', strategyId: 'hydra' },
-        },
+        test,
       };
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful });
       const result = await provider.callApi('', context);
