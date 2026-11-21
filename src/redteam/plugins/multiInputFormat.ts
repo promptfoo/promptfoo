@@ -42,10 +42,6 @@ export function hasMultiInput(inputs?: InputsSchema): inputs is InputsSchema {
  */
 export function buildFormatExample(inputs: InputsSchema): string {
   const keys = getInputKeys(inputs);
-  if (keys.length === 0) {
-    return '{}';
-  }
-
   const parts = keys.map((key, i) => {
     const value = i === 0 ? 'content' : 'value';
     return `"${key}": "${value}"`;
@@ -123,10 +119,8 @@ function parsePromptBlockEntries(generatedPrompts: string): { __prompt: string }
 }
 
 function getPromptLineIndices(lines: string[]): number[] {
-  return lines
-    .map((line, index) => ({ line: line.trim(), index }))
-    .filter(({ line }) => hasPromptMarker(line)) // Match "Prompt:" or "Prompt :" (French typography)
-    .map(({ index }) => index);
+  // Match "Prompt:" or "Prompt :" (French typography)
+  return lines.flatMap((line, index) => (hasPromptMarker(line.trim()) ? [index] : []));
 }
 
 function promptHasMultipleContentLines(
@@ -202,10 +196,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     if (!hasPromptMarker(line)) {
       return null;
     }
-    let prompt = removePrefix(
-      line.replace(/^\s*(?:\d+[.)-]?\s*)?[-*]\s+(?=\**prompt\s*:)/i, ''),
-      'Prompt',
-    );
+    let prompt = removePrefix(line, 'Prompt');
     prompt = cleanPrompt(prompt);
 
     if (prompt.length === 0) {
@@ -219,7 +210,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
   // Newlines already separate prompts; retain trailing payload semicolons and line indexes.
   const promptLines = lines.flatMap((line, lineIndex) =>
     line
-      .split(/;(?=\s*(?:\*+\s*)?(?:\d+[.)-]?\s*)?(?:[-*]\s*)?(?:\*+\s*)?Prompt\s*:)/i)
+      .split(/;(?=\s*(?:\*+\s*)?(?:\d+[.)-]?\s*(?:\*+\s*)?)?Prompt\s*:)/i)
       .map((segment) => ({ line: segment, lineIndex })),
   );
 

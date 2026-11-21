@@ -1,11 +1,10 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  extractGenAIResponse,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
-  getCurrentSpanId,
-  getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
   sanitizeBody,
@@ -98,6 +97,25 @@ describe('genaiTracer', () => {
       );
     });
   });
+
+  it.each([false, true])(
+    'preserves response usage details for tracing (finishReason=%s)',
+    (finishReason) => {
+      const response = {
+        output: 'body',
+        cached: true,
+        finishReason: 'stop',
+        tokenUsage: { prompt: 2, completion: 3, total: 5, cached: 4 },
+      };
+      const result = extractGenAIResponse(response, finishReason);
+      expect(result).toEqual({
+        tokenUsage: response.tokenUsage,
+        ...(finishReason ? { finishReasons: ['stop'] } : {}),
+      });
+      expect(result.tokenUsage).not.toBe(response.tokenUsage);
+      expect(extractGenAIResponse({})).toEqual({});
+    },
+  );
 
   describe('withGenAISpan', () => {
     const baseContext: GenAISpanContext = {
@@ -761,22 +779,6 @@ describe('genaiTracer', () => {
     });
   });
 
-  describe('getCurrentTraceId', () => {
-    it('should return trace ID from active span', () => {
-      const traceId = getCurrentTraceId();
-
-      expect(traceId).toBe('mock-trace-id-1234567890abcdef');
-    });
-  });
-
-  describe('getCurrentSpanId', () => {
-    it('should return span ID from active span', () => {
-      const spanId = getCurrentSpanId();
-
-      expect(spanId).toBe('mock-span-id-12345678');
-    });
-  });
-
   describe('body sanitization', () => {
     const baseContext: GenAISpanContext = {
       system: 'openai',
@@ -794,15 +796,6 @@ describe('genaiTracer', () => {
         `password=<REDACTED> <REDACTED_SECRET> ${ordinaryText}`,
       );
     });
-
-    it.each(['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_'])(
-      'redacts %s credentials from unlabelled body text',
-      (prefix) => {
-        const token = prefix + 'a'.repeat(36);
-        expect(sanitizeBody(`echo ${token}`)).toBe('echo <REDACTED_API_KEY>');
-        expect(sanitizeBody(`See ${prefix} documentation`)).toBe(`See ${prefix} documentation`);
-      },
-    );
 
     it('should redact OpenAI API keys from request body', async () => {
       const contextWithBody = {

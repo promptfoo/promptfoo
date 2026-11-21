@@ -3,12 +3,7 @@ import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import {
-  type EvaluateResult,
-  type GradingResult,
-  type SemanticFrontierDiagnostic,
-  summarizeSemanticFrontierDiagnosticsFromTests,
-} from '@promptfoo/types';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
@@ -78,12 +73,6 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   }
 
   return null;
-}
-
-export function summarizeSemanticFrontierDiagnosticsFromResults(
-  results: readonly EvaluateResult[],
-): SemanticFrontierDiagnostic[] {
-  return summarizeSemanticFrontierDiagnosticsFromTests(results.map((result) => result.testCase));
 }
 
 export const getPassRateStyles = (passRate: number): { bg: string; text: string } => {

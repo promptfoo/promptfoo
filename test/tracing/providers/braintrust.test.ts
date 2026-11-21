@@ -88,7 +88,6 @@ describe('BraintrustProvider', () => {
   it('queries full Braintrust traces using the propagated OpenTelemetry trace ID', async () => {
     const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID);
 
-    expect(result).toMatchObject({ traceId: TRACE_ID, services: ['customer-agent'] });
     expect(result?.spans).toHaveLength(2);
     expect(result?.spans[0]).toMatchObject({
       spanId: 'root-span',
@@ -123,85 +122,6 @@ describe('BraintrustProvider', () => {
     expect(body.query).toContain(`project_logs('${PROJECT_ID}', shape => 'traces')`);
     expect(body.query).toContain(`metadata.trace_id = '${TRACE_ID}'`);
     expect(body.query).toContain('created >= now() - INTERVAL 1 DAY');
-  });
-
-  it.each([undefined, 1])(
-    'bounds ordinary reads and detects oversized uncapped snapshots: maxSpans=%s',
-    async (maxSpans) => {
-      const oversized = Array.from({ length: 10_001 }, (_, index) => ({
-        ...rows[0],
-        span_id: `span-${index}`,
-      }));
-      mockedFetch.mockImplementation(async (_, options) => {
-        const query = JSON.parse(options?.body as string).query as string;
-        const limit = Number(query.match(/LIMIT (\d+)/)?.[1]);
-        return response({ rows: oversized.slice(0, limit) });
-      });
-
-      const result = new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
-      if (maxSpans === undefined) {
-        await expect(result).rejects.toMatchObject({ limitExceeded: true });
-      } else {
-        expect((await result)?.spans).toHaveLength(maxSpans);
-      }
-    },
-  );
-
-  it('filters old rows before enforcing the expanded trace span count', async () => {
-    mockedFetch.mockResolvedValue(
-      response({
-        rows: [
-          ...Array.from({ length: 10_001 }, (_, index) => ({
-            ...rows[0],
-            span_id: `old-${index}`,
-          })),
-          rows[1],
-          { ...rows[0], span_id: '', id: '' },
-        ],
-      }),
-    );
-    const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, {
-      earliestStartTime: 1704067200050,
-      maxSpans: 1,
-    });
-    expect(result?.spans.map((span) => span.name)).toEqual(['tool.search']);
-    expect(result?.incomplete).toBe(true);
-  });
-
-  it('enforces the relevant span ceiling even with a lower display limit', async () => {
-    mockedFetch.mockResolvedValue(
-      response({
-        rows: Array.from({ length: 10_001 }, (_, index) => ({
-          ...rows[0],
-          span_id: `current-${index}`,
-        })),
-      }),
-    );
-    await expect(
-      new BraintrustProvider(config).fetchTrace(TRACE_ID, {
-        earliestStartTime: 1704067200000,
-        maxSpans: 1,
-      }),
-    ).rejects.toMatchObject({ limitExceeded: true });
-  });
-
-  it('accepts a complete trace at the span limit', async () => {
-    mockedFetch.mockResolvedValue(
-      response({
-        rows: Array.from({ length: 10_000 }, (_, index) => ({
-          ...rows[0],
-          span_id: `span-${index}`,
-        })),
-      }),
-    );
-    expect((await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
-  });
-
-  it.each([-1, 0])('bounds non-positive span limits: %s', async (maxSpans) => {
-    const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
-    expect(result?.spans).toHaveLength(1);
-    const query = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string).query;
-    expect(query).toMatch(/LIMIT 1$/);
   });
 
   it('links deeply nested spans to their immediate parent', async () => {
@@ -309,8 +229,9 @@ describe('BraintrustProvider', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it('releases unsuccessful response bodies before propagating provider errors', async () => {
+  it('propagates the HTTP status and releases the body even for an oversized error', async () => {
     const unauthorizedResponse = response({ error: 'unauthorized' }, 401);
+    unauthorizedResponse.headers.set('content-length', '10485761');
     const cancel = vi.spyOn(unauthorizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(unauthorizedResponse);
 
@@ -328,10 +249,9 @@ describe('BraintrustProvider', () => {
     const cancel = vi.spyOn(oversizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(oversizedResponse);
 
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
-      message: expect.stringContaining('maximum response size'),
-      limitExceeded: true,
-    });
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
+      'maximum response size',
+    );
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -351,29 +271,10 @@ describe('BraintrustProvider', () => {
         }),
       );
 
-      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
-        message: expect.stringContaining('maximum response size'),
-        limitExceeded: true,
-      });
-      expect(cancel).toHaveBeenCalledOnce();
-    },
-  );
-
-  it.each([false, true])(
-    'marks discarded records incomplete (valid sibling: %s)',
-    async (sibling) => {
-      mockedFetch.mockResolvedValue(
-        response({
-          rows: [
-            ...(sibling ? [rows[0]] : []),
-            { ...rows[0], id: '', span_id: '' },
-            { ...rows[0], metrics: {}, created: 'invalid-date' },
-          ],
-        }),
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
+        'maximum response size',
       );
-      const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1 });
-      expect(result).toMatchObject({ incomplete: true });
-      expect(result?.spans.map((span) => span.spanId)).toEqual(sibling ? ['root-span'] : []);
+      expect(cancel).toHaveBeenCalledOnce();
     },
   );
 
@@ -381,15 +282,11 @@ describe('BraintrustProvider', () => {
     const provider = new BraintrustProvider(config);
 
     expect((await provider.fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans).toHaveLength(1);
-    const filtered = await provider.fetchTrace(TRACE_ID, {
-      earliestStartTime: 1704067200050,
-      maxSpans: 1,
-    });
-    expect(filtered?.spans.map((span) => span.name)).toEqual(['tool.search']);
-    expect(filtered?.incomplete).not.toBe(true);
-    await expect(
-      provider.fetchTrace(TRACE_ID, { earliestStartTime: 1704067201000 }),
-    ).resolves.toBeNull();
+    expect(
+      (await provider.fetchTrace(TRACE_ID, { earliestStartTime: 1704067200050 }))?.spans.map(
+        (span) => span.name,
+      ),
+    ).toEqual(['tool.search']);
   });
 
   it('rejects malformed BTQL response payloads', async () => {

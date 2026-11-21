@@ -7,15 +7,6 @@ import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import {
-  type ApiProvider,
-  type Inputs,
-  type SemanticFrontierDiagnostic,
-  summarizeSemanticFrontierDiagnosticsFromTests,
-  type TestCase,
-  type TestCaseWithPlugin,
-  type TokenUsage,
-} from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -70,6 +61,7 @@ import {
   getShortPluginId,
 } from './util';
 
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
 import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
@@ -291,7 +283,6 @@ function getStatus(requested: number, generated: number): string {
 function generateReport(
   pluginResults: Record<string, { requested: number; generated: number }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
-  semanticFrontierDiagnostics: readonly SemanticFrontierDiagnostic[],
 ): string {
   const table = new Table({
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
@@ -328,46 +319,7 @@ function generateReport(
       ]);
     });
 
-  const semanticFrontierReport = generateSemanticFrontierReport(semanticFrontierDiagnostics);
-
-  return `\nTest Generation Report:\n${table.toString()}${semanticFrontierReport}`;
-}
-
-function getSemanticFrontierStatus(diagnostic: SemanticFrontierDiagnostic): string {
-  if (diagnostic.structurallyDegraded) {
-    return chalk.red('Degraded');
-  }
-  if (diagnostic.completeFrontierCount < diagnostic.frontierCount) {
-    return chalk.yellow('Incomplete');
-  }
-  return chalk.green('Complete');
-}
-
-function generateSemanticFrontierReport(
-  diagnostics: readonly SemanticFrontierDiagnostic[],
-): string {
-  if (diagnostics.length === 0) {
-    return '';
-  }
-
-  const table = new Table({
-    head: ['Plugin', 'Frontiers', 'Complete', 'Status', 'Unreachable Features'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [28, 12, 12, 14, 42],
-  });
-
-  diagnostics.forEach((diagnostic) => {
-    table.push([
-      diagnostic.pluginId,
-      diagnostic.frontierCount,
-      `${diagnostic.completeFrontierCount}/${diagnostic.frontierCount}`,
-      getSemanticFrontierStatus(diagnostic),
-      diagnostic.unreachableFeatureIds.join(', ') || 'none',
-    ]);
-  });
-
-  return `\n\nSemantic Frontier Diagnostics:\n${table.toString()}`;
+  return `\nTest Generation Report:\n${table.toString()}`;
 }
 
 /**
@@ -415,16 +367,13 @@ function buildRedteamModifiers({
   maxCharsPerMessage,
   pluginConfig,
   testGenerationInstructions,
-  testGenerationFormat,
 }: {
   maxCharsPerMessage?: number;
   pluginConfig?: Record<string, any>;
   testGenerationInstructions?: string;
-  testGenerationFormat?: string;
 }): Record<string, string> {
   const modifiers: Record<string, string> = {
     ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-    ...(testGenerationFormat ? { testGenerationFormat } : {}),
     ...((pluginConfig?.modifiers as Record<string, string> | undefined) ?? {}),
   };
   const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue(
@@ -573,7 +522,6 @@ function addLanguageToPluginMetadata(
   plugin: RedteamPluginObject,
   maxCharsPerMessage?: number,
   testGenerationInstructions?: string,
-  testGenerationFormat?: string,
 ): TestCase {
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
@@ -592,7 +540,6 @@ function addLanguageToPluginMetadata(
       plugin.config ||
       undefined,
     testGenerationInstructions,
-    testGenerationFormat,
   });
 
   return {
@@ -786,8 +733,6 @@ async function applyStrategies(
             vars,
             metadata: {
               ...(t?.metadata || {}),
-              attackSignature: undefined,
-              semanticFrontier: undefined,
               // Don't set strategyId for retry strategy (it's not user-facing)
               ...(strategy.id !== 'retry' && {
                 strategyId: t?.metadata?.strategyId || strategy.id,
@@ -1035,8 +980,6 @@ export async function synthesize({
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
-  testGenerationFormat,
-  mcpTools,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -1044,7 +987,6 @@ export async function synthesize({
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
   generationTokenUsage?: TokenUsage;
-  semanticFrontierDiagnostics?: SemanticFrontierDiagnostic[];
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1346,7 +1288,6 @@ export async function synthesize({
             maxCharsPerMessage,
             pluginConfig: resolvedPluginConfig,
             testGenerationInstructions,
-            testGenerationFormat,
           }),
         });
       } catch (error) {
@@ -1463,7 +1404,6 @@ export async function synthesize({
           redteamGenerationContext,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-            ...(mcpTools?.length ? { mcpTools } : {}),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1471,7 +1411,6 @@ export async function synthesize({
               maxCharsPerMessage,
               pluginConfig: plugin.config,
               testGenerationInstructions,
-              testGenerationFormat,
             }),
           },
         });
@@ -1487,7 +1426,6 @@ export async function synthesize({
                 plugin,
                 maxCharsPerMessage,
                 testGenerationInstructions,
-                testGenerationFormat,
               ),
             );
             const constrainedTests = filterOversizedTestCases(
@@ -1624,7 +1562,6 @@ export async function synthesize({
         const languagePromises = languages.map(async (lang) => {
           const resolvedConfig = {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-            ...(mcpTools?.length ? { mcpTools } : {}),
             ...(lang ? { language: lang } : {}),
             ...(hasMultipleInputs ? { inputs } : {}),
           };
@@ -1634,7 +1571,6 @@ export async function synthesize({
               maxCharsPerMessage,
               pluginConfig: resolvedConfig,
               testGenerationInstructions,
-              testGenerationFormat,
             }),
           };
           const customPlugin = new CustomPlugin(
@@ -1655,7 +1591,6 @@ export async function synthesize({
                 plugin,
                 maxCharsPerMessage,
                 testGenerationInstructions,
-                testGenerationFormat,
               ),
             ),
             injectVar,
@@ -1807,7 +1742,6 @@ export async function synthesize({
 
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
-  const semanticFrontierDiagnostics = summarizeSemanticFrontierDiagnosticsFromTests(finalTestCases);
 
   // Check for abort signal
   checkAbort();
@@ -1819,7 +1753,7 @@ export async function synthesize({
     logger.info('');
   }
 
-  logger.info(generateReport(pluginResults, strategyResults, semanticFrontierDiagnostics));
+  logger.info(generateReport(pluginResults, strategyResults));
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
   const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
@@ -1833,6 +1767,5 @@ export async function synthesize({
     injectVar,
     failedPlugins,
     generationTokenUsage,
-    ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
   };
 }

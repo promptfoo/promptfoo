@@ -13,6 +13,14 @@ import {
 } from '../../../src/redteam/strategies/mathPrompt';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
+function createMathProgressBar() {
+  return {
+    start: vi.fn(),
+    increment: vi.fn(),
+    stop: vi.fn(),
+  } as unknown as SingleBar;
+}
+
 vi.mock('cli-progress');
 vi.mock('../../../src/redteam/providers/shared');
 vi.mock('../../../src/cache');
@@ -98,13 +106,7 @@ describe('mathPrompt', () => {
 
     it('should handle errors gracefully', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
-      (SingleBar as any).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          increment: vi.fn(),
-          stop: vi.fn(),
-        } as unknown as SingleBar;
-      });
+      (SingleBar as any).mockImplementation(createMathProgressBar);
 
       const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
       expect(result).toEqual([]);
@@ -148,9 +150,7 @@ describe('mathPrompt', () => {
     });
 
     it('should use custom math concepts when provided', async () => {
-      vi.mocked(remoteGeneration.shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
       const customConcepts = ['topology', 'calculus'];
 
       const mockProvider = createMockProvider({
@@ -161,13 +161,7 @@ describe('mathPrompt', () => {
       });
 
       vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
-      (SingleBar as any).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          increment: vi.fn(),
-          stop: vi.fn(),
-        } as unknown as SingleBar;
-      });
+      (SingleBar as any).mockImplementation(createMathProgressBar);
 
       const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
         mathConcepts: customConcepts,
@@ -318,13 +312,7 @@ describe('mathPrompt', () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: { result: [{ vars: { prompt: 'remote-encoded' } }] },
       } as any);
-      (SingleBar as any).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          increment: vi.fn(),
-          stop: vi.fn(),
-        } as unknown as SingleBar;
-      });
+      (SingleBar as any).mockImplementation(createMathProgressBar);
 
       await addMathPrompt(
         [{ vars: { prompt: 'test' } }] as any,

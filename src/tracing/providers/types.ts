@@ -45,15 +45,6 @@ export interface FetchTraceOptions {
   /** Maximum number of spans to return */
   maxSpans?: number;
 
-  /** Maximum depth in span tree */
-  maxDepth?: number;
-
-  /** Span name filter patterns */
-  spanFilter?: string[];
-
-  /** Whether to sanitize sensitive attributes */
-  sanitizeAttributes?: boolean;
-
   /** Abort signal shared with the evaluation that requested the trace. */
   abortSignal?: AbortSignal;
 }
@@ -61,17 +52,12 @@ export interface FetchTraceOptions {
 export class TraceProviderError extends Error {
   readonly statusCode?: number;
   readonly retryable: boolean;
-  readonly limitExceeded: boolean;
 
-  constructor(
-    message: string,
-    options: { statusCode?: number; retryable?: boolean; limitExceeded?: boolean } = {},
-  ) {
+  constructor(message: string, options: { statusCode?: number; retryable?: boolean } = {}) {
     super(message);
     this.name = 'TraceProviderError';
     this.statusCode = options.statusCode;
     this.retryable = options.retryable ?? false;
-    this.limitExceeded = options.limitExceeded ?? false;
   }
 }
 
@@ -79,17 +65,8 @@ export class TraceProviderError extends Error {
  * Result from fetching a trace
  */
 export interface FetchTraceResult {
-  /** The trace ID */
-  traceId: string;
-
   /** Spans in the trace */
   spans: SpanData[];
-
-  /** Whether malformed records were omitted from this snapshot. */
-  incomplete?: boolean;
-
-  /** Service name(s) observed */
-  services?: string[];
 
   /** When the trace was fetched */
   fetchedAt: number;
@@ -111,10 +88,4 @@ export interface TraceProvider {
    * @returns The trace data or null if not found
    */
   fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null>;
-
-  /**
-   * Check if the provider backend is reachable
-   * @returns true if healthy
-   */
-  healthCheck?(): Promise<boolean>;
 }

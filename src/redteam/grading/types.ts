@@ -15,7 +15,6 @@ export interface RedteamGradingContext {
   traceData?: TraceData | null;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
-  executionEvidence?: string;
   // Prior multi-turn conversation context for graders that need provenance across turns.
   redteamHistory?: RedteamHistoryEntry[];
   conversationHistory?: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>;

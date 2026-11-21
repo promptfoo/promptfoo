@@ -79,7 +79,7 @@ targets:
       message: 'The user message to process'
 
 redteam:
-  plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
+  plugins: Array<string | { id: string, numTests?: number, severity?: "critical" | "high" | "medium" | "low" | "informational", config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number
   maxCharsPerMessage: number
@@ -364,7 +364,7 @@ If `redteam.maxCharsPerMessage` is set, it applies to every plugin and strategy 
 
 ### Plugins
 
-[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the red team system.
+Specify [plugins](/docs/red-team/plugins/) as an array of plugin IDs or objects with `id` and optional `numTests`, `severity`, and `config` properties. Use a supported plugin ID.
 
 See [Plugins](/docs/red-team/plugins/) for more information.
 
@@ -373,7 +373,7 @@ See [Plugins](/docs/red-team/plugins/) for more information.
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
-If `numTests` is not specified for a plugin, it will use the global `numTests` value.
+Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, and export. Per-plugin counts must be positive integers; invalid stored overrides are omitted on export or run so the global count applies. Workload estimates expand plugin collections and aliases before applying their counts.
 
 #### Available Plugins
 
@@ -844,11 +844,9 @@ The `redteam.provider` configuration controls both attack generation and grading
 
 You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
-For supported local generators, default batches use family-balanced generation to retain distinct attacks instead of near-duplicates. These checks measure patterns in the generated prompts, not whether the target is secure. When semantic frontier planning is active, the generation report includes a `Semantic Frontier Diagnostics` table, and generated YAML stores the same summary in `metadata.semanticFrontierDiagnostics`. Appending tests with `--write` combines the new summary with saved diagnostics, or derives prior coverage from retained tests when no valid saved summary exists. Custom `testGenerationInstructions` use standard generation because they may redefine the built-in attack families. Automatic MCP tool-call formatting preserves family-balanced generation and its diagnostics for supported generators. `pii:direct` and `pii:social` use standard MCP generation and do not produce portfolio diagnostics. Custom PII examples use the same tool-name and argument-schema validation, with retries for invalid generated calls. Explicit JSON Schema drafts 2019-09 and 2020-12 are supported. Different tools may reuse a schema `$id`; each call is validated against its selected tool's schema. Include referenced definitions in each tool's input schema. If multiple MCP targets expose the same tool name, their input schemas must match; otherwise, use distinct tool names or run separate redteams. Schema comparison ignores the order of enum members while preserving array values within each member. Family checks inspect generated tool calls and their arguments. PII checks include tool names and record identifiers; excessive-agency checks distinguish outbound tools from read-only searches and lookups.
+Local English batches for `pii:direct`, `pii:social`, `prompt-extraction`, `sql-injection`, `shell-injection`, and `excessive-agency` prefer distinct topics if the generator returns surplus candidates. Selection uses the existing responses and makes no extra model calls. Custom examples, custom generation instructions, and multi-input cases keep the standard selection behavior.
 
-Transformed strategy cases do not retain the source prompts' signatures. When `basic` is disabled, the generated diagnostics may be empty.
-
-Generated YAML also stores `metadata.generationTokenUsage` when the local generation provider reports usage. These totals are the observed attack-generation spend available to Promptfoo; remote generation services may not expose their underlying token usage.
+Inspect `metadata.sourcePromptFeatures` on each retained test to see which fixed English word lists matched the original prompt. For example, a mention of an email address can add the `contact` label to a PII test. An empty list means no match. Strategies can change the prompt after selection. These labels cannot establish execution, permissions, or vulnerability and do not affect grading.
 
 :::note
 Custom plugins and strategies require an OpenAI key or your own provider configuration.
@@ -1190,6 +1188,8 @@ The `redteam.yaml` file contains a metadata section with a configHash value at t
 
 1. Do not modify or remove the metadata section
 2. Keep a backup of your custom tests
+
+Configuration fingerprints use SHA-256 so cache checks work when the crypto provider rejects MD5. Outputs with older MD5 fingerprints regenerate on the next generation run; back up custom tests before upgrading.
 
 :::
 

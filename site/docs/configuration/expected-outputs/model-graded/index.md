@@ -1,6 +1,6 @@
 ---
 sidebar_position: 7
-description: 'Comprehensive overview of model-graded evaluation techniques leveraging AI models to assess quality, safety, and accuracy'
+description: Choose model-graded assertions to score LLM outputs against rubrics, references, retrieved context, conversations, and agent traces. See configuration examples.
 ---
 
 # Model-graded metrics
@@ -19,7 +19,7 @@ Output-based:
 - [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
 - [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
-- [`moderation`](/docs/configuration/expected-outputs/moderation) - Uses OpenAI's moderation API to ensure LLM outputs are safe and comply with usage policies. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - Checks outputs against configured moderation categories. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs from different prompts/providers and selects the best one based on custom criteria.
 - [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score based on other assertion results.
 
@@ -36,8 +36,6 @@ Conversational:
 Trajectory-based:
 
 - [`trajectory:goal-success`](#trajectorygoal-success) - uses an LLM judge to decide whether a traced agent run achieved its goal
-
-[SQL injection redteam grading](/docs/red-team/plugins/sql-injection/) can use captured queries and explicit authorization outcomes. Bound parameter values and returned rows are omitted; `redteam.tracing.includeInGrading: false` excludes trace evidence.
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
@@ -309,6 +307,8 @@ defaultTest:
 ```
 
 :::
+
+The [data-exfil red team grader](/docs/red-team/plugins/data-exfil#grading) uses confirmed page-tracking evidence when available. Missing or malformed tracking identifiers fall back to model grading rather than a deterministic pass.
 
 Use the `provider.config` field to set custom parameters such as `temperature`, the output token limit, or API host:
 
@@ -730,8 +730,10 @@ tests:
 
 Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanisms:
 
-1. **Without threshold**: PASS depends only on the grader's `pass` field (defaults to `true` if omitted)
-2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
+1. **Without threshold**: An explicit `pass` determines the verdict. If it is omitted, a finite numeric score must be greater than zero to pass.
+2. **With threshold**: The score must meet `score >= threshold`, and an explicit `pass: false` still fails.
+
+A response with neither a verdict nor a finite numeric score is a grader error. It also fails a negated assertion such as `not-llm-rubric`.
 
 This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
 
@@ -742,13 +744,13 @@ omitted.
 **Common issue**: Tests show PASS even when scores are low
 
 ```yaml
-# ❌ Problem: All tests pass regardless of score
+# Problem: Partial credit passes without a threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # No threshold set - always passes if grader doesn't return explicit pass: false
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
+    # Any positive score passes when pass and threshold are omitted.
 ```
 
 **Solutions**:
@@ -758,8 +760,8 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
     threshold: 1 # Only pass when score >= 1
 
 # ✅ Option B: Have grader control pass explicitly

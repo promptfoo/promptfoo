@@ -1,5 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
-
 import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
@@ -193,24 +191,6 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   const observationName =
     typeof observation.name === 'string' && observation.name.trim() ? observation.name : undefined;
 
-  if (observation.type === 'TOOL') {
-    for (const [key, value] of [
-      ['tool.arguments', parsedInput],
-      ['gen_ai.tool.call.arguments', parsedInput],
-      ['gen_ai.tool.call.result', parsedOutput],
-    ] as const) {
-      if (
-        value !== undefined &&
-        Object.prototype.hasOwnProperty.call(telemetryAttributes, key) &&
-        !isDeepStrictEqual(value, parseJsonValue(telemetryAttributes[key]))
-      ) {
-        throw new TraceProviderError(
-          'Langfuse tool observation has conflicting input or output attributes',
-        );
-      }
-    }
-  }
-
   return {
     ...resourceAttributes,
     ...metadata,
@@ -280,7 +260,11 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   };
 }
 
-function transformObservation(observation: LangfuseObservation, traceId: string): SpanData | null {
+function transformObservation(
+  observation: LangfuseObservation,
+  traceId: string,
+  options?: FetchTraceOptions,
+): SpanData | null {
   if (
     typeof observation.id !== 'string' ||
     !observation.id ||
@@ -292,7 +276,10 @@ function transformObservation(observation: LangfuseObservation, traceId: string)
   }
 
   const startTime = Date.parse(observation.startTime);
-  if (Number.isNaN(startTime)) {
+  if (
+    Number.isNaN(startTime) ||
+    (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime)
+  ) {
     return null;
   }
 
@@ -331,40 +318,31 @@ function transformObservation(observation: LangfuseObservation, traceId: string)
 
 function addObservations(
   observations: unknown[],
-  spans: Map<string, SpanData>,
+  spans: SpanData[],
+  seenSpanIds: Set<string>,
   traceId: string,
   maxSpans: number,
   options?: FetchTraceOptions,
-): boolean {
-  let incomplete = false;
+): void {
   for (const observation of observations) {
     if (!observation || typeof observation !== 'object' || Array.isArray(observation)) {
-      incomplete = true;
       logger.warn('[LangfuseProvider] Skipping malformed observation');
       continue;
     }
 
-    const span = transformObservation(observation as LangfuseObservation, traceId);
+    const span = transformObservation(observation as LangfuseObservation, traceId, options);
     if (!span) {
-      incomplete = true;
       logger.warn('[LangfuseProvider] Skipping malformed or unrelated observation');
       continue;
     }
-    if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
-      continue;
+    if (!seenSpanIds.has(span.spanId)) {
+      seenSpanIds.add(span.spanId);
+      spans.push(span);
     }
-    const previous = spans.get(span.spanId);
-    if (previous && !isDeepStrictEqual(previous, span)) {
-      throw new TraceProviderError('Conflicting duplicate Langfuse observation IDs');
-    }
-    if (!previous) {
-      spans.set(span.spanId, span);
-    }
-    if (spans.size >= maxSpans) {
-      return incomplete;
+    if (spans.length >= maxSpans) {
+      return;
     }
   }
-  return incomplete;
 }
 
 function getNextCursor(
@@ -456,22 +434,23 @@ export class LangfuseProvider implements TraceProvider {
 
     const normalizedTraceId = traceId.toLowerCase();
     const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
+    const pageSize = Math.min(maxSpans, MAX_PAGE_SIZE);
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
     const signal = options?.abortSignal
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
-    const spans = new Map<string, SpanData>();
+    const spans: SpanData[] = [];
+    const seenSpanIds = new Set<string>();
     const seenCursors = new Set<string>();
     let page: number | undefined;
     let cursor: string | undefined;
     let remainingBytes = MAX_TRACE_RESPONSE_BYTES;
-    let incomplete = false;
 
     do {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
       url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
-      url.searchParams.set('limit', String(Math.min(MAX_PAGE_SIZE, maxSpans)));
+      url.searchParams.set('limit', String(pageSize));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
       }
@@ -494,21 +473,6 @@ export class LangfuseProvider implements TraceProvider {
         await releaseResponse(response, 'Langfuse');
         return null;
       }
-      if (!response.ok) {
-        await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError(`Langfuse returned HTTP ${response.status}`, {
-          statusCode: response.status,
-          retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-        });
-      }
-
-      const contentLength = Number(response.headers.get('content-length'));
-      if (contentLength > remainingBytes) {
-        await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError('Langfuse trace exceeds the maximum response size', {
-          limitExceeded: true,
-        });
-      }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
       const result = JSON.parse(body) as LangfuseObservationsResponse;
@@ -516,39 +480,15 @@ export class LangfuseProvider implements TraceProvider {
         throw new TraceProviderError('Langfuse returned an invalid observations response');
       }
 
-      incomplete =
-        addObservations(result.data, spans, normalizedTraceId, MAX_SPANS + 1, options) ||
-        incomplete;
-      if (spans.size > MAX_SPANS) {
-        throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
-          limitExceeded: true,
-        });
-      }
-      if (maxSpans < MAX_SPANS && spans.size >= maxSpans) {
-        break;
-      }
+      addObservations(result.data, spans, seenSpanIds, normalizedTraceId, maxSpans, options);
       page = getNextPage(result);
       cursor = page ? undefined : getNextCursor(result, seenCursors);
-    } while (page || cursor);
+    } while ((page || cursor) && spans.length < maxSpans);
 
-    if (spans.size === 0 && !incomplete) {
+    if (spans.length === 0) {
       return null;
     }
 
-    const services = new Set<string>();
-    for (const span of spans.values()) {
-      const service = span.attributes?.['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
-      }
-    }
-
-    return {
-      traceId: normalizedTraceId,
-      spans: [...spans.values()].slice(0, maxSpans),
-      ...(incomplete && { incomplete }),
-      services: [...services],
-      fetchedAt: Date.now(),
-    };
+    return { spans, fetchedAt: Date.now() };
   }
 }

@@ -1,15 +1,25 @@
-import { SpanKind, TraceFlags } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
-import { getTraceStore, LOCAL_SPAN_EXPORT_FAILURE, type SpanData, type TraceStore } from './store';
-import type { SpanContext } from '@opentelemetry/api';
+import { getTraceStore, type SpanData, type TraceStore } from './store';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 const MISSING_TRACE_RETRY_DELAY_MS = 50;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Represent byte values the same way as OTLP JSON, including inside arrays and maps.
+function toStoredAttribute(value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString('base64');
+  }
+  if (Array.isArray(value)) {
+    return value.map(toStoredAttribute);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, toStoredAttribute(entry)]),
+    );
+  }
+  return value;
 }
 
 /**
@@ -17,31 +27,109 @@ function delay(ms: number): Promise<void> {
  * This allows OTEL spans to be stored locally for analysis in the promptfoo UI.
  */
 export class LocalSpanExporter implements SpanExporter {
-  private readonly pendingSpans = new Map<string, () => void>();
-
-  reserveSpan({ traceId, spanId, traceFlags }: SpanContext): void {
-    const key = `${traceId}:${spanId}`;
-    if ((traceFlags & TraceFlags.SAMPLED) !== 0 && !this.pendingSpans.has(key)) {
-      this.pendingSpans.set(key, getTraceStore().reserveLocalSpan(traceId, spanId));
-    }
-  }
-
-  private releaseSpans(traceId: string, spans: ReadableSpan[]): void {
-    for (const span of spans) {
-      const { spanId } = span.spanContext();
-      const key = `${traceId}:${spanId}`;
-      this.pendingSpans.get(key)?.();
-      this.pendingSpans.delete(key);
-    }
-  }
-
   /**
    * Export spans to the local TraceStore.
    * Spans are grouped by trace ID and inserted into the database.
    */
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
     // Handle async export
-    this.exportAsync(spans)
+    /**
+     * Async implementation of span export.
+     * Returns the first non-FK error encountered, or undefined if successful.
+     */
+    const exportAsync = async (): Promise<Error | undefined> => {
+      if (spans.length === 0) {
+        return undefined;
+      }
+
+      const traceStore = getTraceStore();
+      logger.debug(`[LocalSpanExporter] Exporting ${spans.length} spans`);
+
+      // Group spans by trace ID
+      const spansByTrace = new Map<string, SpanData[]>();
+
+      for (const span of spans) {
+        const traceId = span.spanContext().traceId;
+        /**
+         * Convert an OTEL ReadableSpan to our SpanData format.
+         */
+        const spanContext = span.spanContext();
+
+        // Convert OTEL hrtime (seconds, nanoseconds) to milliseconds for consistency
+        // with OTLPReceiver which also stores times in milliseconds
+        const startTimeMs = span.startTime[0] * 1e3 + span.startTime[1] / 1e6;
+        const endTimeMs = span.endTime[0] * 1e3 + span.endTime[1] / 1e6;
+
+        const spanData: SpanData = {
+          spanId: spanContext.spanId,
+          parentSpanId: span.parentSpanContext?.spanId || undefined,
+          name: span.name,
+          startTime: startTimeMs,
+          endTime: endTimeMs,
+          attributes: Object.fromEntries(
+            Object.entries({ ...span.resource.attributes, ...span.attributes }).map(
+              ([key, value]) => [key, toStoredAttribute(value)],
+            ),
+          ),
+          statusCode: span.status.code,
+          statusMessage: span.status.message,
+        };
+
+        if (!spansByTrace.has(traceId)) {
+          spansByTrace.set(traceId, []);
+        }
+        spansByTrace.get(traceId)!.push(spanData);
+      }
+
+      // Store each trace's spans, tracking first error
+      let firstError: Error | undefined;
+
+      for (const [traceId, spanDataList] of spansByTrace) {
+        try {
+          const addSpansWithTraceRetry = async (): ReturnType<TraceStore['addSpans']> => {
+            const options = { skipTraceCheck: false, warnIfMissingTrace: false };
+            const result = await traceStore.addSpans(traceId, spanDataList, options);
+            if (result.stored) {
+              return result;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, MISSING_TRACE_RETRY_DELAY_MS));
+            return traceStore.addSpans(traceId, spanDataList, options);
+          };
+
+          const result = await addSpansWithTraceRetry();
+          if (result.stored) {
+            logger.debug(
+              `[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`,
+            );
+          } else {
+            // Trace doesn't exist - these spans are from grading calls or other internal
+            // operations that weren't initiated through the evaluation tracing flow.
+            logger.debug(
+              `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}: ${result.reason}`,
+            );
+          }
+        } catch (error) {
+          // Handle unexpected errors (e.g., database connection issues)
+          if ((error instanceof Error ? error.message : String(error)).includes('FOREIGN KEY')) {
+            // Foreign key constraint - trace was deleted between check and insert
+            logger.debug(
+              `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}`,
+            );
+          } else {
+            // Track error but continue processing other traces
+            logger.error(`[LocalSpanExporter] Failed to add spans to trace ${traceId}`, { error });
+            if (!firstError) {
+              firstError = error instanceof Error ? error : new Error(String(error));
+            }
+          }
+        }
+      }
+
+      return firstError;
+    };
+
+    exportAsync()
       .then((error) => {
         if (error) {
           // An error occurred during export
@@ -63,150 +151,10 @@ export class LocalSpanExporter implements SpanExporter {
   }
 
   /**
-   * Async implementation of span export.
-   * Returns the first non-FK error encountered, or undefined if successful.
-   */
-  private async exportAsync(spans: ReadableSpan[]): Promise<Error | undefined> {
-    if (spans.length === 0) {
-      return undefined;
-    }
-
-    const traceStore = getTraceStore();
-    logger.debug(`[LocalSpanExporter] Exporting ${spans.length} spans`);
-
-    // Group spans by trace ID
-    const spansByTrace = new Map<string, ReadableSpan[]>();
-
-    for (const span of spans) {
-      const traceId = span.spanContext().traceId;
-      if (!spansByTrace.has(traceId)) {
-        spansByTrace.set(traceId, []);
-      }
-      spansByTrace.get(traceId)!.push(span);
-    }
-
-    // Store each trace's spans, tracking first error
-    let firstError: Error | undefined;
-
-    for (const [traceId, traceSpans] of spansByTrace) {
-      try {
-        const spanDataList = traceSpans.map((span) => this.convertSpan(span));
-        const result = await this.addSpansWithTraceRetry(traceStore, traceId, spanDataList);
-        if (result.stored) {
-          logger.debug(
-            `[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`,
-          );
-        } else {
-          // Trace doesn't exist - these spans are from grading calls or other internal
-          // operations that weren't initiated through the evaluation tracing flow.
-          logger.debug(
-            `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}: ${result.reason}`,
-          );
-        }
-        this.releaseSpans(traceId, traceSpans);
-      } catch (error) {
-        // Handle unexpected errors (e.g., database connection issues)
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('FOREIGN KEY')) {
-          // Foreign key constraint - trace was deleted between check and insert
-          logger.debug(
-            `[LocalSpanExporter] Skipping ${traceSpans.length} spans for orphan trace ${traceId}`,
-          );
-          this.releaseSpans(traceId, traceSpans);
-        } else {
-          // Track error but continue processing other traces
-          logger.error(`[LocalSpanExporter] Failed to add spans to trace ${traceId}`, { error });
-          if (!firstError) {
-            firstError = error instanceof Error ? error : new Error(String(error));
-          }
-          try {
-            await traceStore.markTraceIncomplete(traceId, LOCAL_SPAN_EXPORT_FAILURE);
-            this.releaseSpans(traceId, traceSpans);
-          } catch (markerError) {
-            // Keep ownership until shutdown if the loss of local evidence cannot be persisted.
-            logger.error(`[LocalSpanExporter] Failed to mark trace ${traceId} incomplete`, {
-              error: markerError,
-            });
-          }
-        }
-      }
-    }
-
-    return firstError;
-  }
-
-  private async addSpansWithTraceRetry(
-    traceStore: TraceStore,
-    traceId: string,
-    spans: SpanData[],
-  ): ReturnType<TraceStore['addSpans']> {
-    const options = { skipTraceCheck: false, warnIfMissingTrace: false };
-    const result = await traceStore.addSpans(traceId, spans, options);
-    if (result.stored) {
-      return result;
-    }
-
-    await delay(MISSING_TRACE_RETRY_DELAY_MS);
-    return traceStore.addSpans(traceId, spans, options);
-  }
-
-  /**
-   * Convert an OTEL ReadableSpan to our SpanData format.
-   */
-  private convertSpan(span: ReadableSpan): SpanData {
-    const spanContext = span.spanContext();
-
-    // Convert OTEL hrtime (seconds, nanoseconds) to milliseconds for consistency
-    // with OTLPReceiver which also stores times in milliseconds
-    const startTimeMs = span.startTime[0] * 1e3 + span.startTime[1] / 1e6;
-    const endTimeMs = span.endTime[0] * 1e3 + span.endTime[1] / 1e6;
-
-    return {
-      spanId: spanContext.spanId,
-      parentSpanId: span.parentSpanContext?.spanId || undefined,
-      name: span.name,
-      startTime: startTimeMs,
-      endTime: endTimeMs,
-      attributes: {
-        ...this.convertAttributes({ ...span.resource.attributes, ...span.attributes }),
-        ...(span.instrumentationScope.name && {
-          'otel.scope.name': span.instrumentationScope.name,
-        }),
-        ...(span.instrumentationScope.version && {
-          'otel.scope.version': span.instrumentationScope.version,
-        }),
-        'otel.span.kind': SpanKind[span.kind].toLowerCase(),
-        'otel.span.kind_code': span.kind + 1,
-      },
-      statusCode: span.status.code,
-      statusMessage: span.status.message,
-    };
-  }
-
-  /**
-   * Convert OTEL attributes to a plain object.
-   * OTEL attributes can have various value types that need normalization.
-   */
-  private convertAttributes(attributes: ReadableSpan['attributes']): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-
-    for (const [key, value] of Object.entries(attributes)) {
-      // OTEL attribute values can be string, number, boolean, or arrays of those
-      result[key] = value;
-    }
-
-    return result;
-  }
-
-  /**
-   * Release claims for abandoned spans after the processor has flushed ended spans.
+   * Shutdown the exporter. No-op for local storage.
    */
   shutdown(): Promise<void> {
     logger.debug('[LocalSpanExporter] Shutting down');
-    for (const release of this.pendingSpans.values()) {
-      release();
-    }
-    this.pendingSpans.clear();
     return Promise.resolve();
   }
 

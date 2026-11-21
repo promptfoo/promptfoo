@@ -2,7 +2,6 @@ import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
-  MAX_TRACE_RESPONSE_BYTES,
   readLimitedResponse,
   releaseResponse,
   validateTraceProviderEndpoint,
@@ -51,10 +50,13 @@ function timestampMs(value: unknown): number | undefined {
   return undefined;
 }
 
-function transformSpan(row: BraintrustSpan): SpanData | null {
+function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanData | null {
   const spanId = row.span_id || row.id;
   const startTime = timestampMs(row.metrics?.start) ?? timestampMs(row.created);
   if (!spanId || startTime === undefined) {
+    return null;
+  }
+  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
     return null;
   }
 
@@ -144,12 +146,11 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const normalizedTraceId = traceId.toLowerCase();
-    const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
+    const maxSpans = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
     // Braintrust native root_span_id values do not necessarily match W3C trace IDs.
     // Customers should log the propagated ID as metadata.trace_id or metadata.promptfoo_trace_id.
     // The traces shape returns every span in a matching trace, including child spans that do
-    // not repeat the correlation metadata. LIMIT bounds traces, not their expanded span rows;
-    // enforce the span ceiling below after applying the requested start-time filter.
+    // not repeat the correlation metadata.
     const query = [
       'SELECT id, span_id, root_span_id, span_parents, created, input, output,',
       '  error, metadata, metrics, span_attributes',
@@ -159,7 +160,7 @@ export class BraintrustProvider implements TraceProvider {
       `    OR metadata.promptfoo_trace_id = '${normalizedTraceId}'`,
       `    OR metadata."promptfoo.trace_id" = '${normalizedTraceId}'`,
       `    OR root_span_id = '${normalizedTraceId}')`,
-      `LIMIT ${options?.maxSpans === undefined || options.earliestStartTime !== undefined ? MAX_SPANS + 1 : maxSpans}`,
+      `LIMIT ${maxSpans}`,
     ].join('\n');
 
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
@@ -182,20 +183,6 @@ export class BraintrustProvider implements TraceProvider {
         { statusCode: response.status },
       );
     }
-    if (!response.ok) {
-      await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError(`Braintrust returned HTTP ${response.status}`, {
-        statusCode: response.status,
-        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-      });
-    }
-
-    if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
-      await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size', {
-        limitExceeded: true,
-      });
-    }
     const body = await readLimitedResponse(response, 'Braintrust');
 
     const result = JSON.parse(body) as BraintrustQueryResponse;
@@ -208,42 +195,18 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const spans: SpanData[] = [];
-    const services = new Set<string>();
-    let incomplete = false;
-    let matchingSpans = 0;
     for (const row of rows) {
-      const span = transformSpan(row);
+      if (spans.length >= maxSpans) {
+        break;
+      }
+      const span = transformSpan(row, options);
       if (!span) {
-        incomplete = true;
         logger.warn('[BraintrustProvider] Skipping malformed span');
         continue;
-      }
-      if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
-        continue;
-      }
-      if (++matchingSpans > MAX_SPANS) {
-        throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
-          limitExceeded: true,
-        });
-      }
-      if (spans.length >= maxSpans) {
-        continue;
-      }
-      const service = span.attributes?.['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
       }
       spans.push(span);
     }
 
-    return spans.length > 0 || incomplete
-      ? {
-          traceId: normalizedTraceId,
-          spans,
-          ...(incomplete && { incomplete }),
-          services: [...services],
-          fetchedAt: Date.now(),
-        }
-      : null;
+    return spans.length > 0 ? { spans, fetchedAt: Date.now() } : null;
   }
 }

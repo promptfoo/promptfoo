@@ -1,6 +1,3 @@
-import path from 'path';
-
-import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
   afterEach,
@@ -13,35 +10,9 @@ import {
   vi,
 } from 'vitest';
 import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { encodeOTLPRequest } from './otlpRequestFixture';
 
 import type { TraceStore } from '../../src/tracing/store';
-
-// Helper to create protobuf-encoded OTLP data for tests
-let protoRoot: protobuf.Root | null = null;
-
-async function getProtoRoot(): Promise<protobuf.Root> {
-  if (protoRoot) {
-    return protoRoot;
-  }
-  const protoDir = path.join(__dirname, '../../src/tracing/proto');
-  const root = new protobuf.Root();
-  root.resolvePath = (_origin: string, target: string) => {
-    return path.join(protoDir, target);
-  };
-  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-  protoRoot = root;
-  return protoRoot;
-}
-
-async function encodeOTLPRequest(data: any): Promise<Buffer> {
-  const root = await getProtoRoot();
-  const ExportTraceServiceRequest = root.lookupType(
-    'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-  );
-  const message = ExportTraceServiceRequest.create(data);
-  const encoded = ExportTraceServiceRequest.encode(message).finish();
-  return Buffer.from(encoded);
-}
 
 // Mock the database
 vi.mock('../../src/database', () => ({
@@ -70,7 +41,6 @@ let mockedTraceStore: typeof import('../../src/tracing/store');
 
 describe('OTLPReceiver', () => {
   let receiver: OTLPReceiver;
-  const persistSpans = vi.fn<(traceId: string, spans: any[], options?: any) => void>();
   let mockTraceStore: {
     createTrace: MockedFunction<() => Promise<void>>;
     addSpans: MockedFunction<(traceId: string, spans: any[], options?: any) => Promise<void>>;
@@ -93,9 +63,7 @@ describe('OTLPReceiver', () => {
       createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       addSpans: vi
         .fn<(traceId: string, spans: any[], options?: any) => Promise<void>>()
-        .mockImplementation(async (traceId, spans, options) => {
-          persistSpans(traceId, options?.redactSpans?.(spans) ?? spans, options);
-        }),
+        .mockResolvedValue(undefined),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
       getTraceMetadata: vi
@@ -121,137 +89,7 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
-  it.each(['traces', 'logs'] as const)(
-    'isolates capped traces in mixed OTLP %s batches',
-    async (endpoint) => {
-      const record = (traceId: string) => ({
-        traceId,
-        spanId: 'b'.repeat(16),
-        name: 'tool update_seat',
-        startTimeUnixNano: '1700000000000000000',
-        timeUnixNano: '1700000000000000000',
-        body: { stringValue: 'tool update_seat' },
-      });
-      mockTraceStore.addSpans.mockRejectedValueOnce(new mockedTraceStore.TraceLimitError());
-      const records = [record('a'.repeat(32)), record('c'.repeat(32))];
-      const response = await request(receiver.getApp())
-        .post('/v1/' + endpoint)
-        .send(
-          endpoint === 'traces'
-            ? { resourceSpans: [{ scopeSpans: [{ spans: records }] }] }
-            : { resourceLogs: [{ scopeLogs: [{ logRecords: records }] }] },
-        )
-        .expect(200);
-      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(2);
-      expect(persistSpans.mock.calls.at(-1)?.[0]).toBe('c'.repeat(32));
-      expect(response.body.partialSuccess).toEqual({
-        [endpoint === 'traces' ? 'rejectedSpans' : 'rejectedLogRecords']: 1,
-        errorMessage: 'Per-trace limit exceeded',
-      });
-    },
-  );
-
   describe('Health check', () => {
-    it.each(
-      ['json', 'protobuf'].flatMap((format) =>
-        [false, true].flatMap((nested) =>
-          (format === 'json' ? [false, true] : [false]).map((coerced) => ({
-            format,
-            nested,
-            coerced,
-          })),
-        ),
-      ),
-    )(
-      'rejects duplicate span attributes before storage: $format nested=$nested coerced=$coerced',
-      async ({ format, nested, coerced }) => {
-        const attributes = [
-          { key: coerced ? 1 : 'authorization', value: { stringValue: 'PRIVATE_OTLP_SOURCE' } },
-          { key: coerced ? '1' : 'authorization', value: { stringValue: 'ordinary' } },
-        ];
-        const id = (value: string) => (format === 'json' ? value : Buffer.from(value, 'hex'));
-        const data = {
-          resourceSpans: [
-            {
-              scopeSpans: [
-                {
-                  spans: [
-                    {
-                      traceId: id('a'.repeat(32)),
-                      spanId: id('b'.repeat(16)),
-                      name: 'echo PRIVATE_OTLP_SOURCE',
-                      startTimeUnixNano: '1000000000',
-                      attributes: nested
-                        ? [{ key: 'details', value: { kvlistValue: { values: attributes } } }]
-                        : attributes,
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        };
-        const response = await request(receiver.getApp())
-          .post('/v1/traces')
-          .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
-          .send(format === 'json' ? data : await encodeOTLPRequest(data));
-        expect(response.status).toBe(400);
-        expect(response.body.error).toMatch(/attribute keys/i);
-        expect(persistSpans).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each(['resource', 'span', 'log', 'nested'])(
-      'rejects null %s attribute entries before storage',
-      async (location) => {
-        const span = {
-          traceId: 'a'.repeat(32),
-          spanId: 'b'.repeat(16),
-          name: 'invalid attributes',
-          startTimeUnixNano: '1000000000',
-          attributes:
-            location === 'nested'
-              ? [{ key: 'nested', value: { kvlistValue: { values: [null] } } }]
-              : location === 'span'
-                ? [null]
-                : [],
-        };
-        const body =
-          location === 'log'
-            ? {
-                resourceLogs: [
-                  {
-                    scopeLogs: [
-                      {
-                        logRecords: [
-                          {
-                            traceId: span.traceId,
-                            spanId: span.spanId,
-                            timeUnixNano: span.startTimeUnixNano,
-                            attributes: [null],
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              }
-            : {
-                resourceSpans: [
-                  {
-                    resource: { attributes: location === 'resource' ? [null] : [] },
-                    scopeSpans: [{ spans: [span] }],
-                  },
-                ],
-              };
-        await request(receiver.getApp())
-          .post(location === 'log' ? '/v1/logs' : '/v1/traces')
-          .send(body)
-          .expect(400);
-        expect(persistSpans).not.toHaveBeenCalled();
-      },
-    );
-
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);
 
@@ -336,7 +174,7 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ partialSuccess: {} });
 
       // Verify spans were stored
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         '12345678901234567890123456789012',
         expect.arrayContaining([
           expect.objectContaining({
@@ -356,7 +194,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -388,14 +226,14 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         '12345678901234567890123456789012',
         expect.arrayContaining([
           expect.objectContaining({
             name: 'json-with-charset',
           }),
         ]),
-        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -438,7 +276,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         expect.arrayContaining([
           expect.objectContaining({
@@ -451,97 +289,70 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
-    it.each(['json', 'protobuf'])(
-      'should parse different attribute types from %s',
-      async (format) => {
-        // Manually override the traceStore property for this test too
-        (receiver as any).traceStore = mockTraceStore;
-        const id = (hex: string) =>
-          format === 'json' ? Buffer.from(hex, 'hex').toString('base64') : Buffer.from(hex, 'hex');
-        const otlpRequest = {
-          resourceSpans: [
-            {
-              scopeSpans: [
-                {
-                  spans: [
-                    {
-                      traceId: id('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
-                      spanId: id('3333333333333333'),
-                      name: 'test-attributes',
-                      startTimeUnixNano: '1000000000',
-                      attributes: [
-                        { key: 'string.attr', value: { stringValue: 'hello' } },
-                        { key: 'int.attr', value: { intValue: '123' } },
-                        { key: 'large.attr', value: { intValue: '9007199254740993' } },
-                        { key: 'double.attr', value: { doubleValue: 3.14 } },
-                        { key: 'bool.attr', value: { boolValue: true } },
-                        {
-                          key: 'bytes.attr',
-                          value: { bytesValue: format === 'json' ? 'YWJj' : Buffer.from('abc') },
-                        },
-                        {
-                          key: 'map.attr',
-                          value: {
-                            kvlistValue: {
-                              values: [
-                                {
-                                  key: 'nested',
-                                  value: {
-                                    arrayValue: { values: [{ intValue: '9007199254740993' }] },
-                                  },
-                                },
-                              ],
-                            },
+    it('should parse different attribute types', async () => {
+      // Manually override the traceStore property for this test too
+      (receiver as any).traceStore = mockTraceStore;
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('3333333333333333', 'hex').toString('base64'),
+                    name: 'test-attributes',
+                    startTimeUnixNano: '1000000000',
+                    attributes: [
+                      { key: 'string.attr', value: { stringValue: 'hello' } },
+                      { key: 'int.attr', value: { intValue: '123' } },
+                      { key: 'double.attr', value: { doubleValue: 3.14 } },
+                      { key: 'bool.attr', value: { boolValue: true } },
+                      {
+                        key: 'array.attr',
+                        value: {
+                          arrayValue: {
+                            values: [{ stringValue: 'a' }, { bytesValue: 'AP8=' }, {}],
                           },
                         },
-                        {
-                          key: 'array.attr',
-                          value: {
-                            arrayValue: {
-                              values: [{ stringValue: 'a' }, { stringValue: 'b' }],
-                            },
-                          },
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        };
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
 
-        await request(receiver.getApp())
-          .post('/v1/traces')
-          .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
-          .send(format === 'json' ? otlpRequest : await encodeOTLPRequest(otlpRequest))
-          .expect(200);
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
 
-        expect(persistSpans).toHaveBeenCalledWith(
-          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-          expect.arrayContaining([
-            expect.objectContaining({
-              attributes: expect.objectContaining({
-                'string.attr': 'hello',
-                'int.attr': 123,
-                'large.attr': '9007199254740993',
-                'map.attr': { nested: ['9007199254740993'] },
-                'double.attr': 3.14,
-                'bool.attr': true,
-                'array.attr': ['a', 'b'],
-              }),
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        expect.arrayContaining([
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'string.attr': 'hello',
+              'int.attr': 123,
+              'double.attr': 3.14,
+              'bool.attr': true,
+              'array.attr': ['a', 'AP8=', null],
             }),
-          ]),
-          { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
-        );
-        const attributes = persistSpans.mock.calls[0][1][0].attributes;
-        expect(attributes['bytes.attr']).toBe(format === 'protobuf' ? 'YWJj' : undefined);
-      },
-    );
+          }),
+        ]),
+        { skipTraceCheck: false, warnIfMissingTrace: false },
+      );
+    });
 
     it('should reject unsupported content types', async () => {
       const response = await request(receiver.getApp())
@@ -557,7 +368,7 @@ describe('OTLPReceiver', () => {
       receiver = new OTLPReceiver({ acceptFormats: ['json'] });
       (receiver as any).traceStore = mockTraceStore;
 
-      const encodedData = await encodeOTLPRequest({
+      const encodedData = encodeOTLPRequest({
         resourceSpans: [
           {
             scopeSpans: [
@@ -583,7 +394,7 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('should reject json when only protobuf is enabled', async () => {
@@ -597,7 +408,7 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('should reject malformed json with 415 when json is disabled', async () => {
@@ -611,7 +422,7 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('should reject invalid protobuf data', async () => {
@@ -623,6 +434,20 @@ describe('OTLPReceiver', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toMatch(/invalid protobuf/i);
+    });
+
+    it('rejects overflowing protobuf lengths without storing spans', async () => {
+      // resourceSpans length encodes 2^32, which previously wrapped to zero.
+      const malformed = Buffer.from([0x0a, 0x80, 0x80, 0x80, 0x80, 0x10]);
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(malformed)
+        .expect(400);
+
+      expect(response.body.error).toMatch(/invalid protobuf/i);
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('should accept valid OTLP protobuf traces', async () => {
@@ -671,7 +496,7 @@ describe('OTLPReceiver', () => {
         ],
       };
 
-      const encodedData = await encodeOTLPRequest(protobufRequest);
+      const encodedData = encodeOTLPRequest(protobufRequest);
 
       const response = await request(receiver.getApp())
         .post('/v1/traces')
@@ -682,7 +507,7 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ partialSuccess: {} });
 
       // Verify spans were stored with correct trace ID
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'deadbeefdeadbeefdeadbeefdeadbeef',
         expect.arrayContaining([
           expect.objectContaining({
@@ -699,7 +524,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -713,12 +538,8 @@ describe('OTLPReceiver', () => {
       expect(response.status).toBe(400);
     });
 
-    it.each(['database', 'evidence'])('reports %s trace store errors', async (kind) => {
-      const error =
-        kind === 'database'
-          ? new Error('Database error')
-          : Object.assign(new Error('Conflicting span IDs'), { name: 'TraceEvidenceError' });
-      mockTraceStore.addSpans.mockRejectedValueOnce(error);
+    it('should handle trace store errors gracefully', async () => {
+      mockTraceStore.addSpans.mockRejectedValueOnce(new Error('Database error'));
 
       const otlpRequest = {
         resourceSpans: [
@@ -745,16 +566,14 @@ describe('OTLPReceiver', () => {
         .post('/v1/traces')
         .set('Content-Type', 'application/json')
         .send(otlpRequest)
-        .expect(kind === 'database' ? 500 : 400);
+        .expect(500);
 
-      expect(response.body).toEqual({
-        error: kind === 'database' ? 'Internal server error' : 'Conflicting span IDs',
-      });
+      expect(response.body).toEqual({ error: 'Internal server error' });
     });
   });
 
   describe('Ingest-time redaction', () => {
-    it('redacts matched attributes and text when a protected source is serialized JSON', async () => {
+    it('replaces matched attribute values before persisting', async () => {
       const redactingReceiver = new OTLPReceiver({
         redactAttributes: ['password', 'authorization', 'tool.arguments'],
       });
@@ -805,68 +624,27 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         [
           expect.objectContaining({
-            name: '[REDACTED]',
-            attributes: { '[REDACTED]': '[REDACTED]' },
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+              'http.password': '[REDACTED]',
+              'request.context': {
+                'user.password': '[REDACTED]',
+                safe: 'visible',
+              },
+              'tool.arguments': '[REDACTED]',
+              'tool.result': 'ok',
+            }),
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
-          redactSpans: expect.any(Function),
         },
       );
-    });
-
-    it.each(
-      ['json', 'protobuf'].flatMap((format) =>
-        [938471, '9007199254740993', '-9007199254740993', '9223372036854775807'].map((secret) => ({
-          format,
-          secret,
-        })),
-      ),
-    )('scrubs $format integer secret $secret without rounding', async ({ format, secret }) => {
-      const redactingReceiver = new OTLPReceiver({
-        acceptFormats: ['json', 'protobuf'],
-        redactAttributes: ['private.pin'],
-      });
-      (redactingReceiver as any).traceStore = mockTraceStore;
-      const data = {
-        resourceSpans: [
-          {
-            scopeSpans: [
-              {
-                spans: [
-                  {
-                    traceId:
-                      format === 'json' ? 'e'.repeat(32) : Buffer.from('e'.repeat(32), 'hex'),
-                    spanId:
-                      format === 'json'
-                        ? '1234567890abcdef'
-                        : Buffer.from('1234567890abcdef', 'hex'),
-                    name: `PIN ${secret}`,
-                    startTimeUnixNano: '1000000000',
-                    status: { code: 2, message: `PIN ${secret}` },
-                    attributes: [{ key: 'private.pin', value: { intValue: secret } }],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-      await request(redactingReceiver.getApp())
-        .post('/v1/traces')
-        .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
-        .send(format === 'json' ? data : await encodeOTLPRequest(data))
-        .expect(200);
-      const spans = persistSpans.mock.calls.at(-1)?.[1];
-      expect(JSON.stringify(spans)).not.toContain(String(secret));
-      expect(spans?.[0].attributes?.['private.pin']).toBe('[REDACTED]');
     });
 
     it('redacts span name and statusMessage that echo a redacted attribute value', async () => {
@@ -906,7 +684,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         [
           expect.objectContaining({
@@ -919,124 +697,11 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
-          redactSpans: expect.any(Function),
         },
       );
     });
-
-    it.each(['plain', 'json'])(
-      'redacts partial and sibling-span echoes before storing %s sources',
-      async (format) => {
-        const secret = 'PRIVATE_OTLP_SIBLING_RECEIPT';
-        const redactingReceiver = new OTLPReceiver({
-          acceptFormats: ['json'],
-          redactAttributes: ['tool.output'],
-        });
-        (redactingReceiver as any).traceStore = mockTraceStore;
-        await request(redactingReceiver.getApp())
-          .post('/v1/traces')
-          .set('Content-Type', 'application/json')
-          .send({
-            resourceSpans: [
-              {
-                scopeSpans: [
-                  {
-                    spans: [
-                      {
-                        traceId: 'e'.repeat(32),
-                        spanId: '1234567890abcdef',
-                        name: `sql ${secret}`,
-                        startTimeUnixNano: '1000000000',
-                        attributes: [
-                          {
-                            key: 'tool.output',
-                            value: {
-                              stringValue:
-                                format === 'json' ? JSON.stringify({ rows: [secret] }) : secret,
-                            },
-                          },
-                        ],
-                      },
-                      {
-                        traceId: 'e'.repeat(32),
-                        spanId: '1234567890abcdea',
-                        name: `read ${secret}`,
-                        status: { code: 2, message: `failed ${secret}` },
-                        startTimeUnixNano: '1001000000',
-                        attributes: [{ key: 'tool.name', value: { stringValue: 'read_query' } }],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          })
-          .expect(200);
-        const spans = vi.mocked(persistSpans).mock.calls.at(-1)![1];
-        expect(JSON.stringify(spans)).not.toContain(secret);
-        if (format === 'json') {
-          expect(spans[1].attributes).toEqual({ '[REDACTED]': '[REDACTED]' });
-        }
-        expect(spans[1].attributes?.['tool.name']).toBe(
-          format === 'json' ? undefined : 'read_query',
-        );
-      },
-    );
-
-    it.each(['plain', 'json'])(
-      'redacts echoes in later OTLP uploads after a %s source',
-      async (format) => {
-        const secret = 'PRIVATE_PREVIOUS_BATCH_RECEIPT';
-        const redactingReceiver = new OTLPReceiver({
-          acceptFormats: ['json'],
-          redactAttributes: ['authorization'],
-        });
-        (redactingReceiver as any).traceStore = mockTraceStore;
-        const send = (span: Record<string, unknown>) =>
-          request(redactingReceiver.getApp())
-            .post('/v1/traces')
-            .set('Content-Type', 'application/json')
-            .send({
-              resourceSpans: [
-                {
-                  scopeSpans: [
-                    {
-                      spans: [
-                        {
-                          traceId: 'e'.repeat(32),
-                          spanId: '1234567890abcdef',
-                          startTimeUnixNano: '1000000000',
-                          ...span,
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            });
-        await send({
-          name: 'source',
-          attributes: [
-            {
-              key: 'authorization',
-              value: {
-                stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret,
-              },
-            },
-          ],
-        }).expect(200);
-        await send({
-          spanId: '1234567890abcdea',
-          name: `echo ${secret}`,
-          status: { code: 2, message: `failed ${secret}` },
-          events: [{ name: `event ${secret}`, timeUnixNano: '1000000100', attributes: [] }],
-        }).expect(200);
-        expect(JSON.stringify(vi.mocked(persistSpans).mock.calls.at(-1)![1])).not.toContain(secret);
-      },
-    );
 
     it('replaces a matched key wholesale when its value is a nested object or array', async () => {
       const redactingReceiver = new OTLPReceiver({
@@ -1086,7 +751,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'ffffffffffffffffffffffffffffffff',
         [
           expect.objectContaining({
@@ -1097,10 +762,8 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
-          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1143,7 +806,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         [
           expect.objectContaining({
@@ -1154,10 +817,8 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
-          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1196,7 +857,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'cccccccccccccccccccccccccccccccc',
         [
           expect.objectContaining({
@@ -1206,7 +867,6 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
         },
@@ -1257,7 +917,7 @@ describe('OTLPReceiver', () => {
         testCaseId: 'receiver-created-test',
         metadata: { otlpHttpRedactAttributes: ['authorization'] },
       });
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'dddddddddddddddddddddddddddddddd',
         [
           expect.objectContaining({
@@ -1267,10 +927,8 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
-          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1365,7 +1023,7 @@ describe('OTLPReceiver', () => {
           otlpHttpRedactAttributes: ['authorization'],
         },
       });
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'ffffffffffffffffffffffffffffffff',
         [
           expect.objectContaining({
@@ -1375,10 +1033,8 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
-          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1422,7 +1078,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         '11111111111111111111111111111111',
         [
           expect.objectContaining({
@@ -1432,7 +1088,6 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
         },
@@ -1482,7 +1137,7 @@ describe('OTLPReceiver', () => {
         testCaseId: 'no-redaction-test',
         metadata: undefined,
       });
-      expect(persistSpans).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         '11111111111111111111111111111111',
         [
           expect.objectContaining({
@@ -1492,7 +1147,6 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
-          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
         },
@@ -1501,6 +1155,243 @@ describe('OTLPReceiver', () => {
   });
 
   describe('Singleton startup recovery', () => {
+    it('preserves the first startup formats and shares an in-flight listener', async () => {
+      const listeningCallbacks: Array<() => void> = [];
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            listeningCallbacks.push(resolve);
+          }),
+      );
+
+      const firstStart = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+      const sharedReceiver = listenSpy.mock.contexts[0] as OTLPReceiver;
+      const secondStart = startOTLPReceiver(4319, '127.0.0.2', ['protobuf']);
+
+      try {
+        // Resolve every call on the old implementation too, so a failed assertion cannot
+        // leave a pending startup behind and interfere with another test.
+        for (const finishListening of listeningCallbacks) {
+          finishListening();
+        }
+        await Promise.all([firstStart, secondStart]);
+        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(4318, '127.0.0.1');
+        const info = await request(sharedReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['json']);
+        await request(sharedReceiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', 'application/json')
+          .send({ resourceSpans: [] })
+          .expect(200);
+        await request(sharedReceiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', 'application/x-protobuf')
+          .send(Buffer.alloc(0))
+          .expect(415);
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('does not let an idle stop close a receiver started in the same turn', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockResolvedValue(undefined);
+
+      try {
+        const idleStop = stopOTLPReceiver();
+        const start = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        await Promise.all([idleStop, start]);
+
+        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(4318, '127.0.0.1');
+        expect(stopSpy).not.toHaveBeenCalled();
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('shares shutdown and waits for it before starting a fresh receiver', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      let finishStopping: (() => void) | undefined;
+      const stopSpy = vi
+        .spyOn(OTLPReceiver.prototype, 'stop')
+        .mockResolvedValue(undefined)
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              finishStopping = resolve;
+            }),
+        );
+      let firstStop: Promise<void> | undefined;
+      let secondStop: Promise<void> | undefined;
+      let restart: Promise<void> | undefined;
+
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        const firstReceiver = listenSpy.mock.contexts[0];
+        firstStop = stopOTLPReceiver();
+        await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+        secondStop = stopOTLPReceiver();
+        restart = startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+        let restarted = false;
+        void restart.then(() => {
+          restarted = true;
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(restarted).toBe(false);
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+        expect(listenSpy).toHaveBeenCalledTimes(1);
+
+        finishStopping?.();
+        await Promise.all([firstStop, secondStop, restart]);
+        expect(listenSpy).toHaveBeenCalledTimes(2);
+        expect(listenSpy.mock.contexts[1]).not.toBe(firstReceiver);
+        const freshReceiver = listenSpy.mock.contexts[1] as OTLPReceiver;
+        const info = await request(freshReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['protobuf']);
+      } finally {
+        finishStopping?.();
+        await Promise.all([firstStop, secondStop, restart]);
+        await stopOTLPReceiver();
+      }
+    });
+
+    it.each([
+      { operations: ['start', 'stop'] },
+      { operations: ['start', 'stop', 'start'] },
+      { operations: ['stop', 'start', 'stop', 'start', 'stop'] },
+    ])('applies queued lifecycle calls in order: $operations', async ({ operations }) => {
+      let activeListeners = 0;
+      vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(async () => {
+        activeListeners += 1;
+      });
+      let finishStopping: (() => void) | undefined;
+      const firstShutdown = new Promise<void>((resolve) => {
+        finishStopping = resolve;
+      });
+      let stopCalls = 0;
+      const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockImplementation(async () => {
+        if (stopCalls++ === 0) {
+          await firstShutdown;
+        }
+        activeListeners -= 1;
+      });
+      const pending: Promise<void>[] = [];
+
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        pending.push(stopOTLPReceiver());
+        await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+        for (const operation of operations) {
+          pending.push(
+            operation === 'start'
+              ? startOTLPReceiver(4318, '127.0.0.1', ['protobuf'])
+              : stopOTLPReceiver(),
+          );
+        }
+        finishStopping?.();
+        await Promise.all(pending);
+        expect(activeListeners).toBe(operations.at(-1) === 'start' ? 1 : 0);
+      } finally {
+        finishStopping?.();
+        await Promise.all(pending);
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('keeps startup fallback policies while registering each later evaluation policy', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json'], {
+          commandToolNames: ['bash'],
+          redactAttributes: ['authorization'],
+          tracePolicy: {
+            evaluationId: 'first-eval',
+            commandToolNames: ['bash'],
+            redactAttributes: ['authorization'],
+          },
+        });
+        const sharedReceiver = listenSpy.mock.contexts[0] as OTLPReceiver;
+        await startOTLPReceiver(4319, '127.0.0.2', ['json'], {
+          commandToolNames: ['shell'],
+          redactAttributes: ['cookie'],
+          tracePolicy: {
+            evaluationId: 'second-eval',
+            commandToolNames: ['shell'],
+            redactAttributes: ['cookie'],
+          },
+        });
+
+        for (const [index, evaluationId] of [
+          'first-eval',
+          'second-eval',
+          'unregistered-eval',
+          undefined,
+        ].entries()) {
+          const traceId = String(index + 1).repeat(32);
+          await request(sharedReceiver.getApp())
+            .post('/v1/traces')
+            .set('Content-Type', 'application/json')
+            .send({
+              resourceSpans: [
+                {
+                  scopeSpans: [
+                    {
+                      spans: [
+                        {
+                          traceId,
+                          spanId: '1234567890abcdef',
+                          name: 'tool.call',
+                          startTimeUnixNano: '1000000000',
+                          attributes: [
+                            ...(evaluationId
+                              ? [
+                                  { key: 'evaluation.id', value: { stringValue: evaluationId } },
+                                  { key: 'test.case.id', value: { stringValue: 'test-case' } },
+                                ]
+                              : []),
+                            { key: 'AUTHORIZATION', value: { stringValue: 'test-auth-value' } },
+                            { key: 'COOKIE', value: { stringValue: 'test-cookie-value' } },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            })
+            .expect(200);
+
+          const isSecond = evaluationId === 'second-eval';
+          expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+            traceId,
+            [
+              expect.objectContaining({
+                attributes: expect.objectContaining({
+                  AUTHORIZATION: isSecond ? 'test-auth-value' : '[REDACTED]',
+                  COOKIE: isSecond ? '[REDACTED]' : 'test-cookie-value',
+                }),
+              }),
+            ],
+            { skipTraceCheck: false, warnIfMissingTrace: false },
+          );
+          if (evaluationId) {
+            expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+              traceId,
+              evaluationId,
+              testCaseId: 'test-case',
+              metadata: {
+                commandToolNames: [isSecond ? 'shell' : 'bash'],
+                otlpHttpRedactAttributes: [isSecond ? 'cookie' : 'authorization'],
+              },
+            });
+          }
+        }
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
     it('creates a new receiver after a failed listen attempt', async () => {
       const listenSpy = vi
         .spyOn(OTLPReceiver.prototype, 'listen')
@@ -1508,11 +1399,17 @@ describe('OTLPReceiver', () => {
         .mockResolvedValueOnce(undefined);
 
       try {
-        await expect(startOTLPReceiver(4318, '127.0.0.1', ['json'])).rejects.toThrow('EADDRINUSE');
+        const firstStart = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        const concurrentStart = startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+        await expect(firstStart).rejects.toThrow('EADDRINUSE');
+        await expect(concurrentStart).rejects.toThrow('EADDRINUSE');
         await startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
 
         expect(listenSpy).toHaveBeenCalledTimes(2);
         expect(listenSpy.mock.instances[1]).not.toBe(listenSpy.mock.instances[0]);
+        const retriedReceiver = listenSpy.mock.contexts[1] as OTLPReceiver;
+        const info = await request(retriedReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['protobuf']);
       } finally {
         await stopOTLPReceiver();
       }
@@ -1570,8 +1467,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        source: 'external',
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
         skipTraceCheck: false,
         warnIfMissingTrace: false,
       });
@@ -1605,8 +1501,7 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
-      expect(persistSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        source: 'external',
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
         skipTraceCheck: false,
         warnIfMissingTrace: false,
       });
@@ -1658,8 +1553,8 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledTimes(1);
-      const [persistedTraceId, spans] = persistSpans.mock.calls[0];
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect(persistedTraceId).toBe(hexTraceId);
       expect(spans).toHaveLength(1);
       const span = (spans as any[])[0];
@@ -1688,7 +1583,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('filters out internal tracing logs via denylist', async () => {
@@ -1707,7 +1602,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('falls back to a short body string when no event.name attribute is present', async () => {
@@ -1726,7 +1621,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[])[0].name).toBe('agent.message');
     });
 
@@ -1750,7 +1645,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[])[0]).toEqual(
         expect.objectContaining({
           name: '[REDACTED]',
@@ -1785,35 +1680,8 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[])[0].parentSpanId).toBeUndefined();
-    });
-
-    it('keeps timed log IDs stable across retries and distinct within a batch', async () => {
-      const record = {
-        timeUnixNano: '1700000000000000000',
-        traceId: hexTraceId,
-        spanId: hexParentSpanId,
-        body: { stringValue: 'Inventory lookup complete' },
-      };
-      const payload = makeLogsRequest([record, record]);
-      for (let attempt = 0; attempt < 2; attempt++) {
-        await request(receiver.getApp())
-          .post('/v1/logs')
-          .set('Content-Type', 'application/json')
-          .send(payload)
-          .expect(200);
-      }
-      const first = persistSpans.mock.calls[0][1];
-      const retry = persistSpans.mock.calls[1][1];
-      expect(first).toEqual(retry);
-      expect(new Set(first.map((span: { spanId: string }) => span.spanId)).size).toBe(2);
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .set('Content-Type', 'application/json')
-        .send(makeLogsRequest([{ ...record, body: { stringValue: 'Different event' } }]))
-        .expect(200);
-      expect(persistSpans.mock.calls[2][1][0].spanId).not.toBe(first[0].spanId);
     });
 
     it('handles multiple log records in a single request', async () => {
@@ -1838,7 +1706,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[]).map((s: any) => s.name)).toEqual([
         'claude_code.tool.execution',
         'claude_code.llm_request',
@@ -1884,7 +1752,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [persistedTraceId, spans] = persistSpans.mock.calls[0];
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect(persistedTraceId).toBe(hexTraceId);
       const span = (spans as any[])[0];
       expect(span.parentSpanId).toBe(hexParentSpanId);
@@ -1938,7 +1806,7 @@ describe('OTLPReceiver', () => {
           .send(req)
           .expect(200);
 
-        const [persistedTraceId, spans] = persistSpans.mock.calls[0];
+        const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
         expect(persistedTraceId).toBe(hexTraceId);
         const span = (spans as any[])[0];
         expect(span.parentSpanId).toBe(hexParentSpanId);
@@ -1946,46 +1814,31 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it('is advertised on the service info endpoint', async () => {
-      // Sanity check that /v1/traces stays stable despite the new /v1/logs route.
-      const response = await request(receiver.getApp()).get('/v1/traces').expect(200);
-      expect(response.body.service).toBe('promptfoo-otlp-receiver');
+    it('preserves OK span status while exposing ERROR log severity', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          severityNumber: 17,
+          severityText: 'ERROR',
+          body: { stringValue: 'something failed' },
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.error' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const span = (spans as any[])[0];
+      expect(span.statusCode).toBe(1);
+      expect(span.statusMessage).toBe('ERROR');
+      expect(span.attributes['otel.log.severity_number']).toBe(17);
     });
-
-    it.each([
-      { severityNumber: 17, severityText: 'ERROR', statusCode: 2 },
-      { severityNumber: 24, severityText: undefined, statusCode: 2 },
-      { severityNumber: undefined, severityText: 'ERROR', statusCode: 2 },
-      { severityNumber: undefined, severityText: 'FATAL4', statusCode: 2 },
-      { severityNumber: 9, severityText: 'INFO', statusCode: 1 },
-    ])(
-      'preserves command log severity as span status: %j',
-      async ({ severityNumber, severityText, statusCode }) => {
-        const req = makeLogsRequest([
-          {
-            timeUnixNano: '1700000000000000000',
-            traceId: hexTraceId,
-            spanId: hexParentSpanId,
-            severityNumber,
-            severityText,
-            body: { stringValue: 'something failed' },
-            attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.error' } }],
-          },
-        ]);
-
-        await request(receiver.getApp())
-          .post('/v1/logs')
-          .set('Content-Type', 'application/json')
-          .send(req)
-          .expect(200);
-
-        const [, spans] = persistSpans.mock.calls[0];
-        const span = spans[0];
-        expect(span.statusCode).toBe(statusCode);
-        expect(span.statusMessage).toBe(statusCode === 2 ? severityText : undefined);
-        expect(span.attributes?.['otel.log.severity_number']).toBe(severityNumber);
-      },
-    );
 
     it('uses claude_code.event.name as a secondary span-name source when event.name is absent', async () => {
       const req = makeLogsRequest([
@@ -2005,7 +1858,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[])[0].name).toBe('claude_code.llm_request');
     });
 
@@ -2025,7 +1878,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('falls back to otel.log for span name when body exceeds the body-as-name limit', async () => {
@@ -2045,7 +1898,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[])[0].name).toBe('otel.log');
     });
 
@@ -2067,7 +1920,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       const storedBody = (spans as any[])[0].attributes['otel.log.body'] as string;
       expect(storedBody.length).toBeLessThan(huge.length);
       expect(storedBody.endsWith('... [truncated]')).toBe(true);
@@ -2096,13 +1949,11 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      // Either both survived (because parseAttributes was lenient) or the bad
-      // one was skipped while the good one survived — both acceptable. The
-      // failure mode we're guarding against is "bad record → 500 → whole
-      // batch dropped", verified by the 200 status.
-      expect(persistSpans).toHaveBeenCalled();
-      const [, spans] = persistSpans.mock.calls[0];
-      expect((spans as any[]).some((s: any) => s.name === 'claude_code.tool.execution')).toBe(true);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistedTraceId).toBe(hexTraceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe('claude_code.tool.execution');
     });
 
     it('treats a base64-encoded all-zero span_id as no parent linkage', async () => {
@@ -2122,7 +1973,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       expect((spans as any[])[0].parentSpanId).toBeUndefined();
     });
 
@@ -2133,7 +1984,7 @@ describe('OTLPReceiver', () => {
         .send({ resourceLogs: [] })
         .expect(200);
 
-      expect(persistSpans).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
   });
 });

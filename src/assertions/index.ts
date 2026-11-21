@@ -20,7 +20,6 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -101,7 +100,12 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  processFileReference,
+  resolveJavaScriptFileFunction,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -159,37 +163,16 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-export function requiresExecutionEvidence(
-  assertion: AssertionOrSet,
-  test?: AtomicTestCase,
-): boolean {
-  if (assertion.type === 'assert-set') {
-    return assertion.assert.some((child) => requiresExecutionEvidence(child, test));
-  }
-  const type = getAssertionBaseType(assertion);
-  if (type !== 'promptfoo:redteam:sql-injection' && type !== 'promptfoo:redteam:shell-injection') {
-    return false;
-  }
-  const tracing = resolveTracingOptions({
-    strategyId: test?.metadata?.strategyId ?? 'basic',
-    test,
-  });
-  return tracing.enabled && tracing.includeInGrading;
-}
-
-function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTestCase): boolean {
+function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some((child) => assertionMayNeedTraceContext(child, test));
+    return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
   if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
-    return true;
-  }
-  if (requiresExecutionEvidence(assertion, test)) {
     return true;
   }
 
@@ -198,17 +181,11 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTe
     : false;
 }
 
-export function hasTraceAwareAssertions(
-  assertions?: AssertionOrSet[],
-  test?: AtomicTestCase,
-): boolean {
-  return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, test)));
+export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
+  return Boolean(assertions?.some(assertionMayNeedTraceContext));
 }
 
-async function loadTraceData(
-  traceId: string,
-  waitForFullWindow = false,
-): Promise<TraceData | null> {
+async function loadTraceData(traceId: string): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -238,10 +215,7 @@ async function loadTraceData(
       stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
       lastSpanCount = spanCount;
 
-      if (
-        (!waitForFullWindow && stableObservations >= stablePolls) ||
-        attempt === maxAttempts - 1
-      ) {
+      if (stableObservations >= stablePolls || attempt === maxAttempts - 1) {
         return latestTrace;
       }
     } else {
@@ -254,9 +228,6 @@ async function loadTraceData(
     }
   }
 
-  if (waitForFullWindow && !latestTrace?.spans?.length) {
-    throw new Error('No execution trace evidence was collected for grading');
-  }
   return latestTrace;
 }
 
@@ -304,7 +275,8 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
+      // Await so missing-dependency rejections reach the catch below.
+      return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -315,7 +287,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
           assertion: params.assertion,
         };
       }
@@ -331,7 +303,9 @@ const ASSERTION_HANDLERS: Record<
   python: handlePython,
   regex: handleRegex,
   ruby: handleRuby,
+  'rouge-l': handleRougeScore,
   'rouge-n': handleRougeScore,
+  'rouge-s': handleRougeScore,
   'search-rubric': handleSearchRubric,
   'skill-used': handleSkillUsed,
   similar: handleSimilar,
@@ -400,6 +374,11 @@ export function isAssertionInverse(assertion: Assertion): boolean {
 export function getAssertionBaseType(assertion: Assertion): AssertionType {
   const inverse = isAssertionInverse(assertion);
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
+
+// Zero-weight assertions record their scores without failing the test.
+function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
+  return weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -491,24 +470,10 @@ async function runAssertionInternal({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
-  const requiresTraceEvidence = requiresExecutionEvidence(assertion, test);
-  if (requiresTraceEvidence && providerResponse.cached) {
-    throw new Error(
-      'Cached responses cannot provide current execution trace evidence; rerun with --no-cache',
-    );
-  }
-  if (requiresTraceEvidence && !traceId) {
-    throw new Error('No execution trace evidence was collected for grading: missing trace ID');
-  }
-
   // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion, test)) {
+  if (traceId && assertionMayNeedTraceContext(assertion)) {
     try {
-      const resolvedTraceData =
-        traceData === undefined ? await loadTraceData(traceId, requiresTraceEvidence) : traceData;
-      if (requiresTraceEvidence && !resolvedTraceData?.spans?.length) {
-        throw new Error('No execution trace evidence was collected for grading');
-      }
+      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -519,28 +484,16 @@ async function runAssertionInternal({
         };
       }
     } catch (error) {
-      if (requiresTraceEvidence) {
-        throw error;
-      }
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);
     }
-  }
-
-  const incompleteReason = context.trace?.metadata?.promptfooTraceIncomplete;
-  if (incompleteReason) {
-    throw new Error(
-      `Cannot grade incomplete trace: ${
-        incompleteReason === 'conflicting trace evidence'
-          ? 'conflicting trace evidence'
-          : 'collection exceeded the per-trace limit'
-      }`,
-    );
   }
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  const scriptFailure = (reason: string): GradingResult =>
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -557,42 +510,29 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
+        // Load errors (missing file or export) are config mistakes and still throw.
+        const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
         try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+          valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
+          return scriptFailure(
+            `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          );
         }
-      } else if (filePath.endsWith('.rb')) {
+        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+          const runScript = filePath.endsWith('.py')
+            ? runPython
+            : (await import('../ruby/rubyUtils.js')).runRuby;
+          valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',
             [output, context],
           );
-          valueFromScript = rubyScriptOutput;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+          logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
+          return scriptFailure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -606,7 +546,13 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return scriptFailure(
+          `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+        );
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
@@ -730,15 +676,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return applyAssertionWeight(result, assertion.weight);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
@@ -871,22 +809,12 @@ export async function runAssertions({
     .flat();
 
   const shouldPreloadTrace =
-    !!traceId &&
-    hasTraceAwareAssertions(
-      asserts.map(({ assertion }) => assertion),
-      test,
-    );
+    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
-      preloadedTraceData = await loadTraceData(
-        traceId,
-        asserts.some(({ assertion }) => requiresExecutionEvidence(assertion, test)),
-      );
+      preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {
-      if (asserts.some(({ assertion }) => requiresExecutionEvidence(assertion, test))) {
-        throw error;
-      }
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;
     }

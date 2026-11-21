@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
-import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
-import { getTraceStore, TraceLimitError } from '../../src/tracing/store';
+import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type Eval from '../../src/models/eval';
@@ -20,11 +19,25 @@ import type {
   TestSuite,
 } from '../../src/types/index';
 
+const createTraceProviderConfig = () => ({
+  id: 'mock-provider',
+  response: { output: 'Test response', tokenUsage: {} },
+});
+
+const createSerialOptions = () => ({
+  maxConcurrency: 1,
+});
+
+const createTracingContext = () => ({
+  tracingEnabled: true,
+  evaluationId: 'test-eval-id',
+});
+
 // Mock dependencies
-vi.mock('../../src/tracing/store', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
-  getTraceStore: vi.fn(),
+vi.mock('../../src/telemetry', () => ({
+  default: { record: vi.fn() },
 }));
+vi.mock('../../src/tracing/store');
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockInitializeOtel = vi.hoisted(() => vi.fn());
@@ -47,8 +60,7 @@ vi.mock('../../src/tracing/traceContext', async (importOriginal) => ({
 }));
 
 // Mock evaluatorTracing module
-vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/tracing/evaluatorTracing')>()),
+vi.mock('../../src/tracing/evaluatorTracing', () => ({
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
@@ -56,6 +68,7 @@ vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
   startOtlpReceiverIfNeeded: vi.fn(),
   stopOtlpReceiverIfNeeded: vi.fn(),
   isOtlpReceiverStarted: vi.fn(() => false),
+  isTracingEnabled: vi.fn((test) => test.metadata?.tracingEnabled === true),
 }));
 
 describe('evaluator trace integration', () => {
@@ -81,12 +94,61 @@ describe('evaluator trace integration', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mockResolvedValue(false);
     (getTraceStore as Mock).mockReturnValue(mockTraceStore);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  it.each([true, false])(
+    'honors the evaluation deadline while tracing startup is blocked (late acquisition=%s)',
+    async (acquired) => {
+      vi.useFakeTimers();
+      let finishStartup!: (value: boolean) => void;
+      const startup = new Promise<boolean>((resolve) => {
+        finishStartup = resolve;
+      });
+      vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mockReturnValueOnce(startup);
+      vi.mocked(evaluatorTracing.stopOtlpReceiverIfNeeded).mockResolvedValue(undefined);
+      const settled = vi.fn();
+      const result = evaluate(
+        { providers: [], prompts: [], tests: [], tracing: { enabled: true } },
+        mockEval,
+        { maxEvalTimeMs: 25 },
+      )
+        .then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        )
+        .then((value) => {
+          settled(value);
+          return value;
+        });
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(evaluatorTracing.startOtlpReceiverIfNeeded).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(25);
+        expect(settled).toHaveBeenCalledOnce();
+        expect(await result).toMatchObject({
+          error: expect.objectContaining({ name: 'AbortError' }),
+        });
+        expect(mockInitializeOtel).not.toHaveBeenCalled();
+        finishStartup(acquired);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(evaluatorTracing.stopOtlpReceiverIfNeeded).toHaveBeenCalledWith(
+          acquired,
+          mockEval.id,
+        );
+      } finally {
+        finishStartup(acquired);
+        await vi.runAllTimersAsync();
+        await result;
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('passes published tracing defaults to receiver startup for direct evaluator callers', async () => {
     const provider = { id: 'tempo', endpoint: 'https://tempo.example.test' } as const;
@@ -139,20 +201,12 @@ describe('evaluator trace integration', () => {
     });
 
     const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({
-          id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
-        }),
-      ],
+      providers: [createMockProvider(createTraceProviderConfig())],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
           vars: { input: 'test' },
-          metadata: {
-            tracingEnabled: true,
-            evaluationId: 'test-eval-id',
-          },
+          metadata: createTracingContext(),
           assert: [
             {
               type: 'javascript',
@@ -179,9 +233,7 @@ describe('evaluator trace integration', () => {
       },
     };
 
-    const options: EvaluateOptions = {
-      maxConcurrency: 1,
-    };
+    const options: EvaluateOptions = createSerialOptions();
 
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
@@ -244,12 +296,7 @@ describe('evaluator trace integration', () => {
   it('flushes and shuts down OTEL after successful tracing initialization', async () => {
     await evaluate(
       {
-        providers: [
-          createMockProvider({
-            id: 'mock-provider',
-            response: { output: 'Test response', tokenUsage: {} },
-          }),
-        ],
+        providers: [createMockProvider(createTraceProviderConfig())],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{}],
         tracing: { enabled: true },
@@ -268,12 +315,7 @@ describe('evaluator trace integration', () => {
     vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue(null);
 
     const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({
-          id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
-        }),
-      ],
+      providers: [createMockProvider(createTraceProviderConfig())],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
@@ -293,9 +335,7 @@ describe('evaluator trace integration', () => {
       // Tracing not enabled in test suite
     };
 
-    const options: EvaluateOptions = {
-      maxConcurrency: 1,
-    };
+    const options: EvaluateOptions = createSerialOptions();
 
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
@@ -340,20 +380,12 @@ describe('evaluator trace integration', () => {
     });
 
     const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({
-          id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
-        }),
-      ],
+      providers: [createMockProvider(createTraceProviderConfig())],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
           vars: { input: 'test' },
-          metadata: {
-            tracingEnabled: true,
-            evaluationId: 'test-eval-id',
-          },
+          metadata: createTracingContext(),
           assert: [
             {
               type: 'javascript',
@@ -367,9 +399,7 @@ describe('evaluator trace integration', () => {
       ],
     };
 
-    const options: EvaluateOptions = {
-      maxConcurrency: 1,
-    };
+    const options: EvaluateOptions = createSerialOptions();
 
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
@@ -485,85 +515,6 @@ describe('evaluator trace integration', () => {
       });
     });
 
-    it.each([
-      { suiteEnabled: false, globalEnabled: true, include: false },
-      { suiteEnabled: true, globalEnabled: false, include: true },
-      { suiteEnabled: false, globalEnabled: true, override: true, include: true },
-      { suiteEnabled: true, globalEnabled: false, override: false, include: false },
-    ])(
-      'honors the evaluation SQL trace policy $suiteEnabled with test override $override',
-      async ({ suiteEnabled, globalEnabled, override, include }) => {
-        const previousConfig = cliState.config;
-        try {
-          cliState.config = {
-            redteam: { tracing: { enabled: true, includeInGrading: globalEnabled } },
-          } as typeof cliState.config;
-          const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-            grade: { pass: true, score: 1, reason: 'safe' },
-            rubric: 'safe',
-          });
-          const options = createRunOptions(
-            createMockProvider({ response: { output: 'Refused.' } }),
-          );
-          options.testSuite = {
-            ...tracingSuite,
-            redteam: {
-              tracing: { enabled: true, includeInGrading: suiteEnabled },
-            } as TestSuite['redteam'],
-          };
-          options.test = {
-            ...options.test,
-            metadata: {
-              ...options.test.metadata,
-              pluginId: 'sql-injection',
-              purpose: 'Protect records.',
-              ...(override === undefined ? {} : { tracing: { includeInGrading: override } }),
-            },
-            assert: [{ type: 'promptfoo:redteam:sql-injection' }],
-          };
-          mockTraceStore.getTrace.mockResolvedValue({
-            traceId,
-            spans: [
-              {
-                spanId: 'sql-span',
-                name: 'read_query',
-                startTime: 1000,
-                attributes: {
-                  'tool.name': 'read_query',
-                  'db.statement': 'SELECT PRIVATE_SUITE_SQL FROM records',
-                },
-              },
-            ],
-          });
-          for (const run of [
-            () => runEval(options),
-            () =>
-              evaluate(
-                {
-                  ...options.testSuite!,
-                  providers: [options.provider],
-                  prompts: [options.prompt],
-                  tests: [options.test],
-                },
-                mockEval,
-                { maxConcurrency: 1 },
-              ),
-          ]) {
-            grade.mockClear();
-            await run();
-            expect(grade).toHaveBeenCalled();
-            expect(JSON.stringify(grade.mock.calls).includes('PRIVATE_SUITE_SQL')).toBe(include);
-            expect(mockFetchTraceContext).toHaveBeenLastCalledWith(
-              traceId,
-              expect.objectContaining({ requireComplete: include }),
-            );
-          }
-        } finally {
-          cliState.config = previousConfig;
-        }
-      },
-    );
-
     it('fetches external traces before running trace-aware assertions', async () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       const options = createRunOptions(provider);
@@ -578,7 +529,6 @@ describe('evaluator trace integration', () => {
           providerConfig,
           queryDelay: 750,
           maxRetries: 5,
-          waitForStableSpans: true,
           retryDelayMs: 1000,
           redactAttributes: ['secret'],
         }),
@@ -718,46 +668,6 @@ describe('evaluator trace integration', () => {
       });
     });
 
-    it('inherits active tracing configuration when runEval has no suite', async () => {
-      const captured = vi.fn();
-      const provider = createMockProvider({
-        async callApi(_prompt, context) {
-          captured(resolveTracingOptions({ strategyId: 'basic', test: context?.test }));
-          return { output: 'Inventory is available' };
-        },
-      });
-      const [result] = await cliState.withConfig(
-        {
-          tracing: {
-            enabled: true,
-            provider: providerConfig,
-            queryDelay: 750,
-            otlp: {
-              http: {
-                enabled: true,
-                port: 4318,
-                host: '127.0.0.1',
-                acceptFormats: ['json'],
-                redactAttributes: ['secret'],
-              },
-            },
-          },
-          redteam: { tracing: { enabled: true, includeInGrading: true } } as TestSuite['redteam'],
-        },
-        () => runEval(createRunOptions(provider, { testSuite: undefined })),
-      );
-      expect(result.success).toBe(true);
-      expect(captured).toHaveBeenCalledWith(
-        expect.objectContaining({
-          enabled: true,
-          includeInGrading: true,
-          provider: providerConfig,
-          queryDelay: 750,
-          redactAttributes: ['secret'],
-        }),
-      );
-    });
-
     it('makes request-scoped tracing configuration available without exposing it in provider context', async () => {
       const requestProviderConfig = {
         ...providerConfig,
@@ -847,61 +757,6 @@ describe('evaluator trace integration', () => {
       );
     });
 
-    it.each(['promptfoo:redteam:sql-injection', 'promptfoo:redteam:shell-injection'] as const)(
-      'records an error when external evidence collection fails for %s',
-      async (type) => {
-        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-          grade: { pass: true, score: 1, reason: 'No evidence' },
-          rubric: 'Fixture',
-        });
-        for (const error of [new TraceLimitError(), new Error('Tempo unavailable')]) {
-          const options = createRunOptions(
-            createMockProvider({ response: { output: 'Target output' } }),
-          );
-          options.test.assert = [{ type: 'assert-set', assert: [{ type }] }];
-          options.test.metadata = {
-            ...options.test.metadata,
-            purpose: 'Fixture',
-            tracing: { enabled: true },
-          };
-          mockFetchTraceContext.mockRejectedValueOnce(error);
-          const [result] = await runEval(options);
-          expect(result.success).toBe(false);
-          expect(result.failureReason).toBe(2);
-          expect(result.error).toContain(error.message);
-        }
-        expect(grade).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each([{ enabled: false }, { enabled: true, includeInGrading: false }])(
-      'preserves grading when execution tracing is disabled (%j)',
-      async (tracing) => {
-        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-          grade: { pass: true, score: 1, reason: 'Fixture' },
-          rubric: 'Fixture',
-        });
-        const options = createRunOptions(
-          createMockProvider({ response: { output: 'Target output' } }),
-        );
-        options.test.metadata = { ...options.test.metadata, purpose: 'Fixture', tracing };
-        options.test.assert = [
-          {
-            type: 'assert-set',
-            assert: [
-              { type: 'javascript', value: 'true' },
-              { type: 'promptfoo:redteam:sql-injection' },
-            ],
-          },
-        ];
-        mockFetchTraceContext.mockRejectedValueOnce(new Error('Tempo unavailable'));
-        const [result] = await runEval(options);
-        expect(result.success).toBe(true);
-        expect(result.error).toBeUndefined();
-        expect(grade).toHaveBeenCalled();
-      },
-    );
-
     it('preserves successful provider responses when trace collection fails', async () => {
       const warning = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
       const provider = createMockProvider({ response: { output: 'Target output' } });
@@ -968,6 +823,92 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
 
+    it.each(['success', 'completed error'] as const)(
+      'retains completed %s and accounting when CLI pause interrupts external traces',
+      async (outcome) => {
+        const caller = new AbortController();
+        const pause = new AbortController();
+        const reason = Object.assign(new Error('CLI paused during trace collection'), {
+          name: 'AbortError',
+        });
+        const entered = createDeferred<void>();
+        const release = createDeferred<void>();
+        const response = {
+          output: 'Completed target output',
+          ...(outcome === 'completed error' && {
+            error: 'Completed tool diagnostic',
+            metadata: { errorOrigin: 'tool' },
+          }),
+          cost: 0.125,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        };
+        const provider = createMockProvider({ response });
+        let traceSignal: AbortSignal | undefined;
+        mockFetchTraceContext.mockImplementationOnce(
+          async (_traceId: string, options: { abortSignal?: AbortSignal }) => {
+            traceSignal = options.abortSignal;
+            expect(traceSignal).toBeDefined();
+            const signal = traceSignal!;
+            let onAbort!: () => void;
+            const aborted = new Promise<never>((_resolve, reject) => {
+              onAbort = () => reject(signal.reason);
+              signal.addEventListener('abort', onAbort, { once: true });
+            });
+            entered.resolve();
+            try {
+              await Promise.race([release.promise, aborted]);
+              return externalTrace;
+            } finally {
+              signal.removeEventListener('abort', onAbort);
+            }
+          },
+        );
+        const suite: TestSuite = {
+          ...tracingSuite,
+          providers: [provider],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+        };
+        const pending = evaluate(suite, mockEval, {
+          abortSignal: caller.signal,
+          pauseSignal: pause.signal,
+          timeoutMs: -1,
+          maxEvalTimeMs: 0,
+          maxConcurrency: 1,
+          showProgressBar: false,
+        });
+        try {
+          await Promise.race([
+            entered.promise,
+            pending.then(() => {
+              throw new Error('Evaluation ended before the external trace boundary');
+            }),
+          ]);
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          pause.abort(reason);
+          await pending;
+          expect(traceSignal?.reason).toBe(reason);
+          expect(caller.signal.aborted).toBe(false);
+          expect(
+            mockEval.addResult,
+            'Completed target must be recorded after CLI trace cancellation',
+          ).toHaveBeenCalledTimes(1);
+          const row = vi.mocked(mockEval.addResult).mock.calls[0][0];
+          expect(row.response).toMatchObject(response);
+          expect(row.cost).toBe(0.125);
+          expect(row.success).toBe(outcome === 'success');
+          if (outcome === 'completed error') {
+            expect(row.error).toContain('Completed tool diagnostic');
+          }
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+        } finally {
+          caller.abort(new Error('trace fixture cleanup'));
+          release.resolve();
+          await pending;
+        }
+      },
+    );
+
     it('propagates cancellation during external trace collection', async () => {
       const controller = new AbortController();
       const provider = createMockProvider({ response: { output: 'Target output' } });
@@ -985,6 +926,152 @@ describe('evaluator trace integration', () => {
         traceId,
         expect.objectContaining({ abortSignal: controller.signal }),
       );
+    });
+
+    it.each(['success', 'completed error'] as const)(
+      'retains completed %s when CLI pause cancels the real default trace query delay',
+      async (outcome) => {
+        const { fetchTraceContext } = await vi.importActual<
+          typeof import('../../src/tracing/traceContext')
+        >('../../src/tracing/traceContext');
+        vi.useFakeTimers();
+        const network = vi
+          .spyOn(globalThis, 'fetch')
+          .mockRejectedValue(new Error('Unexpected fetch'));
+        const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+        const entered = createDeferred<void>();
+        const caller = new AbortController();
+        const pause = new AbortController();
+        const reason = new Error('CLI pause during the default trace query delay');
+        const response = {
+          output: 'Completed target output',
+          ...(outcome === 'completed error' && { error: 'Completed tool diagnostic' }),
+          cost: 0.125,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        };
+        const provider = createMockProvider({ response });
+        let traceSignal: AbortSignal | undefined;
+        let traceError: unknown;
+        mockFetchTraceContext.mockImplementationOnce(
+          (...args: Parameters<typeof fetchTraceContext>) => {
+            traceSignal = args[1]?.abortSignal;
+            const trace = fetchTraceContext(...args).catch((error: unknown) => {
+              traceError = error;
+              throw error;
+            });
+            entered.resolve();
+            return trace;
+          },
+        );
+        const pending = evaluate(
+          {
+            ...tracingSuite,
+            tracing: { ...tracingSuite.tracing!, queryDelay: undefined },
+            providers: [provider],
+            prompts: [{ raw: 'Test prompt', label: 'test' }],
+            tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+          },
+          mockEval,
+          {
+            abortSignal: caller.signal,
+            pauseSignal: pause.signal,
+            timeoutMs: -1,
+            maxEvalTimeMs: 0,
+            maxConcurrency: 1,
+            showProgressBar: false,
+          },
+        );
+        try {
+          await Promise.race([
+            entered.promise,
+            pending.then(() => {
+              throw new Error('Evaluation ended before the real trace delay');
+            }),
+          ]);
+          expect(debug).toHaveBeenCalledWith(
+            '[TraceContext] Waiting 3000ms for spans to arrive at external backend',
+          );
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          await vi.advanceTimersByTimeAsync(2999);
+          expect(mockEval.addResult).not.toHaveBeenCalled();
+          expect(network).not.toHaveBeenCalled();
+          pause.abort(reason);
+          await pending;
+          expect(traceSignal?.reason).toBe(reason);
+          expect(traceError).toBeInstanceOf(Error);
+          expect(traceError).not.toBe(reason);
+          expect(traceError).toMatchObject({ name: 'AbortError', cause: reason });
+          expect(caller.signal.aborted).toBe(false);
+          expect(mockEval.addResult).toHaveBeenCalledTimes(1);
+          const row = vi.mocked(mockEval.addResult).mock.calls[0][0];
+          expect(
+            row.response,
+            'Real trace delay cancellation must retain the completed target',
+          ).toMatchObject(response);
+          expect(row.cost).toBe(0.125);
+          expect(row.success).toBe(outcome === 'success');
+          if (outcome === 'completed error') {
+            expect(row.error).toContain('Completed tool diagnostic');
+          }
+          await vi.advanceTimersByTimeAsync(1);
+          expect(network).not.toHaveBeenCalled();
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+        } finally {
+          caller.abort(new Error('trace delay fixture cleanup'));
+          await pending;
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each([
+      'caller',
+      'deadline',
+      'unrelated abort',
+      'nested cause',
+      'plain cause object',
+    ] as const)('does not treat %s trace cancellation as owned CLI pause', async (kind) => {
+      const caller = new AbortController();
+      const pause = new AbortController();
+      const pauseReason = new Error('CLI pause');
+      const foreignReason = Object.assign(new Error(`Independent ${kind}`), {
+        name: kind === 'deadline' ? 'TimeoutError' : 'AbortError',
+      });
+      const provider = createMockProvider({ response: { output: 'Completed target output' } });
+      mockFetchTraceContext.mockImplementationOnce(async () => {
+        if (kind === 'caller' || kind === 'deadline') {
+          caller.abort(foreignReason);
+        }
+        pause.abort(pauseReason);
+        if (kind === 'plain cause object') {
+          throw { name: 'AbortError', cause: pauseReason };
+        }
+        const cause =
+          kind === 'nested cause'
+            ? new Error('Nested wrapper', { cause: pauseReason })
+            : foreignReason;
+        throw Object.assign(new Error(`Independent ${kind}`, { cause }), { name: 'AbortError' });
+      });
+      await evaluate(
+        {
+          ...tracingSuite,
+          providers: [provider],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+        },
+        mockEval,
+        {
+          abortSignal: caller.signal,
+          pauseSignal: pause.signal,
+          timeoutMs: -1,
+          maxEvalTimeMs: 0,
+          maxConcurrency: 1,
+          showProgressBar: false,
+        },
+      );
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockEval.addResult).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockEval.addResult).mock.calls[0][0].success).toBe(false);
     });
 
     it('does not include trace collection time in provider latency', async () => {

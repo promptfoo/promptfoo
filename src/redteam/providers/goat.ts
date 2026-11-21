@@ -76,10 +76,14 @@ import type {
 } from '../../types/providers';
 import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
-import type { FlaggedTurn, Message } from './shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from './shared';
 
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
+
+interface SuccessfulGoatAttack extends SuccessfulAttack {
+  traceSummary?: string;
+}
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -87,12 +91,7 @@ const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-    traceSummary?: string;
-  }>;
+  successfulAttacks?: SuccessfulGoatAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
@@ -143,12 +142,7 @@ export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
   private readonly nunjucks: any;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-    traceSummary?: string;
-  }> = [];
+  private successfulAttacks: SuccessfulGoatAttack[] = [];
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -634,7 +628,6 @@ export default class GoatProvider implements ApiProvider {
 
           if (traceId) {
             traceContext = await fetchTraceContext(traceId, {
-              requireComplete: tracingOptions.includeInGrading,
               abortSignal: options?.abortSignal,
               earliestStartTime: iterationStart,
               includeInternalSpans: tracingOptions.includeInternalSpans,
@@ -866,12 +859,9 @@ export default class GoatProvider implements ApiProvider {
           }
         }
       } catch (error) {
-        // Stop the strategy when cancelled or when trace evidence is incomplete
-        if (
-          error instanceof Error &&
-          ['AbortError', 'TraceLimitError', 'TraceEvidenceError'].includes(error.name)
-        ) {
-          logger.debug('[GOAT] Operation stopped');
+        // Re-throw abort errors to properly cancel the operation
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('[GOAT] Operation aborted');
           throw error;
         }
         if (isRemoteMaterializationUpgradeError(error)) {
