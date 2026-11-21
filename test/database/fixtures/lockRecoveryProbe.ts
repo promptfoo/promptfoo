@@ -93,7 +93,6 @@ try {
     await db.transaction(async (tx) => {
       result.callbackCalls++;
       await tx.run('INSERT INTO lock_recovery_test VALUES (2)');
-      await db.run('PRAGMA busy_timeout = 0');
       result.firstError = await captureError(() =>
         db.run('INSERT INTO lock_recovery_test VALUES (3)'),
       );
@@ -102,7 +101,7 @@ try {
     if (mode === 'script') {
       await contender.execute('CREATE TABLE attached_rows (id INTEGER PRIMARY KEY)');
     }
-    await contender.execute('BEGIN IMMEDIATE');
+    const contenderTransaction = await contender.transaction('write');
     try {
       switch (mode) {
         case 'begin':
@@ -151,7 +150,7 @@ try {
           throw new Error(`Unknown lock recovery probe mode: ${mode}`);
       }
     } finally {
-      await contender.execute('ROLLBACK');
+      await contenderTransaction.rollback();
     }
   }
 

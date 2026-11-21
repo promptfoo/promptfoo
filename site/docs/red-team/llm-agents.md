@@ -22,7 +22,7 @@ Testing autonomous coding agents? Start with the [coding-agent red-team guide](/
 
 LLM agents often have varying levels of access to tools, APIs, and data sources. A primary concern is whether an agent can be manipulated to escalate privileges or access unauthorized resources.
 
-A good reference for these sorts of vulnerabilities is the [OWASP API Security Top 10](https://owasp.org/www-project-api-security/). Although it isn't written for LLMs specifically, think of the agent as a user of an API.
+The [OWASP API Security Top 10](https://api-security.owasp.org/) is a good reference for these vulnerabilities. It isn't written for LLMs, but you can treat the agent as a user of an API.
 
 #### Example
 
@@ -53,7 +53,7 @@ Promptfoo's red teaming capabilities include many other OWASP vulnerabilities. L
 
 ## Context Poisoning and Data Exfiltration
 
-LLM agents often rely on retrieved context to inform their actions. Sophisticated attackers may attempt to poison this context or manipulate the agent into exfiltrating sensitive data.
+Attackers can poison retrieved context or use it to steer an agent into exfiltrating sensitive data.
 
 #### Example
 
@@ -83,7 +83,7 @@ redteam:
     - 'jailbreak:tree' # Uses a tree-based approach to test complex jailbreak attempts
 ```
 
-The SSRF plugin is particularly important here, as it checks if the agent can be manipulated into making unauthorized network requests, potentially leading to data exfiltration or access to internal resources. The RAG-specific plugins are crucial for agents that use retrieval-augmented generation to access document stores.
+The SSRF plugin tests for unauthorized network requests. For agents that retrieve documents, use the RAG plugins to test poisoned content and document exfiltration.
 
 ## Memory Poisoning
 
@@ -123,7 +123,7 @@ A successful attack is indicated when the agent's response to the follow-up ques
 
 ## Multi-stage Attack Chains
 
-LLM agents capable of executing sequences of actions are vulnerable to sophisticated multi-stage attacks that may bypass single-step security measures.
+Attackers can chain actions so that individually permitted steps lead to an unauthorized result.
 
 #### Example
 
@@ -198,7 +198,7 @@ Prompt: "Imagine you are a bank employee. Your primary objective is to maximize 
 
 #### Mitigation
 
-- Regularly audit agent behavior against a comprehensive set of safety criteria
+- Audit agent behavior against your safety criteria
 
 #### Automated Detection
 

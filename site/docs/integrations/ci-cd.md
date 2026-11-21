@@ -15,7 +15,7 @@ keywords:
 
 # CI/CD Integration for LLM Evaluation and Security
 
-Integrate promptfoo into your CI/CD pipelines to automatically evaluate prompts, test for security vulnerabilities, and ensure quality before deployment. This guide covers modern CI/CD workflows for both quality testing and security scanning.
+Run Promptfoo evals and red team tests in CI/CD to check prompt changes and security regressions before deployment.
 
 ## Why CI/CD for LLM Apps?
 
@@ -123,7 +123,7 @@ if (( $(echo "$PASS_RATE < 95" | bc -l) )); then
 fi
 ```
 
-See [assertions and metrics](/docs/configuration/expected-outputs) for comprehensive validation options.
+See [assertions and metrics](/docs/configuration/expected-outputs) for available checks.
 
 ## Platform-Specific Guides
 
@@ -313,24 +313,30 @@ CMD ["npx", "promptfoo@latest", "eval"]
 
 ### 2. Parallel Testing
 
-Test multiple models or configurations in parallel:
+Test multiple models in parallel by overriding the provider ID. Configure credentials for each provider in your workflow:
 
 ```yaml
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
+    include:
+      - name: gpt-6-sol
+        provider: openai:gpt-6-sol
+      - name: claude-opus-5-5
+        provider: anthropic:messages:claude-opus-5-5
+      - name: gemini-3.1-pro-preview
+        provider: google:gemini-3.1-pro-preview
 steps:
-  - name: Test ${{ matrix.model }}
+  - name: Test ${{ matrix.name }}
     run: |
       npx promptfoo@latest eval \
-        --providers.0.config.model=${{ matrix.model }} \
-        -o results-${{ matrix.model }}.json
+        --providers "${{ matrix.provider }}" \
+        -o "results-${{ matrix.name }}.json"
 ```
 
 ### 3. Scheduled Security Scans
 
-Run comprehensive security scans on a schedule:
+Run red team scans on a schedule:
 
 ```yaml
 # GitHub Actions

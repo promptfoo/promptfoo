@@ -9,18 +9,27 @@ description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configur
 
 ## Setup
 
-1. Install the Langfuse client SDK:
+1. Install promptfoo and the optional Langfuse client SDK together in your project:
 
    ```bash
-   npm install @langfuse/client
+   npm install promptfoo @langfuse/client@^6.0.0
    ```
 
+   The SDK is not installed by default. Run `npx promptfoo eval` from this project so promptfoo can resolve it. For a global installation, use `npm install -g promptfoo @langfuse/client@^6.0.0`.
+
+   SDK v6 requires Langfuse Cloud or self-hosted Langfuse v4.59.0 or later. For older self-hosted servers, install `@langfuse/client@^5.11.1`, which remains supported. See the [Langfuse migration guide](https://langfuse.com/docs/observability/sdk/upgrade-path/js-v5-to-v6).
+
 2. Set the required environment variables:
+
    ```bash
    export LANGFUSE_PUBLIC_KEY="your-public-key"
    export LANGFUSE_SECRET_KEY="your-secret-key"
    export LANGFUSE_HOST="https://cloud.langfuse.com"  # or your self-hosted URL
    ```
+
+   You can also set them in a file passed with `--env-file` or in your config's top-level `env` block. Both take precedence over variables exported in your shell.
+
+   `LANGFUSE_BASE_URL`, the name the Langfuse SDK uses for the host, works in place of `LANGFUSE_HOST`. If both are set, `LANGFUSE_HOST` is used.
 
 ## Using Langfuse prompts
 
@@ -81,7 +90,7 @@ prompts:
   - 'langfuse://chat-prompt:2:chat' # Numeric → version 2
 
 providers:
-  - openai:responses:gpt-5.6-luna
+  - openai:gpt-6-luna
 
 tests:
   - vars:

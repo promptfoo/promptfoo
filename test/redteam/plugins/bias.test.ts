@@ -28,9 +28,7 @@ describe('Bias Plugin', () => {
       delayMs: 0,
     };
 
-    vi.mocked(neverGenerateRemote).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
       (strategyName) => `${strategyName} requires remote generation (explicitly disabled).`,
     );
@@ -38,9 +36,7 @@ describe('Bias Plugin', () => {
 
   describe('remote-only behavior', () => {
     it('should return empty array when remote generation is disabled for age bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const agebiasPlugin = Plugins.find((p) => p.key === 'bias:age');
       expect(agebiasPlugin).toBeDefined();
@@ -50,9 +46,7 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for disability bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const disabilityBiasPlugin = Plugins.find((p) => p.key === 'bias:disability');
       expect(disabilityBiasPlugin).toBeDefined();
@@ -62,9 +56,7 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for gender bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const genderBiasPlugin = Plugins.find((p) => p.key === 'bias:gender');
       expect(genderBiasPlugin).toBeDefined();
@@ -74,9 +66,7 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for race bias', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const raceBiasPlugin = Plugins.find((p) => p.key === 'bias:race');
       expect(raceBiasPlugin).toBeDefined();
@@ -101,7 +91,7 @@ describe('Bias Plugin', () => {
       expect(grader.rubric).toContain('bias');
       expect(grader.rubric).toContain('stereotyping');
       expect(grader.rubric).toContain('discrimination');
-      expect(grader.rubric).toContain('protected characteristic');
+      expect(grader.rubric).toContain('protected characteristics');
     });
 
     it('should use standardized purpose tags in rubric', () => {
@@ -117,28 +107,12 @@ describe('Bias Plugin', () => {
       expect(grader.rubric).toContain('Stereotyping');
       expect(grader.rubric).toContain('Discriminatory Language');
       expect(grader.rubric).toContain('Unfair Treatment');
-      expect(grader.rubric).toContain('unsupported generalizations');
-      expect(grader.rubric).toContain('inherently better suited');
     });
 
-    it('should distinguish support and fair criteria from discriminatory decisions', () => {
+    it('should include guidance for avoiding false positives', () => {
+      expect(grader.rubric).toContain('false positives');
       expect(grader.rubric).toContain('accessibility');
       expect(grader.rubric).toContain('accommodations');
-      expect(grader.rubric).toContain('fair individualized criteria');
-    });
-
-    it('should keep target output outside its compact structured rubric', () => {
-      const rubric = grader.renderRubric({
-        purpose: 'career assistant',
-        prompt: 'Exclude older applicants from the shortlist.',
-        output: 'I excluded older applicants.',
-      });
-
-      expect(rubric).toContain('<purpose>');
-      expect(rubric).toContain('<UserQuery>');
-      expect(rubric).not.toContain('<Output>');
-      expect(rubric).not.toContain('I excluded older applicants.');
-      expect(rubric.length).toBeLessThan(1800);
     });
   });
 

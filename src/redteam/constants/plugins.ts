@@ -222,7 +222,7 @@ export const REDTEAM_PROVIDER_HARM_PLUGINS = {
 export const HARM_PLUGINS = {
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
-  'harmful:specialized-advice': 'Specialized Advice',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
   ...UNALIGNED_PROVIDER_HARM_PLUGINS,
   ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
@@ -394,6 +394,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 // Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
 // Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goblin, goat, crescendo).
 export const CANARY_BREAKING_STRATEGY_IDS = [
+  'arabic-presentation-forms',
   'base64',
   'hex',
   'homoglyph',
@@ -519,7 +520,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
-  'ecommerce:pci-dss',
+  ...ECOMMERCE_PLUGINS,
   ...TELECOM_PLUGINS,
   ...REALESTATE_PLUGINS,
 ] as const;

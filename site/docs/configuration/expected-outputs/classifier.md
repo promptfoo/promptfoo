@@ -1,7 +1,7 @@
 ---
 sidebar_position: 99
 sidebar_label: Classification
-description: Apply HuggingFace classifiers for comprehensive output analysis including sentiment, toxicity, bias, PII detection, and custom labels
+description: Use Hugging Face text classifiers to grade LLM outputs for sentiment, toxicity, PII, or custom labels. Configure score thresholds and classification providers.
 ---
 
 # Classifier grading
@@ -95,6 +95,8 @@ assert:
 ```
 
 The `not-classifier` type inverts the result of the classifier. In this case, the starpii model is trained to detect PII, but we want to assert that the LLM output is _not_ PII. So, we invert the classifier to accept values that are _not_ PII.
+
+Provider errors and empty classification results fail both `classifier` and `not-classifier` with a score of `0`. They are grader failures, so negation does not turn them into passes, even when `value` specifies a label.
 
 ## Prompt injection example
 

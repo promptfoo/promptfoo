@@ -8,6 +8,12 @@ packages:
 # `npm ci`, which has no equivalent setting, so this covers the optional local pnpm path
 # only -- Renovate remains the control that gates what actually reaches main.
 minimumReleaseAge: 14400
+# Allow the patched filesystem server (GHSA-p9cv-8g75-4xcg) and the patched
+# minimatch release (GHSA-hqmv-qgp3-jx75) with its required matcher dependency.
+minimumReleaseAgeExclude:
+  - '@modelcontextprotocol/server-filesystem@2.3.0'
+  - 'minimatch@11.0.8'
+  - '@isaacs/nonrecursive-glob-match@1.1.0'
 
 # Build-script allowlist. pnpm 11 dropped the `pnpm` field in package.json ("The 'pnpm'
 # field in package.json is no longer read by pnpm") and renamed onlyBuiltDependencies to
@@ -15,8 +21,6 @@ minimumReleaseAge: 14400
 # pnpm.onlyBuiltDependencies for older pnpm; keep the two lists identical.
 allowBuilds:
   '@huggingface/transformers': true
-  '@playwright/browser-chromium': true
-  '@swc/core': true
   core-js: true
   core-js-pure: true
   esbuild: true

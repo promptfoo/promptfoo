@@ -1,6 +1,6 @@
 ---
 sidebar_label: Select Best
-description: 'Leverage AI models to automatically select and rank the best outputs from multiple LLM responses for quality optimization'
+description: Use an LLM judge to compare outputs from multiple prompts or providers in one test case. Select the response that best meets your criterion and mark the winner.
 ---
 
 # Select Best
@@ -77,6 +77,8 @@ Like other model-graded assertions, you can override the default grader:
        value: 'choose the most engaging response'
        provider: openai:gpt-5-mini
    ```
+
+Resuming with redacted grader credentials requires a matching provider ID and nonsecret configuration. If a hook changed the grader’s settings or selected a runtime provider that cannot be reloaded, supply the matching grader configuration or rerun the eval.
 
 ### Customizing the Prompt
 

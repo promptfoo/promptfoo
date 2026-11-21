@@ -16,6 +16,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
+  'arabic-presentation-forms':
+    'Tests handling of Arabic presentation-forms encoding and Unicode normalization in content filters',
   'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
   layer: 'Applies multiple strategies in a defined order',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -271,6 +273,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -979,7 +982,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:self-harm': 'Self-Harm',
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:sexual-content': 'Sexual Content',
-  'harmful:specialized-advice': 'Specialized Advice',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
   'harmful:weapons:ied': 'Improvised Explosive Devices',
@@ -1027,7 +1030,6 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce<
   acc[value] = key;
   return acc;
 }, {});
-categoryAliasesReverse['Specialized Advice - Financial'] = 'harmful:specialized-advice';
 
 export const pluginDescriptions: Record<Plugin, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
@@ -1274,6 +1276,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 
 export const strategyDescriptions: Record<Strategy, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
+  'arabic-presentation-forms':
+    'Tests detection and handling of Arabic text using isolated Unicode presentation forms',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
@@ -1325,6 +1329,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   audio: 'Audio',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',

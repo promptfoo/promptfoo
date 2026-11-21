@@ -7,15 +7,6 @@ import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import {
-  type ApiProvider,
-  type Inputs,
-  type SemanticFrontierDiagnostic,
-  summarizeSemanticFrontierDiagnosticsFromTests,
-  type TestCase,
-  type TestCaseWithPlugin,
-  type TokenUsage,
-} from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -70,6 +61,7 @@ import {
   getShortPluginId,
 } from './util';
 
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
 import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
@@ -291,7 +283,6 @@ function getStatus(requested: number, generated: number): string {
 function generateReport(
   pluginResults: Record<string, { requested: number; generated: number }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
-  semanticFrontierDiagnostics: readonly SemanticFrontierDiagnostic[],
 ): string {
   const table = new Table({
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
@@ -328,39 +319,7 @@ function generateReport(
       ]);
     });
 
-  return `\nTest Generation Report:\n${table.toString()}${generateSemanticFrontierReport(semanticFrontierDiagnostics)}`;
-}
-
-function generateSemanticFrontierReport(
-  diagnostics: readonly SemanticFrontierDiagnostic[],
-): string {
-  if (diagnostics.length === 0) {
-    return '';
-  }
-
-  const table = new Table({
-    head: ['Plugin', 'Frontiers', 'Complete', 'Status', 'Unreachable Features'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [28, 12, 12, 14, 42],
-  });
-
-  diagnostics.forEach((diagnostic) => {
-    const status = diagnostic.structurallyDegraded
-      ? chalk.red('Degraded')
-      : diagnostic.completeFrontierCount < diagnostic.frontierCount
-        ? chalk.yellow('Incomplete')
-        : chalk.green('Complete');
-    table.push([
-      diagnostic.pluginId,
-      diagnostic.frontierCount,
-      `${diagnostic.completeFrontierCount}/${diagnostic.frontierCount}`,
-      status,
-      diagnostic.unreachableFeatureIds.join(', ') || 'none',
-    ]);
-  });
-
-  return `\n\nSemantic Frontier Diagnostics:\n${table.toString()}`;
+  return `\nTest Generation Report:\n${table.toString()}`;
 }
 
 /**
@@ -1794,13 +1753,7 @@ export async function synthesize({
     logger.info('');
   }
 
-  logger.info(
-    generateReport(
-      pluginResults,
-      strategyResults,
-      summarizeSemanticFrontierDiagnosticsFromTests(finalTestCases),
-    ),
-  );
+  logger.info(generateReport(pluginResults, strategyResults));
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
   const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
