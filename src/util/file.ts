@@ -315,7 +315,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: 'assertion' | 'general' | 'vars' | 'test' | 'assert-list',
   basePath?: string,
 ): any {
   if (basePath !== undefined) {
@@ -324,13 +324,19 @@ export function maybeLoadConfigFromExternalFile(
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
+  const inTest = context === 'test' || context === 'assert-list';
+  const fileContext = inTest ? undefined : context;
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
       // Fallback sources must be literals. Keep their authored values for validation,
       // so external test files cannot turn a forbidden reference into ordinary text.
-      if (key === 'value' && typeof config.type === 'string' && config.fallback !== undefined) {
+      if (context === 'assert-list' && key === 'value' && config.fallback !== undefined) {
         result.value = config.value;
+        continue;
+      }
+      if (inTest && key === 'assert' && Array.isArray(config.assert)) {
+        result.assert = maybeLoadConfigFromExternalFile(config.assert, 'assert-list');
         continue;
       }
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
@@ -345,7 +351,7 @@ export function maybeLoadConfigFromExternalFile(
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : fileContext;
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
@@ -361,7 +367,7 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  return maybeLoadFromExternalFile(config, fileContext);
 }
 
 /**
