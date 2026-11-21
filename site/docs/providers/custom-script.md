@@ -19,6 +19,8 @@ To use a script provider, you need to create an executable that takes a prompt a
 
 :::note Structured provider responses
 
+Run `exec:` providers through the CLI or Node.js library. The local HTTP API and web UI block them, including provider tests and reruns. Other configuration features can execute code, so only use trusted configurations.
+
 An `exec:` provider treats standard output as the response `output`, even when the script prints JSON. It cannot populate top-level fields such as `guardrails`. Use the [Python](/docs/providers/python#implementing-guardrails), [Ruby](/docs/providers/ruby#implementing-guardrails), [JavaScript](/docs/providers/custom-api#guardrail-responses), or [HTTP](/docs/providers/http#guardrails-support) provider when an assertion needs a normalized guardrail response.
 
 :::

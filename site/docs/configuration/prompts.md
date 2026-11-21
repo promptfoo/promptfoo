@@ -339,7 +339,7 @@ puts "\nUser query: #{context['vars']['query']}"
 ### Security Considerations
 
 :::warning
-Executable scripts run with full permissions of the promptfoo process. Be mindful of:
+Run executable prompts through the CLI or Node.js library. The local HTTP API and web UI block them, including reruns. Only use trusted configurations. Other features, such as JavaScript and Python prompt functions, can still run code with the permissions of the Promptfoo process.
 
 - **User Input**: Scripts receive user-controlled `vars` as JSON. Always validate and sanitize inputs before using them in commands.
 - **Untrusted Scripts**: Only run scripts from trusted sources. Scripts can access files, make network calls, and execute commands.

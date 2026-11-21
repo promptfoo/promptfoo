@@ -5,8 +5,8 @@ import fs from 'fs';
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
 import logger from '../logger';
-import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { requireLocalCommand } from '../util/scriptExecution';
 
 import type {
   ApiProvider,
@@ -22,6 +22,7 @@ function stripText(text: string | Buffer) {
 }
 
 export function parseScriptParts(scriptPath: string): string[] {
+  requireLocalCommand(scriptPath);
   const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
   let match;
   const scriptParts = [];
@@ -55,13 +56,13 @@ export async function runScript(
   inputs: string[],
   options: { cwd?: string; timeout?: number },
 ): Promise<string> {
-  invariant(command, 'No command found in script path');
+  requireLocalCommand(command);
   const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
     (resolve, reject) => {
       const child = execFile(
         command,
         [...args, ...inputs],
-        { ...options, env: getProcessEnv() },
+        { cwd: options.cwd, timeout: options.timeout, env: getProcessEnv(), shell: false },
         (error, stdout, stderr) => {
           if (error) {
             reject(error);
@@ -102,7 +103,9 @@ export class ScriptCompletionProvider implements ApiProvider {
   constructor(
     private scriptPath: string,
     private options?: ProviderOptions,
-  ) {}
+  ) {
+    requireLocalCommand(scriptPath);
+  }
 
   id() {
     return `exec:${this.scriptPath}`;
