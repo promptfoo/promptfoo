@@ -60,6 +60,7 @@ export const ProviderEnvOverridesSchema = z.object({
   F5_API_BASE_URL: z.string().optional(),
   F5_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
+  FIKRA_API_KEY: z.string().optional(),
   FIREWORKS_API_BASE_URL: z.string().optional(),
   FIREWORKS_API_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),

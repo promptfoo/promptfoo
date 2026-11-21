@@ -1116,6 +1116,24 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle fikra providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('fikra:deepseek-v4.1-flash'));
+      expect(factory).toBeDefined();
+
+      const fikraOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create(
+        'fikra:deepseek-v4.1-flash',
+        fikraOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('fikra:deepseek-v4.1-flash');
+    });
+
     it.each(['llamaapi:vendor:model', 'llamaapi:chat:vendor:model'])(
       'routes %s uniquely to the Llama API provider',
       async (providerPath) => {

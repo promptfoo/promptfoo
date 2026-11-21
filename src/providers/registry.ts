@@ -41,6 +41,7 @@ import {
   ElevenLabsTTSProvider,
 } from './elevenlabs';
 import { FalImageGenerationProvider } from './fal';
+import { createFikraProvider } from './fikra';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { determineGoogleVertexMode } from './google/auth';
@@ -593,6 +594,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   configuredProviderFactory('atlascloud:', () => createAtlasCloudProvider),
+  configuredProviderFactory('fikra:', () => createFikraProvider),
   {
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
