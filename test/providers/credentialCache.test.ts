@@ -175,15 +175,23 @@ describe('scoped SDK response cache compatibility', () => {
     );
   });
 
-  it('keeps identical public identities stable in independently started processes', () => {
+  it('shares only public identities across processes', () => {
     const moduleUrl = pathToFileURL(path.resolve('src/providers/credentialCache.ts')).href;
-    const script = `import { getCredentialCacheNamespace } from ${JSON.stringify(moduleUrl)}; process.stdout.write(getCredentialCacheNamespace(['fixture-access-key', 'profile']));`;
-    const run = () =>
-      execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
-        encoding: 'utf8',
-      });
-    expect(run()).toBe(run());
-    expect(run()).toBe(getCredentialCacheNamespace(['fixture-access-key', 'profile']));
+    const script = `
+      import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from ${JSON.stringify(moduleUrl)};
+      console.log(getCredentialCacheNamespace(['fixture-access-key', 'profile']));
+      console.log(getOpaqueCredentialCacheNamespace('fixture'.repeat(512)));
+    `;
+    const [publicId, privateId] = execFileSync(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', script],
+      { encoding: 'utf8' },
+    )
+      .trim()
+      .split(/\s+/);
+    expect(publicId).toBe(getCredentialCacheNamespace(['fixture-access-key', 'profile']));
+    expect(privateId).toMatch(/^[a-f0-9]{64}$/);
+    expect(privateId).not.toBe(getOpaqueCredentialCacheNamespace('fixture'.repeat(512)));
   });
 
   it('partitions scoped SSO files and routing files even with configured static IAM', () => {

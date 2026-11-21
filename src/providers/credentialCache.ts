@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, hkdfSync, randomBytes } from 'node:crypto';
 import { statSync } from 'node:fs';
 
 /** Partition by public identity selectors, including changes to selected credential files. */
@@ -21,9 +21,10 @@ export function getCredentialCacheNamespace(
     .digest('hex');
 }
 
-const namespaceKey = randomBytes(32);
+const processSalt = randomBytes(32);
 
 /** Share opaque identities only within this process, without keeping raw credentials. */
 export function getOpaqueCredentialCacheNamespace(token: string): string {
-  return createHmac('sha256', namespaceKey).update(token).digest('hex');
+  const key = hkdfSync('sha256', token, processSalt, 'promptfoo:sdk-credential:v1', 32);
+  return Buffer.from(key).toString('hex');
 }

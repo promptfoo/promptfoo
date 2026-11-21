@@ -335,7 +335,7 @@ describe('Google example provider contracts', () => {
     {
       name: 'a service account plus an API key',
       apiKey: 'example-native-key',
-      credentialsFile: 'synthetic-service-account.json',
+      credentialsFile: path.resolve(__dirname, '../fixtures/synthetic-service-account.json'),
     },
   ])(
     'basic Vertex example keeps OAuth and independent grading with $name',
