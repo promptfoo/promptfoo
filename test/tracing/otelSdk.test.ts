@@ -371,16 +371,20 @@ describe('otelSdk', () => {
       expect(globalPropagator).toEqual({ applicationPropagator: true });
     });
 
-    it('warns when an evaluation joins one with different tracing settings', async () => {
-      const { default: logger } = await import('../../src/logger');
-      initializeOtel(defaultConfig);
-      initializeOtel(defaultConfig);
-      expect(logger.warn).not.toHaveBeenCalled();
-
-      initializeOtel({ ...defaultConfig, endpoint: 'http://collector:4318/v1/traces' });
-
-      expect(logger.warn).toHaveBeenCalledTimes(1);
+    it.each([
+      { endpoint: undefined },
+      { endpoint: 'http://other:4318/v1/traces' },
+      { localExport: !defaultConfig.localExport },
+      { serviceName: 'other' },
+    ])('rejects incompatible settings %o before acquiring the shared exporter', async (change) => {
+      const config = { ...defaultConfig, endpoint: 'http://collector:4318/v1/traces' };
+      initializeOtel(config);
+      Object.assign(config, change);
+      expect(() => initializeOtel(config)).toThrow('matching OpenTelemetry export settings');
       expect(nodeTracerProviderCalls).toHaveLength(1);
+      await shutdownOtel();
+      expect(mockShutdown).toHaveBeenCalledOnce();
+      expect(isOtelInitialized()).toBe(false);
     });
 
     it("leaves an application's tracer provider and propagator registered", async () => {
