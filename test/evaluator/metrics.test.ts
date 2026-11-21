@@ -80,6 +80,8 @@ describeEvaluator('evaluator metrics and scoring', () => {
   it('emits bounded provider and assertion categories without changing evaluation counters', async () => {
     const record = vi.spyOn(telemetry, 'record');
     const providers = [
+      'manual-input',
+      'agent-provider',
       'fixture-private-team:private-endpoint',
       'minimax:private-model',
       'moonshot:private-model',
@@ -119,22 +121,24 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(event).toMatchObject({
       providerPrefixes: [
         'a2a',
+        'agent-provider',
         'azureopenai',
         'custom',
         'dashscope',
         'echo',
         'elevenlabs',
         'file',
+        'manual-input',
         'minimax',
         'moonshot',
         'novita',
         'orcarouter',
       ],
       assertionTypes: ['contains', 'not-contains'],
-      numPasses: 12,
+      numPasses: providers.length,
       numErrors: 0,
-      totalRequests: 12,
-      totalTokens: 36,
+      totalRequests: providers.length,
+      totalTokens: 3 * providers.length,
     });
     expect(JSON.stringify(event)).not.toContain('private');
     expect(JSON.stringify(event)).not.toContain('local-provider');

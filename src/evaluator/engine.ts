@@ -2106,6 +2106,7 @@ function getAverageLatencyMs(results: EvaluationStoreResult[]) {
 const PROVIDER_CATEGORIES = new Set([
   'a2a',
   'abliteration',
+  'agent-provider',
   'ai21',
   'aimlapi',
   'alibaba',
@@ -2154,6 +2155,7 @@ const PROVIDER_CATEGORIES = new Set([
   'llama',
   'llamaapi',
   'localai',
+  'manual-input',
   'mcp',
   'meta',
   'minimax',
