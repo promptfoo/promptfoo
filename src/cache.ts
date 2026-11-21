@@ -10,7 +10,12 @@ import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
-import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isAbortError,
+  isTransientConnectionError,
+} from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudAuthHeaderName,
@@ -877,6 +882,30 @@ async function prepareFetchResponse(
     );
   }
   return { response: serializedResponse, cacheable: true };
+}
+
+/**
+ * Convert a terminal fetchWithCache throttle into a provider diagnostic. Retain the
+ * scheduler's retry timing while keeping raw transport headers out of saved evals.
+ */
+export function getFetchRateLimitResponse(error: unknown) {
+  if (!(error instanceof HttpRateLimitError)) {
+    return undefined;
+  }
+  const wait =
+    error.retryAfterMs ??
+    (error.resetAt === undefined ? undefined : Math.max(0, error.resetAt - Date.now()));
+  const headers: Record<string, string> = {};
+  if (wait !== undefined) {
+    headers['retry-after-ms'] = String(wait);
+  }
+  return {
+    error: formatRateLimitErrorMessage(error),
+    metadata: {
+      rateLimitKind: error.kind,
+      http: { status: error.status, statusText: error.statusText, headers },
+    },
+  };
 }
 
 /**

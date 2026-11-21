@@ -31,6 +31,54 @@ const ANTHROPIC_HEADERS = {
   resetTokens: 'anthropic-ratelimit-tokens-reset',
 } as const;
 
+// Mistral exposes minute and month constraints simultaneously. Keep a window's
+// limit and reset associated with the remaining count that drives throttling.
+function mistralWindow(
+  headers: Record<string, string>,
+  dimension: 'requests' | 'tokens',
+  window: 'minute' | 'month',
+) {
+  const short = dimension === 'requests' ? 'req' : 'tok';
+  const keys = (field: string) => [
+    `x-ratelimit-${field}-${dimension}-${window}`,
+    `x-ratelimit-${field}-${short}-${window}`,
+  ];
+  const remaining = parseFirstMatch(headers, keys('remaining'));
+  const limit = parseFirstMatch(headers, keys('limit'));
+  let resetAt: number | undefined;
+  for (const key of keys('reset')) {
+    if (headers[key] !== undefined) {
+      resetAt = parseResetTime(headers[key]) ?? undefined;
+      if (resetAt !== undefined) {
+        break;
+      }
+    }
+  }
+  return { remaining, limit, resetAt };
+}
+
+function mistralQuota(headers: Record<string, string>, dimension: 'requests' | 'tokens') {
+  const minute = mistralWindow(headers, dimension, 'minute');
+  const month = mistralWindow(headers, dimension, 'month');
+  if (month.remaining === undefined) {
+    return minute.remaining !== undefined ||
+      minute.limit !== undefined ||
+      minute.resetAt !== undefined
+      ? minute
+      : month;
+  }
+  if (minute.remaining === undefined) {
+    return month;
+  }
+  if (month.remaining === 0 && minute.remaining === 0) {
+    return (month.resetAt ?? 0) > (minute.resetAt ?? 0) ? month : minute;
+  }
+  if (minute.limit && month.limit) {
+    return month.remaining / month.limit < minute.remaining / minute.limit ? month : minute;
+  }
+  return month.remaining < minute.remaining ? month : minute;
+}
+
 // Standard/generic headers (RFC 6585 style)
 const STANDARD_HEADERS = {
   remaining: 'ratelimit-remaining',
@@ -49,33 +97,23 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
-  // --- Remaining counts (ordered: OpenAI, Anthropic, Standard) ---
-  result.remainingRequests = parseFirstMatch(h, [
-    OPENAI_HEADERS.remainingRequests,
-    ANTHROPIC_HEADERS.remainingRequests,
-    STANDARD_HEADERS.remainingAlt,
-    STANDARD_HEADERS.remaining,
-  ]);
+  const requests = mistralQuota(h, 'requests');
+  const tokens = mistralQuota(h, 'tokens');
+  result.remainingRequests =
+    parseFirstMatch(h, [OPENAI_HEADERS.remainingRequests, ANTHROPIC_HEADERS.remainingRequests]) ??
+    requests.remaining ??
+    parseFirstMatch(h, [STANDARD_HEADERS.remainingAlt, STANDARD_HEADERS.remaining]);
+  result.remainingTokens =
+    parseFirstMatch(h, [OPENAI_HEADERS.remainingTokens, ANTHROPIC_HEADERS.remainingTokens]) ??
+    tokens.remaining;
+  result.limitRequests =
+    parseFirstMatch(h, [OPENAI_HEADERS.limitRequests, ANTHROPIC_HEADERS.limitRequests]) ??
+    requests.limit ??
+    parseFirstMatch(h, [STANDARD_HEADERS.limitAlt, STANDARD_HEADERS.limit]);
+  result.limitTokens =
+    parseFirstMatch(h, [OPENAI_HEADERS.limitTokens, ANTHROPIC_HEADERS.limitTokens]) ?? tokens.limit;
 
-  result.remainingTokens = parseFirstMatch(h, [
-    OPENAI_HEADERS.remainingTokens,
-    ANTHROPIC_HEADERS.remainingTokens,
-  ]);
-
-  // --- Limits (ordered: OpenAI, Anthropic, Standard) ---
-  result.limitRequests = parseFirstMatch(h, [
-    OPENAI_HEADERS.limitRequests,
-    ANTHROPIC_HEADERS.limitRequests,
-    STANDARD_HEADERS.limitAlt,
-    STANDARD_HEADERS.limit,
-  ]);
-
-  result.limitTokens = parseFirstMatch(h, [
-    OPENAI_HEADERS.limitTokens,
-    ANTHROPIC_HEADERS.limitTokens,
-  ]);
-
-  // --- Reset time (ordered: OpenAI, Anthropic, Standard) ---
+  // --- Reset time (ordered: OpenAI, Anthropic, Mistral, Standard) ---
   for (const name of [
     OPENAI_HEADERS.resetRequests,
     OPENAI_HEADERS.resetTokens,
@@ -94,6 +132,14 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
       }
     }
   }
+
+  // Use the latest exhausted deadline if both constraints must recover.
+  const exhaustedResets = [requests, tokens].flatMap((quota) =>
+    quota.remaining === 0 && quota.resetAt !== undefined ? [quota.resetAt] : [],
+  );
+  result.resetAt ??= exhaustedResets.length
+    ? Math.max(...exhaustedResets)
+    : (requests.resetAt ?? tokens.resetAt);
 
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {
