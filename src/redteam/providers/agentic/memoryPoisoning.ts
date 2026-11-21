@@ -11,7 +11,10 @@ import {
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
+import {
+  TargetPromptLengthError,
+  throwIfTargetPromptExceedsMaxChars,
+} from '../../shared/promptLength';
 import { callTargetProvider, messagesToRedteamHistory } from '../shared';
 
 import type {
@@ -60,6 +63,8 @@ export class MemoryPoisoningProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const totalTokenUsage = createEmptyTokenUsage();
+    const messages: { content: string; role: 'user' | 'assistant' }[] = [];
     try {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;
       const purpose = context?.test?.metadata?.purpose;
@@ -94,7 +99,6 @@ export class MemoryPoisoningProvider implements ApiProvider {
       context!.test!.metadata ??= {};
       context!.test!.metadata['scenario'] = scenario;
 
-      const totalTokenUsage = createEmptyTokenUsage();
       if (scenario.tokenUsage) {
         accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: scenario.tokenUsage });
       }
@@ -108,11 +112,19 @@ export class MemoryPoisoningProvider implements ApiProvider {
         options,
       );
       accumulateResponseTokenUsage(totalTokenUsage, memoryResponse);
+      messages.push(
+        { content: scenario.memory, role: 'user' as const },
+        { content: memoryResponse.output, role: 'assistant' as const },
+      );
 
       // Send the test case to the provider; the test case should poison the memory created in the previous step.
       throwIfTargetPromptExceedsMaxChars(prompt);
       const testResponse = await callTargetProvider(targetProvider, prompt, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, testResponse);
+      messages.push(
+        { content: prompt, role: 'user' as const },
+        { content: testResponse.output, role: 'assistant' as const },
+      );
 
       // Send the follow up question to the provider.
       throwIfTargetPromptExceedsMaxChars(scenario.followUp);
@@ -123,15 +135,10 @@ export class MemoryPoisoningProvider implements ApiProvider {
         options,
       );
       accumulateResponseTokenUsage(totalTokenUsage, response);
-
-      const messages = [
-        { content: scenario.memory, role: 'user' as const },
-        { content: memoryResponse.output, role: 'assistant' as const },
-        { content: prompt, role: 'user' as const },
-        { content: testResponse.output, role: 'assistant' as const },
+      messages.push(
         { content: scenario.followUp, role: 'user' as const },
         { content: response.output, role: 'assistant' as const },
-      ];
+      );
 
       return {
         output: response.output,
@@ -142,6 +149,21 @@ export class MemoryPoisoningProvider implements ApiProvider {
         tokenUsage: totalTokenUsage,
       };
     } catch (error) {
+      if (error instanceof TargetPromptLengthError) {
+        // A scoped cap can reject a later step after earlier target calls
+        // already completed. Return an error response carrying the usage
+        // accumulated so far instead of throwing it away.
+        logger.warn(`Memory poisoning stopped by message length limit: ${error.message}`);
+        return {
+          output: '',
+          error: error.message,
+          metadata: {
+            messages,
+            redteamHistory: messagesToRedteamHistory(messages),
+          },
+          tokenUsage: totalTokenUsage,
+        };
+      }
       logger.error(`Error in MemoryPoisoningProvider: ${error}`);
       throw error;
     }

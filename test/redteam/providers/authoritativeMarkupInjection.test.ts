@@ -186,6 +186,56 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       });
     });
 
+    it('reports generation usage when a scoped cap blocks the target call', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'too long' },
+          tokenUsage: { prompt: 5, completion: 2, total: 7 },
+        }),
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const context = createMockContext(mockTargetProvider);
+      context.test = { metadata: { pluginConfig: { maxCharsPerMessage: 5 } } };
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.error).toContain('maxCharsPerMessage=5');
+      expect(result.tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        attacker: { prompt: 5, completion: 2, total: 7, numRequests: 1 },
+      });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('honors the layer step cap carried on the loaded provider over the plugin cap', async () => {
+      // A layer step configures the provider with maxCharsPerMessage: 100, then
+      // readTest replaces the provider descriptor with the loaded instance. The
+      // step cap must survive loading so the boundary enforces it instead of
+      // the plugin cap of 5.
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: '12345678' },
+          tokenUsage: { prompt: 5, completion: 2, total: 7 },
+        }),
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({
+        injectVar: 'input',
+        maxCharsPerMessage: 100,
+      });
+      const context = createMockContext(mockTargetProvider);
+      context.test = {
+        provider,
+        metadata: { pluginConfig: { maxCharsPerMessage: 5 } },
+      } as unknown as CallApiContextParams['test'];
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('target response');
+      expect(result.error).toBeUndefined();
+    });
+
     it('retains fresh attacker tokens when the target response is reused from cache', async () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({

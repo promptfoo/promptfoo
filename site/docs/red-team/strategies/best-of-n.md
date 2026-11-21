@@ -43,6 +43,8 @@ BoN Jailbreaking works through a simple three-step process:
 
 The strategy's effectiveness comes from exploiting the stochastic nature of LLM outputs and their sensitivity to small input variations.
 
+If a `maxCharsPerMessage` limit is configured, including a plugin-scoped cap with no global cap, Best-of-N skips any candidate that exceeds it without sending that candidate to the target. If every candidate is rejected this way, the run reports a length error instead of a grading verdict, with zero target requests.
+
 ## Configuration Parameters
 
 ### useBasicRefusal

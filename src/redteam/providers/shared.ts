@@ -52,7 +52,10 @@ import {
   withGradingUsage,
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import {
+  isValidMaxCharsPerMessage,
+  throwIfTargetPromptExceedsMaxChars,
+} from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -502,21 +505,25 @@ export function isConversationEndedResponse(
 }
 
 function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): number | undefined {
-  const configuredLimit =
+  // Layer steps carry their limit in test.provider.config. An invalid override
+  // must not mask a valid limit from the strategy or plugin.
+  const providerLimit = (
+    context?.test as { provider?: { config?: { maxCharsPerMessage?: unknown } } } | undefined
+  )?.provider?.config?.maxCharsPerMessage;
+  const scopedLimit = [
+    providerLimit,
     (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: unknown } | undefined)
-      ?.maxCharsPerMessage ??
+      ?.maxCharsPerMessage,
     (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: unknown } | undefined)
-      ?.maxCharsPerMessage;
+      ?.maxCharsPerMessage,
+  ].find(isValidMaxCharsPerMessage);
 
-  if (
-    typeof configuredLimit !== 'number' ||
-    !Number.isInteger(configuredLimit) ||
-    configuredLimit <= 0
-  ) {
-    return undefined;
+  const globalLimit = cliState.config?.redteam?.maxCharsPerMessage;
+  if (isValidMaxCharsPerMessage(globalLimit)) {
+    return scopedLimit === undefined ? globalLimit : Math.min(globalLimit, scopedLimit);
   }
 
-  return configuredLimit;
+  return scopedLimit;
 }
 
 /** Invoke a red-team target with the same tracing behavior across every strategy. */
@@ -526,6 +533,10 @@ export function callTargetProvider(
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
+  // Enforce the request-scoped cap here, before tracing and rate-limit scheduling,
+  // so strategies that call the target directly get the same provider-, plugin- and
+  // strategy-scoped check as the getTargetResponse path, bounded by the global cap.
+  throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
@@ -615,7 +626,6 @@ export async function getTargetResponse(
   let targetRespRaw;
 
   try {
-    throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation

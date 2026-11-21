@@ -39,6 +39,7 @@ import {
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
+  isValidMaxCharsPerMessage,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
@@ -186,10 +187,6 @@ function applyDefaultRemotePluginConfig(
       ]),
     ],
   };
-}
-
-function isValidMaxCharsPerMessage(limit: unknown): limit is number {
-  return typeof limit === 'number' && Number.isInteger(limit) && limit > 0;
 }
 
 function getMaxCharsPerMessageFromConfig(config: PluginConfig | undefined): number | undefined {
