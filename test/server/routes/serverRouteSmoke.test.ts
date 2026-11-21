@@ -337,7 +337,7 @@ function setupDefaultMocks() {
   mocks.synthesizeFromTestSuite.mockResolvedValue([]);
   mocks.telemetry.record.mockResolvedValue(undefined);
   mocks.telemetry.saveConsent.mockResolvedValue(undefined);
-  mocks.updateResult.mockResolvedValue(undefined);
+  mocks.updateResult.mockResolvedValue(false);
   mocks.writeResultsToDatabase.mockResolvedValue('eval-1');
 }
 
@@ -454,8 +454,8 @@ const smokeCases: SmokeCase[] = [
     method: 'patch',
     openApiPath: '/api/eval/{id}',
     path: '/api/eval/eval-1',
-    body: { table: 'not-a-table' },
-    expectedStatus: 400,
+    body: { config: { description: 'updated description' } },
+    expectedStatus: 404,
   },
   {
     method: 'delete',
@@ -825,6 +825,8 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
     socket.once('error', reject);
   });
 
+  // Node marks a fully parsed request complete before an asynchronous handler resumes.
+  req.complete = true;
   req.push(payload ?? null);
   if (payload) {
     req.push(null);

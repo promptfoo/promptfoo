@@ -250,7 +250,11 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
 
   try {
     // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
-    await updateResult(id, config, table as unknown as EvaluateTable | undefined);
+    const updated = await updateResult(id, config, table as unknown as EvaluateTable | undefined);
+    if (!updated) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
     res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
   } catch (error) {
     logger.error('[PATCH /api/eval/:id] Failed to update eval', { id, error });

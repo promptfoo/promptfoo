@@ -149,6 +149,13 @@ describe('getStandaloneEvals', () => {
     );
   });
 
+  it('reports whether updateResult found the eval', async () => {
+    const eval_ = await createEvalWithPrompts({});
+
+    await expect(updateResult(eval_.id, { description: 'renamed' })).resolves.toBe(true);
+    await expect(updateResult('eval-missing', { description: 'renamed' })).resolves.toBe(false);
+  });
+
   it('drops deleted evals from cached history immediately', async () => {
     const keep = await createEvalWithPrompts({});
     const drop = await createEvalWithPrompts({});
