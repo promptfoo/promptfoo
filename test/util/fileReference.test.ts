@@ -25,7 +25,13 @@ vi.mock('fs', async () => {
     },
   };
 });
-vi.mock('path');
+vi.mock('path', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('path')>();
+  return {
+    ...actual,
+    default: { ...actual, resolve: vi.fn(), join: vi.fn(), extname: vi.fn() },
+  };
+});
 vi.mock('../../src/util/yamlLoad');
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
