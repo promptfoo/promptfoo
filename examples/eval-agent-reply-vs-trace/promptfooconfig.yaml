@@ -39,6 +39,8 @@ tests:
 
 tracing:
   enabled: true
+  # Stop instead of grading without spans if port 4318 is already in use.
+  failOnReceiverStartFailure: true
   otlp:
     http:
       enabled: true

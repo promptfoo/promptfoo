@@ -244,7 +244,7 @@ tests:
 
 If your agent emits tool-oriented spans, add [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) to verify the exact tool path.
 
-To check that the report and the trace agree, pair a negated phrase check with a trajectory check in an [`assert-set`](/docs/configuration/expected-outputs/deterministic/#assert-set) with `threshold: 0.5`. The set passes when the report does not make the claim or the step was traced, so a report that says the tests ran fails when no test command is in the trace:
+To check that the report and the trace agree, pair a negated phrase check with a trajectory check in an [`assert-set`](/docs/configuration/expected-outputs/deterministic/#assert-set) with `threshold: 0.5`. The set passes when the report does not make the claim or the step was traced, so a report that says "tests pass" or "ran the tests" fails unless a command matching `pytest*` is in the trace:
 
 ```yaml
 tests:

@@ -20,4 +20,6 @@ No API key is needed. `provider.js` is a stub agent that returns a fixed reply a
 
 Two of the four tests pass and two fail on purpose. The failing tests are the runs this check exists to catch: `says-done-did-nothing` (the reply reports a refund that no tool call backs) and `declines-did-it-anyway` (the reply declines, but `issue_refund` ran).
 
-A passing set can still show one failed assertion and a score of 0.5. That is the half of the "or" that did not apply to that reply.
+A passing set can still show one failed assertion and a score of 0.5. That is the half of the "or" that did not apply to that reply, so read each test's pass or fail, not its score.
+
+The check is only as good as the phrase lists and the traces. A reply worded differently from every listed phrase is not checked, and an agent whose tool calls are not traced passes every "declines" rule.
