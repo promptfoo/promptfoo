@@ -219,6 +219,19 @@ describe('getStandaloneEvals', () => {
     expect((await getStandaloneEvals())[0].promptId).toBe(id);
   });
 
+  it('prefers modern authored IDs while preserving legacy empty-label links', async () => {
+    const legacy = { ...completedPrompt, label: '', id: 'legacy' };
+    const modern = { ...legacy, id: 'modern' };
+    // Reproduce the historical link to sha256('') alongside a current authored ID.
+    const empty = { raw: '', label: '' };
+    await Eval.create({}, [empty, modern], { completedPrompts: [legacy, modern] });
+
+    expect((await getStandaloneEvals()).map((row) => row.promptId)).toEqual([
+      generateIdFromPrompt(empty),
+      generateIdFromPrompt(modern),
+    ]);
+  });
+
   it.each([true, false])(
     'honors per-eval metadata stripping when configured as %s',
     async (strip) => {

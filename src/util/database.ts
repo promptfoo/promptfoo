@@ -17,6 +17,7 @@ import logger from '../logger';
 import Eval, { createEvalId, insertEvalDatasetAndTags, insertEvalPrompts } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { getStripFlags } from '../models/evalResult';
+import { generateIdFromPrompt } from '../prompts/id';
 import {
   type EvaluateSummaryV2,
   type EvaluateTable,
@@ -488,13 +489,13 @@ export async function getStandaloneEvals({
           counts.set(row.pluginId, count);
         }
       }
-      const generatedId = generateIdFromPrompt(col);
       const promptId =
-        col.id && linkedIds?.has(col.id)
-          ? col.id
-          : linkedIds?.has(generatedId)
-            ? generatedId
-            : null;
+        [
+          col.id,
+          generateIdFromPrompt(col),
+          // Older writers hashed even an empty label when an authored ID was present.
+          col.id && col.label === '' ? sha256('') : undefined,
+        ].find((id) => id && linkedIds?.has(id)) ?? null;
 
       return {
         evalId,
