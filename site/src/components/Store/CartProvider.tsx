@@ -73,7 +73,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const applyCoupon = (location: typeof history.location) => {
       const params = new URLSearchParams(location.search);
       const urlCoupon = params.get('coupon');
-      if (!urlCoupon) {
+      if (!urlCoupon || history.location !== location) {
         return;
       }
       const code = urlCoupon.trim().toUpperCase();
@@ -83,9 +83,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Storage may be unavailable.
       }
-      params.delete('coupon');
-      const search = params.toString();
-      history.replace({ ...location, search: search ? `?${search}` : '' });
+      // Keep the encoded pathname, browser entry metadata and PUSH action that
+      // Docusaurus uses to reset focus. Router v4 shares this location with listeners.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('coupon');
+      window.history.replaceState(window.history.state, '', url.href);
+      location.search = url.search;
     };
 
     // Observe each transition, including destinations React batches out of the render.

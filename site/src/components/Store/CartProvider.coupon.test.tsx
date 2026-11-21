@@ -39,10 +39,12 @@ function renderCoupon() {
 describe('coupon URL cleanup', () => {
   it.each([
     ['/store?coupon=save10#size-guide', '/store#size-guide'],
+    ['/discount-25%25/?coupon=save10', '/discount-25%25/'],
+    ['/s%2574ore/?coupon=save10', '/s%2574ore/'],
     ['/store?coupon=save10&utm_source=mail#size-guide', '/store?utm_source=mail#size-guide'],
   ])('preserves the fragment when consuming %s on mount', (entry, expected) => {
-    const historyState = { position: 'store-entry' };
-    window.history.replaceState({ state: historyState }, '', entry);
+    const historyState = { key: 'entry', position: 'store-entry', state: { existing: true } };
+    window.history.replaceState(historyState, '', entry);
     const historyLength = window.history.length;
 
     renderCoupon();
@@ -50,7 +52,7 @@ describe('coupon URL cleanup', () => {
     expect(screen.getByLabelText('Coupon')).toHaveTextContent('SAVE10');
     expect(localStorage.getItem('promptfoo_coupon_code')).toBe('SAVE10');
     expect(window.location.pathname + window.location.search + window.location.hash).toBe(expected);
-    expect(window.history.state.state).toEqual(historyState);
+    expect(window.history.state).toEqual(historyState);
     expect(window.history.length).toBe(historyLength);
   });
 
@@ -63,6 +65,9 @@ describe('coupon URL cleanup', () => {
     });
 
     expect(screen.getByLabelText('Coupon')).toHaveTextContent('SAVE20');
+    // Docusaurus resets keyboard focus only for a PUSH transition.
+    expect(history.action).toBe('PUSH');
+    expect(history.location.search).toBe('?campaign=summer');
     expect(window.location.search).toBe('?campaign=summer');
     expect(window.location.hash).toBe('#size%20guide');
     expect(window.history.state.state).toEqual(historyState);
