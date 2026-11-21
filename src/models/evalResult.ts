@@ -464,7 +464,11 @@ export default class EvalResult {
       error: this.error || undefined,
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(this.gradingResult, shouldStripPromptText),
+        : projectGradingResult(
+            this.gradingResult,
+            shouldStripPromptText,
+            shouldStripResponseOutput || shouldStripMetadata,
+          ),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

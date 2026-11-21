@@ -121,7 +121,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 
 | Assertion Type                                                                                                     | Returns true if...                                                              |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                                          |
+| [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly, with a diff for failed JSON comparisons                 |
 | [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains a string or number as text                                      |
 | [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains a string or number as text, case insensitive                    |
 | [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                                            |
