@@ -39,6 +39,8 @@ redteam:
 
 The `targetUrls` are used to make the test prompts more specific and realistic. By default, the plugin uses a generic promptfoo.dev URL, but you should replace this with URLs relevant to your internal infrastructure.
 
+Grader transport or parsing failures do not receive an SSRF severity or mitigation suggestion. Resolve the grader error before interpreting the result as a vulnerability verdict.
+
 ## Severity Tiers
 
 The SSRF plugin evaluates vulnerabilities based on severity tiers. The `ssrfFailThreshold` config option controls at what severity level a test should fail:

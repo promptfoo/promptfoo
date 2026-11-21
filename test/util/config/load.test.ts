@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { globSync } from 'glob';
@@ -92,6 +93,7 @@ vi.mock('../../../src/envars', async () => {
 });
 
 vi.mock('../../../src/esm', () => ({
+  ensureTypescriptLoader: vi.fn(),
   importModule: vi.fn(),
 }));
 
@@ -1760,7 +1762,7 @@ describe('resolveConfigs', () => {
     expect(selectedPositions?.[1]).not.toEqual(selectedPositions?.[2]);
   });
 
-  it('should not mutate reused default config scenarios when sampling', async () => {
+  it('keeps runtime scenarios separate from reused default config scenarios', async () => {
     const originalPositions = ['0', '1', '2', '3'];
     const scenarios: Scenario[] = [
       {
@@ -1793,6 +1795,13 @@ describe('resolveConfigs', () => {
     const second = await resolveConfigs({ filterSample: 4, filterSampleSeed: 1 }, defaultConfig);
     expect([...(selectedPositions(second) ?? [])].sort()).toEqual(originalPositions);
     expect(defaultPositions()).toEqual(originalPositions);
+
+    const authoredEmpty: Scenario[] = [];
+    const empty = await resolveConfigs({}, { ...defaultConfig, scenarios: authoredEmpty });
+    expect(empty.testSuite.scenarios).toEqual([]);
+    empty.testSuite.scenarios!.push(scenarios[0]);
+    expect(authoredEmpty).toEqual([]);
+    expect(empty.config.scenarios).toEqual([]);
   });
 
   it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
@@ -2506,6 +2515,7 @@ describe('readConfig', () => {
 
 describe('maybeReadConfig', () => {
   beforeEach(async () => {
+    vi.mocked(fsPromises.access).mockReset().mockResolvedValue(undefined);
     vi.clearAllMocks();
     vi.restoreAllMocks();
 
@@ -2514,6 +2524,26 @@ describe('maybeReadConfig', () => {
 
     mockDereference.mockReset();
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  it.each(['EACCES', 'EPERM'])(
+    'preserves %s while checking optional config presence',
+    async (code) => {
+      const error = Object.assign(new Error('Permission denied'), { code });
+      vi.mocked(fsPromises.access).mockRejectedValueOnce(error);
+
+      await expect(maybeReadConfig('config.js')).rejects.toBe(error);
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not import a missing executable config', async () => {
+    vi.mocked(fsPromises.access).mockRejectedValueOnce(
+      Object.assign(new Error('Missing'), { code: 'ENOENT' }),
+    );
+
+    expect(await maybeReadConfig('missing.js')).toBeUndefined();
+    expect(importModule).not.toHaveBeenCalled();
   });
 
   it('should return undefined for ENOENT error', async () => {

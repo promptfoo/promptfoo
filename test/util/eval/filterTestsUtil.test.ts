@@ -31,6 +31,32 @@ vi.mock('../../../src/util', async () => ({
   }),
 }));
 
+const createMockTokenUsage = () => ({
+  total: 0,
+  prompt: 0,
+  completion: 0,
+  cached: 0,
+  numRequests: 0,
+  completionDetails: {
+    reasoning: 0,
+    acceptedPrediction: 0,
+    rejectedPrediction: 0,
+  },
+  assertions: {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    cached: 0,
+  },
+});
+
+const createFailedStats = () => ({
+  successes: 0,
+  failures: 1,
+  errors: 0,
+  tokenUsage: createMockTokenUsage(),
+});
+
 describe('filterTestsUtil', () => {
   describe('filterTestsByResults', () => {
     const mockTestSuite: TestSuite = {
@@ -102,24 +128,7 @@ describe('filterTestsUtil', () => {
       },
     ];
 
-    const mockTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-      assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-      },
-    };
+    const mockTokenUsage = createMockTokenUsage();
 
     beforeEach(() => {
       vi.resetAllMocks();
@@ -253,9 +262,7 @@ describe('filterTestsUtil', () => {
       it('should extract tests from results when no config test matches', async () => {
         // When resultIsForTestCase returns false, no config tests match
         // But results have testCase data, so we extract those tests
-        vi.mocked(util.resultIsForTestCase).mockImplementation(function () {
-          return false;
-        });
+        vi.mocked(util.resultIsForTestCase).mockReturnValue(false);
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => true);
         // New behavior: extracts 3 tests from results since they have testCase data
         expect(result).toHaveLength(3);
@@ -447,42 +454,6 @@ describe('filterTestsUtil', () => {
     });
   });
 
-  describe('pruneTestResults', () => {
-    it('should calculate scores and store metrics based on test results', () => {
-      const _metrics = {
-        score: 0,
-        testPassCount: 0,
-        testFailCount: 0,
-        testErrorCount: 0,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-          numRequests: 0,
-          completionDetails: {
-            reasoning: 0,
-            acceptedPrediction: 0,
-            rejectedPrediction: 0,
-          },
-          assertions: {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-          },
-        },
-      };
-
-      // Add an assertion to satisfy the linter
-      expect(_metrics).toBeDefined();
-    });
-
-    // ... other tests with similar structure ...
-  });
-
   describe('runtime variable filtering integration', () => {
     it.each(['suite', 'suite [acme]'])(
       'uses current assertions when filtering legacy absolute file vars in %s',
@@ -571,20 +542,7 @@ describe('filterTestsUtil', () => {
           timestamp: new Date().toISOString(),
           results: resultsWithRuntimeVars,
           table: { head: { prompts: [], vars: [] }, body: [] },
-          stats: {
-            successes: 0,
-            failures: 1,
-            errors: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-            },
-          },
+          stats: createFailedStats(),
         },
         config: {},
         shareableUrl: null,
@@ -640,20 +598,7 @@ describe('filterTestsUtil', () => {
           timestamp: new Date().toISOString(),
           results: resultsWithSessionId,
           table: { head: { prompts: [], vars: [] }, body: [] },
-          stats: {
-            successes: 0,
-            failures: 1,
-            errors: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-            },
-          },
+          stats: createFailedStats(),
         },
         config: {},
         shareableUrl: null,
@@ -716,15 +661,7 @@ describe('filterTestsUtil', () => {
             successes: 0,
             failures: 0,
             errors: 1,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-            },
+            tokenUsage: createMockTokenUsage(),
           },
         },
         config: {},
@@ -785,20 +722,7 @@ describe('filterTestsUtil', () => {
           timestamp: new Date().toISOString(),
           results: resultsWithCustomRuntimeVar,
           table: { head: { prompts: [], vars: [] }, body: [] },
-          stats: {
-            successes: 0,
-            failures: 1,
-            errors: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-            },
-          },
+          stats: createFailedStats(),
         },
         config: {},
         shareableUrl: null,
@@ -871,20 +795,7 @@ describe('filterTestsUtil', () => {
           timestamp: new Date().toISOString(),
           results: resultsWithRuntimeVars,
           table: { head: { prompts: [], vars: [] }, body: [] },
-          stats: {
-            successes: 0,
-            failures: 1,
-            errors: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-            },
-          },
+          stats: createFailedStats(),
         },
         config: {},
         shareableUrl: null,
@@ -968,15 +879,7 @@ describe('filterTestsUtil', () => {
             successes: 0,
             failures: 2,
             errors: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-            },
+            tokenUsage: createMockTokenUsage(),
           },
         },
         config: {},
@@ -1011,15 +914,7 @@ describe('filterTestsUtil', () => {
       tokenUsage: { total: 0, prompt: 0, completion: 0 },
     };
 
-    const mockTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-      assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-    };
+    const mockTokenUsage = createMockTokenUsage();
 
     beforeEach(() => {
       vi.resetAllMocks();
@@ -1203,15 +1098,7 @@ describe('filterTestsUtil', () => {
       tokenUsage: { total: 0, prompt: 0, completion: 0 },
     };
 
-    const mockTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-      assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
-    };
+    const mockTokenUsage = createMockTokenUsage();
 
     beforeEach(() => {
       vi.resetAllMocks();
