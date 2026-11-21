@@ -226,25 +226,26 @@ async function readLocalStandaloneTestsFile(
     return readPythonTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
   }
 
-  if (fileExtension === 'csv') {
+  const dataExtension = fileExtension.toLowerCase();
+  if (dataExtension === 'csv') {
     telemetry.record('feature_used', {
       feature: 'csv tests file - local',
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
   }
-  if (fileExtension === 'json') {
+  if (dataExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
     return readJsonTestCases(resolvedVarsPath);
   }
-  if (fileExtension === 'jsonl') {
+  if (dataExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
     return readJsonlTestCases(resolvedVarsPath);
   }
-  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+  if (dataExtension === 'yaml' || dataExtension === 'yml') {
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
@@ -685,24 +686,25 @@ async function loadTestsFromGlobWithEnv(
     // Extract path without function name (Windows-aware)
     const pathWithoutFunction = stripFunctionSuffix(testFile);
 
+    const normalizedTestFile = testFile.toLowerCase();
     if (
-      testFile.endsWith('.csv') ||
+      normalizedTestFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py') ||
       getExcelWorkbookPath(testFile)
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
-    } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
+    } else if (normalizedTestFile.endsWith('.yaml') || normalizedTestFile.endsWith('.yml')) {
       const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
-    } else if (testFile.endsWith('.jsonl')) {
+    } else if (normalizedTestFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = parseJsonlLines(fileContent, testFile);
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
-    } else if (testFile.endsWith('.json')) {
+    } else if (normalizedTestFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
       const rawContent = parseJsonOrThrow(
         fileContent,
@@ -756,6 +758,21 @@ export async function readTestConfigs(
   );
 }
 
+function usesYamlTestLoader(source: string): boolean {
+  const localPath = source.replace(/^file:\/\//, '');
+  const pathWithoutFunction = stripFunctionSuffix(localPath);
+  // Preserve legacy suffix routing; extend case matching only for local file extensions.
+  return (
+    source.endsWith('yaml') ||
+    source.endsWith('yml') ||
+    (!isRemoteTestsReference(source) &&
+      !isJavascriptFile(pathWithoutFunction) &&
+      !pathWithoutFunction.endsWith('.py') &&
+      getExcelWorkbookPath(localPath) === undefined &&
+      /\.ya?ml$/i.test(localPath))
+  );
+}
+
 function usesStandaloneWorkbookLoader(source: string, basePath: string): boolean {
   const workbookPath = getExcelWorkbookPath(source);
   // A sheet name can contain glob characters. Expand only bare workbook globs.
@@ -791,7 +808,7 @@ async function readTestsWithEnv(
       return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
-    if (source.endsWith('yaml') || source.endsWith('yml')) {
+    if (usesYamlTestLoader(source)) {
       return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
     const withoutScheme = source.replace(/^file:\/\//, '');
@@ -957,8 +974,9 @@ function collectNestedFileReferences(
   basePath: string,
   varsBasePath: string,
 ): string[] {
-  const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
-  if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
+  // The test loaders also accept dotfiles such as .YAML, which path.extname omits.
+  const ext = /\.(yaml|yml|jsonl?)$/.exec(path.basename(testsFile).toLowerCase())?.[1];
+  if (!ext) {
     return [];
   }
   try {
@@ -1054,8 +1072,7 @@ export function resolveTestsWatchPaths(
       const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
       const useSourceDirectory =
         Array.isArray(tests) ||
-        source.endsWith('yaml') ||
-        source.endsWith('yml') ||
+        usesYamlTestLoader(source) ||
         (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
