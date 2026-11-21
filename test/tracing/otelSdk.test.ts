@@ -20,6 +20,7 @@ const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockProcessorFlush = vi.fn().mockResolvedValue(undefined);
 const mockLocalFlush = vi.fn().mockResolvedValue(undefined);
+const mockLocalComplete = vi.fn().mockReturnValue(true);
 const mockSetLogger = vi.fn();
 
 // Track constructor calls
@@ -126,7 +127,11 @@ vi.mock('../../src/tracing/localSpanExporter', () => ({
     export = vi.fn();
     shutdown = vi.fn();
     forceFlush = mockLocalFlush;
+    isComplete = mockLocalComplete;
+    sealTrace = vi.fn(() => []);
+    isReliable = vi.fn(() => true);
     trackTrace = vi.fn(() => vi.fn());
+    trackSpan = vi.fn();
   },
 }));
 
@@ -159,6 +164,7 @@ describe('otelSdk', () => {
     // Reset mock implementations
     mockShutdown.mockResolvedValue(undefined);
     mockLocalFlush.mockResolvedValue(undefined);
+    mockLocalComplete.mockReturnValue(true);
     mockProcessorFlush.mockResolvedValue(undefined);
     mockForceFlush.mockResolvedValue(undefined);
 
@@ -515,6 +521,35 @@ describe('otelSdk', () => {
       row.release();
     });
 
+    it('does not claim complete evidence when a processor fails before dispatching the row', async () => {
+      const { trackLocalTrace } = await import('../../src/tracing/otelSdk');
+      initializeOtel(defaultConfig);
+      const row = trackLocalTrace('undispatched')!;
+      mockProcessorFlush.mockRejectedValueOnce(new Error('Processor export timed out'));
+      mockLocalComplete.mockReturnValue(false);
+      await expect(row.flush()).resolves.toBe(true);
+      expect(row.isComplete()).toBe(false);
+      expect(mockLocalFlush).toHaveBeenCalledWith('undispatched');
+      row.release();
+    });
+
+    it('rejects stale ownership after the host replaces the active provider', async () => {
+      const { trackLocalTrace } = await import('../../src/tracing/otelSdk');
+      initializeOtel(defaultConfig);
+      const row = trackLocalTrace('trace-a')!;
+      const host = {};
+      registeredProvider = host;
+      await expect(row.flush()).resolves.toBe(true);
+      expect(row.isComplete()).toBe(false);
+      expect(() => initializeOtel(defaultConfig)).toThrow(
+        'The active OpenTelemetry provider was replaced by the host',
+      );
+      await shutdownOtel();
+      expect(registeredProvider).toBe(host);
+      expect(mockTraceDisable).not.toHaveBeenCalled();
+      row.release();
+    });
+
     it('checks background write failures on the SDK that recorded the row', async () => {
       const { trackLocalTrace } = await import('../../src/tracing/otelSdk');
       initializeOtel(defaultConfig);
@@ -523,7 +558,8 @@ describe('otelSdk', () => {
       expect(mockLocalFlush).toHaveBeenCalledWith('trace-a');
       await shutdownOtel();
       initializeOtel(defaultConfig);
-      await expect(row.flush()).resolves.toBe(false);
+      await expect(row.flush()).resolves.toBe(true);
+      expect(row.isComplete()).toBe(false);
       row.release();
     });
 

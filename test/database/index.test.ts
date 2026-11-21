@@ -990,6 +990,18 @@ describe('database', () => {
   });
 
   describe('file-backed lock recovery', () => {
+    it('discards an open transaction when rollback of an aborted write fails', async () => {
+      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+        'lockRecoveryProbe',
+        tempConfigDir,
+        'guarded-abort-rollback-failure',
+      );
+      expect(result.firstError).toMatch(/roll back guarded database write.*Cancelled after insert/);
+      expect(result.clientClosedAfterFailure).toBe(true);
+      expect(result.followupError).toMatch(/closed/i);
+      expect(result.afterCloseIds).toEqual([1]);
+    });
+
     it.each(['guarded-commit', 'guarded-commit-rollback-failure'])(
       'recovers after a rollback-journal reader blocks %s',
       async (mode) => {

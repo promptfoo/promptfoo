@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { stripExternalSpanOwnership } from './otlpOwnership';
+import { setReceivedSpanOwnership } from './otlpOwnership';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import {
   type FetchTraceOptions,
@@ -435,10 +435,9 @@ async function fetchFromExternalProvider(
       const storedSpans = validSpans.map((span) => {
         const external = redactAttributes?.length
           ? redactExternalSpan(span, redactAttributes)
-          : span;
-        if (external.attributes) {
-          stripExternalSpanOwnership(external.attributes);
-        }
+          : { ...span, attributes: span.attributes && { ...span.attributes } };
+        // Match the original wrapper name even when a policy redacts its echo.
+        setReceivedSpanOwnership({ traceId, span: { ...external, name: span.name } });
         return external;
       });
 

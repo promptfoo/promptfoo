@@ -28,7 +28,8 @@ import type { ApiProvider, CallApiContextParams, TestSuite } from '../../src/typ
 
 const createTrace = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: () => ({ createTrace }),
 }));
 

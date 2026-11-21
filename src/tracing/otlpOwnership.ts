@@ -1,43 +1,38 @@
-import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+
+import { type PromptfooSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import type { Span } from '@opentelemetry/api';
 
 import type { ParsedTrace } from './store';
 
-// An HTTP receiver may also be this process's own SDK export destination.
-// Retain only in-flight batches so a receiver can identify those local wrappers.
-const pendingBatches = new Set<Map<string, ReadableSpan>>();
+// A collector may return wrappers long after export, including when the host owns
+// the exporter. Bind each role to one wrapper without retaining completed spans.
+const key = randomBytes(32);
+export const SPAN_ORIGIN_ATTRIBUTE = 'promptfoo.span.origin';
 
-export function trackLocalOtlpExports(exporter: SpanExporter): SpanExporter {
-  return {
-    export(spans, callback) {
-      const batch = new Map<string, ReadableSpan>();
-      for (const span of spans) {
-        if (
-          span.instrumentationScope.name === PROMPTFOO_TRACER_NAME &&
-          span.attributes[SPAN_ROLE_ATTRIBUTE]
-        ) {
-          const { traceId, spanId } = span.spanContext();
-          batch.set(traceId + spanId, span);
-        }
-      }
-      pendingBatches.add(batch);
-      try {
-        exporter.export(spans, (result) => {
-          pendingBatches.delete(batch);
-          callback(result);
-        });
-      } catch (error) {
-        pendingBatches.delete(batch);
-        throw error;
-      }
-    },
-    forceFlush: () => exporter.forceFlush?.() ?? Promise.resolve(),
-    shutdown: () => exporter.shutdown(),
-  };
+function origin(
+  traceId: string,
+  spanId: string,
+  parentId: string | undefined,
+  name: string,
+  role: string,
+) {
+  return createHmac('sha256', key)
+    .update(JSON.stringify([traceId, spanId, parentId || '', name, role]))
+    .digest();
 }
 
-export function stripExternalSpanOwnership(attributes: Record<string, unknown>): void {
-  delete attributes[SPAN_ROLE_ATTRIBUTE];
+export function markEvaluatorSpan(
+  span: Span,
+  role: PromptfooSpanRole,
+  name: string,
+  parentId?: string,
+): void {
+  const { traceId, spanId } = span.spanContext();
+  span.setAttribute(
+    SPAN_ORIGIN_ATTRIBUTE,
+    origin(traceId, spanId, parentId, name, role).toString('hex'),
+  );
 }
 
 export function setReceivedSpanOwnership({ traceId, span }: ParsedTrace): void {
@@ -45,17 +40,18 @@ export function setReceivedSpanOwnership({ traceId, span }: ParsedTrace): void {
   if (!attributes) {
     return;
   }
-  stripExternalSpanOwnership(attributes);
-
-  for (const batch of pendingBatches) {
-    const local = batch.get(traceId + span.spanId);
-    if (
-      local &&
-      local.name === span.name &&
-      local.parentSpanContext?.spanId === span.parentSpanId
-    ) {
-      attributes[SPAN_ROLE_ATTRIBUTE] = local.attributes[SPAN_ROLE_ATTRIBUTE];
-      return;
-    }
+  const role = attributes[SPAN_ROLE_ATTRIBUTE];
+  const received = attributes[SPAN_ORIGIN_ATTRIBUTE];
+  delete attributes[SPAN_ORIGIN_ATTRIBUTE];
+  if (
+    typeof role !== 'string' ||
+    typeof received !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(received) ||
+    !timingSafeEqual(
+      Buffer.from(received, 'hex'),
+      origin(traceId, span.spanId, span.parentSpanId, span.name, role),
+    )
+  ) {
+    delete attributes[SPAN_ROLE_ATTRIBUTE];
   }
 }
