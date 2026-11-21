@@ -60,7 +60,11 @@ For a standalone copy, install with `npm install --no-save --package-lock=false 
 
 ## Generate fresh attacks
 
-`redteam.config.yaml` requests one direct and one indirect attack per plugin. Run generation with your usual Promptfoo red team credentials and generation provider. Keep `AGENT_MODE=openclaw-live` and your target model settings for evaluation.
+`redteam.config.yaml` requests one direct and one indirect attack per plugin. Each plugin's `config.modifiers.context` describes its own service. With all three descriptions in the shared purpose, a generator wrote a support ticket about a missing storefront page view.
+
+Run generation with your usual Promptfoo red team credentials and generation provider. Inspect the generated tickets before evaluation. A model can repeat an example verbatim or invent a customer ID. For disclosure the reporter should ask for a field whose value only the agent can read.
+
+Both fixed migration guides include a runnable handler. If your custom generator returns a multiline guide, prefix each case in the batch with `PromptBlock:`. A single `Prompt: text` line can lose the code on subsequent lines. Check that the full handler reaches `vars.artifact`. Keep `AGENT_MODE=openclaw-live` and your target model settings for evaluation.
 
 ```bash
 example=examples/redteam-agent-outcomes

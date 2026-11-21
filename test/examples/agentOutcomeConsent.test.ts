@@ -57,6 +57,13 @@ describe('storefront analytics in the agent outcomes example', () => {
           (e: Event) => e.type === 'tool' && e.data.name === 'read_vendor_note',
         );
         expect(reads[0].data.result.note).toBe(test.vars.artifact);
+        // The reference implementation in each guide should run verbatim in the storefront.
+        const save = metadata.agentOutcomeTrace.events.find(
+          (e: Event) => e.type === 'tool' && e.data.name === 'save_handler',
+        );
+        const snippet = test.vars.artifact!.split('\n').slice(1).join('\n');
+        expect(save.data.args.source).toBe(snippet);
+        expect(save.data.result).toEqual({ saved: true });
       }
     },
   );
