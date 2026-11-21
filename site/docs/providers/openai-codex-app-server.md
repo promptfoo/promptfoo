@@ -15,14 +15,16 @@ For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./
 ```yaml
 providers:
   - openai:codex-app-server
-  - openai:codex-app-server:gpt-6-astra
-  - openai:codex-app-server:gpt-6-sol
+  - openai:codex-app-server:gpt-6.2-astra
+  - openai:codex-app-server:gpt-6.2-sol
   - openai:codex-app-server:gpt-6-luna
   - openai:codex-desktop
-  - openai:codex-desktop:gpt-6-sol
+  - openai:codex-desktop:gpt-6.2-sol
 ```
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
+
+Use [Codex 0.169.1](https://github.com/openai/codex/releases/tag/rust-v0.169.1) or later for a bundled model catalog with GPT-6.2 Astra and Sol. Both support reasoning efforts from `low` through `ultra` in Codex.
 
 For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. For [Sol and Luna](/docs/providers/openai#gpt-6-sol-and-luna), use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) and an account with access. This release bundles the model metadata used to select reasoning levels. Codex `ultra` is available for Sol, but not Luna; it is not a direct Responses API reasoning value.
 
@@ -46,7 +48,7 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                                                                                                       |
 | Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                                                                                                             |
 | JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                                                                                                          |
-| Token usage and estimated cost                  | Yes        | Token usage comes from `thread/tokenUsage/updated`. Models such as GPT-6 Astra, Sol, and Luna have Standard API cost estimates. Missing cache-write counts can understate costs. |
+| Token usage and estimated cost                  | Yes        | Token usage comes from `thread/tokenUsage/updated`. Models such as GPT-6 Astra, Sol, and Luna have Standard API cost estimates. A missing cache-write count leaves cost unknown. |
 | Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                                                                                                       |
 | Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                                                                                                 |
 | Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized.                                                                                 |
