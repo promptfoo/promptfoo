@@ -20,7 +20,6 @@ import {
   loadGoogleTools,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
-  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -742,7 +741,7 @@ export class GeminiImageProvider implements ApiProvider {
         output,
         images,
         ...(this.modelName === 'gemini-nano-banana-2.1' && {
-          conversationOutput: mergeParts(undefined, formatCandidateContents(candidate)),
+          conversationOutput: formatCandidateContents(candidate),
         }),
         latencyMs,
         cost: totalCost === 0 ? undefined : totalCost * rateMultiplier,
