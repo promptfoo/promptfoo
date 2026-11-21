@@ -492,6 +492,7 @@ export default class EvalResult {
             shouldStripResponseOutput,
             this.response?.metadata,
             this.testCase.metadata,
+            shouldStripGradingResult,
           ),
       failureReason: this.failureReason,
     };

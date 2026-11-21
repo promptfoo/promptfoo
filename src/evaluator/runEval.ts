@@ -164,22 +164,40 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
 
 export const deferredGradingPromises = new WeakMap<EvaluateResult, Promise<void>>();
 
-function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
-  if (!checkResult.pass) {
-    row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+function findGraderError(root: GradingResult): GradingResult | undefined {
+  // Assertion sets can expose a component directly and through its parent.
+  const components = new Set([root]);
+  for (const result of components) {
+    if (result.metadata?.graderError === true) {
+      return result;
+    }
+    for (const child of result.componentResults ?? []) {
+      components.add(child);
+    }
   }
-  row.success = checkResult.pass;
-  row.score = checkResult.score;
-  row.namedScores = checkResult.namedScores || {};
+  return undefined;
+}
+
+function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
+  const error = findGraderError(checkResult);
+  const gradingResult = error
+    ? { ...checkResult, pass: false, reason: error.reason || 'Grader execution failed' }
+    : checkResult;
+  if (!gradingResult.pass) {
+    row.error = gradingResult.reason;
+    row.failureReason = error ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT;
+  }
+  row.success = gradingResult.pass;
+  row.score = gradingResult.score;
+  row.namedScores = gradingResult.namedScores || {};
 
   if (!row.tokenUsage) {
     row.tokenUsage = createEmptyTokenUsage();
   }
-  accumulateGradingTokenUsage(row.tokenUsage, checkResult.tokensUsed, {
-    cached: checkResult.metadata?.cachedResponse,
+  accumulateGradingTokenUsage(row.tokenUsage, gradingResult.tokensUsed, {
+    cached: gradingResult.metadata?.cachedResponse,
   });
-  row.gradingResult = checkResult;
+  row.gradingResult = gradingResult;
 }
 
 export const ABORTED_GRADING_PREFIX = 'Aborted: ';

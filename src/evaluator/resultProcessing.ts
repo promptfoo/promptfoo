@@ -59,7 +59,19 @@ export function projectOutputMetadata<T>(
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
+  stripGradingResult = false,
 ): T {
+  if (stripGradingResult) {
+    const internal = asRecord(asRecord(metadata)?.[PROMPTFOO_METADATA_KEY]);
+    const comparison = asRecord(internal?.comparisonError);
+    if (comparison && Object.prototype.hasOwnProperty.call(comparison, 'gradingVerdict')) {
+      const { gradingVerdict: _verdict, ...baseline } = comparison;
+      metadata = {
+        ...metadata,
+        [PROMPTFOO_METADATA_KEY]: { ...internal, comparisonError: baseline },
+      };
+    }
+  }
   if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
   }
@@ -970,6 +982,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           shouldStripResponseOutput,
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          shouldStripGradingResult,
         ),
   } as T;
 }
