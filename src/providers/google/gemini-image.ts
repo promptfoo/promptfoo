@@ -174,6 +174,10 @@ export class GeminiImageProvider implements ApiProvider {
     ]);
   }
 
+  private getVertexApiKey(): string | undefined {
+    return resolveSelectedApiKey(this.config, this.env, ['VERTEX_API_KEY', 'GOOGLE_API_KEY']);
+  }
+
   /**
    * Gemini 3.x image models default to the global Vertex endpoint.
    * Older models (e.g. gemini-2.5) use regional endpoints.
@@ -266,9 +270,7 @@ export class GeminiImageProvider implements ApiProvider {
         ])?.value
       : undefined;
 
-    const vertexApiKey = isVertexMode
-      ? resolveSelectedApiKey(this.config, this.env, ['VERTEX_API_KEY', 'GOOGLE_API_KEY'])
-      : undefined;
+    const vertexApiKey = isVertexMode ? this.getVertexApiKey() : undefined;
     const hasOAuthConfig = Boolean(
       this.config.credentials ||
         this.config.keyFilename ||
