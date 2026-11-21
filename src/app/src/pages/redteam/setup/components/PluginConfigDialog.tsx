@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -38,13 +39,13 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Update localConfig when config prop changes
+  // Reset draft config when the dialog opens for a different plugin.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+    if (open && plugin) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -285,6 +286,32 @@ export default function PluginConfigDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               {`Example: If your prompt is "Hello {{name}}, how can I help?" and user data goes into the 'name' variable, enter "name" above.`}
+            </p>
+          </div>
+        );
+        break;
+      case 'openai-guardrails':
+        specificConfig = (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Uses the pinned OpenAI Guardrails demo dataset. Each English sample becomes one test
+              case.
+            </p>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="include-safe"
+                checked={localConfig.includeSafe || false}
+                onCheckedChange={(checked) =>
+                  setLocalConfig({ ...localConfig, includeSafe: checked === true })
+                }
+              />
+              <Label htmlFor="include-safe" className="cursor-pointer">
+                Include safe prompts to test for over-blocking
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Samples safe and jailbreak-labeled rows as evenly as availability allows. Safe
+              controls check for unjustified refusals within the assistant's stated purpose.
             </p>
           </div>
         );

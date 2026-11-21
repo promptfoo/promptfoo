@@ -304,4 +304,58 @@ describe('PluginConfigDialog - OSS', () => {
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     });
   });
+
+  describe('OpenAI Guardrails config', () => {
+    it.each([false, true])(
+      'saves the toggled safe-control setting from %s',
+      async (includeSafe) => {
+        const user = userEvent.setup();
+        render(
+          <PluginConfigDialog
+            open
+            plugin="openai-guardrails"
+            config={{ includeSafe, graderGuidance: 'Keep the tutor scope.' }}
+            onClose={mockOnClose}
+            onSave={mockOnSave}
+          />,
+        );
+        const checkbox = screen.getByLabelText('Include safe prompts to test for over-blocking');
+        expect(checkbox).toHaveAttribute('data-state', includeSafe ? 'checked' : 'unchecked');
+        await user.click(checkbox);
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+        expect(mockOnSave).toHaveBeenCalledWith('openai-guardrails', {
+          includeSafe: !includeSafe,
+          graderGuidance: 'Keep the tutor scope.',
+        });
+      },
+    );
+
+    it('does not carry stale config when switching from another plugin', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <PluginConfigDialog
+          open={true}
+          plugin="bola"
+          config={{ targetSystems: ['accounts-api'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      rerender(
+        <PluginConfigDialog
+          open={true}
+          plugin="openai-guardrails"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('Include safe prompts to test for over-blocking'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('openai-guardrails', { includeSafe: true });
+    });
+  });
 });

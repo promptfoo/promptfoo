@@ -411,12 +411,16 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
     ? `1 ${strategy ? 'additional ' : ''}test`
     : `${numTests} ${strategy ? 'additional ' : ''}tests`;
 
-function getPluginLanguageCount(
+function getPluginLanguages(
   plugin: SynthesizeOptions['plugins'][number],
   language?: string | string[],
-): number {
+): (string | undefined)[] {
+  // This pinned benchmark is sampled in its original language, without translation.
+  if (plugin.id === 'openai-guardrails') {
+    return ['en'];
+  }
   const pluginLanguageConfig = plugin.config?.language ?? language;
-  return Array.isArray(pluginLanguageConfig) ? pluginLanguageConfig.length : 1;
+  return Array.isArray(pluginLanguageConfig) ? pluginLanguageConfig : [pluginLanguageConfig];
 }
 
 // Cache resolved intent counts per plugin instance. Resolving `file://`
@@ -463,7 +467,7 @@ function getExpectedPluginTestCount(
   plugin: SynthesizeOptions['plugins'][number],
   language?: string | string[],
 ): number {
-  const languageCount = getPluginLanguageCount(plugin, language);
+  const languageCount = getPluginLanguages(plugin, language).length;
   return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * languageCount;
 }
 
@@ -1377,13 +1381,7 @@ export async function synthesize({
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
 
-      // If plugin has its own language, use that; otherwise use global language
-      const languageConfig = plugin.config?.language ?? language;
-      const languages = Array.isArray(languageConfig)
-        ? languageConfig
-        : languageConfig
-          ? [languageConfig]
-          : [undefined];
+      const languages = getPluginLanguages(plugin, language);
 
       logger.debug(
         `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${plugin.config?.language ? ' (plugin override)' : ''}`,
