@@ -13,7 +13,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger, { getLogLevel, setLogLevel } from '../../src/logger';
 import Eval from '../../src/models/eval';
-import EvalResult, { serializeResultForJsonlArtifact } from '../../src/models/evalResult';
+import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
 import { HttpProvider } from '../../src/providers/http';
 import telemetry from '../../src/telemetry';
@@ -57,6 +57,21 @@ function makeSuite() {
     ],
   };
   return { grader, seenKeys, suite, target };
+}
+
+// These fixtures exercise restoration for pending comparisons, not regrading completed work.
+async function markComparisonPending(record: Eval) {
+  for (const row of await record.fetchResultsByTestIdx(0)) {
+    if (row.gradingResult) {
+      if (row.gradingResult.assertion?.type === 'select-best') {
+        delete row.gradingResult.assertion;
+      }
+      row.gradingResult.componentResults = row.gradingResult.componentResults?.filter(
+        (component) => component.assertion?.type !== 'select-best',
+      );
+      await row.save();
+    }
+  }
 }
 
 describeEvaluator('select-best runtime grading configuration', () => {
@@ -139,6 +154,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
 
       await evaluate(suite, record, { maxConcurrency: 1 });
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
 
@@ -192,6 +208,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
             ? saved.testCase.options?.provider
             : (saved.testCase.assert![0] as Assertion).provider,
         ).toEqual(location === 'options' ? { id: 'echo' } : 'echo');
+        await markComparisonPending(record);
         cliState.resume = true;
         await evaluate(suite, record, { maxConcurrency: 1 });
 
@@ -280,6 +297,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
 
     try {
       await evaluate(suite, record, { maxConcurrency: 1 });
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
       for (const row of await record.fetchResultsByTestIdx(0)) {
@@ -332,6 +350,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
 
     try {
       await evaluate(suite, record, { maxConcurrency: 1 });
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
 
@@ -393,6 +412,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
               ? { apiBaseUrl: 'https://new.example/v1', apiKey: 'new-key' }
               : { apiBaseUrl: 'https://old.example/v1', apiKey: '[REDACTED]' },
         };
+        await markComparisonPending(record);
         cliState.resume = true;
         await evaluate(suite, record, { maxConcurrency: 1 });
         for (const row of await record.fetchResultsByTestIdx(0)) {
@@ -443,6 +463,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     try {
       await evaluate(suite, record, { maxConcurrency: 1 });
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
       expect(configs).toHaveLength(2);
@@ -481,6 +502,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
       id: 'hook-runtime-grader',
       config: { apiKey: '[REDACTED]' },
     });
+    await markComparisonPending(record);
     cliState.resume = true;
     await evaluate(suite, record, { maxConcurrency: 1 });
     for (const row of await record.fetchResultsByTestIdx(0)) {
@@ -531,6 +553,8 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(await EvalResult.getCompletedIndexPairs(record.id, { excludeErrors: true })).toEqual(
       new Set(),
     );
+
+    await markComparisonPending(record);
 
     cliState.resume = true;
     await evaluate(suite, record, { maxConcurrency: 1 });
@@ -593,6 +617,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
         expect(inspect(debug.mock.calls, { depth: null })).not.toContain(errorSecret);
 
         await writeFile(graderPath, 'id: echo\n');
+        await markComparisonPending(record);
         cliState.resume = true;
         await evaluate(suite, record, { maxConcurrency: 1 });
         expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
@@ -615,6 +640,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, { maxConcurrency: 1 });
     const previousIds = (await record.fetchResultsByTestIdx(0)).map((row) => row.id);
+    await markComparisonPending(record);
     cliState.resume = true;
     cliState.retryMode = true;
     cliState._retryErrorResultIds = previousIds;
@@ -667,6 +693,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
         .mockRejectedValueOnce(new Error('temporary grader failure'));
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       await evaluate(suite, record, { maxConcurrency: 1 });
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
 
@@ -702,6 +729,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
                 config: { apiKey: secret, apiBaseUrl: 'https://changed.example' },
               },
             };
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
 
@@ -739,9 +767,9 @@ describeEvaluator('select-best runtime grading configuration', () => {
       expect(savedProvider.provider).toMatchObject({
         env: { ...original, OPENAI_API_KEY: '[REDACTED]' },
       });
-      expect(JSON.stringify(savedProvider.provider)).not.toContain(secret);
-      expect(savedProvider.config?.apiKey).toBe(secret);
+      expect(JSON.stringify(savedProvider)).not.toContain(secret);
       runtimeGrader.env = { ...original, [key]: 'changed', OPENAI_API_KEY: 'rotated-key' };
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
       expect(grader.callApi).toHaveBeenCalledTimes(1);
@@ -877,11 +905,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
       await expectRedacted();
 
       setProvider(makeUrl(rotatedKey));
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
       expect(calls).toEqual([makeUrl(originalKey), makeUrl(rotatedKey)]);
       await expectRedacted();
 
+      await markComparisonPending(record);
       for (const url of [
         makeUrl(rotatedKey, 'different.example'),
         sanitizeProviderIdForLog(makeUrl(rotatedKey)),
@@ -923,6 +953,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
 
     await evaluate(suite, record, { maxConcurrency: 1 });
+    await markComparisonPending(record);
     cliState.resume = true;
     await evaluate(suite, record, { maxConcurrency: 1 });
 
@@ -959,6 +990,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
       } else {
         grader.config!.headers['x-gateway-auth'] = '[REDACTED]';
       }
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
       expect(grader.callApi).toHaveBeenCalledTimes(1);
@@ -991,6 +1023,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
         numFails: 0,
         numErrors: 2,
       });
+      await markComparisonPending(record);
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
       expect(
@@ -1030,6 +1063,8 @@ describeEvaluator('select-best runtime grading configuration', () => {
     }
     expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
 
+    await markComparisonPending(record);
+
     cliState.resume = true;
     await evaluate(suite, record, { maxConcurrency: 1 });
     expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
@@ -1040,7 +1075,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('preserves grader configuration when updating a local result', async () => {
+  it('redacts a raw grader key when updating an existing result', async () => {
     const { suite } = makeSuite();
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, { maxConcurrency: 1 });
@@ -1053,13 +1088,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
     await result.save();
 
     const [persisted] = await record.fetchResultsByTestIdx(0);
-    expect(JSON.stringify(persisted.gradingResult)).toContain(secret);
+    expect(JSON.stringify(persisted.gradingResult)).not.toContain(secret);
     expect(persisted.gradingResult?.componentResults?.[0].assertion?.provider).toMatchObject({
-      config: { apiKey: secret },
+      config: { apiKey: '[REDACTED]' },
     });
   });
 
-  it('preserves grader keys at every local JSONL assertion depth without mutation', () => {
+  it('redacts grader keys at every JSONL assertion depth without mutating the result', () => {
     const raw = {
       gradingResult: {
         pass: true,
@@ -1084,13 +1119,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
         ],
       },
     };
-    const artifact = serializeResultForJsonlArtifact(raw);
-    expect(JSON.stringify(artifact)).toContain(secret);
-    expect(artifact.gradingResult.assertion.provider.config.apiKey).toBe(secret);
+    const artifact = sanitizeResultForJsonlArtifact(raw);
+    expect(JSON.stringify(artifact)).not.toContain(secret);
+    expect(artifact.gradingResult.assertion.provider.config.apiKey).toBe('[REDACTED]');
     expect(
       artifact.gradingResult.componentResults[0].componentResults[0].assertion.provider.config
         .apiKey,
-    ).toBe(secret);
+    ).toBe('[REDACTED]');
     expect(raw.gradingResult.assertion.provider.config.apiKey).toBe(secret);
     expect(
       raw.gradingResult.componentResults[0].componentResults[0].assertion.provider.config.apiKey,
@@ -1102,6 +1137,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, { maxConcurrency: 1 });
     expect(seenKeys).toEqual([secret]);
+    await markComparisonPending(record);
     cliState.resume = true;
     await evaluate(suite, record, { maxConcurrency: 1 });
     expect(target.callApi).toHaveBeenCalledTimes(2);

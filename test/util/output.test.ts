@@ -174,7 +174,7 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves very large token-like config values in local exports', async () => {
+  it('exports very large token-like config values with secret redaction intact', async () => {
     const eval_ = new Eval({
       tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
       providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
@@ -186,18 +186,18 @@ describe('writeOutput', () => {
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
     expect(parsed.config.tests[0].vars).toEqual({
-      media: 'A'.repeat(16_369_336),
+      media: '[REDACTED]',
       message: 'Public fixture text.',
     });
     expect(parsed.config.providers[0].config).toEqual({
-      apiKey: 'fixture-api-key',
+      apiKey: '[REDACTED]',
       max_tokens: 37,
     });
-    expect(outputJson).toContain('fixture-api-key');
+    expect(outputJson).not.toContain('fixture-api-key');
   });
 
   it.each(['json', 'yaml', 'html', 'xml'])(
-    'preserves legacy prompt config in local %s exports',
+    'redacts legacy prompt config in %s exports',
     async (extension) => {
       const prompt = {
         raw: 'Summarize',
@@ -219,13 +219,13 @@ describe('writeOutput', () => {
       }
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      expect(output).toContain('legacy-header-7294');
-      expect(output).not.toContain('[REDACTED]');
+      expect(output).not.toContain('legacy-header-7294');
+      expect(output).toContain('[REDACTED]');
       expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
     },
   );
 
-  it('preserves local env and provider config while keeping trace credential handling', async () => {
+  it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
       description: 'Test config',
@@ -299,22 +299,22 @@ describe('writeOutput', () => {
       label: 'gateway',
       provider: 'openai:agents-api',
       config: {
-        apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=prompt-query-secret',
-        headers: { 'X-Gateway-Auth': 'prompt-header-secret' },
+        apiBaseUrl: 'https://gateway.example/v1?tenant=%5BREDACTED%5D',
+        headers: { 'X-Gateway-Auth': '[REDACTED]' },
       },
     });
     expect(eval_.prompts[0].config?.headers?.['X-Gateway-Auth']).toBe('prompt-header-secret');
-    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-secret-token');
-    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('anthropic-secret-token');
+    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
+    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.REGION).toBe('us-east-1');
-    expect(parsed.config.providers[0].config.apiKey).toBe('sk-secret-value');
+    expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.providers[1].config.headers).toEqual({
-      'X-Gateway-Auth': 'opaque-gateway-7294',
+      'X-Gateway-Auth': '[REDACTED]',
       Accept: 'application/json',
     });
     expect(parsed.config.providers[1].config.agent.tools[0].headers).toEqual({
-      'X-MCP-Custom': 'opaque-value-7294',
+      'X-MCP-Custom': '[REDACTED]',
     });
     for (const credential of [
       'host-credential',
@@ -325,10 +325,10 @@ describe('writeOutput', () => {
       'prompt-query-secret',
       'prompt-header-secret',
     ]) {
-      expect(outputJson).toContain(credential);
+      expect(outputJson).not.toContain(credential);
     }
     expect(parsed.config.description).toBe('Test config');
-    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=azure-secret');
+    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
     expect(outputJson).not.toContain('output-tempo-secret');
     expect(outputJson).not.toContain('output-honeycomb-secret');
     expect(outputJson).not.toContain('short-secret');
@@ -336,7 +336,7 @@ describe('writeOutput', () => {
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
-  it.each(['json', 'yaml'])('preserves gateway URLs in local %s exports', async (extension) => {
+  it.each(['json', 'yaml'])('redacts gateway URL credentials in %s exports', async (extension) => {
     const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
     const eval_ = new Eval({
       env: { ENVOY_API_BASE_URL: url },
@@ -347,11 +347,13 @@ describe('writeOutput', () => {
 
     const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = yaml.load(written) as Record<string, any>;
-    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(url);
+    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(
+      'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+    );
     expect(parsed.config.providers[0].config.apiBaseUrl).toBe(parsed.config.env.ENVOY_API_BASE_URL);
-    expect(written).toContain('gateway-user');
-    expect(written).toContain('gateway-password');
-    expect(written).toContain('short-secret');
+    expect(written).not.toContain('gateway-user');
+    expect(written).not.toContain('gateway-password');
+    expect(written).not.toContain('short-secret');
     expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
   });
 
@@ -368,7 +370,16 @@ describe('writeOutput', () => {
       const restoreEnv = mockProcessEnv(
         Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
       );
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
+      const application = { prompts: ['ordinary-map-application'] };
+      const graderMap = {
+        text: grader,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        application,
+      };
       const testCase = {
+        options: { provider: graderMap },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -392,10 +403,25 @@ describe('writeOutput', () => {
           ],
         },
       ]);
-      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      const provider = { id: 'echo', prompts: ['private-provider-selector'] };
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
+        env: flags,
+        tests: [testCase],
+        prompts: ['private-config-prompt'],
+        providers: [provider],
+      };
+      const eval_ = new Eval(config);
       await eval_.addResult(
         createEvaluateResult({
-          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          prompt: {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'label',
+            config: { provider: grader },
+          },
+          provider,
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
@@ -416,8 +442,13 @@ describe('writeOutput', () => {
         expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
         const output = await createOutputData(eval_, null);
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(Object.hasOwn(output.config, 'providerPromptMap')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        expect(output.config).toMatchObject({
+          tests: [{ options: { provider: { application, config: graderMap.config } } }],
+        });
         if (!strip) {
+          expect(output.config).toMatchObject({ providerPromptMap });
           expect(output.results.results[0]).toMatchObject({
             prompt: { raw: 'private-prompt' },
             testCase,
@@ -439,8 +470,13 @@ describe('writeOutput', () => {
             .join('');
           expect(contents, extension).not.toBe('');
           expect(contents.includes('private-'), extension).toBe(!strip);
+          expect(contents, extension).toContain('ordinary-map-application');
         }
 
+        expect(grader.prompts).toEqual(['private-nested-selector']);
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(eval_.config.providers).toEqual([provider]);
+        expect(eval_.config).toMatchObject({ providerPromptMap });
         expect(eval_.config.tests).toEqual([testCase]);
         expect(eval_.config.prompts).toEqual(['private-config-prompt']);
         expect(eval_.prompts[0].template).toBe('private-template');
@@ -754,7 +790,7 @@ describe('writeOutput', () => {
       'deep-public-value',
     );
     expect(parsed.config.defaultTest.options.deepConfig.l1.l2.l3.l4.l5.l6.apiKey).toBe(
-      'sk-secret-value',
+      '[REDACTED]',
     );
   });
 
@@ -788,7 +824,7 @@ describe('writeOutput', () => {
     },
   );
 
-  it('preserves env and provider config in local YAML output', async () => {
+  it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';
     const eval_ = new Eval({
       env: {
@@ -809,10 +845,10 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputYaml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = yaml.load(outputYaml) as Record<string, any>;
-    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-token');
-    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('anthropic-token');
+    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
+    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.AWS_REGION).toBe('us-east-1');
-    expect(parsed.config.defaultTest.options.apiKey).toBe('another-secret');
+    expect(parsed.config.defaultTest.options.apiKey).toBe('[REDACTED]');
     expect(parsed.config.defaultTest.options.temperature).toBe(0.1);
   });
 
@@ -1197,7 +1233,7 @@ describe('writeOutput', () => {
         expect(names[0][0]).toContain('🚀...');
       } else if (secondId !== 'echo') {
         expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
-        expect(names[0][1]).toBe('[target] prompt 1');
+        expect(names[0][1]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
       }
     },
   );
@@ -1259,6 +1295,7 @@ describe('writeOutput', () => {
   it.each([
     ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
     ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    ['clean whitespace collapses into a space', 'my  model', 'my model'],
     [
       'the forbidden character falls after the display limit',
       `${'x'.repeat(600)}\u0000`,
@@ -1276,9 +1313,58 @@ describe('writeOutput', () => {
       .testsuites.testsuite;
     const names = suites.map((suite) => suite['@_name']);
     expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
-    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).toMatch(/ \([a-f0-9]{16}\)$/);
     expect(new Set(names).size).toBe(2);
   });
+
+  it.each([
+    ['shared', 'shared'],
+    ['shared', ' shared '],
+    ['x'.repeat(520) + 'a', 'x'.repeat(520) + 'b'],
+  ])(
+    'keeps colliding provider and prompt identities stable across result order: %j',
+    async (first, second) => {
+      const rows = [
+        ['provider-a', first, 'prompt-a', 0],
+        ['provider-b', second, 'prompt-a', 0],
+        ['provider-a', first, 'prompt-b', 1],
+        ['provider-b', second, 'prompt-b', 1],
+      ].map(([id, label, promptId, promptIdx]) =>
+        createEvaluateResult({
+          provider: { id: String(id), label: String(label) },
+          promptId: String(promptId),
+          promptIdx: Number(promptIdx),
+          testCase: { description: `${id}:${promptId}` },
+        }),
+      );
+      const identities: Map<string, string>[] = [];
+      for (const results of [rows, [...rows].reverse()]) {
+        const fetchResultsBatched = vi.fn(async function* () {
+          yield results.slice(0, 2);
+          yield results.slice(2);
+        });
+        const eval_ = {
+          persisted: true,
+          createdAt: new Date('2026-01-01'),
+          useOldResults: () => false,
+          fetchResultsBatched,
+        } as unknown as Eval;
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+        expect(fetchResultsBatched).toHaveBeenCalledOnce();
+        const identity = new Map<string, string>();
+        for (const suite of suites) {
+          expect(suite['@_name']).toMatch(/ \([a-f0-9]{16}\)$/);
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          identity.set(suite.testcase['@_name'], suite['@_name']);
+        }
+        expect(new Set(identity.values()).size).toBe(4);
+        identities.push(identity);
+      }
+      expect(identities[1]).toEqual(identities[0]);
+    },
+  );
 
   it('removes forbidden name characters before fallback and length limits', async () => {
     const eval_ = new Eval({});
@@ -1315,7 +1401,7 @@ describe('writeOutput', () => {
     }
   });
 
-  it('keeps different clean prompts numbered under a shared display name', async () => {
+  it('distinguishes providers with matching labels even when their prompts differ', async () => {
     const eval_ = new Eval({});
     for (const id of ['first', 'second']) {
       await eval_.addResult(
@@ -1325,8 +1411,8 @@ describe('writeOutput', () => {
     const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
       .testsuites.testsuite;
     expect(suites).toMatchObject([
-      { '@_name': '[shared] prompt 1' },
-      { '@_name': '[shared] prompt 2' },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
     ]);
   });
 

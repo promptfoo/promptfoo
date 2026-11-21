@@ -1,7 +1,13 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { serializeResultForJsonlArtifact } from '../../src/models/evalResult';
+import EvalResult, {
+  getStripFlags,
+  projectPrompt,
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+  toSerializableProviderRef,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -13,7 +19,6 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
-import { serializeEvalValue } from '../../src/util/evalSerialization';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -23,6 +28,21 @@ import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
+
+const createNestedAuthorizationFixture = () => ({
+  transformedRequest: {
+    headers: {
+      Authorization: 'Bearer nested-secret',
+    },
+  },
+});
+
+const createUserTraceMetadataFixture = () => ({
+  __promptfoo: {
+    traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+    retained: 'user-metadata',
+  },
+});
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -57,7 +77,7 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
-  describe('serializeEvalValue', () => {
+  describe('sanitizeProvider', () => {
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({
         id: 'test-provider',
@@ -66,12 +86,14 @@ describe('EvalResult', () => {
         config: { apiKey: 'test-key' },
       });
 
-      const result = serializeEvalValue(apiProvider);
+      apiProvider.prompts = ['ordinary runtime selector'];
+      const result = sanitizeProvider(apiProvider);
+      expect(apiProvider.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: 'test-key',
+          apiKey: '[REDACTED]',
         },
       });
     });
@@ -80,41 +102,45 @@ describe('EvalResult', () => {
       const providerOptions: ProviderOptions = {
         id: 'test-provider',
         label: 'Test Provider',
+        prompts: ['ordinary runtime selector'],
         config: {
           apiKey: 'test-key',
         },
       };
 
-      const result = serializeEvalValue(providerOptions);
+      const result = sanitizeProvider(providerOptions);
+      expect(providerOptions.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: 'test-key',
+          apiKey: '[REDACTED]',
         },
       });
     });
 
-    it('preserves plain provider options', () => {
+    it('should handle generic objects with id function', () => {
       const provider = {
-        id: 'test-provider',
+        id: () => 'test-provider',
         label: 'Test Provider',
+        prompts: ['ordinary runtime selector'],
         config: {
           apiKey: 'test-key',
         },
-      } as ProviderOptions;
+      } as ApiProvider;
 
-      const result = serializeEvalValue(provider);
+      const result = sanitizeProvider(provider);
+      expect(provider.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: 'test-key',
+          apiKey: '[REDACTED]',
         },
       });
     });
 
-    it('preserves templated WebSocket configuration separately from its display ID', () => {
+    it('should redact env-rendered credentials from templated WebSocket provider data', () => {
       const provider = new WebSocketProvider('websocket', {
         config: {
           url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
@@ -122,11 +148,11 @@ describe('EvalResult', () => {
         },
       });
 
-      expect(serializeEvalValue(provider)).toEqual({
+      expect(sanitizeProvider(provider)).toEqual({
         id: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
         label: undefined,
         config: {
-          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
           messageTemplate: '{{ prompt }}',
         },
       });
@@ -134,44 +160,6 @@ describe('EvalResult', () => {
   });
 
   describe('createFromEvaluateResult', () => {
-    it.each([true, false])('preserves local test content with persist=%s', async (persist) => {
-      const raw = '{ "password": "test-only-canary",  "token": "fixture-token" }\n';
-      const vars = {
-        password: 'test-only-canary',
-        token: 'fixture-token',
-        secret: 'fixture secret',
-        session: 'fixture session',
-        hash: 'a'.repeat(128),
-        json: raw,
-        headers: { 'X-Fixture': 'keep', Authorization: 'fixture auth' },
-        nested: { a: { b: { c: { d: { e: { token: 'deep fixture' } } } } } },
-      };
-      const input = {
-        ...mockEvaluateResult,
-        prompt: { ...mockPrompt, raw },
-        promptId: hashPrompt({ ...mockPrompt, raw }),
-        testCase: { ...mockTestCase, vars, assert: [{ type: 'equals' as const, value: raw }] },
-      };
-      const original = structuredClone(input);
-      const result = await EvalResult.createFromEvaluateResult('local-fidelity', input, {
-        persist,
-      });
-      const rows = [result, serializeResultForJsonlArtifact(input)];
-      if (persist) {
-        rows.push((await EvalResult.findById(result.id))!);
-        rows.push(
-          ...(await EvalResult.createManyFromEvaluateResult([input], 'local-fidelity-bulk')),
-        );
-      }
-      for (const row of rows) {
-        expect(row.prompt.raw).toBe(raw);
-        expect(row.promptId).toBe(hashPrompt(input.prompt));
-        expect(row.testCase.vars).toEqual(vars);
-        expect(row.testCase.assert?.[0]).toEqual({ type: 'equals', value: raw });
-      }
-      expect(input).toEqual(original);
-    });
-
     it.each<Assertion>([
       {
         type: 'is-json',
@@ -182,7 +170,7 @@ describe('EvalResult', () => {
         },
       },
       { type: 'equals', value: '{ "token": "test input",  "number": 1 }' },
-    ])('preserves assertion values and grader settings locally', async (assertion) => {
+    ])('preserves $type assertion values while redacting grader settings', async (assertion) => {
       const credential = 'fixture-grader-credential';
       const gradingResult = {
         pass: true,
@@ -206,7 +194,7 @@ describe('EvalResult', () => {
         ],
       };
       const input = { ...mockEvaluateResult, gradingResult };
-      const artifact = serializeResultForJsonlArtifact(input);
+      const artifact = sanitizeResultForJsonlArtifact(input);
       const result = await EvalResult.createFromEvaluateResult(
         `assertion-values-${assertion.type}`,
         input,
@@ -218,7 +206,7 @@ describe('EvalResult', () => {
         expect(saved?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
           assertion.value,
         );
-        expect(JSON.stringify(saved?.gradingResult)).toContain(credential);
+        expect(JSON.stringify(saved?.gradingResult)).not.toContain(credential);
       }
 
       result.gradingResult = gradingResult;
@@ -228,11 +216,11 @@ describe('EvalResult', () => {
       expect(updated?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
         assertion.value,
       );
-      expect(JSON.stringify(updated?.gradingResult)).toContain(credential);
+      expect(JSON.stringify(updated?.gradingResult)).not.toContain(credential);
       expect(gradingResult.componentResults[0].assertion.provider.config.apiKey).toBe(credential);
     });
 
-    it('preserves URL test inputs and provider configuration', async () => {
+    it('preserves URL test inputs while redacting provider URL credentials', async () => {
       const url = 'https://cdn.example/image?X-Amz-Signature=short-secret&q=hello world';
       const vars = { image: url, imageUrl: url };
       const provider: ProviderOptions = { id: 'test-provider', config: { apiBaseUrl: url } };
@@ -243,7 +231,7 @@ describe('EvalResult', () => {
       });
       const saved = await EvalResult.findById(result.id);
       expect(saved?.testCase.vars).toEqual(vars);
-      expect(saved?.provider.config?.apiBaseUrl).toBe(url);
+      expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
     });
 
     it('should create and persist an EvalResult', async () => {
@@ -321,6 +309,24 @@ describe('EvalResult', () => {
       });
     });
 
+    it('preserves repeat linkage across single-row persistence', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-repeat-linkage', {
+        ...mockEvaluateResult,
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
     it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -353,12 +359,7 @@ describe('EvalResult', () => {
         ...mockEvaluateResult,
         traceId: 'internal-trace',
         evaluationId: 'internal-evaluation',
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       expect(warnSpy).toHaveBeenCalledWith(
@@ -374,12 +375,7 @@ describe('EvalResult', () => {
     it('strips user-supplied reserved trace linkage from untraced rows', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
         ...mockEvaluateResult,
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       const retrieved = await EvalResult.findById(result.id);
@@ -466,7 +462,12 @@ describe('EvalResult', () => {
       expect(resultWithCircular.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
-        config: {},
+        config: {
+          circular: {
+            id: 'test-provider',
+            label: 'Test Provider',
+          },
+        },
       });
 
       // Verify it can be persisted without errors
@@ -475,7 +476,12 @@ describe('EvalResult', () => {
       expect(retrieved?.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
-        config: {},
+        config: {
+          circular: {
+            id: 'test-provider',
+            label: 'Test Provider',
+          },
+        },
       });
     });
 
@@ -513,7 +519,7 @@ describe('EvalResult', () => {
         const retrieved = await EvalResult.findById(result.id);
         expect(retrieved).not.toBeNull();
 
-        // The metadata should be serializable (circular timer references omitted)
+        // The metadata should be sanitized (timer stripped or converted to empty object)
         // Either approach is acceptable - the key is that it doesn't throw
         expect(retrieved?.metadata).toBeDefined();
       } finally {
@@ -553,8 +559,8 @@ describe('EvalResult', () => {
 
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
-    describe('local configuration and response fidelity', () => {
-      it('preserves apiKey in testCase.options.provider.config', async () => {
+    describe('credential redaction (regression for PR #8688 review)', () => {
+      it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -574,15 +580,17 @@ describe('EvalResult', () => {
         );
 
         const serialized = JSON.stringify(result.testCase);
-        expect(serialized).toContain('sk-ant-api03-SHOULD-BE-REDACTED');
-        expect(serialized).not.toContain('[REDACTED]');
+        expect(serialized).not.toContain('sk-ant-api03-SHOULD-BE-REDACTED');
+        expect(serialized).toContain('[REDACTED]');
 
-        // Verify the same configuration survives the database round trip.
+        // Also verify the DB-persisted row is clean.
         const retrieved = await EvalResult.findById(result.id);
-        expect(JSON.stringify(retrieved?.testCase)).toContain('sk-ant-api03-SHOULD-BE-REDACTED');
+        expect(JSON.stringify(retrieved?.testCase)).not.toContain(
+          'sk-ant-api03-SHOULD-BE-REDACTED',
+        );
       });
 
-      it('preserves apiKey in prompt.config.provider.config', async () => {
+      it('redacts apiKey in prompt.config.provider.config', async () => {
         const evalId = 'test-eval-redact-prompt-provider';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -602,16 +610,16 @@ describe('EvalResult', () => {
         );
 
         const serialized = JSON.stringify(result.prompt);
-        expect(serialized).toContain('sk-ant-api03-PROMPT-SHOULD-BE-REDACTED');
-        expect(serialized).not.toContain('[REDACTED]');
+        expect(serialized).not.toContain('sk-ant-api03-PROMPT-SHOULD-BE-REDACTED');
+        expect(serialized).toContain('[REDACTED]');
 
         const retrieved = await EvalResult.findById(result.id);
-        expect(JSON.stringify(retrieved?.prompt)).toContain(
+        expect(JSON.stringify(retrieved?.prompt)).not.toContain(
           'sk-ant-api03-PROMPT-SHOULD-BE-REDACTED',
         );
       });
 
-      it('preserves provider response headers and output', async () => {
+      it('redacts sensitive provider response headers without changing output', async () => {
         const evalId = 'test-eval-redact-response-headers';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -622,7 +630,7 @@ describe('EvalResult', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: {
-                  'openai-project': 'metadata_proj_fixture',
+                  'openai-project': 'metadata_proj_should_not_persist',
                   'set-cookie': 'metadata-session=secret',
                   'x-ratelimit-remaining-requests': '199',
                 },
@@ -642,7 +650,7 @@ describe('EvalResult', () => {
                       status: 200,
                       statusText: 'OK',
                       headers: {
-                        'openai-project': 'grading_proj_fixture',
+                        'openai-project': 'grading_proj_should_not_persist',
                         'set-cookie': 'grading-session=secret',
                         'x-ratelimit-remaining-requests': '2399',
                       },
@@ -661,10 +669,10 @@ describe('EvalResult', () => {
                   statusText: 'OK',
                   headers: {
                     'content-type': 'application/json',
-                    'openai-project': 'proj_fixture',
+                    'openai-project': 'proj_should_not_persist',
                     'set-cookie': 'session=secret',
                     'x-ratelimit-remaining-requests': '199',
-                    'x-request-id': 'req_fixture',
+                    'x-request-id': 'req_should_not_persist',
                   },
                   requestHeaders: {
                     authorization: 'Bearer sk-should-not-persist',
@@ -682,39 +690,47 @@ describe('EvalResult', () => {
         expect(result.response?.output).toEqual({ password: 'model output should stay intact' });
         expect(result.response?.metadata?.http?.headers).toEqual({
           'content-type': 'application/json',
-          'openai-project': 'proj_fixture',
-          'set-cookie': 'session=secret',
-          'x-ratelimit-remaining-requests': '199',
-          'x-request-id': 'req_fixture',
+          'openai-project': '[REDACTED]',
+          'set-cookie': '[REDACTED]',
+          'x-ratelimit-remaining-requests': '[REDACTED]',
+          'x-request-id': '[REDACTED]',
         });
         expect(result.response?.metadata?.http?.requestHeaders).toEqual({
-          authorization: 'Bearer sk-should-not-persist',
-          'api-key': 'azure-api-key-should-not-persist',
-          'X-API-Key': 'custom-api-key-should-not-persist',
+          authorization: '[REDACTED]',
+          'api-key': '[REDACTED]',
+          'X-API-Key': '[REDACTED]',
           'x-safe-debug': 'keep-me',
         });
         expect(result.metadata?.http?.headers).toEqual({
-          'openai-project': 'metadata_proj_fixture',
-          'set-cookie': 'metadata-session=secret',
-          'x-ratelimit-remaining-requests': '199',
+          'openai-project': '[REDACTED]',
+          'set-cookie': '[REDACTED]',
+          'x-ratelimit-remaining-requests': '[REDACTED]',
         });
         expect(result.gradingResult?.componentResults?.[0].metadata?.http?.headers).toEqual({
-          'openai-project': 'grading_proj_fixture',
-          'set-cookie': 'grading-session=secret',
-          'x-ratelimit-remaining-requests': '2399',
+          'openai-project': '[REDACTED]',
+          'set-cookie': '[REDACTED]',
+          'x-ratelimit-remaining-requests': '[REDACTED]',
         });
 
         const retrieved = await EvalResult.findById(result.id);
-        expect(JSON.stringify(retrieved?.response)).toContain('proj_fixture');
-        expect(JSON.stringify(retrieved?.response)).toContain('session=secret');
-        expect(JSON.stringify(retrieved?.response)).toContain('req_fixture');
-        expect(JSON.stringify(retrieved?.response)).toContain('sk-should-not-persist');
-        expect(JSON.stringify(retrieved?.response)).toContain('azure-api-key-should-not-persist');
-        expect(JSON.stringify(retrieved?.response)).toContain('custom-api-key-should-not-persist');
-        expect(JSON.stringify(retrieved?.metadata)).toContain('metadata_proj_fixture');
-        expect(JSON.stringify(retrieved?.metadata)).toContain('metadata-session=secret');
-        expect(JSON.stringify(retrieved?.gradingResult)).toContain('grading_proj_fixture');
-        expect(JSON.stringify(retrieved?.gradingResult)).toContain('grading-session=secret');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('proj_should_not_persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'azure-api-key-should-not-persist',
+        );
+        expect(JSON.stringify(retrieved?.response)).not.toContain(
+          'custom-api-key-should-not-persist',
+        );
+        expect(JSON.stringify(retrieved?.metadata)).not.toContain(
+          'metadata_proj_should_not_persist',
+        );
+        expect(JSON.stringify(retrieved?.metadata)).not.toContain('metadata-session=secret');
+        expect(JSON.stringify(retrieved?.gradingResult)).not.toContain(
+          'grading_proj_should_not_persist',
+        );
+        expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
       });
 
       it('preserves arbitrary legacy headers in grading metadata', async () => {
@@ -853,7 +869,7 @@ describe('EvalResult', () => {
         expect(serialized).toContain('cf-ray was: abc-123');
       });
 
-      it('preserves transport diagnostics including request IDs and rate limits', async () => {
+      it('redacts headers added in this PR (proxy-authorization, x-amzn-requestid, x-trace-id, etc.)', async () => {
         const evalId = 'test-eval-redact-extended-headers';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -890,22 +906,22 @@ describe('EvalResult', () => {
 
         expect(result.response?.metadata?.http?.headers).toEqual({
           'content-type': 'application/json',
-          'proxy-authorization': 'Basic proxy-secret',
-          'x-amzn-requestid': 'req_amzn_should_redact',
-          'x-amzn-trace-id': 'Root=trace-id',
-          'x-amz-security-token': 'amz-token-secret',
-          'x-amz-cf-id': 'cf-id-secret',
-          'x-azure-ref': 'azure-ref-secret',
-          'x-correlation-id': 'corr-secret',
-          'x-trace-id': 'trace-secret',
-          'cf-cache-status': 'HIT',
-          'openai-version': '2024-01-01',
-          via: '1.1 proxy.example',
+          'proxy-authorization': '[REDACTED]',
+          'x-amzn-requestid': '[REDACTED]',
+          'x-amzn-trace-id': '[REDACTED]',
+          'x-amz-security-token': '[REDACTED]',
+          'x-amz-cf-id': '[REDACTED]',
+          'x-azure-ref': '[REDACTED]',
+          'x-correlation-id': '[REDACTED]',
+          'x-trace-id': '[REDACTED]',
+          'cf-cache-status': '[REDACTED]',
+          'openai-version': '[REDACTED]',
+          via: '[REDACTED]',
           'x-safe-debug': 'keep-me',
         });
       });
 
-      it('preserves response headers regardless of header-name casing', async () => {
+      it('redacts response headers regardless of header-name casing', async () => {
         const evalId = 'test-eval-redact-casing';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -932,19 +948,20 @@ describe('EvalResult', () => {
         );
 
         expect(result.response?.metadata?.http?.headers).toEqual({
-          Authorization: 'Bearer mixed-case-secret',
-          'Set-Cookie': 'session=mixed',
-          'CF-RAY': 'cf-mixed',
-          'X-Request-Id': 'req-mixed',
-          'X-RateLimit-Remaining': '99',
+          Authorization: '[REDACTED]',
+          'Set-Cookie': '[REDACTED]',
+          'CF-RAY': '[REDACTED]',
+          'X-Request-Id': '[REDACTED]',
+          'X-RateLimit-Remaining': '[REDACTED]',
         });
       });
 
-      it('serializes nested provider configuration without its live SDK client', async () => {
+      it('redacts credentials from an instantiated provider object embedded in testCase.options.provider', async () => {
         // Mimic the real Anthropic / Bedrock shape: the resolved judge provider is an
         // ApiProvider instance whose internal SDK client carries `apiKey`, `_options`,
-        // `authToken`, and circular `_client` back-references. Only the declared configuration belongs in the saved result; live clients
-        // and credentials acquired by the SDK must stay out of the result API.
+        // `authToken`, and circular `_client` back-references. Before the fix, all of
+        // these survived sanitizeForDb (which only strips circular refs) and persisted
+        // through the eval results API.
         const sdkClientA: { _client?: unknown; apiKey: string; _options: { apiKey: string } } = {
           apiKey: 'sk-ant-api03-INSTANCE-KEY',
           _options: { apiKey: 'sk-ant-api03-INSTANCE-KEY' },
@@ -976,12 +993,12 @@ describe('EvalResult', () => {
 
         const serialized = JSON.stringify(result.testCase);
         expect(serialized).not.toContain('sk-ant-api03-INSTANCE-KEY');
-        expect(serialized).toContain('sk-ant-api03-CONFIG-KEY');
+        expect(serialized).not.toContain('sk-ant-api03-CONFIG-KEY');
         expect(serialized).not.toContain('sk-ant-api03-TOPLEVEL-KEY');
-        expect(serialized).not.toContain('[REDACTED]');
+        expect(serialized).toContain('[REDACTED]');
       });
 
-      it('handles circular references in user-supplied provider configuration', async () => {
+      it('does not crash when redacting a provider with a live circular SDK client', async () => {
         const sdkClient: { _client?: unknown; apiKey: string } = { apiKey: 'sk-live-leak' };
         sdkClient._client = sdkClient;
         const cyclicProvider = {
@@ -1003,11 +1020,11 @@ describe('EvalResult', () => {
         );
 
         expect(result.persisted).toBe(true);
-        expect(JSON.stringify(result.testCase)).toContain('sk-live-leak');
+        expect(JSON.stringify(result.testCase)).not.toContain('sk-live-leak');
       });
     });
 
-    it('preserves non-circular nested provider properties', async () => {
+    it('should redact apiKey while preserving non-circular nested provider properties', async () => {
       const evalId = 'test-eval-id';
 
       const providerWithNestedData: ProviderOptions = {
@@ -1032,17 +1049,17 @@ describe('EvalResult', () => {
         { persist: true },
       );
 
-      // Local serialization preserves the configured values.
-      expect(result.provider?.config?.apiKey).toBe('secret-key');
+      // Verify secrets are redacted while nested non-secret properties are preserved
+      expect(result.provider?.config?.apiKey).toBe('[REDACTED]');
       expect(result.provider?.config?.options).toEqual({
         temperature: 0.7,
         maxTokens: 100,
       });
 
-      // Verify the nested properties survive the database round trip.
+      // Verify it can be persisted and retrieved with redaction and nested properties intact
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.provider?.config?.apiKey).toBe('secret-key');
+      expect(retrieved?.provider?.config?.apiKey).toBe('[REDACTED]');
       expect(retrieved?.provider?.config?.options).toEqual({
         temperature: 0.7,
         maxTokens: 100,
@@ -1291,7 +1308,270 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('projectPrompt', () => {
+    it.each([
+      { mapped: false, strip: true },
+      { mapped: true, strip: true },
+      { mapped: false, strip: false },
+    ])(
+      'preserves live provider serialization (mapped: $mapped, strip: $strip)',
+      ({ mapped, strip }) => {
+        class LocalProvider {
+          prompts = ['ordinary selector'];
+          runtimeOnly = 'ordinary working state';
+          config = { nested: { one: { two: { three: { value: 'public setting' } } } } };
+
+          id(): string {
+            return 'echo';
+          }
+
+          toJSON() {
+            return { id: this.id(), prompts: this.prompts, config: this.config };
+          }
+        }
+        const provider = new LocalProvider();
+        const prompt = createPrompt('Hello', {
+          config: { provider: mapped ? { text: provider } : provider },
+        });
+        const projected = projectPrompt(prompt, strip);
+        const output = JSON.parse(JSON.stringify(projected));
+        const serializedProvider = mapped ? output.config.provider.text : output.config.provider;
+
+        expect(serializedProvider).toEqual({
+          id: 'echo',
+          config: provider.config,
+          ...(!strip && { prompts: provider.prompts }),
+        });
+        expect(provider.runtimeOnly).toBe('ordinary working state');
+        expect(provider.prompts).toEqual(['ordinary selector']);
+        expect(mapped ? prompt.config.provider.text : prompt.config.provider).toBe(provider);
+        if (!strip) {
+          expect(projected).toBe(prompt);
+        }
+      },
+    );
+  });
+
+  it('omits runtime-only provider state and function transforms from replay references', () => {
+    const provider = {
+      id: () => 'echo',
+      callApi: vi.fn(),
+      transform: () => 'runtime transform',
+      inputs: { query: 'A short question' },
+      delay: 0,
+      runtimeOnly: 'ordinary working state',
+    };
+    const saved = toSerializableProviderRef(provider);
+    expect(saved).toEqual({
+      id: 'echo',
+      label: undefined,
+      inputs: { query: 'A short question' },
+      delay: 0,
+    });
+    provider.inputs.query = 'Runtime-only description';
+    expect(saved).toHaveProperty('inputs.query', 'A short question');
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   describe('toEvaluateResult', () => {
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].flatMap((strip) =>
+          [
+            'native-conversation-text',
+            [
+              { text: 'native-conversation-text', thoughtSignature: 'signed-text' },
+              { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLWltYWdl' } },
+            ],
+          ].map((conversationOutput) => ({ boundary, strip, conversationOutput })),
+        ),
+      ),
+    )(
+      'projects native conversation output at $boundary (strip: $strip)',
+      async ({ boundary, strip, conversationOutput }) => {
+        const response = { output: 'display output', conversationOutput };
+        const original = structuredClone(response);
+        const input = createEvaluateResult({ response });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'conversation-projection',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          expect(loaded?.response?.conversationOutput).toEqual(conversationOutput);
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded?.response?.conversationOutput).toEqual(conversationOutput);
+        }
+
+        if (strip) {
+          expect(projected.response).toEqual({ output: '[output stripped]' });
+          expect(JSON.stringify(projected)).not.toContain('native-conversation-text');
+          expect(JSON.stringify(projected)).not.toContain('bmF0aXZlLWltYWdl');
+        } else {
+          expect(projected.response).toEqual(response);
+        }
+        expect(response).toEqual(original);
+        expect(input.response).toEqual(original);
+      },
+    );
+
+    it.each(
+      [
+        { boundary: 'model', strip: true },
+        { boundary: 'model', strip: false },
+        { boundary: 'jsonl', strip: true },
+        { boundary: 'jsonl', strip: false },
+        { boundary: 'single', strip: true },
+        { boundary: 'single', strip: false },
+        { boundary: 'batch', strip: true },
+        { boundary: 'batch', strip: false },
+        { boundary: 'save-insert', strip: true },
+        { boundary: 'save-insert', strip: false },
+        { boundary: 'save-update', strip: true },
+        { boundary: 'save-update', strip: false },
+      ].flatMap((entry) => [
+        { ...entry, mapped: true },
+        { ...entry, mapped: false },
+      ]),
+    )(
+      'projects live grading references at $boundary output (strip: $strip, mapped: $mapped)',
+      async ({ boundary, strip, mapped }) => {
+        const provider = {
+          id: 'echo',
+          prompts: ['ordinary nested selector'],
+          config: { prompts: ['ordinary provider configuration'] },
+        };
+        const liveProviderId = 'https://grader.example/run?mode=ordinary';
+        const liveProvider = {
+          id: () => liveProviderId,
+          callApi: vi.fn(),
+          prompts: [...provider.prompts],
+          config: provider.config,
+          transform: 'output',
+          delay: 0,
+          inputs: { query: 'A short question' },
+          runtimeOnly: 'ordinary working state',
+          toJSON: () => ({ id: liveProviderId }),
+        };
+        const providerMap = {
+          text: liveProvider,
+          embedding: liveProvider,
+          classification: liveProvider,
+          moderation: liveProvider,
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          prompts: ['ordinary application setting'],
+          application: { text: { prompts: ['ordinary application payload'] } },
+        };
+        const gradingProvider = mapped ? providerMap : liveProvider;
+        const assertion: Assertion = { type: 'equals', value: 'ok', provider: gradingProvider };
+        const testCase: AtomicTestCase = {
+          provider: liveProvider,
+          options: {
+            provider: gradingProvider,
+          },
+          assert: [{ type: 'assert-set', assert: [assertion] }],
+          metadata: { prompts: ['ordinary metadata'] },
+        };
+        const input = createEvaluateResult({
+          provider,
+          testCase,
+          prompt: {
+            raw: 'Hello',
+            label: 'Greeting',
+            config: {
+              provider: gradingProvider,
+              options: { provider: { prompts: ['ordinary application options'] } },
+              assert: [{ provider: { prompts: ['ordinary application assertions'] } }],
+            },
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion,
+            componentResults: [{ pass: true, score: 1, reason: 'ok', assertion }],
+            metadata: { prompts: ['ordinary grading metadata'] },
+          },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) });
+        const evalId = `ordinary-provider-${boundary}-${strip}-${mapped}`;
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const saved =
+            boundary === 'batch'
+              ? (await EvalResult.createManyFromEvaluateResult([input], evalId))[0]
+              : await EvalResult.createFromEvaluateResult(evalId, input, {
+                  persist: boundary === 'single' || boundary === 'save-update',
+                });
+          if (boundary === 'save-insert' || boundary === 'save-update') {
+            // Save also accepts newly assigned live grading references.
+            saved.testCase = input.testCase;
+            saved.prompt = input.prompt;
+            saved.gradingResult = input.gradingResult ?? null;
+            await saved.save();
+          }
+          const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+          expect(loaded).not.toBeNull();
+          expect(loaded?.testCase.options?.provider).toMatchObject(
+            mapped
+              ? { text: { id: liveProviderId, prompts: provider.prompts } }
+              : { id: liveProviderId, prompts: provider.prompts },
+          );
+          projected = loaded!.toEvaluateResult(flags);
+        }
+
+        expect(JSON.stringify(projected).includes('ordinary nested selector')).toBe(!strip);
+        expect(projected.testCase.metadata).toEqual(testCase.metadata);
+        const expectedProvider = {
+          id: liveProviderId,
+          config: provider.config,
+          transform: 'output',
+          delay: 0,
+          inputs: { query: 'A short question' },
+          ...(!strip && { prompts: provider.prompts }),
+        };
+        const expectedMap = {
+          ...providerMap,
+          text: expectedProvider,
+          embedding: expectedProvider,
+          classification: expectedProvider,
+          moderation: expectedProvider,
+        };
+        const expectedReference = mapped ? expectedMap : expectedProvider;
+        expect(projected.testCase.provider).toEqual(expectedProvider);
+        expect(projected.testCase.options?.provider).toEqual(expectedReference);
+        expect(projected.prompt.config.provider).toEqual(expectedReference);
+        expect(projected.gradingResult?.assertion?.provider).toEqual(expectedReference);
+        expect(projected.gradingResult?.componentResults?.[0].assertion?.provider).toEqual(
+          expectedReference,
+        );
+        expect(JSON.stringify(projected)).not.toContain('ordinary working state');
+        expect(projected.prompt.config.options).toEqual(input.prompt.config.options);
+        expect(projected.prompt.config.assert).toEqual(input.prompt.config.assert);
+        expect(projected.gradingResult?.metadata).toEqual({
+          prompts: ['ordinary grading metadata'],
+        });
+        expect(provider.prompts).toEqual(['ordinary nested selector']);
+        expect(testCase.options?.provider).toBe(gradingProvider);
+        expect(input.gradingResult?.componentResults?.[0].assertion?.provider).toBe(
+          gradingProvider,
+        );
+        expect(providerMap.text).toBe(liveProvider);
+        expect(liveProvider.id()).toBe(liveProviderId);
+        expect(liveProvider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
     it('should convert EvalResult to EvaluateResult format', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
 
@@ -1316,13 +1596,7 @@ describe('EvalResult', () => {
     it('should preserve the original response object when response stripping is disabled', () => {
       const response = {
         output: 'provider output',
-        metadata: {
-          transformedRequest: {
-            headers: {
-              Authorization: 'Bearer nested-secret',
-            },
-          },
-        },
+        metadata: createNestedAuthorizationFixture(),
       };
 
       const result = new EvalResult({
@@ -1462,13 +1736,7 @@ describe('EvalResult', () => {
           response: {
             output: 'provider output',
             latencyMs: 42,
-            metadata: {
-              transformedRequest: {
-                headers: {
-                  Authorization: 'Bearer nested-secret',
-                },
-              },
-            },
+            metadata: createNestedAuthorizationFixture(),
           },
           gradingResult: null,
           provider: mockProvider,

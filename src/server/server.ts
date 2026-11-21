@@ -47,6 +47,7 @@ import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
+import { defaultErrorHandler } from './utils/defaultErrorHandler';
 import { replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
@@ -120,7 +121,7 @@ export function createApp() {
 
   const staticDir = findStaticDir();
 
-  // Local evals retain their original content. Only trusted browser origins may read it.
+  // Local results can contain sensitive content even after best-effort redaction.
   app.use(
     cors((req, callback) => {
       const origin = req.headers.origin;
@@ -131,6 +132,13 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  app.get('/api/openapi.json', async (_req, res) => {
+    const { default: spec } = await import('../../site/static/openapi.json', {
+      with: { type: 'json' },
+    });
+    res.json({ ...spec, info: { ...spec.info, version: VERSION }, servers: [{ url: '/' }] });
+  });
+
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
@@ -368,6 +376,7 @@ export function createApp() {
   app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
+  app.use(defaultErrorHandler);
   return app;
 }
 
@@ -473,27 +482,29 @@ export async function startServer(
       }
     };
 
-    const closeRunningServer = (onClose: (timedOut: boolean) => void) => {
+    const closeRunningServer = (
+      onClose: (timedOut: boolean, closeError?: NodeJS.ErrnoException) => void,
+    ) => {
       safeCloseWatcher();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
       let settled = false;
+      let closeError: NodeJS.ErrnoException | undefined;
       const settle = (timedOut: boolean) => {
         if (settled) {
           return;
         }
         settled = true;
         clearTimeout(forceCloseTimeout);
-        onClose(timedOut);
+        onClose(timedOut, closeError);
       };
       const forceCloseTimeout = setTimeout(() => {
         logger.warn('Server close timeout - forcing shutdown');
         settle(true);
       }, SHUTDOWN_TIMEOUT_MS);
 
-      // Close Socket.io connections (this also closes the underlying HTTP server)
-      io.close(() => {
+      const closeHttpServer = () => {
         // Socket.io's close() already closes the HTTP server, so check if it's still listening
         // before attempting to close it again to avoid "Server is not running" errors
         if (!httpServer.listening) {
@@ -509,6 +520,17 @@ export async function startServer(
           logger.info('Server closed');
           settle(false);
         });
+      };
+
+      // Close Socket.io connections (this also closes the underlying HTTP server).
+      io.close(closeHttpServer).catch((error) => {
+        logger.warn('Error closing Socket.IO server', { error });
+        // HTTP close does not guarantee that upgraded WebSocket connections closed.
+        // Preserve the failure so callers cannot mistake partial cleanup for success.
+        closeError = Object.assign(new Error('Socket.IO shutdown failed', { cause: error }), {
+          code: 'ESHUTDOWN',
+        });
+        closeHttpServer();
       });
     };
 
@@ -518,19 +540,16 @@ export async function startServer(
       logger.info('Shutting down server...');
       removeShutdownHandlers();
       httpServer.removeListener('error', handleRuntimeError);
-      closeRunningServer((timedOut) => {
-        if (timedOut) {
-          // A force-close means open handles were left dangling. Reject so the
+      closeRunningServer((timedOut, closeError) => {
+        const shutdownError = timedOut
+          ? Object.assign(new Error('Shutdown timeout'), { code: 'ESHUTDOWN' })
+          : closeError;
+        if (shutdownError) {
+          // Failed cleanup can leave open handles dangling. Reject so the
           // caller (CLI or library) decides exit-code policy — startServer is
           // publicly importable, so silently poisoning process.exitCode would
           // hurt library embedders.
-          reject(
-            new ServerError(
-              Object.assign(new Error('Shutdown timeout'), { code: 'ESHUTDOWN' }),
-              port,
-              'runtime',
-            ),
-          );
+          reject(new ServerError(shutdownError, port, 'runtime'));
           return;
         }
         resolve();

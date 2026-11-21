@@ -16,7 +16,7 @@ describe('BlogPostGrid', () => {
   });
 
   it('separates the heading from the page number on paginated pages', () => {
-    render(<BlogPostGrid posts={[]} title="Archive • Page 2" isPaginated />);
+    render(<BlogPostGrid posts={[]} title="Archive" pageNumber={2} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Archive 2' })).toHaveAttribute(
       'data-is-paginated',
@@ -24,8 +24,8 @@ describe('BlogPostGrid', () => {
     );
   });
 
-  it('renders the paginated heading without a page number when the separator is missing', () => {
-    render(<BlogPostGrid posts={[]} title="Older Posts" isPaginated />);
+  it('renders a custom heading without a page number', () => {
+    render(<BlogPostGrid posts={[]} title="Older Posts" />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Older Posts' })).toBeInTheDocument();
   });

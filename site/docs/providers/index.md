@@ -1,6 +1,6 @@
 ---
 sidebar_label: LLM Providers
-description: Configure multiple LLM providers including Claude, GPT, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
+description: Configure model providers and custom targets in Promptfoo to compare APIs, local models, agents, and application endpoints. Find provider IDs and setup guides.
 ---
 
 # LLM Providers
@@ -35,17 +35,17 @@ providers:
 | [Python](./python.md)                                   | Custom - Python file                                             | `file://path/to/custom_provider.py`                                                                                   |
 | [Ruby](./ruby.md)                                       | Custom - Ruby file                                               | `file://path/to/custom_provider.rb`                                                                                   |
 | [Shell Command](./custom-script.md)                     | Custom - script-based providers                                  | `exec: python chain.py`                                                                                               |
-| [OpenAI ChatKit](./openai-chatkit.md)                   | ChatKit workflows; Agent Builder retires November 30, 2026       | `openai:chatkit:wf_xxxxx`                                                                                             |
 | [OpenAI Agents](./openai-agents.md)                     | OpenAI Agents SDK agents and handoffs                            | `openai:agents:my-agent`                                                                                              |
 | [OpenAI Agents API](./openai-agents-api.md)             | Managed Codex sessions and hosted sandboxes                      | `openai:agents-api:gpt-6-astra`                                                                                       |
 | [OpenAI Codex App Server](./openai-codex-app-server.md) | Experimental Codex app-server provider for streamed agent events | `openai:codex-app-server`                                                                                             |
 | [OpenAI Codex SDK](./openai-codex-sdk.md)               | OpenAI Codex SDK for code generation and analysis                | `openai:codex-sdk`                                                                                                    |
 | [OpenAI Codex Security SDK](./openai-codex-security.md) | Security scans, finding validation, coverage, and cost evals     | `openai:codex-security`                                                                                               |
+| [OpenAI Decisions API](./openai-decisions.md)           | Structured predicates, classifications, and ordered scores       | `openai:decisions:gpt-6-luna`                                                                                         |
 | [OpenAI GPT-Live](./openai-live.md)                     | Full-duplex voice with backend delegation                        | `openai:live:gpt-live-1`                                                                                              |
 | [Open Interpreter](./openinterpreter.md)                | Open Interpreter coding agent with sandbox and approval controls | `openinterpreter:gpt-5.4`                                                                                             |
 | [Abliteration](./abliteration.md)                       | OpenAI-compatible chat and multimodal models                     | `abliteration:abliterated-model-large-v2`                                                                             |
 | [AI21 Labs](./ai21.md)                                  | Jamba models                                                     | `ai21:jamba-mini`                                                                                                     |
-| [AI/ML API](./aimlapi.md)                               | Tap into 300+ cutting-edge AI models with a single API           | `aimlapi:chat:deepseek-r1`                                                                                            |
+| [AI/ML API](./aimlapi.md)                               | Access models through the AI/ML API                              | `aimlapi:chat:deepseek-r1`                                                                                            |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                    | Alibaba Cloud's Qwen models                                      | `alibaba:qwen-max` or `qwen-plus`                                                                                     |
 | [Atlas Cloud](./atlascloud.md)                          | OpenAI-compatible AI model aggregation platform                  | `atlascloud:deepseek-v3`                                                                                              |
 | [AWS Bedrock](./aws-bedrock.md)                         | AWS-hosted models from various providers                         | `bedrock:us.anthropic.claude-opus-5`                                                                                  |
@@ -66,8 +66,10 @@ providers:
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
-| [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-3.8-flash`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                   |
-| [Google Vertex AI](./vertex.md)                         | Google Cloud models, Live API, and Veo video                     | `vertex:gemini-3.8-flash`, `vertex:live:gemini-live-2.5-flash-native-audio`, `vertex:video:veo-3.1-generate-001`      |
+| [FlexAI](./flexai.md)                                   | OpenAI-compatible chat and embedding models                      | `openai:chat:DeepSeek-V4-Flash-0731`                                                                                  |
+| [Google AI Studio](./google.md)                         | Gemini, Gemma, Live API, image and video generation              | `google:gemini-3.8-flash`, `google:gemini-nano-banana-2.1`, `google:interactions:gemini-omni-1.1-flash`               |
+| [Gemini Decisions](./google.md#gemini-decisions-api)    | Yes/no probabilities, classifications, and ordered scores        | `google:decisions:gemini-decision-1`                                                                                  |
+| [Google Vertex AI](./vertex.md)                         | Google Cloud models, Live API, and Veo video                     | `vertex:gemini-3.8-flash`, `vertex:live:gemini-3.8-live`, `vertex:video:veo-3.1-generate-001`                         |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
 | [Helicone AI Gateway](./helicone.md)                    | Self-hosted AI gateway for unified provider access               | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-5`                                                         |
 | [Hyperbolic](./hyperbolic.md)                           | OpenAI-compatible Llama 3 provider                               | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                                                        |
@@ -193,6 +195,10 @@ providers:
     config:
       apiKey: your_api_key_here
 ```
+
+For providers that support `env` overrides, values are resolved in this order:
+provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit provider
+`config` values take priority. See each provider's documentation for supported settings.
 
 ### Overriding Pricing
 
@@ -336,7 +342,7 @@ For detailed MCP documentation and advanced configurations, see the [MCP Integra
 This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
 :::
 
-Link custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)) to cloud targets using `linkedTargetId`. This consolidates findings from multiple eval runs into one dashboard, allowing you to track performance over time and view comprehensive reporting.
+Link custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)) to cloud targets using `linkedTargetId`. This groups findings from multiple eval runs under the same target in the dashboard.
 
 ```yaml
 providers:

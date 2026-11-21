@@ -50,10 +50,15 @@ function isAllowedCrossSite(origin: string, host: string): boolean {
   return getAllowedOrigins().has(origin);
 }
 
-/** Browser origins trusted to read local viewer data. Host comes from the request, not a proxy header. */
+/** Compare the serialized browser origin against the request host and configured origins. */
 export function isAllowedOrigin(origin: string, host: string): boolean {
   try {
-    return new URL(origin).hostname === stripPort(host) || isAllowedCrossSite(origin, host);
+    const parsed = new URL(origin);
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.origin === origin &&
+      (parsed.hostname === stripPort(host) || isAllowedCrossSite(origin, host))
+    );
   } catch {
     return false;
   }

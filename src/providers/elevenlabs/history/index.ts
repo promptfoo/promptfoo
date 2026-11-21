@@ -4,8 +4,8 @@
  * Retrieves and manages past agent conversation data
  */
 
-import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsClient } from '../client';
 
 import type {
@@ -206,13 +206,7 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
    * Get API key from config or environment
    */
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY')
-    );
+    return getElevenLabsApiKey(this, () => this.env);
   }
 
   /**

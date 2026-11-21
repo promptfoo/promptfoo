@@ -10,13 +10,17 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { getStripFlags, projectTracesForOutput } from './models/evalResult';
+import {
+  getStripFlags,
+  projectPrompt,
+  projectTracesForOutput,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
   makeRequest as makeCloudRequest,
 } from './util/cloud';
-import { sanitizeResultForShare } from './util/evalSharing';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { sanitizeConfigForOutput } from './util/sanitizer';
@@ -277,7 +281,7 @@ async function sendEvalRecord(
     ...evalFields,
     config: redactedConfig,
     prompts: evalRecord.prompts.map((prompt) =>
-      stripPromptPaths(sanitizeResultForShare({ prompt }, stripFlags).prompt),
+      stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
     ),
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
@@ -524,7 +528,7 @@ async function prepareChunkForShare(
   stripFlags: ReturnType<typeof getStripFlags>,
 ): Promise<EvalResult[]> {
   const sharedResults = chunk.map((row) => {
-    const result = sanitizeResultForShare(row, stripFlags);
+    const result = sanitizeResultForJsonlArtifact(row, stripFlags);
     result.provider = stripProviderPaths(result.provider);
     if (result.metadata) {
       result.metadata = stripProviderOrigin(result.metadata);
@@ -578,7 +582,7 @@ async function sendChunkedResults(
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
-  sampleResults = sampleResults.map((row) => sanitizeResultForShare(row, stripFlags));
+  sampleResults = sampleResults.map((row) => sanitizeResultForJsonlArtifact(row, stripFlags));
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;

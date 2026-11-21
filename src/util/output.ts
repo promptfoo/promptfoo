@@ -17,7 +17,7 @@ import {
   getResultIndexKey,
   getStripFlags,
   projectTracesForOutput,
-  serializeResultForJsonlArtifact,
+  sanitizeResultForJsonlArtifact,
 } from '../models/evalResult';
 import {
   type CsvRow,
@@ -26,11 +26,10 @@ import {
   ResultFailureReason,
 } from '../types';
 import { streamEvalCsv } from './eval/evalTableUtils';
-import { projectConfigForOutput } from './evalSerialization';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeRuntimeOptions } from './sanitizer';
+import { sanitizeConfigForOutput, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -103,7 +102,7 @@ async function appendJsonlResultBatch(
 
   const text =
     results
-      .map((result) => JSON.stringify(serializeResultForJsonlArtifact(result, stripFlags)))
+      .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result, stripFlags)))
       .join(os.EOL) + os.EOL;
   await fsPromises.appendFile(outputPath, text);
 }
@@ -351,7 +350,7 @@ async function createOutputSummary(
   const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
     (prompt) =>
       prompt.config
-        ? { ...prompt, config: projectConfigForOutput(prompt.config, stripFlags) }
+        ? { ...prompt, config: sanitizeConfigForOutput(prompt.config, stripFlags) }
         : prompt,
   );
   return 'prompts' in summary
@@ -417,7 +416,7 @@ export async function createOutputData(
 ): Promise<OutputFile> {
   const stripFlags = getStripFlags(evalRecord.config.env);
   const summary = await createOutputSummary(evalRecord, stripFlags);
-  const projectedConfig = projectConfigForOutput(evalRecord.config, stripFlags);
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
   let traces;
   try {
     // TraceStore redacts sensitive attribute keys on reads by default.
@@ -432,7 +431,7 @@ export async function createOutputData(
   const output: OutputFile = {
     evalId: evalRecord.id,
     results: summary,
-    config: projectedConfig,
+    config: redactedConfig,
     shareableUrl,
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
@@ -541,7 +540,6 @@ export async function writeOutput(
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
@@ -592,10 +590,9 @@ export async function writeOutput(
     );
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const stripFlags = getStripFlags(evalRecord.config.env);
     const summary = await createOutputSummary(evalRecord, stripFlags);
-    const projectedConfig = projectConfigForOutput(evalRecord.config, stripFlags);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
@@ -630,7 +627,7 @@ export async function writeOutput(
     const failures = totalResults - successes - errors;
     const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: projectedConfig,
+      config: redactedConfig,
       table: htmlTable,
       results: summary,
       metadata,
@@ -710,18 +707,12 @@ export async function writeOutput(
   } else if (outputExtension === 'xml') {
     const stripFlags = getStripFlags(evalRecord.config.env);
     const summary = await createOutputSummary(evalRecord, stripFlags);
-    const projectedConfig = projectConfigForOutput(evalRecord.config, stripFlags);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {
       if (obj === null || obj === undefined) {
         return '';
-      }
-      if (typeof obj === 'boolean' || typeof obj === 'number') {
-        return String(obj);
-      }
-      if (typeof obj === 'string') {
-        return obj;
       }
       if (Array.isArray(obj)) {
         return obj.map(sanitizeForXml);
@@ -746,7 +737,7 @@ export async function writeOutput(
       promptfoo: {
         evalId: evalRecord.id,
         results: sanitizeForXml(summary),
-        config: sanitizeForXml(projectedConfig),
+        config: sanitizeForXml(redactedConfig),
         shareableUrl: shareableUrl || '',
       },
     });
