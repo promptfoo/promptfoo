@@ -222,13 +222,13 @@ export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
 
 async function cleanupOnSigterm(): Promise<void> {
   // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
-  await flushOtel();
+  await flushOtel('process');
   try {
     await providerRegistry.shutdownForProcess();
   } catch (error) {
     logger.debug('Provider cleanup failed during SIGTERM', { error });
   }
-  await shutdownOtel();
+  await shutdownOtel('process');
 }
 
 /** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */

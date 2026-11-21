@@ -1,4 +1,5 @@
-import { context, propagation } from '@opentelemetry/api';
+import { context, defaultTextMapSetter } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import cliState from '../cliState';
 import { type EnvVarKey, getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
@@ -8,6 +9,8 @@ import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload }
 
 export { remoteGenerationContextPayload } from './remoteGenerationContext';
 export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
+
+const traceContextPropagator = new W3CTraceContextPropagator();
 
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
@@ -58,13 +61,12 @@ export function getRemoteGenerationUrl(): string {
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
-  const propagatedHeaders: Record<string, string> = {};
-  propagation.inject(context.active(), propagatedHeaders);
-
+  // Use W3C headers exclusively so a host propagator cannot add private baggage.
+  const traceHeaders: Record<string, string> = {};
+  traceContextPropagator.inject(context.active(), traceHeaders, defaultTextMapSetter);
   return {
     'Content-Type': 'application/json',
-    ...(propagatedHeaders.traceparent ? { traceparent: propagatedHeaders.traceparent } : {}),
-    ...(propagatedHeaders.tracestate ? { tracestate: propagatedHeaders.tracestate } : {}),
+    ...traceHeaders,
     ...extraHeaders,
   };
 }

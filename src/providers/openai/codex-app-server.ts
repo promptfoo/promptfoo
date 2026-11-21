@@ -4,7 +4,15 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  type Attributes,
+  type Context,
+  context as otelContext,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  type Tracer,
+} from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -16,6 +24,7 @@ import {
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
+  getGenAITracer,
   getTraceparent,
   openTurnSpan,
   withGenAISpan,
@@ -335,6 +344,8 @@ interface ServerRequestRecord {
 }
 
 interface CodexAppServerTurnState {
+  tracer: Tracer;
+  tracingContext: Context;
   connection: CodexAppServerConnection;
   connectionKey: string;
   connectionInstanceId: string;
@@ -2600,6 +2611,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     appServerEnv: Record<string, string>,
   ): CodexAppServerTurnState {
     return {
+      // Notifications can arrive on a connection created by a different evaluation.
+      tracer: getGenAITracer('promptfoo.codex-app-server'),
+      tracingContext: otelContext.active(),
       connection,
       connectionKey,
       connectionInstanceId,
@@ -2778,6 +2792,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     const itemId = String(item.id);
     const span = this.startItemSpan(
+      state,
       item,
       itemId,
       undefined,
@@ -2814,6 +2829,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const span =
       state.activeSpans.get(itemId) ??
       this.startItemSpan(
+        state,
         completedItem,
         itemId,
         state.lastEventTime,
@@ -3590,17 +3606,25 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.deepTracingWarningShown = true;
   }
 
-  private startItemSpan(item: any, itemId: string, startTime?: number, turnIndex?: number): Span {
-    return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
-      kind: SpanKind.INTERNAL,
-      ...(startTime === undefined ? {} : { startTime }),
-      attributes: addActiveSpanRoleAttribute({
-        'codex.app_server.item.id': itemId,
-        'codex.app_server.item.type': item?.type ?? 'unknown',
-        ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
-        ...this.getAttributesForItem(item),
+  private startItemSpan(
+    state: CodexAppServerTurnState,
+    item: any,
+    itemId: string,
+    startTime?: number,
+    turnIndex?: number,
+  ): Span {
+    return otelContext.with(state.tracingContext, () =>
+      state.tracer.startSpan(this.getSpanNameForItem(item), {
+        kind: SpanKind.INTERNAL,
+        ...(startTime === undefined ? {} : { startTime }),
+        attributes: addActiveSpanRoleAttribute({
+          'codex.app_server.item.id': itemId,
+          'codex.app_server.item.type': item?.type ?? 'unknown',
+          ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
+          ...this.getAttributesForItem(item),
+        }),
       }),
-    });
+    );
   }
 
   private startTurnSpan(
@@ -3620,12 +3644,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state.rawTokenUsage = undefined;
       state.tokenUsage = undefined;
     }
-    openTurnSpan(state, {
-      tracer: trace.getTracer('promptfoo.codex-app-server'),
-      eventTime,
-      system: 'openai',
-      logLabel: 'CodexAppServer',
-    });
+    otelContext.with(state.tracingContext, () =>
+      openTurnSpan(state, {
+        tracer: state.tracer,
+        eventTime,
+        system: 'openai',
+        logLabel: 'CodexAppServer',
+      }),
+    );
   }
 
   private endTurnSpan(

@@ -46,7 +46,7 @@ import {
   stopOtlpReceiverIfNeeded,
 } from '../tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from '../tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from '../tracing/otelSdk';
+import { flushOtel, initializeOtel, shutdownOtel, withOtelContext } from '../tracing/otelSdk';
 import { isCliEventSource } from '../types/eventSource';
 import {
   type Assertion,
@@ -4407,14 +4407,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         return await withProviderCallExecutionContext(
           { rateLimitRegistry: this.rateLimitRegistry },
           () =>
-            this.evaluateWithResources({
-              startTime,
-              maxEvalTimeMs,
-              providerAbortSignal,
-              deferredGradingAbortSignal,
-              globalTimeout,
-              isTimedOut: () => timedOut,
-            }),
+            withOtelContext(() =>
+              this.evaluateWithResources({
+                startTime,
+                maxEvalTimeMs,
+                providerAbortSignal,
+                deferredGradingAbortSignal,
+                globalTimeout,
+                isTimedOut: () => timedOut,
+              }),
+            ),
         );
       } finally {
         if (globalTimeout) {
