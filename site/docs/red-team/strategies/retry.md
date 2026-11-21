@@ -43,7 +43,7 @@ redteam:
 
 Promptfoo combines failed cases from local SQLite and, when connected, Promptfoo Cloud. Either source can supply cases if the other is empty or unavailable. Duplicate inputs with the same strategy appear once.
 
-Cloud retries use a plain-text prompt with the current plugin’s local settings and assertions. Promptfoo skips ambiguous or incompatible cases, including multi-turn, multimodal and structured inputs, template expressions and file or package references. An agentic single-turn retry needs a recorded final prompt. Local retries retain their saved configuration.
+Cloud retries use a plain-text prompt with the current plugin’s local settings and assertions. Promptfoo skips ambiguous or incompatible cases, including multi-turn, multimodal and structured inputs, template expressions and file or package references. Goal-based tests such as `intent` require a historical goal matching a current local goal. Single-turn agentic strategies and Best-of-N need a recorded final prompt. Layered and authoritative markup attacks use local history only. Local retries retain their saved configuration.
 
 ## Example Scenarios
 
