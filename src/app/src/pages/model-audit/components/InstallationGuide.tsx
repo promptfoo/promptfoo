@@ -90,8 +90,16 @@ export default function InstallationGuide({
         </div>
 
         <p className="text-sm text-muted-foreground mb-6">
-          Make sure you have Python 3.8+ installed. After installation, run the command in your
-          terminal.
+          Check the{' '}
+          <a
+            href="https://pypi.org/project/modelaudit/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Python requirements on PyPI
+          </a>
+          , then run the command above in your terminal.
         </p>
 
         <div className="flex flex-wrap gap-3 mb-6">

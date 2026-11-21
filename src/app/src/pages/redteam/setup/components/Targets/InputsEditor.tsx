@@ -333,7 +333,7 @@ export default function InputsEditor({
           <p className="text-sm text-muted-foreground">
             See{' '}
             <a
-              href="https://www.promptfoo.dev/docs/red-team/configuration/multi-input/"
+              href="https://www.promptfoo.dev/docs/red-team/multi-input/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
