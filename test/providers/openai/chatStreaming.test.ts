@@ -1,21 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
-import { fetchProviderRequestWithRetries } from '../../../src/providers/fetch';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { readOpenAiChatStream } from '../../../src/providers/openai/chatStream';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
+import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
-vi.mock('../../../src/cache', async (importOriginal) => ({
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
-  fetchWithCache: vi.fn(),
+  fetchWithRetries: vi.fn(),
 }));
-vi.mock('../../../src/providers/fetch', async (importOriginal) => ({
-  ...(await importOriginal()),
-  fetchProviderRequestWithRetries: vi.fn(),
-}));
-const mockFetchWithRetries = vi.mocked(fetchProviderRequestWithRetries);
-const mockFetchWithCache = vi.mocked(fetchWithCache);
+const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 beforeEach(() => {
   vi.resetAllMocks();
   mockProcessEnv({ OPENAI_API_KEY: 'fixture-key' });
@@ -247,7 +241,7 @@ describe('Streaming API', () => {
       'data: [DONE]' +
       lineEnding.repeat(2);
     const response = new Response(createMockSSEStream([...raw]));
-    const result = await readOpenAiChatStream(response, vi.fn());
+    const result = await readOpenAiChatStream(response);
     expect(result.choices[0].message.content).toBe('Hello');
   });
 
@@ -260,7 +254,7 @@ describe('Streaming API', () => {
     const body =
       chunks.map((chunk) => 'data: ' + JSON.stringify(chunk) + '\n\n').join('') +
       'data: [DONE]\n\n';
-    const result = await readOpenAiChatStream(new Response(body), vi.fn());
+    const result = await readOpenAiChatStream(new Response(body));
     expect(result).toMatchObject({ id: 'fixture', first: 1, second: 2, third: 3 });
   });
 
@@ -292,7 +286,7 @@ describe('Streaming API', () => {
         controller.close();
       },
     });
-    await expect(readOpenAiChatStream(new Response(body), vi.fn())).rejects.toThrow('1 MiB limit');
+    await expect(readOpenAiChatStream(new Response(body))).rejects.toThrow('1 MiB limit');
   });
 
   it.each(['tool', 'legacy', 'tool-empty', 'legacy-empty'])(
@@ -617,12 +611,6 @@ describe('Streaming API', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetchWithRetries.mockReset();
-    mockFetchWithCache.mockReset();
-  });
-
   it('should handle basic streaming response with content', async () => {
     const sseChunks = [
       'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
@@ -631,13 +619,13 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'x-request-id': 'stream-123' }),
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(sseChunks), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'x-request-id': 'stream-123' }),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -663,13 +651,14 @@ describe('Streaming API', () => {
   });
 
   it('should allow custom streaming headers to override OpenAI defaults', async () => {
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream([
-        'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n',
-        'data: [DONE]\n\n',
-      ]),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        createMockSSEStream([
+          'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      ),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: {
@@ -695,13 +684,13 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(sseChunks), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -729,13 +718,13 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(sseChunks), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -759,13 +748,13 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(sseChunks), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true, showThinking: true },
@@ -784,13 +773,13 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(sseChunks), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true, passthrough: { n: 2 } },
@@ -823,13 +812,13 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'x-request-id': 'stream-123' }),
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(sseChunks), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'x-request-id': 'stream-123' }),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -859,10 +848,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -885,10 +871,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25C');
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -915,10 +898,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -943,13 +923,13 @@ describe('Streaming API', () => {
   });
 
   it('should handle streaming API error response', async () => {
-    mockFetchWithRetries.mockResolvedValue({
-      ok: false,
-      status: 429,
-      statusText: 'Too Many Requests',
-      headers: new Headers({ 'retry-after': '60' }),
-      body: createMockSSEStream(['Rate limit exceeded']),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(['Rate limit exceeded']), {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers({ 'retry-after': '60' }),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -966,13 +946,13 @@ describe('Streaming API', () => {
   });
 
   it('should preserve invalid_prompt refusals returned before streaming begins', async () => {
-    mockFetchWithRetries.mockResolvedValue({
-      ok: false,
-      status: 400,
-      statusText: 'Bad Request',
-      headers: new Headers(),
-      body: createMockSSEStream(['{"error":{"code":"invalid_prompt"}}']),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(createMockSSEStream(['{"error":{"code":"invalid_prompt"}}']), {
+        status: 400,
+        statusText: 'Bad Request',
+        headers: new Headers(),
+      }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1010,13 +990,9 @@ describe('Streaming API', () => {
   });
 
   it('should handle streaming with missing response body', async () => {
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: null,
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(null, { status: 200, statusText: 'OK', headers: new Headers() }),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1034,10 +1010,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: {
@@ -1071,10 +1044,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1094,10 +1064,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1118,10 +1085,7 @@ describe('Streaming API', () => {
       'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1139,10 +1103,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1161,10 +1122,7 @@ describe('Streaming API', () => {
       'data:[DONE]',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1190,10 +1148,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1210,10 +1165,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1241,10 +1193,7 @@ describe('Streaming API', () => {
   it('should preserve stream_options passthrough values while requesting usage', async () => {
     const sseChunks = ['data: {"choices":[{"delta":{"content":"Test"}}]}\n\n', 'data: [DONE]\n\n'];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: {
@@ -1277,17 +1226,20 @@ describe('Streaming API', () => {
 
   it('should preserve HTTP metadata when a stream reader fails', async () => {
     const streamError = new Error('Stream interrupted');
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'x-request-id': 'stream-failed' }),
-      body: new ReadableStream({
-        start(controller) {
-          controller.error(streamError);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(streamError);
+          },
+        }),
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'x-request-id': 'stream-failed' }),
         },
-      }),
-    } as unknown as Response);
+      ),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1311,10 +1263,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1343,10 +1292,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1364,10 +1310,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1388,10 +1331,7 @@ describe('Streaming API', () => {
     ];
 
     for (const stream of malformedStreams) {
-      mockFetchWithRetries.mockResolvedValueOnce({
-        ok: true,
-        body: createMockSSEStream([stream]),
-      } as unknown as Response);
+      mockFetchWithRetries.mockResolvedValueOnce(new Response(createMockSSEStream([stream])));
 
       const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
       expect(result.error).toContain('API returned malformed SSE data during streaming request');
@@ -1399,13 +1339,12 @@ describe('Streaming API', () => {
   });
 
   it('should reject an incomplete stream instead of returning or caching partial output', async () => {
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: createMockSSEStream(['data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n']),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        createMockSSEStream(['data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n']),
+        { status: 200, statusText: 'OK', headers: new Headers() },
+      ),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1418,16 +1357,15 @@ describe('Streaming API', () => {
   });
 
   it('should reject a stream that closes after finish_reason but before DONE', async () => {
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      body: createMockSSEStream([
-        'data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}\n\n',
-      ]),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        createMockSSEStream([
+          'data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}\n\n',
+        ]),
+        { status: 200, statusText: 'OK', headers: new Headers() },
+      ),
+    );
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { stream: true },
@@ -1446,10 +1384,7 @@ describe('Streaming API', () => {
       'data: [DONE]\n\n',
     ];
 
-    mockFetchWithRetries.mockResolvedValue({
-      ok: true,
-      body: createMockSSEStream(sseChunks),
-    } as unknown as Response);
+    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: {
@@ -1476,13 +1411,12 @@ describe('Streaming API', () => {
 
   it('should fetch again instead of persisting streaming responses in the response cache', async () => {
     const buildResponse = (content: string) =>
-      ({
-        ok: true,
-        body: createMockSSEStream([
+      new Response(
+        createMockSSEStream([
           `data: {"choices":[{"delta":{"content":"${content}"},"finish_reason":"stop"}]}\n\n`,
           'data: [DONE]\n\n',
         ]),
-      }) as unknown as Response;
+      );
     mockFetchWithRetries
       .mockResolvedValueOnce(buildResponse('First response'))
       .mockResolvedValueOnce(buildResponse('Second response'));
@@ -1500,6 +1434,5 @@ describe('Streaming API', () => {
     expect(first.output).toBe('First response');
     expect(second.output).toBe('Second response');
     expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-    expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 });

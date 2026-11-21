@@ -4,7 +4,7 @@ import { cn } from '@app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const chipVariants = cva(
-  'inline-flex items-center h-8 border border-input rounded-md overflow-hidden bg-white dark:bg-zinc-900 transition-colors no-underline',
+  'inline-flex max-w-full items-center h-7 rounded-md overflow-hidden bg-transparent transition-colors no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
   {
     variants: {
       interactive: {
@@ -46,14 +46,14 @@ function Chip({
 
   const inner = (
     <>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2.5 self-stretch inline-flex items-center bg-muted/50 dark:bg-muted/30">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground pl-1 pr-1.5 self-stretch inline-flex items-center shrink-0">
         {label}
       </span>
-      <span className="text-xs font-medium px-2.5 self-stretch inline-flex items-center border-l border-input select-text">
+      <span className="text-xs font-medium pr-1 self-stretch inline-flex items-center min-w-0 truncate select-text">
         {children}
       </span>
       {trailingIcon && (
-        <span className="px-2 shrink-0 self-stretch inline-flex items-center">{trailingIcon}</span>
+        <span className="px-1 shrink-0 self-stretch inline-flex items-center">{trailingIcon}</span>
       )}
     </>
   );

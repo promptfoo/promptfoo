@@ -220,6 +220,7 @@ export async function monkeyPatchFetch(
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
   const {
+    readBody,
     restrictCloudAuthRedirects: restrictRedirects,
     ...opts
   }: FetchOptions & {
@@ -271,7 +272,8 @@ export async function monkeyPatchFetch(
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
     const response = await fetch(url, opts);
 
-    if (logEnabled) {
+    // A clone can buffer an entire live stream and alter measured chunk timing.
+    if (logEnabled && !readBody) {
       void logRequestResponse({
         url: urlString,
         requestBody: originalBody,

@@ -289,11 +289,6 @@
   background: rgba(12, 20, 25, 0.8);
 }
 
-.cardIcon {
-  font-size: 2rem;
-  margin-bottom: 1rem;
-}
-
 .cardIconSvg {
   width: 2.5rem;
   height: 2.5rem;
@@ -429,10 +424,6 @@
   .raindrop {
     animation: none;
   }
-
-  .countdownSeparator {
-    animation: none;
-  }
 }
 
 /* Responsive */
@@ -451,23 +442,6 @@
 
   .heroSubtitle {
     font-size: 1.1rem;
-  }
-
-  .countdown {
-    gap: 0.25rem;
-  }
-
-  .countdownItem {
-    min-width: 60px;
-    padding: 0.75rem;
-  }
-
-  .countdownNumber {
-    font-size: 1.5rem;
-  }
-
-  .countdownSeparator {
-    font-size: 1.5rem;
   }
 
   .eventDetails {

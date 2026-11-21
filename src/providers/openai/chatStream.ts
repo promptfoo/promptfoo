@@ -19,9 +19,15 @@ function validateUsage(usage: OpenAiStreamingUsage): void {
     'total_tokens',
     'audio_prompt_tokens',
     'audio_completion_tokens',
+    'cache_read_input_tokens',
+    'cache_creation_input_tokens',
   ]);
   if (usage.prompt_tokens_details != null) {
-    validateTokenCounts(usage.prompt_tokens_details, ['cached_tokens', 'audio_tokens']);
+    validateTokenCounts(usage.prompt_tokens_details, [
+      'cached_tokens',
+      'cache_write_tokens',
+      'audio_tokens',
+    ]);
   }
   if (usage.completion_tokens_details != null) {
     validateTokenCounts(usage.completion_tokens_details, [
@@ -84,7 +90,6 @@ type OpenAiStreamingChoice = {
 type OpenAiStreamingState = {
   choices: Map<number, OpenAiStreamingChoice>;
   usage?: OpenAiStreamingUsage;
-  serviceTier?: string | null;
   error?: unknown;
   completed: boolean;
   malformed: boolean;
@@ -219,6 +224,9 @@ function appendStreamingChoice(
     throw new Error('Invalid streaming delta');
   }
   const streamingChoice = getOpenAiStreamingChoice(state, choice.index ?? 0);
+  if (streamingChoice.finishReason && choice.error == null) {
+    throw new Error('Streaming choice received after completion');
+  }
   if (choice.delta?.content != null) {
     streamingChoice.content = appendText(streamingChoice.content ?? '', choice.delta.content);
   }
@@ -293,11 +301,11 @@ function processOpenAiStreamingChunk(
       validateUsage(chunk.usage);
       state.usage = chunk.usage;
     }
+    if (chunk.service_tier != null && typeof chunk.service_tier !== 'string') {
+      throw new Error('Invalid service tier');
+    }
     const { choices: _choices, usage: _usage, error: _error, ...metadata } = chunk;
     Object.assign(state.response, metadata);
-    if (chunk.service_tier !== undefined) {
-      state.serviceTier = chunk.service_tier;
-    }
     if (state.error != null || chunk.choices?.some((choice) => choice?.error != null)) {
       return true;
     }
@@ -322,6 +330,9 @@ function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): bool
     return false;
   }
 
+  if (dataLines.length === 1) {
+    return processOpenAiStreamingChunk(state, dataLines[0], errorEvent);
+  }
   const joinedData = dataLines.join('\n');
   try {
     if (joinedData !== '[DONE]') {
@@ -329,31 +340,12 @@ function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): bool
     }
     return processOpenAiStreamingChunk(state, joinedData, errorEvent);
   } catch {
-    // Some OpenAI-compatible proxies omit blank event separators and emit each
-    // data line as an independent JSON chunk. Preserve that compatibility only
-    // when every line is independently valid; otherwise fail closed below.
-    const independentlyValid = dataLines.every((data) => {
-      if (data === '[DONE]') {
-        return true;
-      }
-      try {
-        JSON.parse(data);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-    if (independentlyValid && dataLines.length > 1) {
-      return dataLines.some((data) => processOpenAiStreamingChunk(state, data, errorEvent));
-    }
-    return processOpenAiStreamingChunk(state, joinedData, errorEvent);
+    // Some proxies emit one JSON chunk per line and omit the event separator.
+    return dataLines.some((data) => processOpenAiStreamingChunk(state, data, errorEvent));
   }
 }
 
-export async function readOpenAiChatStream(
-  response: Response,
-  abortRequest: () => void,
-): Promise<OpenAI.ChatCompletion> {
+export async function readOpenAiChatStream(response: Response): Promise<OpenAI.ChatCompletion> {
   if (!response.body) {
     throw new Error('No response body for streaming request');
   }
@@ -423,7 +415,6 @@ export async function readOpenAiChatStream(
       ...state.response,
       ...(state.error != null && { error: state.error }),
       usage: state.usage,
-      service_tier: state.serviceTier,
       choices: [...state.choices.values()]
         .sort((a, b) => a.index - b.index)
         .map((choice) => ({
@@ -446,8 +437,7 @@ export async function readOpenAiChatStream(
         })),
     } as OpenAI.ChatCompletion;
   } finally {
-    abortRequest();
-    await reader.cancel().catch(() => undefined);
+    void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
