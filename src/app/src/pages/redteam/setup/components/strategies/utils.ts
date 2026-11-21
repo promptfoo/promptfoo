@@ -1,6 +1,6 @@
 import { normalizeRedteamConfigForPreview } from '@promptfoo/presentation/redteamConfig';
 import { REDTEAM_DEFAULTS, STRATEGY_COLLECTION_MAPPINGS } from '@promptfoo/redteam/constants';
-import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
+import { getLayerVariantCount, isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -167,26 +167,9 @@ export function getEstimatedProbes(config: Config) {
 
     const configuredBijectionVariants =
       strategyId === 'bijection' && typeof strategy === 'object' ? strategy.config?.n : undefined;
-    const layerSteps =
-      strategyId === 'layer' &&
-      typeof strategy === 'object' &&
-      Array.isArray(strategy.config?.steps)
-        ? strategy.config.steps
-        : [];
-    const attackIndex = layerSteps.findIndex((step) => isAttackProvider(getStrategyId(step)));
-    const layerBijectionVariants =
-      layerSteps.length > 0
-        ? layerSteps.slice(0, attackIndex < 0 ? undefined : attackIndex).reduce((count, step) => {
-            const config =
-              typeof step === 'object' && step.id === 'bijection' ? step.config : undefined;
-            return typeof config?.n === 'number' && Number.isInteger(config.n) && config.n > 0
-              ? count * config.n
-              : count;
-          }, 1)
-        : undefined;
     const multiplier =
-      typeof layerBijectionVariants === 'number'
-        ? layerBijectionVariants
+      strategyId === 'layer' && typeof strategy === 'object'
+        ? getLayerVariantCount(strategy.config?.steps)
         : typeof configuredBijectionVariants === 'number' &&
             Number.isInteger(configuredBijectionVariants) &&
             configuredBijectionVariants >= 1 &&

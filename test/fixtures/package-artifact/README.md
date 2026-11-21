@@ -18,6 +18,26 @@ and web assets. Evaluations cover success, assertion failure, and provider error
 with caching disabled and isolated configuration paths. CommonJS also checks
 writable exports and Zod constructor identity.
 
+Both profiles check that `jks-js` and `node-forge` are absent from the default
+consumer, ordinary HTTP and PEM signing/mutual TLS still work, and JKS signing
+reports how to install the optional package. The default profile then installs real
+`jks-js` and verifies a signature from a traditional JKS store against a loopback
+server, in both ESM and CommonJS.
+
+`jks-test-identity.json` contains a **public, test-only private key**, certificate, and
+traditional JKS store with alias `fixture` and password `test-only-password`.
+Never use this identity outside tests. It was generated with this command, then
+converted to PEM with `jks-js.toPem`; the JKS bytes are stored as base64. Its
+long-lived certificate avoids clock-dependent fixture failures. CI does not need Java.
+
+```sh
+keytool -genkeypair -alias fixture -keyalg RSA -keysize 2048 -sigalg SHA256withRSA \
+  -storetype JKS -storepass test-only-password -keypass test-only-password \
+  -dname CN=localhost -startdate '2020/01/01 00:00:00' -validity 36500 \
+  -ext SAN=ip:127.0.0.1,dns:localhost -ext EKU=serverAuth,clientAuth \
+  -ext KU=digitalSignature,keyEncipherment,keyCertSign -ext BC=ca:true -keystore identity.jks
+```
+
 Both profiles check that Slack stays opt-in and rejects an incompatible SDK without
 affecting ordinary providers, in ESM and CommonJS. The default profile also installs
 the supported Slack SDK and constructs providers without making Slack requests.

@@ -16,7 +16,7 @@ function isAttackableTextInput(definition: unknown): boolean {
   if (typeof definition === 'string') {
     return true;
   }
-  if (!definition || typeof definition !== 'object') {
+  if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
     return false;
   }
   const input = definition as { type?: unknown; config?: { benign?: boolean } };
@@ -235,13 +235,11 @@ export function transformStrategyInput(
   const originalText = String(testCase.vars?.[injectVar]);
   const inputs = testCase.metadata?.pluginConfig?.inputs;
 
-  if (
-    injectVar !== MULTI_INPUT_VAR ||
-    !inputs ||
-    typeof inputs !== 'object' ||
-    Array.isArray(inputs)
-  ) {
+  if (injectVar !== MULTI_INPUT_VAR) {
     return transform(originalText);
+  }
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) {
+    throw new Error(`${strategy} strategy requires multi-input field definitions`);
   }
 
   let parsed: unknown;
@@ -255,29 +253,28 @@ export function transformStrategyInput(
     throw new Error(`${strategy} strategy requires a valid multi-input JSON object`);
   }
 
-  const definitions = inputs as Record<string, unknown>;
   const envelope = parsed as Record<string, unknown>;
-  for (const [key, definition] of Object.entries(definitions)) {
-    if (
-      isAttackableTextInput(definition) &&
-      typeof testCase.vars?.[key] === 'string' &&
-      (!Object.prototype.hasOwnProperty.call(envelope, key) || typeof envelope[key] !== 'string')
-    ) {
-      throw new Error(`${strategy} strategy requires every attackable multi-input field as text`);
+  const fields = [];
+  for (const [key, definition] of Object.entries(inputs)) {
+    if (!isAttackableTextInput(definition)) {
+      continue;
+    }
+    if (!Object.hasOwn(envelope, key)) {
+      throw new Error(`${strategy} strategy requires all declared multi-input fields`);
+    }
+    // Materialization can stringify numeric companions. The original JSON
+    // value determines whether a declared field contains text.
+    if (typeof envelope[key] === 'string') {
+      fields.push(key);
     }
   }
-
-  return JSON.stringify(
-    Object.fromEntries(
-      Object.entries(envelope).map(([key, value]) => {
-        const definition = definitions[key];
-        return [
-          key,
-          isAttackableTextInput(definition) && typeof value === 'string' ? transform(value) : value,
-        ];
-      }),
-    ),
-  );
+  if (fields.length === 0) {
+    throw new Error(`${strategy} strategy requires a declared multi-input text field`);
+  }
+  for (const key of fields) {
+    envelope[key] = transform(envelope[key] as string);
+  }
+  return JSON.stringify(envelope);
 }
 
 export function addTextMutation(

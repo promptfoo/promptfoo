@@ -48,6 +48,7 @@ import {
   remoteGenerationContextPayload,
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
+import { getLayerVariantCount } from './shared/attackProviders';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
@@ -791,13 +792,12 @@ async function applyStrategies(
         .filter((lang): lang is string => lang !== undefined),
     );
 
-    // Helper to apply numTests cap to requested count (with defensive check for NaN/Infinity)
-    const applyNumTestsCap = (calculatedRequested: number): number => {
-      const numTestsCap = strategy.config?.numTests;
-      if (typeof numTestsCap === 'number' && Number.isFinite(numTestsCap) && numTestsCap >= 0) {
-        return Math.min(calculatedRequested, numTestsCap);
+    const requested = (applicable: number) => {
+      if (strategy.id === 'retry') {
+        // The report includes only new tests. The overall total also includes the originals.
+        return Math.min(applicable, getTestCount(strategy, applicable, strategies) - applicable);
       }
-      return calculatedRequested;
+      return getTestCount(strategy, applicable, strategies);
     };
 
     if (languagesInResults.size > 1) {
@@ -811,15 +811,8 @@ async function applyStrategies(
           (t) => getLanguageForTestCase(t) === lang,
         );
 
-        let n = 1;
-        if (typeof strategy.config?.n === 'number') {
-          n = strategy.config.n;
-        } else if (isFanoutStrategy(strategy.id)) {
-          n = getDefaultNFanout(strategy.id);
-        }
-
         resultsByLanguage[lang] = {
-          requested: applyNumTestsCap(applicableForLang.length * n),
+          requested: requested(applicableForLang.length),
           generated: testsForLang.length,
         };
       }
@@ -828,23 +821,9 @@ async function applyStrategies(
         const strategyDisplayId = lang === 'en' ? displayId : `${displayId} (${lang})`;
         recordStrategyResult(strategyDisplayId, result);
       }
-    } else if (strategy.id === 'layer') {
-      // Layer strategy: requested count is same as applicable test cases
-      recordStrategyResult(displayId, {
-        requested: applyNumTestsCap(applicableTestCases.length),
-        generated: resultTestCases.length,
-      });
     } else {
-      // get an accurate 'Requested' count for strategies that add additional tests during generation
-      let n = 1;
-      if (typeof strategy.config?.n === 'number') {
-        n = strategy.config.n;
-      } else if (isFanoutStrategy(strategy.id)) {
-        n = getDefaultNFanout(strategy.id);
-      }
-
       recordStrategyResult(displayId, {
-        requested: applyNumTestsCap(applicableTestCases.length * n),
+        requested: requested(applicableTestCases.length),
         generated: resultTestCases.length,
       });
     }
@@ -871,9 +850,7 @@ export function getTestCount(
   if (strategy.id === 'basic') {
     count = strategy.config?.enabled === false ? 0 : totalPluginTests;
   } else if (strategy.id === 'layer') {
-    // Layer strategy: returns the same count as plugin tests
-    // (plugins already account for language multipliers)
-    count = totalPluginTests;
+    count = totalPluginTests * getLayerVariantCount(strategy.config?.steps);
   } else if (strategy.id === 'retry') {
     // Retry strategy has its own numTests handling (additive semantics)
     const configuredNumTests = strategy.config?.numTests as number | undefined;
@@ -897,6 +874,22 @@ export function getTestCount(
   }
 
   return count;
+}
+
+function getScopedTestCount(
+  strategy: RedteamStrategyObject,
+  plugins: SynthesizeOptions['plugins'],
+  language?: string | string[],
+): number {
+  const eligible = plugins.filter((plugin) =>
+    pluginMatchesStrategyTargets(
+      { metadata: { pluginId: plugin.id, pluginConfig: plugin.config } },
+      strategy.id,
+      strategy.config?.plugins,
+    ),
+  );
+  const sourceCount = eligible.reduce((sum, p) => sum + getExpectedPluginTestCount(p, language), 0);
+  return getTestCount(strategy, sourceCount, []);
 }
 
 /**
@@ -957,7 +950,7 @@ export function calculateTotalTests(
       continue;
     }
     // Add the tests from this strategy to the total, not replace the total
-    totalTests += getTestCount(strategy, totalPluginTests, strategies);
+    totalTests += getScopedTestCount(strategy, plugins, language);
   }
 
   return {
@@ -1127,93 +1120,6 @@ export async function synthesize({
     provider: redteamProvider,
   };
 
-  const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
-    calculateTotalTests(plugins, strategies, language);
-
-  logger.info(
-    `Synthesizing test cases for ${prompts.length} ${
-      prompts.length === 1 ? 'prompt' : 'prompts'
-    }...\nUsing plugins:\n\n${chalk.yellow(
-      plugins
-        .map((p) => {
-          // Calculate actual test count accounting for multiple languages
-          const actualTestCount = getExpectedPluginTestCount(p, language);
-          // Build a concise display string for the plugin
-          let configSummary = '';
-          if (p.config) {
-            if (p.id === 'policy') {
-              const policy = p.config?.policy as Policy;
-              if (isValidPolicyObject(policy)) {
-                const policyText = policy.text!.trim().replace(/\n+/g, ' ');
-                const truncated =
-                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-                if (policy.name) {
-                  configSummary = ` ${policy.name}:`;
-                }
-                configSummary += ` "${truncated}"`;
-              } else {
-                const policyText = policy.trim().replace(/\n+/g, ' ');
-                const truncated =
-                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-                configSummary = truncated;
-              }
-            } else {
-              // For other plugins with config, just indicate config exists
-              configSummary = ' (custom config)';
-            }
-            logger.debug('Plugin config', {
-              pluginId: p.id,
-              configKeyCount: Object.keys(p.config).length,
-            });
-          }
-          return `${p.id} (${formatTestCount(actualTestCount, false)})${configSummary}`;
-        })
-        .sort()
-        .join('\n'),
-    )}\n`,
-  );
-  if (strategies.length > 0) {
-    logger.info(
-      `Using strategies:\n\n${chalk.yellow(
-        strategies
-          .filter((s) => !['basic', 'retry'].includes(s.id))
-          .map((s) => {
-            // Apply fan-out multiplier if this is a fan-out strategy
-            let n = 1;
-            if (typeof s.config?.n === 'number') {
-              n = s.config.n;
-            } else if (isFanoutStrategy(s.id)) {
-              n = getDefaultNFanout(s.id);
-            }
-            // For non-basic strategies, we want to show the additional tests they generate
-            let testCount = totalPluginTests * n;
-            // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
-            const numTestsCap = s.config?.numTests;
-            if (
-              typeof numTestsCap === 'number' &&
-              Number.isFinite(numTestsCap) &&
-              numTestsCap >= 0
-            ) {
-              testCount = Math.min(testCount, numTestsCap);
-            }
-            return `${s.id} (${formatTestCount(testCount, true)})`;
-          })
-          .sort()
-          .join('\n'),
-      )}\n`,
-    );
-  }
-
-  logger.info(
-    chalk.bold(`Test Generation Summary:`) +
-      `\n• Total tests: ${chalk.cyan(totalTests)}` +
-      `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
-      `\n• Plugins: ${chalk.cyan(plugins.length)}` +
-      `\n• Strategies: ${chalk.cyan(effectiveStrategyCount)}` +
-      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
-      (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
-  );
-
   // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
   const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
   if (hasMultipleInputs) {
@@ -1379,6 +1285,76 @@ export async function synthesize({
     seen.add(key);
     return true;
   });
+
+  const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
+    calculateTotalTests(plugins, strategies, language);
+
+  logger.info(
+    `Synthesizing test cases for ${prompts.length} ${
+      prompts.length === 1 ? 'prompt' : 'prompts'
+    }...\nUsing plugins:\n\n${chalk.yellow(
+      plugins
+        .map((p) => {
+          // Calculate actual test count accounting for multiple languages
+          const actualTestCount = getExpectedPluginTestCount(p, language);
+          // Build a concise display string for the plugin
+          let configSummary = '';
+          if (p.config) {
+            if (p.id === 'policy') {
+              const policy = p.config?.policy as Policy;
+              if (isValidPolicyObject(policy)) {
+                const policyText = policy.text!.trim().replace(/\n+/g, ' ');
+                const truncated =
+                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+                if (policy.name) {
+                  configSummary = ` ${policy.name}:`;
+                }
+                configSummary += ` "${truncated}"`;
+              } else {
+                const policyText = policy.trim().replace(/\n+/g, ' ');
+                const truncated =
+                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
+                configSummary = truncated;
+              }
+            } else {
+              // For other plugins with config, just indicate config exists
+              configSummary = ' (custom config)';
+            }
+            logger.debug('Plugin config', {
+              pluginId: p.id,
+              configKeyCount: Object.keys(p.config).length,
+            });
+          }
+          return `${p.id} (${formatTestCount(actualTestCount, false)})${configSummary}`;
+        })
+        .sort()
+        .join('\n'),
+    )}\n`,
+  );
+  if (strategies.length > 0) {
+    logger.info(
+      `Using strategies:\n\n${chalk.yellow(
+        strategies
+          .filter((s) => !['basic', 'retry'].includes(s.id))
+          .map((s) => {
+            const testCount = getScopedTestCount(s, plugins, language);
+            return `${s.id} (${formatTestCount(testCount, true)})`;
+          })
+          .sort()
+          .join('\n'),
+      )}\n`,
+    );
+  }
+
+  logger.info(
+    chalk.bold(`Test Generation Summary:`) +
+      `\n• Total tests: ${chalk.cyan(totalTests)}` +
+      `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
+      `\n• Plugins: ${chalk.cyan(plugins.length)}` +
+      `\n• Strategies: ${chalk.cyan(effectiveStrategyCount)}` +
+      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
+      (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
+  );
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {

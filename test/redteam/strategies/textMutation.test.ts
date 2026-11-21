@@ -1,8 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { TEXT_MUTATION_STRATEGIES } from '../../../src/redteam/constants/strategies';
-import { addTextMutation, mutateText } from '../../../src/redteam/strategies/textMutation';
+import {
+  addTextMutation,
+  mutateText,
+  transformStrategyInput,
+} from '../../../src/redteam/strategies/textMutation';
 
 import type { TestCaseWithPlugin } from '../../../src/types/index';
+
+describe('multi-input ownership', () => {
+  const original = { label: 'sample', count: 3, source: 'local' };
+  const vars = { __prompt: JSON.stringify(original), count: '3' };
+
+  it('rejects missing definitions before calling a transform', () => {
+    const testCase = { vars, metadata: { pluginId: 'fixture' } };
+    expect(() =>
+      transformStrategyInput(testCase, '__prompt', 'identity', () => {
+        throw new Error('Unexpected transform');
+      }),
+    ).toThrow(/requires multi-input field definitions/);
+  });
+
+  it('preserves protected and materialized numeric companions', () => {
+    const inputs = {
+      label: 'Label',
+      count: 'Count',
+      source: { description: 'Source', config: { benign: true } },
+    };
+    const row = { vars, metadata: { pluginId: 'fixture', pluginConfig: { inputs } } };
+    expect(JSON.parse(transformStrategyInput(row, '__prompt', 'fixture', () => 'checked'))).toEqual(
+      { ...original, label: 'checked' },
+    );
+  });
+});
 
 describe('text mutation strategies', () => {
   it.each(TEXT_MUTATION_STRATEGIES)('mutates eligible input with %s', (strategy) => {
