@@ -1,12 +1,14 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 const NOVITA_API_BASE_URL = 'https://api.novita.ai/openai/v1';
 const NOVITA_API_KEY_ENV_VAR = 'NOVITA_API_KEY';
@@ -18,16 +20,8 @@ type NovitaProviderOptions = {
   env?: EnvOverrides;
 };
 
-function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
-
 function getNovitaApiKey(
-  config: OpenAiCompletionOptions,
+  config: OpenAiSharedOptions,
   env: EnvOverrides | undefined,
 ): string | undefined {
   if (config.apiKey !== undefined) {
@@ -49,7 +43,7 @@ function getNovitaConfig(
   };
 }
 
-function getNovitaMissingApiKeyErrorMessage(config: OpenAiCompletionOptions): string {
+function getNovitaMissingApiKeyErrorMessage(config: OpenAiSharedOptions): string {
   return `Novita API key is not set. Set the ${config.apiKeyEnvar ?? NOVITA_API_KEY_ENV_VAR} environment variable or add \`apiKey\` to the provider config.`;
 }
 
@@ -144,8 +138,9 @@ export class NovitaEmbeddingProvider extends OpenAiEmbeddingProvider {
 
 export function createNovitaProvider(
   providerPath: string,
-  options: { config?: ProviderOptions; id?: string; env?: EnvOverrides } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
   const type = splits[1];
   const isTypedProvider = NOVITA_SUBTYPES.has(type);
@@ -171,9 +166,10 @@ export function createNovitaProvider(
   }
 
   const novitaOptions: NovitaProviderOptions = {
-    id: options.id ?? options.config?.id,
-    env: options.env ?? options.config?.env,
-    config: (options.config?.config ?? {}) as OpenAiCompletionOptions,
+    ...providerOptions,
+    // Legacy callers select the outer environment as a whole when present.
+    env: options.providerOptions ? providerOptions.env : (options.env ?? options.config?.env),
+    config: (providerOptions.config ?? {}) as OpenAiCompletionOptions,
   };
 
   if (type === 'chat') {

@@ -114,6 +114,35 @@ describe('generation provider cleanup ownership', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it('bounds cancellation when the only active call ignores its signal', async () => {
+    vi.useFakeTimers();
+    const started = createDeferred<void>();
+    const release = createDeferred<void>();
+    const controller = new AbortController();
+    const cleanup = vi.fn();
+    const call = vi.fn(() => {
+      started.resolve();
+      return release.promise;
+    });
+    const result = synthesize({
+      ...options,
+      abortSignal: controller.signal,
+      provider: providerOptions({ cleanup, call }),
+    }).catch((error: unknown) => error);
+    try {
+      await started.promise;
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await result).toMatchObject({ message: 'Operation cancelled' });
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      release.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      vi.useRealTimers();
+    }
+    expect(call).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['plugin', 'during drain'],
     ['plugin', 'after drain timeout'],

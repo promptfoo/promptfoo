@@ -16,10 +16,8 @@ type ScanOutcome =
 function createMockAgentClient(outcomes: ScanOutcome[]) {
   let completeHandler: ((response: ScanResponse) => void) | undefined;
   let errorHandler: ((error: { type: string; message: string }) => void) | undefined;
-  let cancelledHandler: (() => void) | undefined;
 
   const client = {
-    sessionId: 'test-session',
     start: vi.fn(() => {
       const outcome = outcomes.shift();
 
@@ -43,12 +41,7 @@ function createMockAgentClient(outcomes: ScanOutcome[]) {
     onError: vi.fn((handler: (error: { type: string; message: string }) => void) => {
       errorHandler = handler;
     }),
-    onCancelled: vi.fn((handler: () => void) => {
-      cancelledHandler = handler;
-    }),
-    on: vi.fn(),
-    emit: vi.fn(),
-    disconnect: vi.fn(),
+    onCancelled: vi.fn(),
     socket: {
       io: {
         once: vi.fn(),
@@ -57,10 +50,7 @@ function createMockAgentClient(outcomes: ScanOutcome[]) {
     },
   } as unknown as AgentClient;
 
-  return {
-    client,
-    cancelledHandler: () => cancelledHandler,
-  };
+  return client;
 }
 
 const scanRequest = {
@@ -75,7 +65,6 @@ const scanResponse: ScanResponse = {
 
 function createExecutionOptions() {
   return {
-    showSpinner: false,
     abortController: new AbortController(),
   };
 }
@@ -91,7 +80,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('retries once when the remote scanner times out waiting for MCP repository access', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
       { type: 'complete', response: scanResponse },
     ]);
@@ -105,7 +94,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('stops after one retry for repeated MCP repository access timeouts', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
       { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
       { type: 'complete', response: scanResponse },
@@ -120,7 +109,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('continues to use the longer retry budget for server capacity errors', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Server at capacity. Please retry.' },
       { type: 'error', message: 'Server at capacity. Please retry.' },
       { type: 'complete', response: scanResponse },
@@ -135,7 +124,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('succeeds on first attempt without retrying', async () => {
-    const { client } = createMockAgentClient([{ type: 'complete', response: scanResponse }]);
+    const client = createMockAgentClient([{ type: 'complete', response: scanResponse }]);
 
     await expect(
       executeScanRequestWithRetry(client, scanRequest, createExecutionOptions()),
@@ -146,7 +135,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('enforces MCP timeout budget independently when preceded by capacity errors', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Server at capacity. Please retry.' },
       { type: 'error', message: 'Server at capacity. Please retry.' },
       { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
@@ -165,7 +154,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('enforces capacity budget independently when preceded by MCP timeout', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
       { type: 'error', message: 'Server at capacity. Please retry.' },
       { type: 'complete', response: scanResponse },
@@ -181,7 +170,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('can succeed after mixed transient failures exceed one policy total', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
       { type: 'error', message: 'Server at capacity. Please retry.' },
       { type: 'error', message: 'Server at capacity. Please retry.' },
@@ -201,7 +190,7 @@ describe('executeScanRequestWithRetry', () => {
   });
 
   it('does not retry non-transient scanner errors', async () => {
-    const { client } = createMockAgentClient([
+    const client = createMockAgentClient([
       { type: 'error', message: 'Invalid scan request' },
       { type: 'complete', response: scanResponse },
     ]);

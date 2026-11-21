@@ -214,13 +214,18 @@ describe('provider cleanup ownership', () => {
       const pending = providerRegistry.shutdown(provider);
       try {
         expect(providerRegistry.has(provider)).toBe(false);
-        await providerRegistry.shutdown(provider);
+        const settled = vi.fn();
+        const second = providerRegistry.shutdown(provider).then(settled);
+        const all = providerRegistry.shutdownAll().then(settled);
+        await Promise.resolve();
+        expect(settled).not.toHaveBeenCalled();
         expect(provider.shutdown).toHaveBeenCalledOnce();
         if (reregister) {
           providerRegistry.register(provider);
         }
         release.resolve();
-        await pending;
+        await Promise.all([pending, second, all]);
+        expect(settled).toHaveBeenCalledTimes(2);
         expect(providerRegistry.has(provider)).toBe(reregister);
 
         await providerRegistry.shutdownAll();

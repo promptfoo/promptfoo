@@ -4,7 +4,6 @@ interface QueuedRequest {
   id: string;
   resolve: () => void;
   reject: (error: unknown) => void;
-  queuedAt: number;
 }
 
 export interface SlotQueueOptions {
@@ -53,62 +52,58 @@ export class SlotQueue {
 
   /**
    * Acquire a slot. All requests go through the queue to prevent race conditions.
-   * Returns when a slot is available and quota is not exhausted.
+   * Returns when a slot is available and quota is not exhausted. An aborted signal stops
+   * the request from waiting, but a slot that is free immediately is still granted.
    */
-  async acquire(requestId: string, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
+  async acquire(requestId: string, abortSignal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-      const queuedAt = Date.now();
-      let timeoutId: NodeJS.Timeout | null = null;
-
+      let timeoutId: NodeJS.Timeout | undefined;
       const cleanup = () => {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
-        signal?.removeEventListener('abort', onAbort);
+        abortSignal?.removeEventListener('abort', onAbort);
       };
-
-      const wrappedResolve = () => {
-        cleanup();
-        this.activeCount++;
-        this.onSlotAcquired?.(this.waiting.length);
-        resolve();
-      };
-
-      const wrappedReject = (error: unknown) => {
-        cleanup();
-        reject(error);
-      };
-
-      const request: QueuedRequest = {
-        id: requestId,
-        resolve: wrappedResolve,
-        reject: wrappedReject,
-        queuedAt,
-      };
-      const removeRequest = (error: unknown) => {
+      const removeAndReject = (error: unknown) => {
         const index = this.waiting.indexOf(request);
         if (index !== -1) {
           this.waiting.splice(index, 1);
-          wrappedReject(error);
-          // Cancel the quota reset timer when no requests remain waiting.
-          this.scheduleResetProcessing();
+          request.reject(error);
+          this.processQueue();
         }
       };
-      const onAbort = () => removeRequest(signal?.reason);
+      const onAbort = () => removeAndReject(abortSignal?.reason);
+      const request: QueuedRequest = {
+        id: requestId,
+        resolve: () => {
+          cleanup();
+          this.activeCount++;
+          this.onSlotAcquired?.(this.waiting.length);
+          resolve();
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      };
 
       if (this.queueTimeoutMs > 0) {
-        timeoutId = setTimeout(() => {
-          removeRequest(
-            new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
-          );
-        }, this.queueTimeoutMs);
+        timeoutId = setTimeout(
+          () =>
+            removeAndReject(
+              new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
+            ),
+          this.queueTimeoutMs,
+        );
       }
-      signal?.addEventListener('abort', onAbort, { once: true });
       this.waiting.push(request);
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
 
       // Immediately try to process queue (synchronous, no race)
       this.processQueue();
+      if (abortSignal?.aborted) {
+        onAbort();
+      }
     });
   }
 
@@ -150,20 +145,20 @@ export class SlotQueue {
   /**
    * Mark that a rate limit was hit.
    * Only updates resetAt if we don't already have a later reset time.
+   * A selected absolute deadline takes precedence over a relative retry delay.
    */
-  markRateLimited(retryAfterMs?: number): void {
+  markRateLimited(retryAfterMs?: number, selectedResetAt?: number): void {
     this.remainingRequests = 0;
     this.remainingTokens = 0;
 
-    // Only update resetAt if:
-    // 1. We have a retryAfterMs >= 0, OR
-    // 2. We don't have an existing resetAt
-    if (retryAfterMs !== undefined && retryAfterMs >= 0) {
-      // retryAfterMs = 0 means "retry immediately", so resetAt = now
-      const newResetAt = Date.now() + retryAfterMs;
-      // Use the later of existing or new reset time
-      this.resetAt = this.resetAt ? Math.max(this.resetAt, newResetAt) : newResetAt;
-    } else if (!this.resetAt) {
+    let newResetAt = selectedResetAt;
+    if (newResetAt === undefined && retryAfterMs !== undefined && retryAfterMs >= 0) {
+      newResetAt = Date.now() + retryAfterMs;
+    }
+    if (newResetAt !== undefined) {
+      // Preserve explicit elapsed/zero deadlines and any later known reset.
+      this.resetAt = Math.max(this.resetAt ?? newResetAt, newResetAt);
+    } else if (this.resetAt === null) {
       // No retryAfter provided and no existing reset - use conservative default
       this.resetAt = Date.now() + 60000;
     }
@@ -216,35 +211,28 @@ export class SlotQueue {
       return false;
     }
 
-    // Request quota exhausted
-    if (this.remainingRequests !== null && this.remainingRequests <= 0) {
-      if (this.resetAt && now < this.resetAt) {
-        return true;
-      }
-    }
+    const quotaExhausted = (remaining: number | null) =>
+      remaining !== null && remaining <= 0 && this.resetAt && now < this.resetAt;
 
-    // Token quota exhausted
-    if (this.remainingTokens !== null && this.remainingTokens <= 0) {
-      if (this.resetAt && now < this.resetAt) {
-        return true;
-      }
-    }
-
-    return false;
+    return !!(
+      // Request quota exhausted
+      quotaExhausted(this.remainingRequests) ||
+      // Token quota exhausted
+      quotaExhausted(this.remainingTokens)
+    );
   }
 
   /**
    * Schedule queue processing when rate limit window resets.
    */
   private scheduleResetProcessing(): void {
-    if (this.resetTimer) {
-      clearTimeout(this.resetTimer);
-      this.resetTimer = null;
-    }
+    clearTimeout(this.resetTimer ?? undefined);
+    this.resetTimer = null;
 
     if (this.resetAt && this.waiting.length > 0) {
       const delay = Math.max(0, this.resetAt - Date.now());
       this.resetTimer = setTimeout(() => {
+        this.resetTimer = null;
         // Clear exhausted state
         this.remainingRequests = null;
         this.remainingTokens = null;
@@ -271,6 +259,9 @@ export class SlotQueue {
     // If queue still has items and we're quota exhausted, ensure reset is scheduled
     if (this.waiting.length > 0 && this.isQuotaExhausted()) {
       this.scheduleResetProcessing();
+    } else if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
     }
   }
 
@@ -300,10 +291,8 @@ export class SlotQueue {
    * Callers should handle these rejections (e.g., via .catch() on acquire promises).
    */
   dispose(): void {
-    if (this.resetTimer) {
-      clearTimeout(this.resetTimer);
-      this.resetTimer = null;
-    }
+    clearTimeout(this.resetTimer ?? undefined);
+    this.resetTimer = null;
     // Reject any waiting requests
     const waiting = this.waiting;
     this.waiting = [];

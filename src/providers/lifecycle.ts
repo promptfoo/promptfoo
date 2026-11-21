@@ -1,30 +1,27 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import logger from '../logger';
-import { isApiProvider } from '../types/providers';
 import { providerRegistry } from './providerRegistry';
 
 import type { ApiProvider } from '../types/providers';
 
 interface ProviderScope {
   owned: Set<ApiProvider>;
-  cleaned: Set<ApiProvider>;
+  cleaned: WeakMap<ApiProvider, Promise<void>>;
   closed: boolean;
 }
 
 const providerScope = new AsyncLocalStorage<ProviderScope>();
 
-export async function cleanupProvider(provider: ApiProvider): Promise<void> {
-  const scope = providerScope.getStore();
-  if (scope?.cleaned.has(provider)) {
-    return;
+export function cleanupProvider(provider: ApiProvider): Promise<void> {
+  const cleaned = providerScope.getStore()?.cleaned;
+  const pending = cleaned?.get(provider);
+  if (pending) {
+    return pending;
   }
-  scope?.cleaned.add(provider);
-  if (providerRegistry.has(provider)) {
-    await providerRegistry.shutdown(provider);
-  } else {
-    await provider.cleanup?.();
-  }
+  const release = providerRegistry.shutdown(provider);
+  cleaned?.set(provider, release);
+  return release;
 }
 
 /**
@@ -34,7 +31,7 @@ export async function cleanupProvider(provider: ApiProvider): Promise<void> {
 export function createProviderCleanupScope() {
   const scope: ProviderScope = {
     owned: new Set(),
-    cleaned: new Set(),
+    cleaned: new WeakMap(),
     closed: false,
   };
   let cleanup: Promise<void> | undefined;
@@ -63,10 +60,7 @@ export function createProviderCleanupScope() {
 }
 
 /** Call sites explicitly enroll providers constructed for this operation. */
-export async function withProviderCleanup<T>(
-  operation: () => Promise<T>,
-  hasFailure: () => boolean = () => false,
-): Promise<T> {
+export async function withProviderCleanup<T>(operation: () => Promise<T>): Promise<T> {
   const scope = createProviderCleanupScope();
   let failed = false;
   try {
@@ -78,7 +72,7 @@ export async function withProviderCleanup<T>(
     try {
       await scope.cleanup();
     } catch (error) {
-      if (!failed && !hasFailure()) {
+      if (!failed) {
         throw error;
       }
       logger.warn('Provider cleanup failed after evaluation error', { error });
@@ -101,16 +95,4 @@ export function trackProvider<T extends ApiProvider>(provider: T): T {
       });
   }
   return provider;
-}
-
-/** Exclude provider instances supplied by the caller when enrolling a loaded config. */
-export function trackConfiguredProviders(providers: ApiProvider[], configured: unknown): void {
-  const borrowed = new Set(
-    (Array.isArray(configured) ? configured : [configured]).filter(isApiProvider),
-  );
-  for (const provider of providers) {
-    if (!borrowed.has(provider)) {
-      trackProvider(provider);
-    }
-  }
 }
