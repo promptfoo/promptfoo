@@ -93,7 +93,25 @@ try {
   // Exercise the JS retry/recovery path without blocking this process's lock holder.
   await db.run('PRAGMA busy_timeout = 0');
 
-  if (mode.startsWith('guarded-commit')) {
+  if (mode === 'guarded-abort-rollback-failure') {
+    const table = sqliteTable('lock_recovery_test', { id: integer('id') });
+    const close = Sqlite3Transaction.prototype.close;
+    Sqlite3Transaction.prototype.close = () => {
+      throw new Error('Injected transaction cleanup error');
+    };
+    try {
+      result.firstError = await captureError(() =>
+        db.runGuardedWrite(db.insert(table).values({ id: 2 }), () => {
+          if (++result.callbackCalls === 3) {
+            throw new Error('Cancelled after insert');
+          }
+        }),
+      );
+      result.clientClosedAfterFailure = client.closed;
+    } finally {
+      Sqlite3Transaction.prototype.close = close;
+    }
+  } else if (mode.startsWith('guarded-commit')) {
     const table = sqliteTable('lock_recovery_test', { id: integer('id') });
     const insert = db.insert(table).values({ id: 2 });
     const noWait = mode === 'guarded-commit-nowait-writer';

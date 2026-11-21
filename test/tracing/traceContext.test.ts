@@ -1,4 +1,10 @@
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { markEvaluatorSpan } from '../../src/tracing/otlpOwnership';
 
 const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
@@ -302,6 +308,26 @@ describe('fetchTraceContext', () => {
 
     expect(storedSpans.map((span) => span.spanId)).toEqual(['valid']);
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
+  });
+
+  it('preserves fetched evaluator roles even after a host-owned exporter shuts down', async () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
+    });
+    const name = 'grader rubric';
+    const span = provider.getTracer('host').startSpan(name, {
+      attributes: { 'promptfoo.span.role': 'grader' },
+    });
+    markEvaluatorSpan(span, 'grader', name);
+    span.end();
+    await provider.forceFlush();
+    const [exported] = exporter.getFinishedSpans();
+    await provider.shutdown();
+    const { traceId, spanId } = exported.spanContext();
+    mockExternalTrace([{ spanId, name, startTime: 1, attributes: exported.attributes }], traceId);
+    await fetchTraceContext(traceId, { providerConfig, queryDelay: 0, maxRetries: 0 });
+    expect(storedSpans[0].attributes).toEqual({ 'promptfoo.span.role': 'grader' });
   });
 
   it.each([false, true])(

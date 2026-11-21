@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { isSensitiveTraceAttribute } from '../../tracing/sanitizeAttributes';
+import {
+  isSensitiveTraceAttribute,
+  MAX_HOSTED_ARGUMENT_BYTES as MAX_ARGUMENT_BYTES,
+} from '../../tracing/sanitizeAttributes';
 import {
   HOSTED_ERROR_STATUS_COMPLETE,
   HOSTED_ERROR_STATUS_VERSION,
@@ -30,7 +33,6 @@ import {
 import type { SpanData } from '../../tracing/store';
 
 const MAX_SPANS = 1_000;
-const MAX_ARGUMENT_BYTES = 64 * 1024;
 // Snapshot-wide limits keep synchronous inspection bounded across tools.
 const MAX_TRACE_ARGUMENT_BYTES = 256 * 1024;
 const MAX_TRACE_ARGUMENT_VALUES = 4_096;
@@ -712,7 +714,15 @@ function isLiteralPath(value: unknown, policy: ImportPolicy): value is string {
     !value.startsWith('-') &&
     !/[^\p{L}\p{N}_./-]/u.test(value) &&
     !hasSensitiveOpenAiCachePath(value) &&
-    !hasProtectedComponent(value, policy)
+    !hasProtectedComponent(value, policy) &&
+    // Short configured credentials may only match as whole values. A suffix
+    // must not disguise a credential-shaped basename in a command operand.
+    value.split('/').every((segment) => {
+      const parts = segment.includes('.') ? [segment, ...segment.split('.')] : [segment];
+      return parts.every(
+        (part) => !part || (!hasSensitiveOpenAiCachePath(part) && policy.redact(part) === part),
+      );
+    })
   );
 }
 

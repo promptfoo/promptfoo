@@ -15,7 +15,6 @@ import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
 import { getOtelRoutingKey } from './otelConfig';
-import { trackLocalOtlpExports } from './otlpOwnership';
 import {
   batchProcessorFromEnv,
   registerTracerProvider,
@@ -102,6 +101,11 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
 
   const routingKey = getOtelRoutingKey(config);
   if (sdk) {
+    if (!ownsGlobalTracerProvider(sdk.provider)) {
+      throw new Error(
+        'The active OpenTelemetry provider was replaced by the host. Finish the current traced evaluations before starting another.',
+      );
+    }
     if (!routingKey || routingKey !== sdk.routingKey) {
       throw new Error(
         'Cannot share the active OpenTelemetry SDK. Run evaluations with different trace settings or file-based OTLP TLS credentials sequentially or in separate processes.',
@@ -129,12 +133,26 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
 
   // Collect span processors
   const spanProcessors: SpanProcessor[] = [];
+  const traceOptions = traceOptionsFromEnv();
 
   // Add local exporter (writes to TraceStore/SQLite)
-  const localExporter = config.localExport ? new LocalSpanExporter() : undefined;
+  const localExporter = config.localExport
+    ? new LocalSpanExporter(traceOptions.spanLimits?.attributeValueLengthLimit)
+    : undefined;
   const localProcessor = localExporter && batchProcessorFromEnv(localExporter);
-  if (localProcessor) {
-    spanProcessors.push(localProcessor);
+  if (localProcessor && localExporter) {
+    spanProcessors.push({
+      onStart: (span, parentContext) => {
+        localExporter.trackSpan(span);
+        localProcessor.onStart(span, parentContext);
+      },
+      onEnd: (span) => {
+        localExporter.trackSpan(span);
+        localProcessor.onEnd(span);
+      },
+      forceFlush: () => localProcessor.forceFlush(),
+      shutdown: () => localProcessor.shutdown(),
+    });
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -143,13 +161,12 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
     // Local-only tracing does not need the external exporter and its transports.
     const { OTLPTraceExporter } =
       require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
-    const exporter = trackLocalOtlpExports(new OTLPTraceExporter({ url: config.endpoint }));
-    spanProcessors.push(batchProcessorFromEnv(exporter));
+    spanProcessors.push(batchProcessorFromEnv(new OTLPTraceExporter({ url: config.endpoint })));
     logger.debug('[OtelSdk] Added OTLP exporter');
   }
 
   // Create trace provider with resource and span processors
-  const provider = new TracerProvider({ ...traceOptionsFromEnv(), resource, spanProcessors });
+  const provider = new TracerProvider({ ...traceOptions, resource, spanProcessors });
 
   // Register the provider globally
   const registered = registerTracerProvider(provider, new W3CTraceContextPropagator());
@@ -320,7 +337,13 @@ export function trackLocalTrace(traceId: string) {
   }
   const release = generation.localExporter.trackTrace(traceId);
   return {
-    flush: async () => (await flushGeneration(generation, [], traceId)) && !generation.shutdown,
+    flush: () => flushGeneration(generation, [], traceId),
+    seal: () => generation.localExporter!.sealTrace(traceId),
+    isReliable: () => generation.localExporter!.isReliable(traceId),
+    isComplete: () =>
+      !generation.shutdown &&
+      ownsGlobalTracerProvider(generation.provider) &&
+      generation.localExporter!.isComplete(traceId),
     release,
   };
 }

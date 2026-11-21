@@ -190,39 +190,6 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(currentConfig).toEqual(DEFAULT_CONFIG);
   });
 
-  it('should clear persisted state when the Reset button is clicked', async () => {
-    // Arrange: Set up initial non-default state in useStore
-    const nonEmptyState = {
-      description: 'Test Description',
-      providers: [{ id: 'provider1', label: 'Provider 1' }] as ProviderOptions[],
-      prompts: ['Test Prompt {{var}}'],
-      tests: [{ vars: { var: 'value' } }] as TestCase[],
-      defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
-      derivedMetrics: [{ name: 'precision', value: 'formula' }] as DerivedMetric[],
-      env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
-      evaluateOptions: { maxConcurrency: 5 } as EvaluateOptions,
-      scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
-      extensions: ['file://path/to/extension.py:function_name'] as string[],
-    };
-    useStore.getState().updateConfig(nonEmptyState);
-
-    render(<EvaluateTestSuiteCreator />);
-
-    // Act: Click the main "Reset" button to open the dialog
-    const mainResetButton = screen.getByRole('button', { name: 'Reset' });
-    await userEvent.click(mainResetButton);
-
-    // Wait for dialog to appear and find the "Reset" button within the dialog
-    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
-    const dialogResetButton = within(dialog).getByRole('button', { name: 'Reset' });
-    await userEvent.click(dialogResetButton);
-
-    // Assert: Check if the store state has been reset to default values
-    const currentConfig = useStore.getState().config;
-
-    expect(currentConfig).toEqual(DEFAULT_CONFIG);
-  });
-
   it('should render the Upload YAML button in the header', () => {
     render(<EvaluateTestSuiteCreator />);
 
@@ -493,13 +460,14 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(fileInput.value).toBe('');
   });
 
-  it('should update state when interacting with components', async () => {
+  it('should clear configured providers through the provider selector', async () => {
+    useStore.getState().updateConfig({ providers: [{ id: 'echo' }] });
     render(<EvaluateTestSuiteCreator />);
 
     // Step 1 (Choose Providers) should be active by default, so provider selector should be visible
     // Find the provider selector
     const providerSelector = await screen.findByTestId('mock-provider-selector');
-    expect(providerSelector).toHaveTextContent('0 providers');
+    expect(providerSelector).toHaveTextContent('1 providers');
 
     // Click the clear providers button to trigger onChange
     const clearButton = within(providerSelector).getByText('Mock Clear Providers');
