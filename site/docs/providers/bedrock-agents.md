@@ -162,11 +162,10 @@ as canonical padded or unpadded base64. Programmatic configs may use `Buffer` or
 `Uint8Array`; other native binary types are unsupported. Supported bytes survive
 saved-eval retries. Malformed base64 is rejected before invocation.
 
-Promptfoo does not retry an Agent event stream through its scheduler, because the
-agent may have already performed actions before an error. With
-`streamingConfigurations.streamFinalResponse: true`, the AWS SDK also makes only
-one attempt. Other Agent calls retain the configured `AWS_BEDROCK_MAX_RETRIES`
-SDK budget.
+Promptfoo and the AWS SDK make a single attempt for each `InvokeAgent` turn,
+regardless of `streamFinalResponse` or `AWS_BEDROCK_MAX_RETRIES`. A connection
+can fail after the agent has performed an action. Cancelling the eval aborts
+the request and stops reading the stream. Actions already performed can still take effect.
 
 Response metadata preserves the session and memory IDs, citations, traces,
 `returnControl` events, and generated `files`. Returned file `bytes` are base64
