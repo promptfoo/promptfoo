@@ -161,11 +161,7 @@ export function evalCommand(
     )
 
     // Additional features
-    .option(
-      '--grader <provider>',
-      'Model that will grade outputs',
-      defaultConfig?.commandLineOptions?.grader,
-    )
+    .option('--grader <provider>', 'Model that will grade outputs')
     .option(
       '--suggest-prompts <number>',
       `Generate N new prompts (1-${MAX_SUGGESTIONS_COUNT}) and append them to the prompt list`,
