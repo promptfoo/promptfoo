@@ -265,6 +265,110 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - basic functionality', () => {
+    it.each([
+      'replay',
+      'session',
+      'changed session',
+      'cached',
+      'error',
+      'wrong role',
+      'rendered',
+      'unreported',
+    ])('binds earlier context only to verified live turns (%s)', async (mode) => {
+      const stateful = mode !== 'replay';
+      const user = { role: 'user' as const, content: 'Describe the color' };
+      const assistant = { role: 'assistant' as const, content: 'Blue' };
+      const rendered = `Question: ${user.content}`;
+      if (mode === 'rendered') {
+        vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue(rendered);
+      }
+      mockAgentProvider.callApi.mockResolvedValue({ output: user.content });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          prompt: mode === 'rendered' ? rendered : [user],
+          output: assistant.content,
+          sessionId: 'first',
+          cached: mode === 'cached',
+          ...(mode === 'error' && { error: 'Network error' }),
+        })
+        .mockResolvedValueOnce({
+          ...(mode !== 'unreported' && {
+            prompt:
+              mode === 'wrong role'
+                ? [{ ...user, role: 'system' as const }]
+                : stateful
+                  ? [user]
+                  : [user, assistant, user],
+          }),
+          ...(mode === 'rendered' && { prompt: [{ ...user, content: rendered }] }),
+          output: 'Green',
+          sessionId: mode === 'changed session' ? 'second' : 'first',
+        });
+      const test: AtomicTestCase = {
+        provider: 'promptfoo:redteam:hydra',
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { goal: 'test goal', pluginId: 'pii', strategyId: 'hydra' },
+      };
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'fixture' },
+        test,
+      };
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful });
+      const result = await provider.callApi('', context);
+      if (mode === 'wrong role') {
+        expect(result.error).toContain('current user turn');
+        expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
+        return;
+      }
+      expect(result.error).toBeUndefined();
+      const transcript =
+        mode === 'replay' || mode === 'session'
+          ? 'User: Describe the color\n\nAssistant: Blue'
+          : undefined;
+      expect(mockGrader.getResult.mock.lastCall[7].conversationTranscript).toBe(transcript);
+      const grade = () =>
+        runAssertions({ prompt: 'test', test: context.test!, providerResponse: result });
+      const calls = mockGrader.getResult.mock.calls.length;
+      await grade();
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(calls);
+      if (transcript && result.metadata) {
+        delete result.metadata.storedGraderResult;
+        await grade();
+        expect(mockGrader.getResult.mock.lastCall[7].conversationTranscript).toBe(transcript);
+        result.metadata.messages[0].content = 'Edited';
+        await expect(grade()).rejects.toThrow('Cannot verify saved target conversation');
+      }
+    });
+
+    it('keeps the last verified snapshot and reports a later target error separately', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({ output: 'First' })
+        .mockResolvedValueOnce({ output: 'Second' })
+        .mockResolvedValueOnce({ output: 'Third' });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'Blue', prompt: 'First', sessionId: 'one' })
+        .mockResolvedValueOnce({ output: 'Green', prompt: 'Second', sessionId: 'one' })
+        .mockResolvedValueOnce({ error: 'Network error' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 3, stateful: true });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'fixture' },
+      });
+      expect(result).toMatchObject({
+        error: 'Network error',
+        output: 'Green',
+        metadata: { redteamFinalPrompt: 'Second', redteamVerifiedContext: { turns: 2 } },
+      });
+      expect(result.metadata.messages).toHaveLength(4);
+      expect(result.metadata.messages.at(-1)).toMatchObject({
+        role: 'assistant',
+        content: 'Green',
+      });
+    });
+
     it('returns the externalized output bound to its stored grade', async () => {
       const enabled = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
       const externalize = vi

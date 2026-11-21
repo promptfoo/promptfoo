@@ -52,6 +52,35 @@ export function getGradingInputHash(
     .digest('hex');
 }
 
+// The saved conversation ends with the selected target output. Only a suffix of
+// complete, verified text turns may contribute earlier context to a new grade.
+export function getVerifiedInputMessages(messages: unknown, turns: number, prompt: string) {
+  if (
+    !Array.isArray(messages) ||
+    !Number.isSafeInteger(turns) ||
+    turns < 2 ||
+    turns * 2 > messages.length
+  ) {
+    return undefined;
+  }
+  const selected = messages.slice(-2 * turns, -1);
+  if (
+    selected[selected.length - 1]?.content !== prompt ||
+    selected.some(
+      (message, index) =>
+        message?.role !== (index % 2 === 0 ? 'user' : 'assistant') ||
+        typeof message.content !== 'string' ||
+        !message.content.trim(),
+    )
+  ) {
+    return undefined;
+  }
+  return selected.map(({ role, content }) => ({
+    role: role as string,
+    content: content as string,
+  }));
+}
+
 export function getTargetConversation(messages: unknown): {
   lastUserPrompt?: string;
   conversationTranscript?: string;

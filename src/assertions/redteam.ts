@@ -5,6 +5,7 @@ import {
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
+  getVerifiedInputMessages,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
@@ -212,19 +213,32 @@ export const handleRedteam = async (
       gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
   }
-  const { lastUserPrompt, conversationTranscript } = conversation;
+  const { lastUserPrompt } = conversation;
+  let { conversationTranscript } = conversation;
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
-  // Hydra and Goblin retain their current-turn grading behavior. Their saved
-  // messages are still available for attack generation and reporting.
+  // Legacy strategy rows expose reporting history without proof of target input.
   const providerId = getConfiguredProviderId(test, provider);
-  const gradesCurrentTurnOnly =
+  const requiresVerifiedContext =
     providerId === 'promptfoo:redteam:hydra' ||
     providerId === 'promptfoo:redteam:goblin' ||
     ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
       test.metadata?.strategyId ?? '',
     );
+
+  if (requiresVerifiedContext) {
+    const marker = providerResponse.metadata?.redteamVerifiedContext;
+    gradingMessages = getVerifiedInputMessages(gradingMessages, marker?.turns, effectivePrompt);
+    if (
+      marker &&
+      (!gradingMessages ||
+        marker.hash !== getGradingInputHash(effectivePrompt, '', gradingMessages))
+    ) {
+      throw new Error('Cannot verify saved target conversation for grading.');
+    }
+    conversationTranscript = getTargetConversation(gradingMessages).conversationTranscript;
+  }
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
@@ -238,12 +252,7 @@ export const handleRedteam = async (
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
-      getGradingInputHash(
-        effectivePrompt,
-        outputString,
-        gradesCurrentTurnOnly ? undefined : gradingMessages,
-        test.metadata?.pluginId,
-      )
+      getGradingInputHash(effectivePrompt, outputString, gradingMessages, test.metadata?.pluginId)
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
@@ -277,7 +286,7 @@ export const handleRedteam = async (
   let gradingContext = createInitialGradingContext({
     assertionValueContext,
     providerResponse,
-    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
+    conversationTranscript,
   });
   const trackingIds =
     getWebPageTrackingIds(
@@ -348,7 +357,7 @@ export const handleRedteam = async (
             gradingInputHash: getGradingInputHash(
               effectivePrompt,
               outputString,
-              undefined,
+              requiresVerifiedContext ? gradingMessages : undefined,
               test.metadata?.pluginId,
             ),
           },
