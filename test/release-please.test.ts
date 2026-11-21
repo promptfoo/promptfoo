@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +22,7 @@ type ReleasePleaseConfig = {
 };
 
 type WorkflowStep = {
+  if?: unknown;
   run?: string;
   name?: unknown;
   uses?: unknown;
@@ -34,6 +36,8 @@ type WorkflowJob = {
   steps?: WorkflowStep[];
 };
 type ReleasePleaseWorkflow = {
+  concurrency?: { group?: unknown };
+  env?: Record<string, unknown>;
   jobs?: Record<string, WorkflowJob>;
 };
 type ReleaseDriftWorkflow = {
@@ -267,5 +271,100 @@ describe('release-please automation', () => {
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Docker image publication', () => {
+  const workflow = yaml.load(readRepoFile('.github/workflows/docker.yml')) as ReleasePleaseWorkflow;
+  const metadata = workflow.jobs?.['merge-docker-digests']?.steps?.find(
+    (step) => typeof step.uses === 'string' && step.uses.startsWith('docker/metadata-action@'),
+  )?.with;
+  const validate = workflow.jobs?.test?.steps?.find((step) => step.name === 'Validate release tag');
+
+  it('lets only the reusable caller authorize aliases and builds the tested commit', () => {
+    const caller = yaml.load(readRepoFile('.github/workflows/release-please.yml'));
+    expect(caller).toHaveProperty('jobs.docker.with.publish_aliases', true);
+    expect(workflow).toHaveProperty('on.workflow_call.inputs.publish_aliases.default', false);
+    expect(workflow).not.toHaveProperty('on.workflow_dispatch.inputs.publish_aliases');
+    expect(workflow.jobs?.test).toHaveProperty(
+      'outputs.source_sha',
+      '${{ steps.source.outputs.sha }}',
+    );
+    const build = workflow.jobs?.['build-docker-and-push-digests'];
+    expect(build?.steps?.find((step) => step.name === 'Checkout repository')?.with?.ref).toBe(
+      '${{ needs.test.outputs.source_sha }}',
+    );
+  });
+
+  it('disables implicit latest and defines the complete set of tag rules', () => {
+    expect(String(metadata?.flavor).trim()).toBe('latest=false');
+    expect(
+      String(metadata?.tags)
+        .trim()
+        .split('\n')
+        .map((rule) => rule.split(',enable=')[0]),
+    ).toEqual([
+      'type=raw,value=main',
+      'type=sha',
+      'type=raw,value=${{ env.RELEASE_TAG }}',
+      'type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }}',
+      'type=raw,value=latest',
+    ]);
+  });
+
+  it.each([
+    ['workflow_dispatch', 'refs/tags/0.125.0', '', '0.125.0', 'version'],
+    ['workflow_dispatch', 'refs/tags/not-a-version', '', 'not-a-version', 'version'],
+    ['workflow_dispatch', 'refs/tags/0.125.0', '0.124.1', '0.124.1', 'version'],
+    ['workflow_dispatch', 'refs/heads/main', '0.124.1', '0.124.1', 'version'],
+    ['workflow_dispatch', 'refs/heads/main', '', '', 'main sha'],
+    ['workflow_dispatch', 'refs/heads/latest', '', '', 'sha'],
+    ['workflow_dispatch', 'refs/heads/0.125.0', '', '', 'sha'],
+    ['manual-release-please', 'refs/heads/main', '0.125.0', '0.125.0', 'version minor latest'],
+    ['push', 'refs/heads/main', '', '', 'main sha'],
+    ['push', 'refs/heads/main', '0.125.0', '0.125.0', 'version minor latest'],
+    ['push', 'refs/heads/main', '0.125.0-beta.1', '0.125.0-beta.1', 'version'],
+    ['release', 'refs/tags/0.124.1', '', '0.124.1', 'version'],
+  ])('routes %s on %s with input %s', (event, ref, inputTag, tag, expected) => {
+    const refName = ref.replace(/^refs\/(heads|tags)\//, '');
+    const context = {
+      github: {
+        event_name: event === 'manual-release-please' ? 'workflow_dispatch' : event,
+        ref,
+        ref_type: ref.startsWith('refs/tags/') ? 'tag' : 'branch',
+        ref_name: refName,
+        repository: 'org/repo',
+        sha: 'trigger-commit',
+        event: {
+          release: { tag_name: event === 'release' ? refName : '' },
+        },
+      },
+      inputs: {
+        tag_name: inputTag,
+        publish_aliases: inputTag !== '' && event !== 'workflow_dispatch',
+      },
+      env: {} as Record<string, string>,
+      contains: (text: string, search: string) => text.includes(search),
+      format: (template: string, value: string) => template.replace('{0}', value),
+    };
+    // These expressions use only operators shared with JavaScript.
+    const evaluate = (expression: unknown) => {
+      assert(typeof expression === 'string');
+      const source = expression.startsWith('${{') ? expression.slice(3, -2) : expression;
+      return runInNewContext(source, context);
+    };
+    context.env.RELEASE_TAG = String(evaluate(workflow.env?.RELEASE_TAG));
+    context.env.IS_RELEASE_FALLBACK = String(evaluate(workflow.env?.IS_RELEASE_FALLBACK));
+    expect(context.env.RELEASE_TAG).toBe(tag);
+    expect(evaluate(validate?.if)).toBe(tag !== '');
+    expect(evaluate(workflow.env?.SOURCE_REF)).toBe(
+      inputTag ? `refs/tags/${inputTag}` : 'trigger-commit',
+    );
+    expect(evaluate(workflow.concurrency?.group)).toBe('docker-publish-org/repo');
+    const rules = String(metadata?.tags).trim().split('\n');
+    const enabled = ['main', 'sha', 'version', 'minor', 'latest'].filter((_, index) =>
+      evaluate(rules[index].split(',enable=')[1]),
+    );
+    expect(enabled.join(' ')).toBe(expected);
   });
 });
