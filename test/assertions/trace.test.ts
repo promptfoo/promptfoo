@@ -15,6 +15,11 @@ import type {
 } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
+const createSpanCountAssertion = (value: string = 'context.trace === undefined') => ({
+  type: 'javascript' as const,
+  value,
+});
+
 // Mock the trace store
 vi.mock('../../src/tracing/store');
 
@@ -296,10 +301,7 @@ describe('trace assertions', () => {
         })
         .mockResolvedValueOnce(mockTraceData);
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace?.spans?.length === 2',
-      };
+      const assertion: Assertion = createSpanCountAssertion('context.trace?.spans?.length === 2');
 
       const result: GradingResult = await runAssertion({
         assertion,
@@ -320,10 +322,7 @@ describe('trace assertions', () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 
       const resultPromise = runAssertion({
-        assertion: {
-          type: 'javascript',
-          value: 'context.trace?.spans?.length === 2',
-        },
+        assertion: createSpanCountAssertion('context.trace?.spans?.length === 2'),
         test: mockTest,
         providerResponse: mockProviderResponse,
         traceId: 'test-trace-id',
@@ -349,10 +348,7 @@ describe('trace assertions', () => {
         .mockResolvedValueOnce(mockTraceData)
         .mockResolvedValueOnce(mockTraceData);
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace?.spans?.length === 2',
-      };
+      const assertion: Assertion = createSpanCountAssertion('context.trace?.spans?.length === 2');
 
       const result: GradingResult = await runAssertion({
         assertion,
@@ -368,10 +364,7 @@ describe('trace assertions', () => {
     it('should handle missing trace gracefully', async () => {
       mockTraceStore.getTrace.mockResolvedValue(null);
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace === undefined',
-      };
+      const assertion: Assertion = createSpanCountAssertion();
 
       const result: GradingResult = await runAssertion({
         assertion,
@@ -393,16 +386,7 @@ describe('trace assertions', () => {
       const result = await runAssertions({
         test: {
           ...mockTest,
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.trace === undefined',
-            },
-            {
-              type: 'javascript',
-              value: 'context.trace === undefined',
-            },
-          ],
+          assert: [createSpanCountAssertion(), createSpanCountAssertion()],
         },
         providerResponse: mockProviderResponse,
         traceId: 'non-existent-trace',
@@ -587,10 +571,7 @@ return {
     it('should handle trace store errors gracefully', async () => {
       mockTraceStore.getTrace.mockRejectedValue(new Error('Database error'));
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace === undefined',
-      };
+      const assertion: Assertion = createSpanCountAssertion();
 
       const result: GradingResult = await runAssertion({
         assertion,

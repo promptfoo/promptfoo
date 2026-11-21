@@ -25,33 +25,22 @@ export default function Prompts({
   showDatasetColumn = true,
 }: PromptsProps) {
   const [searchParams] = useSearchParams();
-  const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
-    open: false,
-    selectedIndex: 0,
-  });
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const selectedPrompt = selectedIndex === null ? undefined : data[selectedIndex];
 
   // Reset dialog state when data changes to prevent invalid index
   useEffect(() => {
-    if (dialogState.open && dialogState.selectedIndex >= data.length) {
-      setDialogState({ open: false, selectedIndex: 0 });
+    if (selectedIndex !== null && selectedIndex >= data.length) {
+      setSelectedIndex(null);
     }
-  }, [data, dialogState.open, dialogState.selectedIndex]);
+  }, [data, selectedIndex]);
 
-  const handleClickOpen = (index: number) => {
-    setDialogState({ open: true, selectedIndex: index });
-  };
-
-  const handleClose = () => {
-    setDialogState((prev) => ({ ...prev, open: false }));
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {
       const promptIndex = data.findIndex((prompt) => prompt.id.startsWith(promptId));
       if (promptIndex !== -1) {
-        handleClickOpen(promptIndex);
+        setSelectedIndex(promptIndex);
       }
     }
   }, [data, searchParams]);
@@ -119,7 +108,7 @@ export default function Prompts({
   const handleRowClick = (prompt: ServerPromptWithMetadata) => {
     const index = data.findIndex((p) => p.id === prompt.id);
     if (index !== -1) {
-      handleClickOpen(index);
+      setSelectedIndex(index);
     }
   };
 
@@ -149,16 +138,14 @@ export default function Prompts({
           </Card>
         </div>
       </div>
-      {dialogState.open &&
-        dialogState.selectedIndex < data.length &&
-        data[dialogState.selectedIndex] && (
-          <PromptDialog
-            openDialog={dialogState.open}
-            handleClose={handleClose}
-            selectedPrompt={data[dialogState.selectedIndex]}
-            showDatasetColumn={showDatasetColumn}
-          />
-        )}
+      {selectedPrompt && (
+        <PromptDialog
+          openDialog
+          handleClose={() => setSelectedIndex(null)}
+          selectedPrompt={selectedPrompt}
+          showDatasetColumn={showDatasetColumn}
+        />
+      )}
     </PageContainer>
   );
 }

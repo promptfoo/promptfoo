@@ -1,12 +1,13 @@
 import { getEventListeners } from 'node:events';
 
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { expect, vi } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { createDeferred } from './utils';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { ProviderResponse } from '../../src/types/providers';
 
@@ -39,8 +40,8 @@ export function createSelectedToolErrorTarget(
     async forceFlush() {},
     async shutdown() {},
   };
-  const tracerProvider = new NodeTracerProvider({ spanProcessors: [processor] });
-  tracerProvider.register();
+  const tracerProvider = new TracerProvider({ spanProcessors: [processor] });
+  registerTracerProvider(tracerProvider);
   const policy = completion.promise.then(() => {
     events.push('caller abort');
     controller.abort(reason);

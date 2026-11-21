@@ -21,6 +21,8 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 
 describe('ProviderTypeSelector', () => {
   it.each([
+    ['LiteLLM', 'litellm', 'litellm:openai/gpt-6.2-sol', {}],
+    ['Vercel AI Gateway', 'vercel', 'vercel:openai/gpt-6.2-sol', {}],
     ['Together AI', 'together', 'togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo', {}],
     ['Hugging Face', 'huggingface', 'huggingface:chat:meta-llama/Meta-Llama-3-70B-Instruct', {}],
     [
@@ -625,7 +627,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-6.1 Sol, GPT-6 Luna and Astra, and GPT-5.6 Terra')).toBeVisible();
+    expect(screen.getByText('GPT-6.2 Astra and Sol, GPT-6.1 Terra, and GPT-6 Luna')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {

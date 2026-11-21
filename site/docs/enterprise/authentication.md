@@ -10,23 +10,15 @@ keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, s
 
 ## Setting Up SSO
 
-[Promptfoo Enterprise](/docs/enterprise/) supports SSO through SAML 2.0 and OIDC. Contact support with your IdP information to configure SSO. For on-prem deployments, start at your organization's Promptfoo URL; it redirects to the identity provider configured for that deployment.
+[Promptfoo Enterprise](/docs/enterprise/) supports SAML 2.0 and OIDC. For hosted deployments, contact support with your identity provider information.
 
-On-prem organization admins can choose how assignments are managed under **Organization Settings → SSO Settings**:
-
-| Mode                                            | Behavior                                                                                                            |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Manage Teams and Roles Manually                 | Manage team membership and roles in Promptfoo.                                                                      |
-| Use Identity Provider for Team Assignment Only  | The IdP controls membership; new members receive the selected default role, and roles remain editable in Promptfoo. |
-| Use Identity Provider for Roles and Permissions | The IdP controls both membership and roles; manual assignment is disabled.                                          |
-
-For IdP-managed modes, verify the team and role mappings before enabling them. On the next login, memberships synchronize with the IdP, including removal from teams no longer assigned there.
+For on-prem deployments, sign in at your organization's Promptfoo URL. Organization administrators can [configure SSO and team assignments](./sso.md). Test those assignments before enabling synchronization. At login, synchronization can remove team memberships.
 
 ## Basic Authentication
 
-Hosted deployments using `auth.promptfoo.app` support password login. When an organization is created, the global admin will receive an email from Promptfoo Enterprise to log in. Users, teams, and roles are managed in Organization Settings, as detailed in the [Teams documentation](./teams.md).
+Hosted deployments using `auth.promptfoo.app` support password login. The organization's first administrator receives a login email and can manage users, [teams and roles](./teams.md) in Organization Settings.
 
-Where magic-link login is enabled, click "Login with a magic link" on the login page. You will receive an email with a link to log in; check your spam folder if it does not arrive. On-prem users should use their deployment's login page and the sign-in methods enabled by their administrator.
+If enabled, **Login with a magic link** sends you a sign-in link by email. On-prem users can choose from the sign-in methods enabled on their deployment's login page.
 
 ## Authenticating Into the CLI
 
@@ -40,20 +32,18 @@ You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follo
 
 4. Once authenticated, you can run `promptfoo eval --share` or `promptfoo share` to share eval results to your Promptfoo Enterprise organization.
 
-For on-prem API-key login, use your deployment's API base URL without `/api/v1`. If the app and API use different URLs, pass the API URL to `--host`. Supply a **Promptfoo** API key from that instance, not an OpenAI key:
+For API key login on-prem, set `PROMPTFOO_API_KEY` to a Promptfoo key from your deployment. Pass its API base URL without `/api/v1` to `--host`. Use a trusted terminal because the key appears in the process arguments.
 
 ```sh
 promptfoo auth login --host https://promptfoo.example.com --api-key "$PROMPTFOO_API_KEY"
 promptfoo auth whoami
 ```
 
-Set `PROMPTFOO_API_KEY` through your secret manager before running this command. For CI without a saved login, set `PROMPTFOO_API_KEY`, `PROMPTFOO_CLOUD_API_URL` to the API base URL, and `PROMPTFOO_REMOTE_APP_BASE_URL` to the browser-facing app URL so report links open in your deployment. A saved API key and host take precedence over their environment variables. See [Enterprise sharing](/docs/usage/sharing#enterprise-sharing) for gateways that use a separate authentication header.
+For CI without a saved login, configure `PROMPTFOO_API_KEY` in your secret manager, `PROMPTFOO_CLOUD_API_URL` for the API base URL, and `PROMPTFOO_REMOTE_APP_BASE_URL` for the browser-facing app URL. A saved key and API host take precedence over these environment variables. See [Enterprise sharing](/docs/usage/sharing#enterprise-sharing) if your gateway uses a separate authentication header.
 
 :::tip
 CLI runs can upload results automatically after Enterprise login. Use `promptfoo share` to upload existing local evals, or see [disabling sharing](/docs/usage/sharing#disabling-sharing) to keep a CLI run local. Scans run on the server store their results in your deployment.
 :::
-
-Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
 
 ## Working with Multiple Teams
 
@@ -86,4 +76,4 @@ To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a ke
 promptfoo auth teams current
 ```
 
-The selected team is used when sharing results that are not associated with a saved cloud scan configuration. Saved scan configurations are retrieved by ID, and their results retain the configuration's team.
+The CLI shares results with the selected team by default. When you run a saved scan configuration by ID, the team assigned to the run takes precedence. If you use an organization-wide template with another team's target, look for the report under the **target's team**.

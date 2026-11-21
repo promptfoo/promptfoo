@@ -1,3 +1,4 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -108,10 +109,7 @@ describeEvaluator('evaluator execution control', () => {
   it('evaluates with no provider delay', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput()),
     };
 
     const testSuite: TestSuite = {
@@ -484,10 +482,7 @@ describeEvaluator('evaluator execution control', () => {
           });
         }
 
-        return {
-          output: 'Test output',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        };
+        return createTokenOutput();
       }),
     };
 
@@ -532,10 +527,7 @@ describeEvaluator('evaluator execution control', () => {
           });
         }
 
-        return {
-          output: 'Test output',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        };
+        return createTokenOutput();
       }),
     };
 
@@ -586,10 +578,7 @@ describeEvaluator('evaluator execution control', () => {
           });
         }
 
-        return {
-          output: 'Test output',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        };
+        return createTokenOutput();
       }),
     };
 
@@ -646,10 +635,7 @@ describeEvaluator('evaluator execution control', () => {
 
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput()),
     };
 
     // Create a test suite that will generate a result with a circular reference
@@ -740,10 +726,7 @@ describeEvaluator('evaluator execution control', () => {
       callApi: vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-            });
+            resolve(createTokenOutput('Slow response'));
           }, 5000);
         });
       }),
@@ -967,10 +950,7 @@ describeEvaluator('evaluator execution control', () => {
       callApi: vi.fn().mockImplementation((_, __, opts) => {
         return new Promise((resolve, reject) => {
           longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-            });
+            resolve(createTokenOutput('Slow response'));
           }, 200);
 
           abortTimer = setTimeout(() => {

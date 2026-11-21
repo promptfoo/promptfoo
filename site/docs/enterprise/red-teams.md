@@ -21,43 +21,37 @@ On-prem deployments use your organization's app, API, and authentication URLs. T
 
 Targets are the applications, agents, or models you test. Team members can reuse a target across scans.
 
-Create a target from **Targets**.
-
-The **Configuration** section contains the connection details for sending probes to the target and parsing responses.
-
-Use **Application Details** to describe the target's capabilities, rules, and access permissions. Use **Context** for test scenarios, conversation handling, and user personas. These details guide attack generation and grading.
+Create a target and configure its connection and response parsing. Describe what the application does, its rules, and which users should have access to which resources. These details guide test generation and grading.
 
 ### Accessing External Systems
 
-For RAG applications and agents, describe connected data sources and tools in **Application Details → Access & Permissions**, including what the target may access and what it must not access. Include tool names and capabilities when using the [tool discovery plugin](/docs/red-team/plugins/tool-discovery/).
+For RAG applications and agents, describe the connected data sources and tools and their access restrictions. Include tool names and capabilities when using the [tool discovery plugin](/docs/red-team/plugins/tool-discovery/).
 
 ## Creating Plugin Collections
 
-Plugin collections group security tests, custom policies, and prompts for reuse across your team's scans.
-
-Open **Policies → Plugin Collections** to create a collection and choose its plugins.
+Create a plugin collection to reuse a set of security tests, custom policies, and prompts across your team's scans.
 
 ## Configuring Scans
 
-Open **Red Team → Scan Templates** and click **Create Scan Template**. Choose **New Scan Template** and enter a name, or select **Upload YAML** to import an existing Promptfoo configuration.
-
-Configure the **Plugins** and **Strategies** tabs, then check **Review** and save the template. [Strategies](/docs/red-team/strategies/) determine how adversarial probes are delivered. Select the target when you run the template.
+Navigation and button labels vary by release. In the scan template list, create a template or import an existing Promptfoo YAML configuration. Select plugins or a collection, choose [strategies](/docs/red-team/strategies/), and save the template.
 
 ## Running a Scan
 
-Save your scan template, then select **Scan Now** in its **Review** section. Choose the target, confirm the selected scan template, and review the run options.
+Start a run from the saved template and choose the target. Check the inference providers and credentials for generation and grading. When you run an organization-wide template against another team's target, the report belongs to the **target's team**.
 
-If server-side execution is enabled and the target supports it, select **Run on Server**, then **Run Red Team Scan**. The scan executes on your deployment's runner. Before starting, verify that generation and grading use the intended inference providers and credentials.
+### Run on the server
 
-Follow the scan's status, probe progress, and logs in **Scan History** or the target's run history.
+If your deployment and target support server execution, choose the server option and start the scan. Open the run in scan history to check progress, view logs, or open the report.
 
-To stop a running server scan, open its details and select **Stop**. With permission to update jobs, you can choose **Cancel Scan** to stop without publishing, or **Publish Partial Report** to publish the completed probes. Partial reports require at least one completed probe and do not represent a completed scan. Open the available results with **View Report** or **View Partial Report**.
+With permission to update jobs, you can stop the run and cancel without publishing. Once at least one probe completes, you can also stop and publish a partial report containing only the completed probes.
 
-For programmatic runs, the **Jobs** section of the [API reference](/docs/api-reference/) documents **Start job**, **Get job**, **Stream job logs**, and **Stop job**, including the request fields for canceling a run or publishing a partial report.
+For programmatic runs, see **Jobs** in the [API reference](/docs/api-reference/). On-prem, use `/static/openapi.json` from your API host for the operations supported by your release.
 
-To execute from your machine, select **Run via CLI** and use the generated command, or use **Export Config** to download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment before running the command. Commands referencing a saved scan configuration retain that configuration's team; see [CLI team selection](./authentication.md#checking-current-team).
+### Run locally
 
-`promptfoo redteam run` generates adversarial probes and runs them against your target. When sharing is enabled, it uploads the results to your configured Promptfoo Enterprise instance. Review them through the report link in the terminal or the Enterprise UI; see [Findings and Reports](./findings.md).
+[Authenticate](./authentication.md) to your deployment, then run the generated CLI command. For saved configurations, the report goes to the team assigned to the run, even if your [current CLI team](./authentication.md#checking-current-team) is different. The same target team rule applies to cross-team runs.
+
+You can also export the YAML file and run `promptfoo redteam run -c promptfooconfig.yaml`. When sharing is enabled, open the report link in the terminal or find the results in the Enterprise UI. See [Findings and Reports](./findings.md).
 
 ## See Also
 

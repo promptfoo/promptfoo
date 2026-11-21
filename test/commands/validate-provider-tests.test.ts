@@ -10,6 +10,8 @@ import { createMockProvider, type MockApiProvider } from '../factories/provider'
 
 import type { UnifiedConfig } from '../../src/types/index';
 
+const { createUuidModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
@@ -24,13 +26,7 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('../../src/util/uuid', () => ({
-  isUuid: vi.fn((str: string) => {
-    // Check if the string looks like a UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }),
-}));
+vi.mock('../../src/util/uuid', createUuidModuleFactory());
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
