@@ -104,6 +104,7 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
   'retry',
   'rot13',
+  'unicode-normalization',
   'video',
 ] as const;
 
@@ -140,8 +141,122 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'unicode-normalization',
 ] as const;
 export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGURABLE_STRATEGIES);
+
+export const UNICODE_NORMALIZATION_FORMS = ['NFC', 'NFD', 'NFKC', 'NFKD'] as const;
+export type UnicodeNormalizationForm = (typeof UNICODE_NORMALIZATION_FORMS)[number];
+export const DEFAULT_UNICODE_NORMALIZATION_FORM: UnicodeNormalizationForm = 'NFKD';
+const UNICODE_NORMALIZATION_FORM_SET: ReadonlySet<string> = new Set(UNICODE_NORMALIZATION_FORMS);
+
+export function isUnicodeNormalizationForm(form: unknown): form is UnicodeNormalizationForm {
+  return typeof form === 'string' && UNICODE_NORMALIZATION_FORM_SET.has(form);
+}
+
+type StrategyConfigLike = Record<string, unknown> | undefined;
+
+const MAX_LAYER_NESTING_DEPTH = 64;
+
+export interface UnicodeNormalizationConfigIssue {
+  message: string;
+  path: Array<string | number>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Validates Unicode normalization configuration, including nested Layer steps.
+ */
+export function findUnicodeNormalizationConfigIssues(
+  strategyId: string,
+  config: StrategyConfigLike,
+  configPath: Array<string | number> = ['config'],
+  depth = 0,
+): UnicodeNormalizationConfigIssue[] {
+  if (strategyId === 'unicode-normalization') {
+    const form = config?.form;
+    return form !== undefined && !isUnicodeNormalizationForm(form)
+      ? [
+          {
+            message: 'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
+            path: [...configPath, 'form'],
+          },
+        ]
+      : [];
+  }
+
+  if (strategyId !== 'layer' || !Array.isArray(config?.steps)) {
+    return [];
+  }
+
+  if (depth >= MAX_LAYER_NESTING_DEPTH) {
+    return [
+      {
+        message: `Layer nesting exceeds ${MAX_LAYER_NESTING_DEPTH} levels`,
+        path: configPath,
+      },
+    ];
+  }
+
+  return config.steps.flatMap((step, index) => {
+    if (typeof step === 'string') {
+      return [];
+    }
+
+    const stepRecord = asRecord(step);
+    if (!stepRecord || typeof stepRecord.id !== 'string') {
+      return [];
+    }
+
+    return findUnicodeNormalizationConfigIssues(
+      stepRecord.id,
+      asRecord(stepRecord.config),
+      [...configPath, 'steps', index, 'config'],
+      depth + 1,
+    );
+  });
+}
+
+/**
+ * Returns true when the strategy is Unicode normalization, or a non-empty Layer
+ * tree composed exclusively of Unicode normalization steps.
+ */
+export function isUnicodeNormalizationOnlyStrategy(
+  strategyId: string,
+  config: StrategyConfigLike,
+  depth = 0,
+): boolean {
+  if (strategyId === 'unicode-normalization') {
+    return true;
+  }
+
+  if (
+    strategyId !== 'layer' ||
+    depth >= MAX_LAYER_NESTING_DEPTH ||
+    !Array.isArray(config?.steps) ||
+    config.steps.length === 0
+  ) {
+    return false;
+  }
+
+  return config.steps.every((step) => {
+    if (typeof step === 'string') {
+      return step === 'unicode-normalization';
+    }
+
+    const stepRecord = asRecord(step);
+    return (
+      !!stepRecord &&
+      typeof stepRecord.id === 'string' &&
+      isUnicodeNormalizationOnlyStrategy(stepRecord.id, asRecord(stepRecord.config), depth + 1)
+    );
+  });
+}
 
 /**
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
@@ -153,6 +268,7 @@ export const ENCODING_STRATEGIES = new Set([
   'rot13',
   'leetspeak',
   'homoglyph',
+  'unicode-normalization',
   'morse',
   'atbash',
   'piglatin',

@@ -3,7 +3,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { isCustomStrategy } from '../constants/strategies';
+import { findUnicodeNormalizationConfigIssues, isCustomStrategy } from '../constants/strategies';
 import { addArabicPresentationForms } from './arabicPresentationForms';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -34,6 +34,7 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 import { withPersistableGenerationProvider } from './types';
+import { addUnicodeNormalization } from './unicodeNormalization';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
@@ -350,6 +351,15 @@ export const Strategies: Strategy[] = [
   },
   createEncodingStrategy('rot13', 'ROT13', () => addRot13),
   {
+    id: 'unicode-normalization',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Unicode normalization to ${testCases.length} test cases`);
+      const newTestCases = addUnicodeNormalization(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Unicode-normalized test cases`);
+      return newTestCases;
+    },
+  },
+  {
     // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
     action: async (testCases, injectVar, config) => {
@@ -388,6 +398,11 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
         throw new Error('Basic strategy enabled config must be a boolean');
       }
       continue;
+    }
+
+    const [configIssue] = findUnicodeNormalizationConfigIssues(strategy.id, strategy.config);
+    if (configIssue) {
+      throw new Error(configIssue.message);
     }
   }
 
