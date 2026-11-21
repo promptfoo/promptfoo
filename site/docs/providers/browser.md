@@ -151,7 +151,7 @@ providers:
 
 **Key options:**
 
-- `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, Promptfoo runs it with concurrency `1`.
+- `persistSession: true` - Keep the browser page open between `callApi()` invocations. Promptfoo runs this stateful workflow with concurrency `1`. Overlapping calls on the same provider run in sequence and share a page. Use separate provider instances for independent conversations.
 - `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns). If the page closes or a turn fails, the next call starts a new session and reruns these steps.
 
 Promptfoo closes the pages, contexts, and launched browsers it owns when the eval ends. It disconnects its own client connection while leaving connected user-owned browsers and existing contexts open. When calling a provider directly, call `await provider.cleanup()` after the final turn.
@@ -339,7 +339,9 @@ Supported config options:
 
 String-valued step arguments support Nunjucks templating with `{{prompt}}` and variables passed in the test context. Cookie values and connection options are not templated.
 
-String cookies (for example, `session=abc==; preference=compact`) use the host and directory of the first `navigate` step's rendered HTTP(S) URL. Without such a navigation URL, use cookie objects with an explicit `url` or `domain`/`path` scope; those scopes are preserved.
+String cookies (for example, `session=abc==; preference=compact`) use the host and directory of the first `navigate` step's rendered HTTP(S) URL. Configure a fixed scheme, host, and port for that step. To navigate to a dynamic host or set cookies without navigation, use cookie objects with an explicit `url` or `domain` and `path`.
+
+Browser steps can use prompt text and context variables. Keep targets and selectors fixed when those inputs are untrusted. Limit interpolation to the text you intend to submit.
 
 ### Browser Support
 
