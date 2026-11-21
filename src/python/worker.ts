@@ -136,18 +136,6 @@ export class PythonWorker {
           reject(new Error('Worker failed to become ready within timeout')),
         );
       }, 30000);
-      const cancelStartup = () => {
-        finishStartup();
-        reject(startup.signal.reason);
-      };
-      const finishStartup = () => {
-        clearTimeout(readyTimeout);
-        startup.signal.removeEventListener('abort', cancelStartup);
-        if (this.startupCancellation === startup) {
-          this.startupCancellation = null;
-        }
-      };
-      startup.signal.addEventListener('abort', cancelStartup, { once: true });
 
       pythonProcess.on('message', (message: string) => {
         if (message.trim() === 'READY') {

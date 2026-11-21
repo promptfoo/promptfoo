@@ -77,7 +77,7 @@ export class PythonWorkerPool {
       await Promise.all(initPromises);
     } catch (error) {
       // Failed startup must release both ready and still-starting peers before retrying.
-      await Promise.all(this.workers.splice(0).map((worker) => worker.shutdown()));
+      await this.shutdown();
       throw error;
     }
     if (this.shuttingDown) {
@@ -146,7 +146,10 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
-    this.shutdownPromise ??= this.shutdownWorkers();
+    this.shutdownPromise ??= this.shutdownWorkers().catch((error) => {
+      this.shutdownPromise = null;
+      throw error;
+    });
     return this.shutdownPromise;
   }
 
@@ -154,7 +157,6 @@ export class PythonWorkerPool {
     this.shuttingDown = true;
     this.isInitialized = false;
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
-    this.isInitialized = false;
 
     // Reject any queued requests
     for (const req of this.queue.splice(0)) {
@@ -162,9 +164,12 @@ export class PythonWorkerPool {
     }
 
     // Shutdown all workers in parallel
-    await Promise.all(this.workers.map((w) => w.shutdown()));
-
-    this.workers = [];
+    const results = await Promise.allSettled(this.workers.map((worker) => worker.shutdown()));
+    this.workers = this.workers.filter((_, i) => results[i].status === 'rejected');
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure) {
+      throw failure.reason;
+    }
 
     logger.debug('Python worker pool shutdown complete');
   }

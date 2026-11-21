@@ -4,6 +4,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { waitForPromiseWithAbort } from './fetch/requestSignal';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { loadYaml } from './yamlLoad';
@@ -19,7 +20,6 @@ export async function loadFileReference(
   basePath: string = '',
   signal?: AbortSignal,
 ): Promise<any> {
-  signal?.throwIfAborted();
   // Parse file:// URL with Windows-aware path handling
   const { filePath, functionName } = parseFileUrl(fileRef);
 
@@ -32,57 +32,43 @@ export async function loadFileReference(
   );
 
   try {
-    if (extension === '.json') {
-      logger.debug(`Loading JSON file: ${resolvedPath}`);
-      const content = await fs.promises.readFile(resolvedPath, { encoding: 'utf8', signal });
-      signal?.throwIfAborted();
-      return JSON.parse(content);
-    } else if (extension === '.yaml' || extension === '.yml') {
-      logger.debug(`Loading YAML file: ${resolvedPath}`);
-      const content = await fs.promises.readFile(resolvedPath, { encoding: 'utf8', signal });
-      signal?.throwIfAborted();
-      return loadYaml(content);
-    } else if (isJavascriptFile(resolvedPath)) {
-      logger.debug(`Loading JavaScript file: ${resolvedPath}`);
-      const loading = (async () => {
-        const mod = await importModule(resolvedPath, functionName);
-        signal?.throwIfAborted();
-        return typeof mod === 'function' ? await mod() : mod;
-      })();
-      if (!signal) {
-        return await loading;
+    if (signal) {
+      signal.throwIfAborted();
+      const stats = await waitForPromiseWithAbort(fs.promises.stat(resolvedPath), signal);
+      if (!stats.isFile()) {
+        throw new Error('Config reference must be a regular file');
       }
-      // Arbitrary in-process JavaScript cannot be terminated. Stop awaiting it;
-      // late completion must not continue resolving config or start a worker.
-      const onAbort = () => rejectLoading(signal.reason);
-      let rejectLoading: (reason: unknown) => void;
-      try {
-        return await new Promise((resolve, reject) => {
-          rejectLoading = reject;
-          signal.addEventListener('abort', onAbort, { once: true });
-          loading.then(resolve, reject);
-        });
-      } finally {
-        signal.removeEventListener('abort', onAbort);
-      }
-    } else if (extension === '.py') {
-      logger.debug(
-        `Loading Python file: ${resolvedPath}, function: ${functionName || 'get_config'}`,
-      );
-      const fnName = functionName || 'get_config';
-      const result = await runPython(resolvedPath, fnName, [], { signal });
-      return result;
-    } else if (extension === '.txt' || extension === '.md' || extension === '') {
-      // For text files, just return the content as a string
-      logger.debug(`Loading text file: ${resolvedPath}`);
-      const content = await fs.promises.readFile(resolvedPath, { encoding: 'utf8', signal });
+      signal.throwIfAborted();
+    }
+    if (isJavascriptFile(resolvedPath)) {
+      const mod = await waitForPromiseWithAbort(importModule(resolvedPath, functionName), signal);
       signal?.throwIfAborted();
-      return content;
-    } else {
-      logger.debug(`Unsupported file extension: ${extension}`);
+      // In-process JavaScript can finish later, but must not start another worker.
+      return typeof mod === 'function'
+        ? await waitForPromiseWithAbort(Promise.resolve(mod()), signal)
+        : mod;
+    }
+    if (extension === '.py') {
+      const fn = functionName || 'get_config';
+      // runPython stops its child and waits for it to close before rejecting.
+      return signal
+        ? await runPython(resolvedPath, fn, [], { abortSignal: signal })
+        : await runPython(resolvedPath, fn, []);
+    }
+    if (!['.json', '.yaml', '.yml', '.txt', '.md', ''].includes(extension)) {
       throw new Error(`Unsupported file extension: ${extension}`);
     }
+    const content = await waitForPromiseWithAbort(
+      fs.promises.readFile(resolvedPath, signal ? { encoding: 'utf8', signal } : 'utf8'),
+      signal,
+    );
+    signal?.throwIfAborted();
+    if (extension === '.json') {
+      return JSON.parse(content);
+    }
+    return extension === '.yaml' || extension === '.yml' ? loadYaml(content) : content;
   } catch (error) {
+    signal?.throwIfAborted();
     logger.error(`Error loading file reference ${fileRef}: ${error}`);
     throw error;
   }

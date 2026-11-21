@@ -249,7 +249,6 @@ export async function runPython<T = unknown>(
       ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
     };
 
-    options.signal?.throwIfAborted();
     logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
@@ -368,7 +367,6 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    options.signal?.throwIfAborted();
     logger.debug('[Python] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;

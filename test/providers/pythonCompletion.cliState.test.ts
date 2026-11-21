@@ -25,7 +25,7 @@ vi.mock('../../src/util/createHash', () => ({
 }));
 
 vi.mock('../../src/util/fileReference', () => ({
-  processConfigFileReferences: vi.fn(async (config) => config),
+  processConfigFileReferences: vi.fn((config) => config),
 }));
 
 vi.mock('../../src/util/index', () => ({

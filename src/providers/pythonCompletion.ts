@@ -19,10 +19,12 @@ import {
   hasScriptResultError,
   validateScriptResult,
 } from './scriptResult';
+import { waitForPromiseWithAbort } from './shared';
 
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -63,8 +65,11 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
-  private initializationGeneration = 0;
+  private startup?: AbortController;
+  private shutdownPromise?: Promise<void>;
+  private resolvedConfig?: PythonProviderConfig;
   public label: string | undefined;
+  private pool: PythonWorkerPool | null = null;
 
   constructor(
     runPath: string,
@@ -85,117 +90,51 @@ export class PythonProvider implements ApiProvider {
     return `python:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
-  /**
-   * Process any file:// references in the configuration and initialize worker pool
-   * This should be called after initialization
-   * @returns A promise that resolves when all file references have been processed
-   */
-  public async initialize(): Promise<void> {
-    await this.getPool();
-  }
-
-  private async getPool(): Promise<PythonWorkerPool> {
-    while (this.shutdownPromise) {
-      await this.shutdownPromise;
-    }
-    if (this.poolPromise) {
-      return this.poolPromise;
-    }
-    // A failed startup may still own workers if its cleanup rejected. Dispose
-    // those workers before retrying; a partial pool is never ready for calls.
-    if (this.ownedPool) {
+  async initialize(): Promise<void> {
+    // Failed teardown keeps ownership. Never replace a pool until it is stopped.
+    while (this.shutdownPromise || this.startup?.signal.aborted) {
       await this.shutdown();
-      return this.getPool();
+    }
+    if (this.initializationPromise) {
+      return this.initializationPromise;
     }
 
-    const generation = ++this.initializationGeneration;
-    this.initializationPromise = (async () => {
-      let pool: PythonWorkerPool | undefined;
-      try {
-        const config = await processConfigFileReferences(
-          this.config,
-          this.options?.config.basePath || '',
+    const startup = new AbortController();
+    this.startup = startup;
+    const initialization = this.startPool(startup.signal);
+    this.initializationPromise = initialization;
+    providerRegistry.register(this);
+    try {
+      await initialization;
+    } catch (error) {
+      if (this.startup === startup && !startup.signal.aborted) {
+        await this.shutdown().catch((cause) =>
+          logger.warn('Failed to release Python provider after startup failure', { cause }),
         );
-        if (generation !== this.initializationGeneration) {
-          throw new Error('Python provider initialization interrupted by cleanup');
-        }
-        this.config = config;
-
-        // Initialize worker pool
-        const workerCount = this.getWorkerCount();
-        const absPath = path.resolve(
-          path.join(this.options?.config.basePath || '', this.scriptPath),
-        );
-
-        pool = new PythonWorkerPool(
-          absPath,
-          this.functionName || 'call_api',
-          workerCount,
-          getConfiguredPythonPath(
-            this.config.pythonExecutable,
-            this.options?.env?.PROMPTFOO_PYTHON,
-          ),
-          this.config.timeout,
-        );
-        this.pool = pool;
-        providerRegistry.register(this);
-
-        await pool.initialize();
-        if (generation !== this.initializationGeneration) {
-          throw new Error('Python provider initialization interrupted by cleanup');
-        }
-
-        this.isInitialized = true;
-        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      } catch (error) {
-        if (generation === this.initializationGeneration) {
-          this.initializationPromise = null;
-          if (pool && this.pool === pool) {
-            this.pool = null;
-            providerRegistry.unregister(this);
-            try {
-              await pool.shutdown();
-            } catch (shutdownError) {
-              logger.warn('Failed to shut down a Python provider after initialization failed', {
-                error: shutdownError,
-              });
-            }
-          }
-        }
-        throw error;
-      }
-
-      // Initialize worker pool
-      const workerCount = this.getWorkerCount();
-      const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
-
-      const pool = new PythonWorkerPool(
-        absPath,
-        this.functionName || 'call_api',
-        workerCount,
-        getConfiguredPythonPath(this.config.pythonExecutable),
-        this.config.timeout,
-      );
-      this.ownedPool = pool;
-      await pool.initialize();
-      if (cleanupGeneration !== this.cleanupGeneration) {
-        throw new Error('Python provider initialization interrupted by cleanup');
-      }
-      logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      return pool;
-    })().catch(async (error) => {
-      this.poolPromise = null;
-      // An explicit shutdown already owns cleanup and joins this readiness
-      // promise. Awaiting it here would make the two promises wait on each other.
-      if (!this.shutdownPromise) {
-        await this.shutdown().catch((cleanupError) => {
-          logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
-        });
       }
       throw error;
-    });
+    }
+  }
 
-    return this.poolPromise;
+  private async startPool(signal: AbortSignal) {
+    const basePath = this.options?.config.basePath || '';
+    if (this.config !== this.resolvedConfig) {
+      const config = await processConfigFileReferences(this.config, basePath, signal);
+      signal.throwIfAborted();
+      // Resolved files can themselves contain literal file:// strings.
+      this.config = config;
+      this.resolvedConfig = config;
+    }
+    this.pool = new PythonWorkerPool(
+      path.resolve(basePath, this.scriptPath),
+      this.functionName || 'call_api',
+      this.getWorkerCount(),
+      getConfiguredPythonPath(this.config.pythonExecutable, this.options?.env?.PROMPTFOO_PYTHON),
+      this.config.timeout,
+    );
+    await this.pool.initialize();
+    signal.throwIfAborted();
+    this.isInitialized = true;
   }
 
   /**
@@ -264,8 +203,15 @@ export class PythonProvider implements ApiProvider {
     prompt: string,
     context: CallApiContextParams | undefined,
     apiType: ScriptApiType,
+    signal?: AbortSignal,
   ): Promise<any> {
-    const pool = await this.getPool();
+    signal?.throwIfAborted();
+    if (!this.isInitialized) {
+      // A caller can stop waiting without cancelling a shared provider's startup.
+      await waitForPromiseWithAbort(this.initialize(), signal);
+    }
+    signal?.throwIfAborted();
+    const pool = this.pool;
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -317,6 +263,10 @@ export class PythonProvider implements ApiProvider {
 
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
+      signal?.throwIfAborted();
+      if (!pool || this.pool !== pool || !this.isInitialized) {
+        throw new Error('Python provider interrupted by cleanup');
+      }
       const result = await pool.execute(functionName, args);
 
       validateScriptResult(apiType, functionName, result, 'Python');
@@ -338,8 +288,12 @@ export class PythonProvider implements ApiProvider {
     }
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    return this.executePythonScript(prompt, context, 'call_api');
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    return this.executePythonScript(prompt, context, 'call_api', options?.abortSignal);
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
@@ -354,14 +308,29 @@ export class PythonProvider implements ApiProvider {
     await this.shutdown();
   }
 
-  async shutdown(): Promise<void> {
-    this.initializationGeneration++;
-    const initialization = this.initializationPromise;
-    this.initializationPromise = null;
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
+    }
     this.isInitialized = false;
-    const pool = this.pool;
-    this.pool = null;
-    providerRegistry.unregister(this);
-    await Promise.all([pool?.shutdown(), initialization?.catch(() => {})]);
+    this.startup?.abort(
+      new DOMException('Python provider initialization interrupted by cleanup', 'AbortError'),
+    );
+    this.shutdownPromise = (async () => {
+      const [cleanup] = await Promise.allSettled([
+        this.pool?.shutdown(),
+        this.initializationPromise,
+      ]);
+      if (cleanup.status === 'rejected') {
+        throw cleanup.reason;
+      }
+      this.pool = null;
+      this.initializationPromise = null;
+      this.startup = undefined;
+      providerRegistry.unregister(this);
+    })().finally(() => {
+      this.shutdownPromise = undefined;
+    });
+    return this.shutdownPromise;
   }
 }

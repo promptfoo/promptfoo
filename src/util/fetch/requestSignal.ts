@@ -36,3 +36,33 @@ export function isCallerAbortError(
           (error as Error & { cause?: unknown }).cause === signal.reason)))
   );
 }
+
+/** Stop only this caller's wait; shared work keeps running and its rejection is observed. */
+export function waitForPromiseWithAbort<T>(
+  promise: PromiseLike<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return Promise.resolve(promise);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(getCallerAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}

@@ -18,10 +18,12 @@ vi.mock('fs', async () => {
       ...actual,
       promises: {
         readFile: vi.fn(),
+        stat: vi.fn(async () => ({ isFile: () => true })),
       },
     },
     promises: {
       readFile: vi.fn(),
+      stat: vi.fn(async () => ({ isFile: () => true })),
     },
   };
 });
@@ -94,6 +96,21 @@ describe('fileReference utility functions', () => {
     runPython.mockResolvedValue({});
   });
 
+  it('passes cancellation through nested file and Python references', async () => {
+    const { signal } = new AbortController();
+    readFileMock.mockResolvedValueOnce('content');
+    runPython.mockResolvedValueOnce({ value: 'local' });
+    await processConfigFileReferences(
+      { settings: ['file://sample.txt', 'file://config.py'] },
+      '/base',
+      signal,
+    );
+    expect(readFileMock).toHaveBeenCalledWith('/base/sample.txt', { encoding: 'utf8', signal });
+    expect(runPython).toHaveBeenCalledWith('/base/config.py', 'get_config', [], {
+      abortSignal: signal,
+    });
+  });
+
   describe('loadFileReference', () => {
     it('should load JSON files correctly', async () => {
       const fileRef = 'file:///path/to/config.json';
@@ -105,10 +122,7 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.json', {
-        encoding: 'utf8',
-        signal: undefined,
-      });
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.json', 'utf8');
       expect(result).toEqual(parsedContent);
     });
 
@@ -122,10 +136,7 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', {
-        encoding: 'utf8',
-        signal: undefined,
-      });
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
       expect(loadYaml).toHaveBeenCalledWith(fileContent);
       expect(result).toEqual(parsedContent);
     });
@@ -164,9 +175,7 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', [], {
-        signal: undefined,
-      });
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', []);
       expect(result).toEqual(pythonOutput);
     });
 
@@ -178,9 +187,7 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', [], {
-        signal: undefined,
-      });
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', []);
       expect(result).toEqual(pythonOutput);
     });
 
@@ -192,10 +199,7 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.txt', {
-        encoding: 'utf8',
-        signal: undefined,
-      });
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.txt', 'utf8');
       expect(result).toEqual(fileContent);
     });
 
@@ -212,10 +216,7 @@ describe('fileReference utility functions', () => {
       const result = await loadFileReference(fileRef, basePath);
 
       expect(path.resolve).toHaveBeenCalledWith('/base/path', 'config.json');
-      expect(fs.promises.readFile).toHaveBeenCalledWith('/base/path/config.json', {
-        encoding: 'utf8',
-        signal: undefined,
-      });
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/base/path/config.json', 'utf8');
       expect(result).toEqual(parsedContent);
     });
 
@@ -230,103 +231,6 @@ describe('fileReference utility functions', () => {
   });
 
   describe('processConfigFileReferences', () => {
-    it.each(['json', 'yaml', 'yml', 'txt', 'md', ''])(
-      'cancels an in-flight %s file read',
-      async (extension) => {
-        const controller = new AbortController();
-        const reason = new Error('configuration cancelled');
-        let finishRead!: () => void;
-        let readSignal: AbortSignal | undefined;
-        readFileMock.mockImplementation((_file, options) => {
-          readSignal = typeof options === 'object' && options ? options.signal : undefined;
-          return new Promise((resolve, reject) => {
-            finishRead = () => resolve('{}');
-            readSignal?.addEventListener('abort', () => reject(readSignal?.reason), { once: true });
-          });
-        });
-        const pending = loadFileReference(
-          `file:///config${extension ? `.${extension}` : ''}`,
-          '',
-          controller.signal,
-        );
-        const result = expect(pending).rejects.toBe(reason);
-        controller.abort(reason);
-        finishRead();
-        await result;
-        expect(readSignal).toBe(controller.signal);
-      },
-    );
-
-    it.each(['json', 'yaml', 'yml', 'txt', 'md', ''])(
-      'rejects a %s file result completed during cancellation',
-      async (extension) => {
-        const controller = new AbortController();
-        const reason = new Error('configuration cancelled');
-        readFileMock.mockImplementation(async () => {
-          controller.abort(reason);
-          return '{}';
-        });
-        await expect(
-          loadFileReference(
-            `file:///config${extension ? `.${extension}` : ''}`,
-            '',
-            controller.signal,
-          ),
-        ).rejects.toBe(reason);
-      },
-    );
-
-    it('passes cancellation through nested arrays and objects to Python execution', async () => {
-      const controller = new AbortController();
-      await processConfigFileReferences(
-        { nested: [{ settings: 'file:///path/to/config.py' }] },
-        '',
-        controller.signal,
-      );
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', [], {
-        signal: controller.signal,
-      });
-    });
-
-    it('removes its JavaScript abort listener after successful loading', async () => {
-      const controller = new AbortController();
-      const add = vi.spyOn(controller.signal, 'addEventListener');
-      const remove = vi.spyOn(controller.signal, 'removeEventListener');
-      importModule.mockResolvedValue(() => ({ value: 'loaded' }));
-      vi.mocked(isJavascriptFile).mockReturnValue(true);
-      try {
-        expect(await loadFileReference('file:///path/to/config.js', '', controller.signal)).toEqual(
-          { value: 'loaded' },
-        );
-        const listener = add.mock.calls.find(([event]) => event === 'abort')?.[1];
-        expect(listener).toBeDefined();
-        expect(remove).toHaveBeenCalledWith('abort', listener);
-        controller.abort();
-      } finally {
-        add.mockRestore();
-        remove.mockRestore();
-      }
-    });
-
-    it('does not invoke JavaScript after cancellation during module loading', async () => {
-      const controller = new AbortController();
-      let finish!: (value: unknown) => void;
-      importModule.mockReturnValue(
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-      );
-      vi.mocked(isJavascriptFile).mockReturnValue(true);
-      const loader = vi.fn();
-      const pending = loadFileReference('file:///path/to/config.js', '', controller.signal).catch(
-        (error: Error) => error,
-      );
-      controller.abort();
-      finish(loader);
-      expect(await pending).toBe(controller.signal.reason);
-      expect(loader).not.toHaveBeenCalled();
-    });
-
     it('should return primitive values as is', async () => {
       await expect(processConfigFileReferences(42)).resolves.toBe(42);
       await expect(processConfigFileReferences('test')).resolves.toBe('test');

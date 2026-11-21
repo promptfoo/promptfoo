@@ -60,9 +60,6 @@ afterEach(() => {
 });
 
 describe('Ruby utilities', () => {
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();

@@ -642,6 +642,7 @@ export class ProviderRegistry {
   private ensureShutdownHandlers(): void {
     if (this.installProcessHandlers && !this.shutdownRegistered) {
       this.registerShutdownHandlers();
+      this.shutdownRegistered = true;
     }
   }
 

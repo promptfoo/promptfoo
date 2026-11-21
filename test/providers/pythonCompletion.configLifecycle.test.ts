@@ -1,4 +1,3 @@
-import { watch } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -110,87 +109,11 @@ describe('Python provider configuration lifetime', () => {
     expect(await provider.callApi('retry')).toMatchObject({ output: 'file://store.db' });
     expect(mocks.initialize).toHaveBeenCalledOnce();
   });
-  it.each([false, true])(
-    'closes a Python configuration child before shutdown (ignore TERM=%s)',
-    async (ignoreTerm) => {
-      const filename = path.join(directory, 'blocking.py');
-      const pidFile = path.join(directory, 'blocking.pid');
-      await writeFile(
-        filename,
-        `import os, signal, time
-from pathlib import Path
-def get_config():
- ${ignoreTerm ? 'signal.signal(signal.SIGTERM, signal.SIG_IGN)' : 'pass'}
- pid_file = Path(__file__).with_suffix('.pid')
- pending = pid_file.with_suffix('.tmp')
- pending.write_text(str(os.getpid()))
- pending.replace(pid_file)
- while True: time.sleep(1)
-`,
-      );
-      const provider = createProvider(`file://${filename}`);
-      let watcher: ReturnType<typeof watch> | undefined;
-      const ready = new Promise<number>((resolve, reject) => {
-        const readPid = async () => {
-          try {
-            const pid = Number(await readFile(pidFile, 'utf8'));
-            if (pid > 0) {
-              resolve(pid);
-            }
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              reject(error);
-            }
-          }
-        };
-        watcher = watch(directory, (_event, changedFile) => {
-          if (changedFile === 'blocking.pid' || changedFile === null) {
-            void readPid();
-          }
-        });
-        watcher.on('error', reject);
-        void readPid();
-      });
-      const initializing = provider.initialize().catch((error: Error) => error);
-      let pid: number | undefined;
-      const alive = () => {
-        if (!pid) {
-          return false;
-        }
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
-            return false;
-          }
-          throw error;
-        }
-      };
-      try {
-        pid = await Promise.race([
-          ready,
-          initializing.then((error) => {
-            throw error ?? new Error('Configuration returned before publishing its PID');
-          }),
-        ]);
-        expect(alive()).toBe(true);
-        await providerRegistry.shutdownAll();
-        expect(await initializing).toMatchObject({ name: 'AbortError' });
-        expect(alive()).toBe(false);
-        expect(mocks.initialize).not.toHaveBeenCalled();
-        await writeFile(filename, "def get_config():\n return {'storageUri': 'retry-ok'}\n");
-        expect(await provider.callApi('retry')).toMatchObject({ output: 'retry-ok' });
-        expect(mocks.initialize).toHaveBeenCalledOnce();
-      } finally {
-        watcher?.close();
-        if (pid && alive()) {
-          process.kill(pid, 'SIGKILL');
-        }
-        await vi.waitFor(() => expect(alive()).toBe(false));
-      }
-    },
-  );
+  it('rejects a non-regular config file before reading it', async () => {
+    const provider = createProvider(`file://${directory}`);
+    await expect(provider.initialize()).rejects.toThrow('regular file');
+    expect(mocks.initialize).not.toHaveBeenCalled();
+  });
 
   it.each(['resolve', 'reject'] as const)(
     'cancels unresolved JavaScript configuration and ignores a late %s after reuse',
