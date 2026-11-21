@@ -19,6 +19,7 @@ vi.mock('natural', () => {
 });
 
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
+import { validateAssertions } from '../../src/assertions/validateAssertions';
 
 // Mock NLP here; integration and CLI tests cover the real dependency.
 function meteor(opts: {
@@ -163,6 +164,27 @@ describe('handleMeteorAssertion', () => {
       });
     });
 
+    it('rejects invalid options before evaluating defaults and nested assertions', () => {
+      const assertion = { type: 'not-meteor' as const, value: 'reference', alpha: 1.1 };
+      expect(() => validateAssertions([], { assert: [assertion] })).toThrow(
+        'defaultTest.assert[0]',
+      );
+      expect(() =>
+        validateAssertions([{ assert: [{ type: 'assert-set', assert: [assertion] }] }]),
+      ).toThrow('tests[0].assert[0].assert[0]');
+    });
+
+    it('keeps the precision needed to explain a close comparison', async () => {
+      const result = await meteor({
+        output: 'one two',
+        value: 'one two',
+        gamma: 0.49984,
+        threshold: 0.93751,
+        inverse: true,
+      });
+      expect(result.reason).toContain('0.93752 met threshold 0.93751');
+    });
+
     it('respects a custom threshold', async () => {
       const input = {
         output: 'The cat is sitting on the mat',
@@ -177,7 +199,7 @@ describe('handleMeteorAssertion', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(defaultResult.score);
       expect(result.reason).toBe(
-        `METEOR score ${result.score.toFixed(4)} did not meet threshold ${threshold}`,
+        `METEOR score ${result.score} did not meet threshold ${threshold}`,
       );
     });
 
@@ -208,7 +230,7 @@ describe('handleMeteorAssertion', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBeLessThan(0.05);
       expect(result.reason).toMatch(
-        /^METEOR score \d\.\d{4} met threshold 0\.5 \(expected it not to\)$/,
+        /^METEOR score \d\.\d+ met threshold 0\.5 \(expected it not to\)$/,
       );
     });
 
@@ -236,7 +258,7 @@ describe('handleMeteorAssertion', () => {
       });
       expect(positiveResult.pass).toBe(false);
       expect(positiveResult.score).toBeLessThan(0.5);
-      expect(positiveResult.reason).toMatch(/^METEOR score \d\.\d{4} did not meet threshold 0\.5$/);
+      expect(positiveResult.reason).toMatch(/^METEOR score \d\.\d+ did not meet threshold 0\.5$/);
       expect(result.pass).toBe(true);
       expect(result.score).toBeCloseTo(1 - positiveResult.score, 12);
       expect(result.reason).toBe('METEOR assertion passed');

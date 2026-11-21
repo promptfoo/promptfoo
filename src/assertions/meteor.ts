@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { getMeteorOptions } from './meteorOptions';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -35,14 +36,6 @@ async function ensureNaturalPackage(): Promise<void> {
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
-
-interface MeteorAssertion {
-  type: string;
-  threshold?: number;
-  alpha?: number;
-  beta?: number;
-  gamma?: number;
-}
 
 function generateEnums(candidate: string[], reference: string[]): [WordPair[], WordPair[]] {
   if (typeof candidate === 'string') {
@@ -256,29 +249,7 @@ export async function handleMeteorAssertion({
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
 
   // Get parameters from assertion or use defaults
-  const meteorAssertion = assertion as unknown as MeteorAssertion;
-  const alpha = meteorAssertion.alpha ?? 0.9;
-  const beta = meteorAssertion.beta ?? 3.0;
-  const gamma = meteorAssertion.gamma ?? 0.5;
-  const threshold = meteorAssertion.threshold ?? 0.5;
-
-  invariant(
-    Number.isFinite(alpha) && alpha >= 0 && alpha <= 1,
-    '"meteor" assertion alpha must be a finite number between 0 and 1',
-  );
-  invariant(
-    Number.isFinite(beta) && beta >= 0,
-    '"meteor" assertion beta must be a finite number greater than or equal to 0',
-  );
-  invariant(
-    Number.isFinite(gamma) && gamma >= 0 && gamma <= 1,
-    '"meteor" assertion gamma must be a finite number between 0 and 1',
-  );
-  invariant(
-    Number.isFinite(threshold) && threshold >= 0 && threshold <= 1,
-    '"meteor" assertion threshold must be a finite number between 0 and 1',
-  );
-
+  const { alpha, beta, gamma, threshold } = getMeteorOptions(assertion);
   const score = await calculateMeteorScore(outputString, references, alpha, beta, gamma);
 
   const pass = inverse ? score < threshold : score >= threshold;
@@ -289,8 +260,8 @@ export async function handleMeteorAssertion({
     reason: pass
       ? 'METEOR assertion passed'
       : inverse
-        ? `METEOR score ${score.toFixed(4)} met threshold ${threshold} (expected it not to)`
-        : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+        ? `METEOR score ${score} met threshold ${threshold} (expected it not to)`
+        : `METEOR score ${score} did not meet threshold ${threshold}`,
     assertion,
   };
 }
