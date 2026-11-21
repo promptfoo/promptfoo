@@ -38,11 +38,6 @@ export const handleIsValidOpenAiToolsCall = async ({
         (error?.[2] ?? 'unknown error'),
     );
   }
-  const result = /^[ \t]*MCP Tool Result(?: \(([^()\r\n]+)\))?:/m.exec(text);
-  if (result) {
-    return verdict(true, 'MCP tool call succeeded for ' + (result[1] ?? 'unknown'));
-  }
-
   // Handle traditional OpenAI function/tool calls
   if (output && typeof output === 'object' && 'tool_calls' in output) {
     output = output.tool_calls as string | object;
