@@ -17,9 +17,10 @@ import {
 } from '../openai/gpt6';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { parseResponsesInput } from '../responses/input';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
-import { calculateAzureCost } from './util';
+import { calculateAzureCost, resolveAzureModelName } from './util';
 
 import type {
   CallApiContextParams,
@@ -93,7 +94,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
    * Reasoning models use max_completion_tokens instead of max_tokens,
    * don't support temperature, and may support configurable reasoning effort.
    */
-  isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
+  isReasoningModel(modelName = resolveAzureModelName(this.config, this.deploymentName)): boolean {
     // Check explicit config flags first (match chat.ts behavior)
     if (this.config.isReasoningModel || this.config.o1) {
       return true;
@@ -125,7 +126,9 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     );
   }
 
-  supportsTemperature(modelName = this.config.modelName ?? this.deploymentName): boolean {
+  supportsTemperature(
+    modelName = resolveAzureModelName(this.config, this.deploymentName),
+  ): boolean {
     return !this.isReasoningModel(modelName);
   }
 
@@ -139,24 +142,9 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       ...context?.prompt?.config,
     };
 
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = parsedJson;
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
+    const input = parseResponsesInput(prompt);
 
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const capabilityModelName = (
-      typeof passthroughModel === 'string'
-        ? passthroughModel
-        : (config.modelName ?? this.deploymentName)
-    ).toLowerCase();
+    const capabilityModelName = resolveAzureModelName(config, this.deploymentName).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const isGPT6Model = isGpt6Model(capabilityModelName);
@@ -390,10 +378,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     // Use the shared response processor for all response processing
     // Deployment aliases and local token prices belong to accounting, outside the API request.
     const config = { ...this.config, ...context?.prompt?.config };
-    const model =
-      (config.passthrough as { model?: string } | undefined)?.model ??
-      config.modelName ??
-      body.model;
+    const model = resolveAzureModelName(config, body.model);
     const { cost, inputCost, outputCost } = config;
     const result = await this.processor.processResponseOutput(
       data,

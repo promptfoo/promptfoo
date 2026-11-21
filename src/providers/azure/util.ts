@@ -150,6 +150,17 @@ export function throwConfigurationError(message: string): never {
   `);
 }
 
+/** Resolve the served model in config order, preserving its casing for requests and cost. */
+export function resolveAzureModelName(
+  config: { modelName?: string; passthrough?: object } | undefined,
+  deploymentName: string,
+): string {
+  const passthroughModel = (config?.passthrough as { model?: unknown } | undefined)?.model;
+  return typeof passthroughModel === 'string'
+    ? passthroughModel
+    : (config?.modelName ?? deploymentName);
+}
+
 /**
  * Calculate Azure cost based on model name and token usage
  */
