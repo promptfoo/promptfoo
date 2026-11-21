@@ -177,6 +177,15 @@ describe('filterProviderConfigs', () => {
       expect((result as ProviderOptions[])[0].label).toBe('Dev');
     });
 
+    it('should filter ProviderOptions by a label that YAML parsed as a number', () => {
+      const providers = [
+        { id: 'echo', label: 2.5 },
+        { id: 'echo', label: 3 },
+      ] as unknown as ProviderOptions[];
+      const result = filterProviderConfigs(providers, '^2\\.5$');
+      expect(result).toEqual([{ id: 'echo', label: 2.5 }]);
+    });
+
     it('should filter ProviderOptionsMap by key (provider id)', () => {
       const providers: ProviderOptionsMap[] = [
         { 'openai:gpt-4': { label: 'Dev' } },

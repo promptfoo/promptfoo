@@ -76,14 +76,29 @@ export function isValidProviderId(id: unknown): id is string {
   return typeof id === 'string' && id !== '';
 }
 
+/**
+ * Converts a configured provider label to the string every label consumer expects.
+ * YAML parses unquoted scalars such as `label: 2.5`, `label: 3` or `label: true` as
+ * numbers and booleans, so those become their string form. Returns undefined for a
+ * missing label or a value with no meaningful string form, such as an object or array.
+ */
+export function normalizeProviderLabel(label: unknown): string | undefined {
+  if (typeof label === 'string') {
+    return label;
+  }
+  if (typeof label === 'number' || typeof label === 'boolean' || typeof label === 'bigint') {
+    return String(label);
+  }
+  return undefined;
+}
+
 function getProviderLabel(provider: unknown): string | undefined {
   if (
     (typeof provider === 'object' || typeof provider === 'function') &&
     provider !== null &&
-    'label' in provider &&
-    typeof provider.label === 'string'
+    'label' in provider
   ) {
-    return provider.label;
+    return normalizeProviderLabel(provider.label);
   }
   return undefined;
 }
