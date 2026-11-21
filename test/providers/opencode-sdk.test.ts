@@ -228,6 +228,16 @@ const createMockPromptResponseWithAnchors = (
   return { data: { ...base.data, info: { ...base.data.info, ...anchors } } };
 };
 
+const importV1Sdk = async (modulePath: string) => {
+  if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+    throw new Error('v2 unavailable');
+  }
+  return {
+    createOpencode: mockCreateOpencode,
+    createOpencodeClient: mockCreateOpencodeClient,
+  };
+};
+
 describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
@@ -421,16 +431,6 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
-      const createV1SdkImporter = () => async (modulePath: string) => {
-        if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-          throw new Error('v2 unavailable');
-        }
-        return {
-          createOpencode: mockCreateOpencode,
-          createOpencodeClient: mockCreateOpencodeClient,
-        };
-      };
-
       it('passes scoped env-file defaults to the server while preserving provider overrides', async () => {
         const { default: cliState } =
           await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
@@ -547,7 +547,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should fall back to the v1 nested request shape when v2 is unavailable', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
 
         const provider = new OpenCodeSDKProvider({
           config: {
@@ -617,7 +617,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('applies static v1 permission policy through the locally started server', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const provider = new OpenCodeSDKProvider({
           config: {
             working_dir: '/test/dir',
@@ -652,7 +652,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('atomically reapplies a complete v1 tools policy on persisted sessions', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const provider = new OpenCodeSDKProvider({
           config: { persist_sessions: true, tools: { bash: true } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -670,7 +670,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('applies v1 explicit-session tools atomically on each prompt', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
         mockSessionPrompt
           .mockImplementationOnce(() => firstPrompt.promise)
@@ -699,7 +699,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('normalizes apply_patch in custom-agent tools on v1', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const provider = new OpenCodeSDKProvider({
           config: {
             custom_agent: {
@@ -729,7 +729,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('rejects v1 explicit-session pattern permissions before prompting', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const provider = new OpenCodeSDKProvider({
           config: { session_id: 'shared-v1', permission: { bash: 'deny' } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -745,7 +745,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('rejects a v1 prompt-level policy before starting or poisoning the server', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const provider = new OpenCodeSDKProvider({
           config: { permission: { bash: 'deny' } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -774,7 +774,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('allows static v1 permissions on provider-owned persisted sessions', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         const provider = new OpenCodeSDKProvider({
           config: { persist_sessions: true, permission: { bash: 'deny' } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -1150,7 +1150,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should use the v1 nested request shape for the history fetch when v2 is unavailable', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        vi.mocked(importModule).mockImplementation(importV1Sdk);
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponseWithAnchors('All done.', createCurrentAssistantAnchor()),
         );
@@ -2969,7 +2969,7 @@ describe('OpenCodeSDKProvider', () => {
       async (version) => {
         if (version === 'v1') {
           const { importModule } = await import('../../src/esm');
-          vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+          vi.mocked(importModule).mockImplementation(importV1Sdk);
         }
         const controller = new AbortController();
         const prompt = createDeferred<unknown>();
