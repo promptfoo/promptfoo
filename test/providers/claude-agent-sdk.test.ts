@@ -957,7 +957,7 @@ describe('ClaudeCodeSDKProvider', () => {
       ['ambient', 'config', 'prompt-env', 'override', undefined, undefined, 'override'],
       ['ambient', 'config', 'prompt-env', 'override', 'provider', undefined, 'provider'],
       ['ambient', 'config', 'prompt-env', 'override', 'provider', 'prompt', 'prompt'],
-      ['ambient', '', '', '', 'provider', '', 'provider'],
+      ['ambient', '', '', '', 'provider', undefined, 'provider'],
     ])(
       'resolves credential precedence in case %#',
       async (ambient, configured, perPrompt, override, providerKey, promptKey, expected) => {
@@ -1033,12 +1033,24 @@ describe('ClaudeCodeSDKProvider', () => {
       }
     });
 
+    it('keeps an explicit empty key in the subprocess when authentication is optional', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'ambient' });
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKeyRequired: false } });
+      provider.apiKey = '';
+      expect(provider.getApiKey()).toBe('');
+      await provider.callApi('Prompt');
+      expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe('');
+    });
+
     it.each<{
       name: string;
       config?: ClaudeCodeOptions;
       env?: EnvOverrides;
       promptConfig?: ClaudeCodeOptions;
     }>([
+      { name: 'provider apiKey', config: { apiKey: '' } },
+      { name: 'prompt apiKey', config: { apiKey: 'provider' }, promptConfig: { apiKey: '' } },
       {
         name: 'provider config.env',
         config: { env: { ANTHROPIC_API_KEY: '' } },

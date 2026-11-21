@@ -1566,8 +1566,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Prompt config overrides provider config; explicit keys take precedence over env.
-    const effectiveApiKey = config.apiKey || this.config.apiKey || env.ANTHROPIC_API_KEY;
-    if (effectiveApiKey) {
+    const effectiveApiKey = config.apiKey ?? this.config.apiKey ?? env.ANTHROPIC_API_KEY;
+    if (effectiveApiKey !== undefined) {
       env.ANTHROPIC_API_KEY = effectiveApiKey;
     }
 
@@ -2634,10 +2634,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     return (
-      this.config.apiKey ||
-      (this.env?.ANTHROPIC_API_KEY ??
-        this.config.env?.ANTHROPIC_API_KEY ??
-        getEnvString('ANTHROPIC_API_KEY'))
+      this.config.apiKey ??
+      this.env?.ANTHROPIC_API_KEY ??
+      this.config.env?.ANTHROPIC_API_KEY ??
+      getEnvString('ANTHROPIC_API_KEY')
     );
   }
 
