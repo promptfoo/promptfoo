@@ -70,17 +70,25 @@ describe('Config Format Smoke Tests', () => {
     const directory = fs.mkdtempSync(path.join(OUTPUT_DIR, 'watch-cjs-'));
     const configPath = path.join(directory, 'promptfooconfig.js');
     const outputPath = path.join(directory, 'output.json');
+    const env = {
+      // Share an isolated, file-backed database between the watcher and list commands.
+      IS_TESTING: '',
+      PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+      PROMPTFOO_DISABLE_TELEMETRY: 'true',
+    };
     fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
-    const writeConfig = (value: string, target = configPath) =>
+    const writeConfig = (value: string, write: boolean, target = configPath) =>
       fs.writeFileSync(
         target,
         `require('node:fs'); module.exports = ${JSON.stringify({
           prompts: [value],
           providers: ['echo'],
+          commandLineOptions: { write },
           tests: [{ assert: [{ type: 'equals', value }] }],
         })};`,
       );
-    writeConfig('before watch edit');
+    writeConfig('before watch edit', true);
     // Default discovery depends on CWD; the child has an isolated fixture and database.
     const child = spawn(
       process.execPath,
@@ -89,12 +97,10 @@ describe('Config Format Smoke Tests', () => {
         cwd: directory,
         env: {
           ...process.env,
+          ...env,
           NODE_OPTIONS: '',
           CHOKIDAR_USEPOLLING: backend === 'polling' ? '1' : '0',
           CHOKIDAR_INTERVAL: '10',
-          PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
-          PROMPTFOO_DISABLE_UPDATE: 'true',
-          PROMPTFOO_DISABLE_TELEMETRY: 'true',
           NO_COLOR: '1',
         },
       },
@@ -115,13 +121,13 @@ describe('Config Format Smoke Tests', () => {
       expect(initial.results.results[0].response.output).toBe('before watch edit');
       if (backend === 'polling') {
         const replacement = path.join(directory, 'replacement.tmp');
-        writeConfig('after watch edit', replacement);
+        writeConfig('after watch edit', false, replacement);
         fs.renameSync(configPath, path.join(directory, 'previous.js'));
         // Let the child poll the missing path during Chokidar's 100 ms atomic-save window.
         await delay(40);
         fs.renameSync(replacement, configPath);
       } else {
-        writeConfig('after watch edit');
+        writeConfig('after watch edit', false);
       }
       await vi.waitFor(
         () => {
@@ -135,6 +141,9 @@ describe('Config Format Smoke Tests', () => {
         },
         { timeout: 10000 },
       );
+      const saved = runCli(['list', 'evals', '--ids-only'], { env });
+      expect(saved.exitCode, saved.stdout + saved.stderr).toBe(0);
+      expect(saved.stdout.trim()).toBe(initial.evalId);
     } finally {
       child.kill('SIGTERM');
       const forcedExit = setTimeout(() => child.kill('SIGKILL'), 1000);

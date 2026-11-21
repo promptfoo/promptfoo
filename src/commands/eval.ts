@@ -190,6 +190,14 @@ export function evalCommand(
         if (command.getOptionValueSource('cache') !== 'cli') {
           delete optsWithAliases.cache;
         }
+        // Resolve the write default from the active config on each fresh run, including watch reruns.
+        if (
+          !optsWithAliases.resume &&
+          !optsWithAliases.retryErrors &&
+          command.getOptionValueSource('write') !== 'cli'
+        ) {
+          delete optsWithAliases.write;
+        }
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
