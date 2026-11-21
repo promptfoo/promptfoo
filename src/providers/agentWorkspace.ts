@@ -1166,7 +1166,12 @@ async function getWorkspaceDiff(
     const exactIgnoreQueries = new Map<string, string>();
     const explicitlyAdded = new Set(rawIgnoredTracked.split('\0').filter(Boolean));
     for (const file of newFiles) {
-      if (baselinePaths.has(Buffer.from(file).toString('latin1'))) {
+      // The traversal reports reserved entries separately. Passing a case
+      // variant to git add can discard the entire batch of readable files.
+      if (
+        /(?:^|\/)\.git(?:\/|$)/i.test(file) ||
+        baselinePaths.has(Buffer.from(file).toString('latin1'))
+      ) {
         newFiles.delete(file);
       }
     }

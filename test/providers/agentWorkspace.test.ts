@@ -3473,6 +3473,20 @@ describe('agent workspaces', () => {
       }
     });
 
+    it.skipIf(process.platform === 'win32')(
+      'reports a re-included FIFO under a wildcard rule',
+      async () => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': 'vendor/*\n!vendor/keep.fifo\n' });
+        const workspace = await create(source);
+        fs.mkdirSync(path.join(workspace.dir, 'vendor'));
+        execFileSync('mkfifo', [path.join(workspace.dir, 'vendor/keep.fifo')]);
+        const metadata = await workspace.metadata();
+        expect(metadata.workspaceDiff).toContain('vendor/keep.fifo');
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+      },
+    );
+
     it('preserves untracked descendants re-included by committed ignore rules', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source, { '.gitignore': 'vendor/*\n!vendor/keep/\n' });
@@ -3556,15 +3570,14 @@ describe('agent workspaces', () => {
       }
       write(path.join(variant, 'policy.txt'), 'hidden\n');
 
+      write(path.join(workspace.dir, 'readable.txt'), 'visible change\n');
       const metadata = await workspace.metadata();
 
-      // Git may show the file, refuse the path, or leave it out. What must not happen is a
-      // diff that looks complete without it.
-      expect(
-        metadata.workspaceDiff?.includes('policy.txt') ||
-          metadata.workspaceDiffIncomplete === true ||
-          metadata.workspaceDiffError !== undefined,
-      ).toBe(true);
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiff).toContain('+visible change');
+      expect(metadata.workspaceDiff).toContain('.GIT');
+      expect(metadata.workspaceDiff).not.toContain('policy.txt');
+      expect(metadata.workspaceDiffIncomplete).toBe(true);
     });
 
     it('names an ignored directory the agent replaced with a fifo after adding a file in it', async () => {
