@@ -99,8 +99,12 @@ function staticPlanPath(reference: string) {
 type ReceiptSetup = ReadonlyMap<string, string | undefined>;
 
 function fileVersion(filePath: string): string | undefined {
-  const stat = fs.statSync(filePath, { bigint: true, throwIfNoEntry: false });
-  return stat && [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+  try {
+    const stat = fs.statSync(filePath, { bigint: true, throwIfNoEntry: false });
+    return stat && [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+  } catch {
+    throw new VerifierArtifactError('verifier artifact');
+  }
 }
 
 function changedDuringSetup(setup: ReceiptSetup | undefined, key: string) {
@@ -194,8 +198,7 @@ export async function withProtectedReceiptScope<T>(
 ): Promise<T> {
   const parent = inherit ? protectedReceiptScope.getStore() : undefined;
   const plans = new Map(parent?.plans);
-  const inherited = parent?.receipts;
-  const receipts = new Map<string, VerifierReceipt[]>(inherited);
+  const receipts = new Map<string, VerifierReceipt[]>(parent?.receipts);
   const resolvedReceiptPaths = new Map(parent?.receiptPaths);
   const assertionValues = new Map(parent?.assertionValues);
   for await (const test of tests) {
@@ -214,7 +217,7 @@ export async function withProtectedReceiptScope<T>(
         const key = path.resolve(filePath);
         resolvedReceiptPaths.set(configuredPath, key);
         const changed = Boolean(changedDuringSetup(setup, key));
-        if (inherited?.has(key) && !changed) {
+        if (receipts.has(key) && !changed) {
           continue;
         }
         const captured = [...(receipts.get(key) ?? [])];

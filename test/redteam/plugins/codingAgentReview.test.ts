@@ -13,6 +13,7 @@ import {
   publicGradingArguments,
 } from '../../../src/redteam/plugins/codingAgent/graders';
 import {
+  snapshotReceiptSetup,
   verifyCodingAgentResult,
   verifyTraceRedaction,
 } from '../../../src/redteam/plugins/codingAgent/localVerifiers';
@@ -45,6 +46,19 @@ const traceContext: TraceContextData = {
 function contextWithSpan(fields: Partial<TraceContextData['spans'][number]>) {
   return { traceContext: { ...traceContext, spans: [{ ...traceContext.spans[0], ...fields }] } };
 }
+
+it('hides the receipt path when a setup snapshot cannot inspect it', () => {
+  expect(() =>
+    snapshotReceiptSetup({
+      assert: [
+        {
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          value: { rawReceiptPath: 'private-receipt\0' },
+        },
+      ],
+    }),
+  ).toThrow(/^A configured verifier artifact could not be read as a valid bounded file\.$/);
+});
 
 describe('encoded redaction receipts', () => {
   it.each([
