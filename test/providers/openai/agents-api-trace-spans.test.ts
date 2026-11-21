@@ -820,6 +820,8 @@ describe('normalizeHostedTrace', () => {
       it.each([
         ['flag value', ['tool', '--api-key', credential]],
         ['flag assignment', ['tool', `--api-key=${credential}`]],
+        ['URL option', ['tool', `--url=https://user:${credential}@example.test`]],
+        ['URL assignment', ['tool', `ADDRESS=https://example.test?key=${credential}`]],
         ['environment assignment', ['env', `SERVICE_API_KEY=${credential}`, 'tool']],
         ['header flag', ['curl', '-H', `Authorization: Bearer ${credential}`]],
         ['attached header', ['curl', `--header=Authorization: Bearer ${credential}`]],
