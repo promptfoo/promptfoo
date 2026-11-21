@@ -136,6 +136,9 @@ describe('list command', () => {
     });
 
     it('renders table output', async () => {
+      const newId = 'eval-Ab12Cd-2026-07-30T11:35:27';
+      const table = await vi.importActual<typeof import('../../src/table')>('../../src/table');
+      vi.mocked(wrapTable).mockImplementationOnce(table.wrapTable);
       const olderEval = createEval({
         id: 'eval-old',
         createdAt: 1,
@@ -144,7 +147,7 @@ describe('list command', () => {
         prompts: [{ raw: 'Older prompt' }],
       });
       const newerEval = createEval({
-        id: 'eval-new',
+        id: newId,
         createdAt: 2,
         description: 'Newer evaluation',
         providers: ['openai:gpt-4'],
@@ -153,7 +156,7 @@ describe('list command', () => {
       evalModel.getMany.mockResolvedValue([newerEval, olderEval]);
       evalQueries.getVarsFromEvals.mockResolvedValue({
         'eval-old': ['topic'],
-        'eval-new': ['name', 'city'],
+        [newId]: ['name', 'city'],
       });
 
       const evalsCmd = getListSubcommand('evals');
@@ -172,11 +175,12 @@ describe('list command', () => {
         vars: 'topic',
       });
       expect(tableRows[1]).toMatchObject({
-        'eval id': 'eval-new',
+        'eval id': newId,
         prompts: 'hash-N',
         vars: 'name, city',
       });
 
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(newId));
       expect(printBorder).toHaveBeenCalledTimes(1);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('promptfoo show eval <id>'));
       expect(logger.info).toHaveBeenCalledWith(
