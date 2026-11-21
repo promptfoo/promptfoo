@@ -28,8 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install a [supported Node.js version](/docs/installation#nodejs-runtime-support)
-- Optional: Set your `OPENAI_API_KEY` environment variable
+Install a [supported Node.js version](/docs/installation#nodejs-runtime-support). You don't need a model API key to set up a scan. If the app or model you're testing requires credentials, you'll need them to run it.
 
 ## Initialize the project
 
@@ -65,64 +64,51 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
   </TabItem>
 </Tabs>
 
-The `setup` command will open a web UI that asks questions to help you configure your red teaming project.
+The command opens red team setup in your browser. For a new scan, start with the setup agent. If you already have a draft, you can keep editing it.
 
 ### Provide application details
 
-Start by providing some details about the target application. The more details we provide, the more tailored the generated test cases will be.
+Tell the agent what your app does and what you want to catch. Here's an example for a support bot.
 
-At a minimum, be sure to fill out the **Purpose** field with a description of your application.
+> Our bot looks up orders and issues refunds. A customer should never see someone else's order or get a refund without approval.
 
-:::tip
-If you just want to try out a quick example, click "Load Example" at the top of the Application Details page.
-:::
+Select **Draft test plan**. Your answers go to Promptfoo Cloud, so leave out secrets and real customer records. Drafting doesn't contact your target.
 
-![llm red team setup](/img/docs/setup/application-details.png)
+The plan starts with three direct tests for each of up to four risks. Uncheck any risks you want to skip or ask the agent to adjust the plan. Select **Use plan &amp; connect app** when you're ready.
 
----
+No app yet? Select **Try the demo app**, then **Draft test plan**. **Review demo setup** takes you straight to [review and save](#review-and-save) with Promptfoo's example support bot as the target.
+
+To skip the agent, select **Set up manually**. You can also load a saved configuration or import YAML.
 
 ### Configure the target
 
-Next, configure Promptfoo to communicate with your target application or model.
+You can test endpoints reachable from your machine, including localhost. Only test systems you have permission to scan.
 
-Provider cards populate an editable target ID and configuration. Choose a hosted model available to your account, or enter your own deployment, served model, or Bedrock agent and alias IDs.
+- **HTTP endpoint** is selected by default. Select **Configure target**, enter your URL, and adjust the request body and response parser to match your app. See the [HTTP example](#attacking-an-api-endpoint).
+- For a **model or another connection type**, select **Change target type**. Choose a provider and enter the model or deployment ID. See [common target types](#common-target-types).
 
-For llamafile, vLLM, and Text Generation WebUI, keep the `openai:chat:` prefix, enter the server's model name, and set `apiBaseUrl` including `/v1`. If your server requires authentication, set `apiKeyEnvar` to the name of an environment variable on the machine running Promptfoo. The native [llama.cpp provider](/docs/providers/llama.cpp/) uses `llama:` and reads its server URL from `LLAMA_BASE_URL` on the machine running Promptfoo.
+Testing the connection sends a request to your app and can share the target configuration and response with Cloud. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
-:::note
-The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
-:::
-
-Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
-
-[See below](#alternative-test-specific-prompts-and-models) for more info on how to talk with non-HTTP targets such as models (local or remote) or custom code.
-
-![llm red team setup](/img/docs/setup/target.png)
+With the agent, select **Review setup** to [review and save](#review-and-save). In manual setup, enter your app's purpose in **Application Details**, then select plugins and strategies.
 
 ### Select plugins
 
-Next, select the plugins that you want to use. [Plugins](/docs/red-team/plugins/) are adversarial generators. They produce malicious inputs that are sent to your application.
+[Plugins](/docs/red-team/plugins/) determine which risks to test, such as unauthorized access to another customer's orders.
 
-Check off the individual plugins you want to use, or select a preset that includes a combination of plugins (if in doubt, stick with "Default").
-
-![llm red team setup](/img/docs/setup/plugins.png)
+For manual setup, choose individual plugins or start with the **Default** preset.
 
 ### Select attack strategies
 
-Now we select strategies. [Strategies](/docs/red-team/strategies/) are techniques that wrap the generated inputs in a specific attack pattern.
-
-![llm red team setup](/img/docs/setup/strategy.png)
+[Strategies](/docs/red-team/strategies/) determine how to attack your app, for example by disguising a request to bypass a safety check.
 
 ### Review and save
 
-Finally, download the generated configuration file. You'll use this to run the red team from your local machine.
+Check the target and estimated number of requests. To change the test count in the agent's plan, select **Adjust test settings**. For broader coverage, add plugins or attack strategies.
 
-![llm red team setup](/img/docs/setup/review.png)
-
-Save the file as `promptfooconfig.yaml`. Then, navigate to the directory where you saved the file and run `promptfoo redteam run`.
+**Save YAML** downloads `promptfooconfig.yaml` without starting a scan. To run it from the browser, select **Run Now**. Promptfoo may ask you to verify your email before the first scan.
 
 :::info
-If you don't want to use the UI to start a red team, you can use the `init` command instead:
+For manual setup in the terminal, run the following command.
 
 ```sh
 promptfoo redteam init --no-gui
@@ -135,9 +121,7 @@ For a new Google Vertex AI target, the CLI offers `vertex:gemini-3.1-pro-preview
 
 ## Run the scan
 
-Now that we've generated the test cases, we're ready to run the adversarial evaluation.
-
-Run this command in the same directory as your `promptfooconfig.yaml` file:
+If you downloaded the config, run the following command in the same directory as `promptfooconfig.yaml`.
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
@@ -157,7 +141,7 @@ Run this command in the same directory as your `promptfooconfig.yaml` file:
   </TabItem>
 </Tabs>
 
-This command will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`. Then, it will run the test cases against the target.
+Promptfoo generates the test cases in `redteam.yaml`, sends them to your target, and grades the responses. Attack generation uses a [separate provider](/docs/red-team/configuration/#providers). Promptfoo supports hosted generation and grading if you don't have a model API key.
 
 ![llm red team run](/img/docs/redteam-run.png)
 
@@ -247,6 +231,8 @@ targets:
 ```
 
 Promptfoo supports dozens of model providers. To configure your own application as the target, see [custom targets](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/prompts).
+
+For llamafile, vLLM, and Text Generation WebUI, keep the `openai:chat:` prefix, enter the server's model name, and set `apiBaseUrl` including `/v1`. If your server requires authentication, set `apiKeyEnvar` to the name of an environment variable on the machine running Promptfoo. The native [llama.cpp provider](/docs/providers/llama.cpp/) uses `llama:` and reads its server URL from `LLAMA_BASE_URL` on the machine running Promptfoo.
 
 ### Alternative: Talking directly to your app
 

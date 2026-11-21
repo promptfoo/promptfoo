@@ -101,7 +101,7 @@ You can also run a foundation model scan locally. Initiate a Promptfoo redteam i
 promptfoo redteam init
 ```
 
-The red team UI will be displayed in your browser. You can then select the Foundation Model option to begin configuring your scan.
+Draft a plan with the [setup agent](/docs/red-team/quickstart/#initialize-the-project), then choose **Change target type** to select your model provider. You can also select the provider directly in manual setup.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/redteammodel-local.png" style={{ width: '90%', height: 'auto' }} />

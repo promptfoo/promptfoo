@@ -20,8 +20,9 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
+import { RedteamSetupPlanSchema, RedteamSetupRequestSchema } from '../../types/api/redteamSetup';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { sanitizeObject } from '../../util/sanitizer';
+import { looksLikeSecret, sanitizeObject } from '../../util/sanitizer';
 import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
@@ -341,6 +342,91 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));
+});
+
+redteamRouter.get('/setup-plan', (_req, res) => {
+  res.json({ enabled: !neverGenerateRemote() });
+});
+
+// Catch common accidental pastes before sending free text to a hosted model.
+function containsSetupCredential(value: string): boolean {
+  return (
+    /\bbearer\s+[\w.+/=-]{8,}|\b(?:api[-_]?key|password|access[-_]?token|authorization)\b["']?\s*[:=]\s*\S+|https?:\/\/[^/\s]+@/i.test(
+      value,
+    ) || value.split(/[\s"':=]+/).some(looksLikeSecret)
+  );
+}
+
+redteamRouter.post('/setup-plan', async (req, res) => {
+  if (neverGenerateRemote()) {
+    res.status(403).json({ error: 'Remote generation is disabled. Set up your tests manually.' });
+    return;
+  }
+  const input = RedteamSetupRequestSchema.safeParse(req.body);
+  if (!input.success) {
+    res.status(400).json({ error: 'Check your description and try again.' });
+    return;
+  }
+  const { description, refinement, previous } = input.data;
+  const fields = [
+    description,
+    refinement,
+    previous?.purpose,
+    previous?.question,
+    previous?.note,
+    ...(previous?.plugins.map(({ reason }) => reason) ?? []),
+  ];
+  if (fields.some((value) => value && containsSetupCredential(value))) {
+    res.status(400).json({
+      error:
+        'Remove credentials before sending. You can enter them later when connecting your target.',
+    });
+    return;
+  }
+
+  const timeout = AbortSignal.timeout(45_000);
+  const disconnected = new AbortController();
+  res.once('close', () => disconnected.abort());
+  try {
+    const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+      method: 'POST',
+      headers: getRemoteGenerationHeaders(),
+      body: JSON.stringify({ task: 'redteam-setup', ...input.data }),
+      signal: AbortSignal.any([timeout, disconnected.signal]),
+      redirect: 'error',
+    });
+    if (
+      response.status === 400 &&
+      (await response.json()).message === 'Unknown task: redteam-setup'
+    ) {
+      res
+        .status(502)
+        .json({ error: 'This server does not support agent setup yet. Continue manually.' });
+      return;
+    }
+    if (response.status === 429) {
+      res
+        .status(429)
+        .json({ error: 'The setup agent is busy. Try again shortly or continue manually.' });
+      return;
+    }
+    if (response.ok) {
+      const plan = RedteamSetupPlanSchema.safeParse(await response.json());
+      if (plan.success) {
+        res.json(plan.data);
+        return;
+      }
+    }
+  } catch {
+    if (disconnected.signal.aborted) {
+      return;
+    }
+  }
+  res.status(502).json({
+    error: timeout.aborted
+      ? 'The setup agent took too long. Try again or continue manually.'
+      : 'The setup agent is unavailable. Try again or continue manually.',
+  });
 });
 
 /**

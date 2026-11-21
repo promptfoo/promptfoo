@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { getEstimatedDuration, getEstimatedProbes } from './components/strategies/utils';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
-import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 
@@ -20,7 +19,7 @@ const mockNavigate = vi.fn();
 const mockLocation = {
   pathname: '/redteam/setup',
   search: '',
-  hash: '',
+  hash: '#0',
   state: null,
   key: 'default',
 };
@@ -38,7 +37,6 @@ vi.mock('react-router', async () => {
 // Mock hooks (but NOT useRedTeamConfig — use the real Zustand store)
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
-vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
@@ -82,13 +80,9 @@ vi.mock('./components/Purpose', () => ({ default: () => <div>Purpose</div> }));
 vi.mock('./components/Plugins', () => ({ default: () => <div>Plugins</div> }));
 vi.mock('./components/Strategies', () => ({ default: () => <div>Strategies</div> }));
 vi.mock('./components/Review', () => ({ default: () => <div>Review</div> }));
-vi.mock('./components/Setup', () => ({
-  default: () => <div data-testid="setup-modal">Setup</div>,
-}));
 
 const mockedUseTelemetry = useTelemetry as Mock;
 const mockedUseToast = useToast as Mock;
-const mockedUseSetupState = useSetupState as unknown as Mock;
 const mockedCallApi = vi.mocked(callApi);
 
 // Capture initial store state for reset
@@ -110,10 +104,6 @@ describe('RedTeamSetupPage', () => {
     // Provide default mock implementations for hooks
     mockedUseTelemetry.mockReturnValue({ recordEvent: vi.fn() });
     mockedUseToast.mockReturnValue({ showToast: vi.fn() });
-    mockedUseSetupState.mockReturnValue({
-      hasSeenSetup: true, // Assume setup has been seen to not render the modal
-      markSetupAsSeen: vi.fn(),
-    });
     mockedCallApi.mockResolvedValue({
       ok: true,
       json: async () => ({ configs: [] }),
@@ -287,22 +277,6 @@ describe('RedTeamSetupPage', () => {
 
       expect(screen.getByRole('tab', { name: 'Strategies (1)' })).toBeInTheDocument();
     });
-  });
-
-  it('should display the setup modal if hasSeenSetup is false', () => {
-    mockedUseSetupState.mockReturnValue({
-      hasSeenSetup: false,
-      markSetupAsSeen: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/redteam/setup']}>
-        <RedTeamSetupPage />
-      </MemoryRouter>,
-    );
-
-    const setupModal = screen.getByTestId('setup-modal');
-    expect(setupModal).toBeInTheDocument();
   });
 
   describe('YAML file import', () => {

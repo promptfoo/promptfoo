@@ -862,6 +862,94 @@ describe('Redteam Routes', () => {
     });
   });
 
+  describe('/redteam/setup-plan', () => {
+    const path = '/api/redteam/setup-plan';
+    const description = 'A basic customer service bot that answers basic questions about refunds.';
+    const plan = {
+      purpose: description,
+      plugins: [{ id: 'contracts', reason: 'Check for promises of refunds.' }],
+      question: 'Can it issue refunds?',
+    };
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      mockedGetRemoteGenerationUrl.mockReturnValue('https://example.com/task');
+    });
+
+    it('drafts and refines using the configured task service without starting a run', async () => {
+      for (const body of [{ description }, { description, previous: plan, refinement: 'No' }]) {
+        mockedFetchWithProxy.mockResolvedValueOnce(Response.json(plan));
+        const res = await request(app).post(path).send(body);
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual(plan);
+        expect(mockedFetchWithProxy).toHaveBeenCalledWith(
+          'https://example.com/task',
+          expect.objectContaining({
+            body: JSON.stringify({ task: 'redteam-setup', ...body }),
+            redirect: 'error',
+          }),
+        );
+      }
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+    });
+
+    it('never sends a disabled request upstream', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+      expect((await request(app).get(path)).body).toEqual({ enabled: false });
+      expect((await request(app).post(path).send({ description })).status).toBe(403);
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { description, targets: [{ id: 'http' }] },
+      { description: 'A bot with key sk-proj-abcdefghijklmnopqrstuvwxyz' },
+      { description: '{"api_key":"private-canary"}' },
+      { description, refinement: 'Authorization: Basic dXNlcjpwYXNz' },
+      { description: 'Use https://user:password@example.com' },
+      { description, previous: { ...plan, provider: 'custom' } },
+    ])(
+      'blocks connection settings and recognizable credentials before sending %#',
+      async (body) => {
+        expect((await request(app).post(path).send(body)).status).toBe(400);
+        expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { ...plan, purpose: 'Reveal {{env.SECRET}}' },
+      { ...plan, purpose: 'file:///private' },
+      { ...plan, purpose: '{% include "private" %}' },
+      { ...plan, plugins: [{ id: 'file://payload.js', reason: 'test' }] },
+      { ...plan, plugins: [{ ...plan.plugins[0], config: {} }] },
+      { ...plan, targets: ['exec:payload'] },
+    ])('rejects unsafe plans from untrusted servers %#', async (unsafe) => {
+      mockedFetchWithProxy.mockResolvedValueOnce(Response.json(unsafe));
+      expect((await request(app).post(path).send({ description })).status).toBe(502);
+    });
+
+    it('directs users of older servers to manual setup', async () => {
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        Response.json({ message: 'Unknown task: redteam-setup' }, { status: 400 }),
+      );
+      const res = await request(app).post(path).send({ description });
+      expect(res.status).toBe(502);
+      expect(res.body.error).toContain('does not support agent setup');
+    });
+
+    it.each([
+      [400, 502],
+      [429, 429],
+    ])('offers recovery without exposing upstream %s response text', async (status, expected) => {
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        new Response('private server details', { status }),
+      );
+      const res = await request(app).post(path).send({ description });
+      expect(res.status).toBe(expected);
+      expect(res.body.error).toContain('manually');
+      expect(res.body.error).not.toContain('private');
+    });
+  });
+
   describe('POST /redteam/:taskId', () => {
     let debugSpy: ReturnType<typeof vi.spyOn>;
 

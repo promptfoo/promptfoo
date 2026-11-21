@@ -32,7 +32,12 @@ import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
 import { checkEmailStatus } from '@app/utils/emailVerification';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
-import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import {
+  displayNameOverrides,
+  type Plugin,
+  REDTEAM_DEFAULTS,
+  strategyDisplayNames,
+} from '@promptfoo/redteam/constants';
 import {
   isValidPolicyObject,
   makeDefaultPolicyName,
@@ -52,10 +57,89 @@ import { RunOptionsContent } from './RunOptions';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
-import type { ProviderOptions } from '../types';
+import type { Config, ProviderOptions } from '../types';
+
+function targetDestination({ id, config }: ProviderOptions): string {
+  const url = config?.url || config?.apiBaseUrl || (/^https?:/i.test(id) ? id : undefined);
+  if (url) {
+    try {
+      return new URL(url).host;
+    } catch {
+      return 'Custom endpoint';
+    }
+  }
+  return /^[\w.:/-]+$/.test(id) ? id : 'Custom target';
+}
+
+// A user can return to Review with browser Back after clearing a required field.
+function guidedReviewError({ target, plugins }: Config): string | null {
+  if (
+    (target.id === 'http' || target.id === 'https') &&
+    !target.config?.request &&
+    (typeof target.config?.url !== 'string' || !target.config.url.trim())
+  ) {
+    return 'Edit the target to add its URL before running.';
+  }
+  if (!plugins.length) {
+    return 'Adjust test settings to select at least one plugin before running.';
+  }
+  return null;
+}
+
+function riskName(id: string) {
+  return Object.prototype.hasOwnProperty.call(displayNameOverrides, id)
+    ? displayNameOverrides[id as Plugin]
+    : id;
+}
+
+function AgentReview({
+  config,
+  onEditTarget,
+  children,
+}: {
+  config: Config;
+  onEditTarget: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 ph-no-capture">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-4">
+        <div className="min-w-0 break-words">
+          <p className="text-sm text-muted-foreground">Target</p>
+          <p className="font-medium">{targetDestination(config.target)}</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onEditTarget}>
+          Edit target
+        </Button>
+      </div>
+      <div>
+        <h2 className="font-semibold">Test plan</h2>
+        <p className="mt-1 text-sm">
+          {config.plugins.map((p) => riskName(typeof p === 'string' ? p : p.id)).join(' · ') ||
+            'No risks selected'}
+        </p>
+        {config.strategies.length === 1 && config.strategies[0] === 'basic' && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            This first pass tests direct prompts. Add strategies to try more ways to bypass
+            safeguards.
+          </p>
+        )}
+      </div>
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm">
+            Adjust test settings <ChevronDown aria-hidden="true" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-4">{children}</CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
 
 interface ReviewProps {
   onBack?: () => void;
+  navigateToTarget?: () => void;
   navigateToPlugins: () => void;
   navigateToStrategies: () => void;
   navigateToPurpose: () => void;
@@ -157,12 +241,14 @@ function removeIntentEntry(
 
 export default function Review({
   onBack,
+  navigateToTarget,
   navigateToPlugins,
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { targetConfigError } = useRedTeamTargetConfigValidation();
+  const reviewError = targetConfigError || (navigateToTarget && guidedReviewError(config));
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -350,8 +436,8 @@ export default function Review({
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
-    if (targetConfigError) {
-      showToast(targetConfigError, 'error');
+    if (reviewError) {
+      showToast(reviewError, 'error');
       return;
     }
 
@@ -448,18 +534,18 @@ export default function Review({
   const isRunNowDisabled = useMemo(() => {
     return (
       isRunning ||
-      Boolean(targetConfigError) ||
+      Boolean(reviewError) ||
       ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus)
     );
-  }, [isRunning, apiHealthStatus, targetConfigError]);
+  }, [isRunning, apiHealthStatus, reviewError]);
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
     if (isRunning) {
       return undefined;
     }
 
-    if (targetConfigError) {
-      return targetConfigError;
+    if (reviewError) {
+      return reviewError;
     }
 
     switch (apiHealthStatus) {
@@ -472,7 +558,7 @@ export default function Review({
       default:
         return undefined;
     }
-  }, [isRunning, apiHealthStatus, targetConfigError]);
+  }, [isRunning, apiHealthStatus, reviewError]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -550,9 +636,9 @@ export default function Review({
   );
 
   const handleRunWithSettings = async () => {
-    if (targetConfigError) {
+    if (reviewError) {
       confirmedRunTargetRef.current = null;
-      showToast(targetConfigError, 'error');
+      showToast(reviewError, 'error');
       return;
     }
     const confirmedTarget =
@@ -588,7 +674,7 @@ export default function Review({
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
     const runTargetValidationError = getRunTargetValidationError(
-      latestTargetConfigError,
+      latestTargetConfigError || (navigateToTarget ? guidedReviewError(latestConfig) : null),
       confirmedTarget,
       latestConfig.target,
     );
@@ -712,8 +798,10 @@ export default function Review({
     };
   }, []);
 
-  return (
-    <PageWrapper title="Review & Run" onBack={onBack}>
+  const shortPurpose = !navigateToTarget && (config.purpose?.length ?? 0) < 100;
+
+  function renderDetails() {
+    return (
       <div>
         <div className="mb-8">
           <Label htmlFor="description">Description</Label>
@@ -722,7 +810,7 @@ export default function Review({
             placeholder="My Red Team Configuration"
             value={config.description}
             onChange={handleDescriptionChange}
-            autoFocus
+            autoFocus={!navigateToTarget}
           />
         </div>
 
@@ -745,10 +833,11 @@ export default function Review({
                       label === 'Custom Policy' && 'bg-primary text-primary-foreground',
                     )}
                   >
-                    {count > 1 ? `${label} (${count})` : label}
+                    {navigateToTarget ? riskName(label) : label}
+                    {count > 1 && ` (${count})`}
                     <button
                       type="button"
-                      aria-label={`Remove plugin ${label}`}
+                      aria-label={`Remove plugin ${navigateToTarget ? riskName(label) : label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
                           const pluginLabel = getPluginSummary(plugin).label;
@@ -834,15 +923,10 @@ export default function Review({
               {(strategySummary.length === 0 ||
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
-                  <Alert variant="warning" className="mt-4">
-                    <AlertContent>
-                      <AlertDescription>
-                        The basic strategy is great for an end-to-end setup test, but don't expect
-                        any findings. Once you've verified that the setup is working, add another
-                        strategy.
-                      </AlertDescription>
-                    </AlertContent>
-                  </Alert>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Basic tests send direct prompts. Add a strategy to try other techniques like
+                    disguising the request.
+                  </p>
                   <Button onClick={navigateToStrategies} className="mt-4">
                     Add more strategies
                   </Button>
@@ -973,7 +1057,11 @@ export default function Review({
         {/* Collapsible Sections */}
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
-          <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
+          <Collapsible
+            className="ph-no-capture"
+            open={isPurposeExpanded}
+            onOpenChange={setIsPurposeExpanded}
+          >
             <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
               <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 items-center gap-2">
@@ -985,12 +1073,12 @@ export default function Review({
                     variant="outline"
                     className={cn(
                       'text-xs',
-                      config.purpose.length < 100
+                      shortPurpose
                         ? 'border-amber-500 text-amber-600'
                         : 'border-green-500 text-green-600',
                     )}
                   >
-                    {config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
+                    {shortPurpose ? 'Needs more detail' : 'Configured'}
                   </Badge>
                 )}
                 {!config.purpose && (
@@ -1030,7 +1118,7 @@ export default function Review({
                   </div>
                 )}
 
-                {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                {(!config.purpose?.trim() || shortPurpose) &&
                 !isFoundationModelProvider(config.target.id) ? (
                   <div className="mb-4">
                     <Alert variant="warning">
@@ -1214,27 +1302,39 @@ export default function Review({
             </CollapsibleContent>
           </Collapsible>
         </div>
+      </div>
+    );
+  }
 
-        <Separator className="my-8" />
+  return (
+    <PageWrapper title="Review & Run" onBack={onBack}>
+      <div>
+        {navigateToTarget ? (
+          <AgentReview config={config} onEditTarget={navigateToTarget}>
+            {renderDetails()}
+          </AgentReview>
+        ) : (
+          renderDetails()
+        )}
+        <Separator className={navigateToTarget ? 'my-4' : 'my-8'} />
+        {!navigateToTarget && <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>}
 
-        <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>
-
+        {navigateToTarget && reviewError && (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {reviewError}
+          </p>
+        )}
         <EstimationsDisplay config={config} />
 
         <Card className="p-6">
           <div className="mb-8">
-            <h3 className="mb-2 text-lg font-semibold">Option 1: Save and Run via CLI</h3>
+            <h3 className="mb-2 text-lg font-semibold">Save for the command line</h3>
             <p className="mb-4 text-muted-foreground">
-              Save your configuration and run it from the command line. Full control over the
-              evaluation process, good for larger scans:
+              Save the YAML file, then run this command from the same folder when you’re ready.
             </p>
             <Code>promptfoo redteam run</Code>
             <div className="mt-4 flex gap-3">
-              <Button
-                onClick={handleSaveYaml}
-                disabled={Boolean(targetConfigError)}
-                className="gap-2"
-              >
+              <Button onClick={handleSaveYaml} disabled={Boolean(reviewError)} className="gap-2">
                 <Save className="size-4" />
                 Save YAML
               </Button>
@@ -1253,10 +1353,10 @@ export default function Review({
           <Separator className="my-6" />
 
           <div>
-            <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
+            <h3 className="mb-2 text-lg font-semibold">Run in the browser</h3>
             <p className="mb-4 text-muted-foreground">
-              Run the red team evaluation right here. Simpler but less powerful than the CLI, good
-              for tests and small scans:
+              Running sends test requests to your target and may send its responses to Promptfoo
+              Cloud for grading. Only test systems you have permission to scan.
             </p>
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
@@ -1321,7 +1421,7 @@ export default function Review({
 
         {/* YAML Dialog */}
         <Dialog open={isYamlDialogOpen} onOpenChange={setIsYamlDialogOpen}>
-          <DialogContent className="max-w-6xl w-[90vw] overflow-hidden">
+          <DialogContent className="ph-no-capture max-w-6xl w-[90vw] overflow-hidden">
             <DialogHeader>
               <DialogTitle>YAML Configuration</DialogTitle>
             </DialogHeader>

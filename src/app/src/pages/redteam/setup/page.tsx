@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
 import { Input } from '@app/components/ui/input';
@@ -45,7 +46,7 @@ import { customTargetOption, findPredefinedTarget } from './components/constants
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
-import Setup from './components/Setup';
+import Setup, { type SetupDraft } from './components/Setup';
 import Strategies from './components/Strategies';
 import { isModelProviderId } from './components/Targets/providerCatalog';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
@@ -54,7 +55,6 @@ import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvi
 import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
-import { useSetupState } from './hooks/useSetupState';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
@@ -106,6 +106,8 @@ const withStatefulTargetConfig = (
   return { ...target, config: { ...target.config, stateful: true } };
 };
 
+const EMPTY_DRAFT: SetupDraft = { description: '', refinement: '', demo: false };
+
 const TAB_CONFIG = [
   { value: '0', label: 'Target Type', icon: Crosshair },
   { value: '1', label: 'Target Config', icon: Settings },
@@ -127,16 +129,28 @@ export default function RedTeamSetupPage() {
   const navigate = useNavigate();
   const { recordEvent } = useTelemetry();
 
-  // Get initial tab from URL hash or default to first page
-  const [value, setValue] = useState(() => {
-    const hash = location.hash.replace('#', '');
-    return hash ? Number.parseInt(hash, 10) : 0;
-  });
-
-  const { hasSeenSetup, markSetupAsSeen } = useSetupState();
-  const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
   const { targetConfigError, targetConfigRevision } = useRedTeamTargetConfigValidation();
+
+  // Keep existing work and numbered deep links in the full editor. Remember the landing
+  // page for browser Back, even after accepting a plan changes the persisted config.
+  const fresh = useMemo(
+    () =>
+      !targetConfigError &&
+      JSON.stringify(config) === JSON.stringify(useRedTeamConfig.getInitialState().config),
+    [config, targetConfigError],
+  );
+  const [startWithAgent] = useState(fresh);
+  const guided = location.state?.fromAgent === true;
+  const agentOpen =
+    location.hash === '#agent' || (!location.hash && startWithAgent) || (guided && fresh);
+  const value = agentOpen
+    ? -1
+    : /^#[0-5]$/.test(location.hash)
+      ? Number(location.hash.slice(1))
+      : 0;
+  const [draft, setDraft] = useState<SetupDraft>(EMPTY_DRAFT);
+  const steps = guided && value <= 1 ? TAB_CONFIG.slice(0, 2) : TAB_CONFIG;
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -152,6 +166,7 @@ export default function RedTeamSetupPage() {
   const [configDate, setConfigDate] = useState<string | null>(null);
 
   const lastSavedConfig = useRef<string>('');
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // Track funnel on initial load
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
@@ -163,61 +178,32 @@ export default function RedTeamSetupPage() {
     });
   }, []);
 
-  const navigateToPlugins = () => {
-    setValue(3);
-    updateHash(3);
-  };
-
-  const navigateToPurpose = () => {
-    setValue(2);
-    updateHash(2);
-  };
-
-  const navigateToStrategies = () => {
-    setValue(4);
-    updateHash(4);
-  };
-
-  // Handle browser back/forward
-  useEffect(() => {
-    const hash = location.hash.replace('#', '');
-    if (hash) {
-      const newValue = Number.parseInt(hash, 10);
-      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 5) {
-        setValue(newValue);
-      } else {
-        setValue(0);
-      }
+  const updateHash = (step: number, fromAgent = false) => {
+    if (fromAgent) {
+      navigate(`#${step}`, { state: { fromAgent: true } });
     } else {
-      setValue(0);
-    }
-  }, [location.hash]);
-
-  const updateHash = (newValue: number) => {
-    if (location.hash !== `#${newValue}`) {
-      navigate(`#${newValue}`);
+      navigate(`#${step}`);
     }
   };
 
-  const handleNext = () => {
-    const newValue = value + 1;
-    setValue(newValue);
-    updateHash(newValue);
-    window.scrollTo({ top: 0 });
+  const openAgent = () => navigate('#agent', { state: { returnStep: value, fromAgent: guided } });
+  const applyPlan = (proposed: Config, demo: boolean) => {
+    if (targetConfigError) {
+      toast.showToast('Fix the target configuration before applying a plan.', 'error');
+      return;
+    }
+    const next =
+      fresh && !demo ? { ...proposed, target: { ...proposed.target, label: 'My app' } } : proposed;
+    setFullConfig(next);
+    updateHash(demo ? 5 : !fresh && next.target.label ? 1 : 0, true);
   };
 
-  const handleBack = () => {
-    const newValue = value - 1;
-    setValue(newValue);
-    updateHash(newValue);
-    window.scrollTo({ top: 0 });
-  };
+  const handleNext = () => updateHash(guided && value === 1 ? 5 : value + 1, guided);
+  const handleBack = () => updateHash(value - 1, guided);
 
   const handleTabChange = (newValue: string) => {
     const numValue = Number.parseInt(newValue, 10);
-    updateHash(numValue);
-    setValue(numValue);
-    window.scrollTo({ top: 0 });
+    updateHash(numValue, guided && (numValue === 0 || numValue === 1 || numValue === 5));
 
     // Track funnel progress
     const steps = ['target_type', 'target_config', 'purpose', 'plugins', 'strategies', 'review'];
@@ -228,11 +214,6 @@ export default function RedTeamSetupPage() {
         source: 'webui',
       });
     }
-  };
-
-  const closeSetupModal = () => {
-    setSetupModalOpen(false);
-    markSetupAsSeen();
   };
 
   const handleSaveConfig = async () => {
@@ -329,6 +310,7 @@ export default function RedTeamSetupPage() {
       }
 
       setFullConfig(data.config);
+      setDraft(EMPTY_DRAFT);
       setConfigName(data.name);
       setConfigDate(data.updatedAt);
       lastSavedConfig.current = JSON.stringify(data.config);
@@ -336,8 +318,11 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
-      // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
-      window.location.reload();
+      if (agentOpen || guided) {
+        updateHash(0);
+      } else {
+        window.location.reload();
+      }
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
@@ -401,6 +386,10 @@ export default function RedTeamSetupPage() {
       };
 
       setFullConfig(mappedConfig);
+      setDraft(EMPTY_DRAFT);
+      if (agentOpen || guided) {
+        updateHash(0);
+      }
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
     } catch (error) {
@@ -430,7 +419,10 @@ export default function RedTeamSetupPage() {
   // Update handleResetConfig
   const handleResetConfig = () => {
     resetConfig();
+    setDraft(EMPTY_DRAFT);
+    setConfigDate(null);
     setConfigName('');
+    navigate('#agent', { replace: true });
     lastSavedConfig.current = '';
     setHasUnsavedChanges(false);
     setResetDialogOpen(false);
@@ -490,8 +482,31 @@ export default function RedTeamSetupPage() {
   // Root container
   return (
     <div className="fixed flex w-full bg-background text-foreground">
+      {agentOpen && (
+        <div
+          className="w-full overflow-auto"
+          style={{ height: `calc(100dvh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))` }}
+        >
+          <Setup
+            draft={draft}
+            setDraft={setDraft}
+            fresh={fresh}
+            onApply={applyPlan}
+            onManual={() => updateHash(location.state?.returnStep ?? 0, guided && !fresh)}
+            onLoad={() => {
+              loadConfigs();
+              setLoadDialogOpen(true);
+            }}
+          />
+        </div>
+      )}
       {/* Content wrapper */}
-      <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
+      <div
+        className={cn(
+          agentOpen ? 'hidden' : 'flex',
+          'min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row',
+        )}
+      >
         {/* Outer sidebar container */}
         <div
           data-testid="redteam-setup-sidebar"
@@ -536,6 +551,10 @@ export default function RedTeamSetupPage() {
               )}
             </div>
 
+            <Button variant="outline" onClick={openAgent} className="mx-3 mt-3">
+              {draft.plan ? 'View agent plan' : 'Plan with agent'}
+            </Button>
+
             {/* Tabs container */}
             <div className="grow overflow-y-auto">
               <Tabs
@@ -545,7 +564,7 @@ export default function RedTeamSetupPage() {
                 className="w-full"
               >
                 <TabsList className="flex h-auto w-full flex-col gap-1 rounded-none bg-card p-3">
-                  {TAB_CONFIG.map((tab) => {
+                  {steps.map((tab) => {
                     const Icon = tab.icon;
                     return (
                       <TabsTrigger
@@ -642,6 +661,15 @@ export default function RedTeamSetupPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {steps.map((step) => (
+                    <DropdownMenuItem key={step.value} onClick={() => handleTabChange(step.value)}>
+                      {getTabLabel(step)}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={openAgent}>
+                    {draft.plan ? 'View agent plan' : 'Plan with agent'}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setSaveDialogOpen(true)}>
                     <Save className="mr-2 size-4" />
                     Save Config
@@ -666,13 +694,14 @@ export default function RedTeamSetupPage() {
 
           {value === 0 && (
             <ErrorBoundary name="Target Type Selection Page">
-              <TargetTypeSelection onNext={handleNext} />
+              <TargetTypeSelection onNext={handleNext} guided={guided} />
             </ErrorBoundary>
           )}
           {value === 1 && (
             <ErrorBoundary name="Target Configuration Page">
               <TargetConfiguration
                 key={targetConfigRevision}
+                guided={guided}
                 onNext={handleNext}
                 onBack={handleBack}
               />
@@ -698,16 +727,15 @@ export default function RedTeamSetupPage() {
           {value === 5 && (
             <ErrorBoundary name="Review Page">
               <Review
-                navigateToPlugins={navigateToPlugins}
-                navigateToStrategies={navigateToStrategies}
-                navigateToPurpose={navigateToPurpose}
+                navigateToTarget={guided ? () => updateHash(1, true) : undefined}
+                navigateToPlugins={() => updateHash(3)}
+                navigateToStrategies={() => updateHash(4)}
+                navigateToPurpose={() => updateHash(2)}
               />
             </ErrorBoundary>
           )}
         </div>
       </div>
-
-      {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
 
       {/* Save Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
@@ -768,14 +796,17 @@ export default function RedTeamSetupPage() {
                 accept=".yml,.yaml"
                 className="hidden"
                 id="yaml-file-upload"
+                ref={fileInput}
                 type="file"
                 onChange={handleFileUpload}
               />
-              <label htmlFor="yaml-file-upload">
-                <Button variant="outline" className="w-full" asChild>
-                  <span>Import YAML File</span>
-                </Button>
-              </label>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => fileInput.current?.click()}
+              >
+                Import YAML File
+              </Button>
             </div>
 
             <p className="text-sm font-medium">Or choose a saved configuration:</p>

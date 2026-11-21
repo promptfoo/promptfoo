@@ -1636,8 +1636,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           providerType: undefined,
         });
         finishTargetConfigValidationClear();
-        // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
-        window.location.reload();
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => {
         const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(get().config.target);

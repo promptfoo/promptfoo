@@ -877,7 +877,7 @@ Alias for [`promptfoo redteam generate`](#promptfoo-redteam-generate).
 
 ## `promptfoo redteam init`
 
-Initialize a red teaming project.
+Open [red team setup](#promptfoo-redteam-setup) in the browser. In headless environments or with `--no-gui`, follow the manual prompts in your terminal.
 
 | Option        | Description                            | Default |
 | ------------- | -------------------------------------- | ------- |
@@ -887,7 +887,7 @@ Initialize a red teaming project.
 Example:
 
 ```sh
-promptfoo redteam init my_project
+promptfoo redteam init my_project --no-gui
 ```
 
 :::danger
@@ -898,7 +898,7 @@ For more detail, see [red team configuration](/docs/red-team/configuration/).
 
 ## `promptfoo redteam setup`
 
-Start browser UI and open to red team setup.
+Open [red team setup](/docs/red-team/quickstart/#initialize-the-project) in your browser. Draft a plan with the Promptfoo Cloud agent or configure tests manually. The agent doesn't require a model API key.
 
 | Option                           | Description                              | Default |
 | -------------------------------- | ---------------------------------------- | ------- |

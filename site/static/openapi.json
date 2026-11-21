@@ -4832,6 +4832,215 @@
         }
       }
     },
+    "/api/redteam/setup-plan": {
+      "get": {
+        "operationId": "getRedteamSetupAvailability",
+        "tags": ["Redteam"],
+        "summary": "Check whether local settings permit remote red team setup",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "enabled": { "type": "boolean" } },
+                  "required": ["enabled"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "draftRedteamSetupPlan",
+        "tags": ["Redteam"],
+        "summary": "Draft or refine a starter test plan with the hosted agent",
+        "description": "Send an app description without credentials. Drafting does not contact the target or start a run.",
+        "requestBody": {
+          "description": "JSON request body",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                  "previous": {
+                    "type": "object",
+                    "properties": {
+                      "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                      "plugins": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "enum": [
+                                "bias:age",
+                                "bias:disability",
+                                "bias:gender",
+                                "bias:race",
+                                "bfla",
+                                "bola",
+                                "contracts",
+                                "excessive-agency",
+                                "hallucination",
+                                "hijacking",
+                                "overreliance",
+                                "pii:direct",
+                                "rag-document-exfiltration",
+                                "rbac",
+                                "system-prompt-override"
+                              ]
+                            },
+                            "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
+                          },
+                          "required": ["id", "reason"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 4
+                      },
+                      "note": { "type": "string", "minLength": 1, "maxLength": 300 },
+                      "question": { "type": "string", "minLength": 1, "maxLength": 300 }
+                    },
+                    "required": ["purpose", "plugins"],
+                    "additionalProperties": false
+                  },
+                  "refinement": { "type": "string", "minLength": 1, "maxLength": 1000 }
+                },
+                "required": ["description"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                    "plugins": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "bias:age",
+                              "bias:disability",
+                              "bias:gender",
+                              "bias:race",
+                              "bfla",
+                              "bola",
+                              "contracts",
+                              "excessive-agency",
+                              "hallucination",
+                              "hijacking",
+                              "overreliance",
+                              "pii:direct",
+                              "rag-document-exfiltration",
+                              "rbac",
+                              "system-prompt-override"
+                            ]
+                          },
+                          "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
+                        },
+                        "required": ["id", "reason"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 4
+                    },
+                    "note": { "type": "string", "minLength": 1, "maxLength": 300 },
+                    "question": { "type": "string", "minLength": 1, "maxLength": 300 }
+                  },
+                  "required": ["purpose", "plugins"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Remote generation disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Remote rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Agent unavailable or invalid response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/redteam/{taskId}": {
       "post": {
         "operationId": "runRedteamTask",

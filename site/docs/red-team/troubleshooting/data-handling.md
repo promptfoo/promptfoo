@@ -10,7 +10,11 @@ This page explains what data leaves your machine during red team testing and how
 
 ## Data Flow Overview
 
-Red team testing involves three distinct operations, each with different data requirements:
+The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your description to Promptfoo Cloud by default, even if you have a model API key. Refining sends the description, current plan, and your feedback. Drafting a plan doesn't contact your target or send its saved configuration. Leave secrets out of your answers or choose manual setup to skip the agent.
+
+Testing the connection to your target is a separate step that can send the target configuration, request headers, and response to Cloud.
+
+Running a scan involves three operations.
 
 | Operation             | What Runs       | Data Sent Externally                 |
 | --------------------- | --------------- | ------------------------------------ |
@@ -22,7 +26,7 @@ Your target model is always evaluated locally. Promptfoo receives target respons
 
 ## Default Behavior (No API Key)
 
-Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses hosted inference for test generation and grading. The following data is sent to `api.promptfoo.app`:
+Without an `OPENAI_API_KEY` or a custom provider, red team plugins can use hosted inference for test generation and grading. By default these requests go to `api.promptfoo.app`.
 
 **For test generation:**
 
@@ -65,7 +69,7 @@ With this configuration, Promptfoo servers usually receive only [telemetry](#tel
 
 ## With Your ChatGPT Subscription
 
-If Codex is installed and signed in with ChatGPT, Promptfoo can use `openai:codex-sdk` locally for default text generation and grading when no higher-priority API credentials are configured. Remote-only plugins still use hosted inference, and embedding/moderation assertions still require a provider override with API credentials.
+Some text assertions can use `openai:codex-sdk` when you're signed in to Codex with ChatGPT. Without an API key or explicit grader, red team plugins can still send your target's responses and grading criteria to Promptfoo Cloud. To control where grading runs, [configure a grader](/docs/red-team/troubleshooting/grading-results/). Embedding and moderation assertions still need a provider with API credentials.
 
 ## Remote-Only Plugins
 
