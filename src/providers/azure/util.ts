@@ -1,4 +1,6 @@
 import dedent from 'dedent';
+import { calculateOpenAIUsageCost } from '../openai/billing';
+import { getGpt6Variant } from '../openai/gpt6';
 import { clampCachedTokens } from '../shared';
 import { AZURE_MODELS } from './defaults';
 
@@ -171,6 +173,16 @@ export function calculateAzureCost(
     !Number.isFinite(completionTokens)
   ) {
     return undefined;
+  }
+
+  if (getGpt6Variant(modelName)?.startsWith('6.2-')) {
+    // Deployment names do not distinguish Global Standard, Data Zone and provisioned pricing.
+    return calculateOpenAIUsageCost(
+      modelName,
+      config,
+      { prompt_tokens: promptTokens, completion_tokens: completionTokens },
+      { provider: 'azure' },
+    );
   }
 
   const model = AZURE_MODELS.find((entry) => entry.id === modelName);

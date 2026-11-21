@@ -76,7 +76,7 @@ Promptfoo Enterprise supports the following permissions:
 - **Manage Configurations**: Create, edit, and delete configurations and plugin collections
 - **Manage Targets**: Create, edit, and delete targets
 - **View Evaluations**: View saved evals and their results
-- **Create Evaluations**: Create or upload evals; includes viewing evals and targets
+- **Create Evaluations**: Create or upload evals and view evals and targets
 - **Manage Evaluations**: Create, view, update, and delete evals
 - **View Issues**: View vulnerabilities
 - **Manage Issues**: Create, view, update, and delete vulnerabilities
