@@ -80,6 +80,7 @@ export interface Config {
   defaultTest?: TestCase;
   extensions?: string[];
   language?: string | string[]; // Global language configuration
+  graderLanguage?: string; // Language for grader judgment reasons
   // Provider used for generating adversarial inputs (redteam provider)
   provider?: string | CoreProviderOptions;
 }
