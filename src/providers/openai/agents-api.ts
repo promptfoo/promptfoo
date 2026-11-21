@@ -5,17 +5,23 @@ import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
 import {
+  isCredentialHeader as isKnownCredentialHeader,
   isNonCredentialHeader,
-  isSecretField,
-  looksLikeSecret,
   REDACTED,
   sanitizeObject,
-  sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
-import { decodeUrlComponent } from '../urlEncoding';
+import {
+  basicCredential,
+  decodeBasicCredentials,
+  getHostedCredentialArgument,
+  getHostedHeaderCredentialParts,
+  getUrlCredentials,
+  isCredentialName,
+  splitUserinfo,
+} from './agents-api-credential-args';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
@@ -122,8 +128,6 @@ const TURN_USAGE_GRACE_MS = 5_000;
 const MIN_CREDENTIAL_LENGTH = 8;
 // A single character is no secret, and redacting it would erase that character from diagnostics.
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
-const CREDENTIAL_NAME =
-  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
 
 async function digestArtifact(response: Response | undefined, expectedSize: number) {
   if (!response?.body || response.redirected) {
@@ -164,10 +168,6 @@ class AgentsApiHttpError extends Error {
   }
 }
 
-function isCredentialName(name: string): boolean {
-  return isSecretField(name) || CREDENTIAL_NAME.test(name);
-}
-
 function isCredentialHeader(name: string, value: string): boolean {
   return (
     isCredentialName(name) ||
@@ -177,22 +177,38 @@ function isCredentialHeader(name: string, value: string): boolean {
   );
 }
 
-function addCredential(credentials: Set<string>, value: unknown): void {
+// Empty credentials are never collected. This sentinel suppresses echoes of an
+// authorization scheme whose individual credential values cannot be inspected.
+const UNINSPECTABLE_AUTHORIZATION = '';
+
+function isCredentialArgumentName(name: string): boolean {
+  return isCredentialName(name) || isKnownCredentialHeader(name, '');
+}
+
+function addCredential(credentials: Set<string>, value: unknown, field?: string): void {
   if (typeof value !== 'string') {
     return;
   }
   const trimmed = value.trim();
   const candidates = [trimmed, trimmed.replace(/^(?:Bearer|Basic|Token)\s+/i, '')];
-  const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
+  if (field) {
+    for (const part of getHostedHeaderCredentialParts(field, trimmed, () => {
+      // A template may stand in for the entire token. Its rendered value is
+      // collected again from the effective request configuration.
+      if (!/^(?:[a-z][\w-]*[ \t]+)?\{\{[\w.()| \t]+\}\}$/i.test(trimmed)) {
+        credentials.add(UNINSPECTABLE_AUTHORIZATION);
+      }
+    })) {
+      candidates.push(part);
+    }
+  }
+  const basic = /^Basic\s+([a-z\d._~+/-]+=*)$/i.exec(trimmed);
   if (basic) {
-    const bytes = Buffer.from(basic[1], 'base64');
-    const decoded = bytes.toString('utf8');
-    const separator = decoded.indexOf(':');
-    if (
-      separator !== -1 &&
-      bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
-    ) {
-      candidates.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
+    const parts = decodeBasicCredentials(basic[1]);
+    if (parts) {
+      candidates.push(...parts);
+    } else {
+      credentials.add(UNINSPECTABLE_AUTHORIZATION);
     }
   }
   for (const candidate of candidates) {
@@ -201,83 +217,6 @@ function addCredential(credentials: Set<string>, value: unknown): void {
       credentials.add(encodeURIComponent(candidate));
     }
   }
-}
-
-/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
-function decodeUserinfo(url: URL): string | undefined {
-  return url.username || url.password
-    ? `${decodeUrlComponent(url.username)}:${decodeUrlComponent(url.password)}`
-    : undefined;
-}
-
-function basicCredential(userinfo: string): string {
-  return `Basic ${Buffer.from(userinfo).toString('base64')}`;
-}
-
-/**
- * Promptfoo's fetch helper would Base64-encode URL userinfo while it is still percent-encoded, so
- * request URLs omit it and the provider sends a decoded Basic credential instead.
- */
-function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
-  let url: URL;
-  try {
-    url = new URL(apiUrl);
-  } catch {
-    return { url: apiUrl };
-  }
-  const userinfo = decodeUserinfo(url);
-  if (!userinfo) {
-    return { url: apiUrl };
-  }
-  url.username = '';
-  url.password = '';
-  return { url: url.toString(), userinfo };
-}
-
-/**
- * Credential values carried by a URL: userinfo, including the decoded pair and the Basic
- * credential derived from it, and credential-named query parameters. Raw and decoded spellings
- * are both returned for redaction.
- */
-function getUrlCredentials(value: string, includeFragment = true): string[] {
-  const trimmed = value.trim();
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
-    return [];
-  }
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    // A malformed credential-bearing URL can be echoed only as one opaque error value.
-    return sanitizeUrlForLogging(value) === value ? [] : [value];
-  }
-  const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
-  const userinfo = decodeUserinfo(url);
-  if (userinfo) {
-    found.push(userinfo, basicCredential(userinfo));
-  }
-  const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
-  for (const [index, segment] of url.pathname.split('/').entries()) {
-    if (sanitizedSegments[index] === '%5BREDACTED%5D') {
-      found.push(segment, decodeUrlComponent(segment));
-    }
-  }
-  const parameterParts = includeFragment ? [url.search, url.hash] : [url.search];
-  for (const segment of parameterParts.flatMap((part) => part.slice(1).split(/[&;]/))) {
-    const separator = segment.indexOf('=');
-    const [param] = new URLSearchParams(segment);
-    if (
-      separator !== -1 &&
-      param &&
-      (isCredentialName(param[0]) ||
-        looksLikeSecret(param[1]) ||
-        looksLikeSecret(segment.slice(separator + 1)))
-    ) {
-      // A raw `+` decodes to a space; keep both spellings a server might echo.
-      found.push(segment.slice(separator + 1), param[1]);
-    }
-  }
-  return found.filter((credential) => credential.trim().length > 0);
 }
 
 /**
@@ -292,7 +231,7 @@ function collectConfigCredentials(
 ): void {
   if (typeof value === 'string') {
     if ((key && isCredentialName(key)) || (inHeaders && !isNonCredentialHeader(key))) {
-      addCredential(credentials, value);
+      addCredential(credentials, value, key);
     }
     for (const credential of getUrlCredentials(value)) {
       addCredential(credentials, credential);
@@ -306,6 +245,24 @@ function collectConfigCredentials(
     return;
   }
   if (value && typeof value === 'object') {
+    if (
+      key === 'transport' &&
+      'type' in value &&
+      value.type === 'stdio' &&
+      'args' in value &&
+      Array.isArray(value.args)
+    ) {
+      for (const [index, arg] of value.args.entries()) {
+        const credential = getHostedCredentialArgument(
+          arg,
+          value.args[index - 1],
+          isCredentialArgumentName,
+        );
+        if (credential) {
+          addCredential(credentials, credential.value, credential.name);
+        }
+      }
+    }
     const childInHeaders = inHeaders || key.toLowerCase() === 'headers';
     for (const [childKey, item] of Object.entries(value)) {
       collectConfigCredentials(item, credentials, childKey, childInHeaders);
@@ -327,7 +284,7 @@ function scanRequestHeaders(
     const present = value.trim().length > 0;
     if (isCredentialName(name)) {
       hasHeaderCredential ||= present;
-      addCredential(credentials, value);
+      addCredential(credentials, value, name);
     }
     hasCustomHeader ||= present && name !== 'authorization' && !isNonCredentialHeader(name);
   });
@@ -358,6 +315,9 @@ function shortCredentialPattern(credential: string): RegExp {
 }
 
 function redactCredentials(text: string, credentials: readonly string[]): string {
+  if (credentials.includes(UNINSPECTABLE_AUTHORIZATION)) {
+    return REDACTED;
+  }
   let redacted = text;
   for (const credential of credentials) {
     redacted =
@@ -902,7 +862,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           }
           if (isCredentialHeader(name, value)) {
             removedInheritedHeaders ||= !hasReplacementCredential && value.trim().length > 0;
-            addCredential(removedHeaderCredentials, value);
+            addCredential(removedHeaderCredentials, value, name);
             collectConfigCredentials(value, removedHeaderCredentials);
           } else {
             safeHeaders[name] = value;
