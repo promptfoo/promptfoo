@@ -180,6 +180,10 @@ export interface GoogleSpeechConfig {
 }
 
 export interface CompletionOptions {
+  /** Set to zero to disable retries, including the empty GenerateContent retry. */
+  maxRetries?: number;
+  /** Delay in milliseconds before retrying an empty GenerateContent response. */
+  baseRetryDelay?: number;
   apiKey?: string;
   apiKeyRequired?: boolean;
   apiHost?: string;

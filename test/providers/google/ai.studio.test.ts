@@ -289,12 +289,14 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should handle empty candidate responses', async () => {
-      const provider = new AIStudioChatProvider('gemini-pro', createApiKeyOptions());
+    it('reports empty candidates after the retry is exhausted', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { ...createApiKeyOptions().config, baseRetryDelay: 0 },
+      });
 
       vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(createPreparedTestPrompt);
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      const empty = {
         data: {
           candidates: [],
         },
@@ -302,11 +304,13 @@ describe('AIStudioChatProvider', () => {
         status: 200,
         statusText: 'OK',
         headers: {},
-      });
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(empty).mockResolvedValueOnce(empty);
 
       const response = await provider.callGemini('test prompt');
       expect(response.error).toContain('No candidates returned in API response');
       expect(response.error).toContain('Got response:');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
     });
 
     it('should handle malformed API responses', async () => {
@@ -1968,6 +1972,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2081,6 +2086,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2426,6 +2432,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2522,6 +2529,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2592,6 +2600,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 

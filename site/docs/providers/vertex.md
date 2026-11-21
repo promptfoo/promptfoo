@@ -12,6 +12,8 @@ The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/
 Use `vertex:` for the supported Vertex inference paths listed below. Use `google:` for Google AI Studio (API key authentication). [Gemini image models](#image-generation-models) also use `google:` with `config.projectId` to select Vertex AI.
 :::
 
+For Gemini `generateContent` calls without tools or streaming, Promptfoo retries once by default after an HTTP 503 or a successful response with no candidate parts, safety feedback, or usage. Set `maxRetries` to the number of retries after the initial attempt. Use `0` to disable retries or `baseRetryDelay` to change the 200 ms wait. A prompt-level override applies to that prompt's call. The retry shares the original request timeout.
+
 ## Available Models
 
 For Gemini speech generation, use `vertex:gemini-3.8-flash-tts` or `vertex:gemini-3.8-flash-lite-tts` with `config.region: global`. These models use `generateContent` (or `streamGenerateContent` with `streaming: true`) and return audio in `providerResponse.audio`. See [speech configuration](/docs/providers/google#text-to-speech) for single- and two-speaker voices. System instructions are unsupported; put delivery instructions in `speechMetadata.style`. They are [Preview on Vertex](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-tts); check project access before use.
