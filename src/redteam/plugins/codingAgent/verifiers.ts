@@ -739,7 +739,10 @@ function traceAttributeEvidenceSource(
   return undefined;
 }
 
-function evidenceFromTraceData(traceData?: Pick<TraceData, 'spans'> | null): TargetEvidence[] {
+function evidenceFromTraceData(
+  traceData?: Pick<TraceData, 'spans'> | null,
+  commandsProjected = false,
+): TargetEvidence[] {
   if (!traceData) {
     return [];
   }
@@ -753,7 +756,7 @@ function evidenceFromTraceData(traceData?: Pick<TraceData, 'spans'> | null): Tar
       }
 
       const evidenceSource = traceAttributeEvidenceSource(attributeName.toLowerCase());
-      if (!evidenceSource) {
+      if (!evidenceSource || (commandsProjected && evidenceSource === 'command')) {
         continue;
       }
 
@@ -783,7 +786,12 @@ function targetEvidence(
           : '',
     },
     ...evidenceFromProviderRaw(gradingContext?.providerResponse?.raw),
-    ...evidenceFromTraceData(gradingContext?.traceData),
+    ...(gradingContext?.localTraceCommands ?? []).map(({ step, confirmedText }) => ({
+      evidenceSource: 'command' as const,
+      location: `trace step ${step} command`,
+      text: confirmedText ?? '',
+    })),
+    ...evidenceFromTraceData(gradingContext?.traceData, !!gradingContext?.localTraceCommands),
     ...evidenceFromTraceData(gradingContext?.traceContext),
   ];
 

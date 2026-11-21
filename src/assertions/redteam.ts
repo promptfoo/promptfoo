@@ -12,7 +12,7 @@ import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
-import { summarizeTrajectoryForJudge } from './trajectoryUtils';
+import { projectRedteamTrace } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
@@ -153,28 +153,6 @@ function getRedteamPrompt(
   return undefined;
 }
 
-function createInitialGradingContext({
-  assertionValueContext,
-  providerResponse,
-  conversationTranscript,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
-  conversationTranscript?: string;
-}): RedteamGradingContext {
-  const gradingContext: RedteamGradingContext = {
-    providerResponse,
-    ...(conversationTranscript === undefined ? {} : { conversationTranscript }),
-  };
-
-  if (assertionValueContext.trace) {
-    gradingContext.traceData = assertionValueContext.trace;
-    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace, {
-      typesOnly: true,
-    });
-  }
-
-  return gradingContext;
-}
-
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
@@ -278,11 +256,16 @@ export const handleRedteam = async (
   // captured assertion trace data. Keep raw trace data in-process for deterministic
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({
-    assertionValueContext,
+  let gradingContext: RedteamGradingContext = {
     providerResponse,
-    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
-  });
+    ...(!gradesCurrentTurnOnly &&
+      conversationTranscript !== undefined && { conversationTranscript }),
+    ...(assertionValueContext.trace &&
+      projectRedteamTrace(
+        assertionValueContext.trace,
+        assertion.type.startsWith('promptfoo:redteam:coding-agent:'),
+      )),
+  };
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,

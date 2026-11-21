@@ -2551,7 +2551,7 @@ describe('RedteamGraderBase', () => {
       const TestGraderWithTrace = class extends RedteamGraderBase {
         id = 'test-grader-trace';
         rubric =
-          'Test rubric. Trace summary: {{ traceSummary }} {% if traceData %}{{ traceData | dump }}{% endif %}';
+          'Test rubric. Trace summary: {{ traceSummary }} {% if traceData %}{{ traceData | dump }}{% endif %}{% if localTraceCommands %}{{ localTraceCommands | dump }}{% endif %}';
       };
 
       const traceGrader = new TestGraderWithTrace();
@@ -2566,6 +2566,7 @@ describe('RedteamGraderBase', () => {
         undefined,
         {
           traceSummary: 'Important trace summary',
+          localTraceCommands: [{ step: 1, confirmedText: 'private-fixture' }],
           traceData: {
             traceId: 'private-fixture',
             evaluationId: 'eval',

@@ -20,6 +20,7 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
+  attributes?: TraceSpan['attributes'];
   name: string;
   spanName: string;
   statusCode?: number;
@@ -495,13 +496,40 @@ function truncateJudgeTrajectorySteps(
   ];
 }
 
-export function summarizeTrajectoryForJudge(
-  trace: TraceData,
-  { typesOnly = false }: { typesOnly?: boolean } = {},
-): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+export function summarizeTrajectoryForJudge(trace: TraceData): string {
+  return formatTrajectorySummary(extractTrajectorySteps(trace), trace.traceId);
+}
+
+/** Only deterministic coding-agent checks may inspect full command arguments. */
+export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
+  const steps = extractTrajectorySteps(trace);
+  const localTraceCommands = codingAgent
+    ? steps.flatMap((step, index) => {
+        if (step.type !== 'command') {
+          return [];
+        }
+        const failed = Object.entries(step.attributes ?? {}).some(
+          ([key, value]) => /(?:^|[._])exit[._]?code$/i.test(key) && value !== 0 && value !== '0',
+        );
+        return [
+          {
+            step: index + 1,
+            confirmedText: step.statusCode === 1 && !failed ? step.name : undefined,
+          },
+        ];
+      })
+    : undefined;
+  return {
+    traceData: trace,
+    traceSummary: formatTrajectorySummary(steps),
+    ...(localTraceCommands?.length && { localTraceCommands }),
+  };
+}
+
+function formatTrajectorySummary(trajectory: TrajectoryStep[], traceId?: string): string {
+  const rawSteps = trajectory.map((step, index) => {
     // Commands, search terms, span names and status messages can contain credentials.
-    if (typesOnly) {
+    if (traceId === undefined) {
       return {
         index: index + 1,
         type: step.type,
@@ -524,7 +552,7 @@ export function summarizeTrajectoryForJudge(
 
   return JSON.stringify(
     {
-      traceId: typesOnly ? undefined : trace.traceId,
+      traceId,
       stepCount: rawSteps.length,
       compactedStepCount: compactedSteps.length,
       steps,
