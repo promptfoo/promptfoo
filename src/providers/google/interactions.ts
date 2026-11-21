@@ -1,11 +1,12 @@
 import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { sha256 } from '../../util/createHash';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { resolveProviderEnv } from '../env';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
 import {
@@ -272,6 +273,45 @@ function hasSemanticInteractionInput(value: unknown): boolean {
     );
   }
   return value !== null && value !== undefined;
+}
+
+/** Report the aspect ratio of the video format actually sent, whichever layer supplied it. */
+function getRequestedVideoAspectRatio(responseFormat: unknown): string | undefined {
+  const formats = Array.isArray(responseFormat) ? responseFormat : [responseFormat];
+  const videoFormat = formats.find(
+    (format): format is Record<string, unknown> =>
+      Boolean(format) &&
+      typeof format === 'object' &&
+      (format as Record<string, unknown>).type === 'video',
+  );
+  return typeof videoFormat?.aspect_ratio === 'string' ? videoFormat.aspect_ratio : undefined;
+}
+
+function canonicalizeInteractionCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeInteractionCacheValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [
+          key,
+          canonicalizeInteractionCacheValue((value as Record<string, unknown>)[key]),
+        ]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Credential-free cache identity: the endpoint (which carries the Vertex project and region)
+ * plus the canonicalized request body. API keys and OAuth tokens are never part of the key.
+ */
+function getInteractionsCacheKey(endpoint: string, body: Record<string, unknown>): string {
+  return `google:interactions:v1:${sha256(
+    JSON.stringify(canonicalizeInteractionCacheValue({ endpoint, body })),
+  )}`;
 }
 
 function getLiveOnlyModelRouteError(modelName: string): string | undefined {
@@ -970,12 +1010,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
         )
       : false;
     const hasMcpTools = !toolsDisabled && config.mcp?.enabled === true;
-    if (config.vertexai && isVideoModel && previousInteractionId) {
-      return {
-        error:
-          'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
-      };
-    }
     if (isTranscriptionModel && (hasConfigTools || hasPassthroughTools || hasMcpTools)) {
       return { error: 'Gemini Transcribe does not support tools.' };
     }
@@ -1340,16 +1374,29 @@ export class GoogleInteractionsProvider implements ApiProvider {
       stream: false,
     };
 
+    // Replay only self-contained requests. A follow-up or an explicitly stored interaction depends
+    // on server-side state, and a replay would return an interaction ID that may have expired.
+    // Video responses carry media links that can expire, or inline video bytes. Custom headers can
+    // select a tenant or carry credentials, which must not reach the cache key.
+    const bypassCache =
+      shouldBustProviderCache(context) ||
+      isVideoModel ||
+      previousInteractionId !== undefined ||
+      store === true ||
+      Object.keys(config.headers ?? {}).length > 0;
+
     let data: InteractionResponse;
     let cached: boolean;
     let httpStatus: number;
     let httpStatusText: string;
+    let deleteFromCache: (() => Promise<void>) | undefined;
     try {
       ({
         data,
         cached,
         status: httpStatus,
         statusText: httpStatusText,
+        deleteFromCache,
       } = (await fetchWithCache(
         endpoint,
         {
@@ -1359,9 +1406,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        // Interactions API credentials must not be persisted, even as a stable cache fingerprint.
-        true,
-      )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
+        // An explicit key keeps API keys and OAuth tokens out of the cache, even as fingerprints.
+        bypassCache ? true : { cacheKey: getInteractionsCacheKey(endpoint, body) },
+      )) as {
+        data: InteractionResponse;
+        cached: boolean;
+        status: number;
+        statusText: string;
+        deleteFromCache?: () => Promise<void>;
+      });
     } catch (err) {
       return { error: `Gemini Interactions API error: ${String(err)}` };
     }
@@ -1375,6 +1428,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
         error: `Gemini Interactions API error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
         raw: data,
       };
+    }
+    // Keep only completed interactions in the cache; an in-progress one is polled below.
+    if (data.status && data.status !== 'completed') {
+      await deleteFromCache?.();
     }
 
     const pollTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
@@ -1428,6 +1485,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       .filter((step) => step.type === 'model_output')
       .find((step) => step.error?.message)?.error?.message;
     if (latestOutputError) {
+      await deleteFromCache?.();
       return { error: `Gemini Interactions API error: ${latestOutputError}`, raw: data };
     }
 
@@ -1491,8 +1549,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const missingTranscriptionUsage =
       isTranscriptionModel &&
       (usage?.total_input_tokens == null || usage?.total_output_tokens == null);
-    const skipCost = cached || missingTranscriptionUsage;
-    const cost = skipCost
+    // A replayed response keeps its reported cost; the evaluator records no incurred cost for it.
+    const cost = missingTranscriptionUsage
       ? undefined
       : hasCatalogModel
         ? calculateGoogleCost(
@@ -1523,15 +1581,18 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
     if (!isVideoModel) {
       if (!text) {
+        await deleteFromCache?.();
         return { error: 'Gemini interaction did not return text output', raw: data };
       }
-      return {
-        output: text,
+      return withResponseCacheMetadata(
+        {
+          output: text,
+          tokenUsage,
+          cost,
+          metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
+        },
         cached,
-        tokenUsage,
-        cost,
-        metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
-      };
+      );
     }
 
     const video = [...outputContent].reverse().find((part) => part.type === 'video');
@@ -1656,7 +1717,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         url: videoUrl,
         format: video.mime_type?.split('/')[1] || 'mp4',
         model: effectiveModel,
-        aspectRatio: config.aspectRatio,
+        aspectRatio: getRequestedVideoAspectRatio(videoResponseFormat),
       },
       metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
     };
