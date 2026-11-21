@@ -787,7 +787,9 @@ export class VLSUGrader extends ImageDatasetGraderBase {
    * Get guidance for a category
    */
   protected getGuidance(category: string, _subcategory?: string): string {
-    return Object.hasOwn(this.guidance, category) ? this.guidance[category] : this.defaultGuidance;
+    return Object.prototype.hasOwnProperty.call(this.guidance, category)
+      ? this.guidance[category]
+      : this.defaultGuidance;
   }
 
   /**

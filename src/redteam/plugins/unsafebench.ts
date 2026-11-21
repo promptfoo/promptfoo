@@ -519,7 +519,9 @@ export class UnsafeBenchGrader extends RedteamGraderBase {
     return super.renderRubric({
       ...vars,
       category,
-      categoryGuidance: Object.hasOwn(guidance, category) ? guidance[category] : guidance.default,
+      categoryGuidance: Object.prototype.hasOwnProperty.call(guidance, category)
+        ? guidance[category]
+        : guidance.default,
     });
   }
 

@@ -176,7 +176,7 @@ export abstract class ImageDatasetGraderBase extends RedteamGraderBase {
       args[7] = { ...args[7], inputImage: image };
     }
     // Remove exact bytes first to preserve adjacent text without a delimiter.
-    const query = image ? prompt.replaceAll(image, '[image]') : prompt;
+    const query = image ? prompt.split(image).join('[image]') : prompt;
     const inputText = query.replace(/data:image\/[^;,\s]+;base64,[\w+/=-]+/gi, '[image]');
     args[4] = {
       ...value,
@@ -214,10 +214,12 @@ export abstract class ImageDatasetGraderBase extends RedteamGraderBase {
    * Get guidance for a specific category or subcategory
    */
   protected getGuidance(category: string, subcategory?: string): string {
-    if (subcategory && Object.hasOwn(this.guidance, subcategory)) {
+    if (subcategory && Object.prototype.hasOwnProperty.call(this.guidance, subcategory)) {
       return this.guidance[subcategory];
     }
-    return Object.hasOwn(this.guidance, category) ? this.guidance[category] : this.defaultGuidance;
+    return Object.prototype.hasOwnProperty.call(this.guidance, category)
+      ? this.guidance[category]
+      : this.defaultGuidance;
   }
 
   /**
