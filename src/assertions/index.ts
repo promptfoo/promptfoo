@@ -93,6 +93,7 @@ import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
+import { renderTraceFilters } from './traceUtils';
 import {
   handleTrajectoryGoalSuccess,
   handleTrajectoryStepCount,
@@ -613,6 +614,10 @@ async function runAssertionInternal({
     // Update renderedValue with the script output
     // Type assertion is now safe because we've validated the type
     renderedValue = valueFromScript as AssertionValue;
+  }
+
+  if (baseType.startsWith('trace-')) {
+    renderedValue = renderTraceFilters(renderedValue, resolvedVars);
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
