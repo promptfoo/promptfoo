@@ -302,6 +302,7 @@ describe('GolangProvider', () => {
       filters: { upper: (value: string) => value.toUpperCase() },
       originalProvider,
     };
+    context.test = { metadata: { context } };
     const originalContext = { ...context };
     if (frozen) {
       Object.freeze(context);
@@ -331,6 +332,7 @@ describe('GolangProvider', () => {
         prompt: context.prompt,
         vars: context.vars,
         evaluationId: 'context-eval',
+        test: { metadata: {} },
       });
     }
   });

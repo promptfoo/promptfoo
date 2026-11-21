@@ -201,6 +201,7 @@ describe('ScriptCompletionProvider', () => {
       filters: { upper: (value: string) => value.toUpperCase() },
       originalProvider,
     };
+    context.test = { metadata: { context } };
     const originalContext = { ...context };
     if (frozen) {
       Object.freeze(context);
@@ -230,8 +231,18 @@ describe('ScriptCompletionProvider', () => {
       }
     }
     expect(serializedContexts).toEqual([
-      { prompt: context.prompt, vars: context.vars, evaluationId: 'context-eval' },
-      { prompt: context.prompt, vars: context.vars, evaluationId: 'context-eval' },
+      {
+        prompt: context.prompt,
+        vars: context.vars,
+        evaluationId: 'context-eval',
+        test: { metadata: {} },
+      },
+      {
+        prompt: context.prompt,
+        vars: context.vars,
+        evaluationId: 'context-eval',
+        test: { metadata: {} },
+      },
     ]);
   });
 

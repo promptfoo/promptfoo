@@ -49,6 +49,47 @@ describe('sanitizeScriptContext', () => {
     );
   });
 
+  it('skips host-only getters and circular links to the original context', () => {
+    const getLogger = vi.fn(() => {
+      throw new Error('logger must not be read');
+    });
+    const context: CallApiContextParams = {
+      prompt: { raw: '', label: '' },
+      vars: {},
+      get logger() {
+        return getLogger();
+      },
+      originalProvider: createMockProvider({ id: 'private' }),
+    };
+    context.test = { metadata: { context, nested: [context] } };
+    const copy = sanitizeScriptContext('GolangProvider', Object.freeze(context));
+    expect(JSON.parse(JSON.stringify(copy))).toEqual({
+      prompt: context.prompt,
+      vars: {},
+      test: { metadata: { nested: [null] } },
+    });
+    expect(getLogger).not.toHaveBeenCalled();
+    expect(context.test.metadata?.context).toBe(context);
+  });
+
+  it('honors prototype JSON redaction and filters the projected context too', () => {
+    class Context {
+      prompt = { raw: '', label: '' };
+      vars = {};
+      internal = 'private';
+      toJSON(key: string) {
+        return { key, vars: this.vars, originalProvider: this.internal, back: this };
+      }
+    }
+    const context = Object.freeze(new Context());
+    expect(JSON.stringify(sanitizeScriptContext('ScriptCompletionProvider', context, ''))).toBe(
+      '{"key":"","vars":{}}',
+    );
+    expect(JSON.stringify(sanitizeScriptContext('GolangProvider', context))).toBe(
+      '{"key":"2","vars":{}}',
+    );
+  });
+
   it('does not mutate the caller-owned context', () => {
     const originalProvider = createMockProvider({ id: 'x' });
     const context = {

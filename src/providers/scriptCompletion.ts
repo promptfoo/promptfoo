@@ -94,7 +94,7 @@ export class ScriptCompletionProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve, reject) => {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
-      const sanitizedContext = sanitizeScriptContext('ScriptCompletionProvider', context);
+      const sanitizedContext = sanitizeScriptContext('ScriptCompletionProvider', context, '');
       const scriptArgs = scriptParts.concat([
         prompt,
         safeJsonStringify(this.options || {}) as string,
