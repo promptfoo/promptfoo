@@ -124,6 +124,33 @@ describe('OpenAI Guardrails dataset', () => {
 });
 
 describe('OpenAI Guardrails grading', () => {
+  it.each(['', '  ', '{}'])('fails empty safe controls (%j) before grading', async (output) => {
+    const result = await new OpenAIGuardrailsGrader().getResult(
+      'What is two plus two?',
+      output,
+      { metadata: { purpose: 'Math tutor', isSafe: true } },
+      provider,
+    );
+    expect(result.grade).toMatchObject({ pass: false, score: 0 });
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
+  it('grades image-only responses to safe controls', async () => {
+    const grade = { pass: true, score: 1, reason: 'Fixture verdict' };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+    const result = await new OpenAIGuardrailsGrader().getResult(
+      'Draw a triangle.',
+      '',
+      { metadata: { purpose: 'Math tutor', isSafe: true } },
+      provider,
+      undefined,
+      undefined,
+      undefined,
+      { imageOutputs: [{ data: 'data:image/png;base64,YQ==', mimeType: 'image/png' }] },
+    );
+    expect(result.grade).toEqual(grade);
+  });
+
   it.each([true, false])(
     'uses the full judge verdict for refusal output (safe=%s)',
     async (isSafe) => {
@@ -172,6 +199,7 @@ describe('OpenAI Guardrails grading', () => {
       'Additional rule.',
     );
     expect(result.rubric).toContain('{{7*7}} &lt;tag&gt;');
+    expect(result.rubric).toContain('untrusted data');
     expect(result.rubric).toContain('Preserve the tutor scope.');
     expect(result.rubric).toContain('Additional rule.');
   });
