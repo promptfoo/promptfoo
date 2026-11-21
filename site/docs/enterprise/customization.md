@@ -27,8 +27,6 @@ Select the intended team before creating policies or severity sets. Your role ne
 3. Select **Save**.
 4. In a scan template or plugin collection, open **Custom Policies**, select **Add from Library**, choose the policies, and select **Add** or **Apply**. Save the template or collection.
 
-Creating a library policy does not add it to every scan. Each template or collection must select it.
-
 Policies belong to the team that creates them. To let other teams reuse one, enable **Accessible to all teams in your organization**. Other teams can read and select the policy; only its owning team can edit or delete it, with the appropriate permissions.
 
 [![Policy Library with refund and account-privacy policies and their team-sharing labels](/img/enterprise-docs/customization-policy.png)](pathname:///img/enterprise-docs/customization-policy.png)
@@ -60,19 +58,17 @@ For a plugin-specific correction, edit the scan template's **Plugins**, use **Cu
 
 ### Correct a result and optionally save an example
 
-Open the eval itself, rather than a comparison view, and find the result to review. In release 125, red-team rows use a check for **Mark as safe** and an X for **Mark as vulnerable**. Ordinary evals show thumbs up/down labeled **Mark test passed** / **Mark test failed**. These actions set PASS/FAIL, not agreement or disagreement with the grader.
+Open a result in the eval's own results view. In release 125, the red team controls are **Mark as safe** (check) and **Mark as vulnerable** (X). Ordinary evals use **Mark test passed** (thumbs up) and **Mark test failed** (thumbs down).
 
-- **Safe / thumbs up** saves a manual PASS with score 1; **Vulnerable / thumbs down** saves FAIL with score 0. Clicking the active rating again removes the manual override and restores the verdict from the stored automatic assertions.
-- **Set score** changes the score while retaining the current PASS/FAIL verdict. A comment records your explanation; it is not automatically a reusable grading example.
-- For a saved red-team target, a **Create Grading Example** dialog opens after the rating is submitted. Wait for confirmation. **Cancel** skips the example; it does not undo an already saved rating.
+- A manual PASS sets the score to 1. A manual FAIL sets it to 0. **Set score** leaves the verdict unchanged.
+- Click the active rating again to clear the override. With saved assertions, release 125 requires all of them to pass and averages their scores. It does not reapply the test's `threshold` or assertion weights, so the verdict and score can differ from the original.
+- For a saved red team target, submitting a rating opens **Create Grading Example**. Wait for confirmation. **Cancel** skips the example and keeps the saved rating.
 
-In that dialog, check the plugin, output, expected **Result**, score, and **Reason for this grading decision**. Changing Result inside the dialog changes the example, not the rating already saved on the row. Choose a specific plugin for a narrow exception. **All** means all plugins for this target, not all targets or organizations.
+Check the output, **Result**, score, and **Reason for this grading decision**. Changing **Result** affects only the example. Choose a plugin to limit the rule, or **All** to apply it to every plugin for that target.
 
-In release 125, the dialog uses the eval's first configured target. Use it with a single-target eval; for a multi-target eval, add the example directly from the intended target's **Grading Examples** page.
+In release 125, this dialog uses the eval's first target. For a multi-target eval, add the example from the intended target's **Grading Examples** page.
 
 [![A saved PASS correction and a contracts grading example explaining why human review is allowed](/img/enterprise-docs/customization-grading-example.png)](pathname:///img/enterprise-docs/customization-grading-example.png)
-
-This synthetic example distinguishes safe escalation from an unauthorized refund promise.
 
 **Save** stores the target's grading example for later runs that load it and adds the reason to the originating result's comment. It does not regrade other results. Manage saved examples under the target's **Grading Examples** page. Examples supply context in the grader's prompt; they do not fine-tune a model or automatically teach every target.
 
@@ -114,7 +110,7 @@ On-prem review requires a configured **Agent Provider**. Ask an administrator to
 
 [![Apply Grading Guidelines dialog with refund and identity-verification documents selected](/img/enterprise-docs/customization-guidelines.png)](pathname:///img/enterprise-docs/customization-guidelines.png)
 
-This reviews saved responses, without sending new probes to the target. It reviews all FAIL results in the eval, rather than only the rows currently visible through a filter. A failure can be confirmed or revised to PASS; a revised result receives a passing score and a review reason.
+The review covers all failures in the eval, including filtered rows, without sending new probes to the target. If a failure is revised to PASS, the result includes a passing score and review reason.
 
 :::note
 
@@ -129,7 +125,7 @@ You can apply a saved guideline as soon as its document text is available. For g
 Use severity overrides when a plugin's default risk level does not match your application. For example, a team might classify unauthorized financial commitments as critical for a customer-facing purchasing assistant.
 
 1. Open **Red Team → Plugins**, select **Severity Overrides** in the sidebar, and create an override. Enter a name and optional description.
-2. Change at least one plugin's severity in the table, then save.
+2. In the plugin table, change at least one value in the **Severity** column. Use **Hide Defaults** to review your changes, then save.
 3. Open the target's **Plugin Severities** page and choose the set under **Selected severities**. The selection saves automatically.
 
 [![Target Plugin Severities page showing the selected customer-support severity set and its customized risk levels](/img/enterprise-docs/customization-severities.png)](pathname:///img/enterprise-docs/customization-severities.png)

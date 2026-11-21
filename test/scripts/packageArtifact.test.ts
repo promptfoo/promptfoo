@@ -162,9 +162,7 @@ describe('standalone artifact tooling', () => {
     for (const filename of [
       'preparePackageArtifactTest.mjs',
       'testPackageArtifact.ts',
-      'packPackageArtifact.ts',
       'packedConsumerSbom.ts',
-      'postbuild.ts',
     ]) {
       fs.copyFileSync(
         path.resolve(__dirname, '../../scripts', filename),

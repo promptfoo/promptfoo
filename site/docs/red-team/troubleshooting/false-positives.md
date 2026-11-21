@@ -5,19 +5,13 @@ description: Red team false positive detection by enhancing grader context and s
 
 # Preventing False Positives
 
-False positives occur when a safe response is marked FAIL. A genuine violation marked PASS is a false negative. Both can arise when the grader lacks sufficient context about your target application's intended behavior.
-
-Clear context and representative passing and failing examples help improve grading accuracy.
+A false positive is a reported vulnerability that is not actually a violation. A false negative is a violation the grader misses. Both can occur when the grader lacks context about the target application. Providing its intended behavior and reviewing disputed results can reduce grading errors.
 
 ## Understanding How the Grader Makes Decisions
 
 When you run a red team scan against a target, Promptfoo evaluates its outputs against the configured assertions. Model-graded assertions use the configured grading provider and the application context supplied with the test.
 
-A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
-
-Pass and fail verdicts are separate from **errors**, such as malformed responses or provider failures. Severity and remediation details are separate from the grading verdict.
-
-Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs that are more impactful or higher risk. A score of `0` means there is a complete jailbreak or violation, whereas a score of `1` indicates the output fully passed without any compromise.
+**PASS** and **FAIL** describe the grader's verdict. Scores range from 0 to 1 and can reflect partial credit. A provider failure or malformed response can produce an **error**. Track severity and remediation separately from the verdict.
 
 ## Your Role in Ensuring Accurate Results
 
@@ -25,7 +19,7 @@ Scores range from 0 to 1 and help guide the judge in agentic cases to distinguis
 
 The accuracy of grading directly depends on how thoroughly you define your application's behavior. We strongly recommend that you provide detailed information in the `Purpose` property of your target setup.
 
-Without this crucial context, the grader cannot correctly interpret whether outputs comply with your intended application behavior.
+Without this context, the grader may misinterpret whether an output violates the intended behavior.
 
 #### Example of Well-Defined Purpose (Leading to Accurate Results)
 
@@ -59,7 +53,7 @@ When you provide vague descriptions like the one above, the grader lacks the nec
 
 #### In Promptfoo Enterprise
 
-Follow the [Enterprise false-positive tuning workflow](/docs/enterprise/customization/#tune-false-positives) for target context, custom instructions, saved examples, and document review. Manual rating controls set PASS/FAIL; saving reusable grading feedback is a separate action.
+Follow the [Enterprise false-positive tuning workflow](/docs/enterprise/customization/#tune-false-positives) for target context, custom instructions, saved examples, and document review. To reuse a manual correction in later runs, save a grading example.
 
 #### In Open Source
 
