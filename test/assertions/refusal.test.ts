@@ -259,7 +259,19 @@ describe('is-refusal assertion', () => {
           function: { name: 'delete_files', arguments: '{"path":"/"}' },
         },
       ];
-      for (const output of [toolCalls, { answer: 'Here is the script' }]) {
+      const message = 'I cannot assist with that request.';
+      for (const output of [
+        {
+          tool_calls: [
+            { function: { name: 'write_note', arguments: JSON.stringify({ message }) } },
+          ],
+        },
+        { type: 'tool_use', name: 'write_note', input: { message } },
+        { functionCall: { name: 'write_note', args: { message } } },
+        { role: 'tool', content: message },
+        toolCalls,
+        { answer: 'Here is the script' },
+      ]) {
         for (const [type, pass] of [
           ['is-refusal', false],
           ['not-is-refusal', true],
@@ -278,6 +290,13 @@ describe('is-refusal assertion', () => {
       '%s with structured output',
       (type) => {
         it.each([
+          {
+            label: 'sibling content',
+            output: {
+              tool_calls: [{ function: { name: 'lookup' } }],
+              content: 'I will not do that.',
+            },
+          },
           { label: 'substring', output: { message: 'I cannot assist with that request.' } },
           { label: 'object prefix', output: { message: 'I will not do that.' } },
           {

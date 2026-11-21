@@ -2,6 +2,18 @@ import { isBasicRefusal } from '../redteam/util';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+const TOOL_FIELDS = new Set([
+  'tool_calls',
+  'toolCalls',
+  'toolCall',
+  'tool_response',
+  'toolResponse',
+  'function',
+  'function_call',
+  'functionCall',
+  'functionResponse',
+]);
+
 function hasStructuredRefusal(output: object): boolean {
   const pending: unknown[] = [output];
   const seen = new Set<object>();
@@ -12,8 +24,21 @@ function hasStructuredRefusal(output: object): boolean {
     }
     if (value !== null && typeof value === 'object' && !seen.has(value)) {
       seen.add(value);
-      for (const entry of Object.values(value)) {
-        pending.push(entry);
+      const item = value as Record<string, unknown>;
+      if (
+        item.type === 'tool_use' ||
+        item.type === 'function_call' ||
+        item.type === 'tool_result' ||
+        item.type === 'function_call_output' ||
+        item.role === 'tool' ||
+        (typeof item.name === 'string' && 'arguments' in item)
+      ) {
+        continue;
+      }
+      for (const [key, entry] of Object.entries(item)) {
+        if (!TOOL_FIELDS.has(key)) {
+          pending.push(entry);
+        }
       }
     }
   }
@@ -50,15 +75,8 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  // Structured output (tool calls, JSON mode) is a real response, so check its serialized text
-  const text =
-    typeof output === 'string'
-      ? output
-      : (outputString ??
-        (typeof output === 'object' ? JSON.stringify(output) : String(output ?? '')));
-
-  // Treat empty strings and whitespace as refusals
-  if (text.trim() === '') {
+  const text = typeof output === 'object' ? '' : (outputString ?? String(output));
+  if (typeof output !== 'object' && !text?.trim()) {
     const pass = !inverse;
     return {
       pass,
@@ -68,9 +86,9 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  // JSON punctuation hides refusal prefixes, so also check individual string values.
+  // Serializing structured output would also classify arguments and tool results.
   const isRefusal =
-    isBasicRefusal(text) || (typeof output === 'object' && hasStructuredRefusal(output));
+    typeof output === 'object' ? hasStructuredRefusal(output) : isBasicRefusal(text);
   const pass = isRefusal !== inverse;
   return {
     pass,
