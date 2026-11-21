@@ -142,16 +142,19 @@ describeEvaluator('evaluator runtime ports', () => {
     }
   });
 
-  it.each([false, true])(
-    'preserves step order on resume (lookup fails: %s)',
-    async (lookupFails) => {
+  it.each(['none', 'interrupted', 'completed'])(
+    'resumes saved cases without replay (failed lookup: %s)',
+    async (failure) => {
       const evaluation = createInMemoryEvaluation({
         persisted: true,
         results: [createEvaluateResult({ testIdx: 1 })],
       });
       const store = new InMemoryEvaluationStore(evaluation);
       const readCompletedIndexPairs = vi.spyOn(store, 'readCompletedIndexPairs');
-      if (lookupFails) {
+      if (failure === 'completed') {
+        readCompletedIndexPairs.mockResolvedValueOnce(new Set());
+      }
+      if (failure !== 'none') {
         readCompletedIndexPairs.mockRejectedValue(new Error('lookup failed'));
       }
       const testSuite: TestSuite = {
@@ -161,12 +164,22 @@ describeEvaluator('evaluator runtime ports', () => {
       };
       cliState.resume = true;
 
-      await evaluate(testSuite, evaluation, { maxConcurrency: 1 }, createInMemoryRuntime(store));
-
-      expect(readCompletedIndexPairs).toHaveBeenCalledWith({ excludeErrors: false });
-      expect(evaluation.results.map((row) => row.testIdx)).toEqual(
-        lookupFails ? [1, 0, 1, 2] : [1, 0, 2],
+      const run = evaluate(
+        testSuite,
+        evaluation,
+        { maxConcurrency: 1 },
+        createInMemoryRuntime(store),
       );
+      if (failure !== 'none') {
+        await expect(run).rejects.toThrow('lookup failed');
+        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+        expect(evaluation.results.map((row) => row.testIdx)).toEqual([1]);
+        return;
+      }
+
+      await run;
+      expect(readCompletedIndexPairs).toHaveBeenCalledWith({ excludeErrors: false });
+      expect(evaluation.results.map((row) => row.testIdx)).toEqual([1, 0, 2]);
     },
   );
 

@@ -1889,23 +1889,16 @@ async function filterCompletedResumeSteps(
     return runEvalOptions;
   }
 
-  let pending = runEvalOptions;
-  try {
-    const completedPairs = await store.readCompletedIndexPairs({
-      excludeErrors: cliState.retryMode,
-    });
-    if (completedPairs.size === 0) {
-      return runEvalOptions;
-    }
-    pending = runEvalOptions.filter((step) => !completedPairs.has(getResultIndexKey(step)));
-    const skipped = runEvalOptions.length - pending.length;
-    if (skipped > 0) {
-      logger.info(`Resuming: skipping ${skipped} previously completed cases`);
-    }
-  } catch (err) {
-    logger.warn(
-      `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
-    );
+  const completedPairs = await store.readCompletedIndexPairs({
+    excludeErrors: cliState.retryMode,
+  });
+  if (!completedPairs.size) {
+    return runEvalOptions;
+  }
+  const pending = runEvalOptions.filter((step) => !completedPairs.has(getResultIndexKey(step)));
+  const skipped = runEvalOptions.length - pending.length;
+  if (skipped > 0) {
+    logger.info(`Resuming: skipping ${skipped} previously completed cases`);
   }
   return pending;
 }
