@@ -5,17 +5,17 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 
-const mockSaveEmail = vi.fn();
-const mockClearEmail = vi.fn();
-const mockCheckEmailStatus = vi.fn();
+const { mockSaveEmail, mockClearEmail, mockCheckEmailStatus } = vi.hoisted(() => ({
+  mockSaveEmail: vi.fn(),
+  mockClearEmail: vi.fn(),
+  mockCheckEmailStatus: vi.fn(),
+}));
 const mockShowToast = vi.fn();
 
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: () => ({
-    saveEmail: mockSaveEmail,
-    clearEmail: mockClearEmail,
-    checkEmailStatus: mockCheckEmailStatus,
-  }),
+vi.mock('@app/utils/emailVerification', () => ({
+  saveEmail: mockSaveEmail,
+  clearEmail: mockClearEmail,
+  checkEmailStatus: mockCheckEmailStatus,
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -175,9 +175,9 @@ describe('EmailVerificationDialog', () => {
     });
   });
 
-  it('disables form during submission', async () => {
-    let resolveSaveEmail: (value: { error: null }) => void;
-    mockSaveEmail.mockImplementation(
+  it.each(['save', 'status'])('disables form while %s is pending', async (stage) => {
+    let resolveSaveEmail: (value: { error: null; canProceed: boolean }) => void;
+    (stage === 'save' ? mockSaveEmail : mockCheckEmailStatus).mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveSaveEmail = resolve;
@@ -196,10 +196,17 @@ describe('EmailVerificationDialog', () => {
       expect(screen.getByRole('button', { name: /verifying/i })).toBeDisabled();
     });
     expect(emailInput).toBeDisabled();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
+    await userEvent.keyboard('{Enter}{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(mockSaveEmail).toHaveBeenCalledTimes(1);
+    expect(mockCheckEmailStatus).toHaveBeenCalledTimes(stage === 'status' ? 1 : 0);
+    expect(mockProps.onClose).not.toHaveBeenCalled();
+    expect(mockProps.onSuccess).not.toHaveBeenCalled();
 
-    // Resolve the save email promise
+    // Resolve the pending API operation
     await act(async () => {
-      resolveSaveEmail!({ error: null });
+      resolveSaveEmail!({ error: null, canProceed: true });
     });
 
     await waitFor(() => {

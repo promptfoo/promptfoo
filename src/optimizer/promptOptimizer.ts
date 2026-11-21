@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { asEvaluateResult } from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import { OPTIMIZE_PROMPT_SYSTEM_MESSAGE } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
@@ -12,10 +13,9 @@ import {
   type TestSuite,
 } from '../types/index';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
-import { isPromptAllowed } from '../util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
 
-import type EvalResult from '../models/evalResult';
 import type { UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
@@ -131,8 +131,14 @@ function createOptimizationExamples(results: EvaluateResult[]) {
   }));
 }
 
-function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+function selectPromptFeedback(evalRecord: Eval, promptIndex: number) {
+  const rows = evalRecord.results
+    .map((row) => asEvaluateResult(row))
+    .filter((row) => row.promptIdx === promptIndex);
+  return {
+    failures: rows.filter((row) => !row.success).slice(0, MAX_FAILURE_EXAMPLES),
+    successes: rows.filter((row) => row.success).slice(0, MAX_SUCCESS_EXAMPLES),
+  };
 }
 
 function buildCandidateGenerationPayload(params: {
@@ -243,6 +249,66 @@ export async function generateOptimizedPromptCandidates(params: {
   }
 
   return candidates;
+}
+
+/**
+ * Generates candidates for an optimization round, returning `null` to signal the
+ * caller should stop optimizing while keeping the best prompt found so far.
+ *
+ * A first-round failure rethrows so genuine misconfiguration (bad provider,
+ * unparseable output, no candidates at all) surfaces instead of being hidden
+ * behind a silent "no improvement" exit. A later-round failure is expected as
+ * the prompt converges (the suggestions provider returns only duplicates or the
+ * unchanged prompt) or on a transient provider error, so it is logged and the
+ * already-adopted improvements from earlier rounds are preserved.
+ */
+async function generateRoundCandidatesOrStop(
+  round: number,
+  params: Parameters<typeof generateOptimizedPromptCandidates>[0],
+): Promise<PromptOptimizationCandidate[] | null> {
+  try {
+    return await generateOptimizedPromptCandidates(params);
+  } catch (error) {
+    if (round === 1) {
+      throw error;
+    }
+    logger.warn(
+      chalk.yellow(
+        `Stopping optimization after round ${round - 1}: round ${round} could not generate new prompt candidates (${error instanceof Error ? error.message : String(error)}). Keeping the best prompt found so far.`,
+      ),
+    );
+    return null;
+  }
+}
+
+function logOptimizationOutcome(params: {
+  improved: boolean;
+  baselinePrompt: CompletedPrompt;
+  bestPrompt: CompletedPrompt;
+  baselineValidationPrompt?: CompletedPrompt;
+  bestValidationPrompt?: CompletedPrompt;
+}): void {
+  const { improved, baselinePrompt, bestPrompt, baselineValidationPrompt, bestValidationPrompt } =
+    params;
+  if (baselineValidationPrompt && bestValidationPrompt) {
+    logger.info(
+      improved
+        ? chalk.green(
+            `Optimization improved validation score from ${formatScore(baselineValidationPrompt)} to ${formatScore(bestValidationPrompt)}.`,
+          )
+        : chalk.yellow(
+            `No candidate exceeded the baseline validation score of ${formatScore(baselineValidationPrompt)}.`,
+          ),
+    );
+    return;
+  }
+  logger.info(
+    improved
+      ? chalk.green(
+          `Optimization improved score from ${formatScore(baselinePrompt)} to ${formatScore(bestPrompt)}.`,
+        )
+      : chalk.yellow(`No candidate exceeded the baseline score of ${formatScore(baselinePrompt)}.`),
+  );
 }
 
 function selectBestPrompt(prompts: CompletedPrompt[]): CompletedPrompt {
@@ -399,8 +465,9 @@ function createSelectedOptimizationTestSuite(
   }
 
   const providerKey = selectedProvider.label || selectedProvider.id();
-  const allowedPrompts = testSuite.providerPromptMap?.[providerKey];
-  if (!isPromptAllowed(selectedPrompt, allowedPrompts)) {
+  const override = getProviderPromptOverride(selectedProvider, testSuite.providerPromptMap);
+  const selectors = override ?? selectedProvider.prompts?.slice();
+  if (!isPromptAllowed(selectedPrompt, selectors)) {
     throw new Error(
       `Prompt index ${promptIndex} is not configured for provider index ${providerIndex}.`,
     );
@@ -412,6 +479,14 @@ function createSelectedOptimizationTestSuite(
     ...testSuite,
     prompts: [selectedPrompt],
     providers: [selectedProvider],
+    providerPromptMap:
+      selectors === undefined
+        ? testSuite.providerPromptMap
+        : {
+            ...testSuite.providerPromptMap,
+            ...(override === undefined && { [selectedProvider.id()]: selectors }),
+            [providerKey]: selectors,
+          },
   };
 }
 
@@ -449,46 +524,17 @@ function buildCandidateProviderPromptMap(
     return testSuite.providerPromptMap;
   }
 
+  const extendedFilters = new Map<string[], string[]>();
   return Object.fromEntries(
     Object.entries(testSuite.providerPromptMap).map(([providerId, labels]) => {
-      return [
-        providerId,
-        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ?? labels,
-      ];
+      const extended =
+        extendedFilters.get(labels) ??
+        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ??
+        labels;
+      extendedFilters.set(labels, extended);
+      return [providerId, extended];
     }),
   );
-}
-
-function buildCandidateTests(
-  tests: TestSuite['tests'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['tests'] {
-  if (!tests) {
-    return tests;
-  }
-
-  return tests.map((test) => ({
-    ...test,
-    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-  }));
-}
-
-function buildCandidateDefaultTest(
-  defaultTest: TestSuite['defaultTest'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['defaultTest'] {
-  if (!defaultTest || typeof defaultTest !== 'object') {
-    return defaultTest;
-  }
-
-  return {
-    ...defaultTest,
-    prompts: extendPromptFilter(defaultTest.prompts, routingPrompt, seedPrompt, candidateLabels),
-  };
 }
 
 function createCandidateTestSuite(
@@ -512,6 +558,14 @@ function createCandidateTestSuite(
     .map((prompt) => prompt.label)
     .filter(Boolean) as string[];
 
+  const withCandidatePrompts = <T extends { prompts?: string[] }>(test: T) => ({
+    ...test,
+    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+  });
+  const mapTests = (tests: TestSuite['tests']) => tests && tests.map(withCandidatePrompts);
+  const mapDefaultTest = (test: TestSuite['defaultTest']) =>
+    test && typeof test === 'object' ? withCandidatePrompts(test) : test;
+
   return {
     ...testSuite,
     prompts: [seedPrompt, ...candidatePrompts],
@@ -521,14 +575,13 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    tests: buildCandidateTests(testSuite.tests, routingPrompt, seedPrompt, candidateLabels),
-    defaultTest: buildCandidateDefaultTest(
-      testSuite.defaultTest,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
-    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
+    tests: mapTests(testSuite.tests),
+    defaultTest: mapDefaultTest(testSuite.defaultTest),
+    scenarios: testSuite.scenarios?.map((scenario) => ({
+      ...scenario,
+      config: scenario.config.map(withCandidatePrompts),
+      tests: scenario.tests.map(withCandidatePrompts),
+    })),
   };
 }
 
@@ -591,6 +644,28 @@ function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {
   };
 }
 
+/**
+ * Detects whether `defaultTest` carries enough configuration to be a runnable test
+ * on its own. `promptfoo eval` synthesizes a single implicit `[{}]` test case when no
+ * `tests` or `scenarios` are configured and merges `defaultTest` into it (see
+ * `getInitialTests` in `src/evaluator.ts`), so a `defaultTest` with assertions
+ * or variables produces one runnable row. An assertion scoring function only
+ * combines assertion results, so a default-only implicit test that configures
+ * one without assertions is rejected rather than silently ignoring the scorer.
+ * An empty `defaultTest` (`{}`) carries nothing to evaluate and is not counted.
+ */
+function hasRunnableDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+  const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
+  const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
+  if (defaultTest.assertScoringFunction && !hasAssertions) {
+    return false;
+  }
+  return hasAssertions || hasVars;
+}
+
 function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   const explicitTests = testSuite.tests?.length || 0;
   const scenarioTests = (testSuite.scenarios || []).reduce((count, scenario) => {
@@ -598,6 +673,17 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
     const scenarioTestCount = scenario.tests?.length ?? 1;
     return count + scenarioConfigCount * scenarioTestCount;
   }, 0);
+  // `eval` synthesizes one implicit `[{}]` test (merging `defaultTest`) only
+  // when there are no `tests` and `scenarios` is absent — an empty `scenarios`
+  // array still suppresses it (see `getInitialTests` in `src/evaluator.ts`).
+  // Mirror that exactly so the preflight does not accept testless configs.
+  if (
+    explicitTests === 0 &&
+    !testSuite.scenarios &&
+    hasRunnableDefaultTest(testSuite.defaultTest)
+  ) {
+    return 1;
+  }
   return explicitTests + scenarioTests;
 }
 
@@ -609,6 +695,14 @@ function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvalua
     showProgressBar: false,
     silent: true,
   };
+}
+
+function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
+  if (evalRecord?.results.length === 0) {
+    throw new Error(
+      `No eval test cases ran for ${scope} — check filters and other test scoping options.`,
+    );
+  }
 }
 
 export async function optimizePromptTestSuite(
@@ -625,6 +719,9 @@ export async function optimizePromptTestSuite(
   }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(testSuite, options);
+  if (selectedTestSuite.prompts[0].function) {
+    throw new Error('Prompt optimization currently supports literal string prompts only.');
+  }
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(selectedTestSuite, options.validationSplit);
 
@@ -639,6 +736,7 @@ export async function optimizePromptTestSuite(
     new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
@@ -646,6 +744,7 @@ export async function optimizePromptTestSuite(
         createEvaluationOptions(config),
       )
     : undefined;
+  assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,
@@ -657,21 +756,13 @@ export async function optimizePromptTestSuite(
     throw new Error('Prompt optimization currently supports string prompts only.');
   }
 
-  const baselineResults = baselineEval.results
-    .map(toEvaluateResult)
-    .filter((result) => result.promptIdx === baselinePromptIndex);
-  let currentFailures = baselineResults
-    .filter((result) => !result.success)
-    .slice(0, MAX_FAILURE_EXAMPLES);
-  let currentSuccesses = baselineResults
-    .filter((result) => result.success)
-    .slice(0, MAX_SUCCESS_EXAMPLES);
+  let feedback = selectPromptFeedback(baselineEval, baselinePromptIndex);
   let currentPrompt = baselinePrompt;
   let currentValidationPrompt = baselineValidationPrompt;
   let currentPromptSource = baselineSourcePrompt;
   const history: PromptOptimizationHistoryItem[] = [
     {
-      failures: createOptimizationExamples(currentFailures),
+      failures: createOptimizationExamples(feedback.failures),
       prompt: baselineSourcePrompt.raw,
       score: scoreOf(baselinePrompt),
     },
@@ -686,12 +777,18 @@ export async function optimizePromptTestSuite(
   );
 
   for (let round = 1; round <= DEFAULT_ROUNDS; round += 1) {
-    const candidates = await generateOptimizedPromptCandidates({
+    const candidates = await generateRoundCandidatesOrStop(round, {
       prompt: currentPromptSource.raw,
-      failures: currentFailures,
-      successes: currentSuccesses,
+      ...feedback,
       history,
     });
+    // Later rounds frequently fail to produce *new* candidates as the prompt
+    // converges, or on a transient provider error. Don't discard the
+    // improvements already adopted in earlier rounds: stop and return the best
+    // prompt found so far (a first-round failure rethrows inside the helper).
+    if (candidates === null) {
+      break;
+    }
     allCandidates = [...allCandidates, ...candidates];
 
     logger.info(
@@ -751,19 +848,11 @@ export async function optimizePromptTestSuite(
         label: roundBestPrompt.label,
       };
       const chosenPromptIndex = findPromptIndex(candidateEval.prompts, roundBestPrompt);
-      const chosenResults = candidateEval.results
-        .map(toEvaluateResult)
-        .filter((result) => result.promptIdx === chosenPromptIndex);
-      currentFailures = chosenResults
-        .filter((result) => !result.success)
-        .slice(0, MAX_FAILURE_EXAMPLES);
-      currentSuccesses = chosenResults
-        .filter((result) => result.success)
-        .slice(0, MAX_SUCCESS_EXAMPLES);
+      feedback = selectPromptFeedback(candidateEval, chosenPromptIndex);
     }
 
     history.push({
-      failures: createOptimizationExamples(currentFailures),
+      failures: createOptimizationExamples(feedback.failures),
       prompt: currentPromptSource.raw,
       score: scoreOf(currentPrompt),
     });
@@ -787,33 +876,13 @@ export async function optimizePromptTestSuite(
           scoreOf(bestPrompt) > scoreOf(baselinePrompt))
       : scoreOf(bestPrompt) > scoreOf(baselinePrompt);
 
-  if (improved) {
-    if (baselineValidationPrompt && bestValidationPrompt) {
-      logger.info(
-        chalk.green(
-          `Optimization improved validation score from ${formatScore(baselineValidationPrompt)} to ${formatScore(bestValidationPrompt)}.`,
-        ),
-      );
-    } else {
-      logger.info(
-        chalk.green(
-          `Optimization improved score from ${formatScore(baselinePrompt)} to ${formatScore(bestPrompt)}.`,
-        ),
-      );
-    }
-  } else {
-    if (baselineValidationPrompt && bestValidationPrompt) {
-      logger.info(
-        chalk.yellow(
-          `No candidate exceeded the baseline validation score of ${formatScore(baselineValidationPrompt)}.`,
-        ),
-      );
-    } else {
-      logger.info(
-        chalk.yellow(`No candidate exceeded the baseline score of ${formatScore(baselinePrompt)}.`),
-      );
-    }
-  }
+  logOptimizationOutcome({
+    improved,
+    baselinePrompt,
+    bestPrompt,
+    baselineValidationPrompt,
+    bestValidationPrompt,
+  });
 
   return {
     baselineEval,

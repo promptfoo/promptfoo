@@ -2,6 +2,57 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.2.3](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.2...code-scan-action-0.2.3) (2026-11-18)
+
+### Bug Fixes
+
+- **code-scan:** upgrade the filesystem MCP server to 2.3.0 ([#12185](https://github.com/promptfoo/promptfoo/issues/12185)) ([9e66910](https://github.com/promptfoo/promptfoo/commit/9e66910303f288c88bb49a8ce227b96789ab9400))
+- **deps:** upgrade Undici in the CLI and scan action ([#12437](https://github.com/promptfoo/promptfoo/issues/12437)) ([f12d114](https://github.com/promptfoo/promptfoo/commit/f12d1144af0678ce5f88f39a439f4b89378ec5fd))
+
+## [0.2.2](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.1...code-scan-action-0.2.2) (2026-10-08)
+
+### Bug Fixes
+
+- **code-scan:** mint OIDC after CLI installation ([#11467](https://github.com/promptfoo/promptfoo/issues/11467)) ([9a404c8](https://github.com/promptfoo/promptfoo/commit/9a404c8ea96e6e8f854964b9224667e704cd405d))
+
+## [0.2.1](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.0...code-scan-action-0.2.1) (2026-10-06)
+
+### Bug Fixes
+
+- **deps:** update type definitions ([#11010](https://github.com/promptfoo/promptfoo/issues/11010)) ([8174e60](https://github.com/promptfoo/promptfoo/commit/8174e6017902ffbd5ee8692db8caa24c437864e1))
+
+## [0.2.0](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.8...code-scan-action-0.2.0) (2026-08-28)
+
+### ⚠ BREAKING CHANGES
+
+- drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260))
+
+### Bug Fixes
+
+- **code-scan:** harden action supply chain ([#9991](https://github.com/promptfoo/promptfoo/issues/9991)) ([17e90eb](https://github.com/promptfoo/promptfoo/commit/17e90eb9641f935aebb34663560fcee1b90c62bc))
+- **deps:** patch undici in code-scan-action and guard both lockfiles ([#10278](https://github.com/promptfoo/promptfoo/issues/10278)) ([15bf41f](https://github.com/promptfoo/promptfoo/commit/15bf41f2dcb7187fc6ed40cddea96b609b2610a9))
+- **deps:** update type definitions ([#9832](https://github.com/promptfoo/promptfoo/issues/9832)) ([f545c51](https://github.com/promptfoo/promptfoo/commit/f545c5164c6a45ce80bf2a73a013924f1a49f1c4))
+
+### Miscellaneous Chores
+
+- drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260)) ([26b725b](https://github.com/promptfoo/promptfoo/commit/26b725bd9496351ef269380c9fd83b9c2c338a0e))
+
+## [0.1.8](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.7...code-scan-action-0.1.8) (2026-06-16)
+
+### Bug Fixes
+
+- **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
+- **code-scan:** run GitHub Action on Node 24 runtime ([#9772](https://github.com/promptfoo/promptfoo/issues/9772)) ([c25974e](https://github.com/promptfoo/promptfoo/commit/c25974e8e74a5ba923c0318cb6576e2b4dfc9ad6))
+
+## [0.1.7](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.6...code-scan-action-0.1.7) (2026-05-29)
+
+### Bug Fixes
+
+- **code-scan:** emit structured fork PR skip output ([#9426](https://github.com/promptfoo/promptfoo/issues/9426)) ([61c624c](https://github.com/promptfoo/promptfoo/commit/61c624c7f91808a6f59d8b837dbb3896dd9a74c0))
+- **code-scan:** honor minimum-severity alias when min-severity is unset ([#9433](https://github.com/promptfoo/promptfoo/issues/9433)) ([ea5ea9e](https://github.com/promptfoo/promptfoo/commit/ea5ea9e741da0968431de25c0d67337f2e0e6e20))
+- **eval:** show test descriptions in HTML output ([#9390](https://github.com/promptfoo/promptfoo/issues/9390)) ([206f1dd](https://github.com/promptfoo/promptfoo/commit/206f1dd9848607ed9d4eba1f7998f90b8f87f0ff))
+- **providers:** honor Vertex default host overrides ([#9389](https://github.com/promptfoo/promptfoo/issues/9389)) ([11a8d9b](https://github.com/promptfoo/promptfoo/commit/11a8d9b1c4edf214e8e15dd6794690ab49d24430))
+
 ## [0.1.6](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.5...code-scan-action-0.1.6) (2026-05-21)
 
 ### Features

@@ -9,23 +9,10 @@ import BlogListPageStructuredData from '@theme/BlogListPage/StructuredData';
 import BlogListPaginator from '@theme/BlogListPaginator';
 import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
+import { formatTagLabel } from '../../utils/blog';
 import styles from './styles.module.css';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
 import type { Props } from '@theme/BlogListPage';
-
-// Format tag label: "red-teaming" → "Red Teaming", "ai-security" → "AI Security"
-function formatTagLabel(label: string): string {
-  const acronyms = ['ai', 'llm', 'owasp', 'mcp', 'rag', 'agi', 'a2a', 'eu'];
-  return label
-    .split('-')
-    .map((word) => {
-      if (acronyms.includes(word.toLowerCase())) {
-        return word.toUpperCase();
-      }
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    })
-    .join(' ');
-}
 
 function BlogListPageMetadata(props: Props): React.ReactElement {
   const { metadata } = props;
@@ -69,9 +56,6 @@ function BlogListPageContent(props: Props): React.ReactElement {
     );
   }, [items, isFirstPage]);
 
-  // Dynamic title based on page (use • to match BlogPostGrid parsing)
-  const gridTitle = isFirstPage ? 'Latest Posts' : `Older Posts • Page ${metadata.page}`;
-
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
@@ -82,7 +66,11 @@ function BlogListPageContent(props: Props): React.ReactElement {
             ))}
           </div>
         )}
-        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
+        <BlogPostGrid
+          posts={displayPosts.map((item) => item.content)}
+          title={isFirstPage ? 'Latest Posts' : 'Older Posts'}
+          pageNumber={isFirstPage ? undefined : metadata.page}
+        />
       </div>
       <BlogListPaginator metadata={metadata} />
     </BlogLayout>

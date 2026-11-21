@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex SDK on Amazon Bedrock
+
+prompts:
+  - 'Write a Python function named factorial that calculates the factorial of a number. Output only the code.'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model_provider: amazon-bedrock
+      model: openai.gpt-6.1-terra
+      sandbox_mode: read-only
+      skip_git_repo_check: true
+      cli_env:
+        AWS_REGION: us-east-1
+        AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+
+tests:
+  - assert:
+      - type: contains
+        value: 'def factorial'

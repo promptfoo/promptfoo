@@ -86,8 +86,8 @@ describe('Export/import smoke tests', () => {
     await runDbMigrations();
   });
 
-  afterAll(() => {
-    closeDbIfOpen();
+  afterAll(async () => {
+    await closeDbIfOpen();
     fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
     process.exitCode = undefined;
   });

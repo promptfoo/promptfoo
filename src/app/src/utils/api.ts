@@ -1,9 +1,8 @@
 import useApiConfig from '@app/stores/apiConfig';
+import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
 import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
-import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/types/api/user';
 
-export function getApiBaseUrl(): string {
-  const { apiBaseUrl } = useApiConfig.getState();
+export function getApiBaseUrl(apiBaseUrl = useApiConfig.getState().apiBaseUrl): string {
   if (apiBaseUrl) {
     return apiBaseUrl.replace(/\/$/, '');
   }
@@ -11,8 +10,12 @@ export function getApiBaseUrl(): string {
   return import.meta.env.VITE_PUBLIC_BASENAME || '';
 }
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(`${getApiBaseUrl()}/api${path}`, options);
+export async function callApi(
+  path: string,
+  options: RequestInit = {},
+  apiBaseUrl = getApiBaseUrl(),
+): Promise<Response> {
+  return fetch(`${apiBaseUrl}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {

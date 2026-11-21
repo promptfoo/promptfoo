@@ -12,7 +12,8 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
-import { doEval } from '../../src/commands/eval';
+import { doEval } from '../../src/node/doEval';
+import { loadApiProviders } from '../../src/providers/index';
 import { setupEnv } from '../../src/util/index';
 
 vi.mock('../../src/cache');
@@ -78,6 +79,8 @@ describe('Integration: commandLineOptions.envPath', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // The evaluator always receives a provider list; the automock would return undefined.
+    vi.mocked(loadApiProviders).mockResolvedValue([]);
   });
 
   it('should load environment from config-specified envPath', async () => {
@@ -111,10 +114,12 @@ tests:
       // Expected to fail due to mocked dependencies
     }
 
-    // Should call setupEnv twice: once for CLI (undefined), once for config
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined); // Phase 1: CLI
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile); // Phase 2: Config
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile, { processEnv: {} });
+    expect(mockSetupEnv.mock.calls[1][1]?.processEnv).toBe(
+      mockSetupEnv.mock.calls[0][1]?.processEnv,
+    );
   });
 
   it('should prioritize CLI envPath over config envPath', async () => {
@@ -153,7 +158,7 @@ tests:
 
     // Should only call setupEnv once with CLI envPath (config envPath ignored)
     expect(mockSetupEnv).toHaveBeenCalledTimes(1);
-    expect(mockSetupEnv).toHaveBeenCalledWith(cliEnvFile);
+    expect(mockSetupEnv).toHaveBeenCalledWith(cliEnvFile, { processEnv: {} });
   });
 
   it('should handle missing commandLineOptions section gracefully', async () => {
@@ -182,7 +187,7 @@ tests:
 
     // Should only call setupEnv once with undefined (no config envPath)
     expect(mockSetupEnv).toHaveBeenCalledTimes(1);
-    expect(mockSetupEnv).toHaveBeenCalledWith(undefined);
+    expect(mockSetupEnv).toHaveBeenCalledWith(undefined, { processEnv: {} });
   });
 
   it('should handle multiple config files and use first envPath found', async () => {
@@ -226,8 +231,8 @@ tests:
 
     // Should call setupEnv twice: CLI + first envPath found (from config2)
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2);
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2, { processEnv: {} });
   });
 
   it('should resolve relative envPath against the config file directory', async () => {
@@ -258,10 +263,8 @@ tests:
     } catch {}
 
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-    // Expect absolute resolved path
-    expect(path.isAbsolute((mockSetupEnv as any).mock.calls[1][0])).toBe(true);
-    expect((mockSetupEnv as any).mock.calls[1][0]).toBe(relEnvAbs);
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, relEnvAbs, { processEnv: {} });
   });
 
   describe('multi-file envPath support', () => {
@@ -302,8 +305,8 @@ tests:
 
       // Should call setupEnv twice: CLI (undefined), then config with array
       expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2], { processEnv: {} });
     });
 
     it('should resolve relative paths in envPath array against config directory', async () => {
@@ -339,11 +342,8 @@ tests:
       } catch {}
 
       expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-      // Should receive resolved absolute paths
-      const envPathArg = (mockSetupEnv as any).mock.calls[1][0];
-      expect(Array.isArray(envPathArg)).toBe(true);
-      expect(envPathArg).toEqual([envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2], { processEnv: {} });
     });
 
     it('should pass CLI envPath array when provided', async () => {
@@ -377,7 +377,7 @@ tests:
 
       // CLI envPath should be called once (no config envPath)
       expect(mockSetupEnv).toHaveBeenCalledTimes(1);
-      expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2], { processEnv: {} });
     });
 
     it('should load config envPath when CLI envPath defaults to an empty array', async () => {
@@ -412,8 +412,8 @@ tests:
       } catch {}
 
       expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, []);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, [], { processEnv: {} });
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2], { processEnv: {} });
     });
   });
 });

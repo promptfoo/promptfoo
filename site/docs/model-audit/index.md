@@ -54,6 +54,8 @@ ModelAudit helps identify these risks before models are deployed to production e
 
 ## Installation
 
+ModelAudit 0.2.55 supports Python 3.10 through 3.14. For Python 3.14, use standard (GIL-enabled) CPython.
+
 ### Using Promptfoo
 
 The easiest way to use ModelAudit is through Promptfoo:
@@ -161,7 +163,7 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 :::info Alternative Installation and Usage
 
-- **Standalone**: Install modelaudit directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
+- **Standalone**: Install modelaudit directly using `pip install modelaudit`. With ModelAudit 0.2.56 or later, standalone scans can send README or model-card findings and excerpts to OpenAI when `OPENAI_API_KEY` is set. Use `modelaudit scan ./model --no-triage` to disable this. Promptfoo CLI and web scans withhold the key from ModelAudit.
 - **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
 
 :::
@@ -264,6 +266,8 @@ The scanner looks for various security issues, including:
 
 ## Interpreting Results
 
+In ModelAudit 0.2.55, a completed scan can report `success: true` even when it finds security issues. Check the findings or the exit code to decide whether to accept a model.
+
 The scan results are classified by severity:
 
 - **CRITICAL**: Definite security concerns that should be addressed immediately
@@ -299,7 +303,7 @@ ModelAudit returns specific exit codes for automation:
 
 - **0**: No security issues found ✅
 - **1**: Security issues detected (warnings or critical) 🟡
-- **2**: Scan errors occurred (installation, file access, etc.) 🔴
+- **2**: Operational errors or inconclusive scans occurred (installation, file access, timeouts, no scanned files, etc.) 🔴
 
 :::tip CI/CD Best Practice
 In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.

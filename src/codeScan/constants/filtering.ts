@@ -2,7 +2,7 @@
  * File Filtering Constants
  *
  * Shared constants for code scan file filtering used by both CLI and server.
- * Extracted to avoid pulling in ESM dependencies (like execa) into server tests.
+ * Kept separate so server callers do not load the diff-processing pipeline.
  */
 
 import { minimatch } from 'minimatch';
@@ -44,6 +44,8 @@ export const DENYLIST_PATTERNS = [
 export const MAX_BLOB_SIZE_BYTES = 500 * 1024; // 500 KB
 export const MAX_PATCH_SIZE_BYTES = 200 * 1024; // 200 KB
 
-export function isInDenylist(filePath: string): boolean {
-  return DENYLIST_PATTERNS.some((pattern) => minimatch(filePath, pattern));
+export function isInDenylist(filePath: string, includeDotfiles = false): boolean {
+  return DENYLIST_PATTERNS.some((pattern) =>
+    minimatch(filePath, pattern, { dot: includeDotfiles }),
+  );
 }

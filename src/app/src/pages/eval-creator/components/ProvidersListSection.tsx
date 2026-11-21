@@ -33,6 +33,9 @@ function getProviderLabel(provider: ProviderOptions): string {
 function getProviderType(provider: ProviderOptions): string {
   const id = typeof provider.id === 'string' ? provider.id : '';
 
+  if (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) {
+    return 'Codex Security SDK';
+  }
   if (id.startsWith('openai:')) {
     return 'OpenAI';
   }
@@ -42,11 +45,17 @@ function getProviderType(provider: ProviderOptions): string {
   if (id.startsWith('bedrock:')) {
     return 'AWS Bedrock';
   }
-  if (id.startsWith('azure:')) {
+  if (id.startsWith('azure:') || id.startsWith('azureopenai:')) {
     return 'Azure';
   }
   if (id.startsWith('vertex:')) {
     return 'Google Vertex';
+  }
+  if (id.startsWith('litellm:')) {
+    return 'LiteLLM';
+  }
+  if (id.startsWith('vercel:')) {
+    return 'Vercel AI Gateway';
   }
   if (id.startsWith('openrouter:')) {
     return 'OpenRouter';

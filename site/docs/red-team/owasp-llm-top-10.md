@@ -24,11 +24,11 @@ The current top 10 are:
 
 ## Scanning for OWASP Top 10
 
-This guide will walk through how to use Promptfoo's features to test for and mitigate OWASP risks.
+Use the OWASP preset to test for risks mapped to the LLM Top 10.
 
 Promptfoo is an open-source tool that helps identify and remediate many of the vulnerabilities outlined in the OWASP LLM Top 10. OWASP has also [listed Promptfoo](https://genai.owasp.org/ai-security-solutions-landscape/) as a security solution for Generative AI.
 
-The end result is a comprehensive report card that enumerates the OWASP Top 10 vulnerabilities and their severities:
+The report groups findings by OWASP category and severity:
 
 ![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
 
@@ -43,9 +43,9 @@ OWASP defines two types of prompt injection vulnerabilities:
 - **Direct Prompt Injection**: A user's prompt directly changes the LLM's behavior in an unintended way.
 - **Indirect Prompt Injection**: An LLM accepts input from an external source (like websites or files) that subsequently alters the LLM's behavior in unintended ways.
 
-Promptfoo can help detect and prevent prompt injection attacks by generating adversarial inputs through plugins and employing a "prompt injection" strategy.
+Promptfoo can help detect and prevent prompt injection attacks by generating adversarial inputs through plugins and layering strategies such as `jailbreak-templates` on top.
 
-Each plugin automatically produces adversarial inputs for a certain harm area and tests whether the output is affected. Adding the prompt injection strategy modifies the way that adversarial inputs are sent.
+Each plugin automatically produces adversarial inputs for a certain harm area and tests whether the output is affected. Adding the `jailbreak-templates` strategy modifies the way that adversarial inputs are sent.
 
 Example configuration:
 
@@ -58,8 +58,8 @@ redteam:
     - politics
     # ...
   strategies:
-    # Add prompt injection strategy
-    - prompt-injection
+    # Add the jailbreak-templates strategy
+    - jailbreak-templates
     # Additional strategies such as "jailbreak" are related to prompt injection
     - jailbreak
 ```
@@ -102,7 +102,7 @@ redteam:
     - pii:social
   strategies:
     # Apply additional techniques to extract PII
-    - prompt-injection
+    - jailbreak-templates
     - jailbreak
 ```
 
@@ -168,10 +168,10 @@ redteam:
     - pii
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
-For comprehensive supply chain security coverage, see the [LLM Supply Chain Security guide](/docs/red-team/llm-supply-chain/).
+For model and dependency risks, see the [LLM Supply Chain Security guide](/docs/red-team/llm-supply-chain/).
 
 ## 4. Data and Model Poisoning (LLM04)
 
@@ -488,7 +488,7 @@ These red teaming best practices complement the OWASP LLM Top 10 by providing a 
 
 ## What's next
 
-The OWASP LLM Top 10 is rapidly evolving, but the above examples should give you a good starting point for testing your LLM applications. Regular testing with Promptfoo can help ensure your LLM applications remain secure and robust against a wide range of potential threats.
+Rerun the preset after application changes and review new findings against the OWASP categories. A passing scan only reflects the cases tested.
 
 You can automatically include _all_ of the OWASP LLM Top 10 with the following shorthand configuration:
 
@@ -497,7 +497,7 @@ redteam:
   plugins:
     - owasp:llm
   strategies:
-    - prompt-injection
+    - jailbreak-templates
     - jailbreak
 ```
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createProviderRateLimitOptions,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
@@ -103,6 +104,104 @@ describe('providerWrapper', () => {
   });
 
   describe('rate limit detection callbacks', () => {
+    it('detects transient result-level availability failures', () => {
+      const options = createProviderRateLimitOptions();
+
+      expect(
+        options.isRetryableResult?.({
+          error: 'temporary failure',
+          metadata: {
+            retryableErrorKind: 'transient_availability',
+            http: { status: 503, statusText: 'Service Unavailable' },
+          },
+        }),
+      ).toBe(true);
+      expect(
+        options.isRetryableResult?.({
+          error: 'ordinary HTTP failure',
+          metadata: { http: { status: 503, statusText: 'Service Unavailable' } },
+        }),
+      ).toBe(false);
+    });
+
+    it('combines safe retry accounting into the terminal result', () => {
+      const options = createProviderRateLimitOptions();
+      const retryResult: ProviderResponse = {
+        error: 'temporary failure',
+        tokenUsage: {
+          total: 5,
+          prompt: 3,
+          completion: 2,
+          numRequests: 1,
+          completionDetails: { reasoning: 1 },
+        },
+        cost: 0.007,
+      };
+
+      const result = options.finalizeResult?.(
+        {
+          output: 'Recovered',
+          tokenUsage: {
+            total: 10,
+            prompt: 7,
+            completion: 3,
+            numRequests: 1,
+            completionDetails: { reasoning: 2 },
+          },
+          cost: 0.013,
+        },
+        [retryResult],
+      );
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: {
+          total: 15,
+          prompt: 10,
+          completion: 5,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        },
+        cost: 0.02,
+      });
+    });
+
+    it('drops unsafe retry accounting fields', () => {
+      const options = createProviderRateLimitOptions();
+      const retryResult: ProviderResponse = {
+        error: 'temporary failure',
+        tokenUsage: {
+          total: Number.POSITIVE_INFINITY,
+          prompt: -1,
+          completion: 2,
+          numRequests: Number.NaN,
+        },
+        cost: Number.POSITIVE_INFINITY,
+      };
+
+      const result = options.finalizeResult?.({ output: 'Recovered' }, [retryResult]);
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: { completion: 2, numRequests: 2 },
+      });
+    });
+
+    it('does not retain an unsafe terminal cost', () => {
+      const options = createProviderRateLimitOptions();
+
+      const result = options.finalizeResult?.(
+        { output: 'Recovered', cost: Number.POSITIVE_INFINITY },
+        [{ error: 'temporary failure', cost: 0.01 }],
+      );
+
+      expect(result).toEqual({
+        output: 'Recovered',
+        tokenUsage: { numRequests: 2 },
+        cost: 0.01,
+      });
+    });
+
     it('should detect rate limit from HTTP 429 status', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {
@@ -116,6 +215,23 @@ describe('providerWrapper', () => {
       const result: ProviderResponse = {
         output: 'test',
         metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+      };
+      expect(capturedOptions.isRateLimited(result, undefined)).toBe(true);
+    });
+
+    it('should detect explicit transient rate limit metadata without error text parsing', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const result: ProviderResponse = {
+        error: 'SDK throttle',
+        metadata: { rateLimitKind: 'rate_limit' },
       };
       expect(capturedOptions.isRateLimited(result, undefined)).toBe(true);
     });
@@ -159,6 +275,40 @@ describe('providerWrapper', () => {
       expect(headers).toEqual({ 'retry-after': '60' });
     });
 
+    it('should keep hard-quota headers out of the rate-limit state', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const headers = {
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '3600s',
+      };
+      const quota: ProviderResponse = {
+        error: 'Quota exceeded: HTTP 429 Too Many Requests (code: credit_balance_exhausted)',
+        metadata: {
+          rateLimitKind: 'quota',
+          http: { status: 429, statusText: 'Too Many Requests', headers },
+        },
+      };
+      expect(capturedOptions.getHeaders(quota)).toBeUndefined();
+      expect(capturedOptions.isRateLimited(quota, undefined)).toBe(false);
+
+      const throttle: ProviderResponse = {
+        error: 'Rate limit exceeded: HTTP 429 Too Many Requests',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: { status: 429, statusText: 'Too Many Requests', headers },
+        },
+      };
+      expect(capturedOptions.getHeaders(throttle)).toEqual(headers);
+    });
+
     it('should parse retry-after header', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {
@@ -183,6 +333,45 @@ describe('providerWrapper', () => {
       // Headers are normalized to lowercase in getRetryAfter
       const retryAfter = capturedOptions.getRetryAfter(result, undefined);
       expect(retryAfter).toBe(30000); // 30 seconds in ms
+    });
+
+    it('should ignore non-finite retry-after-ms and fall back to retry-after', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const result: ProviderResponse = {
+        output: 'test',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '9'.repeat(400), 'retry-after': '30' },
+          },
+        },
+      };
+
+      expect(capturedOptions.getRetryAfter(result, undefined)).toBe(30000);
+    });
+
+    it('should ignore a non-finite retry-after parsed from the error message', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const overflowingRetryAfter = `retry after ${'9'.repeat(400)}`;
+      const error = new Error(overflowingRetryAfter);
+      expect(capturedOptions.getRetryAfter(undefined, error)).toBeUndefined();
     });
   });
 });

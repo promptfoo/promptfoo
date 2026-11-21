@@ -1,11 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../src/cache';
-import {
-  CometApiImageProvider,
-  clearCometApiModelsCache,
-  createCometApiProvider,
-  fetchCometApiModels,
-} from '../../src/providers/cometapi';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CometApiImageProvider, createCometApiProvider } from '../../src/providers/cometapi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
@@ -28,7 +22,10 @@ vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
     OpenAiEmbeddingProvider: vi.fn(),
   };
 });
-vi.mock('../../src/cache');
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('createCometApiProvider', () => {
   beforeEach(() => {
@@ -78,63 +75,5 @@ describe('createCometApiProvider', () => {
     const provider = createCometApiProvider('cometapi:any-model-name');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('any-model-name', expect.any(Object));
-  });
-});
-
-describe('fetchCometApiModels', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    clearCometApiModelsCache();
-  });
-
-  it('fetches all models from endpoint without filtering', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: {
-        data: [
-          { id: 'gpt-4o' },
-          { id: 'claude-3-5-sonnet' },
-          { id: 'dall-e-3' },
-          { id: 'text-embedding-3-small' },
-          { id: 'whisper-1' }, // Audio model - now included
-          { id: 'custom-user-model' }, // User's custom model
-        ],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
-
-    const models = await fetchCometApiModels({ COMETAPI_KEY: 'sk-test' } as any);
-
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.cometapi.com/v1/models',
-      { headers: { Accept: 'application/json', Authorization: 'Bearer sk-test' } },
-      expect.any(Number),
-    );
-    // All models should be included - no filtering based on model names
-    expect(models).toEqual([
-      { id: 'gpt-4o' },
-      { id: 'claude-3-5-sonnet' },
-      { id: 'dall-e-3' },
-      { id: 'text-embedding-3-small' },
-      { id: 'whisper-1' },
-      { id: 'custom-user-model' },
-    ]);
-  });
-
-  it('uses cache on subsequent calls', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { data: [{ id: 'gpt-5-mini' }] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
-
-    const first = await fetchCometApiModels();
-    vi.mocked(fetchWithCache).mockClear();
-    const second = await fetchCometApiModels();
-
-    expect(first).toEqual(second);
-    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 });

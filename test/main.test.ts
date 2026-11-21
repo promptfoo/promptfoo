@@ -10,7 +10,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
+const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockProviderShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
 const mockDispatcherDestroy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -34,7 +36,15 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: mockTelemetryRecord, shutdown: mockTelemetryShutdown },
+  default: {
+    initialize: mockTelemetryInitialize,
+    record: mockTelemetryRecord,
+    shutdown: mockTelemetryShutdown,
+  },
+}));
+
+vi.mock('../src/providers/providerRegistry', () => ({
+  providerRegistry: { shutdownForProcess: mockProviderShutdown },
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -44,11 +54,6 @@ vi.mock('../src/database/index', () => ({
 vi.mock('undici', async () => ({
   ...(await actualUndici),
   getGlobalDispatcher: mockGetGlobalDispatcher,
-}));
-
-// Mock code scan commands to avoid ESM import issues with execa
-vi.mock('../src/codeScan', () => ({
-  codeScansCommand: vi.fn(),
 }));
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
@@ -72,30 +77,35 @@ describe('setupEnvFilesFromArgv', () => {
   beforeEach(async () => {
     await loadMainModule();
     mockSetupEnv.mockReset();
+    mockTelemetryInitialize.mockReset();
   });
 
   it('should load env files before command actions run', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', { refreshConfigDirectory: true });
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should support repeated and comma-separated env file args', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.one', '--env-path=.env.two,.env.three']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three'], {
+      refreshConfigDirectory: true,
+    });
   });
 
   it('should ignore flags after --', () => {
     setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should recognize the --env-path alias', () => {
     setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging', { refreshConfigDirectory: true });
   });
 
   it('should be a no-op when no env flags are present', () => {
@@ -303,6 +313,33 @@ describe('addCommonOptionsRecursively', () => {
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
   });
 
+  it('keeps structured code-scan output muted even when --verbose is present', () => {
+    const mockHookRegister = vi.fn();
+    (program as any).hook = mockHookRegister;
+
+    addCommonOptionsRecursively(program);
+
+    const preActionFn = mockHookRegister.mock.calls[0][1];
+    const originalArgv = process.argv;
+
+    process.argv = ['node', 'promptfoo', 'code-scans', 'run', '.', '--json', '--verbose'];
+
+    try {
+      preActionFn({
+        opts: () => ({ verbose: true }),
+        name: () => 'run',
+        parent: {
+          name: () => 'code-scans',
+          parent: null,
+        },
+      });
+    } finally {
+      process.argv = originalArgv;
+    }
+
+    expect(mockSetLogLevel).not.toHaveBeenCalledWith('debug');
+  });
+
   it('should parse --env-file without consuming positional subcommand arguments', async () => {
     const action = vi.fn();
     const documentCommand = program.command('scan-model').argument('<model>').action(action);
@@ -468,6 +505,7 @@ describe('shutdownGracefully', () => {
     mockSetupEnv.mockReset();
     mockSetLogLevel.mockReset();
     mockTelemetryShutdown.mockReset().mockResolvedValue(undefined);
+    mockProviderShutdown.mockReset().mockResolvedValue(undefined);
     mockCloseLogger.mockReset().mockResolvedValue(undefined);
     mockCloseDbIfOpen.mockReset();
     mockDispatcherDestroy.mockReset().mockResolvedValue(undefined);
@@ -488,10 +526,57 @@ describe('shutdownGracefully', () => {
 
     await shutdownPromise;
 
+    expect(mockProviderShutdown).toHaveBeenCalledOnce();
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseLogger).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
     expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('starts provider shutdown immediately and waits for it before the explicit exit', async () => {
+    let releaseProviders!: () => void;
+    mockProviderShutdown.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseProviders = resolve;
+        }),
+    );
+    mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
+
+    const shutdownPromise = shutdownGracefully();
+    expect(mockProviderShutdown).toHaveBeenCalledOnce();
+    expect(mockProviderShutdown.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTelemetryShutdown.mock.invocationCallOrder[0],
+    );
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(process.exit).not.toHaveBeenCalled();
+    releaseProviders();
+    await vi.advanceTimersByTimeAsync(500);
+    await shutdownPromise;
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('bounds provider shutdown so a hung child cannot block the explicit exit', async () => {
+    mockProviderShutdown.mockImplementation(() => new Promise(() => {}));
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(process.exit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
+    expect(mockProviderShutdown).toHaveBeenCalledOnce();
   });
 
   it('should handle telemetry shutdown timeout', async () => {
@@ -528,6 +613,38 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
     expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('should continue cleanup when database close times out', async () => {
+    let resolveDbClose!: () => void;
+    const markDbCloseResolved = vi.fn();
+    mockCloseDbIfOpen.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDbClose = resolve;
+        }),
+    );
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+    expect(mockCloseLogger).not.toHaveBeenCalled();
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    markDbCloseResolved();
+    resolveDbClose();
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(markDbCloseResolved.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
   });
 
   it('should handle dispatcher.destroy() timeout', async () => {

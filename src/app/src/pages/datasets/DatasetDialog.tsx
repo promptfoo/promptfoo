@@ -10,15 +10,15 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 interface DatasetDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  testCase: TestCasesWithMetadata & { recentEvalDate: string };
+  testCase: Pick<TestCasesWithMetadata, 'id' | 'testCases' | 'prompts'>;
 }
 
 const ROWS_PER_PAGE = 10;

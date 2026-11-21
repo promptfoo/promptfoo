@@ -29,6 +29,42 @@ Red teams happen in three steps:
 
 `promptfoo redteam run` is a shortcut that combines `redteam generate` and `redteam eval` steps, ensuring that your generated test cases are always synced with the latest configuration.
 
+In CI/CD, use repeatable `--tag key=value` options with `redteam run` or
+`redteam eval` to record run-specific context without changing your scan template or
+generated `redteam.yaml`. Tags are saved with the eval and included when results are
+shared.
+
+```bash
+promptfoo redteam run --tag ci.run-id="$CI_RUN_ID" --tag git.sha="$GIT_SHA"
+```
+
+### Generation token accounting
+
+Generated configurations include `metadata.generation`, which identifies when the test suite was
+created and, when available, records the model requests and tokens used to create it:
+
+```yaml
+metadata:
+  generation:
+    id: 4d2f4d7f-9b99-4a51-85c5-7fc5f6c03f88
+    generatedAt: '2026-08-17T12:00:00.000Z'
+    tokenUsage:
+      total: 1200
+      prompt: 900
+      completion: 300
+      numRequests: 4
+```
+
+Generation usage includes system-purpose extraction, entity extraction, attack-goal extraction,
+and test generation. A failed request still increments `numRequests` when its token count is
+unavailable. Reusing a complete cached response adds neither requests nor newly consumed tokens;
+provider-side prompt caching during an actual model request still counts that request.
+
+`promptfoo redteam run` attributes generation tokens to the evaluation only when it generated the
+suite during that run. Running an existing generated suite does not charge its historical
+generation usage again. `metadata.generationAccounting` is reserved for internally persisted
+current-run accounting and should not be added to reusable configurations.
+
 ## Configuration Structure
 
 The red team configuration uses the following YAML structure:
@@ -43,7 +79,7 @@ targets:
       message: 'The user message to process'
 
 redteam:
-  plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
+  plugins: Array<string | { id: string, numTests?: number, severity?: "critical" | "high" | "medium" | "low" | "informational", config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number
   maxCharsPerMessage: number
@@ -328,7 +364,7 @@ If `redteam.maxCharsPerMessage` is set, it applies to every plugin and strategy 
 
 ### Plugins
 
-[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the red team system.
+Specify [plugins](/docs/red-team/plugins/) as an array of plugin IDs or objects with `id` and optional `numTests`, `severity`, and `config` properties. Use a supported plugin ID.
 
 See [Plugins](/docs/red-team/plugins/) for more information.
 
@@ -337,7 +373,7 @@ See [Plugins](/docs/red-team/plugins/) for more information.
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
-If `numTests` is not specified for a plugin, it will use the global `numTests` value.
+Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, and export. Per-plugin counts must be positive integers; invalid stored overrides are omitted on export or run so the global count applies. Workload estimates expand plugin collections and aliases before applying their counts.
 
 #### Available Plugins
 
@@ -592,7 +628,7 @@ The severity levels affect:
 - Issue prioritization in vulnerability tables
 - Dashboard statistics and metrics
 
-See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants.ts#L553) for a list of default severity levels.
+See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants/metadata.ts#L504) for a list of default severity levels.
 
 ### Strategies
 
@@ -1148,6 +1184,8 @@ The `redteam.yaml` file contains a metadata section with a configHash value at t
 
 1. Do not modify or remove the metadata section
 2. Keep a backup of your custom tests
+
+Configuration fingerprints use SHA-256 so cache checks work when the crypto provider rejects MD5. Outputs with older MD5 fingerprints regenerate on the next generation run; back up custom tests before upgrading.
 
 :::
 

@@ -12,13 +12,12 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
@@ -27,6 +26,7 @@ interface EvalsTableProps {
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
+  focusedDatasetId?: string | null;
   deletionEnabled?: boolean;
 }
 
@@ -35,6 +35,7 @@ export default function EvalsTable({
   focusedEvalId,
   showUtilityButtons = false,
   filterByDatasetId = false,
+  focusedDatasetId,
   deletionEnabled = false,
 }: EvalsTableProps) {
   if (filterByDatasetId) {
@@ -50,26 +51,33 @@ export default function EvalsTable({
   const location = useLocation();
 
   // Fetch evals from the API
-  const fetchEvals = useCallback(async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
+        const query =
+          filterByDatasetId && focusedDatasetId
+            ? `?datasetId=${encodeURIComponent(focusedDatasetId)}`
+            : '';
+        const response = await callApi(`/results${query}`, { cache: 'no-store', signal });
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+        const body = (await response.json()) as { data: EvalSummary[] };
+        setEvals(body.data);
+        setError(null);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setEvals(body.data);
-      setError(null);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError((err as Error).message);
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [filterByDatasetId, focusedDatasetId],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -169,6 +177,32 @@ export default function EvalsTable({
   const columns: ColumnDef<EvalSummary>[] = useMemo(
     () => [
       {
+        id: 'description',
+        // accessorFn (not accessorKey) ensures every row is searched. TanStack Table
+        // infers column types from the first row, so a leading row with description:
+        // null would silently drop this column from global search.
+        accessorFn: (row) => row.description || row.label,
+        header: 'Evaluation',
+        cell: ({ row }) => {
+          const text = row.original.description || row.original.label;
+          return (
+            <Link
+              to={EVAL_ROUTES.DETAIL(row.original.evalId)}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onEvalSelected(row.original.evalId);
+              }}
+              title={text || row.original.evalId}
+              className="line-clamp-2 text-sm font-medium text-foreground hover:text-primary hover:underline"
+            >
+              {text || 'Untitled evaluation'}
+            </Link>
+          );
+        },
+        size: 280,
+      },
+      {
         accessorKey: 'evalId',
         header: 'ID',
         cell: ({ getValue }) => {
@@ -188,7 +222,7 @@ export default function EvalsTable({
                 onEvalSelected(evalId);
               }}
               title={evalId}
-              className="block truncate font-mono text-sm text-primary hover:underline"
+              className="block truncate font-mono text-xs text-muted-foreground hover:text-primary hover:underline"
             >
               {evalId}
             </Link>
@@ -215,7 +249,8 @@ export default function EvalsTable({
                 const isRedteam = row.original.isRedteam;
                 return (
                   <Badge
-                    variant={isRedteam ? 'destructive' : 'secondary'}
+                    variant="secondary"
+                    truncate
                     className={cn(
                       'font-medium whitespace-nowrap',
                       !isRedteam && 'bg-muted text-muted-foreground border-muted-foreground/20',
@@ -237,33 +272,6 @@ export default function EvalsTable({
           ]
         : []),
       {
-        accessorKey: 'description',
-        header: 'Description',
-        cell: ({ row }) => {
-          const text = row.original.description || row.original.label;
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className="text-sm block"
-                  style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {text}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">{text}</TooltipContent>
-            </Tooltip>
-          );
-        },
-        size: 250,
-      },
-      {
         accessorKey: 'passRate',
         header: 'Pass Rate',
         cell: ({ getValue }) => {
@@ -283,11 +291,11 @@ export default function EvalsTable({
       },
       {
         accessorKey: 'numTests',
-        header: '# Tests',
+        header: 'Tests',
         cell: ({ getValue }) => (
           <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
-        size: 80,
+        size: 112,
         meta: { align: 'right' },
       },
     ],
@@ -326,6 +334,7 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
+        initialColumnVisibility={{ evalId: false }}
         globalFilterLabel="Search evaluations"
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}

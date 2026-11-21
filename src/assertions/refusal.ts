@@ -3,19 +3,44 @@ import { isBasicRefusal } from '../redteam/util';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handleIsRefusal(params: AssertionParams): GradingResult {
-  const { output, inverse, assertion } = params;
+  const { output, outputString, inverse, assertion, provider, providerResponse, test } = params;
 
-  if (typeof output !== 'string') {
+  const transformed =
+    assertion.transform ||
+    provider?.transform ||
+    test.options?.transform ||
+    test.options?.postprocess;
+  if (!transformed && providerResponse.isRefusal === true) {
+    const pass = !inverse;
     return {
-      pass: true,
-      score: 0,
-      reason: 'No value provided, assumed to be a refusal',
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Provider reported a refusal' : 'Expected output to not be a refusal',
       assertion,
     };
   }
 
+  if (output === undefined || output === null) {
+    const pass = !inverse;
+    return {
+      pass,
+      score: 0,
+      reason: pass
+        ? 'No value provided, assumed to be a refusal'
+        : 'Expected output to not be a refusal',
+      assertion,
+    };
+  }
+
+  // Structured output (tool calls, JSON mode) is a real response, so check its serialized text
+  const text =
+    typeof output === 'string'
+      ? output
+      : (outputString ??
+        (typeof output === 'object' ? JSON.stringify(output) : String(output ?? '')));
+
   // Treat empty strings and whitespace as refusals
-  if (output.trim() === '') {
+  if (text.trim() === '') {
     const pass = !inverse;
     return {
       pass,
@@ -25,7 +50,7 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  const isRefusal = isBasicRefusal(output);
+  const isRefusal = isBasicRefusal(text);
   const pass = isRefusal !== inverse;
   return {
     pass,

@@ -213,6 +213,7 @@ Tune the threshold on labeled paraphrases before using it as a release gate.
 | Format must be exact        | [`is-json`](/docs/configuration/expected-outputs/deterministic#is-json), [`contains`](/docs/configuration/expected-outputs/deterministic#contains), [`regex`](/docs/configuration/expected-outputs/deterministic#regex) |
 | Semantic match is enough    | [`similar`](/docs/configuration/expected-outputs/similar)                                                                                                                                                               |
 | Output must compile/execute | [JavaScript](/docs/configuration/expected-outputs/javascript) or [Python](/docs/configuration/expected-outputs/python) assertions                                                                                       |
+| Workspace/tool evidence     | [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric)                                                                                                                                        |
 | Fresh facts needed          | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric)                                                                                                                                      |
 | Adversarial inputs          | [Red teaming](/docs/red-team/quickstart/) (judges can be manipulated)                                                                                                                                                   |
 
@@ -759,13 +760,26 @@ npx promptfoo view
 Inspect the exported JSON to compare human labels against judge results:
 
 ```bash
-jq -r '.results.results[] | [.metadata.expected_label, (if .success then "pass" else "fail" end)] | @tsv' results.json
+jq -r '.results.results[] |
+  (if .failureReason == 2 or
+      (.gradingResult.pass | type) != "boolean" or
+      ([.gradingResult, .gradingResult.componentResults[]?] |
+        any(.metadata.graderError == true))
+    then "not judged"
+    elif .gradingResult.pass then "pass"
+    else "fail" end) as $judgment |
+  [.metadata.expected_label, $judgment] | @tsv' results.json
 ```
+
+For example, a run with two valid judgments and one error would show:
 
 ```text
 fail    fail
 pass    pass
+fail    not judged
 ```
+
+Here, `failureReason: 2` denotes an execution error ([`ResultFailureReason.ERROR`](https://github.com/promptfoo/promptfoo/blob/6fb013584d2f0e4a2e9b7848feff2e6110420aae/src/types/index.ts#L380-L387)); `metadata.graderError` marks a grader failure. Missing verdicts are also not judged. Exclude these rows from agreement calculations and report their count alongside the number of judged rows. This example uses one rubric assertion per row; with multiple assertions, compare the relevant assertion's verdict rather than the aggregate result.
 
 Refine rubric wording until agreement is >90%.
 
@@ -776,6 +790,8 @@ Run against holdout examples (that you never tuned on) to check for overfitting:
 ```bash
 npx promptfoo eval -c eval/promptfooconfig.yaml --filter-metadata split=holdout -o holdout-results.json --no-cache
 ```
+
+Apply the jq command from [Step 4](#step-4-run-and-measure-agreement) to `holdout-results.json` as well. Calculate agreement only among judged rows, and report judged and unjudged counts separately for both the development and holdout sets.
 
 If holdout agreement is significantly lower than development agreement, your rubric is overfit.
 
@@ -1063,6 +1079,7 @@ npx promptfoo eval --filter-metadata risk=high --grader openai:responses:gpt-5.4
 | Type                                                                                                 | Purpose                                           | Default model               |
 | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------- |
 | [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)                         | General rubric evaluation                         | Varies by API key           |
+| [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric)                     | Rubric + coding-agent tool/workspace evidence     | OpenAI Codex SDK            |
 | [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)                                 | Chain-of-thought scoring (uses CoT internally)    | Varies by API key           |
 | [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)                         | Fact consistency against a reference              | Varies by API key           |
 | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric)                   | Rubric + web search                               | Web-search-capable provider |
@@ -1090,6 +1107,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
       - uses: promptfoo/promptfoo-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -1110,11 +1130,12 @@ paths, TTLs, and explicit cache clearing.
 
 ### Grader model selection
 
-| Provider ID                                     | Reliability | Cost   | Use for                     |
-| ----------------------------------------------- | ----------- | ------ | --------------------------- |
-| `openai:responses:gpt-5.4`                      | High        | Higher | Production, complex rubrics |
-| `openai:responses:gpt-5-mini`                   | Medium      | Low    | Development, simple checks  |
-| `anthropic:messages:claude-sonnet-4-5-20250929` | High        | Medium | Production                  |
+Compare candidate graders against human-labeled examples from your task. Measure agreement, cost, and latency before choosing a production grader.
+
+| Provider  | Example grader IDs                                                         |
+| --------- | -------------------------------------------------------------------------- |
+| OpenAI    | `openai:responses:gpt-5.4`, `openai:responses:gpt-5-mini`                  |
+| Anthropic | `anthropic:messages:claude-sonnet-5`, `anthropic:messages:claude-opus-5-5` |
 
 Override via CLI:
 
@@ -1152,7 +1173,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-4-5-20250929` are reliable for production. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+Choose a model that agrees with human judgments on your rubric. Test it on both clear-cut and borderline cases, then compare its error rate, cost, and latency with other candidates. See [Grader model selection](#grader-model-selection) for example provider IDs.
 
 ### How do you do majority vote LLM judging?
 

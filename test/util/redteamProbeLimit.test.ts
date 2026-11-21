@@ -24,18 +24,19 @@ vi.mock('../../src/globalConfig/accounts', async () => {
 /**
  * Helper to insert a redteam eval with result rows directly into the database.
  */
-function insertRedteamEval(opts: {
+async function insertRedteamEval(opts: {
   createdAt?: number;
   numResults?: number;
   numRequestsPerResult?: number;
-}): string {
-  const db = getDb();
+}): Promise<string> {
+  const db = await getDb();
   const evalId = randomUUID();
   const createdAt = opts.createdAt ?? Date.now();
   const numResults = opts.numResults ?? 1;
   const numRequestsPerResult = opts.numRequestsPerResult ?? 1;
 
-  db.insert(evalsTable)
+  await db
+    .insert(evalsTable)
     .values({
       id: evalId,
       createdAt,
@@ -46,7 +47,8 @@ function insertRedteamEval(opts: {
     .run();
 
   for (let i = 0; i < numResults; i++) {
-    db.insert(evalResultsTable)
+    await db
+      .insert(evalResultsTable)
       .values({
         id: randomUUID(),
         createdAt,
@@ -78,13 +80,17 @@ function insertRedteamEval(opts: {
 /**
  * Helper to insert a non-redteam eval.
  */
-function insertNonRedteamEval(opts?: { createdAt?: number; numResults?: number }): string {
-  const db = getDb();
+async function insertNonRedteamEval(opts?: {
+  createdAt?: number;
+  numResults?: number;
+}): Promise<string> {
+  const db = await getDb();
   const evalId = randomUUID();
   const createdAt = opts?.createdAt ?? Date.now();
   const numResults = opts?.numResults ?? 1;
 
-  db.insert(evalsTable)
+  await db
+    .insert(evalsTable)
     .values({
       id: evalId,
       createdAt,
@@ -95,7 +101,8 @@ function insertNonRedteamEval(opts?: { createdAt?: number; numResults?: number }
     .run();
 
   for (let i = 0; i < numResults; i++) {
-    db.insert(evalResultsTable)
+    await db
+      .insert(evalResultsTable)
       .values({
         id: randomUUID(),
         createdAt,
@@ -125,7 +132,7 @@ describe('redteamProbeLimit', () => {
   });
 
   beforeEach(async () => {
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -156,48 +163,49 @@ describe('redteamProbeLimit', () => {
   });
 
   describe('getMonthlyRedteamProbeUsage', () => {
-    it('should return 0 when there are no evals', () => {
-      expect(getMonthlyRedteamProbeUsage()).toBe(0);
+    it('should return 0 when there are no evals', async () => {
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(0);
     });
 
-    it('should count probes from redteam evals in the current month', () => {
-      insertRedteamEval({ numResults: 3, numRequestsPerResult: 1 });
-      expect(getMonthlyRedteamProbeUsage()).toBe(3);
+    it('should count probes from redteam evals in the current month', async () => {
+      await insertRedteamEval({ numResults: 3, numRequestsPerResult: 1 });
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(3);
     });
 
-    it('should count multi-turn probes correctly using numRequests', () => {
+    it('should count multi-turn probes correctly using numRequests', async () => {
       // Simulates a multi-turn strategy where each result has multiple target calls
-      insertRedteamEval({ numResults: 2, numRequestsPerResult: 10 });
-      expect(getMonthlyRedteamProbeUsage()).toBe(20);
+      await insertRedteamEval({ numResults: 2, numRequestsPerResult: 10 });
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(20);
     });
 
-    it('should not count non-redteam evals', () => {
-      insertNonRedteamEval({ numResults: 5 });
-      expect(getMonthlyRedteamProbeUsage()).toBe(0);
+    it('should not count non-redteam evals', async () => {
+      await insertNonRedteamEval({ numResults: 5 });
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(0);
     });
 
-    it('should not count evals from previous months', () => {
-      insertRedteamEval({
+    it('should not count evals from previous months', async () => {
+      await insertRedteamEval({
         createdAt: getMonthStartTimestamp() - 1,
         numResults: 5,
         numRequestsPerResult: 1,
       });
-      expect(getMonthlyRedteamProbeUsage()).toBe(0);
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(0);
     });
 
-    it('should aggregate probes across multiple redteam evals', () => {
-      insertRedteamEval({ numResults: 3, numRequestsPerResult: 1 });
-      insertRedteamEval({ numResults: 2, numRequestsPerResult: 5 });
+    it('should aggregate probes across multiple redteam evals', async () => {
+      await insertRedteamEval({ numResults: 3, numRequestsPerResult: 1 });
+      await insertRedteamEval({ numResults: 2, numRequestsPerResult: 5 });
       // 3*1 + 2*5 = 13
-      expect(getMonthlyRedteamProbeUsage()).toBe(13);
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(13);
     });
 
-    it('should fall back to 1 per result when numRequests is not present', () => {
-      const db = getDb();
+    it('should fall back to 1 per result when numRequests is not present', async () => {
+      const db = await getDb();
       const evalId = randomUUID();
       const now = Date.now();
 
-      db.insert(evalsTable)
+      await db
+        .insert(evalsTable)
         .values({
           id: evalId,
           createdAt: now,
@@ -208,7 +216,8 @@ describe('redteamProbeLimit', () => {
         .run();
 
       // Insert result without numRequests in tokenUsage
-      db.insert(evalResultsTable)
+      await db
+        .insert(evalResultsTable)
         .values({
           id: randomUUID(),
           createdAt: now,
@@ -228,16 +237,17 @@ describe('redteamProbeLimit', () => {
         })
         .run();
 
-      expect(getMonthlyRedteamProbeUsage()).toBe(1);
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(1);
     });
 
-    it('should detect redteam evals via config JSON even if isRedteam column is false', () => {
-      const db = getDb();
+    it('should detect redteam evals via config JSON even if isRedteam column is false', async () => {
+      const db = await getDb();
       const evalId = randomUUID();
       const now = Date.now();
 
       // Insert with isRedteam=false but config has redteam key
-      db.insert(evalsTable)
+      await db
+        .insert(evalsTable)
         .values({
           id: evalId,
           createdAt: now,
@@ -247,7 +257,8 @@ describe('redteamProbeLimit', () => {
         })
         .run();
 
-      db.insert(evalResultsTable)
+      await db
+        .insert(evalResultsTable)
         .values({
           id: randomUUID(),
           createdAt: now,
@@ -267,35 +278,35 @@ describe('redteamProbeLimit', () => {
         })
         .run();
 
-      expect(getMonthlyRedteamProbeUsage()).toBe(3);
+      await expect(getMonthlyRedteamProbeUsage()).resolves.toBe(3);
     });
   });
 
   describe('checkRedteamProbeLimit', () => {
-    it('should return withinLimit=true when no usage', () => {
-      const result = checkRedteamProbeLimit();
+    it('should return withinLimit=true when no usage', async () => {
+      const result = await checkRedteamProbeLimit();
       expect(result.withinLimit).toBe(true);
       expect(result.used).toBe(0);
       expect(result.remaining).toBe(MONTHLY_PROBE_LIMIT);
       expect(result.limit).toBe(MONTHLY_PROBE_LIMIT);
     });
 
-    it('should return withinLimit=true when under limit', () => {
-      insertRedteamEval({ numResults: 10, numRequestsPerResult: 1 });
-      const result = checkRedteamProbeLimit();
+    it('should return withinLimit=true when under limit', async () => {
+      await insertRedteamEval({ numResults: 10, numRequestsPerResult: 1 });
+      const result = await checkRedteamProbeLimit();
       expect(result.withinLimit).toBe(true);
       expect(result.used).toBe(10);
       expect(result.remaining).toBe(MONTHLY_PROBE_LIMIT - 10);
     });
 
-    it('should return withinLimit=false when at or over limit', () => {
+    it('should return withinLimit=false when at or over limit', async () => {
       // Insert enough probes to exceed the limit
       // We'll use a large numRequests to simulate hitting the limit
       const numResultsNeeded = 1000;
       const numRequestsPerResult = Math.ceil(MONTHLY_PROBE_LIMIT / numResultsNeeded) + 1;
-      insertRedteamEval({ numResults: numResultsNeeded, numRequestsPerResult });
+      await insertRedteamEval({ numResults: numResultsNeeded, numRequestsPerResult });
 
-      const result = checkRedteamProbeLimit();
+      const result = await checkRedteamProbeLimit();
       expect(result.withinLimit).toBe(false);
       expect(result.used).toBeGreaterThanOrEqual(MONTHLY_PROBE_LIMIT);
       expect(result.remaining).toBe(0);
@@ -305,9 +316,9 @@ describe('redteamProbeLimit', () => {
       vi.mocked(isLoggedIntoCloud).mockReturnValue(true);
 
       // Even with probes, cloud users should be exempt
-      insertRedteamEval({ numResults: 10, numRequestsPerResult: 1 });
+      await insertRedteamEval({ numResults: 10, numRequestsPerResult: 1 });
 
-      const result = checkRedteamProbeLimit();
+      const result = await checkRedteamProbeLimit();
       expect(result.withinLimit).toBe(true);
       expect(result.remaining).toBe(Number.POSITIVE_INFINITY);
       expect(result.limit).toBe(Number.POSITIVE_INFINITY);

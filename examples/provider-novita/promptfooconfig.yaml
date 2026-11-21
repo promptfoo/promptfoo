@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Quick demo of the Novita provider answering concise factual questions
+
+prompts:
+  - 'Answer in one sentence: {{question}}'
+
+providers:
+  - id: novita:chat:meta-llama/llama-3.3-70b-instruct
+    config:
+      temperature: 0.2
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris

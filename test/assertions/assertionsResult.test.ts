@@ -5,8 +5,24 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import {
+  accumulateGradingRequest,
+  accumulateGradingTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
+} from '../../src/util/tokenUsageUtils';
 
-import type { AssertionSet, GradingResult } from '../../src/types/index';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
+
+const createComponentGrade = () => ({
+  index: 0,
+  result: {
+    pass: true,
+    score: 1,
+    reason: 'Component grading result',
+    tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+  },
+});
 
 vi.mock('../../src/envars');
 
@@ -80,6 +96,52 @@ describe('AssertionsResult', () => {
       expect(assertionsResult['failedReason']).toBe('Test failed');
     });
 
+    it('preserves detailed token accounting across multiple assertion results', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'First grade passed',
+          tokensUsed: {
+            total: 20,
+            prompt: 12,
+            completion: 8,
+            numRequests: 2,
+            completionDetails: { reasoning: 5, cacheReadInputTokens: 7 },
+          },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Second grade failed',
+          tokensUsed: {
+            total: 11,
+            prompt: 6,
+            completion: 5,
+            numRequests: 1,
+            completionDetails: { reasoning: 3, cacheCreationInputTokens: 4 },
+          },
+        },
+      });
+
+      expect((await assertionsResult.testResult()).tokensUsed).toMatchObject({
+        total: 31,
+        prompt: 18,
+        completion: 13,
+        numRequests: 3,
+        completionDetails: {
+          reasoning: 8,
+          cacheReadInputTokens: 7,
+          cacheCreationInputTokens: 4,
+        },
+      });
+    });
+
     it('should throw error if short circuit enabled', () => {
       vi.mocked(getEnvBool).mockReturnValue(true);
 
@@ -101,6 +163,470 @@ describe('AssertionsResult', () => {
   });
 
   describe('testResult', () => {
+    it('preserves cache provenance when every grading response was reused', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result without token usage',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { cachedResponse: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.tokensUsed).toMatchObject({
+        total: 0,
+        cached: 0,
+        numRequests: 1,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
+      expect(result.metadata).toEqual({ cachedResponse: true });
+      expect(usage.numRequests).toBe(0);
+    });
+
+    it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { cachedResponse: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh grading result without token usage',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { renderedGradingPrompt: 'Grade this response' },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(usage.numRequests).toBe(2);
+      expect(result.tokensUsed?.incurredTokenUsage?.numRequests).toBe(1);
+    });
+
+    it('counts fresh matcher calls when avoided cached tokens exceed fresh token usage', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: { total: 0, cached: 97, numRequests: 0 },
+          metadata: { cachedResponse: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh local grading result',
+          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 0 },
+          metadata: { renderedGradingPrompt: 'Grade this response' },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(usage).toMatchObject({ total: 147, cached: 97, numRequests: 2 });
+      expect(result.tokensUsed?.incurredTokenUsage).toMatchObject({
+        total: 50,
+        numRequests: 1,
+      });
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+    });
+
+    it('preserves logical and incurred usage when cached and fresh graders are combined', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          metadata: { cachedResponse: true },
+          tokensUsed: {
+            total: 37,
+            prompt: 23,
+            completion: 14,
+            numRequests: 1,
+            completionDetails: { reasoning: 9 },
+          },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh grading result',
+          tokensUsed: {
+            total: 23,
+            prompt: 15,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const accounting = createEmptyTokenUsage();
+      accumulateGradingTokenUsage(accounting, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(result.tokensUsed).toMatchObject({
+        total: 60,
+        prompt: 38,
+        completion: 22,
+        cached: 37,
+        numRequests: 2,
+        completionDetails: { reasoning: 13 },
+        incurredTokenUsage: {
+          total: 23,
+          prompt: 15,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      expect(accounting).toMatchObject({
+        assertions: { total: 60, cached: 37, numRequests: 2 },
+        incurredTokenUsage: { assertions: { total: 23, numRequests: 1 } },
+      });
+    });
+
+    it.each([[''], ['Explained failure', ''], ['', 'Explained failure']])(
+      'fails regardless of the failure explanations: %j',
+      async (...reasons) => {
+        const assertionsResult = new AssertionsResult();
+        reasons.forEach((reason, index) => {
+          assertionsResult.addResult({ index, result: { pass: false, score: 0, reason } });
+        });
+        assertionsResult.addResult({
+          index: reasons.length,
+          result: { pass: true, score: 1, reason: 'Passed' },
+        });
+
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: false,
+          reason: reasons.at(-1),
+        });
+      },
+    );
+
+    it('allows a threshold to override a failure with an empty explanation', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+      assertionsResult.addResult({ index: 0, result: { pass: false, score: 0, reason: '' } });
+
+      expect(await assertionsResult.testResult()).toMatchObject({
+        pass: true,
+        score: 0,
+        reason: 'Aggregate score 0.00 ≥ 0 threshold',
+      });
+    });
+
+    it('allows custom scoring to override a failure with an empty explanation', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({ index: 0, result: { pass: false, score: 0, reason: '' } });
+
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
+    });
+
+    it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+      'preserves nullable %s returned by custom scoring',
+      async (field) => {
+        const assertionsResult = new AssertionsResult();
+        const scoringResult = { pass: true, score: 0.75, reason: 'Custom', [field]: null };
+
+        expect(await assertionsResult.testResult(() => scoringResult)).toMatchObject(scoringResult);
+        expect(scoringResult[field]).toBeNull();
+      },
+    );
+
+    it.each([
+      { score: Number.POSITIVE_INFINITY },
+      { namedScores: { quality: Number.NaN } },
+      { namedScoreWeights: { quality: Number.NEGATIVE_INFINITY } },
+    ])('rejects nonfinite custom scoring results: %j', async (invalidFields) => {
+      const assertionsResult = new AssertionsResult();
+      const result = await assertionsResult.testResult(() => ({
+        pass: true,
+        score: 1,
+        reason: 'Custom',
+        ...invalidFields,
+      }));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('Scoring function error:');
+      expect(result.namedScores).toEqual({});
+      expect(result.namedScoreWeights).toBeUndefined();
+    });
+
+    it.each([undefined, 0, 0.2])(
+      'rejects unlabelled weight overflow even when the quotient is finite (threshold %s)',
+      async (threshold) => {
+        const assertionsResult = new AssertionsResult({ threshold });
+        for (let index = 0; index < 2; index++) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score: 0.25, reason: 'Finite input' },
+            weight: Number.MAX_VALUE,
+          });
+        }
+
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: {},
+          componentResults: [
+            { pass: true, score: 0.25 },
+            { pass: true, score: 0.25 },
+          ],
+        });
+      },
+    );
+
+    it('allows valid custom scoring to override unlabelled weight overflow', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.9 });
+      for (let index = 0; index < 2; index++) {
+        assertionsResult.addResult({
+          index,
+          result: { pass: true, score: 0.25, reason: 'Finite input' },
+          weight: Number.MAX_VALUE,
+        });
+      }
+
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
+    });
+
+    it.each([
+      { score: Number.MAX_VALUE, weight: 2, count: 1 },
+      { score: -Number.MAX_VALUE, weight: 2, count: 1 },
+      { score: Number.MAX_VALUE, weight: 1, count: 2 },
+    ])(
+      'fails explicitly when finite scores overflow during aggregation: %j',
+      async ({ score, weight, count }) => {
+        const assertionsResult = new AssertionsResult({ threshold: 0 });
+        for (let index = 0; index < count; index++) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score, reason: 'Finite input' },
+            metric: 'overflow',
+            weight,
+          });
+        }
+        assertionsResult.addResult({
+          index: count,
+          result: { pass: true, score: 0.25, reason: 'Valid metric' },
+          metric: 'valid',
+        });
+
+        const result = await assertionsResult.testResult();
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: { valid: 0.25 },
+          namedScoreWeights: { valid: 1 },
+        });
+        expect(result.namedScores).not.toHaveProperty('overflow');
+        expect(result.namedScoreWeights).not.toHaveProperty('overflow');
+        expect(result.componentResults?.[0]).toMatchObject({ pass: true, score });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each([
+      { score: Number.MAX_VALUE, weight: 1 },
+      { score: 1, weight: Number.MAX_VALUE },
+    ])('fails when named scores or weights overflow: %j', async ({ score, weight }) => {
+      const assertionsResult = new AssertionsResult();
+      const component = {
+        pass: true,
+        score: 1,
+        reason: 'Finite component',
+        namedScores: { overflow: score, valid: 0.25 },
+        namedScoreWeights: { overflow: weight, valid: 1 },
+      };
+      assertionsResult.addResult({ index: 0, result: component, weight: 2 });
+
+      const result = await assertionsResult.testResult();
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Assertion aggregation error: scores or weights must remain finite',
+        namedScores: { valid: 0.25 },
+        namedScoreWeights: { valid: 2 },
+      });
+      expect(result.namedScores).not.toHaveProperty('overflow');
+      expect(result.namedScoreWeights).not.toHaveProperty('overflow');
+      expect(component.namedScores.overflow).toBe(score);
+      expect(component.namedScoreWeights.overflow).toBe(weight);
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    });
+
+    it.each([-2, 2, Number.MAX_VALUE])('preserves finite aggregate scores: %s', async (score) => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score, reason: '' },
+        metric: 'quality',
+      });
+      expect(await assertionsResult.testResult()).toMatchObject({
+        pass: true,
+        score,
+        namedScores: { quality: score },
+        namedScoreWeights: { quality: 1 },
+      });
+    });
+
+    it.each([
+      { scores: [Number.MAX_VALUE, -Number.MAX_VALUE, 1], weights: [2, 2, 1] },
+      { scores: [Number.MAX_VALUE, Number.MAX_VALUE], weights: [2, -2] },
+      { scores: [Number.MAX_VALUE, Number.MAX_VALUE], weights: [2, -3] },
+      { scores: [0, 0, 1], weights: [Number.MAX_VALUE, -Number.MAX_VALUE, 1] },
+    ])('retains intermediate named metric overflow: %j', async ({ scores, weights }) => {
+      const assertionsResult = new AssertionsResult();
+      scores.forEach((score, index) => {
+        assertionsResult.addResult({
+          index,
+          weight: 2,
+          result: {
+            pass: true,
+            score: 1,
+            reason: 'Finite component',
+            namedScores: { quality: score, valid: 0.25 },
+            namedScoreWeights: { quality: weights[index], valid: 1 },
+          },
+        });
+      });
+
+      const result = await assertionsResult.testResult();
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Assertion aggregation error: scores or weights must remain finite',
+        namedScores: { valid: 0.25 },
+        namedScoreWeights: { valid: scores.length * 2 },
+      });
+      expect(result.namedScores).not.toHaveProperty('quality');
+      expect(result.namedScoreWeights).not.toHaveProperty('quality');
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    });
+
+    it.each([0, -1])(
+      'preserves finite named metrics with nonpositive weight %s',
+      async (weight) => {
+        const assertionsResult = new AssertionsResult();
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: true,
+            score: 1,
+            reason: '',
+            namedScores: { quality: 0.75 },
+            namedScoreWeights: { quality: weight },
+          },
+        });
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: true,
+          score: 1,
+          namedScores: { quality: 0 },
+          namedScoreWeights: { quality: weight },
+        });
+      },
+    );
+
+    it('allows custom scoring to replace an intermediate named metric overflow', async () => {
+      const assertionsResult = new AssertionsResult();
+      [Number.MAX_VALUE, -Number.MAX_VALUE, 1].forEach((score, index) => {
+        assertionsResult.addResult({
+          index,
+          result: {
+            pass: true,
+            score: 1,
+            reason: '',
+            namedScores: { quality: score },
+            namedScoreWeights: { quality: 2 },
+          },
+        });
+      });
+      const customResult = {
+        pass: true,
+        score: 0.75,
+        reason: 'Custom',
+        namedScores: { quality: 0.75 },
+        namedScoreWeights: { quality: 1 },
+      };
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+    });
+
+    it('allows a valid custom scoring override to repair an overflow', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: Number.MAX_VALUE, reason: '' },
+        metric: 'quality',
+        weight: 2,
+      });
+      const customResult = {
+        pass: true,
+        score: 2,
+        reason: 'Custom',
+        namedScores: { quality: 0.75 },
+        namedScoreWeights: { quality: 1 },
+      };
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+    });
+
+    it('still rejects invalid inherited metrics after a finite score override', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: Number.MAX_VALUE, reason: '' },
+        metric: 'quality',
+        weight: 2,
+      });
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: false, score: 0, namedScores: {}, namedScoreWeights: {} });
+    });
+
     it('should calculate final result with threshold', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0.7 });
 
@@ -133,6 +659,127 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Aggregate score 0.70 ≥ 0.7 threshold');
     });
 
+    it('should honor a threshold of 0 as an override (never fail on individual assertion failures)', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+
+      // A failing assertion — under the default all-pass logic this fails the test.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Test 1 failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      // A passing assertion.
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Test 2 passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // Aggregate score 0.5 ≥ 0 → the threshold override passes the test. Before the fix
+      // `if (this.threshold)` was falsy for 0, so the override was skipped and the failing
+      // assertion failed the whole test.
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
+    });
+
+    it('should pass at the threshold:0 boundary when every assertion fails (aggregate score 0)', async () => {
+      // The override the fix depends on is `0 >= 0`. With every assertion failing the
+      // aggregate score is exactly 0, which must still pass under threshold:0.
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: false, score: 0, reason: 'failed', tokensUsed: DEFAULT_TOKENS_USED },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Aggregate score 0.00 ≥ 0 threshold');
+    });
+
+    it('should NOT force-pass when the threshold is null (e.g. an empty `threshold:` in YAML)', async () => {
+      // A null/NaN threshold is not a real score requirement. Gating the override on a
+      // numeric threshold keeps `score >= null` (always true) from silently passing every
+      // failing assertion; the default all-pass logic applies instead.
+      const assertionsResult = new AssertionsResult({ threshold: null as unknown as number });
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: false, score: 0, reason: 'Test failed', tokensUsed: DEFAULT_TOKENS_USED },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Test failed');
+    });
+
+    it('should honor an assert-set threshold of 0 (override + threshold survives in metadata)', async () => {
+      // The assert-set path (index.ts) builds an AssertionsResult with a parentAssertionSet,
+      // and flows through the same numeric-threshold override gate. A threshold of 0
+      // must still engage the override here, and `0` must round-trip into the assert-set metadata
+      // (buildAssertionSetMetadata uses `!== undefined`, not a truthy check).
+      const assertionsResult = new AssertionsResult({
+        threshold: 0,
+        parentAssertionSet: {
+          index: 0,
+          assertionSet: {
+            type: 'assert-set',
+            threshold: 0,
+            assert: [
+              { type: 'equals', value: 'Hello world' },
+              { type: 'contains', value: 'world' },
+            ],
+          } as AssertionSet,
+        },
+      });
+
+      // A failing assertion — under the default all-pass logic this fails the assert-set.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'equals failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'contains passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
+      expect(result.metadata?.assertionSet?.threshold).toBe(0);
+    });
+
     it('should handle scoring function', async () => {
       const assertionsResult = new AssertionsResult({});
       const scoringFunction = vi.fn().mockResolvedValue({
@@ -157,6 +804,242 @@ describe('AssertionsResult', () => {
       );
     });
 
+    it('records the named score shapes earlier releases accepted from scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      const scoringFunction = vi.fn().mockResolvedValue({
+        pass: true,
+        score: 0.9,
+        reason: 'Custom scoring',
+        namedScores: { exact_match: true, skipped: null },
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.9,
+        reason: 'Custom scoring',
+        namedScores: { exact_match: 1, skipped: 0 },
+      });
+    });
+
+    it('exposes completion details to typed scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Grading passed',
+          tokensUsed: {
+            total: 12,
+            prompt: 5,
+            completion: 7,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: context?.tokensUsed?.completionDetails?.reasoning ?? 0,
+        reason: 'Reasoning tokens are available',
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).score).toBe(7);
+    });
+
+    it('clears cached provenance when a custom scoring function performs fresh grading', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached component grade',
+          tokensUsed: { total: 0, cached: 97, numRequests: 0 },
+          metadata: { cachedResponse: true },
+        },
+      });
+      const scoringFunction: ScoringFunction = () => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Fresh custom grading',
+        tokensUsed: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(usage).toMatchObject({
+        total: 120,
+        prompt: 15,
+        completion: 8,
+        cached: 97,
+        numRequests: 2,
+      });
+      expect(result.tokensUsed?.incurredTokenUsage).toMatchObject({
+        total: 23,
+        prompt: 15,
+        completion: 8,
+        numRequests: 1,
+      });
+    });
+
+    it.each([
+      {
+        label: 'fresh components and fresh scoring',
+        componentCached: false,
+        scorerCached: false,
+        expectedLogical: { total: 73, prompt: 45, completion: 28, cached: 0, numRequests: 2 },
+      },
+      {
+        label: 'fresh components and cached scoring',
+        componentCached: false,
+        scorerCached: true,
+        expectedLogical: { total: 87, prompt: 52, completion: 35, cached: 37, numRequests: 2 },
+        expectedIncurred: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      },
+      {
+        label: 'cached components and fresh scoring',
+        componentCached: true,
+        scorerCached: false,
+        expectedLogical: { total: 120, prompt: 76, completion: 44, cached: 97, numRequests: 2 },
+        expectedIncurred: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      },
+      {
+        label: 'cached components and cached scoring',
+        componentCached: true,
+        scorerCached: true,
+        expectedLogical: { total: 134, prompt: 83, completion: 51, cached: 134, numRequests: 2 },
+        expectedIncurred: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
+      },
+    ])('accounts for $label without losing or double-counting usage', async (scenario) => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: scenario.componentCached
+            ? { total: 97, prompt: 61, completion: 36, numRequests: 1 }
+            : { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+          ...(scenario.componentCached && { metadata: { cachedResponse: true } }),
+        },
+      });
+      const scoringFunction: ScoringFunction = () => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom scoring result',
+        tokensUsed: scenario.scorerCached
+          ? { total: 37, prompt: 22, completion: 15, numRequests: 1 }
+          : { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+        ...(scenario.scorerCached && { metadata: { cachedResponse: true } }),
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+      const accounting = createEmptyTokenUsage();
+      accumulateGradingTokenUsage(accounting, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse,
+      });
+
+      expect(accounting.assertions).toMatchObject(scenario.expectedLogical);
+      if (scenario.expectedIncurred) {
+        expect(accounting.incurredTokenUsage?.assertions).toMatchObject(scenario.expectedIncurred);
+      } else {
+        expect(accounting.incurredTokenUsage).toBeUndefined();
+      }
+      expect(result.metadata?.cachedResponse).toBe(
+        scenario.componentCached && scenario.scorerCached ? true : undefined,
+      );
+    });
+
+    it('does not double-count component usage returned unchanged by custom scoring', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult(createComponentGrade());
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom score without additional grading',
+        tokensUsed: context?.tokensUsed,
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+      });
+    });
+
+    it.each([
+      {
+        label: 'a shallow copy',
+        copy: (usage: NonNullable<GradingResult['tokensUsed']>) => ({ ...usage }),
+      },
+      {
+        label: 'a serialized copy',
+        copy: (usage: NonNullable<GradingResult['tokensUsed']>) =>
+          JSON.parse(JSON.stringify(usage)) as NonNullable<GradingResult['tokensUsed']>,
+      },
+    ])('does not double-count $label of existing custom-scoring usage', async ({ copy }) => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: {
+            total: 50,
+            prompt: 30,
+            completion: 20,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom score without additional grading',
+        ...(context?.tokensUsed && { tokensUsed: copy(context.tokensUsed) }),
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+        completionDetails: { reasoning: 7 },
+      });
+    });
+
+    it('counts independently graded scoring usage even when token counts match components', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult(createComponentGrade());
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Independent grading happened to use the same token counts',
+        ...(context?.tokensUsed && { tokensUsed: { ...context.tokensUsed } }),
+        metadata: { renderedGradingPrompt: 'Grade the component scores' },
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+      });
+    });
+
     it('should handle scoring function errors', async () => {
       const assertionsResult = new AssertionsResult({});
       const scoringFunction = vi.fn().mockRejectedValue(new Error('Scoring failed'));
@@ -168,33 +1051,187 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Scoring function error: Scoring failed');
     });
 
-    it('should handle failed content safety checks', async () => {
-      const assertionsResult = new AssertionsResult({});
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'contains errors reading custom %s during final inspection',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        let reads = 0;
+        const metrics = {
+          get quality() {
+            if (++reads > 1) {
+              throw new Error('Metric unavailable');
+            }
+            return 0.75;
+          },
+        };
 
-      assertionsResult.addResult({
-        index: 0,
-        result: {
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({
           pass: false,
           score: 0,
-          reason: 'Failed safety check',
-          assertion: {
-            type: 'guardrails',
-            config: {
-              purpose: 'redteam',
-            },
+          reason: 'Assertion aggregation error: unable to read scores or weights',
+          namedScores: {},
+          namedScoreWeights: {},
+        });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+        expect(await assertionsResult.testResult()).toBe(result);
+      },
+    );
+
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'preserves stable getter-backed custom %s',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        const metrics = {
+          get quality() {
+            return 0.75;
           },
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
+        };
 
-      const result = await assertionsResult.testResult();
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          [field]: metrics,
+        }));
 
-      expect(result.pass).toBe(true);
-      expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
-    });
+        expect(result).toMatchObject({ pass: true, score: 0.75 });
+        expect(result[field]).toBe(metrics);
+        expect(result[field]?.quality).toBe(0.75);
+      },
+    );
+
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'reuses inspected %s entries when pruning invalid metrics',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        let reads = 0;
+        const metrics = {
+          get quality() {
+            reads++;
+            if (reads > 2) {
+              throw new Error('Metric already inspected');
+            }
+            return reads === 1 ? 0.75 : Number.NaN;
+          },
+        };
+
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          namedScores: { quality: 0.75 },
+          namedScoreWeights: { quality: 1 },
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: {},
+          namedScoreWeights: {},
+        });
+        expect(reads).toBe(2);
+      },
+    );
+
+    it.each(['Failed safety check', ''])(
+      'should handle failed content safety checks: %j',
+      async (reason) => {
+        const assertionsResult = new AssertionsResult({});
+
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: false,
+            score: 0,
+            reason,
+            assertion: {
+              type: 'guardrails',
+              config: {
+                purpose: 'redteam',
+              },
+            },
+            tokensUsed: DEFAULT_TOKENS_USED,
+          },
+        });
+
+        const result = await assertionsResult.testResult();
+
+        expect(result.pass).toBe(true);
+        expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
+      },
+    );
   });
 
   describe('namedScores weight normalization', () => {
+    it.each(['constructor', 'toString', '__proto__'])(
+      'preserves configured metric %s in ordinary public records',
+      async (metric) => {
+        const assertionsResult = new AssertionsResult({});
+        for (const [index, score, weight] of [
+          [0, 0.25, 1],
+          [1, 0.75, 3],
+        ]) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score, reason: 'Valid score' },
+            metric,
+            weight,
+          });
+        }
+
+        const result = await assertionsResult.testResult((scores) => {
+          expect(Object.getPrototypeOf(scores)).toBe(Object.prototype);
+          expect(Object.hasOwn(scores, metric)).toBe(true);
+          return { pass: true, score: scores[metric], reason: 'Custom score' };
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 0.625 });
+        expect(result.namedScores).toEqual(Object.fromEntries([[metric, 0.625]]));
+        expect(result.namedScoreWeights).toEqual(Object.fromEntries([[metric, 4]]));
+        expect(Object.getPrototypeOf(result.namedScoreWeights)).toBe(Object.prototype);
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each(
+      ['constructor', 'toString', '__proto__'].flatMap((metric) =>
+        [false, true].map((explicitWeight) => ({ metric, explicitWeight })),
+      ),
+    )(
+      'preserves returned metric $metric with explicit weight $explicitWeight',
+      async ({ metric, explicitWeight }) => {
+        const assertionsResult = new AssertionsResult({});
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: true,
+            score: 0.75,
+            reason: 'Valid score',
+            namedScores: Object.fromEntries([[metric, 0.75]]),
+            namedScoreWeights: explicitWeight ? Object.fromEntries([[metric, 3]]) : {},
+          },
+          weight: 2,
+        });
+
+        const result = await assertionsResult.testResult();
+        expect(result).toMatchObject({ pass: true, score: 0.75 });
+        expect(result.namedScores).toEqual(Object.fromEntries([[metric, 0.75]]));
+        expect(result.namedScoreWeights).toEqual(
+          Object.fromEntries([[metric, explicitWeight ? 6 : 2]]),
+        );
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
     it('should normalize a shared metric using assertion weights', async () => {
       const assertionsResult = new AssertionsResult({});
 
@@ -359,11 +1396,33 @@ describe('AssertionsResult', () => {
 
       const result = await assertionsResult.testResult();
 
-      // weight 0: (0.8 * 0) / 0 → 0 (division guarded)
-      expect(result.namedScores!['safety']).toBe(0);
+      // A measurement is retained even when it does not contribute to the aggregate score.
+      expect(result.score).toBe(0);
+      expect(result.namedScores!['safety']).toBe(0.8);
       expect(result.namedScoreWeights).toEqual({
-        safety: 0,
+        safety: 1,
       });
+    });
+
+    it('combines a measurement with weighted assertions sharing its metric', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: 0.2, reason: 'measurement' },
+        metric: 'quality',
+        weight: 0,
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: { pass: true, score: 0.8, reason: 'weighted score' },
+        metric: 'quality',
+        weight: 3,
+      });
+
+      const result = await assertionsResult.testResult();
+      expect(result.score).toBeCloseTo(0.8);
+      expect(result.namedScores?.quality).toBeCloseTo(0.65);
+      expect(result.namedScoreWeights).toEqual({ quality: 4 });
     });
 
     it('should preserve nested namedScoreWeights when merging child named scores', async () => {

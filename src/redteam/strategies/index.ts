@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addArabicPresentationForms } from './arabicPresentationForms';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -12,6 +13,7 @@ import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
+import { addGoblin } from './goblin';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
@@ -31,16 +33,36 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { withPersistableGenerationProvider } from './types';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
 
+function createEncodingStrategy(
+  id: string,
+  label: string,
+  encoding: (() => typeof addBase64Encoding) | keyof typeof EncodingType,
+): Strategy {
+  return {
+    id,
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding ${label} encoding to ${testCases.length} test cases`);
+      const newTestCases =
+        typeof encoding === 'function'
+          ? encoding()(testCases, injectVar)
+          : addOtherEncodings(testCases, injectVar, EncodingType[encoding]);
+      logger.debug(`Added ${newTestCases.length} ${label} encoded test cases`);
+      return newTestCases;
+    },
+  };
+}
+
 export const Strategies: Strategy[] = [
   {
     id: 'layer',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Layer strategy to ${testCases.length} test cases`);
       const newTestCases = await addLayerTestCases(
         testCases,
@@ -48,29 +70,19 @@ export const Strategies: Strategy[] = [
         config,
         Strategies,
         loadStrategy,
+        runtimeContext,
       );
       logger.debug(`Added ${newTestCases.length} Layer test cases`);
       return newTestCases;
     },
   },
-  {
-    id: 'base64',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
-      const newTestCases = addBase64Encoding(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'homoglyph',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Homoglyph encoding to ${testCases.length} test cases`);
-      const newTestCases = addHomoglyphs(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Homoglyph encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('base64', 'Base64', () => addBase64Encoding),
+  createEncodingStrategy('homoglyph', 'Homoglyph', () => addHomoglyphs),
+  createEncodingStrategy(
+    'arabic-presentation-forms',
+    'Arabic presentation forms',
+    () => addArabicPresentationForms,
+  ),
   {
     id: 'basic',
     action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
@@ -90,9 +102,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'citation',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Citation to ${testCases.length} test cases`);
-      const newTestCases = await addCitationTestCases(testCases, injectVar, config);
+      const newTestCases = await addCitationTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} Citation test cases`);
       return newTestCases;
     },
@@ -100,9 +112,13 @@ export const Strategies: Strategy[] = [
   {
     id: 'crescendo',
     requiresGoalExtraction: true,
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
-      const newTestCases = addCrescendo(testCases, injectVar, config);
+      const newTestCases = addCrescendo(
+        testCases,
+        injectVar,
+        withPersistableGenerationProvider(config, runtimeContext),
+      );
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
       return newTestCases;
     },
@@ -110,18 +126,23 @@ export const Strategies: Strategy[] = [
   {
     id: 'custom',
     requiresGoalExtraction: true,
-    action: async (testCases, injectVar, config, strategyId = 'custom') => {
+    action: async (testCases, injectVar, config, strategyId = 'custom', runtimeContext) => {
       logger.debug(`Adding Custom to ${testCases.length} test cases`);
-      const newTestCases = addCustom(testCases, injectVar, config, strategyId);
+      const newTestCases = addCustom(
+        testCases,
+        injectVar,
+        withPersistableGenerationProvider(config, runtimeContext),
+        strategyId,
+      );
       logger.debug(`Added ${newTestCases.length} Custom test cases`);
       return newTestCases;
     },
   },
   {
     id: 'gcg',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
-      const newTestCases = await addGcgTestCases(testCases, injectVar, config);
+      const newTestCases = await addGcgTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} GCG test cases`);
       return newTestCases;
     },
@@ -168,15 +189,7 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
-  {
-    id: 'hex',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
-      const newTestCases = addHexEncoding(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('hex', 'Hex', () => addHexEncoding),
   {
     // Deprecated: Use 'jailbreak:meta' instead. This alias exists for backward compatibility.
     id: 'jailbreak',
@@ -194,18 +207,23 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:composite',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
-      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
+      const newTestCases = await addCompositeTestCases(
+        testCases,
+        injectVar,
+        config,
+        runtimeContext,
+      );
       logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
       return newTestCases;
     },
   },
   {
     id: 'jailbreak:likert',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Likert scale jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = await addLikertTestCases(testCases, injectVar, config);
+      const newTestCases = await addLikertTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} Likert scale jailbreak test cases`);
       return newTestCases;
     },
@@ -213,9 +231,14 @@ export const Strategies: Strategy[] = [
   {
     id: 'jailbreak:tree',
     requiresGoalExtraction: true,
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
+      const newTestCases = addIterativeJailbreaks(
+        testCases,
+        injectVar,
+        'iterative:tree',
+        withPersistableGenerationProvider(config, runtimeContext),
+      );
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
       return newTestCases;
     },
@@ -237,6 +260,16 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addHydra(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} hydra jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:goblin',
+    requiresGoalExtraction: true,
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding goblin multi-turn jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addGoblin(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} goblin jailbreak test cases`);
       return newTestCases;
     },
   },
@@ -278,9 +311,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'math-prompt',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding MathPrompt encoding to ${testCases.length} test cases`);
-      const newTestCases = await addMathPrompt(testCases, injectVar, config);
+      const newTestCases = await addMathPrompt(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
       return newTestCases;
     },
@@ -315,15 +348,7 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
-  {
-    id: 'rot13',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
-      const newTestCases = addRot13(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('rot13', 'ROT13', () => addRot13),
   {
     // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
@@ -331,42 +356,10 @@ export const Strategies: Strategy[] = [
       return addSimbaTestCases(testCases, injectVar, config);
     },
   },
-  {
-    id: 'morse',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Morse code encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.MORSE);
-      logger.debug(`Added ${newTestCases.length} Morse code encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'piglatin',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Pig Latin encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.PIG_LATIN);
-      logger.debug(`Added ${newTestCases.length} Pig Latin encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'camelcase',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding camelCase encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.CAMEL_CASE);
-      logger.debug(`Added ${newTestCases.length} camelCase encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'emoji',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding emoji encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.EMOJI);
-      logger.debug(`Added ${newTestCases.length} emoji encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('morse', 'Morse code', 'MORSE'),
+  createEncodingStrategy('piglatin', 'Pig Latin', 'PIG_LATIN'),
+  createEncodingStrategy('camelcase', 'camelCase', 'CAMEL_CASE'),
+  createEncodingStrategy('emoji', 'emoji', 'EMOJI'),
 ];
 
 export async function validateStrategies(strategies: RedteamStrategyObject[]): Promise<void> {

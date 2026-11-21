@@ -1,6 +1,6 @@
 import { RenderResult, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
@@ -84,14 +84,17 @@ function renderWithProviders({
   showDatasetColumn?: boolean;
 }): RenderResult {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <Prompts
-        data={data}
-        isLoading={isLoading}
-        error={error}
-        showDatasetColumn={showDatasetColumn}
-      />
-    </MemoryRouter>,
+    <Prompts
+      data={data}
+      isLoading={isLoading}
+      error={error}
+      showDatasetColumn={showDatasetColumn}
+    />,
+    {
+      wrapper: ({ children }) => (
+        <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+      ),
+    },
   );
 }
 
@@ -107,9 +110,9 @@ describe('Prompts', () => {
     expect(screen.getAllByText('This is the second sample prompt.').length).toBeGreaterThan(0);
   });
 
-  it('should display a DataGrid with the provided data and open the PromptDialog with the correct prompt details when a row is clicked', async () => {
+  it('opens the clicked prompt and clears its selection when that row disappears', async () => {
     const user = userEvent.setup();
-    renderWithProviders({ data: mockPrompts });
+    const { rerender } = renderWithProviders({ data: mockPrompts });
 
     // Text appears in both label and prompt columns
     expect(screen.getAllByText('This is the first sample prompt.').length).toBeGreaterThan(0);
@@ -126,6 +129,11 @@ describe('Prompts', () => {
     expect(within(dialog).getByText('Prompt Details')).toBeInTheDocument();
     expect(within(dialog).getByText('This is the second sample prompt.')).toBeInTheDocument();
     expect(within(dialog).queryByText('This is the first sample prompt.')).not.toBeInTheDocument();
+
+    rerender(<Prompts data={mockPrompts.slice(0, 1)} isLoading={false} error={null} />);
+    expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
+    rerender(<Prompts data={mockPrompts} isLoading={false} error={null} />);
+    expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
   });
 
   it('should open the PromptDialog with the correct prompt details when a later virtualized row is clicked', async () => {
@@ -212,28 +220,6 @@ describe('Prompts', () => {
     await user.click(closeButton);
 
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
-  });
-
-  it('should not call handleClickOpen if the prompt ID is not found in the data array', () => {
-    const handleClickOpenMock = vi.fn();
-
-    renderWithProviders({ data: mockPrompts });
-
-    const nonexistentId = 'prompt:nonexistent';
-
-    const promptCells = screen.getAllByText('This is the first sample prompt.');
-    const promptsComponent = promptCells[0].closest('[data-rowid]');
-    if (promptsComponent) {
-      const handleRowClick = () => {
-        const index = mockPrompts.findIndex((p) => p.id === nonexistentId);
-        if (index !== -1) {
-          handleClickOpenMock(index);
-        }
-      };
-      handleRowClick();
-    }
-
-    expect(handleClickOpenMock).not.toHaveBeenCalled();
   });
 
   it('should render correctly in dark mode', () => {

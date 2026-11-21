@@ -38,7 +38,7 @@ ATLAS currently organizes adversarial ML techniques into these tactics. Promptfo
 
 ## Scanning for MITRE ATLAS Threats
 
-Promptfoo helps identify ATLAS-aligned vulnerabilities through comprehensive red teaming. To set up ATLAS scanning through the Promptfoo UI, select the MITRE ATLAS option or configure it directly:
+Promptfoo maps red team findings to ATLAS tactics and techniques. To set up ATLAS scanning through the Promptfoo UI, select the MITRE ATLAS option or configure it directly:
 
 ```yaml
 redteam:
@@ -46,7 +46,7 @@ redteam:
     - mitre:atlas
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or target specific tactics:
@@ -173,6 +173,8 @@ redteam:
   plugins:
     - debug-access
     - harmful:cybercrime
+    - indirect-prompt-injection
+    - mcp
     - shell-injection
     - sql-injection
     - ssrf
@@ -180,7 +182,7 @@ redteam:
     - base64
     - jailbreak
     - leetspeak
-    - prompt-injection
+    - jailbreak-templates
     - rot13
 ```
 
@@ -296,7 +298,7 @@ Attackers create impact by:
 - Generating harmful or inappropriate content
 - Impersonating brands or individuals
 - Causing the system to take unauthorized actions
-- Using sophisticated multi-turn attacks
+- Using multi-turn attacks
 
 ### Testing Strategy
 
@@ -330,7 +332,7 @@ redteam:
 
 ## Comprehensive MITRE ATLAS Testing
 
-For complete MITRE ATLAS threat coverage across all tactics:
+To run the MITRE ATLAS preset with multiple languages and strategies:
 
 ```yaml
 redteam:
@@ -339,12 +341,12 @@ redteam:
     - mitre:atlas
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - base64
     - rot13
 ```
 
-This configuration tests your AI system against all MITRE ATLAS tactics, providing comprehensive adversarial threat assessment.
+This configuration runs the checks included in the MITRE ATLAS preset.
 
 ## MITRE ATLAS vs MITRE ATT&CK
 
@@ -381,7 +383,7 @@ redteam:
     - nist:ai:measure
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## Best Practices for ATLAS-Based Red Teaming
@@ -410,9 +412,9 @@ Promptfoo's plugins map to these specific ATLAS techniques, enabling targeted te
 
 ## What's Next
 
-MITRE ATLAS is actively maintained and updated with new techniques as the threat landscape evolves. Regular testing with Promptfoo helps ensure your LLM applications remain protected against documented adversarial ML tactics.
+Review findings against the ATLAS techniques relevant to your application and rerun tests after changes.
 
-To learn more about setting up comprehensive AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
+To learn more about setting up AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
 
 ## Additional Resources
 

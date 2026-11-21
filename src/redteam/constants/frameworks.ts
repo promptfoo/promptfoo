@@ -63,16 +63,6 @@ export const OWASP_AGENTIC_NAMES = [
   'ASI10: Rogue Agents',
 ];
 
-export const GDPR_ARTICLE_NAMES = [
-  'Principles of Processing Personal Data',
-  'Special Categories of Personal Data',
-  'Right of Access',
-  'Right to Erasure',
-  'Automated Decision-Making',
-  'Data Protection by Design',
-  'Security of Processing',
-];
-
 export const DOD_AI_ETHICS_PRINCIPLE_NAMES = [
   'Responsible',
   'Equitable',

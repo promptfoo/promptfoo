@@ -1,3 +1,5 @@
+import { createAccuracyFilter, createMixedResultOptions } from '../../factories/literalFixtures';
+import { setupTestServer } from '../../util/testServer';
 /**
  * Integration tests for GET /api/eval/:id/table with filtered metrics.
  *
@@ -8,49 +10,19 @@
  * 4. Handles errors gracefully
  */
 
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
+import { clearEvalTables } from '../../util/evalDb';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
+  const api = setupTestServer(createApp, runDbMigrations);
 
-  beforeAll(async () => {
-    await runDbMigrations();
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
-
-  beforeEach(async () => {
-    const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-
-    // Reset mocks
-    vi.resetAllMocks();
-  });
+  // Reset mocks after clearing eval tables
+  beforeEach(() => clearEvalTables(() => vi.resetAllMocks()));
 
   afterEach(() => {
     vi.resetAllMocks();
@@ -58,10 +30,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Filtered metrics behavior', () => {
     it('should include filteredMetrics when filters are active', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
@@ -88,10 +57,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     });
 
     it('should NOT include filteredMetrics when NO filters are active', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'all' }); // No filters
 
@@ -102,10 +68,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Filter detection', () => {
     it('should detect filterMode as active filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'passes' });
 
@@ -134,12 +97,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       });
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({
-        filter: JSON.stringify({
-          logicOperator: 'and',
-          type: 'metric',
-          operator: 'equals',
-          value: 'accuracy',
-        }),
+        filter: JSON.stringify(createAccuracyFilter()),
       });
 
       expect(response.status).toBe(200);
@@ -157,12 +115,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({
         filterMode: 'failures',
         search: 'searchable',
-        filter: JSON.stringify({
-          logicOperator: 'and',
-          type: 'metric',
-          operator: 'equals',
-          value: 'accuracy',
-        }),
+        filter: JSON.stringify(createAccuracyFilter()),
       });
 
       expect(response.status).toBe(200);
@@ -172,10 +125,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Metrics correctness', () => {
     it('should return correct metrics for error filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 15,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(15));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
@@ -189,10 +139,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     });
 
     it('should return correct metrics for failure filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 15,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(15));
 
       const response = await api
         .get(`/api/eval/${eval_.id}/table`)
@@ -208,10 +155,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     });
 
     it('should return correct metrics for pass filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 15,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(15));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'passes' });
 
@@ -255,14 +199,11 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     });
 
     it('should return empty metrics when no results match filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       // Delete all results to test empty dataset handling
-      const db = getDb();
-      await db.run(`DELETE FROM eval_results WHERE eval_id = '${eval_.id}'`);
+      const db = await getDb();
+      await db.run(sql`DELETE FROM eval_results WHERE eval_id = ${eval_.id}`);
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
@@ -282,10 +223,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     });
 
     it('should validate filteredMetrics array length matches prompts array length', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
@@ -300,10 +238,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Response structure', () => {
     it('should include all required fields in response', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
@@ -321,10 +256,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     });
 
     it('should preserve existing behavior for export formats', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(10));
 
       // CSV export should not include filteredMetrics
       const csvResponse = await api
@@ -372,15 +304,9 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Comparison mode', () => {
     it('should include filteredMetrics for base eval even when comparison evals are present', async () => {
-      const eval1 = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval1 = await EvalFactory.create(createMixedResultOptions(10));
 
-      const eval2 = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval2 = await EvalFactory.create(createMixedResultOptions(10));
 
       const response = await api.get(`/api/eval/${eval1.id}/table`).query({
         filterMode: 'passes',

@@ -3,6 +3,7 @@ import * as cache from './cache';
 import guardrails from './guardrails';
 import { evaluate } from './node';
 import { loadApiProvider, loadApiProviders } from './providers/index';
+import { getModelPricing } from './providers/pricing';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
@@ -15,8 +16,7 @@ import { Strategies } from './redteam/strategies/index';
 
 import type { RedteamRunOptions } from './redteam/types';
 
-export { EvalRunError } from './commands/eval';
-export { PromptSuggestionsRejectedError } from './evaluator';
+export { EvalRunError, PromptSuggestionsRejectedError } from './evaluator/errors';
 export { EmailValidationError } from './globalConfig/accounts';
 export { ServerError, type ServerErrorPhase } from './server/errors';
 export { generateTable } from './table';
@@ -35,6 +35,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+export type { ModelPricing } from './providers/pricing';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource'>;
@@ -60,12 +61,22 @@ const redteam = {
   run: runRedteam,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
+export {
+  assertions,
+  cache,
+  evaluate,
+  getModelPricing,
+  guardrails,
+  loadApiProvider,
+  loadApiProviders,
+  redteam,
+};
 
 export default {
   assertions,
   cache,
   evaluate,
+  getModelPricing,
   guardrails,
   loadApiProvider,
   loadApiProviders,

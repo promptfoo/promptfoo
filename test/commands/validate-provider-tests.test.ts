@@ -2,13 +2,15 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
+import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
-import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';
+
+const { createUuidModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
 
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
@@ -16,7 +18,7 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
   resolveConfigs: vi.fn(),
 }));
 vi.mock('../../src/providers/index');
-vi.mock('../../src/validators/testProvider');
+vi.mock('../../src/node/testProvider');
 vi.mock('../../src/util/cloud');
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -24,13 +26,7 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('../../src/util/uuid', () => ({
-  isUuid: vi.fn((str: string) => {
-    // Check if the string looks like a UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }),
-}));
+vi.mock('../../src/util/uuid', createUuidModuleFactory());
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -127,6 +123,79 @@ describe('Validate Command Provider Tests', () => {
       );
     });
 
+    it('should display connectivity suggestions and transformed request details', async () => {
+      const mockStatelessHttpProvider = createMockProvider({
+        id: 'http://example.com',
+        config: { stateful: false },
+      });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockStatelessHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: false,
+        message: 'Configuration needs changes',
+        providerResponse: { output: 'test' },
+        transformedRequest: {
+          url: 'http://example.com/api',
+          method: 'POST',
+        },
+        analysis: {
+          changes_needed: true,
+          changes_needed_reason: 'Response format needs changes',
+          changes_needed_suggestions: ['Add transformResponse'],
+        },
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Response format needs changes'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Add transformResponse'));
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('URL: http://example.com/api'),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Method: POST'));
+    });
+
+    it('should ignore malformed connectivity suggestions', async () => {
+      const mockStatelessHttpProvider = createMockProvider({
+        id: 'http://example.com',
+        config: { stateful: false },
+      });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockStatelessHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: false,
+        message: 'Configuration needs changes',
+        analysis: {
+          changes_needed: true,
+          changes_needed_suggestions: 'Add transformResponse' as unknown as string[],
+        },
+      });
+
+      await expect(
+        doValidateTarget({ target: 'http://example.com' }, defaultConfig),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should display the reason for a failed session test', async () => {
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
+        success: true,
+        message: 'Connectivity test passed',
+      });
+      vi.mocked(testProviderSession).mockResolvedValue({
+        success: false,
+        message: 'Session test failed',
+        reason: 'The target did not preserve context',
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Reason: The target did not preserve context'),
+      );
+    });
+
     it('should skip session test when target is not stateful (stateful=false)', async () => {
       const mockNonStatefulHttpProvider = createMockProvider({
         id: 'http://example.com',
@@ -166,6 +235,21 @@ describe('Validate Command Provider Tests', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     });
 
+    it('should not mark an exact 100-character serialized response as truncated', async () => {
+      const output = 'x'.repeat(98);
+      expect(JSON.stringify(output)).toHaveLength(100);
+      mockEchoProvider.callApi.mockResolvedValue({ output });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
+
+      const responseLog = vi
+        .mocked(logger.info)
+        .mock.calls.find(([message]) => String(message).includes('Response:'));
+      expect(responseLog?.[0]).toContain(JSON.stringify(output));
+      expect(responseLog?.[0]).not.toContain('...');
+    });
+
     it('should load cloud provider when -t flag is UUID', async () => {
       const cloudUUID = '12345678-1234-1234-1234-123456789abc';
       const mockProviderOptions = {
@@ -178,7 +262,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID, {});
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
@@ -358,7 +442,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID, {});
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
@@ -395,6 +479,28 @@ describe('Validate Command Provider Tests', () => {
       expect(process.exitCode).toBe(1);
       expect(loadApiProvider).not.toHaveBeenCalled();
       expect(loadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('should reload config providers with the string env values of the resolved suite', async () => {
+      // A config can give env values as numbers or booleans, which providers that call
+      // string methods on them, as OpenClaw does on its gateway port, cannot take.
+      const suiteEnv = { OPENCLAW_GATEWAY_PORT: '18789', FEATURE_FLAG: 'true' };
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: {
+          env: { OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true },
+          providers: ['echo'],
+        } as unknown as UnifiedConfig,
+        testSuite: { prompts: [], providers: [], env: suiteEnv },
+        basePath: '',
+      });
+      vi.mocked(loadApiProviders).mockResolvedValue([]);
+
+      await doValidateTarget({ config: 'config.yaml' }, defaultConfig);
+
+      expect(loadApiProviders).toHaveBeenCalledWith(
+        ['echo'],
+        expect.objectContaining({ env: suiteEnv }),
+      );
     });
 
     it('should set exitCode 1 when loading config fails', async () => {

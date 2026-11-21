@@ -139,8 +139,8 @@ Factuality evaluation is especially useful for comparing how different models pe
 providers:
   - openai:gpt-5-mini
   - openai:gpt-5
-  - anthropic:claude-sonnet-4-6
-  - google:gemini-2.0-flash
+  - anthropic:claude-sonnet-5
+  - google:gemini-3.5-flash-lite
 prompts:
   - |
     Question: What is the capital of {{location}}?
@@ -160,7 +160,7 @@ tests:
 
 ## Evaluating On External Datasets
 
-For comprehensive evaluation, you can run factuality tests against external datasets like TruthfulQA, which we covered in the Quick Start section.
+You can also run factuality tests against external datasets such as TruthfulQA, shown in the Quick Start section.
 
 ### Creating Your Own Dataset Integration
 
@@ -176,7 +176,7 @@ tests: file://your_dataset_loader.ts:generate_tests
 
 ## Crafting Effective Reference Answers
 
-The quality of your reference answers is crucial for accurate factuality evaluation. Here are specific guidelines:
+Factuality scores depend on the reference answers. Choose references that meet these criteria:
 
 ### What makes a good reference answer?
 
@@ -222,7 +222,7 @@ You can also override it per assertion:
 assert:
   - type: factuality
     value: The capital of California is Sacramento
-    provider: anthropic:claude-sonnet-4-6
+    provider: anthropic:claude-sonnet-5
 ```
 
 Or via the command line:
@@ -257,7 +257,7 @@ By default, promptfoo uses a simple binary scoring system:
 
 - Decrease `superset` if you're concerned about models adding potentially incorrect information
 - Reduce `differButFactual` if precision in wording is important for your application
-- Adjust `subset` downward if comprehensive answers are required
+- Adjust `subset` downward if complete answers are required
 
 A score of 0 means fail, while any positive score is considered passing. The score values can be used for ranking and comparing model outputs.
 
@@ -315,7 +315,7 @@ The factuality checker supports two response formats:
 
 When setting up factuality evaluations:
 
-1. **Choose reference answers carefully**: They should be accurate, clear, and comprehensive
+1. **Choose reference answers carefully**: They should be accurate, clear, and complete
 2. **Consider multiple providers**: Different models may excel at different types of factual knowledge
 3. **Customize scoring weights**: Adjust based on your application's tolerance for different types of factual issues
 4. **Use a strong grader**: More capable models generally provide more reliable factuality assessments

@@ -8,15 +8,6 @@ export const getSeverityLabel = (severity: string): string => {
 };
 
 /**
- * Maps display labels back to internal severity values
- * @param label - The display label
- * @returns The internal severity value
- */
-export const getSeverityValue = (label: string): string => {
-  return label === 'critical' ? 'error' : label;
-};
-
-/**
  * Strips position information from a file path
  * @param filePath - The file path that may contain position info
  * @returns The file path without position information
@@ -64,28 +55,6 @@ export const getIssueFilePath = (issue: {
  */
 export const isCriticalSeverity = (severity: string): boolean => {
   return severity === 'critical' || severity === 'error';
-};
-
-/**
- * Maps severity for filtering purposes, handling the critical/error equivalence
- * @param selectedSeverity - The selected severity filter
- * @param issueSeverity - The issue's severity level
- * @returns True if the issue matches the filter
- */
-export const mapSeverityForFiltering = (
-  selectedSeverity: string | null,
-  issueSeverity: string,
-): boolean => {
-  if (!selectedSeverity) {
-    return true;
-  }
-
-  // Handle critical/error mapping
-  if (selectedSeverity === 'error') {
-    return isCriticalSeverity(issueSeverity);
-  }
-
-  return issueSeverity === selectedSeverity;
 };
 
 export const hasModelAuditFindings = (results: {

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { createMockProvider } from '../../factories/provider';
 
@@ -28,6 +29,7 @@ vi.mock('../../../src/cache', () => ({
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.com'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
 }));
 
 vi.mock('../../../src/database', async (importOriginal) => {
@@ -59,7 +61,7 @@ vi.mock('glob', async (importOriginal) => {
   };
 });
 
-vi.mock('better-sqlite3');
+vi.mock('libsql');
 
 describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();
@@ -69,9 +71,15 @@ describe('IntentPlugin', () => {
   });
 
   it('should initialize with a single string intent and extract intent goal', async () => {
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
-      intent: 'View order details belonging to Jane Smith while authenticated as John Doe',
-    });
+    const plugin = new IntentPlugin(
+      mockProvider,
+      'test-purpose',
+      'prompt',
+      {
+        intent: 'View order details belonging to Jane Smith while authenticated as John Doe',
+      },
+      'cloud-target-123',
+    );
 
     const tests = await plugin.generateTests(1, 0);
     expect(tests).toHaveLength(1);
@@ -81,6 +89,10 @@ describe('IntentPlugin', () => {
     );
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
+    const requestBody = JSON.parse(
+      (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(requestBody.targetId).toBe('cloud-target-123');
   });
 
   it('should initialize with an array of string intents', async () => {
@@ -94,6 +106,33 @@ describe('IntentPlugin', () => {
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
+  });
+
+  it('accounts for every remote intent extraction exactly once', async () => {
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { intent: 'First goal', tokenUsage: { total: 9, prompt: 6, completion: 3 } },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      })
+      .mockResolvedValueOnce({
+        data: { intent: 'Second goal', tokenUsage: { total: 11, prompt: 7, completion: 4 } },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+    const usage = {};
+    const plugin = new IntentPlugin(
+      trackGenerationTokenUsage(mockProvider, usage),
+      'test-purpose',
+      'prompt',
+      { intent: ['intent1', 'intent2'] },
+    );
+
+    await plugin.generateTests(1, 0);
+
+    expect(usage).toMatchObject({ total: 20, prompt: 13, completion: 7, numRequests: 2 });
   });
 
   it('should initialize with a list of list of strings', async () => {
@@ -127,9 +166,7 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a CSV file', async () => {
     const mockFileContent = 'header\nintent1\nintent2\nintent3';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -149,9 +186,7 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a JSON file', async () => {
     const mockFileContent = '["intent1","intent2","intent3"]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -170,9 +205,7 @@ describe('IntentPlugin', () => {
 
   it('should load nested intent arrays from a JSON file', async () => {
     const mockFileContent = '[["step1", "step2"], ["other1", "other2"]]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -202,9 +235,7 @@ describe('IntentPlugin', () => {
 
   it('should handle empty JSON array', async () => {
     const mockFileContent = '[]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -220,9 +251,7 @@ describe('IntentPlugin', () => {
 
   it('should handle mixed string and array intents in JSON', async () => {
     const mockFileContent = '["single_intent", ["multi", "step"], "another_single"]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -256,9 +285,7 @@ describe('IntentPlugin', () => {
 
   it('should throw error for malformed JSON file', () => {
     const mockFileContent = '["invalid", json}';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });

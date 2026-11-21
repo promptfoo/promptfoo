@@ -1,9 +1,13 @@
-import dotenv from 'dotenv';
-import { getEnvOverrides } from './envOverrides';
+import {
+  getEnvOverridesProvider,
+  getExplicitProviderEnv,
+  getProviderEnvOverrides,
+} from './envOverrides';
+import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 // Define the supported environment variables and their types
 type EnvVars = {
@@ -20,7 +24,17 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
+  /**
+   * Disables the path-traversal guard applied to `file://` callback
+   * references (e.g. `functionToolCallbacks`). When unset (default), callback
+   * paths must resolve inside the config's basePath. Setting this to `true`
+   * restores the legacy unguarded behavior — NOT recommended outside of
+   * legacy compatibility scenarios.
+   */
+  PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
+  /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
+  PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
   PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
@@ -56,7 +70,14 @@ type EnvVars = {
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
+  PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
+  /**
+   * Disables dynamic inline JavaScript execution in transforms and assertions.
+   * Requires pointing to dedicated script files instead (file://...).
+   */
+  PROMPTFOO_SAFE_MODE?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
@@ -107,6 +128,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
@@ -210,16 +232,17 @@ type EnvVars = {
   // Continuous Integration
   //=========================================================================
   APPVEYOR?: boolean;
-  BITBUCKET_COMMIT?: boolean;
+  BITBUCKET_COMMIT?: string;
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   CI?: boolean;
   CIRCLECI?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
+  CODEBUILD_BUILD_ID?: string;
   GITHUB_ACTIONS?: boolean;
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
-  TEAMCITY_VERSION?: boolean;
+  JENKINS_URL?: string;
+  TEAMCITY_VERSION?: string;
   TF_BUILD?: boolean;
   TRAVIS?: boolean;
 
@@ -234,11 +257,15 @@ type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
-  // AIML API
   AIML_API_KEY?: string;
+
+  NOVITA_API_KEY?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
@@ -247,6 +274,7 @@ type EnvVars = {
   ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
+  AWS_ACCESS_KEY_ID?: string;
   AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
@@ -258,6 +286,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  AWS_DEFAULT_REGION?: string;
+  AWS_PROFILE?: string;
+  AWS_REGION?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_SESSION_TOKEN?: string;
 
   // AWS Bedrock Agents
   AWS_BEDROCK_AGENT_ID?: string;
@@ -322,6 +355,7 @@ type EnvVars = {
   HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -336,15 +370,31 @@ type EnvVars = {
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
 
+  // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
+  MODEL_API_KEY?: string;
+
   // Mistral
   MISTRAL_MAX_TOKENS?: string;
   MISTRAL_TEMPERATURE?: string;
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // MiniMax
+  MINIMAX_API_KEY?: string;
+
+  // Moonshot AI (Kimi)
+  MOONSHOT_API_KEY?: string;
+
+  // n8n
+  N8N_API_KEY?: string;
+
   // Nscale
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;
+
+  // NVIDIA NIM (hosted inference)
+  NVIDIA_API_BASE_URL?: string;
+  NVIDIA_API_KEY?: string;
 
   // Ollama
   OLLAMA_API_KEY?: string;
@@ -378,6 +428,9 @@ type EnvVars = {
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;
+
+  // OrcaRouter
+  ORCAROUTER_API_KEY?: string;
 
   // Portkey
   PORTKEY_API_BASE_URL?: string;
@@ -413,6 +466,9 @@ type EnvVars = {
   // TrueFoundry
   TRUEFOUNDRY_API_KEY?: string;
 
+  // TypeSafe
+  TYPESAFE_API_KEY?: string;
+
   // Vertex AI
   VERTEX_API_VERSION?: string;
 
@@ -439,6 +495,45 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Read explicit, registered, then retained provider values without consulting process.env. */
+export function getProviderEnvString(
+  env: EnvOverrides | undefined,
+  key: EnvVarKey,
+): string | undefined {
+  for (const layer of [getExplicitProviderEnv(env), getEnvOverrides('provider'), env]) {
+    if (layer && Object.prototype.hasOwnProperty.call(layer, key)) {
+      const value = layer[key as keyof EnvOverrides];
+      if (value !== undefined) {
+        return String(value);
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
+export function getEnvOverrides(
+  layer: 'suite' | 'file' | 'provider' = 'suite',
+): EnvOverrides | undefined {
+  try {
+    return layer === 'provider' ? getProviderEnvOverrides() : getEnvOverridesProvider()?.(layer);
+  } catch {
+    // All environment reads must still fall back normally when registration fails.
+    return undefined;
+  }
+}
+
+/** Environment inherited by child processes, including invocation-local file values. */
+export function getProcessEnv(): NodeJS.ProcessEnv {
+  const fileEnv = getEnvOverrides('file');
+  return fileEnv
+    ? {
+        ...process.env,
+        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+      }
+    : process.env;
+}
+
 /**
  * Get an environment variable.
  * @param key The name of the environment variable.
@@ -448,16 +543,15 @@ export type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  const envOverrides = getEnvOverrides();
-  if (envOverrides) {
-    const envValue = envOverrides[key as string];
+  // Keep provider values out of the template and subprocess environment layers.
+  for (const layer of ['provider', 'suite'] as const) {
+    const envValue = getEnvOverrides(layer)?.[key as string];
     if (envValue !== undefined) {
       return String(envValue);
     }
   }
 
-  // Fallback to process.env
-  const value = process.env[key as string];
+  const value = getEnvOverrides('file')?.[key as string] ?? process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -471,7 +565,11 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvString(key) || defaultValue;
+  return parseEnvBool(getEnvString(key), defaultValue);
+}
+
+export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
+  const value = input || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -479,6 +577,17 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
     return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   }
   return Boolean(defaultValue);
+}
+
+/** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */
+export function isTemplateProcessEnvDisabled(): boolean {
+  const disabled = (env: Record<string, string | undefined>) =>
+    parseEnvBool(env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS, parseEnvBool(env.PROMPTFOO_SELF_HOSTED));
+  return (
+    disabled(process.env) ||
+    disabled(getEnvOverrides('file') ?? {}) ||
+    disabled(getEnvOverrides() ?? {})
+  );
 }
 
 /**
@@ -546,20 +655,26 @@ export function getMaxEvalTimeMs(defaultValue: number = 0): number {
  * @returns True if running in a CI environment, false otherwise.
  */
 export function isCI() {
+  const hasIdentifier = (key: EnvVarKey) => {
+    const value = getEnvString(key);
+    // Keep explicit false/0 opt-outs while accepting build IDs, versions and URLs.
+    return Boolean(value && !['false', '0'].includes(value.toLowerCase()));
+  };
   return (
     getEnvBool('CI') ||
     getEnvBool('GITHUB_ACTIONS') ||
     getEnvBool('TRAVIS') ||
     getEnvBool('CIRCLECI') ||
     getEnvBool('JENKINS') ||
+    hasIdentifier('JENKINS_URL') ||
     getEnvBool('GITLAB_CI') ||
     getEnvBool('APPVEYOR') ||
-    getEnvBool('CODEBUILD_BUILD_ID') ||
+    hasIdentifier('CODEBUILD_BUILD_ID') ||
     getEnvBool('TF_BUILD') ||
-    getEnvBool('BITBUCKET_COMMIT') ||
+    hasIdentifier('BITBUCKET_COMMIT') ||
     getEnvBool('BUDDY') ||
     getEnvBool('BUILDKITE') ||
-    getEnvBool('TEAMCITY_VERSION')
+    hasIdentifier('TEAMCITY_VERSION')
   );
 }
 
@@ -570,4 +685,12 @@ export function isCI() {
  */
 export function isNonInteractive() {
   return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
+}
+
+export function parseEnvFloat(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
