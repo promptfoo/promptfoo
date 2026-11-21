@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
+import logger from '../../src/logger';
 import {
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
@@ -74,6 +75,55 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result).toEqual({ output: ['test output'] });
   });
 
+  it('should not log harmful generation request content', async () => {
+    vi.mocked(getEnvString).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT'
+        ? 'https://user:secret-endpoint-password@example.com/secret-path-sentinel?token=secret-query-sentinel'
+        : '';
+    });
+    provider = new PromptfooHarmfulCompletionProvider({
+      ...options,
+      purpose: 'secret-purpose-sentinel',
+      config: {
+        'secret-config-key-sentinel': 'secret-config-sentinel',
+      } as any,
+    });
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    try {
+      await provider.callApi('test prompt');
+
+      const debugCall = debugSpy.mock.calls.find(
+        ([message]) => message === '[HarmfulCompletionProvider] Calling generate harmful API',
+      );
+      expect(debugCall?.[1]).toEqual(
+        expect.objectContaining({
+          purposeLength: 'secret-purpose-sentinel'.length,
+          configKeyCount: 1,
+          remoteGenerationProtocol: 'https',
+          remoteGenerationHost: 'example.com',
+          hasRemoteGenerationQuery: true,
+        }),
+      );
+
+      const loggedContext = JSON.stringify(debugCall?.[1]);
+      expect(loggedContext).not.toContain('secret-purpose-sentinel');
+      expect(loggedContext).not.toContain('secret-config-key-sentinel');
+      expect(loggedContext).not.toContain('secret-config-sentinel');
+      expect(loggedContext).not.toContain('secret-endpoint-password');
+      expect(loggedContext).not.toContain('secret-path-sentinel');
+      expect(loggedContext).not.toContain('secret-query-sentinel');
+      expect(loggedContext).not.toContain('test@example.com');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
   it('preserves token usage returned by harmful generation', async () => {
     const tokenUsage = { total: 18, prompt: 11, completion: 7 };
     vi.mocked(fetchWithRetries).mockResolvedValue(
@@ -93,7 +143,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     );
 
     await expect(provider.callApi('test prompt')).resolves.toMatchObject({
-      error: expect.stringContaining('Generation failed'),
+      error: '[HarmfulCompletionProvider] API call failed with status 500',
       tokenUsage,
     });
   });
@@ -144,12 +194,85 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle API error', async () => {
-    const mockResponse = new Response('API Error', createStatusResponse(400, 'Bad Request'));
+    const responseBody = 'secret-harmful-api-error-body';
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const mockResponse = new Response(responseBody, {
+      status: 400,
+      statusText: 'secret-status-text-sentinel',
+    });
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
-    const result = await provider.callApi('test prompt');
+    try {
+      const result = await provider.callApi('test prompt');
 
-    expect(result.error).toContain('[HarmfulCompletionProvider]');
+      expect(result.error).toBe('[HarmfulCompletionProvider] API call failed with status 400');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[HarmfulCompletionProvider] Generate harmful API failed',
+        expect.objectContaining({
+          status: 400,
+          statusTextLength: 'secret-status-text-sentinel'.length,
+          responseBodyLength: responseBody.length,
+        }),
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(responseBody);
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(
+        'secret-status-text-sentinel',
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('should redact harmful generation fetch errors', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const err = new Error('secret-harmful-fetch-error-message');
+    err.name = 'secret-harmful-fetch-error-name';
+    vi.mocked(fetchWithRetries).mockRejectedValue(err);
+
+    try {
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('[HarmfulCompletionProvider] Error generating harmful content');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[HarmfulCompletionProvider] Error generating harmful content',
+        expect.objectContaining({
+          errorType: 'Error',
+        }),
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(
+        'secret-harmful-fetch-error-message',
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(
+        'secret-harmful-fetch-error-name',
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('should redact malformed harmful generation responses', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const responseBody = 'secret-malformed-json-response';
+    const mockResponse = new Response(responseBody, {
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    try {
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('[HarmfulCompletionProvider] Error generating harmful content');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[HarmfulCompletionProvider] Error generating harmful content',
+        expect.objectContaining({
+          errorType: 'SyntaxError',
+        }),
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(responseBody);
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
@@ -468,7 +591,40 @@ describe('PromptfooChatCompletionProvider', () => {
     );
 
     expect(await provider.callApi('test prompt')).toEqual({
-      error: 'LLM did not return a result, likely refusal',
+      error: 'API call failed with status 500',
+      tokenUsage,
+    });
+  });
+
+  it.each([400, 429, 500, 502])(
+    'rejects stale output from an unsuccessful HTTP %s response',
+    async (status) => {
+      const tokenUsage = { total: 23, prompt: 15, completion: 8, numRequests: 2 };
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(JSON.stringify({ result: 'stale output', isRefusal: true, tokenUsage }), {
+          status,
+        }),
+      );
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        error: `API call failed with status ${status}`,
+        isRefusal: true,
+        tokenUsage,
+      });
+    },
+  );
+
+  it('preserves a structured remote error on an unsuccessful HTTP response', async () => {
+    const tokenUsage = { total: 23, prompt: 15, completion: 8 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'Remote quota exhausted', result: 'stale output', tokenUsage }),
+        { status: 429 },
+      ),
+    );
+
+    await expect(provider.callApi('test prompt')).resolves.toEqual({
+      error: 'Remote quota exhausted',
       tokenUsage,
     });
   });
@@ -561,7 +717,7 @@ describe('PromptfooChatCompletionProvider', () => {
     );
 
     expect(await provider.callApi('test prompt')).toEqual({
-      error: 'LLM did not return a result, likely refusal',
+      error: 'API call failed with status 400',
     });
   });
 
@@ -688,6 +844,16 @@ describe('PromptfooSimulatedUserProvider', () => {
       targetId: 'cloud-target-123',
     });
   });
+
+  it.each(['', '{', '[{"role":"user","content":"hello"}'])(
+    'returns a provider error for malformed conversation history %j',
+    async (prompt) => {
+      await expect(provider.callApi(prompt)).resolves.toEqual({
+        error: expect.stringContaining('API call error: SyntaxError:'),
+      });
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    },
+  );
 
   it('should handle API error response', async () => {
     const mockResponse = new Response('API Error', createStatusResponse(400, 'Bad Request'));

@@ -12,6 +12,7 @@ import {
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { BaseTokenUsageSchema } from '../types/shared';
+import { HttpRateLimitError } from '../util/fetch/errors';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
@@ -34,6 +35,51 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
   targetId?: string;
   redteamGenerationContext?: RemoteGenerationContext;
+}
+
+function getHarmfulGenerationLogMetadata(body: {
+  config?: PluginConfig;
+  email?: string | null;
+  harmCategory: string;
+  n: number;
+  purpose: string;
+  version: string;
+}) {
+  const remoteGenerationUrl = getRemoteGenerationUrlForUnaligned();
+
+  return {
+    ...getRemoteGenerationUrlLogMetadata(remoteGenerationUrl),
+    harmCategory: body.harmCategory,
+    n: body.n,
+    purposeLength: body.purpose.length,
+    hasEmail: Boolean(body.email),
+    version: body.version,
+    hasConfig: Boolean(body.config),
+    configKeyCount: body.config ? Object.keys(body.config).length : 0,
+  };
+}
+
+function getRemoteGenerationUrlLogMetadata(remoteGenerationUrl: string) {
+  try {
+    const url = new URL(remoteGenerationUrl);
+    return {
+      remoteGenerationProtocol: url.protocol.replace(':', ''),
+      remoteGenerationHost: url.host,
+      remoteGenerationPathLength: url.pathname.length,
+      hasRemoteGenerationQuery: Boolean(url.search),
+    };
+  } catch {
+    return {
+      remoteGenerationUrlConfigured: Boolean(remoteGenerationUrl),
+      remoteGenerationUrlParseError: true,
+    };
+  }
+}
+
+function getErrorMetadata(err: unknown) {
+  return {
+    errorType: err instanceof Error ? err.constructor.name : typeof err,
+  };
 }
 
 /**
@@ -99,14 +145,15 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
     try {
       logger.debug(
-        `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
+        '[HarmfulCompletionProvider] Calling generate harmful API',
+        getHarmfulGenerationLogMetadata(body),
       );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       const response = await fetchWithRetries(
         getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
-          headers: getRemoteGenerationHeaders(),
+          headers: { ...getRemoteGenerationHeaders(), 'x-promptfoo-silent': 'true' },
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -115,17 +162,25 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        const body = await response.text();
-        const error = new Error(`API call failed with status ${response.status}: ${body}`);
+        const responseBody = await response.text();
+        logger.info('[HarmfulCompletionProvider] Generate harmful API failed', {
+          status: response.status,
+          statusTextLength: response.statusText.length,
+          responseBodyLength: responseBody.length,
+        });
+        let tokenUsage: TokenUsage | undefined;
         try {
-          const parsed = JSON.parse(body) as { tokenUsage?: TokenUsage };
-          if (parsed.tokenUsage) {
-            Object.assign(error, { tokenUsage: parsed.tokenUsage });
+          const parsed = BaseTokenUsageSchema.safeParse(JSON.parse(responseBody)?.tokenUsage);
+          if (parsed.success) {
+            tokenUsage = parsed.data;
           }
         } catch {
-          // Preserve the original error for non-JSON responses.
+          // Non-JSON responses do not carry structured token usage.
         }
-        throw error;
+        return {
+          error: `[HarmfulCompletionProvider] API call failed with status ${response.status}`,
+          ...(tokenUsage ? { tokenUsage } : {}),
+        };
       }
 
       const data = await response.json();
@@ -146,14 +201,17 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
       }
-      logger.info(`[HarmfulCompletionProvider] ${err}`);
+      logger.info(
+        '[HarmfulCompletionProvider] Error generating harmful content',
+        getErrorMetadata(err),
+      );
       const parsedTokenUsage =
         err && typeof err === 'object' && 'tokenUsage' in err
           ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
           : undefined;
       const tokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
       return {
-        error: `[HarmfulCompletionProvider] ${err}`,
+        error: '[HarmfulCompletionProvider] Error generating harmful content',
         ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
@@ -288,6 +346,14 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         };
       }
 
+      if (!response.ok) {
+        return {
+          error: `API call failed with status ${response.status}`,
+          ...(data.isRefusal === true ? { isRefusal: true } : {}),
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+        };
+      }
+
       if (!data.result) {
         logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
@@ -311,6 +377,22 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       // Re-throw abort errors to properly cancel the operation
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
+      }
+      if (err instanceof HttpRateLimitError) {
+        const data =
+          err.body && typeof err.body === 'object'
+            ? (err.body as Record<string, unknown>)
+            : undefined;
+        const parsedTokenUsage = BaseTokenUsageSchema.safeParse(data?.tokenUsage);
+        return {
+          error:
+            typeof data?.error === 'string' && data.error
+              ? data.error
+              : `API call error: ${String(err)}`,
+          metadata: { rateLimitKind: err.kind },
+          ...(data?.isRefusal === true ? { isRefusal: true } : {}),
+          ...(parsedTokenUsage.success ? { tokenUsage: parsedTokenUsage.data } : {}),
+        };
       }
       return {
         error: `API call error: ${String(err)}`,
@@ -388,19 +470,19 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       };
     }
 
-    const messages = JSON.parse(prompt);
-    const body = {
-      task: this.taskId,
-      instructions: this.options.instructions,
-      history: messages,
-      email: getUserEmail(),
-      version: VERSION,
-      ...providerRemoteGenerationContextPayload(
-        this.options.redteamGenerationContext ?? this.options.targetId,
-      ),
-    };
-
     try {
+      const messages = JSON.parse(prompt);
+      const body = {
+        task: this.taskId,
+        instructions: this.options.instructions,
+        history: messages,
+        email: getUserEmail(),
+        version: VERSION,
+        ...providerRemoteGenerationContextPayload(
+          this.options.redteamGenerationContext ?? this.options.targetId,
+        ),
+      };
+
       const response = await fetchWithRetries(
         getRemoteGenerationUrl(),
         {
