@@ -1,12 +1,12 @@
 ---
 sidebar_position: 100
 sidebar_label: Moderation
-description: Implement comprehensive content moderation using multiple APIs to detect and filter harmful, toxic, or policy-violating outputs
+description: Check LLM outputs against moderation categories using OpenAI, LlamaGuard, or Azure Content Safety. Configure providers, thresholds, and assertion results.
 ---
 
 # Moderation
 
-Use the `moderation` assert type to ensure that LLM outputs are safe.
+Use the `moderation` assertion to check whether a moderation provider flags an output.
 
 Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation), Meta's LlamaGuard models (LlamaGuard 3 and 4) via [Replicate](https://replicate.com/meta/llama-guard-3-8b), and [Azure Content Safety API](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview).
 

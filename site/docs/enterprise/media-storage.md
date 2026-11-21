@@ -7,9 +7,9 @@ description: Configure S3-compatible, Google Cloud, or Azure storage for generat
 
 # Media storage for on-prem deployments
 
-Promptfoo Enterprise On-Prem can store generated images, audio, and video outside the application database. Organization administrators configure this under **Organization → Media Storage**. External storage is off by default; generated media stays in the application database.
+Organization administrators can configure external storage for generated images, audio, and video under **Organization → Media Storage** in Promptfoo Enterprise On-Prem. Promptfoo Cloud manages its own storage.
 
-Managed Promptfoo Cloud manages its own media storage. These settings apply to on-prem deployments.
+External storage is off by default. Promptfoo’s default filesystem store writes media files to the `blobs` subdirectory of the Promptfoo config directory. The database holds metadata and references to those files. Back up the media directory and the database together, and verify that restored evaluations can play the media.
 
 ## Prepare storage
 
@@ -34,7 +34,7 @@ For AWS S3, allow `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject`, plus an
 4. Set **Key Prefix** if you need a different path. The default is `media/`; Promptfoo adds organization and team directories beneath it.
 5. Click **Save Settings**.
 
-For AWS S3, leave **Custom Endpoint** empty. For S3-compatible services such as MinIO, enter the service endpoint; the UI enables path-style requests when a custom endpoint is set.
+For AWS S3, leave **Custom Endpoint** empty. For S3-compatible services such as MinIO, enter the service endpoint. The UI enables path-style requests when a custom endpoint is set.
 
 For GCS, a key-file path such as `/etc/promptfoo/gcs-key.json` refers to a file on the Promptfoo server, not your laptop. Mount it at the same path wherever the server and workers access storage. Alternatively, enter the service account's `client_email` and `private_key` in **Client Email** and **Private Key**. This on-prem configuration requires explicit credentials or a key file.
 
@@ -53,9 +53,9 @@ If verification fails, check the server logs and the settings below before runni
 
 ## Change settings without losing access
 
-Enabling external storage applies to new media; it does not move existing inline media out of the database. Changing providers, buckets, containers, or prefixes does not migrate existing objects.
+Enabling external storage affects new media. Existing files and inline database content remain in place.
 
-Existing external-media references use the organization's current storage configuration when read. Changing the destination or prefix can make older media unavailable. Disabling external storage also prevents Promptfoo from serving those external references; it does not copy the files back into the database. Keep the original storage and configuration available while planning and verifying a migration.
+Promptfoo reads external references using the organization’s current settings. Disabling storage or changing the provider, bucket, container, or prefix can make older files unavailable. Promptfoo does not migrate objects automatically. Retain the original destination, settings, and backups until you verify access after migration.
 
 When rotating credentials, keep the destination and prefix unchanged and supply complete replacement credentials. Verify both a new upload and playback of older media before revoking the old credentials. For GCS credentials entered in the form, replace **Client Email** and **Private Key** together. Clearing a secret field is not a credential-removal mechanism.
 

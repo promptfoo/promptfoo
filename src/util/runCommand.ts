@@ -7,6 +7,7 @@ interface CommandOptions {
   cwd?: string;
   input?: string | Buffer;
   maxBuffer?: number;
+  stripFinalNewline?: boolean;
   encoding?: 'utf8' | 'buffer';
 }
 
@@ -71,7 +72,7 @@ export function runCommand(
       (error, stdout, stderr) => {
         removeExitHandler();
         const output = {
-          stdout: stripFinalNewline(stdout),
+          stdout: options.stripFinalNewline === false ? stdout : stripFinalNewline(stdout),
           stderr: stripFinalNewline(stderr),
         };
         const result =
