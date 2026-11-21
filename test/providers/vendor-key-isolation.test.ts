@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers/index';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
 import { mockProcessEnv } from '../util/utils';
 import { createMockFetchResponse } from './mockProviderResponses';
 
 import type { OpenAiGenericProvider } from '../../src/providers/openai';
 import type { ApiProvider } from '../../src/types/providers';
 
+const imageData = 'data:image/png;base64,aW1hZ2U=';
+vi.mock('../../src/providers/openai/image', async (importOriginal) => ({
+  ...(await importOriginal()),
+  buildSafeStructuredImageOutputs: vi.fn(),
+}));
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
@@ -14,6 +20,9 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 
 let restoreEnv: () => void;
 beforeEach(() => {
+  vi.mocked(buildSafeStructuredImageOutputs)
+    .mockReset()
+    .mockResolvedValue([{ data: imageData, mimeType: 'image/png' }]);
   restoreEnv = mockProcessEnv({
     OPENAI_API_KEY: 'process-openai',
     NSCALE_SERVICE_TOKEN: undefined,
@@ -26,7 +35,7 @@ beforeEach(() => {
   vi.mocked(fetchWithCache).mockResolvedValue(
     createMockFetchResponse({
       choices: [{ message: { content: 'Hello' }, text: 'Hello', finish_reason: 'stop' }],
-      data: [{ embedding: [0.1, 0.2], url: 'https://example.invalid/image.png' }],
+      data: [{ embedding: [0.1, 0.2], url: imageData }],
     }),
   );
 });

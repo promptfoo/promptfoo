@@ -199,6 +199,32 @@ export function getFetchWithProxyHeaders(
   };
 }
 
+export function getFetchTlsOptions(): ConnectionOptions | Promise<ConnectionOptions> {
+  const tlsOptions: ConnectionOptions = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+  };
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (!caCertPath) {
+    return tlsOptions;
+  }
+
+  const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+  return fsPromises.readFile(resolvedPath, 'utf8').then(
+    (ca) => {
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      return { ...tlsOptions, ca };
+    },
+    (error) => {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${error}`);
+      return tlsOptions;
+    },
+  );
+}
+
+export function getProxyUrlForTarget(url: string): string {
+  return getProxyForUrl(url);
+}
+
 function getFetchUrlString(url: RequestInfo): string | undefined {
   if (typeof url === 'string') {
     return url;
@@ -289,27 +315,10 @@ export async function fetchWithProxy(
     return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      if (logEnabled) {
-        logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-      }
-    } catch (e) {
-      if (logEnabled) {
-        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-      }
-    }
-  }
-  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
+  const pendingTlsOptions = getFetchTlsOptions();
+  const tlsOptions =
+    pendingTlsOptions instanceof Promise ? await pendingTlsOptions : pendingTlsOptions;
+  const proxyUrl = finalUrlString ? getProxyUrlForTarget(finalUrlString) : '';
 
   if (proxyUrl && logEnabled) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);

@@ -239,16 +239,19 @@ describe('extractMarkdownImageSources', () => {
 });
 
 describe('resolveEvalImageOutputSource', () => {
-  it('returns HTTP URL from data string', () => {
-    const image = { data: 'https://example.com/image.png', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.png');
-  });
-
-  it('returns HTTPS URL from data string', () => {
-    const image = { data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.jpg');
+  it.each([
+    'https://example.com/image.png',
+    'https://example.com/image.jpg',
+    'https://example.com/image.png?size=large&format=webp',
+    'https://example.com/image.png#section',
+    'http://example.com/image.png',
+    'HTTP://example.com/image.png',
+    '  https://example.com/image.png  ',
+    'ftp://example.com/image.png',
+    'file:///path/to/image.png',
+    'invalid-data',
+  ])('rejects untrusted URLs and malformed image data (%s)', (data) => {
+    expect(resolveEvalImageOutputSource({ data, mimeType: 'image/png' })).toBeUndefined();
   });
 
   it('falls back to resolveImageSource for data URIs', () => {
@@ -267,16 +270,10 @@ describe('resolveEvalImageOutputSource', () => {
     expect(result).toBe('/api/blobs/abc123def456abc123def456abc123de');
   });
 
-  it('falls back to resolveImageSource when data is not an HTTP(S) URL', () => {
-    const image = { data: 'storageRef:images/test.png', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('data:image/png;base64,storageRef:images/test.png');
-  });
-
-  it('delegates non-URL image data to the base64 resolver', () => {
-    const image = { data: 'invalid-data', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('data:image/png;base64,invalid-data');
+  it('resolves a stored image through the media API', () => {
+    expect(resolveEvalImageOutputSource({ data: 'storageRef:images/test.png' })).toBe(
+      '/api/media/images/test.png',
+    );
   });
 
   it('handles image with only blobRef', () => {
@@ -291,53 +288,5 @@ describe('resolveEvalImageOutputSource', () => {
     const image = {};
     const result = resolveEvalImageOutputSource(image);
     expect(result).toBeUndefined();
-  });
-
-  it('handles HTTP URL with query parameters', () => {
-    const image = {
-      data: 'https://example.com/image.png?size=large&format=webp',
-      mimeType: 'image/png',
-    };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.png?size=large&format=webp');
-  });
-
-  it('handles HTTP URL with fragment', () => {
-    const image = { data: 'https://example.com/image.png#section', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.png#section');
-  });
-
-  it('handles lowercase http protocol', () => {
-    const image = { data: 'http://example.com/image.png', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('http://example.com/image.png');
-  });
-
-  it('delegates uppercase HTTP data instead of treating it as an HTTP URL', () => {
-    // The implementation uses /^https?:\/\// which only matches lowercase http/https
-    const image = { data: 'HTTP://example.com/image.png', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('data:image/png;base64,HTTP://example.com/image.png');
-  });
-
-  it('delegates FTP data instead of treating it as an HTTP URL', () => {
-    const image = { data: 'ftp://example.com/image.png', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('data:image/png;base64,ftp://example.com/image.png');
-  });
-
-  it('delegates file data instead of treating it as an HTTP URL', () => {
-    const image = { data: 'file:///path/to/image.png', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('data:image/png;base64,file:///path/to/image.png');
-  });
-
-  it('delegates data with leading whitespace instead of treating it as an HTTP URL', () => {
-    // The regex /^https?:\/\// requires the string to start with http/https
-    // Leading whitespace causes the regex to fail
-    const image = { data: '  https://example.com/image.png  ', mimeType: 'image/png' };
-    const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('data:image/png;base64,  https://example.com/image.png  ');
   });
 });

@@ -1,19 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { ModelsLabImageProvider } from '../../src/providers/modelslab';
-
-import type { CallApiContextParams } from '../../src/types/providers';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
 
 vi.mock('../../src/cache');
-vi.mock('../../src/blobs/extractor', () => ({
-  isBlobStorageEnabled: vi.fn().mockReturnValue(false),
-}));
-vi.mock('../../src/blobs/index', () => ({
-  storeBlob: vi.fn(),
-}));
-vi.mock('../../src/util/fetch/index', () => ({
-  fetchWithProxy: vi.fn(),
-}));
+vi.mock('../../src/providers/openai/image', () => ({ buildSafeStructuredImageOutputs: vi.fn() }));
 vi.mock(import('../../src/envars'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -23,6 +14,7 @@ vi.mock(import('../../src/envars'), async (importOriginal) => {
 });
 
 const mockedFetchWithCache = vi.mocked(fetchWithCache);
+const imageData = 'data:image/png;base64,aW5lcnQ=';
 
 function mockResponse(
   data: Record<string, unknown>,
@@ -38,10 +30,14 @@ describe('ModelsLabImageProvider', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue([
+      { data: imageData, mimeType: 'image/png' },
+    ]);
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -73,9 +69,8 @@ describe('ModelsLabImageProvider', () => {
 
     const result = await provider.callApi('A serene mountain landscape at sunset');
 
-    expect(result.output).toBe(
-      '![A serene mountain landscape at sunset](https://modelslab.com/output/flux-image-123.jpg)',
-    );
+    expect(result.output).toBe(imageData);
+    expect(result.images).toEqual([{ data: imageData, mimeType: 'image/png' }]);
     expect(result.error).toBeUndefined();
 
     expect(mockedFetchWithCache).toHaveBeenCalledWith(
@@ -131,7 +126,7 @@ describe('ModelsLabImageProvider', () => {
     const result = await resultPromise;
 
     expect(result.cached).toBe(false);
-    expect(result.output).toContain('polled.jpg');
+    expect(result.output).toBe(imageData);
   });
 
   it('merges per-prompt config overrides from context', async () => {
@@ -182,7 +177,7 @@ describe('ModelsLabImageProvider', () => {
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
-    expect(result.output).toContain('processed-image.jpg');
+    expect(result.output).toBe(imageData);
     expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
 
     // Verify poll request uses correct URL, sends API key, and busts cache
@@ -223,7 +218,7 @@ describe('ModelsLabImageProvider', () => {
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
-    expect(result.output).toContain('img.jpg');
+    expect(result.output).toBe(imageData);
     expect(mockedFetchWithCache).toHaveBeenCalledTimes(3);
   });
 
@@ -300,58 +295,40 @@ describe('ModelsLabImageProvider', () => {
     expect(provider.id()).toBe('modelslab:image:flux');
   });
 
-  it('downloads image to blob storage when enabled', async () => {
-    const { isBlobStorageEnabled } = await import('../../src/blobs/extractor');
-    const { storeBlob } = await import('../../src/blobs/index');
-    const { fetchWithProxy } = await import('../../src/util/fetch/index');
-    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
-    vi.mocked(storeBlob).mockResolvedValue({
-      ref: {
-        uri: 'promptfoo://blob/abc123',
-        hash: 'abc123',
-        mimeType: 'image/png',
-        sizeBytes: 1024,
-        provider: 'filesystem',
-      },
-      deduplicated: false,
-    });
-    vi.mocked(fetchWithProxy).mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'content-type': 'image/jpeg' }),
-      arrayBuffer: async () => new ArrayBuffer(1024),
-    } as Response);
-
+  it('returns inline image evidence for the shared extractor with inline media enabled', async () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');
+    const controller = new AbortController();
     mockedFetchWithCache.mockResolvedValue(
-      mockResponse({
-        status: 'success',
-        output: ['https://modelslab.com/output/blob-test.jpg'],
-      }),
+      mockResponse({ status: 'success', output: ['https://fixture.example.test/image.png'] }),
     );
-
     const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
-    const result = await provider.callApi('Blob test', {
-      evaluationId: 'eval-modelslab',
-      promptIdx: 2,
-      testIdx: 1,
-    } as unknown as CallApiContextParams);
 
-    expect(result.output).toContain('promptfoo://blob/abc123');
-    expect(result.metadata).toEqual(
-      expect.objectContaining({
-        blobRef: expect.objectContaining({ uri: 'promptfoo://blob/abc123', hash: 'abc123' }),
-        blobHash: 'abc123',
-      }),
+    const result = await provider.callApi('A greeting card', undefined, {
+      abortSignal: controller.signal,
+    });
+
+    expect(result.output).toBe(imageData);
+    expect(result.images).toEqual([{ data: imageData, mimeType: 'image/png' }]);
+    expect(result.metadata).toBeUndefined();
+    expect(buildSafeStructuredImageOutputs).toHaveBeenCalledWith(
+      { data: [{ url: 'https://fixture.example.test/image.png' }] },
+      undefined,
+      undefined,
+      controller.signal,
     );
-    expect(fetchWithProxy).toHaveBeenCalledWith('https://modelslab.com/output/blob-test.jpg');
-    expect(storeBlob).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      'image/jpeg',
-      expect.objectContaining({
-        evalId: 'eval-modelslab',
-        kind: 'image',
-        promptIdx: 2,
-        testIdx: 1,
-      }),
+  });
+
+  it('returns an error instead of an external URL when download fails', async () => {
+    mockedFetchWithCache.mockResolvedValue(
+      mockResponse({ status: 'success', output: ['https://fixture.example.test/image.png'] }),
     );
+    vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue(undefined);
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+
+    const result = await provider.callApi('A greeting card');
+
+    expect(result.error).toBe('The generated image could not be downloaded safely.');
+    expect(result.output).toBeUndefined();
+    expect(result.images).toBeUndefined();
   });
 });
