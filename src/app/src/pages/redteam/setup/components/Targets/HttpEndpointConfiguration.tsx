@@ -1,3 +1,4 @@
+import { normalizeLocalProviders } from './helpers';
 import './syntax-highlighting.css';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -31,7 +32,6 @@ import { Switch } from '@app/components/ui/switch';
 import { highlightJS } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
-import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import * as yaml from 'js-yaml';
 import {
   AlignLeft,
@@ -182,7 +182,9 @@ Content-Type: application/json
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: getTargetForExecution(selectedTarget) }),
+        body: JSON.stringify({
+          providerOptions: normalizeLocalProviders(selectedTarget, { forRuntime: true }),
+        }),
       });
 
       if (response.ok) {

@@ -16,7 +16,6 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
-import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';

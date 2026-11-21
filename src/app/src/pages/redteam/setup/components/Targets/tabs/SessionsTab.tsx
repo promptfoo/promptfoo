@@ -22,7 +22,6 @@ import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { callApi } from '@app/utils/api';
-import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import {
   AlertCircle,
   AlertTriangle,

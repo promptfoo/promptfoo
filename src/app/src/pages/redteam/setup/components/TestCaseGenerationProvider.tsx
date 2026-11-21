@@ -17,7 +17,6 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { normalizeLocalProviders } from './Targets/helpers';

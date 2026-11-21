@@ -652,7 +652,7 @@ describe('HttpProvider with TLS Configuration', () => {
         const provider = new HttpProvider('https://api.example.com', {
           config: {
             method: 'GET',
-            tls: { rejectUnauthorized: false },
+            tls: { servername: 'api.example.com' },
           },
         });
 

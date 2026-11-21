@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getTargetForExecution } from '../../src/presentation/redteamConfig';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
 import { RedteamConfigSchema } from '../../src/validators/redteam';
@@ -219,6 +220,12 @@ describe('getUnifiedConfig', () => {
     applicationDefinition: {},
     entities: [],
   };
+
+  it.each(['opaque', ['one', 'two'], 0, false])('preserves an opaque config (%j)', (config) => {
+    const provider = { id: 'file://adapter.js', config };
+    expect(getTargetForExecution(provider)).toBe(provider);
+    expect(getUnifiedConfig({ ...baseConfig, target: provider }).targets).toEqual([provider]);
+  });
 
   it('should transform config correctly', () => {
     const result = getUnifiedConfig(baseConfig);

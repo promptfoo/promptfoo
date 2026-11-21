@@ -700,6 +700,9 @@ describe('fetchWithProxy', () => {
     'keeps separate TLS policies in the %s proxy agent cache',
     async (useProxy) => {
       const proxyUrl = 'http://proxy.example.com';
+      vi.mocked(getEnvBool).mockImplementation((key, fallback = false) =>
+        key === 'PROMPTFOO_INSECURE_SSL' ? false : fallback,
+      );
       if (useProxy) {
         mockProcessEnv({ HTTPS_PROXY: proxyUrl });
       }

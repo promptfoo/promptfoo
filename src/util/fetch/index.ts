@@ -102,7 +102,8 @@ export function clearAgentCache(): void {
 
 function createAgent(
   proxyUrl: string,
-  tlsOptions: ConnectionOptions,
+  requestTls: ConnectionOptions,
+  proxyTls: ConnectionOptions,
   connections: number,
   headersTimeout: number,
 ): Dispatcher {
@@ -113,23 +114,37 @@ function createAgent(
     keepAliveMaxTimeout: 60_000,
   };
   const agent = proxyUrl
-    ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls: tlsOptions, requestTls: tlsOptions })
-    : new Agent({ ...options, connect: tlsOptions });
+    ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls, requestTls })
+    : new Agent({ ...options, connect: requestTls });
   return agent.compose(createDecompressionInterceptor()).compose(stripDecompressionHeaders());
 }
 
-function acquireAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ActiveAgent {
+function acquireAgent(
+  proxyUrl: string,
+  proxyTls: ConnectionOptions,
+  rejectUnauthorized?: boolean,
+): ActiveAgent {
+  const requestTls =
+    rejectUnauthorized === undefined ? proxyTls : { ...proxyTls, rejectUnauthorized };
   const connections = getConnectionPoolSize();
   const headersTimeout = getRequestTimeoutMs();
   // Hash the effective settings so cache keys don't retain proxy credentials or CA bundles.
-  const key = sha256(JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout]));
+  const key = sha256(
+    JSON.stringify([
+      proxyUrl,
+      requestTls,
+      proxyUrl ? proxyTls.rejectUnauthorized : null,
+      connections,
+      headersTimeout,
+    ]),
+  );
   const active = activeAgents.get(key);
   if (active) {
     active.users++;
     return active;
   }
   const dispatcher =
-    idleAgents.get(key) ?? createAgent(proxyUrl, tlsOptions, connections, headersTimeout);
+    idleAgents.get(key) ?? createAgent(proxyUrl, requestTls, proxyTls, connections, headersTimeout);
   idleAgents.delete(key);
   const entry = { key, dispatcher, users: 1 };
   activeAgents.set(key, entry);
@@ -233,7 +248,7 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const { getAuthHeaders, ...requestOptions } = options;
+  const { getAuthHeaders, rejectUnauthorized, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: Dispatcher } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
@@ -315,7 +330,7 @@ export async function fetchWithProxy(
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
   }
   // Hold the same transport across asynchronous auth, redirects and retry backoff.
-  const agent = acquireAgent(proxyUrl, tlsOptions);
+  const agent = acquireAgent(proxyUrl, tlsOptions, rejectUnauthorized);
   finalOptions.dispatcher = agent.dispatcher;
   try {
     return await fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
