@@ -1283,6 +1283,19 @@ describe('normalizeHostedTrace', () => {
       });
 
       it.each([
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`user:${credential}`).toString('base64')}`,
+          },
+        },
+        {
+          headers: [
+            [
+              'Proxy-Authorization',
+              `basic ${Buffer.from(`${credential}:word`).toString('base64')}`,
+            ],
+          ],
+        },
         { headers: [['Authorization', `DPoP ${credential}`]] },
         { responseHeaders: [{ Value: `id=${credential}; Path=/; HttpOnly`, Name: 'Set-Cookie' }] },
         { rawHeaders: ['Accept', 'text/plain', 'Cookie', `locale=en; SID=${credential}`] },
@@ -1294,6 +1307,11 @@ describe('normalizeHostedTrace', () => {
           `lookup_${credential}`,
           attribute('tool.arguments', JSON.stringify(args)),
         );
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('withholds uninspectable Basic credentials even without a visible echo', () => {
+        const call = callNamed('lookup', attribute('Authorization', 'Basic broken'));
         expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
       });
 
