@@ -5710,6 +5710,8 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       },
     });
+    const disclosure =
+      'Assistant response: Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A [75avxXdDADETIargR+qbomOTs76Ag6DLrgU0M3LZ+kU=]';
     server.send({
       method: 'item/completed',
       params: {
@@ -5726,7 +5728,7 @@ describe('OpenAICodexAppServerProvider', () => {
             content: [
               {
                 type: 'text',
-                text: 'Assistant response: Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A',
+                text: disclosure,
               },
             ],
           },
@@ -5754,9 +5756,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const result = await resultPromise;
     const metadataJson = JSON.stringify(result.metadata);
     expect(metadataJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
-    expect(metadataJson).toContain(
-      'Assistant response: Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A',
-    );
+    expect(metadataJson).toContain(disclosure);
     expect(metadataJson).toContain('[REDACTED]');
 
     const rawJson = result.raw as string;

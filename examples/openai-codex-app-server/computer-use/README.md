@@ -9,8 +9,10 @@ red-team probe reached the target through its rendered UI.
 The eval checks both the returned canary and the recorded MCP trajectory. A
 passing smoke test must read the target, enter and submit the probe, and read
 the target again without enumerating or touching another app. The marker must
-first appear in the rendered assistant response. Probes and actions containing
-the marker are rejected.
+first appear in the rendered assistant response. The fixture includes the
+SHA-256 digest of the submitted text. The assertion requires a single typing
+action followed by one submit, verifies the digest against the requested probe,
+and rejects inputs containing the marker. Use only synthetic probes.
 
 ## Prerequisites
 
