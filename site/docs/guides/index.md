@@ -6,7 +6,7 @@ description: Step-by-step tutorials for evaluating LLMs, comparing models, and t
 
 # Eval Guides
 
-Practical tutorials to help you get the most out of promptfoo evals. Each guide walks through a real-world scenario with working configuration examples you can adapt to your own use case.
+Tutorials and example configurations for Promptfoo evals and red team testing.
 
 ## Evaluation Techniques
 
