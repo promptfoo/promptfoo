@@ -336,7 +336,16 @@ describe('PiProvider', () => {
     it('accepts same-vendor model and thinking overrides', async () => {
       mockPiRun(defaultEvents());
       const provider = createProvider({ config: { model: 'openai/fixture' } });
-      const config = { model: 'openai/other', thinking: 'high', prefix: '', suffix: '' };
+      const config = {
+        model: 'openai/other',
+        thinking: 'high',
+        prefix: '',
+        suffix: '',
+        runSerially: true,
+        storeOutputAs: 'lastAnswer',
+        transform: 'output.trim()',
+        disableConversationVar: true,
+      };
       const result = await provider.callApi('hello', {
         vars: {},
         prompt: { label: 'test', raw: 'hello', config },

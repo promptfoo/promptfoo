@@ -16,6 +16,7 @@ import { REDACTED } from '../util/sanitizer';
 import { getProjectPathCheck, resolveAgentExecutable } from './agentExecutable';
 import { resolveAgenticWorkingDir } from './agentic-utils';
 import { hasAgentEnvOverride } from './env';
+import { getProviderPromptOverrides } from './promptOverrides';
 import { providerRegistry } from './providerRegistry';
 
 import type {
@@ -264,13 +265,7 @@ export class PiProvider implements ApiProvider {
   }
 
   private prepareCall(context?: CallApiContextParams): PiPreparedCall {
-    const {
-      provider: _provider,
-      prefix: _prefix,
-      suffix: _suffix,
-      ...overrides
-    } = context?.prompt?.config ?? {};
-    const row = turn.parse(overrides);
+    const row = turn.parse(getProviderPromptOverrides(context?.prompt?.config));
     const config = { ...this.config, ...row };
     const vendor = this.resolveProviderName(this.config);
     if (
