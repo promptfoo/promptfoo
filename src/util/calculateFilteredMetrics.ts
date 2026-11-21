@@ -222,8 +222,8 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
-  const response = sql`CASE WHEN json_valid(response) THEN response END`;
-  const gradingResult = sql`CASE WHEN json_valid(grading_result) THEN grading_result END`;
+  const response = sql`response`;
+  const gradingResult = sql`grading_result`;
   const targetPath = '$.tokenUsage';
   const incurredTargetPath = '$.tokenUsage.incurredTokenUsage';
   const attackerPath = '$.tokenUsage.attacker';
@@ -254,7 +254,21 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     });
 
   // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
+  // Materialize only usage fields so SQLite validates each source once and never copies outputs.
   const basicMetricsQuery = sql`
+    WITH usage AS MATERIALIZED (
+      SELECT prompt_idx, success, failure_reason, score, latency_ms, cost,
+        CASE WHEN json_valid(response) THEN json_object(
+          'tokenUsage',json_extract(response,'$.tokenUsage'),
+          'cached',json_extract(response,'$.cached'),
+          'incurredCost',json_extract(response,'$.incurredCost')
+        ) END AS response,
+        CASE WHEN json_valid(grading_result) THEN json_object(
+          'tokensUsed',json_extract(grading_result,'$.tokensUsed'),
+          'metadata',json_object('cachedResponse',json_extract(grading_result,'$.metadata.cachedResponse'))
+        ) END AS grading_result
+      FROM eval_results WHERE ${whereSql}
+    )
     SELECT
       prompt_idx,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
@@ -334,8 +348,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(
         ${incurredInternalGradingUsage('numRequests')} + ${incurredGradingUsage('numRequests')}
       ) as incurred_grading_num_requests
-    FROM eval_results
-    WHERE ${whereSql}
+    FROM usage
     GROUP BY prompt_idx
     ORDER BY prompt_idx
   `;
@@ -424,7 +437,7 @@ async function aggregateNamedScores(
       CASE
         WHEN grading_result IS NOT NULL
           AND json_valid(grading_result)
-          AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
+          AND json_type(grading_result, '$.namedScoreWeights') = 'object'
         THEN json_extract(grading_result, '$.namedScoreWeights')
         ELSE json('{}')
       END
@@ -485,22 +498,22 @@ async function aggregateAssertions(
       prompt_idx,
       SUM(
         CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
+          WHEN json_valid(grading_result) AND json_type(grading_result, '$.componentResults') = 'array' THEN
             (
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
+              WHERE json_each.type = 'object' AND CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
             )
           ELSE 0
         END
       ) as assert_pass_count,
       SUM(
         CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
+          WHEN json_valid(grading_result) AND json_type(grading_result, '$.componentResults') = 'array' THEN
             (
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
+              WHERE json_each.type = 'object' AND CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
             )
           ELSE 0
         END

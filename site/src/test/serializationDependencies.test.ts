@@ -11,7 +11,10 @@ describe.each(['copy-webpack-plugin', 'css-minimizer-webpack-plugin'])(
   (plugin) => {
     // Resolve the serializer through the webpack plugin that Docusaurus actually loads.
     const requireFromPlugin = createRequire(requireFromBundler.resolve(plugin));
-    const serialize = requireFromPlugin('serialize-javascript') as (value: unknown) => string;
+    const serialize = requireFromPlugin('serialize-javascript') as (
+      value: unknown,
+      options?: { space: number },
+    ) => string;
 
     it('escapes script end tags after a misleading script prefix in function source', () => {
       const input = new Function(
@@ -21,6 +24,16 @@ describe.each(['copy-webpack-plugin', 'css-minimizer-webpack-plugin'])(
       const serialized = serialize(input);
 
       expect(() => new Function(`return (${serialized});`)).not.toThrow();
+      expect(serialized).not.toMatch(/<\/script[\t\n\f\r />]/i);
+    });
+
+    it('escapes a script end tag split between function source and formatted output', () => {
+      const value = Object.assign(() => 1, {
+        toString: () => 'function f() { return 1 }//</script',
+      });
+
+      const serialized = serialize({ value }, { space: 2 });
+
       expect(serialized).not.toMatch(/<\/script[\t\n\f\r />]/i);
     });
 

@@ -56,6 +56,28 @@ describe('table search and filtered metrics', () => {
     return eval_;
   }
 
+  it('normalizes a missing prompt body and invalid media without discarding valid output', async () => {
+    const eval_ = await create([{ metadata: { note: 'needle' } }]);
+    const db = await getDb();
+    await db.run(sql`UPDATE eval_results SET prompt = '{}', prompt_id = NULL,
+      response = '{"output":"visible","images":{}}'
+      WHERE eval_id = ${eval_.id}`);
+    const page = await eval_.getTablePage({ searchQuery: 'needle' });
+    expect(page.body[0].outputs[0].text).toBe('visible');
+  });
+
+  it('retains deeply nested output and excludes unreadable response-only matches', async () => {
+    const eval_ = await create([{ metadata: { note: 'needle' } }, {}]);
+    const db = await getDb();
+    const output = '['.repeat(1010) + '0' + ']'.repeat(1010);
+    await db.run(sql`UPDATE eval_results SET response =
+      CASE test_idx WHEN 0 THEN ${'{"output":' + output + '}'} ELSE '{needle' END
+      WHERE eval_id = ${eval_.id}`);
+    const page = await eval_.getTablePage({ searchQuery: 'needle' });
+    expect(page.filteredCount).toBe(1);
+    expect(page.body[0].outputs[0].text).toBe(output);
+  });
+
   it.each(fieldCases)(
     'searches %s consistently with and without a structured filter',
     async (_name, patch) => {
