@@ -114,6 +114,8 @@ providers:
         includeToolArguments: true
 ```
 
+#### Grade native spans
+
 | Ledger check           | Evidence used to grade it                                                                                                                                                    |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CompletedRootCommand` | A saved `command_execution` item has status `completed` and the same turn ID as the root answer.                                                                             |
