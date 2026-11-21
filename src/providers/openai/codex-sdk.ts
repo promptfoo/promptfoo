@@ -2383,7 +2383,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         'cause' in error &&
         error.cause instanceof CodexCliCleanupError
       ) {
-        logger.warn('Codex CLI process-tree cleanup failed', error.cause.cleanup);
+        logger.warn('Codex CLI process-tree cleanup failed', { ...error.cause.cleanup });
       }
       throw error;
     } finally {
