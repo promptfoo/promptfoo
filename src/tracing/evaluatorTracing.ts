@@ -6,6 +6,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import { isExternalTraceProvider } from './providers';
 import {
   SPAN_ROLE_ATTRIBUTE,
   TEST_CASE_OUTCOME_ATTRIBUTES,
@@ -350,7 +351,11 @@ export interface EvaluationTraceContext {
   rootSpan?: Span;
   localExport?: ReturnType<typeof trackLocalTrace>;
   externalTraceCollected?: boolean;
-  setTraceEvidence?: (evidence: 'complete' | 'unavailable') => Promise<void>;
+  traceEvidence?: { traceUnavailable: boolean; traceIncomplete: boolean };
+  setTraceEvidence?: (
+    evidence: 'complete' | 'partial' | 'unavailable',
+    captureSpanIds?: string[],
+  ) => Promise<void>;
 }
 
 interface TraceExecutionMetadata {
@@ -440,6 +445,10 @@ export async function generateTraceContextIfNeeded(
         testCaseSpanId: spanId,
         localBodyAttributeLossTracked: true,
         ...(testCaseSpanAttributeKeys && { testCaseSpanAttributeKeys }),
+        // A failed collection write must not expose later graders as target evidence.
+        ...(!isExternalTraceProvider(testSuite?.tracing?.provider) && {
+          promptfooTraceSpanIds: [],
+        }),
         testIdx,
         promptIdx,
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),
@@ -465,6 +474,7 @@ export async function generateTraceContextIfNeeded(
     evaluationId,
     testCaseId,
     ...(rootSpan && { rootSpan }),
-    setTraceEvidence: (evidence) => traceStore.setTraceEvidence(traceId, evidence),
+    setTraceEvidence: (evidence, captureSpanIds) =>
+      traceStore.setTraceEvidence(traceId, evidence, captureSpanIds),
   };
 }

@@ -1,5 +1,7 @@
 import { hasBodyCaptureMarker, PromptfooAttributes, truncateBody } from './genaiTracer';
 
+export const MAX_HOSTED_ARGUMENT_BYTES = 64 * 1024;
+
 export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
@@ -135,6 +137,18 @@ export function sanitizeTraceAttributes(
     return value;
   };
 
+  // Only native importer spans carry this owner. Their two bounded JSON aliases
+  // must remain parseable when exported and replayed. Custom redactions still win.
+  const argumentKeys = ['tool.arguments', 'gen_ai.tool.call.arguments'];
+  const hostedArguments = attributes['gen_ai.tool.call.arguments'];
+  const preserveHosted =
+    typeof attributes['promptfoo.openai.hosted_trace'] === 'string' &&
+    /^[0-9a-f]{16}$/.test(attributes['promptfoo.openai.hosted_trace']) &&
+    attributes['gen_ai.operation.name'] === 'execute_tool' &&
+    typeof hostedArguments === 'string' &&
+    hostedArguments.length <= MAX_HOSTED_ARGUMENT_BYTES &&
+    hostedArguments === attributes['tool.arguments'];
+
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
@@ -145,7 +159,15 @@ export function sanitizeTraceAttributes(
       sanitized[key] = SENSITIVE_REDACTION;
       continue;
     }
-    sanitized[key] = sanitizeValue(value);
+    if (preserveHosted && argumentKeys.includes(key)) {
+      sanitized[key] = customPatterns.some((pattern) =>
+        argumentKeys.some((alias) => alias.includes(pattern)),
+      )
+        ? CUSTOM_REDACTION
+        : value;
+    } else {
+      sanitized[key] = sanitizeValue(value);
+    }
   }
 
   return sanitized;

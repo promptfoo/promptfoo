@@ -25,7 +25,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
-import { getTraceStore } from '../tracing/store';
+import { getTraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
@@ -186,6 +186,50 @@ export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean 
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
 }
 
+// A local capture records the target spans known before grading begins. The full
+// timeline stays available in storage, including later evaluator and grader spans.
+function getAssertionTraceSpans(traceData: TraceData): {
+  spans: TraceData['spans'];
+  incomplete: boolean;
+} {
+  const spans = traceData.spans || [];
+  const capturedIds = traceData.metadata?.promptfooTraceSpanIds;
+  if (capturedIds === undefined) {
+    return { spans, incomplete: false };
+  }
+  if (!Array.isArray(capturedIds) || !capturedIds.every((id) => typeof id === 'string' && id)) {
+    return { spans: [], incomplete: true };
+  }
+  const captured = new Set(capturedIds);
+  if (traceData.metadata?.promptfooTraceEvidence === 'partial') {
+    // Remote or still-active target children may arrive after grading. Their parent
+    // linkage keeps them in the target capture without admitting later grader roots.
+    const children = new Map<string, string[]>();
+    for (const span of spans) {
+      if (span.parentSpanId) {
+        const siblings = children.get(span.parentSpanId) ?? [];
+        siblings.push(span.spanId);
+        children.set(span.parentSpanId, siblings);
+      }
+    }
+    const pending = [...captured];
+    while (pending.length) {
+      for (const child of children.get(pending.pop()!) ?? []) {
+        if (!captured.has(child)) {
+          captured.add(child);
+          pending.push(child);
+        }
+      }
+    }
+  }
+  const selected = spans.filter((span) => captured.has(span.spanId));
+  const storedIds = new Set(selected.map((span) => span.spanId));
+  return {
+    spans: selected,
+    incomplete: captured.size === 0 || capturedIds.some((id) => !storedIds.has(id)),
+  };
+}
+
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
@@ -293,7 +337,7 @@ function getTraceEvidenceError(
     return;
   }
   if (traceUnavailable) {
-    return 'Local trace export did not complete before grading. Trace evidence is unavailable.';
+    return 'Trace evidence is unavailable or unreliable; this assertion cannot be graded.';
   }
   if (traceId && !params.assertionValueContext.trace) {
     return 'No spans were stored for this row before grading. Trace evidence is unavailable.';
@@ -359,7 +403,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.2',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
           assertion: params.assertion,
         };
       }
@@ -446,6 +490,11 @@ export function isAssertionInverse(assertion: Assertion): boolean {
 export function getAssertionBaseType(assertion: Assertion): AssertionType {
   const inverse = isAssertionInverse(assertion);
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
+
+// Zero-weight assertions record their scores without failing the test.
+function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
+  return weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -560,13 +609,22 @@ async function runAssertionInternal({
         !traceUnavailable &&
         (evidence !== 'partial' || resolvedTraceData.spans?.length)
       ) {
-        context.trace = {
-          traceId: resolvedTraceData.traceId,
-          evaluationId: resolvedTraceData.evaluationId,
-          testCaseId: resolvedTraceData.testCaseId,
-          metadata: resolvedTraceData.metadata,
-          spans: resolvedTraceData.spans || [],
-        };
+        const capture = getAssertionTraceSpans(resolvedTraceData);
+        traceIncomplete ||= capture.incomplete;
+        // Delayed target children can lose attributes after the row was finalized.
+        // Excluded graders cannot make an otherwise intact target capture unavailable.
+        traceUnavailable ||= capture.spans.some(
+          (span) => span.attributes?.[UNRELIABLE_SPAN_ATTRIBUTE] === true,
+        );
+        if (!traceUnavailable) {
+          context.trace = {
+            traceId: resolvedTraceData.traceId,
+            evaluationId: resolvedTraceData.evaluationId,
+            testCaseId: resolvedTraceData.testCaseId,
+            metadata: resolvedTraceData.metadata,
+            spans: capture.spans,
+          };
+        }
       }
     } catch (error) {
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);
@@ -577,9 +635,8 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  // A JavaScript file or package function that throws becomes a failed result. It still goes
-  // through the common post-processing below, so overrides such as weight: 0 apply.
-  let scriptFailure: GradingResult | undefined;
+  const scriptFailure = (reason: string): GradingResult =>
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -601,48 +658,24 @@ async function runAssertionInternal({
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          scriptFailure = {
-            pass: false,
-            score: 0,
-            reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
-            assertion,
-          };
+          return scriptFailure(
+            `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          );
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
+      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+          const runScript = filePath.endsWith('.py')
+            ? runPython
+            : (await import('../ruby/rubyUtils.js')).runRuby;
+          valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',
             [output, context],
           );
-          valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+          logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
-        }
-      } else if (filePath.endsWith('.rb')) {
-        try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = rubyScriptOutput;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
-        } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
+          return scriptFailure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -659,12 +692,9 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        scriptFailure = {
-          pass: false,
-          score: 0,
-          reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
-          assertion,
-        };
+        return scriptFailure(
+          `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+        );
       }
     } else {
       // It's a normal string value
@@ -770,28 +800,28 @@ async function runAssertionInternal({
   };
 
   // Check for redteam assertions first
-  if (!scriptFailure && assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (scriptFailure || handler) {
-    const traceError =
-      getTraceEvidenceError(assertionParams, traceId, traceUnavailable, traceIncomplete) ??
-      prepareHostedTraceAssertion(assertionParams);
-    const result: GradingResult =
-      scriptFailure ??
-      (traceError
-        ? { pass: false, score: 0, reason: traceError, assertion }
-        : await handler(assertionParams));
-
-    if (
-      traceIncomplete &&
-      !result.pass &&
-      !traceError &&
-      !scriptFailure &&
-      canGradePartialTrace(assertionParams)
-    ) {
+  if (handler) {
+    const evidenceError = getTraceEvidenceError(
+      assertionParams,
+      traceId,
+      traceUnavailable,
+      traceIncomplete,
+    );
+    // Validate deterministic matchers on partial captures. Never run a model judge
+    // against incomplete evidence or award a pass for missing spans.
+    if (evidenceError && context.trace && assertionParams.baseType !== 'trajectory:goal-success') {
+      await handler(assertionParams);
+    }
+    const traceError = evidenceError ?? prepareHostedTraceAssertion(assertionParams);
+    const result: GradingResult = traceError
+      ? { pass: false, score: 0, reason: traceError, assertion }
+      : await handler(assertionParams);
+    if (traceIncomplete && !result.pass && !traceError && canGradePartialTrace(assertionParams)) {
       result.reason = `The trace is incomplete. Additional spans could satisfy this assertion. ${result.reason}`;
     }
 
@@ -806,15 +836,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return applyAssertionWeight(result, assertion.weight);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);

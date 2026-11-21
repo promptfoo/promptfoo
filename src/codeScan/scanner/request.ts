@@ -5,6 +5,7 @@
  */
 
 import logger from '../../logger';
+import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import { sleepWithAbort } from '../../util/time';
 import type ora from 'ora';
 
@@ -14,8 +15,8 @@ import type {
   PullRequestContext,
   ScanRequest,
   ScanResponse,
+  SocketAuthCredentials,
 } from '../../types/codeScan';
-import type { AgentClient } from '../../util/agent/agentClient';
 import type { Config } from '../config/schema';
 
 // Capacity error detection and retry configuration
@@ -24,6 +25,11 @@ const MCP_REQUEST_TIMEOUT_ERROR_MESSAGE = 'MCP error -32001: Request timed out';
 const MAX_CAPACITY_ATTEMPTS = 7;
 const MAX_MCP_TIMEOUT_ATTEMPTS = 2;
 const BASE_DELAY_MS = 1000;
+
+/** Connect the hosted code scanner using the credentials selected by the runner. */
+export function connectScanClient(host: string | undefined, auth: SocketAuthCredentials) {
+  return createAgentClient({ agent: 'code-scan', host: host || 'https://api.promptfoo.app', auth });
+}
 
 /**
  * Options for scan execution

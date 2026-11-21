@@ -179,9 +179,10 @@ function couldMatchTestCaseRoot(pattern: string, filters: unknown, trace: TraceD
 }
 
 function getArgumentCoverageError(
-  { baseType, renderedValue: value, inverse }: AssertionParams,
+  params: AssertionParams,
   includeToolArguments: boolean,
 ): string | undefined {
+  const { baseType, renderedValue: value, inverse } = params;
   if (!value || typeof value !== 'object') {
     return undefined;
   }
@@ -191,7 +192,11 @@ function getArgumentCoverageError(
       return undefined;
     }
   } else {
-    const steps = Array.isArray(value) ? value : 'steps' in value ? value.steps : [value];
+    const steps = Array.isArray(value)
+      ? value
+      : baseType === 'trajectory:tool-sequence' && 'steps' in value
+        ? value.steps
+        : [value];
     const untypedStep = baseType === 'trajectory:step-count' && !('type' in value && value.type);
     const commandFilter =
       (baseType.startsWith('trajectory:') &&
@@ -203,12 +208,21 @@ function getArgumentCoverageError(
     }
     if (
       !inverse &&
-      (includeToolArguments || untypedStep) &&
       (provesObservedTool(baseType, value) ||
         (baseType === 'trajectory:step-count' && hasPositiveMinimum(value, 0)))
     ) {
-      // Untyped patterns can match preserved span names even when arguments were never captured.
-      return undefined;
+      if (includeToolArguments || untypedStep) {
+        return undefined;
+      }
+      // A mixed minimum can be witnessed by a preserved tool or span name.
+      // Exclude command aliases from this check when capture was disabled.
+      if ('type' in value && Array.isArray(value.type)) {
+        const type = value.type.filter((item) => item !== 'command');
+        if (type.length) {
+          params.renderedValue = { ...value, type };
+          return undefined;
+        }
+      }
     }
   }
   return missingArgumentsReason(includeToolArguments);
