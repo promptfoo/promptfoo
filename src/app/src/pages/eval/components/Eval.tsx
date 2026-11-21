@@ -70,7 +70,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const {
     table,
     tableError,
-    tableErrorStatus,
     tableSource,
     setTable,
     config,
@@ -113,21 +112,22 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Handlers
   // ================================
 
-  const fetchRecentFileEvals = async ({
-    reportFailure = true,
-  }: {
-    reportFailure?: boolean;
-  } = {}) => {
-    const resp = await callApi(`/results`, { cache: 'no-store' });
-    if (!resp.ok) {
-      if (reportFailure) {
-        setFailed(true);
+  const recentRequest = useRef(0);
+  const fetchRecentFileEvals = async () => {
+    const request = ++recentRequest.current;
+    try {
+      const resp = await callApi('/results', { cache: 'no-store' });
+      if (!resp.ok) {
+        return;
       }
-      return;
+      const { data } = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+      if (request === recentRequest.current && loadEvalById === loadEvalByIdRef.current) {
+        setRecentEvals(data);
+      }
+      return data;
+    } catch (error) {
+      logger.error('[Eval] Error fetching recent evaluations', { error });
     }
-    const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-    setRecentEvals(body.data);
-    return body.data;
   };
 
   /**
@@ -151,32 +151,31 @@ export default function Eval({ fetchId }: EvalOptions) {
         setInComparisonMode(comparisons.length > 0);
         setEvalId(id);
 
-        const { filters } = useTableStore.getState();
+        const { filters, activeEvalQuery } = useTableStore.getState();
+        const queryOptions =
+          isBackgroundUpdate && activeEvalQuery?.evalId === id
+            ? activeEvalQuery.options
+            : {
+                ...pagination,
+                filterMode,
+                searchText: new URLSearchParams(searchRef.current).get('search') || '',
+                filters: Object.values(filters.values).filter((filter) => {
+                  if (filter.type === 'metadata') {
+                    return Boolean(filter.field && (filter.operator === 'exists' || filter.value));
+                  }
+                  if (filter.type === 'metric' && filter.operator === 'is_defined') {
+                    return Boolean(filter.field);
+                  }
+                  return Boolean(filter.value);
+                }),
+              };
 
         const data = await fetchEvalData(id, {
+          ...queryOptions,
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          ...pagination,
-          filterMode,
-          searchText: new URLSearchParams(searchRef.current).get('search') || '',
-          filters: Object.values(filters.values).filter((filter) => {
-            if (filter.type === 'metadata') {
-              return Boolean(filter.field && (filter.operator === 'exists' || filter.value));
-            }
-            if (filter.type === 'metric' && filter.operator === 'is_defined') {
-              return Boolean(filter.field);
-            }
-            return Boolean(filter.value);
-          }),
         });
-
-        if (requestId !== loadRequestIdRef.current) {
-          return false;
-        }
-        if (!data) {
-          return false;
-        }
-        return true;
+        return requestId === loadRequestIdRef.current && !!data;
       } catch (error) {
         console.error('Error loading eval:', error);
         if (requestId === loadRequestIdRef.current) {
@@ -204,6 +203,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const clearEvalState = useCallback(() => {
     loadRequestIdRef.current += 1;
+    recentRequest.current += 1;
     setFailed(false);
     setTable(null);
     setConfig(null);
@@ -212,105 +212,72 @@ export default function Eval({ fetchId }: EvalOptions) {
     setLoaded(true);
   }, [setAuthor, setConfig, setEvalId, setTable]);
 
-  /**
-   * Populates the table store from a websocket signal. Explicit /eval/:id routes stay
-   * pinned (they only reload when their own eval changes), while the root /eval route
-   * follows the latest eval. Held in a ref (below) so the socket effect never has to tear
-   * down and reopen the connection when the route or comparison selection changes.
-   */
+  const reloadInBackground = async (id: string) => {
+    setIsStreaming(true);
+    try {
+      await loadEvalByIdRef.current(id, true);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  const handleDeletion = async (deletedIds: string[]) => {
+    const recents = await fetchRecentFileEvals();
+    // A deletion survives in-page filter or comparison changes, but must not
+    // redirect an unrelated evaluation after navigation or an API switch.
+    const route = routeContextRef.current;
+    const displayedId = route.fetchId ?? currentEvalIdRef.current;
+    if (apiBaseUrl !== route.apiBaseUrl || !displayedEvalWasDeleted(displayedId, deletedIds)) {
+      return;
+    }
+    const latestId = recents?.[0]?.evalId;
+    if (!latestId) {
+      clearEvalState();
+      if (route.fetchId) {
+        navigate(EVAL_ROUTES.ROOT, { replace: true });
+      }
+      return;
+    }
+    setDefaultEvalId(latestId);
+    if (route.fetchId) {
+      navigate(EVAL_ROUTES.DETAIL(latestId), { replace: true });
+    } else {
+      await reloadInBackground(latestId);
+    }
+  };
+
   const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
-      logger.debug('[Eval] No eval data available', {});
       clearEvalState();
       return;
     }
-
-    const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
-    const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
-
-    // Reload the displayed table in the background, suppressing the page-level loading
-    // flash. Streaming is scoped to the actual reload so signals that don't change the
-    // current view (e.g. a scoped update for a different pinned eval) never toggle the
-    // streaming indicator. loadEvalById sets the eval id itself.
-    const reloadInBackground = async (id: string) => {
-      setIsStreaming(true);
-      try {
-        const reload = deletedEvalIds === undefined ? loadEvalById : loadEvalByIdRef.current;
-        await reload(id, true);
-      } finally {
-        setIsStreaming(false);
-      }
-    };
-
-    // Pinned /eval/:id route + a scoped update for THIS eval: reload it directly via
-    // /eval/:id/table. The recent-evals list is only needed for the dropdown, so fetch it
-    // concurrently and don't let a transient /api/results failure drop the pinned eval's refresh.
-    if (fetchId && deletedEvalIds === undefined && scopedEvalId === fetchId) {
-      const [recents] = await Promise.all([
-        fetchRecentFileEvals({ reportFailure: false }),
-        reloadInBackground(fetchId),
-      ]);
-      if (loadEvalById !== loadEvalByIdRef.current) {
-        return;
-      }
-      if (recents && recents.length > 0) {
-        setDefaultEvalId(recents[0].evalId);
-      }
-      return;
+    const { deletedEvalIds, evalId: scopedId } = data;
+    if (deletedEvalIds) {
+      return handleDeletion(deletedEvalIds);
     }
 
-    const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
-    const activeRoute = routeContextRef.current;
-    if (apiBaseUrl !== activeRoute.apiBaseUrl) {
+    // Refresh a pinned evaluation even when the dropdown lookup fails.
+    const refreshPinned = fetchId && scopedId === fetchId;
+    const [recents] = await Promise.all([
+      fetchRecentFileEvals(),
+      refreshPinned ? reloadInBackground(fetchId) : null,
+    ]);
+    if (!recents || loadEvalById !== loadEvalByIdRef.current) {
       return;
     }
-    const activeFetchId = deletedEvalIds === undefined ? fetchId : activeRoute.fetchId;
-    if (deletedEvalIds !== undefined) {
-      // A deletion still applies after in-page changes, but not to a different selected record.
-      if (!displayedEvalWasDeleted(activeFetchId ?? currentEvalIdRef.current, deletedEvalIds)) {
-        return;
-      }
-    } else if (loadEvalById !== loadEvalByIdRef.current) {
-      return;
-    }
-    if (!newRecentEvals) {
-      // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
-      // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.
-      if (activeFetchId && deletedEvalIds !== undefined) {
+    const latestId = recents[0]?.evalId;
+    if (!latestId) {
+      if (!refreshPinned) {
         clearEvalState();
-        navigate(EVAL_ROUTES.ROOT, { replace: true });
+        if (fetchId) {
+          navigate(EVAL_ROUTES.ROOT, { replace: true });
+        }
       }
       return;
     }
-    if (newRecentEvals.length === 0) {
-      clearEvalState();
-      if (activeFetchId) {
-        navigate(EVAL_ROUTES.ROOT, { replace: true });
-      }
-      return;
-    }
-
-    const latestEvalId = newRecentEvals[0].evalId;
-    setDefaultEvalId(latestEvalId);
-
-    if (deletedEvalIds !== undefined) {
-      if (activeFetchId) {
-        navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
-      } else {
-        await reloadInBackground(latestEvalId);
-      }
-      return;
-    }
-
-    const updatedEvalId = scopedEvalId ?? latestEvalId;
-    const shouldReload =
-      fetchId === null
-        ? scopedEvalId === undefined ||
-          scopedEvalId === currentEvalIdRef.current ||
-          scopedEvalId === latestEvalId
-        : scopedEvalId === fetchId;
-    if (shouldReload) {
-      await reloadInBackground(updatedEvalId);
+    setDefaultEvalId(latestId);
+    if (!fetchId && (!scopedId || scopedId === currentEvalIdRef.current || scopedId === latestId)) {
+      await reloadInBackground(scopedId ?? latestId);
     }
   };
 
@@ -440,7 +407,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         if (success && !cancelled) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
-          fetchRecentFileEvals({ reportFailure: false });
+          fetchRecentFileEvals();
           // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
@@ -450,7 +417,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       // Fetch from server
       const run = async () => {
         const loadRequestId = loadRequestIdRef.current;
-        const evals = await fetchRecentFileEvals({ reportFailure: false }).catch(() => undefined);
+        const evals = await fetchRecentFileEvals();
         if (cancelled || loadRequestId !== loadRequestIdRef.current) {
           return;
         }
@@ -599,25 +566,29 @@ export default function Eval({ fetchId }: EvalOptions) {
       JSON.stringify(comparisonEvalIds.filter((id) => id !== evalId));
 
   if (failed || (tableError && (!table || !tableMatchesSelection))) {
-    if (comparisonEvalIds.length > 0) {
-      return (
-        <div className="notice space-y-3">
-          <p>
-            {tableErrorStatus === 400 || tableErrorStatus === 404
-              ? 'Unable to load comparison. All evaluations must exist and use the same dataset.'
-              : 'Unable to load comparison. Please try again.'}
-          </p>
-          {tableErrorStatus === 413 && (
-            <p>Clear comparison, choose fewer results per page, and compare again.</p>
-          )}
-          <div className="flex justify-center gap-2">
-            <Button onClick={() => setRetryAttempt((attempt) => attempt + 1)}>Retry</Button>
-            <Button onClick={() => updateComparisonEvalIds([])}>Clear comparison</Button>
-          </div>
-        </div>
-      );
+    const comparing = comparisonEvalIds.length > 0;
+    const status = failed ? undefined : tableError?.status;
+    if (!comparing && status === 404) {
+      return <div className="notice">404 Eval not found</div>;
     }
-    return <div className="notice">404 Eval not found</div>;
+    return (
+      <div className="notice space-y-3" role="alert">
+        <p>
+          {comparing && (status === 400 || status === 404)
+            ? 'Unable to load comparison. All evaluations must exist and use the same dataset.'
+            : `Unable to load ${comparing ? 'comparison' : 'evaluation'}. Please try again.`}
+        </p>
+        {comparing && status === 413 && (
+          <p>Clear comparison, choose fewer results per page, and compare again.</p>
+        )}
+        <div className="flex justify-center gap-2">
+          <Button onClick={() => setRetryAttempt((attempt) => attempt + 1)}>Retry</Button>
+          {comparing && (
+            <Button onClick={() => updateComparisonEvalIds([])}>Clear comparison</Button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (!loaded) {

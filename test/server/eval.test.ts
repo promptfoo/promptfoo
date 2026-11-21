@@ -126,6 +126,17 @@ describe('eval routes', () => {
       },
     );
 
+    it('derives the dataset ID of a legacy import from its tests', async () => {
+      const legacy = await EvalFactory.createOldResult();
+      const comparison = await Eval.create({ tests: legacy.config.tests }, []);
+      testEvalIds.add(legacy.id);
+      testEvalIds.add(comparison.id);
+      const response = await api.get(`/api/eval/${legacy.id}/table`).query({
+        comparisonEvalIds: comparison.id,
+      });
+      expect(response.status).toBe(200);
+    });
+
     it('rejects a missing comparison without returning a partial table', async () => {
       const base = await EvalFactory.create();
       testEvalIds.add(base.id);

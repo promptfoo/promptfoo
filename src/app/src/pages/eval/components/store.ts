@@ -212,6 +212,13 @@ interface FetchEvalOptions {
   filters?: ResultsFilter[];
 }
 
+type EvalTableQuery = {
+  evalId: string;
+  options: Required<
+    Pick<FetchEvalOptions, 'pageIndex' | 'pageSize' | 'filterMode' | 'searchText' | 'filters'>
+  >;
+};
+
 interface ColumnState {
   selectedColumns: string[];
   columnVisibility: VisibilityState;
@@ -299,9 +306,9 @@ interface TableState {
   stats: EvaluateStats | null;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+  activeEvalQuery: EvalTableQuery | null;
   isFetching: boolean;
-  tableError: boolean;
-  tableErrorStatus: number | null;
+  tableError: { status?: number } | null;
   tableSource: {
     apiBaseUrl: string | undefined;
     evalId: string;
@@ -470,13 +477,7 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
       comparisonEvalIds: [],
-      setComparisonEvalIds: (comparisonEvalIds: string[]) =>
-        set((state) =>
-          state.comparisonEvalIds.length === comparisonEvalIds.length &&
-          state.comparisonEvalIds.every((id, index) => id === comparisonEvalIds[index])
-            ? state
-            : { comparisonEvalIds },
-        ),
+      setComparisonEvalIds: (comparisonEvalIds: string[]) => set(() => ({ comparisonEvalIds })),
       stickyHeader: true,
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
@@ -519,29 +520,18 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
   ),
 );
 
-// Helper function to determine if a filter is applied
-const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolean => {
-  if (filter.type === 'metadata') {
-    // For metadata filters with exists operator, only field is required
-    if (filter.operator === 'exists') {
-      return Boolean(filter.field);
-    }
-    // For other metadata operators, both field and value are required
+export function isFilterApplied(filter: Partial<ResultsFilter>): boolean {
+  if (
+    (filter.type === 'metadata' && filter.operator === 'exists') ||
+    (filter.type === 'metric' && filter.operator === 'is_defined')
+  ) {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metadata' || filter.type === 'metric') {
     return Boolean(filter.value && filter.field);
   }
-  if (filter.type === 'metric') {
-    // For metric filters with is_defined operator, only field is required
-    if (filter.operator === 'is_defined') {
-      return Boolean(filter.field);
-    }
-    // For metric filters with comparison operators, both field and value are required
-    return Boolean(filter.value && filter.field);
-  }
-  // For non-metadata/non-metric filters, value is required
   return Boolean(filter.value);
-};
-
-let evalDataRequestId = 0;
+}
 
 const clearFilters = (prevState: TableState) => ({
   filters: {
@@ -550,6 +540,14 @@ const clearFilters = (prevState: TableState) => ({
     appliedCount: 0,
   },
 });
+
+type ForegroundEvalRequest = {
+  query: EvalTableQuery;
+  settled: Promise<void>;
+  settle: () => void;
+};
+
+let foregroundEvalRequest: ForegroundEvalRequest | null = null;
 
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
@@ -564,21 +562,24 @@ export const useTableStore = create<TableState>()(
 
     table: null,
     tableSource: null,
+    tableError: null,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
      * are not updated.
      */
     setTable: (table: EvaluateTable | null) => {
-      if (table === null) {
-        evalDataRequestId += 1;
+      if (!table) {
+        foregroundEvalRequest = null;
       }
       set((prevState) => ({
         table,
-        isFetching: table === null ? false : prevState.isFetching,
-        tableError: table === null ? false : prevState.tableError,
-        tableErrorStatus: table === null ? null : prevState.tableErrorStatus,
-        tableSource: table ? prevState.tableSource : null,
+        ...(!table && {
+          activeEvalQuery: null,
+          tableSource: null,
+          tableError: null,
+          isFetching: false,
+        }),
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -603,15 +604,13 @@ export const useTableStore = create<TableState>()(
     userRatedResultsCount: 0,
 
     isFetching: false,
-    tableError: false,
-    tableErrorStatus: null,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
     shouldHighlightSearchText: false,
+    activeEvalQuery: null,
 
     fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
-      const requestId = ++evalDataRequestId;
       const {
         pageIndex = 0,
         pageSize = 50,
@@ -623,18 +622,43 @@ export const useTableStore = create<TableState>()(
         filters = [],
       } = options;
 
+      const query: EvalTableQuery = {
+        evalId: id,
+        options: { pageIndex, pageSize, filterMode, searchText, filters },
+      };
+      const pendingForeground = foregroundEvalRequest;
+      if (
+        skipLoadingState &&
+        pendingForeground?.query.evalId === id &&
+        JSON.stringify(pendingForeground.query.options) === JSON.stringify(query.options)
+      ) {
+        // Let the selected page commit before refreshing it. A failed refresh
+        // must not discard an otherwise successful foreground page load.
+        await pendingForeground.settled;
+        if (get().activeEvalQuery !== pendingForeground.query) {
+          return null;
+        }
+      }
+
+      let request: ForegroundEvalRequest | null = null;
+      if (!skipLoadingState) {
+        let settle!: () => void;
+        const settled = new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+        request = { query, settled, settle };
+        foregroundEvalRequest = request;
+      }
+
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
       // Cancel any existing metadata keys request and reset state for new eval
-      const currentState = get();
-      if (currentState.currentMetadataKeysRequest) {
-        currentState.currentMetadataKeysRequest.abort();
-      }
+      get().currentMetadataKeysRequest?.abort();
 
       set({
+        activeEvalQuery: query,
+        tableError: null,
         isFetching: skipLoadingState ? get().isFetching : true,
-        tableError: false,
-        tableErrorStatus: null,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -681,9 +705,8 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        // Remove the origin as it was only added to satisfy the URL constructor.
         const { apiBaseUrl } = useApiConfig.getState();
-        const resp = await callApi(url.toString().replace(window.location.origin, ''));
+        const resp = await callApi(url.pathname + url.search);
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
@@ -694,15 +717,13 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
-          // Navigation or comparison changes can finish out of order.
-          if (requestId !== evalDataRequestId) {
+          // A socket refresh or page change may have started a newer request.
+          if (get().activeEvalQuery !== query) {
             return data;
           }
 
           set((prevState) => ({
             table: data.table,
-            tableError: false,
-            tableErrorStatus: null,
             tableSource: { apiBaseUrl, evalId: id, comparisonEvalIds },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
@@ -712,7 +733,6 @@ export const useTableStore = create<TableState>()(
             version: data.version,
             author: data.author,
             evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: false,
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
@@ -734,24 +754,29 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (requestId === evalDataRequestId) {
-          set({ isFetching: false, tableError: true, tableErrorStatus: resp.status });
-        }
+        set((state) =>
+          state.activeEvalQuery === query ? { tableError: { status: resp.status } } : state,
+        );
         return null;
       } catch (error) {
-        if (requestId !== evalDataRequestId) {
-          return null;
-        }
         console.error('Error fetching eval data:', error);
-        set({
-          isFetching: false,
-          tableError: true,
-          tableErrorStatus: null,
-          isStreaming: false,
-          metadataKeysLoading: false,
-          currentMetadataKeysRequest: null,
-        });
+        if (get().activeEvalQuery === query) {
+          set({
+            tableError: {},
+            isStreaming: false,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
         return null;
+      } finally {
+        if (request) {
+          if (foregroundEvalRequest === request) {
+            foregroundEvalRequest = null;
+            set({ isFetching: false });
+          }
+          request.settle();
+        }
       }
     },
 
