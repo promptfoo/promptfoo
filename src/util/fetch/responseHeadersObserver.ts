@@ -29,6 +29,10 @@ export function preserveResponseHeadersObserverErrorResponse<T extends object>(
   return response;
 }
 
+// Receipt time belongs to the original wire headers. Keep it out of serialized
+// cache entries and provider metadata while sharing it with fresh observers.
+export const headerReceiptTimes = new WeakMap<Record<string, string>, number>();
+
 type HeaderArguments = Parameters<ResponseHeadersObserver>;
 type Observe = (args: HeaderArguments, alreadyObserved: boolean) => boolean;
 

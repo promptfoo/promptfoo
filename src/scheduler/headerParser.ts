@@ -45,7 +45,10 @@ const STANDARD_HEADERS = {
 /**
  * Parse rate limit headers from response.
  */
-export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRateLimitHeaders {
+export function parseRateLimitHeaders(
+  headers: Record<string, string>,
+  now = Date.now(),
+): ParsedRateLimitHeaders {
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
@@ -87,7 +90,7 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
     STANDARD_HEADERS.reset,
   ]) {
     if (h[name] !== undefined) {
-      const parsed = parseResetTime(h[name]);
+      const parsed = parseResetTime(h[name], now);
       if (parsed !== null) {
         result.resetAt = parsed;
         break;
@@ -102,17 +105,17 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
     if (Number.isFinite(ms) && ms >= 0) {
       result.retryAfterMs = ms;
       if (result.resetAt === undefined) {
-        result.resetAt = Date.now() + ms;
+        result.resetAt = now + ms;
       }
     }
   }
 
   if (result.retryAfterMs === undefined && h['retry-after'] !== undefined) {
-    const parsed = parseRetryAfter(h['retry-after']);
+    const parsed = parseRetryAfter(h['retry-after'], now);
     if (parsed !== null) {
       result.retryAfterMs = parsed;
       if (result.resetAt === undefined) {
-        result.resetAt = Date.now() + parsed;
+        result.resetAt = now + parsed;
       }
     }
   }
@@ -125,7 +128,7 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
  * Returns duration in milliseconds.
  * Exported for integration use.
  */
-export function parseRetryAfter(value: string): number | null {
+export function parseRetryAfter(value: string, now = Date.now()): number | null {
   // Try as integer seconds (must be non-negative)
   const seconds = Number.parseInt(value, 10);
   const durationMs = seconds * 1000;
@@ -141,7 +144,7 @@ export function parseRetryAfter(value: string): number | null {
   // Try HTTP-date format
   const httpDate = parseHttpDate(value);
   if (httpDate !== null) {
-    return Math.max(0, httpDate - Date.now());
+    return Math.max(0, httpDate - now);
   }
 
   return null;
@@ -175,11 +178,11 @@ const BARE_NUMBER_RE = /^\d+(?:\.\d+)?$/;
  * Parse reset time from various formats.
  * Returns absolute Unix timestamp in milliseconds.
  */
-function parseResetTime(value: string): number | null {
+function parseResetTime(value: string, now: number): number | null {
   // Try duration format first (e.g., "1s", "100ms", "1m30s")
   const durationMs = parseDuration(value);
   if (durationMs !== null) {
-    return Date.now() + durationMs;
+    return now + durationMs;
   }
 
   // Try as numeric, but only when the whole value is a bare number
@@ -191,7 +194,7 @@ function parseResetTime(value: string): number | null {
       // - 1-10 billion: Unix seconds (10 digits)
       // - > 10 billion: Unix milliseconds (13 digits)
       if (num < 1_000_000_000) {
-        return Date.now() + num * 1000;
+        return now + num * 1000;
       } else if (num < 10_000_000_000) {
         return num * 1000;
       } else {

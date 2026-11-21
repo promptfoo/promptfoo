@@ -302,7 +302,7 @@ describe('Chat cached quota through the real rate-limit wrapper', () => {
     },
   );
 
-  it('retains metadata and existing final-header learning for an uncancelled cache hit', async () => {
+  it('retains metadata without restarting the quota window on an uncancelled cache hit', async () => {
     const { callback, callbackStarted, callbackResult, registry, wrapped } = await warmCache();
     const firstController = new AbortController();
     const secondController = new AbortController();
@@ -311,7 +311,7 @@ describe('Chat cached quota through the real rate-limit wrapper', () => {
     const retrying = vi.fn();
     registry.on('ratelimit:learned', learned);
     registry.on('request:retrying', retrying);
-    const resetAt = Date.now() + resetWindowMs;
+    const startedAt = Date.now();
     let secondDispatchAt: number | undefined;
     vi.mocked(globalThis.fetch).mockImplementationOnce(async () => {
       secondDispatchAt = Date.now();
@@ -331,23 +331,15 @@ describe('Chat cached quota through the real rate-limit wrapper', () => {
         metadata: { http: { status: 200, statusText: 'OK', headers: quotaHeaders } },
       });
       expect(release).toHaveBeenCalledOnce();
-      expect(learned).toHaveBeenCalledOnce();
+      expect(learned).not.toHaveBeenCalled();
       expect(callback).toHaveBeenCalledTimes(2);
       second = withEnabledCache(() =>
         wrapped.callApi('distinct live B prompt', undefined, {
           abortSignal: secondController.signal,
         }),
       ).catch((error: unknown) => error);
-      expect(Object.values(registry.getMetrics())).toHaveLength(1);
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        activeRequests: 0,
-        queueDepth: 1,
-      });
-      await vi.advanceTimersByTimeAsync(resetWindowMs - 1);
-      expect(secondDispatchAt).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(1);
       await expect(second).resolves.toMatchObject({ output: 'live B output', cached: false });
-      expect(secondDispatchAt).toBe(resetAt);
+      expect(secondDispatchAt).toBe(startedAt);
       expect(secondController.signal.aborted).toBe(false);
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
       expect(release).toHaveBeenCalledTimes(2);
