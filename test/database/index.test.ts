@@ -828,7 +828,7 @@ describe('database', () => {
       ).toBe(false);
       expect(result.isDbOpen).toBe(false);
       expect(result.rowCount).toBe(2);
-      expect(result.elapsedMs).toBeLessThan(2_500);
+      expect(result.closeElapsedMs).toBeLessThan(2_500);
     });
 
     it('preserves acknowledged writes when a competing writer briefly holds the lock', async () => {
@@ -843,7 +843,7 @@ describe('database', () => {
       expect(result.insertAcknowledged).toBe(true);
       expect(result.rowCount).toBe(2);
       expect(result.isDbOpen).toBe(false);
-      expect(result.elapsedMs).toBeLessThan(2_500);
+      expect(result.closeElapsedMs).toBeLessThan(2_500);
     });
 
     it('exits gracefully below the watchdog while a reader holds the WAL open', async () => {
@@ -853,7 +853,7 @@ describe('database', () => {
         'shutdown',
       );
 
-      expect(result.elapsedMs).toBeLessThan(2_500);
+      expect(result.exitElapsedMs).toBeLessThan(2_500);
       expect(result.isDbOpen).toBe(false);
       expect(result.rowCount).toBe(2);
       const warningIndex = result.logs.findIndex(

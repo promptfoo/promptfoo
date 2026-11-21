@@ -8,7 +8,8 @@ import logger from '../../../src/logger';
 import type { Transaction } from '@libsql/client/node';
 
 export interface WalCheckpointProbeResult {
-  elapsedMs: number;
+  closeElapsedMs: number;
+  exitElapsedMs: number;
   journalMode: string;
   insertAcknowledged: boolean;
   isDbOpen: boolean;
@@ -85,13 +86,14 @@ if (mode === 'hold-writer') {
       writer.send('release');
     }
 
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     const insertPromise = writer
       ? db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES').then(() => {
           insertAcknowledged = true;
         })
       : Promise.resolve();
     await Promise.all([insertPromise, close()]);
+    const closeElapsedMs = performance.now() - startedAt;
     const databaseStillOpen = isDbOpen();
 
     await readerTransaction?.rollback();
@@ -110,7 +112,8 @@ if (mode === 'hold-writer') {
     process.once('exit', () => {
       console.log(
         `PROMPTFOO_DATABASE_PROBE_RESULT=${JSON.stringify({
-          elapsedMs: Date.now() - startedAt,
+          closeElapsedMs,
+          exitElapsedMs: performance.now() - startedAt,
           journalMode,
           insertAcknowledged,
           isDbOpen: databaseStillOpen,
