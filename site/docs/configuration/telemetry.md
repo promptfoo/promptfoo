@@ -36,9 +36,7 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
-For a single eval, set `env: { PROMPTFOO_DISABLE_TELEMETRY: 'true' }` in its configuration. This setting is also accepted by API jobs. An explicit `'false'` or empty string overrides the environment default. Provider-level env settings do not control telemetry.
-
-The CLI sends a one-time opt-out acknowledgment, which can include your local user ID and email. See the [FAQ](/docs/faq#do-you-collect-any-pii).
+For a single eval, set `env: { PROMPTFOO_DISABLE_TELEMETRY: 'true' }` in its configuration. This setting is also accepted by API jobs. An eval or provider cannot re-enable telemetry disabled by the host or an environment file. Provider settings cannot override the eval's opt-out. Promptfoo sends no opt-out acknowledgment.
 
 For the web UI, set this variable when building the app. Changing the server environment does not change a prebuilt UI.
 
