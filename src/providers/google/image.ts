@@ -2,7 +2,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
-import { resolveProviderApiKey } from '../credentials';
+import { resolveSelectedApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import {
@@ -133,6 +133,13 @@ export class GoogleImageProvider implements ApiProvider {
     // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
     const isVertexMode = determineGoogleVertexMode(this.config, this.env);
 
+    if (
+      isVertexMode &&
+      !apiKey &&
+      (this.config.apiKey !== undefined || this.config.apiKeyEnvar !== undefined)
+    ) {
+      return { error: 'The selected Google image API key is empty or missing.' };
+    }
     if (isVertexMode) {
       // Use Vertex AI if project ID is available
       return this.callVertexApi(prompt);
@@ -372,7 +379,7 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey(this.config, this.env, [
+    return resolveSelectedApiKey(this.config, this.env, [
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',

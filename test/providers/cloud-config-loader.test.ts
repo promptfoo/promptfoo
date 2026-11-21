@@ -28,6 +28,8 @@ describe('cloud provider loader configuration', () => {
   ])('%s credentials', (path) => {
     it.each([
       { config: {}, env: { GEMINI_API_KEY: 'scoped-alias' }, expected: 'scoped-alias' },
+      { config: { apiKey: '' }, env: {}, expected: undefined },
+      { config: { apiKeyEnvar: '' }, env: {}, expected: undefined },
       { config: { apiKey: 'explicit' }, env: { GOOGLE_API_KEY: 'scoped' }, expected: 'explicit' },
       {
         config: { apiKeyEnvar: 'PRIVATE_GOOGLE_KEY' },
@@ -78,7 +80,7 @@ describe('cloud provider loader configuration', () => {
       expect(url).toContain('/v1/publishers/google/models/');
       expect(init?.headers).toMatchObject({ 'x-goog-api-key': key });
     } else {
-      expect(result.error).toContain('named Vertex Express API key');
+      expect(result.error).toContain('selected Vertex Express API key');
       expect(fetchWithCache).not.toHaveBeenCalled();
     }
   });
@@ -193,6 +195,25 @@ describe('cloud provider loader configuration', () => {
       await expect(provider.callEmbeddingApi('hello')).rejects.toThrow(
         'Voyage API key must be set',
       );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ apiKey: '' }, { apiKeyEnvar: '' }, { apiKey: '  ' }])(
+    'does not forward ambient credentials to a saved endpoint for %j',
+    async (config) => {
+      vi.stubEnv('VOYAGE_API_KEY', 'ambient');
+      vi.stubEnv('VERTEX_API_KEY', 'ambient');
+      vi.stubEnv('GOOGLE_API_KEY', 'ambient');
+      const options = { config: { ...config, apiBaseUrl: 'https://gateway.invalid' } };
+      const voyage = await loadApiProvider('voyage:voyage-4', { options });
+      await expect(voyage.callEmbeddingApi!('input')).rejects.toThrow('Voyage API key must be set');
+      const vertex = await loadApiProvider('google:gemini-2.5-flash-image', {
+        options: { config: { ...options.config, vertexai: true } },
+      });
+      expect((await vertex.callApi('draw')).error).toContain('selected Vertex Express API key');
+      const live = await loadApiProvider('google:live:gemini-3.1-flash-live-preview', { options });
+      await expect(live.callApi('hello')).rejects.toThrow('selected Google Live API key');
       expect(fetchWithCache).not.toHaveBeenCalled();
     },
   );

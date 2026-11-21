@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
-import { resolveProviderApiKey } from '../credentials';
+import { resolveSelectedApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { GoogleAuthManager } from './auth';
@@ -166,7 +166,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey(this.config, this.env, [
+    return resolveSelectedApiKey(this.config, this.env, [
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',
@@ -267,7 +267,7 @@ export class GeminiImageProvider implements ApiProvider {
       : undefined;
 
     const vertexApiKey = isVertexMode
-      ? resolveProviderApiKey(this.config, this.env, ['VERTEX_API_KEY', 'GOOGLE_API_KEY'])
+      ? resolveSelectedApiKey(this.config, this.env, ['VERTEX_API_KEY', 'GOOGLE_API_KEY'])
       : undefined;
     const hasOAuthConfig = Boolean(
       this.config.credentials ||
@@ -290,9 +290,10 @@ export class GeminiImageProvider implements ApiProvider {
         this.env?.GOOGLE_CLOUD_PROJECT ||
         (providerScopedRegion && providerScopedRegion !== 'global'),
     );
+    const selectedKey = this.config.apiKey !== undefined || this.config.apiKeyEnvar !== undefined;
     const explicitlyRequestedExpress =
       this.config.expressMode === true ||
-      Boolean(this.config.apiKey || this.config.apiKeyEnvar) ||
+      selectedKey ||
       (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
         !hasProviderScopedOAuthConfig);
     const effectiveRegion =
@@ -310,8 +311,8 @@ export class GeminiImageProvider implements ApiProvider {
       !hasOAuthConfig &&
       (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig);
 
-    if (usesVertexExpress && this.config.apiKeyEnvar && !vertexApiKey) {
-      return { error: 'The named Vertex Express API key is empty or missing.' };
+    if (usesVertexExpress && selectedKey && !vertexApiKey) {
+      return { error: 'The selected Vertex Express API key is empty or missing.' };
     }
     if (usesVertexExpress && vertexApiKey) {
       const region = effectiveRegion || 'global';

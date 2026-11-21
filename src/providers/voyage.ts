@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { resolveProviderApiKey } from './credentials';
+import { resolveSelectedApiKey } from './credentials';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
@@ -50,7 +50,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    return resolveProviderApiKey(this.config, this.env, ['VOYAGE_API_KEY']);
+    return resolveSelectedApiKey(this.config, this.env, ['VOYAGE_API_KEY']);
   }
 
   getApiUrl(): string {
@@ -70,7 +70,8 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    if (!this.getApiKey()) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       throw new Error('Voyage API key must be set for similarity comparison');
     }
 
@@ -91,7 +92,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            Authorization: `Bearer ${apiKey}`,
             ...this.config.headers,
           },
           body: JSON.stringify(body),
