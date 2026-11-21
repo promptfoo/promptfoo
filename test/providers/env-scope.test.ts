@@ -1010,7 +1010,10 @@ describe('provider environment scopes', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      // Video requests bypass the cache; text requests use a credential-free key.
+      route.includes('gemini-omni')
+        ? true
+        : { cacheKey: expect.stringMatching(/^google:interactions:v1:[0-9a-f]{64}$/) },
     );
   });
 
