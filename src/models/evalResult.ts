@@ -3,7 +3,9 @@ import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extrac
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
+  captureResponseFields,
   getStripFlags,
+  mapGradingResultProviderRefs,
   persistRepeatMetadata,
   persistTraceMetadata,
   projectGradingResult,
@@ -11,14 +13,14 @@ import {
   projectPrompt,
   projectProviderResponse,
   projectTestCase,
-  redactSensitiveResultFieldsForDb,
   sanitizeForDb,
-  sanitizeForDbWithSecrets,
-  sanitizeGradingResultForDb,
+  sanitizePromptForDb,
   sanitizeProvider,
-  serializeResultProviderRefs,
+  sanitizeResultFieldsForDb,
+  sanitizeTestCaseForDb,
   surfaceRepeatMetadata,
   surfaceTraceMetadata,
+  toSerializableProviderRef,
 } from '../evaluator/resultProcessing';
 import { hashPrompt } from '../prompts/utils';
 import {
@@ -46,7 +48,7 @@ export default class EvalResult {
     result: EvaluateResult,
     opts?: { persist: boolean },
   ) {
-    const persist = opts?.persist == null ? true : opts.persist;
+    const persist = opts?.persist ?? true;
     const {
       prompt,
       error,
@@ -64,7 +66,7 @@ export default class EvalResult {
       evaluationId,
       repeatIndex,
       repeatGroupId,
-    } = serializeResultProviderRefs(result);
+    } = result;
 
     // Persist trace and repeat linkage inside a private metadata namespace so they
     // survive EvalResult round-trips without a Drizzle schema migration.
@@ -74,50 +76,46 @@ export default class EvalResult {
       evaluationId,
     );
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
+    const captured = captureResponseFields(result.response, persistedMetadata);
+    const processedResponse = await extractAndStoreBinaryData(captured.response, {
       evalId,
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
-
-    // Sanitize all JSON fields to remove circular references and non-serializable values.
-    // `testCase` and `prompt` can contain a resolved runtime provider under
-    // `options.provider` or `config.provider` (used for llm-rubric judging); that
-    // provider may hold a live SDK client with credentials (Anthropic apiKey, etc.)
-    // and circular references — see `sanitizeForDbWithSecrets`. Other fields go
-    // through the lighter `sanitizeForDb` which only strips circular refs /
-    // non-serializable values.
+    // A null field from the persistence projection is final. Retrying the original
+    // value could run a serializer that bypasses transport and credential redaction.
+    const fields = persist
+      ? sanitizeResultFieldsForDb({ ...result, response: processedResponse }, captured.metadata)
+      : {
+          testCase: sanitizeTestCaseForDb(testCase),
+          prompt: sanitizePromptForDb(prompt),
+          response: sanitizeForDb(processedResponse || null),
+          gradingResult: sanitizeForDb(
+            mapGradingResultProviderRefs(gradingResult || null, toSerializableProviderRef),
+          ),
+          namedScores: sanitizeForDb(namedScores),
+          provider: sanitizeProvider(provider),
+          metadata: sanitizeForDb(captured.metadata),
+        };
     const args = {
+      ...fields,
+      response: fields.response ?? null,
+      gradingResult: fields.gradingResult ?? null,
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
-      prompt: sanitizeForDbWithSecrets(prompt),
       promptId: hashPrompt(prompt),
       error: error?.toString(),
       success,
-      score: score == null ? 0 : score,
-      response: sanitizeForDb(processedResponse || null),
-      gradingResult: sanitizeForDb(gradingResult || null),
-      namedScores: sanitizeForDb(namedScores),
-      provider: sanitizeProvider(provider),
+      score: score ?? 0,
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
       failureReason,
     };
     if (persist) {
       const db = await getDb();
 
-      const redacted = redactSensitiveResultFieldsForDb({
-        response: args.response,
-        gradingResult: args.gradingResult,
-        metadata: args.metadata,
-      });
-      args.response = redacted.response;
-      args.gradingResult = redacted.gradingResult;
-      args.metadata = redacted.metadata;
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
@@ -130,15 +128,17 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
+      const captured = captureResponseFields(result.response, result.metadata);
       const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
+        ? await extractAndStoreBinaryData(captured.response, {
             evalId,
             testIdx: result.testIdx,
             promptIdx: result.promptIdx,
           })
-        : result.response;
+        : captured.response;
       processedResults.push({
-        ...serializeResultProviderRefs(result),
+        ...result,
+        metadata: captured.metadata,
         response: processedResponse ?? undefined,
       });
     }
@@ -156,24 +156,7 @@ export default class EvalResult {
           repeatGroupId: _repeatGroupId,
           ...rest
         } = result;
-        const sanitizedResult = {
-          ...rest,
-          testCase: sanitizeForDbWithSecrets(result.testCase),
-          prompt: sanitizeForDbWithSecrets(result.prompt),
-          ...redactSensitiveResultFieldsForDb({
-            response: sanitizeForDb(result.response),
-            gradingResult: sanitizeForDb(result.gradingResult),
-            metadata: sanitizeForDb(
-              persistTraceMetadata(
-                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
-                result.traceId,
-                result.evaluationId,
-              ),
-            ),
-          }),
-          namedScores: sanitizeForDb(result.namedScores),
-          provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
-        };
+        const sanitizedResult = { ...rest, ...sanitizeResultFieldsForDb(result) };
         const dbResult = await tx
           .insert(evalResultsTable)
           .values({ ...sanitizedResult, evalId, id: crypto.randomUUID() })
@@ -384,26 +367,23 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
-    // Trace/repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived
-    // from testCase metadata, while linkage travels inside the metadata JSON. Drizzle would
-    // drop them silently, but excluding them explicitly keeps the payload aligned with the schema.
+    // Trace and repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
+    // testCase metadata in the constructor, and trace linkage travels inside the metadata
+    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
+    // explicitly keeps the write payload aligned with the schema.
     const {
       traceId: _traceId,
       evaluationId: _evaluationId,
       repeatIndex: _repeatIndex,
       repeatGroupId: _repeatGroupId,
       pluginId: _pluginId,
+      persisted: _persisted,
       ...rest
-    } = serializeResultProviderRefs(this);
+    } = this;
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
-      metadata: persistTraceMetadata(
-        persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
-        this.traceId,
-        this.evaluationId,
-      ),
+      ...sanitizeResultFieldsForDb(this),
     };
     //check if this exists in the db
     if (this.persisted) {
@@ -508,6 +488,7 @@ export function asEvaluateResult(
 
 export { getResultIndexKey } from '../evaluator/resultIndex';
 // Compatibility exports for existing source consumers. New callers use evaluator/resultProcessing.
+
 export {
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
@@ -515,7 +496,9 @@ export {
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
+  sanitizeLegacyResults,
   sanitizeProvider,
+  sanitizeResultFieldsForDb,
   sanitizeResultForJsonlArtifact,
   stripRepeatLinkageFromMetadata,
   stripTraceLinkageFromMetadata,

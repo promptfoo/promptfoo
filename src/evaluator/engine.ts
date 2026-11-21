@@ -79,6 +79,7 @@ import { accumulateNamedMetric, backfillNamedScoreWeights } from '../util/namedM
 import { filterFiniteScores } from '../util/numeric';
 import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import {
+  AMBIGUOUS_PROVIDER_ID_MESSAGE,
   getProviderIdentifier,
   isAnthropicProvider,
   isGoogleProvider,
@@ -3293,7 +3294,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
       }
       const message =
-        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
+        error instanceof Error && error.message === AMBIGUOUS_PROVIDER_ID_MESSAGE
+          ? AMBIGUOUS_PROVIDER_ID_MESSAGE
+          : 'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {
@@ -3485,8 +3488,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     firstResult: TResult,
     repeatCacheContext?: RepeatCacheContext,
   ): CallApiContextParams {
-    const providerId = firstResult.provider.id;
-    const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+    const { id, label } = firstResult.provider;
+    let originalProvider: ApiProvider | undefined;
+    let originalId: string | undefined;
+    for (const provider of this.testSuite.providers) {
+      if (label && provider.label !== label) {
+        continue;
+      }
+      const candidateId = provider.id();
+      if (candidateId !== id && sanitizeProviderIdForLog(candidateId) !== id) {
+        continue;
+      }
+      if (originalId !== undefined && candidateId !== originalId) {
+        throw new Error(AMBIGUOUS_PROVIDER_ID_MESSAGE);
+      }
+      originalId = candidateId;
+      originalProvider ??= provider;
+    }
     return {
       getCache,
       ...(originalProvider && { originalProvider }),
