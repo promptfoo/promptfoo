@@ -2124,7 +2124,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": { "pass": { "type": "boolean" }, "score": { "type": "number" } },
+                "properties": {
+                  "pass": { "type": "boolean" },
+                  "score": { "type": "number" },
+                  "commentOnly": { "type": "boolean" }
+                },
                 "required": ["pass", "score"],
                 "additionalProperties": {}
               }

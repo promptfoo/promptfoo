@@ -5,6 +5,7 @@ import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { isCachedRepeatResult } from '../util/eval/repeatStability';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -744,6 +745,7 @@ export function persistRepeatMetadata(
   metadata: EvaluateResult['metadata'],
   repeatIndex: EvaluateResult['repeatIndex'],
   repeatGroupId: EvaluateResult['repeatGroupId'],
+  repeatCached?: EvaluateResult['repeatCached'],
 ): EvaluateResult['metadata'] {
   if (repeatIndex === undefined || !repeatGroupId) {
     return stripRepeatLinkageFromMetadata(metadata);
@@ -766,7 +768,11 @@ export function persistRepeatMetadata(
     ...metadataRecord,
     [PROMPTFOO_METADATA_KEY]: {
       ...(promptfooMetadata ?? {}),
-      [REPEAT_LINKAGE_KEY]: { repeatIndex, repeatGroupId },
+      [REPEAT_LINKAGE_KEY]: {
+        repeatIndex,
+        repeatGroupId,
+        ...(repeatCached === true && { repeatCached }),
+      },
     },
   };
 }
@@ -793,6 +799,7 @@ export function stripRepeatLinkageFromMetadata<
 export function surfaceRepeatMetadata(metadata: Record<string, unknown> | null | undefined): {
   repeatIndex?: number;
   repeatGroupId?: string;
+  repeatCached?: true;
   metadata: Record<string, unknown>;
 } {
   const metadataRecord = metadata ?? {};
@@ -814,6 +821,7 @@ export function surfaceRepeatMetadata(metadata: Record<string, unknown> | null |
   return {
     repeatIndex,
     repeatGroupId,
+    ...(repeatLinkage?.repeatCached === true && { repeatCached: true }),
     metadata: hasRepeatLinkage ? stripRepeatLinkageFromMetadata(metadataRecord) : metadataRecord,
   };
 }
@@ -925,6 +933,10 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
+    ...(shouldStripGradingResult &&
+      typeof artifactResult.repeatGroupId === 'string' &&
+      typeof artifactResult.repeatIndex === 'number' &&
+      isCachedRepeatResult(artifactResult as Partial<EvaluateResult>) && { repeatCached: true }),
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(

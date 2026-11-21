@@ -723,8 +723,9 @@ evalRouter.post(
 
     try {
       const { evalId, id } = paramsResult.data;
+      const { commentOnly, ...submittedGradingResult } = bodyResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
-      const gradingResult = bodyResult.data as unknown as GradingResult;
+      const gradingResult = submittedGradingResult as unknown as GradingResult;
       const result = await EvalResult.findById(id);
       if (!result || result.evalId !== evalId) {
         res.status(404).json({ error: 'Result not found' });
@@ -734,6 +735,25 @@ evalRouter.post(
       const eval_ = await Eval.findById(evalId);
       if (!eval_) {
         res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+
+      if (commentOnly) {
+        if (result.success !== gradingResult.pass || result.score !== gradingResult.score) {
+          res.status(400).json({ error: 'Comment-only updates cannot change pass or score' });
+          return;
+        }
+        result.gradingResult = {
+          ...(result.gradingResult ?? {
+            pass: result.success,
+            score: result.score,
+            reason: 'Manual result',
+          }),
+          comment: gradingResult.comment,
+        };
+        await result.save();
+        await eval_.save();
+        res.json(EvalSchemas.SubmitRating.Response.parse(result));
         return;
       }
 
@@ -748,6 +768,8 @@ evalRouter.post(
 
       // Update the result
       result.gradingResult = gradingResult;
+      // Replacement grading supersedes stripped grader evidence; target cache flags remain intact.
+      delete result.repeatCached;
       result.success = gradingResult.pass;
       result.score = gradingResult.score;
 
