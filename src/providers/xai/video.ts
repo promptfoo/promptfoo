@@ -43,7 +43,10 @@ import type {
 // Types
 // =============================================================================
 
-export type XaiVideoModel = 'grok-imagine-video' | 'grok-imagine-video-1.5';
+export type XaiVideoModel =
+  | 'grok-imagine-video'
+  | 'grok-imagine-video-1.5'
+  | 'grok-imagine-video-1.5-lite';
 
 /**
  * Maps the non-canonical video slugs xAI publishes (dated and -preview aliases, as
@@ -61,7 +64,16 @@ export function resolveVideoModel(modelName: string): XaiVideoModel {
   return VIDEO_MODEL_ALIASES[modelName] ?? (modelName as XaiVideoModel);
 }
 
-export type XaiVideoAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3';
+export type XaiVideoAspectRatio =
+  | '16:9'
+  | '4:3'
+  | '1:1'
+  | '9:16'
+  | '3:4'
+  | '3:2'
+  | '2:3'
+  | '21:9'
+  | '5:2';
 
 export type XaiVideoResolution = '1080p' | '720p' | '480p';
 
@@ -152,7 +164,7 @@ const PROVIDER_NAME = 'xAI Video';
 const DEFAULT_MODEL: XaiVideoModel = 'grok-imagine-video';
 const DEFAULT_API_BASE_URL = 'https://api.x.ai/v1';
 
-/** Valid aspect ratios for Grok Imagine */
+/** Valid aspect ratios for Grok Imagine. Every video model accepts 21:9 and 5:2 (verified live 2026-11-20). */
 const VALID_ASPECT_RATIOS: readonly XaiVideoAspectRatio[] = [
   '16:9',
   '4:3',
@@ -161,6 +173,8 @@ const VALID_ASPECT_RATIOS: readonly XaiVideoAspectRatio[] = [
   '3:4',
   '3:2',
   '2:3',
+  '21:9',
+  '5:2',
 ] as const;
 
 const GROK_IMAGINE_VIDEO_15_MODELS = new Set<string>([
@@ -168,6 +182,13 @@ const GROK_IMAGINE_VIDEO_15_MODELS = new Set<string>([
   'grok-imagine-video-1.5-preview',
   'grok-imagine-video-1.5-2026-05-30',
 ]);
+
+/**
+ * Lower-priced Video 1.5 variant. It supports text-to-video and image-to-video only:
+ * xAI rejects `reference_images`, `reference_audios`, and video edits for it
+ * (verified live 2026-11-20). Its 1080p output is upscaled from 720p.
+ */
+const GROK_IMAGINE_VIDEO_15_LITE_MODEL: XaiVideoModel = 'grok-imagine-video-1.5-lite';
 
 /** Valid resolutions for the legacy and 1.5 Grok Imagine video families. */
 const LEGACY_VALID_RESOLUTIONS: readonly XaiVideoResolution[] = ['720p', '480p'] as const;
@@ -184,7 +205,13 @@ const DEFAULT_RESOLUTION: XaiVideoResolution = '720p';
 const MIN_DURATION = 1;
 const MAX_DURATION = 15;
 const LEGACY_MAX_REFERENCE_DURATION = 10;
-const MAX_REFERENCE_IMAGES = 7;
+/**
+ * Documented reference-image caps. xAI counts only `reference_images` (a Video 1.5 starting
+ * `image` is extra). The API currently enforces 14 for both models; the legacy model keeps its
+ * documented limit of 7.
+ */
+const LEGACY_MAX_REFERENCE_IMAGES = 7;
+const VIDEO_15_MAX_REFERENCE_IMAGES = 14;
 const MAX_REFERENCE_AUDIOS = 3;
 
 const LEGACY_VIDEO_COST_PER_SECOND: Record<'720p' | '480p', number> = {
@@ -195,6 +222,12 @@ const VIDEO_15_COST_PER_SECOND: Record<XaiVideoResolution, number> = {
   '1080p': 0.25,
   '720p': 0.14,
   '480p': 0.08,
+};
+/** From xAI's model and pricing pages, matching live `usage.cost_in_usd_ticks` (2026-11-20). */
+const VIDEO_15_LITE_COST_PER_SECOND: Record<XaiVideoResolution, number> = {
+  '1080p': 0.14,
+  '720p': 0.03,
+  '480p': 0.02,
 };
 const LEGACY_IMAGE_INPUT_COST = 0.002;
 const VIDEO_15_IMAGE_INPUT_COST = 0.01;
@@ -211,11 +244,23 @@ function isGrokImagineVideo15Model(modelName: string): boolean {
   return GROK_IMAGINE_VIDEO_15_MODELS.has(modelName);
 }
 
+function isGrokImagineVideo15LiteModel(modelName: string): boolean {
+  return modelName === GROK_IMAGINE_VIDEO_15_LITE_MODEL;
+}
+
+/**
+ * Video 1.5 and 1.5 Lite share 1080p output, $0.01 image inputs, optional prompts with a
+ * starting image, and no video editing.
+ */
+function isGrokImagineVideo15FamilyModel(modelName: string): boolean {
+  return isGrokImagineVideo15Model(modelName) || isGrokImagineVideo15LiteModel(modelName);
+}
+
 export function validateResolution(
   resolution: XaiVideoResolution,
   modelName: string = DEFAULT_MODEL,
 ): { valid: boolean; message?: string } {
-  return isGrokImagineVideo15Model(modelName)
+  return isGrokImagineVideo15FamilyModel(modelName)
     ? validateVideo15Resolution(resolution)
     : validateLegacyResolution(resolution);
 }
@@ -242,7 +287,7 @@ function buildVideoInputReference(
   const referenceAudios =
     config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
   if (config.image?.url) {
-    const imageUrl = isGrokImagineVideo15Model(modelName)
+    const imageUrl = isGrokImagineVideo15FamilyModel(modelName)
       ? sanitizeVideoCacheReferenceUrl(config.image.url)
       : config.image.url;
     return referenceImages.length || referenceAudios.length
@@ -278,6 +323,16 @@ function canUsePersistentCache(config: XaiVideoOptions): boolean {
   return inputUrls.every(isVideoCacheReferenceUrlSafe);
 }
 
+function getOutputCostPerSecond(modelName: string, resolution: XaiVideoResolution): number {
+  if (isGrokImagineVideo15LiteModel(modelName)) {
+    return VIDEO_15_LITE_COST_PER_SECOND[resolution];
+  }
+  if (isGrokImagineVideo15Model(modelName)) {
+    return VIDEO_15_COST_PER_SECOND[resolution];
+  }
+  return LEGACY_VIDEO_COST_PER_SECOND[resolution === '480p' ? '480p' : '720p'];
+}
+
 /**
  * Calculate video generation cost
  */
@@ -293,13 +348,13 @@ export function calculateVideoCost(
 
   const modelName = options.modelName ?? DEFAULT_MODEL;
   const resolution = options.resolution ?? DEFAULT_RESOLUTION;
-  const isVideo15 = isGrokImagineVideo15Model(modelName);
-  const outputRate = isVideo15
-    ? VIDEO_15_COST_PER_SECOND[resolution]
-    : LEGACY_VIDEO_COST_PER_SECOND[resolution === '480p' ? '480p' : '720p'];
+  const outputRate = getOutputCostPerSecond(modelName, resolution);
   const imageInputCount = options.imageInputCount ?? (options.hasImageInput ? 1 : 0);
   const imageInputCost =
-    imageInputCount * (isVideo15 ? VIDEO_15_IMAGE_INPUT_COST : LEGACY_IMAGE_INPUT_COST);
+    imageInputCount *
+    (isGrokImagineVideo15FamilyModel(modelName)
+      ? VIDEO_15_IMAGE_INPUT_COST
+      : LEGACY_IMAGE_INPUT_COST);
   return outputRate * seconds + imageInputCost;
 }
 
@@ -418,7 +473,7 @@ export class XAIVideoProvider implements ApiProvider {
 
     const body: Record<string, unknown> = {
       model: this.modelName,
-      ...(isGrokImagineVideo15Model(this.modelName) && !prompt.trim() ? {} : { prompt }),
+      ...(isGrokImagineVideo15FamilyModel(this.modelName) && !prompt.trim() ? {} : { prompt }),
     };
 
     // Add generation-specific parameters (not for edits)
@@ -479,6 +534,28 @@ export class XAIVideoProvider implements ApiProvider {
     }
   }
 
+  /** Rejects input modes the model does not support, mirroring xAI's 400 responses. */
+  private getUnsupportedModeError(
+    isEdit: boolean,
+    hasReferenceMedia: boolean,
+    hasReferenceAudios: boolean,
+  ): string | undefined {
+    if (isGrokImagineVideo15LiteModel(this.modelName)) {
+      if (isEdit) {
+        return 'Grok Imagine Video 1.5 Lite does not support video editing.';
+      }
+      return hasReferenceMedia
+        ? 'Grok Imagine Video 1.5 Lite does not support reference_images or reference_audios. Use grok-imagine-video-1.5 for reference-to-video.'
+        : undefined;
+    }
+    if (isGrokImagineVideo15Model(this.modelName)) {
+      return isEdit ? 'Grok Imagine Video 1.5 does not support video editing.' : undefined;
+    }
+    return hasReferenceAudios
+      ? 'reference_audios are only supported by Grok Imagine Video 1.5.'
+      : undefined;
+  }
+
   private validateVideoInputs(
     prompt: string,
     config: XaiVideoOptions,
@@ -486,7 +563,7 @@ export class XAIVideoProvider implements ApiProvider {
     resolution: XaiVideoResolution,
     isEdit: boolean,
   ): string | undefined {
-    const isVideo15 = isGrokImagineVideo15Model(this.modelName);
+    const isVideo15 = isGrokImagineVideo15FamilyModel(this.modelName);
     const referenceImageCount = config.reference_images?.length ?? 0;
     const referenceAudios: unknown = config.reference_audios;
     if (referenceAudios !== undefined && !Array.isArray(referenceAudios)) {
@@ -497,12 +574,13 @@ export class XAIVideoProvider implements ApiProvider {
     const hasReferenceAudios = referenceAudioCount > 0;
     const hasReferenceMedia = hasReferenceImages || hasReferenceAudios;
 
-    if (isVideo15 && isEdit) {
-      return 'Grok Imagine Video 1.5 does not support video editing.';
-    }
-
-    if (hasReferenceAudios && !isVideo15) {
-      return 'reference_audios are only supported by Grok Imagine Video 1.5.';
+    const unsupportedModeError = this.getUnsupportedModeError(
+      isEdit,
+      hasReferenceMedia,
+      hasReferenceAudios,
+    );
+    if (unsupportedModeError) {
+      return unsupportedModeError;
     }
 
     if (!hasReferenceMedia) {
@@ -526,8 +604,11 @@ export class XAIVideoProvider implements ApiProvider {
       return 'Reference-to-video requires a non-empty prompt.';
     }
 
-    if (referenceImageCount > MAX_REFERENCE_IMAGES) {
-      return `Invalid reference_images count "${referenceImageCount}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
+    const maxReferenceImages = isVideo15
+      ? VIDEO_15_MAX_REFERENCE_IMAGES
+      : LEGACY_MAX_REFERENCE_IMAGES;
+    if (referenceImageCount > maxReferenceImages) {
+      return `Invalid reference_images count "${referenceImageCount}". Must be between 1 and ${maxReferenceImages}.`;
     }
 
     if (referenceAudioCount > MAX_REFERENCE_AUDIOS) {

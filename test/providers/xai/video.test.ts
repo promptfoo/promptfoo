@@ -88,10 +88,12 @@ describe('XAI Video Provider', () => {
         expect(validateAspectRatio('3:4')).toEqual({ valid: true });
         expect(validateAspectRatio('3:2')).toEqual({ valid: true });
         expect(validateAspectRatio('2:3')).toEqual({ valid: true });
+        expect(validateAspectRatio('21:9')).toEqual({ valid: true });
+        expect(validateAspectRatio('5:2')).toEqual({ valid: true });
       });
 
       it('rejects invalid aspect ratios', () => {
-        const result = validateAspectRatio('21:9' as any);
+        const result = validateAspectRatio('7:3' as any);
         expect(result.valid).toBe(false);
         expect(result.message).toContain('Invalid aspect ratio');
       });
@@ -102,6 +104,9 @@ describe('XAI Video Provider', () => {
         expect(validateResolution('720p')).toEqual({ valid: true });
         expect(validateResolution('480p')).toEqual({ valid: true });
         expect(validateResolution('1080p', 'grok-imagine-video-1.5')).toEqual({ valid: true });
+        expect(validateResolution('1080p', 'grok-imagine-video-1.5-lite')).toEqual({
+          valid: true,
+        });
       });
 
       it('rejects invalid resolutions', () => {
@@ -180,6 +185,32 @@ describe('XAI Video Provider', () => {
         ]) {
           expect(calculateVideoCost(5, false, alias)).toBeCloseTo(0.7, 10);
         }
+      });
+
+      it('bills grok-imagine-video-1.5-lite at its own per-second rates', () => {
+        // xAI pricing: $0.02/sec at 480p, $0.03/sec at 720p, $0.14/sec at 1080p, $0.01 per image.
+        const model = 'grok-imagine-video-1.5-lite';
+        expect(calculateVideoCost(1, false, { modelName: model, resolution: '480p' })).toBeCloseTo(
+          0.02,
+          10,
+        );
+        expect(calculateVideoCost(10, false, { modelName: model, resolution: '720p' })).toBeCloseTo(
+          0.3,
+          10,
+        );
+        expect(
+          calculateVideoCost(10, false, { modelName: model, resolution: '1080p' }),
+        ).toBeCloseTo(1.4, 10);
+        expect(
+          calculateVideoCost(1, false, {
+            modelName: model,
+            resolution: '480p',
+            hasImageInput: true,
+          }),
+        ).toBeCloseTo(0.03, 10);
+        // The default 720p output.
+        expect(calculateVideoCost(5, false, model)).toBeCloseTo(0.15, 10);
+        expect(calculateVideoCost(5, true, model)).toBe(0);
       });
 
       it('falls back to the base rate for unknown slugs and returns 0 when cached', () => {
@@ -574,7 +605,7 @@ describe('XAI Video Provider', () => {
 
     it('handles invalid aspect ratio parameter', async () => {
       const provider = new XAIVideoProvider('grok-imagine-video', {
-        config: { aspect_ratio: '21:9' as any },
+        config: { aspect_ratio: '7:3' as any },
       });
       const result = await provider.callApi(mockPrompt);
 
@@ -588,6 +619,48 @@ describe('XAI Video Provider', () => {
       const result = await provider.callApi(mockPrompt);
 
       expect(result.error).toContain('Invalid resolution');
+    });
+  });
+
+  describe('Wide aspect ratios', () => {
+    it.each([
+      ['grok-imagine-video', '21:9'],
+      ['grok-imagine-video', '5:2'],
+      ['grok-imagine-video-1.5', '21:9'],
+      ['grok-imagine-video-1.5', '5:2'],
+      ['grok-imagine-video-1.5-lite', '21:9'],
+      ['grok-imagine-video-1.5-lite', '5:2'],
+    ] as const)('sends %s requests with aspect ratio %s', async (model, aspectRatio) => {
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            status: 'done',
+            video: { url: mockVideoUrl, duration: 1 },
+            model,
+          }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+        } as any);
+
+      const provider = new XAIVideoProvider(model, {
+        config: { aspect_ratio: aspectRatio, duration: 1, resolution: '480p' },
+      });
+      const result = await provider.callApi(mockPrompt);
+
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      expect(JSON.parse(createCall[1]?.body as string)).toMatchObject({
+        model,
+        aspect_ratio: aspectRatio,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.video).toMatchObject({ aspectRatio, size: aspectRatio });
     });
   });
 
@@ -939,6 +1012,7 @@ describe('XAI Video Provider', () => {
       { model: 'grok-imagine-video-1.5', config: {} },
       { model: 'grok-imagine-video-1.5-preview', config: {} },
       { model: 'grok-imagine-video-1.5-2026-05-30', config: {} },
+      { model: 'grok-imagine-video-1.5-lite', config: {} },
       { model: 'grok-imagine-video-1.5', config: { reference_audios: [{ voice_id: 'eve' }] } },
       {
         model: 'grok-imagine-video',
@@ -957,11 +1031,11 @@ describe('XAI Video Provider', () => {
       [{ duration: 16 }, 'Must be between 1 and 15'],
       [
         {
-          reference_images: Array.from({ length: 8 }, () => ({
+          reference_images: Array.from({ length: 15 }, () => ({
             url: 'https://example.com/reference.jpg',
           })),
         },
-        'Must be between 1 and 7',
+        'Must be between 1 and 14',
       ],
     ])('validates mixed visual inputs without a prompt for %j', async (overrides, error) => {
       const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
@@ -1016,6 +1090,59 @@ describe('XAI Video Provider', () => {
       const result = await provider.callApi(mockPrompt);
 
       expect(result.error).toContain('capped at 720p');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('sends fourteen reference images plus a starting image for Grok Imagine Video 1.5', async () => {
+      const image = { url: 'https://example.com/frame.jpg' };
+      const referenceImages = Array.from({ length: 14 }, (_, index) => ({
+        url: `https://example.com/reference-${index}.jpg`,
+      }));
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            status: 'done',
+            video: { url: mockVideoUrl, duration: 1 },
+            model: 'grok-imagine-video-1.5',
+          }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+        } as any);
+
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: { image, reference_images: referenceImages, duration: 1, resolution: '480p' },
+      });
+      const result = await provider.callApi(mockPrompt);
+
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      expect(JSON.parse(createCall[1]?.body as string)).toMatchObject({
+        image,
+        reference_images: referenceImages,
+      });
+      expect(result.error).toBeUndefined();
+      // 1 second * $0.08 at 480p + 15 input images * $0.01.
+      expect(result.cost).toBeCloseTo(0.23, 10);
+    });
+
+    it('rejects more than fourteen reference images for Grok Imagine Video 1.5', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          reference_images: Array.from({ length: 15 }, (_, index) => ({
+            url: `https://example.com/reference-${index}.jpg`,
+          })),
+        },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('Must be between 1 and 14');
       expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
     });
 
@@ -1208,7 +1335,7 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Cache key generation', () => {
-    it.each(['grok-imagine-video', 'grok-imagine-video-1.5'])(
+    it.each(['grok-imagine-video', 'grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite'])(
       'isolates %s cache entries by endpoint and explicit account namespace',
       async (model) => {
         const actualVideoUtils = await vi.importActual<typeof videoUtils>(
@@ -2123,6 +2250,106 @@ describe('XAI Video Provider', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.video?.duration).toBe(3);
+    });
+  });
+
+  describe('Grok Imagine Video 1.5 Lite', () => {
+    const liteModel = 'grok-imagine-video-1.5-lite';
+
+    function mockCompletedJob(duration: number) {
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            status: 'done',
+            video: { url: mockVideoUrl, duration },
+            model: liteModel,
+          }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+        } as any);
+    }
+
+    it('generates 1080p text-to-video and estimates cost at the Lite rate', async () => {
+      mockCompletedJob(4);
+      const provider = createXAIVideoProvider(`xai:video:${liteModel}`, {
+        config: { duration: 4, resolution: '1080p' },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      expect(createCall[0]).toBe('https://api.x.ai/v1/videos/generations');
+      expect(JSON.parse(createCall[1]?.body as string)).toEqual({
+        model: liteModel,
+        prompt: mockPrompt,
+        duration: 4,
+        aspect_ratio: '16:9',
+        resolution: '1080p',
+      });
+      expect(provider.id()).toBe(`xai:video:${liteModel}`);
+      expect(result.error).toBeUndefined();
+      // 4 seconds * $0.14 at 1080p, without API usage data.
+      expect(result.cost).toBeCloseTo(0.56, 10);
+      expect(result.video).toMatchObject({ model: liteModel, duration: 4, resolution: '1080p' });
+    });
+
+    it('omits an empty prompt for image-to-video and bills the image input', async () => {
+      mockCompletedJob(1);
+      const image = { url: 'https://example.com/frame.jpg' };
+      const provider = new XAIVideoProvider(liteModel, {
+        config: { image, duration: 1, resolution: '480p' },
+      });
+
+      const result = await provider.callApi('');
+
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      expect(JSON.parse(createCall[1]?.body as string)).toEqual({
+        model: liteModel,
+        duration: 1,
+        aspect_ratio: '16:9',
+        resolution: '480p',
+        image,
+      });
+      expect(result.error).toBeUndefined();
+      // 1 second * $0.02 at 480p + $0.01 for the input image.
+      expect(result.cost).toBeCloseTo(0.03, 10);
+    });
+
+    it.each([
+      [
+        { reference_images: [{ url: 'https://example.com/reference.jpg' }] },
+        'Grok Imagine Video 1.5 Lite does not support reference_images or reference_audios',
+      ],
+      [
+        { reference_audios: [{ voice_id: 'eve' }] },
+        'Grok Imagine Video 1.5 Lite does not support reference_images or reference_audios',
+      ],
+      [
+        {
+          image: { url: 'https://example.com/frame.jpg' },
+          reference_images: [{ url: 'https://example.com/reference.jpg' }],
+        },
+        'Grok Imagine Video 1.5 Lite does not support reference_images or reference_audios',
+      ],
+      [
+        { video: { url: 'https://example.com/source.mp4' } },
+        'Grok Imagine Video 1.5 Lite does not support video editing.',
+      ],
+    ])('rejects unsupported inputs before calling the API for %j', async (config, error) => {
+      const provider = new XAIVideoProvider(liteModel, { config });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain(error);
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+      expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
     });
   });
 });
