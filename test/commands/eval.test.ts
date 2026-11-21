@@ -1079,7 +1079,8 @@ describe('evalCommand', () => {
       expect(installedSince(before)).toHaveLength(0);
     });
 
-    it('waits for the active rerun before returning the latest result on shutdown', async () => {
+    it('drains the active rerun on SIGINT and keeps SIGTERM bounded until it settles', async () => {
+      const beforeSigterm = process.listenerCount('SIGTERM');
       const { pending } = await startWatching({ eventSource: 'cli' });
       const { resolve: releaseRun, promise: gate } = createDeferred<void>();
       let rerunResult: Eval | undefined;
@@ -1095,6 +1096,7 @@ describe('evalCommand', () => {
       const [onSignal] = installedSince(before);
       onSignal('SIGINT');
       try {
+        expect(process.listenerCount('SIGTERM')).toBeGreaterThan(beforeSigterm);
         expect(await hasSettled(pending)).toBe(false);
       } finally {
         releaseRun();

@@ -354,7 +354,6 @@ async function doEvalWithEnv(
   // Set once watch mode starts watching; awaited before doEval returns so the CLI does
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
-  let removeSigtermHandler: (() => void) | undefined;
   let rerun: Promise<void> | undefined;
   let pending = false;
   let stopped = false;
@@ -1245,8 +1244,6 @@ async function doEvalWithEnv(
         });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
-          // Once installed, the watcher owns termination and drains the active run.
-          removeSigtermHandler?.();
           watchTermination = watchUntilTerminated(watcher, () => {
             stopped = true;
           });
@@ -1313,7 +1310,7 @@ async function doEvalWithEnv(
     const runOptions = { ...evaluateOptions };
     // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
     // Keep it until the whole run settles, including sharing and output files after evaluate().
-    removeSigtermHandler = isCliInvocation && !watchTermination ? terminateOnSigterm() : undefined;
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
     try {
       return await cliState.withSafeMode(
         Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
