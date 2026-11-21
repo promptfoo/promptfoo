@@ -2,14 +2,20 @@
 description: 'Compare reasoning capabilities across Mistral models'
 
 providers:
-  # `magistral-small-latest` was dropped: it now resolves to the same model as
-  # `mistral-small-latest` (Mistral Small 4), so listing both would duplicate a model.
-  - mistral:magistral-medium-latest
+  - id: mistral:mistral-medium-3-5
+    config:
+      reasoning_effort: high
   - mistral:mistral-large-latest
-  - mistral:mistral-small-latest
+  - id: mistral:mistral-small-latest
+    config:
+      reasoning_effort: high
 
 prompts:
   - 'Solve this step by step: {{problem}}'
+
+defaultTest:
+  options:
+    provider: mistral:mistral-large-latest
 
 tests:
   - vars:

@@ -1,4 +1,4 @@
-import { bindRedteamProviderEnvironment, getDefaultRedteamTemperature } from '../redteamDefaults';
+import { withRedteamDefaults } from '../redteamDefaults';
 import { createXAIProvider } from './chat';
 import { XAIResponsesProvider } from './responses';
 
@@ -22,14 +22,6 @@ export function getXAIProviders(
   | 'webSearchProvider'
 > {
   const gradingProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, { env });
-  const redteamTemperature = getDefaultRedteamTemperature(env);
-  const redteamProvider = bindRedteamProviderEnvironment(
-    createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
-      env,
-      config: { config: { temperature: redteamTemperature } },
-    }),
-    env,
-  );
 
   // The outer `config` is `ProviderOptions.config`; the xAI chat provider then reads
   // its model-specific options from the *nested* `config.config` (see XAIProvider's
@@ -42,31 +34,27 @@ export function getXAIProviders(
       },
     },
   });
-  const redteamJsonProvider = bindRedteamProviderEnvironment(
-    createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
-      env,
-      config: {
-        config: {
-          temperature: redteamTemperature,
-          response_format: { type: 'json_object' },
-        },
-      },
-    }),
-    env,
-  );
 
-  return {
-    gradingJsonProvider,
-    gradingProvider,
-    redteamProvider,
-    redteamJsonProvider,
-    suggestionsProvider: gradingProvider,
-    synthesizeProvider: gradingProvider,
-    webSearchProvider: new XAIResponsesProvider(DEFAULT_XAI_MODEL, {
-      env,
-      config: {
-        tools: [{ type: 'web_search' }],
-      },
-    }),
-  };
+  return withRedteamDefaults(
+    {
+      gradingJsonProvider,
+      gradingProvider,
+      suggestionsProvider: gradingProvider,
+      synthesizeProvider: gradingProvider,
+      webSearchProvider: new XAIResponsesProvider(DEFAULT_XAI_MODEL, {
+        env,
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      }),
+    },
+    env,
+    (env, temperature, jsonOnly) =>
+      createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
+        env,
+        config: {
+          config: { temperature, ...(jsonOnly && { response_format: { type: 'json_object' } }) },
+        },
+      }),
+  );
 }

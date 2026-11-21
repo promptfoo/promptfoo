@@ -2,7 +2,17 @@ const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 const COMPACTED_EFFORT = Symbol('effort before compaction');
 
-type Gpt6Variant = 'astra' | 'sol' | 'luna';
+const MODEL_LABELS = {
+  astra: 'GPT-6 Astra',
+  sol: 'GPT-6 Sol',
+  luna: 'GPT-6 Luna',
+  '6.1-sol': 'GPT-6.1 Sol',
+  '6.1-terra': 'GPT-6.1 Terra',
+  '6.2-astra': 'GPT-6.2 Astra',
+  '6.2-sol': 'GPT-6.2 Sol',
+} as const;
+
+type Gpt6Variant = keyof typeof MODEL_LABELS;
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6BaseModelName(modelName: string): string {
@@ -16,9 +26,12 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
     return undefined;
   }
   const baseModel = getGpt6BaseModelName(modelName);
-  return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
-    | Gpt6Variant
-    | undefined;
+  const versioned = /(?:^|[.-])gpt-(6\.1-(?:sol|terra)|6\.2-(?:astra|sol))(?:[-:]|$)/.exec(
+    baseModel,
+  );
+  const variant =
+    versioned?.[1] ?? /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1];
+  return variant as Gpt6Variant | undefined;
 }
 
 export function isGpt6Model(modelName: unknown): boolean {
@@ -130,7 +143,7 @@ function getResponsesReasoning(
   );
   for (const value of [typed, passthrough]) {
     if (value != null && !getObject(value)) {
-      throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: none }.');
+      throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: low }.');
     }
   }
   const options = { ...getObject(passthrough), ...getObject(typed) };
@@ -227,20 +240,25 @@ function getOpenRouterChatEffortUpdates(messages: unknown): unknown[] {
   return efforts;
 }
 
+function supportsReasoningNone(variant: Gpt6Variant): boolean {
+  return variant === 'sol' || variant === 'luna' || variant === '6.1-terra';
+}
+
 function validateReasoningEffort(effort: unknown, variant: Gpt6Variant, modelLabel: string): void {
+  const supportsNone = supportsReasoningNone(variant);
   if (
     effort == null ||
     effort === '' ||
     (typeof effort === 'string' &&
-      (REASONING_EFFORTS.has(effort) || (variant !== 'astra' && effort === 'none')))
+      (REASONING_EFFORTS.has(effort) || (supportsNone && effort === 'none')))
   ) {
     return;
   }
 
   throw new Error(
-    variant === 'astra'
-      ? `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`
-      : `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`,
+    supportsNone
+      ? `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`
+      : `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`,
   );
 }
 
@@ -266,9 +284,10 @@ function validateChatTools(
     return;
   }
 
-  if (variant === 'astra') {
+  if (variant !== 'sol' && variant !== 'luna') {
+    const model = variant === 'astra' ? 'gpt-6-astra' : `gpt-${variant}`;
     throw new Error(
-      'GPT-6 Astra tool calling requires the Responses API. Use openai:responses:gpt-6-astra or azure:responses:<deployment>.',
+      `${modelLabel} tool calling requires the Responses API. Use openai:responses:${model} or azure:responses:<deployment>.`,
     );
   }
   for (const [selector, definitions] of [
@@ -330,6 +349,8 @@ export function applyGpt6RequestRules(
   api: 'chat' | 'responses',
   options: {
     isOpenRouter?: boolean;
+    isAzure?: boolean;
+    bridgesGpt62ChatTools?: boolean;
     defaultResponsesTemperature?: number;
     supportsPersistedEffortUpdates?: boolean;
   } = {},
@@ -338,7 +359,7 @@ export function applyGpt6RequestRules(
   if (!variant) {
     return;
   }
-  const modelLabel = `GPT-6 ${variant[0].toUpperCase()}${variant.slice(1)}`;
+  const modelLabel = MODEL_LABELS[variant];
 
   const reasoning = normalizeReasoning(body);
   if (api === 'responses' && body.reasoning_effort !== undefined) {
@@ -360,7 +381,15 @@ export function applyGpt6RequestRules(
   validateReasoningEffort(effort, variant, modelLabel);
 
   if (api === 'chat') {
-    validateChatTools(body, variant, modelLabel, effort, options.isOpenRouter ?? false);
+    if (options.isAzure && variant.startsWith('6.2-')) {
+      delete body.presence_penalty;
+      delete body.frequency_penalty;
+      delete body.logit_bias;
+    }
+    const allowChatTools =
+      !!options.isOpenRouter ||
+      (!!options.bridgesGpt62ChatTools && (variant === '6.2-astra' || variant === '6.2-sol'));
+    validateChatTools(body, variant, modelLabel, effort, allowChatTools);
   }
   const samplingEffort = getSamplingEffort(
     body,
@@ -383,7 +412,7 @@ export function applyGpt6RequestRules(
   }
 
   if (
-    variant === 'astra' ||
+    !supportsReasoningNone(variant) ||
     (samplingEffort !== UNKNOWN_PERSISTED_EFFORT && samplingEffort !== 'none')
   ) {
     for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {
