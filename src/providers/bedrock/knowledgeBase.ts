@@ -157,6 +157,7 @@ export class AwsBedrockKnowledgeBaseProvider
   }
 
   async getKnowledgeBaseClient() {
+    this.checkAgentRuntimeCacheIdentity();
     const singleAttempt = this.handlesOwnRetries;
     const clientProperty = singleAttempt
       ? 'singleAttemptKnowledgeBaseClient'
@@ -168,6 +169,9 @@ export class AwsBedrockKnowledgeBaseProvider
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials(false);
+        if (credentials) {
+          this.allowSharedAgentRuntimeCache = false;
+        }
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
           // The SDK caches retry strategies; session continuations need a separate client.
@@ -393,18 +397,20 @@ export class AwsBedrockKnowledgeBaseProvider
         ...(this.kbConfig.userContext ? { userContext: this.kbConfig.userContext } : {}),
       };
 
-      const cache = await getCache();
       // Native configurations have no safe AWS identity namespace. Explicit sessions and
       // streaming requests must also reach AWS to advance the conversation state.
-      const useCache =
+      const cache =
+        this.allowSharedAgentRuntimeCache &&
         !nativeConfig &&
         isCacheEnabled() &&
         !shouldBustProviderCache(context) &&
         !this.kbConfig.sessionId &&
-        !this.kbConfig.streaming;
+        !this.kbConfig.streaming
+          ? await getCache()
+          : undefined;
       const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'];
-      const cacheKey = useCache
-        ? `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
+      const cacheKey = cache
+        ? `bedrock-kb:v4:${this.kbConfig.knowledgeBaseId}:${modelArn}:${region}:${hashBedrockConfig(
             {
               config: {
                 region,
@@ -418,7 +424,7 @@ export class AwsBedrockKnowledgeBaseProvider
             },
           )}`
         : '';
-      if (useCache) {
+      if (cache) {
         const cached = await cache.get(cacheKey);
         if (cached) {
           throwIfAborted(abortSignal);
@@ -457,7 +463,7 @@ export class AwsBedrockKnowledgeBaseProvider
           : {}),
         tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
       };
-      if (useCache) {
+      if (cache) {
         try {
           // Cached output is reusable, but the service session belongs to this live call.
           const { sessionId: _sessionId, ...metadata } = result.metadata ?? {};

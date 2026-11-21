@@ -65,7 +65,7 @@ try {
         assert.doesNotMatch(result.response.output, /\{\{name\}\}/);
       } else {
         assert.equal(result.success, false);
-        assert.match(result.error, /npm install promptfoo @langfuse\/client@\^5\.11\.1/);
+        assert.match(result.error, /npm install promptfoo @langfuse\/client@\^6\.0\.0/);
         assert.match(
           result.error,
           state === 'incompatible' ? /found 0\.0\.0/ : /package is required/,

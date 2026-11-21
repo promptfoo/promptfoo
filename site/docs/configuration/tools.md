@@ -72,7 +72,7 @@ providers:
     config:
       tools: *tools # Alias: reuse the same tools
 
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.5-flash-lite
     config:
       tools: *tools # Alias: works here too
 ```

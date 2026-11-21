@@ -223,6 +223,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Get or create the Bedrock Agent Runtime client
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
+    this.checkAgentRuntimeCacheIdentity();
     const singleAttempt = this.config.streamingConfigurations?.streamFinalResponse === true;
     const clientProperty = singleAttempt ? 'singleAttemptAgentRuntimeClient' : 'agentRuntimeClient';
     if (!this[clientProperty]) {
@@ -232,6 +233,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials(false);
+        if (credentials) {
+          this.allowSharedAgentRuntimeCache = false;
+        }
 
         this[clientProperty] = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
@@ -557,19 +561,21 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
-    const cache = await getCache();
-    const useCache =
+    const cache =
+      this.allowSharedAgentRuntimeCache &&
       isCacheEnabled() &&
       !shouldBustProviderCache(context) &&
       !this.config.enableTrace &&
       !this.config.sessionId &&
       !this.config.memoryId &&
       !this.config.endSession &&
-      !this.config.sessionState?.returnControlInvocationResults;
+      !this.config.sessionState?.returnControlInvocationResults
+        ? await getCache()
+        : undefined;
 
     // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = useCache
-      ? `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${hashBedrockConfig(
+    const cacheKey = cache
+      ? `bedrock-agent:v4:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${hashBedrockConfig(
           {
             prompt,
             actionGroups: this.config.actionGroups,
@@ -592,7 +598,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       : '';
 
     // Check cache
-    if (useCache) {
+    if (cache) {
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
@@ -626,7 +632,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       const result = await this.processResponse(response);
 
       // Cache the successful response
-      if (useCache && !result.metadata?.returnControl) {
+      if (cache && !result.metadata?.returnControl) {
         try {
           const { sessionId: _sessionId, memoryId: _memoryId, ...metadata } = result.metadata ?? {};
           await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));

@@ -182,7 +182,7 @@ describe('AwsBedrockAgentsProvider', () => {
   it('does not replay legacy cached guardrail claims', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-agent:v3:')
+      key.startsWith('bedrock-agent:v4:')
         ? null
         : JSON.stringify({
             output: 'legacy response',
@@ -198,6 +198,45 @@ describe('AwsBedrockAgentsProvider', () => {
     expect(result.metadata).not.toHaveProperty('guardrails');
     expect(result.cached).not.toBe(true);
     expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps explicitly credentialed agents out of the shared cache', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockResolvedValue(JSON.stringify({ output: 'other account' }));
+    for (const owner of ['first', 'second']) {
+      const provider = new AwsBedrockAgentsProvider('agent-123', {
+        config: {
+          ...createAgentConfig().config,
+          accessKeyId: `fixture-id-${owner}`,
+          secretAccessKey: `fixture-secret-${owner}`,
+        },
+      });
+      mockSend.mockResolvedValueOnce(makeCompletionResponse(owner));
+      expect((await provider.callApi('same prompt')).output).toBe(owner);
+    }
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('keeps credentials selected during asynchronous client construction out of cache', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    const provider = new AwsBedrockAgentsProvider('agent-123', createAgentConfig());
+    const initializing = provider.getAgentRuntimeClient();
+    provider.config.accessKeyId = 'fixture-id';
+    provider.config.secretAccessKey = 'fixture-secret';
+    await initializing;
+    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: expect.objectContaining({ accessKeyId: 'fixture-id' }),
+      }),
+    );
+    delete provider.config.accessKeyId;
+    delete provider.config.secretAccessKey;
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('fresh'));
+
+    expect((await provider.callApi('same prompt')).output).toBe('fresh');
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it('should hash prompt and config values while reusing the same cache key', async () => {
@@ -243,7 +282,7 @@ describe('AwsBedrockAgentsProvider', () => {
     const firstKey = mockGet.mock.calls[0][0];
     const secondKey = mockGet.mock.calls[1][0];
 
-    expect(firstKey).toMatch(/^bedrock-agent:v3:agent-123:alias-456:us-east-1:[a-f0-9]{64}$/);
+    expect(firstKey).toMatch(/^bedrock-agent:v4:agent-123:alias-456:us-east-1:[a-f0-9]{64}$/);
     expect(firstKey).not.toContain(prompt);
     expect(firstKey).not.toContain('SECRET_FILTER_VALUE');
     expect(firstKey).not.toContain('SECRET_SESSION_ATTRIBUTE');
