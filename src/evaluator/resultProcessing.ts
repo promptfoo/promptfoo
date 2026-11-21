@@ -4,7 +4,6 @@ import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
-import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import {
   isSecretField,
@@ -17,7 +16,6 @@ import {
 } from '../util/sanitizer';
 import { sanitizeRedactionResult } from '../util/verifierPrivacy';
 
-import type { ProviderConfig } from '../providers/shared';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -28,14 +26,6 @@ import type {
   ProviderResponse,
   TraceData,
 } from '../types/index';
-
-function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
-  return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
-    context: 'provider config',
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as ProviderConfig;
-}
 
 function stripMediaReferences(value: unknown): unknown {
   if (
@@ -242,40 +232,21 @@ export function projectGradingResult<T>(gradingResult: T, stripPromptText: boole
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
 ): ProviderOptions {
-  try {
-    if (isApiProvider(provider)) {
-      return {
-        id: provider.id(),
-        label: provider.label,
-        ...(provider.config && {
-          config: sanitizeProviderConfig(provider.config),
-        }),
-      };
-    }
-    if (isProviderOptions(provider)) {
-      return {
-        id: provider.id,
-        label: provider.label,
-        ...(provider.config && {
-          config: sanitizeProviderConfig(provider.config),
-        }),
-      };
-    }
-    if (typeof provider === 'object' && provider) {
-      const providerObj = provider as {
-        id: string | (() => string);
-        label?: string;
-        config?: ProviderConfig;
-      };
-      return {
-        id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
-        label: providerObj.label,
-        ...(providerObj.config && {
-          config: sanitizeProviderConfig(providerObj.config),
-        }),
-      };
-    }
-  } catch {}
+  if (provider && typeof provider === 'object') {
+    // Keep config nested so serializers receive the same key as in a saved
+    // evaluation. Never fall back to serializing the complete live instance.
+    const options = JSON.parse(safeJsonStringify({ config: provider.config }) ?? '{}');
+    return {
+      id: typeof provider.id === 'function' ? provider.id() : provider.id,
+      label: provider.label,
+      ...sanitizeObject(options, {
+        context: 'provider config',
+        sanitizeUrls: true,
+        maxDepth: Number.POSITIVE_INFINITY,
+        throwOnError: true,
+      }),
+    };
+  }
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 
