@@ -171,7 +171,9 @@ Unknown or empty selectors and repeated scalar selectors are rejected. A `sessio
 
 ### Trace variables
 
-Imported variables and values returned by `transformVars` are treated as literal data, including template syntax and file references. Local variables that are not returned by `transformVars` keep their normal template and file loading behavior.
+Imported variables and values returned by `transformVars` stay literal, including templates, file paths and schema references. To replay saved tests, import whole rows with their `metadata.__promptfoo` labels intact. A reference to just a field inside an external row loses that context and can be evaluated as local configuration.
+
+Local variables still support templates and file loading. If an imported string variable is named `$ref`, the schema parser skips the entire `vars` mapping, including local references in it.
 
 `input` contains the extracted trace input. The extracted response is stored in `providerOutput` and passed to assertions as `output`. Stored OpenAI tool calls retain the structure needed by `is-valid-openai-tools-call`. Mixed text and tool-call outputs retain their content. The original input is also available:
 
