@@ -12,6 +12,16 @@ import {
   processApiResponse,
   validateSizeForModel,
 } from '../../../src/providers/openai/image';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createImageResponse = () => ({
+  data: [{ url: 'https://example.com/image.png' }],
+});
+
+const createHighQualityImageOptions = () => ({
+  quality: 'hd',
+  style: 'vivid',
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -87,9 +97,7 @@ describe('OpenAI Image Provider Functions', () => {
 
   describe('formatOutput', () => {
     it('should format URL output correctly', () => {
-      const data = {
-        data: [{ url: 'https://example.com/image.png' }],
-      };
+      const data = createImageResponse();
       const prompt = 'A test prompt';
       const result = formatOutput(data, prompt, 'url');
       expect(typeof result).toBe('string');
@@ -98,9 +106,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should sanitize prompt text with special characters', () => {
-      const data = {
-        data: [{ url: 'https://example.com/image.png' }],
-      };
+      const data = createImageResponse();
       const prompt = 'A test [with] brackets\nand newlines';
       const result = formatOutput(data, prompt, 'url');
       expect(typeof result).toBe('string');
@@ -172,10 +178,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should include DALL-E 3 specific parameters', () => {
-      const config = {
-        quality: 'hd',
-        style: 'vivid',
-      };
+      const config = createHighQualityImageOptions();
       const body = prepareRequestBody('dall-e-3', 'prompt', '1024x1024', 'url', config);
 
       expect(body).toEqual({
@@ -190,10 +193,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should not include DALL-E 3 parameters for DALL-E 2', () => {
-      const config = {
-        quality: 'hd',
-        style: 'vivid',
-      };
+      const config = createHighQualityImageOptions();
       const body = prepareRequestBody('dall-e-2', 'prompt', '512x512', 'url', config);
 
       expect(body).not.toHaveProperty('quality');
@@ -348,12 +348,7 @@ describe('OpenAI Image Provider Functions', () => {
     ])(
       'should bypass persistent image caching for an authenticated custom gateway',
       async (url, headers) => {
-        vi.mocked(fetchWithCache).mockResolvedValue({
-          data: { some: 'data' },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ some: 'data' }));
 
         await callOpenAiImageApi(
           url,
@@ -373,12 +368,7 @@ describe('OpenAI Image Provider Functions', () => {
     );
 
     it('should bypass persistent image caching when the request body embeds a credential', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { some: 'data' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ some: 'data' }));
 
       await callOpenAiImageApi(
         'https://api.openai.com/v1/images/generations',
@@ -411,12 +401,7 @@ describe('OpenAI Image Provider Functions', () => {
       // DEFAULT endpoint and a clean custom gateway must both keep caching
       // enabled. The exact three-argument call pins bust=false — the bust path
       // appends ('json', true).
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { some: 'data' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ some: 'data' }));
       const body = { model: 'gpt-image-1', prompt: 'test' };
       const fullHeaders = { 'Content-Type': 'application/json', ...headers };
 
@@ -432,31 +417,18 @@ describe('OpenAI Image Provider Functions', () => {
 
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
-      const result = await processApiResponse(
-        data,
-        'prompt',
-        'url',
-        false,
-        'dall-e-2',
-        '512x512',
-        undefined,
-      );
+      const result = await processApiResponse(data, 'prompt', 'url', false, 'dall-e-2', '512x512');
 
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('Some API error');
     });
 
     it('should return formatted output for successful response', async () => {
-      const data = {
-        data: [{ url: 'https://example.com/image.png' }],
-      };
+      const data = createImageResponse();
 
       const result = await processApiResponse(
         data,
@@ -518,9 +490,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should set cost to 0 for cached responses', async () => {
-      const data = {
-        data: [{ url: 'https://example.com/image.png' }],
-      };
+      const data = createImageResponse();
 
       const result = await processApiResponse(
         data,
@@ -571,10 +541,8 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should handle errors during output formatting', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -584,20 +552,16 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
-        undefined,
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
     });
 
     it('should handle a specific error case with malformed response', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -607,12 +571,11 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
-        undefined,
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error:');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
     });
   });
 
