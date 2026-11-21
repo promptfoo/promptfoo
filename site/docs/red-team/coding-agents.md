@@ -45,7 +45,7 @@ Additional coding-agent plugins cover narrower harness and code-generation risks
 | The agent persists unsafe behavior through hooks, package scripts, workflows, or release automation | `coding-agent:automation-poisoning`    |
 | The agent hides sensitive data in encoded or low-visibility artifacts                               | `coding-agent:steganographic-exfil`    |
 
-Use the core collection for quick baseline coverage. Use the full collection when you want comprehensive coding-agent coverage:
+Use the core collection for a baseline scan, or the full collection to run all coding-agent plugin IDs:
 
 ```yaml
 redteam:
