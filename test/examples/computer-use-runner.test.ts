@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import * as yaml from 'js-yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const fixtureRoots: string[] = [];
@@ -25,6 +26,10 @@ function createFixture() {
   }
   const script = path.join(example, 'run-e2e.sh');
   fs.copyFileSync(runnerPath, script);
+  fs.copyFileSync(
+    path.join(path.dirname(runnerPath), 'promptfooconfig.yaml'),
+    path.join(example, 'promptfooconfig.yaml'),
+  );
   fs.writeFileSync(path.join(example, 'target/Info.plist'), 'fixture');
   fs.writeFileSync(path.join(plugin, '.codex-plugin/plugin.json'), '{"name":"computer-use"}');
   fs.writeFileSync(
@@ -74,6 +79,7 @@ done
   const env = {
     ...process.env,
     PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+    NODE_PATH: path.resolve(__dirname, '../../node_modules'),
     OPENAI_API_KEY: 'fixture-only',
     CODEX_API_KEY: '',
     COMPUTER_USE_PLUGIN_DIR: plugin,
@@ -162,7 +168,9 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
       }
       const result = await fixture.run({}, ['eval', '--env-file', envPath]);
       expect(result.code).not.toBe(0);
-      expect(result.stderr).toContain('Refusing non-regular state file');
+      expect(result.stderr).toContain(
+        'Refusing config that overrides runner-owned Promptfoo state',
+      );
     },
   );
 
@@ -216,17 +224,50 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
   });
 
-  it('allows the bundled config to reference runner-owned environment', async () => {
+  it('accepts a generated YAML suite with the reviewed state references', async () => {
     const fixture = createFixture();
+    const suite = yaml.load(
+      fs.readFileSync(path.join(fixture.example, 'promptfooconfig.yaml'), 'utf8'),
+    ) as Record<string, unknown>;
+    fs.mkdirSync(path.join(fixture.example, '.tmp'));
     fs.writeFileSync(
-      path.join(fixture.example, 'promptfooconfig.yaml'),
-      'defaultTest:\n  vars:\n    target_app: "{{ env.COMPUTER_USE_TARGET_APP }}"\n',
+      path.join(fixture.example, '.tmp/redteam.yaml'),
+      yaml.dump({ ...suite, tests: [{ vars: { prompt: 'fixture' } }] }),
     );
-
-    const result = await fixture.run({}, ['eval', '-c', 'promptfooconfig.yaml']);
-
+    const result = await fixture.run({}, [
+      'redteam',
+      'eval',
+      '-c',
+      '.tmp/redteam.yaml',
+      '--no-cache',
+      '--no-share',
+      '-o',
+      '.tmp/redteam-results.json',
+    ]);
     expect(result.code, result.stderr).toBe(0);
+    expect(fs.existsSync(path.join(fixture.example, '.tmp/redteam-results.json'))).toBe(true);
   });
+
+  it.each(['yaml', 'json'])(
+    'rejects escaped state overrides in approved %s input',
+    async (format) => {
+      const fixture = createFixture();
+      const file = path.join(fixture.example, 'promptfooconfig.yaml');
+      const suite = yaml.load(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+      suite.envPath = 'escape.env';
+      fs.writeFileSync(
+        file,
+        format === 'json'
+          ? JSON.stringify(suite).replace('"envPath"', '"env\\u0050ath"')
+          : yaml.dump(suite).replace('envPath:', '"env\\u0050ath":'),
+      );
+      const result = await fixture.run();
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(
+        'Refusing config that overrides runner-owned Promptfoo state',
+      );
+    },
+  );
 
   it('rejects env files declared by a config before launch', async () => {
     const fixture = createFixture();

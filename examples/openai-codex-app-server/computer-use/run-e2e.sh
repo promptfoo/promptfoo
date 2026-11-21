@@ -18,75 +18,6 @@ require_command() {
   fi
 }
 
-reject_state_overrides() {
-  local arg config index
-  local -a configs
-  reject_state_file() {
-    local file="$1"
-    [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
-    if [[ ! -f "$file" ]]; then
-      echo "Refusing non-regular state file: $file" >&2
-      exit 1
-    fi
-    if grep -Eq '(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME(_OVERRIDE)?|COMPUTER_USE_(WORKING_DIR|TARGET_APP)|working_dir)' "$file"; then
-      echo "Refusing config that overrides runner-owned Promptfoo state: $file" >&2
-      exit 1
-    fi
-  }
-  inspect_config() {
-    local config="$1"
-    [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
-    if [[ ! -f "$config" ]]; then
-      [[ "$config" == "$EXAMPLE_DIR/promptfooconfig.yaml" ]] && return
-      echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
-      exit 1
-    fi
-    if [[ "$config" != "$EXAMPLE_DIR/promptfooconfig.yaml" ]]; then
-      reject_state_file "$config"
-    fi
-    if grep -Eq '(^|[^[:alnum:]_])envPath([^[:alnum:]_]|$)' "$config"; then
-      echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
-      exit 1
-    fi
-  }
-  inspect_paths() {
-    local config
-    if [[ "$2" == config ]]; then
-      inspect_config "$1"
-      return
-    fi
-    IFS=, read -ra configs <<<"$1"
-    for config in "${configs[@]}"; do
-      config="${config#"${config%%[![:space:]]*}"}"
-      config="${config%"${config##*[![:space:]]}"}"
-      [[ -n "$config" ]] || continue
-      reject_state_file "$config"
-    done
-  }
-  for ((index = 1; index <= $#; index++)); do
-    arg="${!index}"
-    case "$arg" in
-    --config=*) inspect_paths "${arg#*=}" config ;;
-    --env-file=* | --env-path=*) inspect_paths "${arg#*=}" env ;;
-    -c?*) inspect_paths "${arg#-c}" config ;;
-    -c | --config)
-      ((index++))
-      while ((index <= $#)) && [[ "${!index}" != -* ]]; do
-        inspect_paths "${!index}" config
-        ((index++))
-      done
-      ((index--))
-      ;;
-    --env-file | --env-path)
-      ((index++))
-      config="${!index:-}"
-      [[ "$config" == -* ]] || inspect_paths "$config" env
-      ;;
-    *) continue ;;
-    esac
-  done
-}
-
 terminate_process() {
   local pid="${1:-}"
   if [[ -z "$pid" ]] || [[ "$(ps -p "$pid" -o command= 2>/dev/null)" != "$TARGET_APP_BINARY" ]]; then
@@ -197,17 +128,70 @@ if (($# == 0)); then
   # run must not depend on remote generation (or its email-verification prompt).
   # Custom commands keep remote grading available.
   DISABLE_REMOTE_GENERATION=true
-  set -- eval \
-    -c "$EXAMPLE_DIR/promptfooconfig.yaml" \
-    --no-cache \
-    --no-share \
-    -o "$TMP_DIR/results.json"
+  set -- eval
 fi
 
-reject_state_overrides "$@"
+# Launch only the two reviewed flows. Validate the decoded YAML, including the
+# generated config, before replacing any of the fixture's state directories.
+cd "$EXAMPLE_DIR"
+node - "$@" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const { parseArgs } = require('node:util');
+const yaml = require('js-yaml');
+function refuse() {
+  throw new Error('Refusing config that overrides runner-owned Promptfoo state');
+}
+
+const args = process.argv.slice(2);
+const redteam = args[0] === 'redteam';
+const mode = redteam ? args.splice(0, 2) : args.splice(0, 1);
+if (mode.at(-1) !== 'eval') refuse();
+let opts;
+try {
+  opts = parseArgs({args, options: {
+    config: { type: 'string', short: 'c', multiple: true },
+    output: { type: 'string', short: 'o', multiple: true },
+    'no-cache': { type: 'boolean' },
+    'no-share': { type: 'boolean' },
+  }}).values;
+} catch {
+  refuse();
+}
+const config = redteam ? '.tmp/redteam.yaml' : 'promptfooconfig.yaml';
+const output = redteam ? '.tmp/redteam-results.json' : '.tmp/results.json';
+for (const [values, expected] of [[opts.config, config], [opts.output, output]]) {
+  if (values && (values.length !== 1 || path.resolve(values[0]) !== path.resolve(expected))) refuse();
+}
+if (!fs.lstatSync(config).isFile()) refuse();
+const suite = yaml.load(fs.readFileSync(config, 'utf8'));
+const provider = suite?.providers?.[0]?.config;
+const home = '{{ env.CODEX_HOME_OVERRIDE | default(".tmp/codex-home", true) }}';
+const workspace = '{{ env.COMPUTER_USE_WORKING_DIR | default(".tmp/workspace") }}';
+const app = '{{ env.COMPUTER_USE_TARGET_APP | default("PromptfooComputerUseTarget.app") }}';
+if (suite?.providers?.length !== 1 || provider?.working_dir !== workspace ||
+    provider.cli_env?.CODEX_HOME !== home || suite.defaultTest?.vars?.target_app !== app) refuse();
+function inspect(value) {
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'working_dir' && value !== provider) refuse();
+    if (key === 'CODEX_HOME' && value !== provider.cli_env) refuse();
+    if (key === 'target_app' && child !== app) refuse();
+    if (/^(?:env|envPath|commandLineOptions|\$ref|CODEX_HOME_OVERRIDE|PROMPTFOO_.+|COMPUTER_USE_.+)$/i.test(key)) refuse();
+    inspect(child);
+  }
+}
+inspect(suite);
+NODE
+
+if [[ "$1" == redteam ]]; then
+  set -- redteam eval -c .tmp/redteam.yaml --no-cache --no-share -o .tmp/redteam-results.json
+else
+  set -- eval -c promptfooconfig.yaml --no-cache --no-share -o .tmp/results.json
+fi
 
 # Recreate fixed outputs so old symlinks or hard links cannot redirect writes.
-rm -f -- "$TMP_DIR/target.log" "$TMP_DIR/results.json" \
+rm -f -- "$TMP_DIR/target.log" "$TMP_DIR/results.json" "$TMP_DIR/redteam-results.json" \
   "$TMP_DIR/marketplace-add.json" "$TMP_DIR/plugin-add.json" "$TMP_DIR/plugin-list.json"
 
 # Keep Promptfoo's own state (database, logs, evalLastWritten) inside the disposable

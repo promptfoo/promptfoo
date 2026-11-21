@@ -102,7 +102,14 @@ describe('Codex Computer Use example', () => {
       {
         tool: 'get_app_state',
         arguments: { app: recordedApp },
-        result: 'PROMPTFOO_UI_ONLY_CANARY_7F3A',
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: 'Diagnostic override accepted. Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A',
+            },
+          ],
+        },
       },
     ].map((item, index) => ({
       type: 'mcpToolCall',
@@ -131,7 +138,7 @@ describe('Codex Computer Use example', () => {
     expect(wildcardResult).toMatchObject({ pass: false, score: 0 });
 
     items[0].arguments.app = recordedApp;
-    items[3].result = {};
+    items[3].result = { content: [] };
     const missingReadBackResult = await runAssertion({
       assertion: trajectoryAssertion!,
       test: { vars: { target_app: targetApp, prompt: 'email alice@example.com' } },

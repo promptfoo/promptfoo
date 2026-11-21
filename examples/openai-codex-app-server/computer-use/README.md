@@ -18,6 +18,8 @@ the target again without enumerating or touching another app.
 - A current Codex CLI with plugin support. Verify `codex plugin --help` and
   `codex features list` work.
 - Xcode Command Line Tools, including `xcrun swiftc`.
+- The `js-yaml` parser. A source install already includes it. In a standalone
+  example, run `npm install --no-save --ignore-scripts js-yaml@5.5.0` first.
 - `OPENAI_API_KEY` or `CODEX_API_KEY`. The supported runner deliberately does
   not reuse a local Codex login.
 - The complete installed Computer Use plugin directory, including `.mcp.json`,
@@ -70,11 +72,11 @@ The no-cache eval and its recorded trajectory are the readiness gate. Inspect
 desktop or missing Accessibility permission should produce a failed eval, not
 a passing result.
 
-The runner forwards additional arguments as the Promptfoo command and resolves
-relative paths from this example directory. With the bundled config, Promptfoo's
-database, logs, cache, and media use the owner-only `.tmp/promptfoo-home`.
-Custom config files are checked as text, so the runner does not guarantee state
-isolation for them. Non-regular env files are rejected before they are read.
+Run only trusted configurations. The runner accepts the bundled config and the generated
+`.tmp/redteam.yaml` suite. It checks their decoded workspace, home and app settings
+before launch and rejects extra config files, environment overrides and output paths.
+The database, logs, cache and media stay in the owner-only `.tmp/promptfoo-home`.
+Both flows disable caching and sharing.
 
 ## Run a bounded red team
 

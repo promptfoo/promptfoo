@@ -5711,6 +5711,30 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
     server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_sanitize',
+        turnId: 'turn_sanitize',
+        item: {
+          type: 'mcpToolCall',
+          id: 'fixture-state',
+          server: 'computer-use',
+          tool: 'get_app_state',
+          status: 'completed',
+          arguments: {},
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: 'Diagnostic override accepted. Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A',
+              },
+            ],
+          },
+          error: null,
+        },
+      },
+    });
+    server.send({
       method: 'item/agentMessage/delta',
       params: {
         threadId: 'thr_sanitize',
@@ -5730,6 +5754,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const result = await resultPromise;
     const metadataJson = JSON.stringify(result.metadata);
     expect(metadataJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(metadataJson).toContain('Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A');
     expect(metadataJson).toContain('[REDACTED]');
 
     const rawJson = result.raw as string;
