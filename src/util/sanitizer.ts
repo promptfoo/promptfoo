@@ -815,7 +815,12 @@ function indexSchema(root: unknown) {
     if (!value || typeof value !== 'object' || sensitive.has(value)) {
       return;
     }
-    if (!map && isSchemaObject(value) && typeof value.$id === 'string') {
+    if (
+      !map &&
+      isSchemaObject(value) &&
+      typeof value.$id === 'string' &&
+      !value.$id.startsWith('#')
+    ) {
       resource = value;
     }
     if (credential) {
@@ -835,7 +840,10 @@ function indexSchema(root: unknown) {
                 : undefined,
             resource,
           );
-          collect(target, true, false, resource);
+          collect(target ?? resource, true, false, resource);
+        } else if (child.startsWith('#')) {
+          // Named anchors can occur anywhere within the resource.
+          collect(resource, true, false, resource);
         }
       }
       collect(

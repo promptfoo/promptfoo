@@ -461,8 +461,8 @@ describe('sanitizeConfigForOutput', () => {
         public: { default: 'ordinary' },
         nested: {
           $id: 'child.json',
-          $defs: { public: { const: 'private-nested' } },
-          properties: { token: { $ref: '#/$defs/public' } },
+          $defs: { public: { $id: '#field', const: 'private-nested' } },
+          properties: { token: { $ref: '#field' } },
         },
       },
       properties: { apiKey: { $ref: '#/$defs/field' }, token: { $ref: 'public.json' } },
