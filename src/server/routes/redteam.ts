@@ -29,6 +29,7 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
@@ -249,15 +250,16 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  // If there's a current job running, abort it
+  // Refuse to start while another job is already running. Aborting the in-flight
+  // job here let any stray request kill the operator's run; the UI offers an
+  // explicit cancel-then-restart through POST /redteam/cancel instead.
   if (currentJobId) {
-    if (currentAbortController) {
-      currentAbortController.abort();
-    }
-    evalJobService.fail(currentJobId, ['Job cancelled - new job started'], {
-      append: true,
-      resetResult: false,
+    res.status(409).json({
+      success: false,
+      error: 'A red team job is already running. Cancel it before starting a new one.',
+      jobId: currentJobId,
     });
+    return;
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
@@ -315,7 +317,16 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   res.json(RedteamSchemas.Run.Response.parse({ id }));
 });
 
-redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
+redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void> => {
+  const body = RedteamSchemas.Cancel.Request.safeParse(req.body === undefined ? {} : req.body);
+  if (!body.success) {
+    replyValidationError(res, body.error);
+    return;
+  }
+  if (body.data.jobId && currentJobId !== body.data.jobId) {
+    res.status(409).json({ error: 'The selected job is no longer running.' });
+    return;
+  }
   if (!currentJobId) {
     res.status(400).json({ error: 'No job currently running' });
     return;

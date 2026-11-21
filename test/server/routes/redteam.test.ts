@@ -599,9 +599,12 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/run', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       vi.resetAllMocks();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
+      // /run refuses with 409 while a job is in flight, and the route module's
+      // job state outlives createApp(); drop anything a previous test left.
+      await request(app).post('/api/redteam/cancel');
     });
 
     afterEach(() => {
@@ -688,51 +691,51 @@ describe('Redteam Routes', () => {
       });
     });
 
-    it('should keep a replaced job cancelled when its stale run settles', async () => {
+    it('should reject a second run with 409 while a job is in flight and let the first complete', async () => {
       let resolveFirstRun: ((value: any) => void) | undefined;
-      let resolveSecondRun: ((value: undefined) => void) | undefined;
-      mockedDoRedteamRun
-        .mockReturnValueOnce(
-          new Promise((resolve) => {
-            resolveFirstRun = resolve;
-          }),
-        )
-        .mockReturnValueOnce(
-          new Promise((resolve) => {
-            resolveSecondRun = resolve;
-          }),
-        );
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstRun = resolve;
+        }),
+      );
 
       const firstResponse = await request(app)
         .post('/api/redteam/run')
         .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      // A second run request must not abort or fail the in-flight job.
       const secondResponse = await request(app)
         .post('/api/redteam/run')
         .send({ config: { purpose: 'second' } });
-      expect(firstResponse.status).toBe(200);
-      expect(secondResponse.status).toBe(200);
-
-      const cancelledResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
-      expect(cancelledResponse.body).toMatchObject({
-        status: 'error',
-        logs: ['Job cancelled - new job started'],
+      expect(secondResponse.status).toBe(409);
+      expect(secondResponse.body).toMatchObject({
+        success: false,
+        error: 'A red team job is already running. Cancel it before starting a new one.',
+        jobId: firstResponse.body.id,
       });
+      expect(mockedDoRedteamRun).toHaveBeenCalledTimes(1);
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      const inFlightResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
+      expect(inFlightResponse.body).toMatchObject({ status: 'in-progress', logs: [] });
 
       const toEvaluateSummary = vi.fn().mockResolvedValue({ results: [] });
       resolveFirstRun!({
-        id: 'stale-redteam-eval-id',
+        id: 'redteam-eval-id',
         toEvaluateSummary,
       });
       await vi.waitFor(async () => {
         const settledResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
         expect(settledResponse.body).toMatchObject({
-          status: 'error',
-          logs: ['Job cancelled - new job started'],
+          status: 'complete',
+          evalId: 'redteam-eval-id',
         });
       });
       expect(toEvaluateSummary).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
 
-      resolveSecondRun!(undefined);
+      // The slot is free again once the job settles.
       await vi.waitFor(async () => {
         const statusResponse = await request(app).get('/api/redteam/status');
         expect(statusResponse.body).toMatchObject({
@@ -740,6 +743,36 @@ describe('Redteam Routes', () => {
           jobId: null,
         });
       });
+    });
+
+    it('keeps the replacement job running when a stale confirmation requests cancellation', async () => {
+      mockedDoRedteamRun.mockReturnValueOnce(new Promise(() => {}));
+      const active = await request(app).post('/api/redteam/run').send({ config: {} });
+      expect(active.status).toBe(200);
+      const cancel = (jobId: string) => request(app).post('/api/redteam/cancel').send({ jobId });
+      expect((await cancel('00000000-0000-4000-8000-000000000001')).status).toBe(409);
+      expect((await cancel('invalid')).status).toBe(400);
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+      expect((await cancel(active.body.id)).status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(true);
+    });
+
+    it('should allow a new run after the previous job settled', async () => {
+      mockedDoRedteamRun.mockResolvedValueOnce(undefined as any);
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+      await vi.waitFor(async () => {
+        const completed = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
+        expect(completed.body).toMatchObject({ status: 'complete' });
+      });
+
+      const secondResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'second' } });
+      expect(secondResponse.status).toBe(200);
+      expect(secondResponse.body.id).toBeDefined();
     });
 
     it('should preserve streamed logs when the background run rejects', async () => {
