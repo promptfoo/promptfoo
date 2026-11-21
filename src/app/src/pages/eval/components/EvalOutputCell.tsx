@@ -8,6 +8,7 @@ import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
   isLegacyMediaPath,
   isMediaRef,
+  mapMediaText,
   normalizeMediaText,
   resolveAudioSource,
   resolveBlobUri,
@@ -55,8 +56,8 @@ type CSSPropertiesWithCustomVars = React.CSSProperties & {
 
 // Resolve complete Markdown destinations after parsing, so quoted, escaped, and
 // angle-bracket links cannot append path syntax to a validated reference prefix.
-const transformMarkdownUrl = (url: string): string =>
-  isMediaRef(url) || isLegacyMediaPath(url) ? (resolveBlobUri(url) ?? '') : url;
+const transformMarkdownUrl = (url: string) =>
+  isMediaRef(url) || isLegacyMediaPath(url) ? resolveBlobUri(url) : url;
 
 type MarkdownDisplayNode = {
   type: string;
@@ -67,27 +68,33 @@ type MarkdownDisplayNode = {
 };
 
 function remarkNormalizeMediaText() {
-  return (tree: MarkdownDisplayNode) => {
-    const pending = [tree];
-    for (let node = pending.pop(); node; node = pending.pop()) {
-      // Preserve normalization of displayed prose and code, without modifying
-      // URL destinations or reference identifiers before urlTransform validates them.
-      if (
-        (node.type === 'text' || node.type === 'inlineCode' || node.type === 'code') &&
-        typeof node.value === 'string'
-      ) {
-        node.value = normalizeMediaText(node.value);
-      }
-      if (typeof node.alt === 'string') {
-        node.alt = normalizeMediaText(node.alt);
-      }
-      if (typeof node.title === 'string') {
-        node.title = normalizeMediaText(node.title);
-      }
-      for (const child of node.children ?? []) {
-        pending.push(child);
-      }
+  function normalize(node: MarkdownDisplayNode, inLink: boolean): MarkdownDisplayNode[] {
+    if (!inLink && node.type === 'text' && node.value) {
+      return mapMediaText(node.value, (value, isUrl) => {
+        const text = { ...node, value };
+        return isUrl && /^https?:\/\//i.test(value)
+          ? { type: 'link', url: value, children: [text] }
+          : text;
+      });
     }
+    // Keep URL destinations and reference identifiers intact for urlTransform.
+    if (node.value && ['text', 'inlineCode', 'code'].includes(node.type)) {
+      node.value = normalizeMediaText(node.value);
+    }
+    if (node.alt) {
+      node.alt = normalizeMediaText(node.alt);
+    }
+    if (node.title) {
+      node.title = normalizeMediaText(node.title);
+    }
+    if (node.children) {
+      const nested = inLink || node.type === 'link' || node.type === 'linkReference';
+      node.children = node.children.flatMap((child) => normalize(child, nested));
+    }
+    return [node];
+  }
+  return (tree: MarkdownDisplayNode) => {
+    normalize(tree, false);
   };
 }
 

@@ -1,3 +1,4 @@
+import useApiConfig from '@app/stores/apiConfig';
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
@@ -208,7 +209,35 @@ describe('EvalOutputCell', () => {
       />,
     );
     const label = screen.getByText(`See /api/blobs/${hash}.`);
-    expect(label.closest('a')?.getAttribute('href') || '').toBe('');
+    expect(label.closest('a[href]')).toBeNull();
+    dispatchClick(label);
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('links absolute media references in prose without nesting links or linking code', () => {
+    const base = 'https://api.example.com';
+    const ref = 'storageRef:images/a.png';
+    const hash = 'a'.repeat(64);
+    const original = useApiConfig.getState().apiBaseUrl;
+    useApiConfig.setState({ apiBaseUrl: base });
+    try {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={10000}
+          output={{
+            ...defaultProps.output,
+            text: `See **${ref}** and promptfoo://blob/${hash}. [**${ref}**](/help) \`${ref}\``,
+          }}
+        />,
+      );
+      expect(
+        Array.from(container.querySelectorAll('a[href]'), (link) => link.getAttribute('href')),
+      ).toEqual([`${base}/api/media/images/a.png`, `${base}/api/blobs/${hash}`, '/help']);
+      expect(container.querySelector('a a, code a')).toBeNull();
+    } finally {
+      useApiConfig.setState({ apiBaseUrl: original });
+    }
   });
 
   it('normalizes image alternative text without changing destination validation', () => {

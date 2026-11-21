@@ -722,6 +722,8 @@ describe('resolveBlobUri security', () => {
     '/api/%62lobs/library',
     `/api/%${'25'.repeat(30)}6dedia/video/../../../eval/private`,
     `%${'25'.repeat(30)}2fapi/media/video/../../../eval/private`,
+    '/api/media/%2e%2e ',
+    '/api/media/..  ',
     '/api/media/video/%2e%2e/../../eval/private',
     '/api/media/video/%252e%252e/../../eval/private',
     '/api/media/video%2f..%2f..%2feval/private',
@@ -752,6 +754,7 @@ describe('resolveBlobUri security', () => {
 
   it.each([
     '/api/media/video/safe.mp4?download=1&name=../other#t=0',
+    '/api/media/..%20',
     '/api/media/video/my%20clip.mp4',
     '/api/media/video/100%25.mp4#preview',
     '/api/MeDiA/video/safe.mp4',

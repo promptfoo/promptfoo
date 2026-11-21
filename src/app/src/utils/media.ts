@@ -79,7 +79,7 @@ function resolveStoragePath(path: string): string | undefined {
 }
 
 export function isLegacyMediaPath(value: unknown): boolean {
-  if (typeof value !== 'string') {
+  if (typeof value !== 'string' || !/^[\\/%\u0000-\u0020\u007f]/.test(value)) {
     return false;
   }
   // Library endpoints are ordinary API links, not blob byte references.
@@ -89,7 +89,7 @@ export function isLegacyMediaPath(value: unknown): boolean {
   let path = value;
   for (let decodePass = 0; decodePass <= 5; decodePass++) {
     path = path.replace(/[\u0000-\u0020\u007f]/g, '').replace(/\\/g, '/');
-    const segments = path.split(/[?#]/, 1)[0].split('/');
+    const segments = path.split(/[?#]/, 1)[0].split('/', 4);
     if (
       path.startsWith('/') &&
       segments[1] &&
@@ -128,6 +128,10 @@ function resolveLegacyMediaPath(uri: string): string | undefined {
   }
   const [, kind, key] = match;
   if (kind.toLowerCase() === 'media') {
+    // Browsers trim literal trailing spaces before resolving dot segments.
+    if (path === uri && key.endsWith(' ')) {
+      return undefined;
+    }
     return encodeStoragePath(key) === undefined ? undefined : uri;
   }
   try {
@@ -182,11 +186,14 @@ function resolveMediaUrl(url?: string | null): string | undefined {
   return undefined;
 }
 
+function hasPrefix(value: string, prefix: string): boolean {
+  return value.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase();
+}
+
 export function isMediaRef(value: unknown): boolean {
   return (
     typeof value === 'string' &&
-    (value.toLowerCase().startsWith(BLOB_URI_PREFIX) ||
-      value.toLowerCase().startsWith(STORAGE_REF_PREFIX.toLowerCase()))
+    (hasPrefix(value, BLOB_URI_PREFIX) || hasPrefix(value, STORAGE_REF_PREFIX))
   );
 }
 
@@ -195,12 +202,15 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
     return undefined;
   }
 
-  if (uri.toLowerCase().startsWith(BLOB_URI_PREFIX)) {
+  if (uri.startsWith('data:')) {
+    return uri;
+  }
+  if (hasPrefix(uri, BLOB_URI_PREFIX)) {
     const hash = uri.slice(BLOB_URI_PREFIX.length);
     return BLOB_HASH_REGEX.test(hash) ? withApiBase(`/api/blobs/${hash.toLowerCase()}`) : undefined;
   }
 
-  if (uri.toLowerCase().startsWith(STORAGE_REF_PREFIX.toLowerCase())) {
+  if (hasPrefix(uri, STORAGE_REF_PREFIX)) {
     return resolveStoragePath(uri.slice(STORAGE_REF_PREFIX.length));
   }
 
@@ -211,7 +221,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   // Only allow safe internal paths and data URIs
   // External URLs (http://, https://, //) are NOT allowed to prevent SSRF
   // See SECURITY.md - test data and model outputs are untrusted inputs
-  if (uri.startsWith('/api/') || uri.startsWith('data:')) {
+  if (uri.startsWith('/api/')) {
     return uri;
   }
 
@@ -264,9 +274,6 @@ export function resolveImageSource(
     const blobUrl = resolveBlobUri(image);
     if (blobUrl) {
       return blobUrl;
-    }
-    if (image.startsWith('data:')) {
-      return image;
     }
     // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
     // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
@@ -327,19 +334,33 @@ export function resolveVideoSource(
   };
 }
 
-// For text display and comparison only. Resolve complete URL destinations with
-// resolveBlobUri after Markdown parsing before using them in href/src attributes.
-export function normalizeMediaText(text: string): string {
-  return text.replace(MEDIA_REF_REGEX, (match) => {
-    const prefix = match.toLowerCase().startsWith(BLOB_URI_PREFIX)
-      ? BLOB_URI_PREFIX
-      : STORAGE_REF_PREFIX;
+// Match references in prose only. Validate authored links as complete Markdown destinations.
+export function mapMediaText<T>(text: string, convert: (value: string, isUrl: boolean) => T): T[] {
+  const parts: T[] = [];
+  let end = 0;
+  for (const { 0: match, index } of text.matchAll(MEDIA_REF_REGEX)) {
+    const prefix = hasPrefix(match, BLOB_URI_PREFIX) ? BLOB_URI_PREFIX : STORAGE_REF_PREFIX;
     const value = match.slice(prefix.length);
     const prose =
       prefix === BLOB_URI_PREFIX ? /^([a-f0-9]{64})((?:(?![/\\%])\p{P})+)$/iu.exec(value) : null;
-    const resolved = resolveBlobUri(`${prefix}${prose?.[1] ?? value}`);
-    return resolved === undefined ? match : `${resolved}${prose?.[2] ?? ''}`;
-  });
+    const ref = `${prefix}${prose?.[1] ?? value}`;
+    const resolved = resolveBlobUri(ref);
+    if (resolved !== undefined) {
+      if (index > end) {
+        parts.push(convert(text.slice(end, index), false));
+      }
+      parts.push(convert(resolved, true));
+      end = index + ref.length;
+    }
+  }
+  if (end < text.length) {
+    parts.push(convert(text.slice(end), false));
+  }
+  return parts;
+}
+
+export function normalizeMediaText(text: string): string {
+  return mapMediaText(text, (value) => value).join('');
 }
 
 /**
