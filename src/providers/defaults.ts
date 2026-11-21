@@ -10,7 +10,11 @@ import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
 import { getMistralProviders } from './mistral/defaults';
-import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
+import {
+  getCodexDefaultProviders,
+  hasCodexDefaultCredentials,
+  inspectCodexDefaultProviders,
+} from './openai/codexDefaults';
 import { getOpenAiProviders } from './openai/defaults';
 import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
@@ -137,7 +141,23 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+type Assignments<T> = { [K in keyof DefaultProviders]: ApiProvider | T };
+
+export function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  return selectDefaultProviders<ApiProvider>(env, getCodexDefaultProviders);
+}
+
+/** Inspect automatic assignments without creating Codex workspaces or registering SDK clients. */
+export function inspectDefaultProviders(env?: EnvOverrides) {
+  return selectDefaultProviders<Pick<ApiProvider, 'id'>>(env, inspectCodexDefaultProviders);
+}
+
+async function selectDefaultProviders<T>(
+  env: EnvOverrides | undefined,
+  codex: (
+    env?: EnvOverrides,
+  ) => Pick<Assignments<T>, keyof ReturnType<typeof getCodexDefaultProviders>>,
+): Promise<Assignments<T>> {
   const {
     preferAnthropic,
     preferAzure,
@@ -150,7 +170,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
   const openAiProviders = getOpenAiProviders(env);
 
-  let providers: Pick<DefaultProviders, keyof DefaultProviders>;
+  let providers: Assignments<T>;
 
   if (preferAzure) {
     logger.debug('Using Azure OpenAI default providers');
@@ -222,7 +242,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     providers = {
       embeddingProvider: openAiProviders.embeddingProvider,
       moderationProvider: openAiProviders.moderationProvider,
-      ...getCodexDefaultProviders(env),
+      ...codex(env),
     };
   } else {
     logger.debug('Using OpenAI default providers');

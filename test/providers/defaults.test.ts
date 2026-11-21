@@ -1,9 +1,12 @@
+import fs from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
+  inspectDefaultProviders,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
@@ -273,6 +276,20 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
     expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
     expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+  });
+
+  it('inspects Codex assignments without allocating a working directory', async () => {
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+    const mkdir = vi.spyOn(fs, 'mkdtempSync');
+    try {
+      const providers = await inspectDefaultProviders();
+      expect(providers.gradingProvider.id()).toBe('openai:codex-sdk');
+      expect(providers.webSearchProvider?.id()).toBe('openai:codex-sdk');
+      expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
+      expect(mkdir).not.toHaveBeenCalled();
+    } finally {
+      mkdir.mockRestore();
+    }
   });
 
   it('should use Codex SDK providers when ChatGPT/Codex credentials exist without API provider keys', async () => {

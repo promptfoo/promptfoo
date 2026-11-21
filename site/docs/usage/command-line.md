@@ -12,6 +12,7 @@ The `promptfoo` command line utility includes these command groups:
 - `init [directory]` - Initialize a new project with prompts, providers, and test cases.
 - `eval` - Evaluate prompts and models. This is the command you'll be using the most!
   - `eval setup`
+- `providers` - Show automatic default provider assignments.
 - `view` - Start a browser UI for visualization of results.
 - `share [id]` - Create a URL that can be shared online for an eval or model audit.
 - `auth` - Manage authentication for cloud features.
@@ -170,6 +171,17 @@ Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3`
 When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+
+## `promptfoo providers`
+
+Show the default provider IDs for grading, embeddings and other tasks without making model requests:
+
+```sh
+promptfoo providers
+promptfoo providers --env-file .env.local
+```
+
+The command uses the current environment and the discovered config's `env` settings. It does not apply eval-specific provider overrides or display credential values.
 
 ## `promptfoo optimize`
 
