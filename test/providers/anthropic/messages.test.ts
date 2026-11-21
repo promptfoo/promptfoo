@@ -2244,6 +2244,10 @@ describe('AnthropicMessagesProvider', () => {
         expect(result.tokenUsage).toMatchObject({ prompt: 17, completion: 9, total: 26 });
         expect(mcpMocks.callTool).not.toHaveBeenCalled();
         expect(createSpy).toHaveBeenCalledTimes(2);
+        expect(createSpy.mock.calls[1][0].messages.at(-2)).toMatchObject({
+          role: 'assistant',
+          content: [{ type: 'tool_use', input: {} }],
+        });
         expect(createSpy.mock.calls[1][0].messages.at(-1)).toEqual({
           role: 'user',
           content: [

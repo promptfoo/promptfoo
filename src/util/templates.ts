@@ -525,8 +525,8 @@ export function extractVariablesFromTemplate(template: string): string[] {
     /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
   const commentRegex = /\{#[\s\S]*?#\}/g;
 
-  // Remove comments
-  template = template.replace(commentRegex, '');
+  // Whitespace controls affect rendered spacing, not variable identity.
+  template = template.replace(commentRegex, '').replace(/(\{\{|\{%)-|-(\}\}|%\})/g, '$1$2');
 
   let match;
   while ((match = regex.exec(template)) !== null) {

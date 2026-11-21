@@ -224,7 +224,7 @@ describe('redteamInit', () => {
     vi.mocked(editor)
       .mockResolvedValueOnce('First prompt without a variable')
       .mockResolvedValueOnce('Second prompt without a variable')
-      .mockResolvedValueOnce('User query: {{question}}');
+      .mockResolvedValueOnce('User query: {{- question -}}');
     vi.mocked(confirm).mockResolvedValue(false);
 
     await redteamInit(undefined);
@@ -241,7 +241,7 @@ describe('redteamInit', () => {
     const config = yaml.load(vi.mocked(fs.writeFile).mock.calls[0][1] as string) as {
       prompts: string[];
     };
-    expect(config.prompts).toEqual(['User query: {{question}}']);
+    expect(config.prompts).toEqual(['User query: {{- question -}}']);
   });
 
   it('removes the instructional note before validating every edit', async () => {

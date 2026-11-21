@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, like, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNull, like, or } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
@@ -218,7 +218,11 @@ export default class ModelAudit {
     // If we have contentHash, check (modelId, contentHash)
     if (contentHash) {
       conditions.push(
-        and(eq(modelAuditsTable.modelId, modelId), eq(modelAuditsTable.contentHash, contentHash)),
+        and(
+          eq(modelAuditsTable.modelId, modelId),
+          eq(modelAuditsTable.contentHash, contentHash),
+          revisionSha === null ? isNull(modelAuditsTable.revisionSha) : undefined,
+        ),
       );
     }
 

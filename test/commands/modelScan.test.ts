@@ -891,7 +891,7 @@ describe('Re-scan on version change behavior', () => {
     expect((ModelAudit.create as Mock).mock.calls[0][0]).not.toHaveProperty('revisionSha');
   });
 
-  it.each([undefined, 'same-content'])(
+  it.each([undefined, 'same-content', 'collision'])(
     'clears a reused audit revision when the alias changes with content hash %s',
     async (contentHash) => {
       vi.mocked(isHuggingFaceModel).mockReturnValue(true);
@@ -910,7 +910,13 @@ describe('Re-scan on version change behavior', () => {
         contentHash,
         save: vi.fn().mockResolvedValue(undefined),
       };
-      vi.mocked(ModelAudit.findByRevision).mockResolvedValue(existingAudit as any);
+      const unversioned =
+        contentHash === 'collision'
+          ? { ...existingAudit, id: 'unversioned', revisionSha: null, save: vi.fn() }
+          : null;
+      vi.mocked(ModelAudit.findByRevision)
+        .mockResolvedValueOnce(existingAudit as any)
+        .mockResolvedValue(unversioned as any);
       const results = {
         ...JSON.parse(VALID_SCAN_OUTPUT),
         ...(contentHash ? { content_hash: contentHash } : {}),
@@ -922,8 +928,18 @@ describe('Re-scan on version change behavior', () => {
       modelScanCommand(program);
       await program.commands[0].parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
 
-      expect(existingAudit.save).toHaveBeenCalledTimes(1);
-      expect(existingAudit).toMatchObject({ revisionSha: null, contentHash, results });
+      if (unversioned) {
+        expect(ModelAudit.findByRevision).toHaveBeenLastCalledWith(
+          metadata.modelId,
+          null,
+          contentHash,
+        );
+        expect(existingAudit.save).not.toHaveBeenCalled();
+        expect(existingAudit.revisionSha).toBe('before-scan');
+      }
+      const saved = unversioned ?? existingAudit;
+      expect(saved.save).toHaveBeenCalledOnce();
+      expect(saved).toMatchObject({ revisionSha: null, contentHash, results });
       expect(ModelAudit.create).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(0);
     },
