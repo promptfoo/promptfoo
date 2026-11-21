@@ -24,6 +24,20 @@ import type {
   MCPToolInputSchema,
 } from './types';
 
+/** Name occupied by a provider-configured Chat Completions tool. */
+export function getConfiguredOpenAiToolName(tool: Record<string, unknown>): string | undefined {
+  const definition = tool.function ?? tool.custom;
+  if (
+    definition &&
+    typeof definition === 'object' &&
+    'name' in definition &&
+    typeof definition.name === 'string'
+  ) {
+    return definition.name;
+  }
+  return undefined;
+}
+
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;

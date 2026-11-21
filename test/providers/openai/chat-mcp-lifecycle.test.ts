@@ -85,6 +85,24 @@ describe('Chat MCP caller lifetime', () => {
     }
   });
 
+  it('rejects a configured function that would be shadowed by a generated MCP alias', async () => {
+    const provider = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture',
+        mcp: { enabled: true, servers: [{ command: 'first' }, { command: 'second' }] },
+        tools: [
+          { type: 'function', function: { name: 'mcp_2_lookup', parameters: { type: 'object' } } },
+        ],
+      },
+    });
+    try {
+      await expect(provider.callApi('test')).rejects.toThrow(/mcp_2_lookup.*configured tool/);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    } finally {
+      await provider.cleanup();
+    }
+  });
+
   it.each([
     { timing: 'cancelled wrapped', outcome: 'success', preAborted: false },
     { timing: 'cancelled wrapped', outcome: 'failure', preAborted: false },

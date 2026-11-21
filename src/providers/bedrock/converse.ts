@@ -931,18 +931,18 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return undefined;
     }
 
-    const mcpTools = this.mcpClient
-      ? transformMCPToolsToBedrockConverse(this.mcpClient.getAllTools())
-      : [];
-
-    // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
     const configTools = promptConfig?.tools ?? this.config.tools;
-    if (mcpTools.length === 0 && (!configTools || configTools.length === 0)) {
-      return undefined;
-    }
-
-    // Load tools from external file with variable rendering if needed
     const tools = configTools ? await maybeLoadToolsFromExternalFile(configTools, vars) : [];
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToBedrockConverse(
+          this.mcpClient.getAllTools(
+            (tools || []).map(
+              (tool: BedrockConverseToolConfig) =>
+                tool.toolSpec?.name ?? tool.function?.name ?? tool.name,
+            ),
+          ),
+        )
+      : [];
     if (mcpTools.length === 0 && (!tools || tools.length === 0)) {
       return undefined;
     }
