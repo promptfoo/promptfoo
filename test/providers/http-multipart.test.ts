@@ -366,6 +366,17 @@ describe('HttpProvider structured multipart requests', () => {
     ).rejects.toBe(error);
   });
 
+  it('never opens non-regular files', async () => {
+    const read = vi.spyOn(fs.promises, 'readFile');
+    await expect(
+      renderHttpMultipartBody(
+        { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: '.' } }] },
+        {},
+      ),
+    ).rejects.toThrow('must be a regular file');
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it('aborts without waiting for path resolution or reading a file', async () => {
     const controller = new AbortController();
     const realpath = vi

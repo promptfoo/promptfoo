@@ -228,6 +228,11 @@ async function loadFilePart(
   if (!isCanonicalPathWithinDir(canonicalPath, canonicalBase)) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
+  // Opening a FIFO can block even if readFile receives an abort signal.
+  const stat = await waitForPromiseWithAbort(fs.stat(canonicalPath), abortSignal);
+  if (!stat.isFile()) {
+    throw new Error(`Multipart source must be a regular file: ${renderedPath}`);
+  }
   const buffer = await fs.readFile(canonicalPath, { signal: abortSignal });
   return {
     buffer,

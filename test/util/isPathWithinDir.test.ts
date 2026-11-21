@@ -91,6 +91,11 @@ describe('isPathWithinDir', () => {
     await expect(isPathWithinDir('evil-symlink', workspace)).resolves.toBe(false);
   });
 
+  it('rejects writes through dangling symlinks', async () => {
+    await fs.symlink(path.join(outsideDir, 'new.txt'), path.join(workspace, 'dangling'), 'file');
+    await expect(isPathWithinDir('dangling', workspace)).resolves.toBe(false);
+  });
+
   it('should allow non-existent paths within directory (for Write tool)', async () => {
     await expect(isPathWithinDir('nonexistent.txt', workspace)).resolves.toBe(true);
     await expect(isPathWithinDir('subdir/new-file.txt', workspace)).resolves.toBe(true);

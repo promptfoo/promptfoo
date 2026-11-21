@@ -31,26 +31,26 @@ export async function isPathWithinDir(filePath: string, dir: string): Promise<bo
     throw new Error(`Directory does not exist or is inaccessible: ${dir}`);
   }
 
-  const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
-  try {
-    return isCanonicalPathWithinDir(await fs.realpath(absoluteTarget), realDir);
-  } catch (error: any) {
-    // If target doesn't exist (ENOENT), validate parent directory instead.
-    // This allows writes to create new files in valid directories.
-    if (error.code === 'ENOENT') {
-      const parentDir = path.dirname(absoluteTarget);
-
-      // Stop recursion if we've reached root
-      if (parentDir === absoluteTarget) {
-        logger.warn('Path validation failed — reached filesystem root');
+  let target = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
+  while (true) {
+    try {
+      return isCanonicalPathWithinDir(await fs.realpath(target), realDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`Path validation failed for ${filePath}: ${error}`);
         return false;
       }
-
-      return isPathWithinDir(parentDir, dir);
     }
-
-    // Fail safely on any other error (broken symlinks, permission errors, etc.)
-    logger.warn(`Path validation failed for ${filePath}: ${error.message ?? error}`);
-    return false;
+    // A missing entry can be created in a safe directory. A dangling symlink
+    // also yields ENOENT from realpath, but writing through it follows its target.
+    const missing = await fs.lstat(target).then(
+      () => false,
+      (error: NodeJS.ErrnoException) => error.code === 'ENOENT',
+    );
+    const parent = path.dirname(target);
+    if (!missing || parent === target) {
+      return false;
+    }
+    target = parent;
   }
 }
