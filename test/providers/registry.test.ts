@@ -13,6 +13,7 @@ import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/providers/registry';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
+import { TransformersTextClassificationProvider } from '../../src/providers/transformers';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisions';
@@ -105,6 +106,9 @@ describe('Bedrock Runtime OpenAI API routing', () => {
 });
 
 vi.mock('../../src/telemetry');
+vi.mock('../../src/providers/transformersAvailability', () => ({
+  loadTransformers: vi.fn().mockResolvedValue({}),
+}));
 
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
@@ -154,6 +158,19 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['transformers', 'transformers.js'])(
+    'routes %s:text-classification to the local classifier',
+    async (prefix) => {
+      const provider = await loadApiProvider(`${prefix}:text-classification:org/model`, {
+        options: { id: 'local-grader', config: { dtype: 'q8', localFilesOnly: true } },
+      });
+      expect(provider).toBeInstanceOf(TransformersTextClassificationProvider);
+      expect(provider.id()).toBe('local-grader');
+      expect(provider).toHaveProperty('modelName', 'org/model');
+      expect(provider).toHaveProperty('config', { dtype: 'q8', localFilesOnly: true });
+    },
+  );
+
   describe('OpenAI model lifecycle', () => {
     it.each([
       'openai:completion',
