@@ -3,6 +3,7 @@ import logger from '../../../src/logger';
 import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
+import { sampleEachShufflePath } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/logger');
@@ -36,6 +37,17 @@ describe('XSTest Plugin', () => {
       expect(result[0].vars).toHaveProperty('type');
       expect(result[0].vars).toHaveProperty('label');
       expect(result[0].vars).toHaveProperty('note');
+    });
+
+    it('samples every ordered pair of rows equally', async () => {
+      const csv = 'id,prompt,type,label,focus,note\n1,a,t,safe,,\n2,b,t,safe,,\n3,c,t,unsafe,,';
+      vi.mocked(fetchWithTimeout).mockImplementation(async () => new Response(csv));
+
+      const samples = await sampleEachShufflePath(async () =>
+        (await fetchDataset(2)).map((test) => test.vars.prompt).join(''),
+      );
+
+      expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
     });
 
     it('should handle HTTP errors gracefully', async () => {

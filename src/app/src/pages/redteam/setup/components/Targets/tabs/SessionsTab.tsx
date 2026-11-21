@@ -35,6 +35,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
+import { normalizeLocalProviders } from '../helpers';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 
@@ -361,7 +362,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: getTargetForExecution(selectedTarget),
+          provider: normalizeLocalProviders(selectedTarget, { forRuntime: true }),
           sessionConfig: {
             sessionSource: selectedTarget.config?.sessionSource,
             sessionParser: selectedTarget.config?.sessionParser,

@@ -1,5 +1,7 @@
+import confirm from '@inquirer/confirm';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createAndDisplayShareableModelAuditUrl,
   createAndDisplayShareableUrl,
@@ -7,18 +9,21 @@ import {
   shareCommand,
 } from '../../src/commands/share';
 import * as envars from '../../src/envars';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import ModelAudit from '../../src/models/modelAudit';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
+  hasEvalBeenShared,
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../../src/share';
 import { loadDefaultConfig } from '../../src/util/config/default';
 
 vi.mock('../../src/share');
+vi.mock('@inquirer/confirm');
 vi.mock('../../src/logger');
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -41,7 +46,13 @@ vi.mock('../../src/util/config/default');
 describe('Share Command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(confirm).mockReset();
+    vi.mocked(hasEvalBeenShared).mockReset();
     process.exitCode = 0; // Reset exitCode before each test
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('notCloudEnabledShareInstructions', () => {
@@ -57,9 +68,7 @@ describe('Share Command', () => {
 
   describe('createAndDisplayShareableUrl', () => {
     it('should return a URL and log it when successful', async () => {
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
@@ -86,9 +95,7 @@ describe('Share Command', () => {
     it('should return null when createShareableUrl returns null', async () => {
       const mockEval = { id: 'test-eval-id' } as Eval;
 
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue(null);
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
@@ -185,9 +192,7 @@ describe('Share Command', () => {
       } as ModelAudit;
 
       vi.spyOn(ModelAudit, 'findById').mockResolvedValue(mockAudit);
-      vi.mocked(isModelAuditSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
         'https://example.com/model-audit/scan-test-123',
       );
@@ -211,9 +216,7 @@ describe('Share Command', () => {
       } as unknown as Eval;
 
       vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-test-123');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
@@ -241,9 +244,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isModelAuditSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
         'https://example.com/model-audit/scan-new',
       );
@@ -274,9 +275,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-new');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
@@ -364,9 +363,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
@@ -379,9 +376,7 @@ describe('Share Command', () => {
     });
 
     it('should use promptfoo.app by default if no environment variables are set', () => {
-      vi.mocked(envars.getEnvString).mockImplementation(function () {
-        return '';
-      });
+      vi.mocked(envars.getEnvString).mockReturnValue('');
 
       const baseUrl =
         envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
@@ -501,9 +496,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(false);
       vi.mocked(loadDefaultConfig).mockResolvedValue({
         defaultConfig: {},
         defaultConfigPath: 'promptfooconfig.yaml',
@@ -532,9 +525,7 @@ describe('Share Command', () => {
 
       vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
       vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue(
         'https://app.promptfoo.dev/eval/test-eval-id',
       );
@@ -555,9 +546,7 @@ describe('Share Command', () => {
       } as unknown as Eval;
 
       vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-      vi.mocked(isSharingEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
       vi.mocked(createShareableUrl).mockResolvedValue(
         'https://app.promptfoo.dev/eval/specific-eval-id',
       );
@@ -570,12 +559,55 @@ describe('Share Command', () => {
       expect(process.exitCode).toBe(0);
     });
 
-    it('should set exit code 0 when user cancels sharing in confirmation prompt', async () => {
-      // This test is complex to mock properly, so we'll just verify the command exists
-      // The actual cancellation logic is tested in integration tests
-      const shareCmd = program.commands.find((c) => c.name() === 'share');
-      expect(shareCmd).toBeDefined();
-      expect(shareCmd?.name()).toBe('share');
+    it.each(['declines', 'aborts', 'exits'] as const)(
+      'does not upload and exits successfully when the user %s re-sharing',
+      async (action) => {
+        const evalRecord = {
+          id: 'eval-already-shared',
+          prompts: ['test prompt'],
+          config: { sharing: true },
+        } as unknown as Eval;
+        vi.spyOn(Eval, 'findById').mockResolvedValue(evalRecord);
+        vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+        vi.mocked(isSharingEnabled).mockReturnValue(true);
+        vi.mocked(hasEvalBeenShared).mockResolvedValue(true);
+        if (action === 'declines') {
+          vi.mocked(confirm).mockResolvedValue(false);
+        } else {
+          vi.mocked(confirm).mockRejectedValue(
+            action === 'aborts' ? new AbortPromptError() : new ExitPromptError(),
+          );
+        }
+
+        await program.parseAsync(['node', 'test', 'share', evalRecord.id]);
+
+        expect(confirm).toHaveBeenCalledOnce();
+        expect(createShareableUrl).not.toHaveBeenCalled();
+        expect(createShareableModelAuditUrl).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(process.exitCode).toBe(0);
+      },
+    );
+
+    it('reports unexpected confirmation failures without uploading', async () => {
+      const evalRecord = {
+        id: 'eval-already-shared',
+        prompts: ['test prompt'],
+        config: { sharing: true },
+      } as unknown as Eval;
+      vi.spyOn(Eval, 'findById').mockResolvedValue(evalRecord);
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
+      vi.mocked(hasEvalBeenShared).mockResolvedValue(true);
+      vi.mocked(confirm).mockRejectedValue(new Error('Terminal input failed'));
+
+      await program.parseAsync(['node', 'test', 'share', evalRecord.id]);
+
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(createShareableUrl).not.toHaveBeenCalled();
+      expect(createShareableModelAuditUrl).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Terminal input failed'));
+      expect(process.exitCode).toBe(1);
     });
   });
 });
