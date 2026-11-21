@@ -11,17 +11,15 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getConfiguredPythonPath } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 import * as fileReference from '../../src/util/fileReference';
+import { createBasePathOptions } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { Mock } from 'vitest';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+const { createFsModuleFactory, createWarningOrderedLoggerFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+vi.mock('../../src/logger', createWarningOrderedLoggerFactory());
 
 vi.mock('../../src/python/pythonUtils');
 vi.mock('../../src/cache');
@@ -32,17 +30,7 @@ const fsMocks = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 vi.mock('fs/promises', () => ({
   default: {
     readFile: fsMocks.readFileSync,
@@ -153,34 +141,25 @@ describe('PythonProvider', () => {
 
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with python: syntax', () => {
-      const provider = new PythonProvider('python:script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('python:script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix', () => {
-      const provider = new PythonProvider('file://script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('file://script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix and function name', () => {
-      const provider = new PythonProvider('file://script.py:function_name', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider(
+        'file://script.py:function_name',
+        createBasePathOptions(),
+      );
       expect(provider.id()).toBe('testId');
     });
   });
@@ -963,6 +942,49 @@ describe('PythonProvider', () => {
     });
   });
 
+  describe('early registration', () => {
+    it('registers an initializing worker pool and does not restore it after forced shutdown', async () => {
+      let poolStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        poolStarted = resolve;
+      });
+      let finishInitialization!: () => void;
+      const poolInitialization = new Promise<void>((resolve) => {
+        finishInitialization = resolve;
+      });
+      mockPoolInstance.initialize.mockImplementationOnce(async () => {
+        poolStarted();
+        await poolInitialization;
+      });
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+      const shutdown = vi.spyOn(provider, 'shutdown');
+      const initialization = provider.initialize();
+      const rejection = expect(initialization).rejects.toThrow(
+        'initialization interrupted by cleanup',
+      );
+      try {
+        await started;
+        const disposal = providerRegistry.shutdownAll();
+        await vi.waitFor(() => expect(mockPoolInstance.shutdown).toHaveBeenCalled());
+        expect(shutdown).toHaveBeenCalledOnce();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+
+        finishInitialization();
+        await rejection;
+        await disposal;
+        await expect(provider.initialize()).resolves.toBeUndefined();
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      } finally {
+        finishInitialization();
+        await Promise.allSettled([initialization]);
+        await provider.shutdown();
+        shutdown.mockRestore();
+      }
+    });
+  });
+
   describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
     it.each([false, true])(
       'retains a replacement pool while disposing the old pool (initialized=%s)',
@@ -1056,7 +1078,7 @@ describe('PythonProvider', () => {
             ).toHaveBeenCalledTimes(1),
           );
           cleanup = provider[method]();
-          expect(mockPoolInstance.shutdown).not.toHaveBeenCalled();
+          expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(stage === 'pool' ? 1 : 0);
           if (rejectInitialization) {
             initialization.reject(new Error('pool init failed'));
           } else {
@@ -1070,7 +1092,7 @@ describe('PythonProvider', () => {
             ),
           );
           await cleanup;
-          const disposals = stage === 'configuration' && rejectInitialization ? 0 : 1;
+          const disposals = stage === 'configuration' ? 0 : 1;
           expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(disposals);
           expect(mockPoolInstance.execute).not.toHaveBeenCalled();
           expect(providerRegistry.has(provider)).toBe(false);

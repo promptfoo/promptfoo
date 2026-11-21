@@ -242,6 +242,24 @@ describe('TypeSafeProvider', () => {
       expect(mockedFetchWithCache).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } },
+      { fileData: { fileUri: 'gs://fixture/image.png' } },
+    ])(
+      'rejects Google parts in custom rubric prompts before sending a request',
+      async (attachment) => {
+        const result = await matchesLlmRubric('Matches the attachment', 'A circle', {
+          provider: createProvider(),
+          rubricPrompt: JSON.stringify([
+            { role: 'user', content: 'Describe', parts: [{ text: 'Describe' }, attachment] },
+          ]),
+        });
+        expect(result).toMatchObject({ pass: false, metadata: { graderError: true } });
+        expect(result.reason).toContain('supports text output only');
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
     describe.each([
       { content: ['Custom text-only prompt'] },
       { content: [{ text: 'Custom text-only prompt' }] },

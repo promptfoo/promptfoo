@@ -6,8 +6,19 @@ import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
+import { createStringAssertion } from '../factories/literalFixtures';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
+
+const { createRequireModuleFactory, createPathFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+const createZeroThresholdAssertion = () => ({
+  type: 'javascript' as const,
+  value: '0',
+  threshold: 0,
+});
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -17,14 +28,7 @@ vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('node:module', () => {
-  const mockRequire: NodeJS.Require = {
-    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
-  return {
-    createRequire: vi.fn().mockReturnValue(mockRequire),
-  };
-});
+vi.mock('node:module', createRequireModuleFactory());
 
 vi.mock('../../src/util/fetch/index.ts', async () => {
   const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
@@ -60,18 +64,7 @@ vi.mock('../../src/esm', () => ({
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
 }));
-vi.mock('path', async () => {
-  const actualPath = await vi.importActual<typeof import('path')>('path');
-  const mocked = {
-    ...actualPath,
-    resolve: vi.fn(),
-    extname: vi.fn(),
-  };
-  return {
-    ...mocked,
-    default: mocked,
-  };
-});
+vi.mock('path', createPathFactory());
 
 vi.mock('../../src/cliState', () => ({
   default: {
@@ -319,6 +312,27 @@ describe('buildFunctionBody', () => {
     ['semicolon inside template expression', 'const x = 1; `${(() => { return x; })()}` === "1"'],
   ])('should evaluate %s without treating comment text as code', (_name, code) => {
     expect(new Function(buildFunctionBody(code))()).toBe(true);
+  });
+
+  it.each(['in {}', 'instanceof String'])(
+    'preserves a use-strict string continued with %s as an expression',
+    (operator) => {
+      const code = `const f = function () { "use strict"\n${operator}; return 010; }; f() === 8`;
+      expect(new Function(buildFunctionBody(code))()).toBe(true);
+    },
+  );
+
+  it('preserves assignment defaults in valid destructuring', () => {
+    const code = 'let a; [{a = 1}] = [{}]; a === 1';
+    expect(new Function(buildFunctionBody(code))()).toBe(true);
+  });
+
+  it.each([
+    'const f = async(a)(b) => 1; true',
+    'const x = 1; ({a = 0}.x = 0); true',
+    'const x = 1; ({__proto__: null, __proto__: null}.x = 0); true',
+  ])('rejects invalid expression syntax before constructing the assertion: %s', (code) => {
+    expect(() => buildFunctionBody(code)).toThrow(SyntaxError);
   });
 
   it.each(['\n', '\r', '\u2028', '\u2029'])(
@@ -686,6 +700,36 @@ describe('JavaScript declaration grading', () => {
 });
 
 describe('JavaScript file references', () => {
+  const createInvertedJavaScriptCheck =
+    () =>
+    async (
+      _type: string,
+      assertion: Assertion,
+      expectedPass: boolean,
+      expectedScore: number,
+      expectedReason: string,
+    ) => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        score: expectedScore,
+        reason: expectedReason,
+        assertion: {
+          type: 'not-javascript',
+          value: expect.any(String),
+        },
+      });
+    };
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset all mocks before each test
@@ -790,10 +834,7 @@ describe('JavaScript file references', () => {
   });
 
   it('should handle default export when no function name specified', async () => {
-    const assertion: Assertion = {
-      type: 'javascript',
-      value: 'file:///path/to/assert.js',
-    };
+    const assertion: Assertion = createStringAssertion('javascript', 'file:///path/to/assert.js');
 
     const mockFn = vi.fn((_output: string) => true);
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
@@ -832,10 +873,7 @@ describe('JavaScript file references', () => {
   });
 
   it('should handle default export object with function', async () => {
-    const assertion: Assertion = {
-      type: 'javascript',
-      value: 'file:///path/to/assert.js',
-    };
+    const assertion: Assertion = createStringAssertion('javascript', 'file:///path/to/assert.js');
 
     const mockFn = vi.fn((_output: string) => true);
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
@@ -1725,33 +1763,13 @@ describe('JavaScript file references', () => {
       { type: 'not-javascript', value: () => ({ pass: true, score: 1, reason: '' }) },
       false,
       1,
-      'Custom function returned true',
+      '',
     ],
   ];
 
   it.each(inverseFunctionAssertionCases)(
     'should honor inverse mode for direct function-valued javascript assertions with %s',
-    async (_type, assertion, expectedPass, expectedScore, expectedReason) => {
-      const output = 'Expected output';
-
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-        assertion,
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-      });
-
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        score: expectedScore,
-        reason: expectedReason,
-        assertion: {
-          type: 'not-javascript',
-          value: expect.any(String),
-        },
-      });
-    },
+    createInvertedJavaScriptCheck(),
   );
 
   it.each(['prototype', 'non-enumerable'] as const)(
@@ -1795,7 +1813,7 @@ describe('JavaScript file references', () => {
           expect(result).toMatchObject({
             pass: rawPass !== inverse,
             score: 0.4,
-            reason: inverse && !rawPass ? 'Assertion passed' : 'Custom reason',
+            reason: 'Custom reason',
             namedScores: { safety: 0.7 },
             tokensUsed: { total: 3 },
             assertion: { type: 'javascript', value: '() => false' },
@@ -1817,7 +1835,7 @@ describe('JavaScript file references', () => {
       },
       false,
       1,
-      'Custom function returned true',
+      '',
     ],
     [
       'boolean results for not-javascript assertions',
@@ -1860,27 +1878,7 @@ describe('JavaScript file references', () => {
 
   it.each(inverseStringAssertionCases)(
     'should honor inverse mode for inline javascript assertions with %s',
-    async (_type, assertion, expectedPass, expectedScore, expectedReason) => {
-      const output = 'Expected output';
-
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-        assertion,
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-      });
-
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        score: expectedScore,
-        reason: expectedReason,
-        assertion: {
-          type: 'not-javascript',
-          value: expect.any(String),
-        },
-      });
-    },
+    createInvertedJavaScriptCheck(),
   );
 
   it('should honor inverse mode when a file:// javascript assertion returns a number', async () => {
@@ -1991,10 +1989,10 @@ describe('JavaScript file references', () => {
       const mockImportModule = vi.mocked(importModule);
       mockImportModule.mockResolvedValue(mockFn);
 
-      const fileAssertion: Assertion = {
-        type: 'javascript',
-        value: 'file:///path/to/assert.js',
-      };
+      const fileAssertion: Assertion = createStringAssertion(
+        'javascript',
+        'file:///path/to/assert.js',
+      );
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const providerResponse = { output };
@@ -2087,6 +2085,50 @@ describe('JavaScript file references', () => {
       });
     },
   );
+
+  it('should fail the assertion when a package function throws (#11917)', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: 'package:@promptfoo/fake:assertionFunction' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Custom function threw error: boom',
+    });
+  });
+
+  it('should apply the weight: 0 override when a package function throws', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'Custom function threw error: boom',
+    });
+  });
 
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
@@ -2429,10 +2471,7 @@ return s >= 0.5 && s <= 0.75;`,
     };
 
     it('should FAIL when score=0 and no threshold (default behavior)', async () => {
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: '0',
-      };
+      const assertion: Assertion = createStringAssertion('javascript', '0');
 
       const result: GradingResult = await runAssertion({
         ...baseParams,
@@ -2444,11 +2483,7 @@ return s >= 0.5 && s <= 0.75;`,
     });
 
     it('should PASS when score=0 and threshold=0 (explicit zero threshold)', async () => {
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: '0',
-        threshold: 0,
-      };
+      const assertion: Assertion = createZeroThresholdAssertion();
 
       const result: GradingResult = await runAssertion({
         ...baseParams,
@@ -2509,16 +2544,9 @@ return s >= 0.5 && s <= 0.75;`,
     });
 
     it('should handle threshold=0 differently from threshold=undefined', async () => {
-      const assertionWithoutThreshold: Assertion = {
-        type: 'javascript',
-        value: '0',
-      };
+      const assertionWithoutThreshold: Assertion = createStringAssertion('javascript', '0');
 
-      const assertionWithZeroThreshold: Assertion = {
-        type: 'javascript',
-        value: '0',
-        threshold: 0,
-      };
+      const assertionWithZeroThreshold: Assertion = createZeroThresholdAssertion();
 
       const resultWithoutThreshold: GradingResult = await runAssertion({
         ...baseParams,
@@ -2664,5 +2692,105 @@ return s >= 0.5 && s <= 0.75;`,
 
       expect(result).toMatchObject({ pass: true });
     });
+  });
+});
+
+describe('not-javascript: GradingResult reason preservation on inversion', () => {
+  const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+  it('preserves custom reason verbatim when function returns pass:true and assertion is inverted (test fails)', async () => {
+    // Function says "output contains foo" — not-javascript should fail and keep the reason verbatim.
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: output.includes('foo') ? 1 : 0,
+        reason: 'Expected output not to contain "foo", but it did.',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'foo bar' },
+    });
+
+    expect(result.pass).toBe(false);
+    // Reason must NOT be the generic "Custom function returned true"
+    expect(result.reason).not.toBe('Custom function returned true');
+    // Reason must surface the custom message verbatim (no NOT: prefix)
+    expect(result.reason).toBe('Expected output not to contain "foo", but it did.');
+  });
+
+  it('preserves custom reason when function returns pass:false and assertion is inverted (test passes)', async () => {
+    // The function checks whether output contains "foo"; it returns pass:false for "hello world".
+    // Inversion makes not-javascript pass because the output does not contain "foo".
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: output.includes('foo') ? 1 : 0,
+        reason: 'Output does not contain the forbidden word.',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'hello world' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('Output does not contain the forbidden word.');
+  });
+
+  it('does not replace reason when inversion does not change the outcome', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: async (_output: string) => ({
+        pass: true,
+        score: 1,
+        reason: 'My custom reason',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'anything' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('My custom reason');
+  });
+
+  it('preserves empty-string reason verbatim and does not replace it with a fallback', async () => {
+    // Returning reason: '' is a valid GradingResult. The || fallback used to
+    // replace it with 'Assertion passed'; ?? preserves it.
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: 0,
+        reason: '',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'hello world' }, // does not include 'foo' → function pass:false → not-javascript pass:true
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe(''); // empty string must be preserved verbatim
   });
 });

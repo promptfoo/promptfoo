@@ -8,6 +8,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -98,10 +99,7 @@ async function generateCompositePrompts(
             ...testCase.vars,
             [injectVar]: modifiedPrompt,
           },
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.metric ? `${assertion.metric}/Composite` : assertion.metric,
-          })),
+          assert: appendMetricSuffix(testCase, 'Composite'),
           metadata: {
             ...testCase.metadata,
             strategyId: 'jailbreak:composite',

@@ -1,9 +1,13 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import type { EventEmitter } from 'node:events';
 import type { Writable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const stopSignal = process.platform === 'win32' ? 'SIGKILL' : 'SIGINT';
+
 import cliState from '../../src/cliState';
 import { PythonWorker } from '../../src/python/worker';
 import { PythonWorkerPool } from '../../src/python/workerPool';
@@ -32,13 +36,14 @@ vi.mock('child_process', () => ({
 }));
 vi.mock('python-shell', async () => {
   const { EventEmitter } = await import('node:events');
-  const { Writable } = await import('node:stream');
+  const { Writable, PassThrough } = await import('node:stream');
   return {
     PythonShell: class extends EventEmitter {
       childProcess = this;
+      pid = 4242;
       exitCode = null;
       signalCode = null;
-      stderr = new EventEmitter();
+      stderr = new PassThrough();
       stdin = new Writable({
         write(_chunk, _encoding, callback) {
           callback();
@@ -55,10 +60,16 @@ vi.mock('python-shell', async () => {
         }
       }
       send() {
-        queueMicrotask(() => this.emit('close'));
+        queueMicrotask(() => {
+          this.emit('exit');
+          this.emit('close');
+        });
       }
       kill() {
-        queueMicrotask(() => this.emit('close'));
+        queueMicrotask(() => {
+          this.emit('exit');
+          this.emit('close');
+        });
       }
     },
   };
@@ -71,6 +82,12 @@ describe('Python pool executable validation', () => {
   const pools: PythonWorkerPool[] = [];
 
   beforeEach(() => {
+    vi.mocked(execFile).mockImplementation(((
+      _command: string,
+      _args: string[],
+      _options: unknown,
+      callback: (error: Error) => void,
+    ) => callback(new Error('synthetic taskkill unavailable'))) as unknown as typeof execFile);
     execFileAsync.mockReset();
     execFileAsync.mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
     shells.length = 0;
@@ -140,12 +157,20 @@ describe('Python pool executable validation', () => {
       await setImmediate();
       expect(shells).toHaveLength(2);
       const peerSend = vi.spyOn(shells[1], 'send');
+      const peerKill = vi.spyOn(shells[1], 'kill');
       if (peerState === 'ready') {
         shells[1].emit('message', 'READY');
       }
       shells[0].emit('close');
-      expect(await initialized).toEqual(new Error('Worker exited before becoming ready'));
-      expect(peerSend).toHaveBeenCalledWith('SHUTDOWN');
+      expect(await initialized).toEqual(
+        new Error('Python worker exited before becoming ready (exit code unknown)'),
+      );
+      if (peerState === 'ready') {
+        expect(peerSend).toHaveBeenCalledWith('SHUTDOWN');
+      } else {
+        expect(peerSend).not.toHaveBeenCalled();
+        expect(peerKill).toHaveBeenCalledWith(stopSignal);
+      }
       expect(pool.getWorkerCount()).toBe(0);
 
       signals.autoReady = true;
@@ -180,8 +205,10 @@ describe('Python pool executable validation', () => {
       });
       shells[0].emit('close');
 
-      expect(await initialized).toEqual(new Error('Worker exited before becoming ready'));
-      expect(killed).toHaveBeenCalledWith('SIGKILL');
+      expect(await initialized).toEqual(
+        new Error('Python worker exited before becoming ready (exit code unknown)'),
+      );
+      expect(killed).toHaveBeenCalledWith(stopSignal);
       expect(peer.stdin.destroyed).toBe(true);
       expect(peer.stdin.listenerCount('error')).toBe(0);
       expect(pool.getWorkerCount()).toBe(0);
@@ -206,13 +233,17 @@ describe('Python pool executable validation', () => {
     const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
     pools.push(pool);
     await pool.initialize();
-    execFileAsync.mockRejectedValueOnce(new Error('fixture missing'));
+    execFileAsync.mockRejectedValue(new Error('fixture missing'));
     shells[0].emit('close');
     const queued = pool.execute('call_api', []).catch((error) => error);
     await setImmediate();
     const outcome = await Promise.race([queued, Promise.resolve('still queued')]);
-    expect(outcome).toEqual(new Error('Python worker pool has no usable workers'));
-    await expect(pool.execute('call_api', [])).rejects.toThrow('no usable workers');
+    expect(outcome).toEqual(
+      new Error(
+        'All 1 Python worker(s) for fixture.py crashed and could not be restarted. Check the logs for the Python worker stderr output.',
+      ),
+    );
+    await expect(pool.execute('call_api', [])).rejects.toThrow('could not be restarted');
     expect(shells).toHaveLength(1);
   });
 
@@ -229,7 +260,9 @@ describe('Python pool executable validation', () => {
     const queued = pool.execute('call_api', []).catch((error) => error);
     await setImmediate();
     expect(await Promise.race([queued, Promise.resolve('still queued')])).toEqual(
-      new Error('Python worker pool has no usable workers'),
+      new Error(
+        'All 1 Python worker(s) for fixture.py crashed and could not be restarted. Check the logs for the Python worker stderr output.',
+      ),
     );
     expect(execFileAsync).toHaveBeenCalledTimes(3);
     expect(shells).toHaveLength(3);
@@ -246,17 +279,21 @@ describe('Python pool executable validation', () => {
       shells[0].emit('close');
       await setImmediate();
       const queued = pool.execute('call_api', []).catch((error) => error);
-      if (failure === 'close') {
-        shells[1].emit('close');
-      } else {
-        await vi.advanceTimersByTimeAsync(30000);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        if (failure === 'close') {
+          shells[attempt].emit('close');
+        } else {
+          await vi.advanceTimersByTimeAsync(30000);
+        }
+        await setImmediate();
       }
-      await setImmediate();
       expect(await Promise.race([queued, Promise.resolve('still queued')])).toEqual(
-        new Error('Python worker pool has no usable workers'),
+        new Error(
+          'All 1 Python worker(s) for fixture.py crashed and could not be restarted. Check the logs for the Python worker stderr output.',
+        ),
       );
       expect(vi.getTimerCount()).toBe(0);
-      expect(shells).toHaveLength(2);
+      expect(shells).toHaveLength(3);
     },
   );
 
@@ -287,17 +324,21 @@ describe('Python pool executable validation', () => {
         process.emit('error', new Error('fixture startup failure'));
         await setImmediate();
         expect(settled).toBe(false);
-        expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+        expect(kill).toHaveBeenCalledExactlyOnceWith(stopSignal);
         process.emit('error', new Error('duplicate startup failure'));
         process.emit('message', 'READY');
         expect(kill).toHaveBeenCalledTimes(1);
         expect(call).not.toHaveBeenCalled();
         process.emit('close');
+        if (phase === 'replacement') {
+          await setImmediate();
+          shells.at(-1)!.emit('close');
+        }
         expect(await result).toEqual(
           new Error(
             phase === 'initial'
               ? 'fixture startup failure'
-              : 'Python worker pool has no usable workers',
+              : 'All 1 Python worker(s) for fixture.py crashed and could not be restarted. Check the logs for the Python worker stderr output.',
           ),
         );
       } finally {
@@ -339,7 +380,7 @@ describe('Python pool executable validation', () => {
     try {
       await vi.advanceTimersByTimeAsync(30000);
       expect(settled).toBe(false);
-      expect(kill).toHaveBeenCalledWith('SIGKILL');
+      expect(kill).toHaveBeenCalledWith(stopSignal);
       process.emit('message', 'READY');
       expect(worker.isReady()).toBe(false);
       process.emit('close');
@@ -369,7 +410,7 @@ describe('Python pool executable validation', () => {
     });
     try {
       await vi.advanceTimersByTimeAsync(5000);
-      expect(kill).toHaveBeenCalledWith('SIGKILL');
+      expect(kill).toHaveBeenCalledWith(stopSignal);
       expect(settled).toBe(false);
     } finally {
       process.emit('close');
@@ -405,7 +446,7 @@ describe('Python pool executable validation', () => {
       });
     });
     call.mockResolvedValue({ output: 'healthy' });
-    execFileAsync.mockRejectedValueOnce(new Error('fixture missing'));
+    execFileAsync.mockRejectedValue(new Error('fixture missing'));
     shells[0].emit('close');
     const active = pool.execute('call_api', []);
     const queued = pool.execute('call_api', []);
@@ -532,7 +573,7 @@ describe('Python pool executable validation', () => {
     const recovered = pool.execute('call_api', ['current']).catch((error) => error);
     try {
       await vi.advanceTimersByTimeAsync(25);
-      expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(kill).toHaveBeenCalledExactlyOnceWith(stopSignal);
       expect(settled).toBe(false);
       expect(remove).not.toHaveBeenCalled();
       expect(send).toHaveBeenCalledOnce();

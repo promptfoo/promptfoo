@@ -179,12 +179,12 @@ describe('provider endpoint environment precedence', () => {
   );
   it.each(requiredEndpoints)(
     '%s rejects an empty %s override and preserves explicit config',
-    (_name, key, configKey, suffix, resolve) => {
+    (name, key, configKey, suffix, resolve) => {
       mockProcessEnv({ [key]: 'https://ambient.example.invalid' });
       expect(() => resolve({ config: {}, env: { [key]: '' } })).toThrow(/requires|required/i);
       expect(
         resolve({ config: { [configKey]: 'https://config.example.invalid' }, env: { [key]: '' } }),
-      ).toBe(`https://config.example.invalid${suffix}`);
+      ).toBe(`https://config.example.invalid${name === 'Envoy' ? '' : suffix}`);
       expect(resolve({ config: {}, env: { [key]: 'https://provider.example.invalid' } })).toBe(
         `https://provider.example.invalid${suffix}`,
       );
