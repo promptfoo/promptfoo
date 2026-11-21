@@ -15,13 +15,15 @@ export const handleIsValidOpenAiToolsCall = async ({
   const verdict = (valid: boolean, reason: string) =>
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
-  // Handle MCP tool outputs from Responses API
+  // Text may explain a failed call, but cannot prove that a tool ran.
   let outputStr: string;
   if (typeof output === 'string') {
     outputStr = output;
   } else if (
     output &&
     typeof output === 'object' &&
+    !Array.isArray(output) &&
+    !('tool_calls' in output) &&
     'content' in output &&
     typeof output.content === 'string'
   ) {
@@ -41,14 +43,6 @@ export const handleIsValidOpenAiToolsCall = async ({
     const detail = (next < 0 ? body : body.slice(0, next)).trim() || 'unknown error';
     return verdict(false, 'MCP tool call failed for ' + (header?.[1] ?? 'unknown') + ': ' + detail);
   }
-  const result = /^[ \t]*MCP Tool Result(?: \(([^()\r\n]+)\))?:/m.exec(outputStr);
-  const successReason = result
-    ? 'MCP tool call succeeded for ' + (result[1] ?? 'unknown')
-    : undefined;
-  if (successReason && !(output && typeof output === 'object' && 'tool_calls' in output)) {
-    return verdict(true, successReason);
-  }
-
   // Handle traditional OpenAI function/tool calls
   if (output && typeof output === 'object' && 'tool_calls' in output) {
     output = output.tool_calls as string | object;
@@ -118,7 +112,7 @@ export const handleIsValidOpenAiToolsCall = async ({
         test.vars,
       );
     });
-    return verdict(true, successReason ?? 'Assertion passed');
+    return verdict(true, 'Assertion passed');
   } catch (err) {
     return toolCallErrorVerdict(assertion, inverse, err, 'OpenAI tools call');
   }
