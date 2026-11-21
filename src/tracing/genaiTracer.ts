@@ -2,7 +2,6 @@ import {
   type Attributes,
   context,
   propagation,
-  ROOT_CONTEXT,
   type Span,
   SpanKind,
   SpanStatusCode,
@@ -404,7 +403,8 @@ export async function withGenAISpan<T>(
       activeSpanContext?.spanId.toLowerCase() !== explicitSpanId?.toLowerCase())
   ) {
     const carrier = { traceparent: ctx.traceparent };
-    parentContext = propagation.extract(ROOT_CONTEXT, carrier);
+    // Replace the parent span while preserving context values such as tracing suppression.
+    parentContext = propagation.extract(trace.deleteSpan(parentContext), carrier);
   }
 
   // Create the span within the parent context
@@ -760,6 +760,12 @@ export function extractProviderResponseAttributes(response: ProviderResponse): G
   }
   if (response.finishReason) {
     result.finishReasons = [response.finishReason];
+  }
+  if (typeof response.metadata?.model === 'string' && response.metadata.model) {
+    result.responseModel = response.metadata.model;
+  }
+  if (typeof response.metadata?.responseId === 'string' && response.metadata.responseId) {
+    result.responseId = response.metadata.responseId;
   }
   if (response.cached !== undefined) {
     result.cacheHit = response.cached;
