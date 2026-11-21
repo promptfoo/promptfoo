@@ -119,6 +119,9 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  // Agent Runtime clients are reused. Once one sees configured credentials, its
+  // responses cannot safely enter a shared cache, even if the config is later cleared.
+  protected allowSharedAgentRuntimeCache = true;
 
   constructor(
     modelName: string,
@@ -148,6 +151,13 @@ export abstract class AwsBedrockGenericProvider {
 
   requiresApiKey(): boolean {
     return false;
+  }
+
+  protected checkAgentRuntimeCacheIdentity(): void {
+    const { accessKeyId, profile, secretAccessKey, sessionToken } = this.config;
+    if (accessKeyId || profile || secretAccessKey || sessionToken || this.getApiKey()) {
+      this.allowSharedAgentRuntimeCache = false;
+    }
   }
 
   protected getApiKey(): string | undefined {

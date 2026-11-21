@@ -4,13 +4,13 @@ import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
+  getNativeGeminiApiKey,
   mergeGoogleCompletionOptions,
   parseConfigResponseSchema,
   parseConfigSystemInstruction,
@@ -466,7 +466,7 @@ function normalizeInteractionServiceTier(
 
 type InteractionStructuredOutputLayer = {
   generationConfigs: unknown[];
-  responseSchema?: string;
+  responseSchema?: CompletionOptions['responseSchema'];
 };
 
 function resolveInteractionStructuredOutput(layers: InteractionStructuredOutputLayer[]): {
@@ -757,7 +757,7 @@ function getVertexInteractionsEndpoint(
     config.apiBaseUrl ||
     config.apiHost ||
     resolveProviderEnv(env, ['VERTEX_API_HOST'])?.value ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
+    getVertexApiHostForRegion(region);
   const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
 }
@@ -1072,13 +1072,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         };
       }
     } else {
-      const rawApiKey = resolveProviderApiKey({ apiKey: config.apiKey }, this.env, [
-        'GOOGLE_API_KEY',
-        'GEMINI_API_KEY',
-        'PALM_API_KEY',
-        'GOOGLE_GENERATIVE_AI_API_KEY',
-      ]);
-      apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
+      apiKey = getNativeGeminiApiKey({ apiKey: config.apiKey }, this.env);
       if (!apiKey) {
         return {
           error:

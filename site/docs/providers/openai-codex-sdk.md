@@ -20,13 +20,13 @@ For direct model API calls, use the [OpenAI provider](/docs/providers/openai).
 
 ### Install
 
-Use Node.js 22.22.0 or later. In your eval project, install Promptfoo and the SDK:
+Use Node.js 22.22.0 or later. Promptfoo supports SDK versions from 0.156.1 through 0.169.x. For the GPT-6.2 examples, install a version whose [bundled CLI catalog](https://github.com/openai/codex/blob/rust-v0.169.1/codex-rs/models-manager/models.json) includes Astra and Sol.
 
 ```bash
-npm install --save-dev promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
+npm install --save-dev promptfoo "@openai/codex-sdk@>=0.169.1 <0.170.0"
 ```
 
-The SDK includes the Codex CLI. Neither is included in the default Promptfoo install. The provider checks SDK compatibility when called; automatic grader selection uses Codex only when a compatible SDK is available.
+The SDK includes the Codex CLI. Promptfoo installs neither by default. The provider checks SDK compatibility when called.
 
 <Link id="setup" />
 <Link id="option-1-use-your-chatgpt-login" />
@@ -36,7 +36,7 @@ The SDK includes the Codex CLI. Neither is included in the default Promptfoo ins
 
 Choose one authentication method:
 
-- **ChatGPT sign-in:** run `npx --package "@openai/codex@>=0.156.1 <0.167.0" codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
+- **ChatGPT sign-in:** run `npx --package "@openai/codex@>=0.169.1 <0.170.0" codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
 - **API key:** set `OPENAI_API_KEY` in your shell or secret manager. `CODEX_API_KEY` is also supported. API usage is billed separately from ChatGPT subscriptions.
 
 For custom Codex homes, CI, and AWS credentials, see [authentication and environment](#authentication-and-environment). OpenAI's [authentication guide](https://learn.chatgpt.com/docs/auth) covers account access and login storage.
@@ -53,7 +53,7 @@ prompts:
   - 'Write a Python factorial function. Return only the code.'
 
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -86,28 +86,26 @@ Inspect the entries under `results.results` in `results.json`. Each row includes
 
 These IDs select the same provider:
 
-| ID                           | Model selection                               |
-| ---------------------------- | --------------------------------------------- |
-| `openai:codex-sdk`           | `config.model`, or Codex's configured default |
-| `openai:codex-sdk:gpt-6-sol` | Model in the ID                               |
-| `openai:codex:gpt-6-sol`     | Short alias for the same provider and model   |
+| ID                             | Model selection                               |
+| ------------------------------ | --------------------------------------------- |
+| `openai:codex-sdk`             | `config.model`, or Codex's configured default |
+| `openai:codex-sdk:gpt-6.2-sol` | Model in the ID                               |
+| `openai:codex:gpt-6.2-sol`     | Short alias for the same provider and model   |
 
 A model in the ID takes precedence over the provider's `config.model`. To compare models, add one provider entry per model.
 
-Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-6-sol` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Sol and Luna require [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1); Astra requires 0.153.1 or later. The [Codex 0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning. Availability depends on your Codex version and account.
-
-Set reasoning effort when you need to compare speed and answer quality:
+Check [Codex model availability](https://learn.chatgpt.com/docs/models) for your account. For repeatable comparisons, specify a model and reasoning effort. Try `gpt-6.2-sol` for everyday coding, `gpt-6.2-astra` for demanding tasks, or `gpt-6-luna` for lower cost. If you omit the model, Codex's configured default can change between runs.
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
       model_reasoning_effort: high
 ```
 
-Promptfoo accepts `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`. The selected model and Codex runtime determine which levels work. `ultra` is a Codex setting that uses subagents, not a Responses API reasoning value. GPT-6 Luna does not support `ultra`. Check model availability and reasoning support when migrating saved configs.
+GPT-6.2 Astra and Sol support `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`. In Codex, `ultra` uses subagents. Support varies by model and runtime. GPT-6 Luna does not support `ultra`.
 
 <Link id="with-working-directory" />
 <Link id="skipping-git-check" />
@@ -120,7 +118,7 @@ Set `working_dir` to the repository you want Codex to inspect or edit:
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       working_dir: ./sample-project
       sandbox_mode: read-only
@@ -151,7 +149,7 @@ For editing tasks, use `workspace-write` with a disposable checkout. It can also
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       working_dir: ./sample-project
       additional_directories:
@@ -172,7 +170,7 @@ Set `copy_working_dir: true` to give each eval step a fresh copy of a fixture di
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       working_dir: ./sample-project
       copy_working_dir: true
@@ -193,7 +191,7 @@ Web search and command network access are separate settings:
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: workspace-write
       approval_policy: never
@@ -236,7 +234,7 @@ prompts:
   - 'Describe a Python function named factorial that takes an integer n.'
 
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -281,7 +279,7 @@ prompts:
   - '{{request}}'
 
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -318,7 +316,7 @@ Use the `sessionId` from a previous provider response as `thread_id`. The same C
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       thread_id: '<session-id>'
       sandbox_mode: read-only
@@ -350,16 +348,16 @@ tests:
 
 The [skills example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) includes the `token-skill` fixture and complete configs. See [Test agent skills](/docs/guides/test-agent-skills) for how to compare skill versions.
 
-`skill-used` checks `response.metadata.skillCalls`. For Codex, this is inferred from successful commands that directly reference a `SKILL.md` file in a recognized skill directory. It does not prove that Codex followed the instructions. Wildcards and directory listings do not count, and a skill used without a detected file read may be missed.
+`skill-used` checks `response.metadata.skillCalls`. Promptfoo looks for a recognized `SKILL.md` path in successful command text. Even `ls .agents/skills/token-skill/SKILL.md` can pass without reading the file. A command without a literal path can be missed. Use the output assertion to check whether Codex followed the skill.
 
 <details>
 <summary>Skill metadata and tracing</summary>
 
-Each `skillCalls` entry contains `name`, `path`, and `source: heuristic`. `attemptedSkillCalls` can also appear when candidate reads were not all successful; retried paths can occur in both lists.
+Entries contain `name`, `path`, and `source: heuristic`. If any path appears only in unsuccessful commands, `attemptedSkillCalls` lists all detected paths, including successful ones.
 
 Recognized paths include skill directories within the active repository, the configured `CODEX_HOME/skills`, the default user Codex home, and `/etc/codex/skills`. Absolute repository skill paths outside the active repository are ignored.
 
-With streaming enabled, detected skill reads add `promptfoo.skill.*` attributes to command spans. Use [trajectory assertions](/docs/configuration/expected-outputs/deterministic#trajectorytool-used) to check the commands or MCP calls made while following the skill.
+With streaming enabled, matching commands add `promptfoo.skill.*` attributes to command spans. Use [trajectory assertions](/docs/configuration/expected-outputs/deterministic#trajectorytool-used) to check the commands or MCP calls made while following the skill.
 
 </details>
 
@@ -382,7 +380,7 @@ tracing:
       acceptFormats: [json]
 
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -428,7 +426,7 @@ The Codex subprocess receives a minimal environment with OS basics such as `PATH
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-6-sol
+  - id: openai:codex-sdk:gpt-6.2-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -556,12 +554,14 @@ The legacy `collaboration_mode` field accepts `coding` or `plan` and forwards it
 | `sessionId`           | Underlying Codex thread ID                                               |
 | `tokenUsage`          | Input, output, and cached-input token counts when reported by the SDK    |
 | `cost`                | Standard API estimate for a requested model in Promptfoo's pricing table |
-| `metadata.skillCalls` | Detected successful skill reads, when present                            |
+| `metadata.skillCalls` | Skill paths inferred from successful commands                            |
 | `raw`                 | JSON string containing the SDK turn, including items and usage           |
 
 Reasoning and cache-write counts are included in token details when Codex reports them. Cached input tokens are already part of the input total.
 
-If the requested model is omitted or unknown to the pricing table, `cost` is undefined. The SDK turn does not report the backend-resolved model, so Promptfoo cannot infer it for pricing. Cost estimates do not represent ChatGPT subscription usage or automatically account for Fast, Flex, or Batch pricing. See [OpenAI cost estimates](/docs/providers/openai#cost-estimates) for supported models. Missing cache-write counts can understate costs. With a custom binary and a GPT-5.6 model, the estimate is omitted unless the response includes a positive cache-write count. Codex's instructions, tool definitions, and conversation history can make input usage much larger than the visible prompt.
+Promptfoo estimates [Standard API cost](/docs/providers/openai#cost-estimates) for the requested model. The SDK does not report the resolved model. If you omit the model or Promptfoo lacks pricing or required usage data, `cost` is undefined. GPT-6.2 Astra and Sol require input, output, and cache-write counts. GPT-5.6 with a custom binary requires a positive cache-write count.
+
+Codex's instructions, tool definitions, and history can make input usage much larger than the visible prompt. Estimates do not reflect ChatGPT subscription usage or infer Fast, Flex, or Batch pricing.
 
 ## Troubleshooting
 
