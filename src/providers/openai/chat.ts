@@ -864,12 +864,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const getAuthHeaders = this.getRequestAuthentication();
     throwIfAborted(callApiOptions?.abortSignal);
 
-    type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
+    type OpenAIChatCompletionResponse = Omit<OpenAI.ChatCompletion, 'choices'> & {
       choices: Array<
         OpenAI.ChatCompletion.Choice & {
           message: OpenAI.ChatCompletion.Choice['message'] & {
             reasoning?: string;
             reasoning_content?: string;
+            reasoning_details?: unknown;
             audio?: {
               id: string;
               expires_at: number;
@@ -1186,7 +1187,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       throwIfAborted(callApiOptions?.abortSignal);
-      const message = data.choices[0].message;
+      const choices =
+        config.showThinking === false
+          ? data.choices.map((choice) => {
+              const message = { ...choice.message };
+              delete message.reasoning;
+              delete message.reasoning_content;
+              delete message.reasoning_details;
+              return { ...choice, message };
+            })
+          : data.choices;
+      const message = choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
       const providerMetadata = this.getProviderResponseMetadata(data);
@@ -1200,25 +1211,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
 
-      let reasoning = '';
-      let output: any = '';
-      if (message.reasoning) {
-        reasoning = message.reasoning;
-        output = message.content;
-      } else if (message.content && (message.function_call || message.tool_calls)) {
-        if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
-          output = message.content;
-        } else {
-          output = message;
-        }
-      } else if (
-        message.content === null ||
-        message.content === undefined ||
-        (message.content === '' && (message.function_call || message.tool_calls))
-      ) {
-        output = message.function_call || message.tool_calls;
-      } else {
-        output = message.content;
+      const functionCalls: any[] = message.function_call
+        ? [message.function_call]
+        : (message.tool_calls ?? []);
+      let output: any = message.content;
+      if (functionCalls.length) {
+        output = message.content ? message : (message.function_call ?? message.tool_calls);
       }
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
@@ -1232,21 +1230,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           logger.error(`Failed to parse JSON output: ${error}`);
         }
       }
-      // Handle reasoning as thinking content if present and showThinking is enabled
-      if (reasoning && typeof output === 'string' && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${reasoning}\n\n${output}`;
-      }
-
       // Executed MCP tool calls, published as `metadata.toolCalls` so assertions can
       // check tool routing and arguments without wrapping the provider.
       const mcpToolCalls: McpToolCallEntry[] = [];
 
       // Handle function tool callbacks
-      const functionCalls: any = message.function_call
-        ? [message.function_call]
-        : message.tool_calls;
       if (
-        functionCalls &&
+        functionCalls.length &&
         finishReason !== FINISH_REASON_MAP.length &&
         (config.functionToolCallbacks || this.mcpClient)
       ) {
@@ -1410,14 +1400,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
-      if (
-        message.reasoning_content &&
-        typeof message.reasoning_content === 'string' &&
-        typeof output === 'string' &&
-        (this.config.showThinking ?? true)
-      ) {
-        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
+      // Both field names occur on OpenAI-compatible endpoints. Hidden fields were
+      // removed above so that tool output and multi-choice metadata stay consistent.
+      for (const reasoning of [message.reasoning, message.reasoning_content]) {
+        if (typeof output === 'string' && typeof reasoning === 'string' && reasoning) {
+          output = `Thinking: ${reasoning}\n\n${output}`;
+        }
       }
       if (message.audio) {
         return {
@@ -1467,7 +1455,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             headers: responseHeaders ?? {},
           },
           // Include all choices for multi-response requests (n > 1)
-          ...(data.choices.length > 1 && { choices: data.choices }),
+          ...(choices.length > 1 && { choices }),
           ...(Array.isArray(message.annotations) &&
             message.annotations.length > 0 && { annotations: message.annotations }),
           ...(citations.length > 0 && { citations }),
