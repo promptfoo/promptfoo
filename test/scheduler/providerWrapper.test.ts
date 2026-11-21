@@ -68,7 +68,10 @@ describe('providerWrapper', () => {
       expect(getOriginalProvider(wrappedAgain)).toBe(mockProvider);
       expect(wrappedAgain).toBe(wrappedProvider);
       // Spreading public provider properties must not leak the private original reference.
-      expect(getOriginalProvider({ ...wrappedProvider })).not.toBe(mockProvider);
+      const copy = { ...wrappedProvider };
+      expect(getOriginalProvider(copy)).toBe(copy);
+      expect(Reflect.get(copy, Symbol.for('promptfoo.rateLimitWrapped'))).toBe(true);
+      expect(wrapProviderWithRateLimiting(copy, mockRegistry)).toBe(copy);
 
       expect(await wrappedAgain.callApi('image rubric')).toEqual({ output: 'test output' });
       expect(mockExecute).toHaveBeenCalledTimes(1);

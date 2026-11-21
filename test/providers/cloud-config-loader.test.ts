@@ -61,6 +61,28 @@ describe('cloud provider loader configuration', () => {
     );
   });
 
+  it.each(['scoped', ''])('uses only the named Vertex Express key (%j)', async (key) => {
+    vi.stubEnv('GOOGLE_API_KEY', 'ambient-google');
+    vi.stubEnv('GOOGLE_CLOUD_PROJECT', 'ambient-project');
+    vi.stubEnv('PRIVATE_VERTEX_KEY', 'ambient-named');
+    const provider = await loadApiProvider('google:gemini-2.5-flash-image', {
+      options: {
+        config: { vertexai: true, apiKeyEnvar: 'PRIVATE_VERTEX_KEY' },
+        env: { PRIVATE_VERTEX_KEY: key },
+      },
+    });
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('fixture'));
+    const result = await provider.callApi('draw');
+    if (key) {
+      const [url, init] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toContain('/v1/publishers/google/models/');
+      expect(init?.headers).toMatchObject({ 'x-goog-api-key': key });
+    } else {
+      expect(result.error).toContain('named Vertex Express API key');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    }
+  });
+
   it('forwards Cloudera domain config while preserving the deployed endpoint and model', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { choices: [{ message: { content: 'hello' } }] },

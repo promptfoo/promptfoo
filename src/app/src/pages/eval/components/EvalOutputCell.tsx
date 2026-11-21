@@ -512,13 +512,11 @@ function renderStructuredImages({
     return node;
   }
 
-  return node ? (
+  return (
     <>
-      {node}
+      {node ?? normalizedText}
       {imageElements}
     </>
-  ) : (
-    imageElements
   );
 }
 

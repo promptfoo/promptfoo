@@ -174,10 +174,6 @@ export class GeminiImageProvider implements ApiProvider {
     ]);
   }
 
-  private getVertexApiKey(): string | undefined {
-    return GoogleAuthManager.getApiKey(this.config, this.env, true).apiKey;
-  }
-
   /**
    * Gemini 3.x image models default to the global Vertex endpoint.
    * Older models (e.g. gemini-2.5) use regional endpoints.
@@ -270,7 +266,9 @@ export class GeminiImageProvider implements ApiProvider {
         ])?.value
       : undefined;
 
-    const vertexApiKey = isVertexMode ? this.getVertexApiKey() : undefined;
+    const vertexApiKey = isVertexMode
+      ? resolveProviderApiKey(this.config, this.env, ['VERTEX_API_KEY', 'GOOGLE_API_KEY'])
+      : undefined;
     const hasOAuthConfig = Boolean(
       this.config.credentials ||
         this.config.keyFilename ||
@@ -294,7 +292,7 @@ export class GeminiImageProvider implements ApiProvider {
     );
     const explicitlyRequestedExpress =
       this.config.expressMode === true ||
-      Boolean(this.config.apiKey) ||
+      Boolean(this.config.apiKey || this.config.apiKeyEnvar) ||
       (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
         !hasProviderScopedOAuthConfig);
     const effectiveRegion =
@@ -308,11 +306,13 @@ export class GeminiImageProvider implements ApiProvider {
     );
     const usesVertexExpress =
       isVertexMode &&
-      Boolean(vertexApiKey) &&
       this.config.expressMode !== false &&
       !hasOAuthConfig &&
       (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig);
 
+    if (usesVertexExpress && this.config.apiKeyEnvar && !vertexApiKey) {
+      return { error: 'The named Vertex Express API key is empty or missing.' };
+    }
     if (usesVertexExpress && vertexApiKey) {
       const region = effectiveRegion || 'global';
       if (region !== 'global') {

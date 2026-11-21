@@ -813,7 +813,6 @@ describe('GoogleLiveProvider', () => {
             apiKey: 'fixture-live-key',
             maxRetries: 0,
             timeoutMs: 500,
-            generationConfig: { response_modalities: ['text'] },
           },
         },
       });
@@ -822,10 +821,14 @@ describe('GoogleLiveProvider', () => {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
-          simulateTextMessage(
-            mockWs,
-            JSON.stringify({ pass: true, reason: 'Fixture image response' }),
-          );
+          simulatePartsMessage(mockWs, [{ inlineData: { mimeType: 'audio/pcm', data: 'AQI=' } }]);
+          simulateMessage(mockWs, {
+            serverContent: {
+              outputTranscription: {
+                text: JSON.stringify({ pass: true, reason: 'Fixture image response' }),
+              },
+            },
+          });
           simulateCompletionMessage(mockWs);
         });
         return mockWs;
@@ -844,6 +847,7 @@ describe('GoogleLiveProvider', () => {
         expect(result.pass, result.reason).toBe(true);
         expect(grader.id()).toBe(id || `google:live:${model}`);
         const messages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+        expect(messages[0].setup.outputAudioTranscription).toEqual({});
         expect(messages.slice(1)).toEqual([
           { realtimeInput: { video: { mimeType: 'image/png', data: 'aW1hZ2U=' } } },
           { realtimeInput: { text: expect.stringContaining('Inspect the attached image') } },

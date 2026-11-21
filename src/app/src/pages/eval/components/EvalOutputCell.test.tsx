@@ -881,9 +881,7 @@ describe('EvalOutputCell', () => {
 
       expect(screen.getByRole('img')).toHaveAttribute('src', imageUrl);
       expect(container.querySelector('.truncation-toggler')).toBeNull();
-      if (renderMarkdown) {
-        expect(container.textContent).toContain(text.trim());
-      }
+      expect(container.textContent).toContain(text.trim());
     },
   );
 

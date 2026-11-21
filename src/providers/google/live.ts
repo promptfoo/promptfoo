@@ -884,12 +884,16 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      // Extract transcription config for use in message handler
-      const hasOutputTranscription =
-        !!config.generationConfig?.outputAudioTranscription ||
-        isGemini38Live ||
-        this.isVertex ||
-        (usesRealtimeTextInput && !supportsTextResponse && requestedText);
+      const isRubricGrading = context?.isGrading && context.prompt.label === 'llm-rubric';
+      const outputAudioTranscription =
+        config.generationConfig?.outputAudioTranscription ??
+        (isGemini38Live ||
+        (this.isVertex && !isLiveTranscribe) ||
+        (isRubricGrading && isAudioExpected) ||
+        (usesRealtimeTextInput && !supportsTextResponse && requestedText)
+          ? {}
+          : undefined);
+      const hasOutputTranscription = Boolean(outputAudioTranscription);
 
       const videoFrameCount = contents.reduce(
         (total, content) =>
@@ -1055,15 +1059,14 @@ export class GoogleLiveProvider implements ApiProvider {
         }
 
         const result: ProviderResponse = {
-          output:
-            context?.isGrading && context.prompt.label === 'llm-rubric'
-              ? outputText
-              : {
-                  text: outputText,
-                  toolCall: { functionCalls: function_calls_total },
-                  statefulApiState,
-                  ...(thinking && { thinking }),
-                },
+          output: isRubricGrading
+            ? outputText
+            : {
+                text: outputText,
+                toolCall: { functionCalls: function_calls_total },
+                statefulApiState,
+                ...(thinking && { thinking }),
+              },
           metadata: {},
         };
 
@@ -1341,20 +1344,13 @@ export class GoogleLiveProvider implements ApiProvider {
           speechConfig: generationSpeechConfig,
           response_modalities: _responseModalities,
           responseModalities: _camelResponseModalities,
-          outputAudioTranscription: configuredOutputAudioTranscription,
+          outputAudioTranscription: _outputAudioTranscription,
           inputAudioTranscription = isLiveTranscribe ? {} : undefined,
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
         } = config.generationConfig || {};
         const speechConfig = generationSpeechConfig ?? config.speechConfig;
-        const outputAudioTranscription =
-          configuredOutputAudioTranscription ??
-          (isGemini38Live ||
-          (this.isVertex && !isLiveTranscribe) ||
-          (usesRealtimeTextInput && !supportsTextResponse && requestedText)
-            ? {}
-            : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {

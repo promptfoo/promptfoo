@@ -47,6 +47,20 @@ export function withCloudProviderResolver<T>(
 function parseCloudProvider(id: string, config: unknown): ProviderOptions & { id: string } {
   const provider = ProviderOptionsSchema.parse(config);
   invariant(provider.id, `Provider ${id} has no id`);
+  // Keep a saved credential selected by name without admitting unrelated HTTP env keys.
+  const name = provider.config?.apiKeyEnvar;
+  if (
+    typeof name === 'string' &&
+    name &&
+    isRecord(config) &&
+    isRecord(config.env) &&
+    Object.hasOwn(config.env, name) &&
+    config.env[name] !== undefined
+  ) {
+    const value = config.env[name];
+    invariant(typeof value === 'string', 'Invalid saved provider credential');
+    provider.env = { ...provider.env, [name]: value };
+  }
   return { ...provider, id: provider.id };
 }
 
