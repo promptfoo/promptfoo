@@ -329,7 +329,11 @@ describe('Helm chart', () => {
       });
     });
 
-    it('renders no autoscaler when values still enable one', () => {
+    it('permits at most one server even with legacy autoscaling values', () => {
+      expect(only(render('--set', 'replicaCount=0'), 'Deployment').spec.replicas).toBe(0);
+      const invalid = helm(...templateArgs, '--set', 'replicaCount=2,autoscaling.enabled=true');
+      expect(invalid.status).not.toBe(0);
+      expect(invalid.stderr).toContain('replicaCount must be 0 or 1');
       const resources = render(
         '--set',
         'autoscaling.enabled=true',

@@ -1,3 +1,6 @@
+{{- if not (has (toString .Values.replicaCount) (list "0" "1")) }}
+{{- fail "replicaCount must be 0 or 1 because multiple servers cannot share the SQLite volume" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

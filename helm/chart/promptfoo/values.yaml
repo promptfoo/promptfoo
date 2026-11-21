@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-# Keep at 1: the server uses a local SQLite database and an in-memory job queue.
+# Use one server for the local SQLite database and job queue. Set 0 to suspend it.
 replicaCount: 1
 
 image:
