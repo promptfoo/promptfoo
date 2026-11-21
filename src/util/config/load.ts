@@ -185,6 +185,41 @@ export function resolveCliProvidersWithConfig(
   });
 }
 
+// These fields carry schemas owned by the provider. Their nested references use
+// the schema's root and must also be excluded during external resolution.
+const PROVIDER_SCHEMA_PATH =
+  /^#\/providers\/\d+\/(?:[^/]+\/)?config\/(?:response_format\/json_schema\/schema|text\/format\/schema|output_format\/schema|output_config\/format\/schema|output_schema|outputSchema|responseSchema|generationConfig\/response_schema|format\/schema|agent\/outputType\/schema)$/;
+
+function isStandaloneProviderSchema(path: string, value: unknown, config: UnifiedConfig): boolean {
+  if (
+    !PROVIDER_SCHEMA_PATH.test(path) ||
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value)
+  ) {
+    return false;
+  }
+  if (!('$ref' in value) || typeof value.$ref !== 'string') {
+    return true;
+  }
+  // A schema-root config reference may carry sibling annotations. Only protect
+  // it when the schema declares its own base or defines the local target.
+  const ref = value.$ref;
+  if (ref.startsWith('#/')) {
+    const rootKey = ref.split('/')[1].replace(/~1/g, '/').replace(/~0/g, '~');
+    if (
+      Object.prototype.hasOwnProperty.call(value, rootKey) ||
+      Object.prototype.hasOwnProperty.call(value, '$id')
+    ) {
+      return true;
+    }
+    if (Object.prototype.hasOwnProperty.call(config, rootKey)) {
+      return false;
+    }
+  }
+  return ref === '#' || Object.keys(value).length > 1;
+}
+
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
@@ -266,7 +301,12 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   }
 
   // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
+  const excludeSchema = (path: string, value?: unknown) =>
+    isStandaloneProviderSchema(path, value, rawConfig);
+  const config = (await $RefParser.dereference(rawConfig, {
+    resolveExcludedPathMatcher: excludeSchema,
+    dereference: { excludedPathMatcher: excludeSchema },
+  })) as unknown as UnifiedConfig;
 
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
