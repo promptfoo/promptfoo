@@ -173,9 +173,9 @@ strings. If the agent returns control without text, the eval output contains the
 return-control events as JSON; Promptfoo does not execute those requested actions.
 To resume, supply the same `sessionId` and the returned `invocationId` and
 `returnControlInvocationResults` in `sessionState`. Explicit session/memory calls,
-session-ending requests, tracing, and return-control results bypass the response cache. Cached
-outputs omit resumable session/memory IDs; use `--no-cache` to start a conversation
-you intend to continue. Responses that request return control are not cached.
+session-ending requests, tracing, return-control turns, knowledge base overrides, and S3
+locations bypass the response cache. Cached outputs omit resumable session/memory IDs.
+Use `--no-cache` when switching AWS identities or starting a conversation you intend to continue.
 
 Programmatic calls can set `bustCache: true` in the call context to bypass both cache
 reads and writes. Legacy `debug: true` has the same effect unless `bustCache` is set
