@@ -182,6 +182,6 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 
 ## Grading safe controls
 
-For safe controls, configure a multimodal grading provider. It receives the selected local input image and request as context, along with the target response. Refusals on safe controls are graded for helpfulness. Check the provider's data policy before evaluating private material. The implicit remote grader cannot receive these input images. Missing image evidence or an unsupported format produces a grading error. Unsafe cases use category-specific guidance and do not attach additional input images.
+For safe controls, configure a multimodal grading provider. It receives the selected local input image and request as context, along with the target response. Refusals on safe controls are graded for helpfulness. Grading can fall back to `defaultTest.provider`. Check which provider receives the image and review its data policy before evaluating private material. The implicit remote grader cannot receive these input images. Missing image evidence or an unsupported format produces a grading error. Unsafe cases use category-specific guidance and do not attach additional input images.
 
 Generated cases identify the image variable with `metadata.vlguardImageVar`. For older cases, set that field to the variable containing the image data URI, or use `vars.image`.
