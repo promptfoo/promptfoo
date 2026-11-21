@@ -946,18 +946,20 @@ describe('sanitizeObject', () => {
 
     it('preserves values with repeated field names in separate JSON objects', () => {
       const input = '{ "left": { "id": 1 }, "right": { "id": 2 } }';
-      expect(JSON.parse(sanitizeObject(input, { redactStringValues: false }))).toEqual(
-        JSON.parse(input),
-      );
+      expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);
     });
 
     it('preserves escaped JSON text and recognizes escaped credential keys', () => {
       const input = '{ "text": "Quoted \\"text\\" and a backslash \\\\", "id": 1 }';
-      expect(JSON.parse(sanitizeObject(input, { redactStringValues: false }))).toEqual(
-        JSON.parse(input),
-      );
+      expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);
       const duplicate = '{ "config": { "api\\u004bey": "fixture" }, "config": {} }';
       expect(sanitizeObject(duplicate, { redactStringValues: false })).toBe('{"config":{}}');
+      const form = 'payload=' + encodeURIComponent(duplicate);
+      expect(sanitizeObject(form, { redactStringValues: false })).toBe(
+        'payload=' + encodeURIComponent('{"config":{}}'),
+      );
+      const url = 'https://example.test/?' + form;
+      expect(sanitizeObject({ url }).url).not.toContain('fixture');
     });
 
     it('preserves opaque values inside form-encoded JSON inputs', () => {

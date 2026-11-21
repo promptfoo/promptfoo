@@ -1170,6 +1170,34 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
   return restoreAzureBlobSasTokensWithResult(value, storedValue).value;
 }
 
+/** Keep prompt formatting only when every JSON token survived sanitization.
+ * Comparing decoded objects could restore credentials hidden by duplicate keys.
+ */
+function retainJsonWhitespace(source: string, encoded: string): string {
+  if (source.length <= encoded.length) {
+    return encoded;
+  }
+  let quoted = false;
+  let index = 0;
+  for (let offset = 0; offset < source.length; offset++) {
+    const ch = source[offset];
+    // JSON.parse already validated the input. Only whitespace between tokens is optional.
+    if (!quoted && source.charCodeAt(offset) <= 0x20) {
+      continue;
+    }
+    if (ch !== encoded[index++]) {
+      return encoded;
+    }
+    if (ch === '"') {
+      quoted = !quoted;
+    }
+    if (quoted && ch === '\\' && source[++offset] !== encoded[index++]) {
+      return encoded;
+    }
+  }
+  return index === encoded.length ? source : encoded;
+}
+
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
@@ -1214,7 +1242,8 @@ function sanitizeJsonString(
         isEnvMap,
         redactStringValues,
       );
-      return JSON.stringify(sanitized);
+      const encoded = JSON.stringify(sanitized);
+      return redactStringValues ? encoded : retainJsonWhitespace(str, encoded);
     } catch {
       return REDACTED;
     }
@@ -1301,9 +1330,8 @@ function redactNestedJsonValue(
     redactStringValues,
     maxDepth: Number.POSITIVE_INFINITY,
   });
-  const originalSerialized = JSON.stringify(parsed);
-  const sanitizedSerialized = JSON.stringify(sanitized);
-  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+  const encoded = JSON.stringify(sanitized);
+  return retainJsonWhitespace(trimmed, encoded) === trimmed ? null : encoded;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
