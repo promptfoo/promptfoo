@@ -65,10 +65,23 @@ describe('providerWrapper', () => {
             getRetryAfter: expect.any(Function),
           }),
         );
+        if (method === 'callModerationApi' || method === 'callSimilarityApi') {
+          expect(mockExecute.mock.calls[0][2]?.abortSignal).toBe(options.abortSignal);
+        }
         expect(operation).toHaveBeenCalledWith(...inputs, context, options);
         expect(operation.mock.contexts[0]).toBe(mockProvider);
       },
     );
+
+    it('ignores non-callable inherited operations', () => {
+      const provider = Object.assign(
+        Object.create({ callSimilarityApi: 'unsupported' }),
+        mockProvider,
+      );
+      expect(
+        wrapProviderWithRateLimiting(provider, mockRegistry).callSimilarityApi,
+      ).toBeUndefined();
+    });
 
     it('should wrap provider callApi with registry.execute', async () => {
       mockExecute.mockImplementation(async (_provider, callFn) => callFn());

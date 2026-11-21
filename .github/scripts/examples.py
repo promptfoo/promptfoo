@@ -11,7 +11,7 @@ import tempfile
 import time
 import unittest
 import venv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +43,23 @@ class Example:
     check_dependencies: bool = True
     extra_requirements: tuple[str, ...] = ()
 
+
+OPENAI_AGENTS = Example(
+    "examples/openai-agents",
+    ("3.12", "3.14"),
+    (
+        ("tests", "test_sdk.py"),
+        (".", "*_test.py"),
+        ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+    ),
+    node=True,
+)
+GOOGLE_ADK = Example(
+    "examples/integration-google-adk",
+    ("3.12", "3.14"),
+    ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+    node=True,
+)
 
 # Keep small helpers beside examples and larger CLI harnesses under scripts/tests.
 EXAMPLES = {
@@ -86,37 +103,16 @@ EXAMPLES = {
         ("3.10", "3.14"),
         ((".", "*_test.py"),),
     ),
-    "openai-agents": Example(
-        "examples/openai-agents",
-        ("3.12", "3.14"),
-        (
-            ("tests", "test_sdk.py"),
-            (".", "*_test.py"),
-            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
-        ),
-        node=True,
-    ),
-    "openai-agents-minimums": Example(
-        "examples/openai-agents",
-        ("3.10",),
-        (
-            ("tests", "test_sdk.py"),
-            (".", "*_test.py"),
-            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
-        ),
-        node=True,
+    "openai-agents": OPENAI_AGENTS,
+    "openai-agents-minimums": replace(
+        OPENAI_AGENTS,
+        python_versions=("3.10",),
         minimums=True,
         extra_requirements=("openai>=3.0,<4",),
     ),
-    "openai-agents-otel": Example(
-        "examples/openai-agents",
-        ("3.12",),
-        (
-            ("tests", "test_sdk.py"),
-            (".", "*_test.py"),
-            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
-        ),
-        node=True,
+    "openai-agents-otel": replace(
+        OPENAI_AGENTS,
+        python_versions=("3.12",),
         minimums=True,
         extra_requirements=(
             "opentelemetry-api>=1.44,<2",
@@ -140,32 +136,29 @@ EXAMPLES = {
         (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
         node=True,
     ),
+    "image-classification": Example(
+        "examples/eval-image-classification",
+        ("3.11", "3.14"),
+        ((".", "test_dataset_gen.py"),),
+    ),
     "f-score": Example(
         "examples/eval-f-score",
         ("3.10", "3.14"),
         ((".", "dependencies_test.py"),),
     ),
-    "google-adk": Example(
-        "examples/integration-google-adk",
-        ("3.12", "3.14"),
-        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
-        node=True,
-    ),
-    "google-adk-minimums": Example(
-        "examples/integration-google-adk",
-        ("3.10",),
-        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
-        node=True,
+    "google-adk": GOOGLE_ADK,
+    "google-adk-minimums": replace(
+        GOOGLE_ADK,
+        python_versions=("3.10",),
         minimums=True,
     ),
-    "google-adk-litellm": Example(
-        "examples/integration-google-adk",
-        ("3.12",),
-        (
+    "google-adk-litellm": replace(
+        GOOGLE_ADK,
+        python_versions=("3.12",),
+        suites=(
             (".", "*_test.py"),
             ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
         ),
-        node=True,
         # LiteLLM imports MCP types for ordinary function-tool completions too.
         extra_requirements=("litellm[mcp]>=1.101,<2",),
     ),

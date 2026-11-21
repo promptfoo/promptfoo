@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 
 const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
@@ -8,7 +10,7 @@ import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import * as util from '../../../src/util/index';
 import { createLocationProperties } from '../../factories/literalFixtures';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
@@ -372,9 +374,9 @@ describe('OpenAI Realtime Provider', () => {
       },
     );
 
-    it('sends one user item after session readiness on the client-secret socket', async () => {
+    it('sends one user item after session readiness even with an empty client secret', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
-      const promise = provider.webSocketRequest('test-secret', 'hello');
+      const promise = provider.webSocketRequest('', 'hello');
 
       mockHandlers.open.forEach((handler) => handler());
       expect(sentWebSocketEvents(mockWs)).not.toEqual(
@@ -394,6 +396,30 @@ describe('OpenAI Realtime Provider', () => {
       emitOutputTextDone(handler, 'hello back');
       emitResponseDone(handler);
       await promise;
+    });
+
+    it('waits for the direct session config when readiness arrives during tool loading', async () => {
+      const tools = createDeferred<unknown[]>();
+      vi.spyOn(util, 'maybeLoadToolsFromExternalFile').mockReturnValueOnce(tools.promise);
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { tools: [createRealtimeTool('get_weather')] },
+      });
+      const result = provider.directWebSocketRequest('hello');
+      const opened = mockHandlers.open[0]();
+      const handler = lastMessageHandler();
+
+      await emitRealtimeEvent(handler, { type: 'session.created' });
+      expect(mockWs.send).not.toHaveBeenCalled();
+      tools.resolve([]);
+      await opened;
+      await emitRealtimeEvent(handler, { type: 'session.ready' });
+      expect(sentWebSocketEvents(mockWs).map((event) => event.type)).toEqual([
+        'session.update',
+        'conversation.item.create',
+      ]);
+
+      await emitResponseDone(handler);
+      await result;
     });
 
     it('does not expose audio when usage reports tokens without audio bytes', async () => {
@@ -2217,6 +2243,55 @@ describe('OpenAI Realtime Provider', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("discards a failed turn's delayed tool result and handles errors until the old socket closes", async () => {
+      const result = createDeferred<string>();
+      const functionCallHandler = vi.fn(() => result.promise);
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          tools: [createRealtimeTool('lookup')],
+          functionCallHandler,
+        },
+      });
+      const retired = Object.assign(new EventEmitter(), {
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+        close: vi.fn(),
+      });
+      provider.persistentConnection = retired as unknown as WebSocket;
+      const first = provider.callApi('lookup', {
+        test: { metadata: { conversationId: 'a' } },
+      } as any);
+      await flushMicrotasks();
+      const emit = (data: Buffer) => retired.emit('message', data);
+      emitFunctionCall(emit, 'lookup');
+      emitFunctionCallArgumentsDone(emit);
+      emitResponseDone(emit);
+      expect(functionCallHandler).toHaveBeenCalledOnce();
+      emit(Buffer.from(JSON.stringify({ type: 'error', message: 'interrupted' })));
+      expect((await first).error).toContain('interrupted');
+
+      const second = provider.callApi('hi', { test: { metadata: { conversationId: 'b' } } } as any);
+      await flushMicrotasks();
+      mockHandlers.open.forEach((handler) => handler());
+      await flushMicrotasks();
+      expect(retired.close).toHaveBeenCalledOnce();
+      retired.emit('error', new Error('invalid close frame'));
+      retired.emit('close', 1006, Buffer.alloc(0));
+      expect(retired.listenerCount('error')).toBe(0);
+
+      const socket = provider.persistentConnection!;
+      const sent = sentWebSocketEvents(socket).length;
+      result.resolve('private output');
+      await flushMicrotasks();
+      expect(sentWebSocketEvents(socket)).toHaveLength(sent);
+      const handler = lastMessageHandler();
+      emitOutputTextDone(handler, 'ok');
+      emitResponseDone(handler);
+      await expect(second).resolves.toMatchObject({ output: 'ok' });
+      provider.cleanup();
     });
 
     it('should reuse existing connection for subsequent requests', async () => {

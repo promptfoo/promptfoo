@@ -209,7 +209,6 @@ export function wrapProviderWithRateLimiting(
   const wrappedProvider: ApiProvider = {
     ...provider,
     promptfooCapabilities: provider.promptfooCapabilities,
-    [Symbol.for('promptfoo.capabilityDelegate')]: provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
     config: provider.config,
@@ -224,24 +223,34 @@ export function wrapProviderWithRateLimiting(
     ...(hasFunctionToolCallValidator(provider) && {
       validateFunctionToolCall: provider.validateFunctionToolCall.bind(provider),
     }),
-    callClassificationApi: provider.callClassificationApi
-      ? wrapOperation(provider.callClassificationApi, (_input, options) => options?.abortSignal)
-      : undefined,
-    callEmbeddingApi: provider.callEmbeddingApi
-      ? provider.supportsEmbeddingCancellation
+    callClassificationApi:
+      typeof provider.callClassificationApi === 'function'
+        ? wrapOperation(provider.callClassificationApi, (_input, options) => options?.abortSignal)
+        : undefined,
+    callEmbeddingApi:
+      typeof provider.callEmbeddingApi === 'function'
+        ? provider.supportsEmbeddingCancellation
+          ? wrapOperation(
+              (provider as CancellableEmbeddingProvider).callEmbeddingApi,
+              (_input: string, _context?: CallApiContextParams, options?: CallApiOptionsParams) =>
+                options?.abortSignal,
+            )
+          : wrapOperation(provider.callEmbeddingApi)
+        : undefined,
+    callSimilarityApi:
+      typeof provider.callSimilarityApi === 'function'
         ? wrapOperation(
-            (provider as CancellableEmbeddingProvider).callEmbeddingApi,
-            (_input: string, _context?: CallApiContextParams, options?: CallApiOptionsParams) =>
-              options?.abortSignal,
+            provider.callSimilarityApi,
+            (_first, _second, _context, options) => options?.abortSignal,
           )
-        : wrapOperation(provider.callEmbeddingApi)
-      : undefined,
-    callSimilarityApi: provider.callSimilarityApi
-      ? wrapOperation(provider.callSimilarityApi)
-      : undefined,
-    callModerationApi: provider.callModerationApi
-      ? wrapOperation(provider.callModerationApi)
-      : undefined,
+        : undefined,
+    callModerationApi:
+      typeof provider.callModerationApi === 'function'
+        ? wrapOperation(
+            provider.callModerationApi,
+            (_first, _second, _context, options) => options?.abortSignal,
+          )
+        : undefined,
     callApi: async (
       prompt: string,
       context?: CallApiContextParams,
@@ -268,6 +277,9 @@ export function wrapProviderWithRateLimiting(
     },
   };
 
+  Object.defineProperty(wrappedProvider, Symbol.for('promptfoo.capabilityDelegate'), {
+    value: provider,
+  });
   // Mark as wrapped to prevent double-wrapping
   (wrappedProvider as WrappedApiProvider)[WRAPPED_SYMBOL] = true;
 

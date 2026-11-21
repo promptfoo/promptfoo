@@ -10,6 +10,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { inheritProviderCapabilities } from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
@@ -34,6 +35,7 @@ import {
 } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getEmbedding2OptionError, isEmbeddingVector, isGeminiEmbedding2 } from './embedding';
 import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
@@ -61,6 +63,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
+import { getVertexLlamaWireId, isVertexLlama4Model } from './vertexLlama';
 import type { gaxios } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
@@ -103,11 +106,6 @@ const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
   output: 22.5 / 1e6,
 };
 
-const VERTEX_LLAMA_4_MODELS = new Set([
-  'llama-4-maverick-17b-128e-instruct-maas',
-  'llama-4-scout-17b-16e-instruct-maas',
-]);
-
 interface VertexLlamaModelSafetySettings {
   enabled: boolean;
   llama_guard_settings: Record<string, unknown>;
@@ -128,7 +126,7 @@ type VertexLlamaSafetyRequestConfig =
   | { error: string };
 
 function getRequiredVertexLlamaRegion(modelName: string): 'us-central1' | 'us-east5' {
-  return VERTEX_LLAMA_4_MODELS.has(modelName) ? 'us-east5' : 'us-central1';
+  return isVertexLlama4Model(modelName) ? 'us-east5' : 'us-central1';
 }
 
 function getVertexLlamaRegionError(modelName: string, region: string): string | undefined {
@@ -137,7 +135,7 @@ function getVertexLlamaRegionError(modelName: string, region: string): string | 
     return undefined;
   }
 
-  const availabilitySubject = VERTEX_LLAMA_4_MODELS.has(modelName)
+  const availabilitySubject = isVertexLlama4Model(modelName)
     ? `Llama model ${modelName} is`
     : 'Llama models are';
   return `${availabilitySubject} only available in the ${requiredRegion} region. Current region: ${region}. Please set region: '${requiredRegion}' in your configuration.`;
@@ -147,7 +145,7 @@ function getVertexLlamaSafetyRequestConfig(
   modelName: string,
   llamaConfig: GoogleProviderConfig['llamaConfig'],
 ): VertexLlamaSafetyRequestConfig {
-  if (VERTEX_LLAMA_4_MODELS.has(modelName)) {
+  if (isVertexLlama4Model(modelName)) {
     if (
       llamaConfig?.safetySettings?.enabled === true ||
       llamaConfig?.safetySettings?.llama_guard_settings !== undefined
@@ -355,15 +353,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ? 'vertex:llama'
           : 'vertex:palm2';
 
-    // Set up tracing context
+    const llama = system === 'vertex:llama' ? this.getLlamaSamplingOptions() : undefined;
     const spanContext: GenAISpanContext = {
       system,
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      temperature: llama?.temperature ?? this.config.temperature,
+      topP: llama?.top_p ?? this.config.topP,
+      topK: llama?.top_k,
+      maxTokens: llama?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -553,13 +552,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const output = outputFromMessage(data as any, showThinking);
-
-      if (!output) {
+      // An empty completion is a valid answer that assertions can grade;
+      // only a response without a content array is malformed.
+      if (!Array.isArray(data?.content)) {
         return {
           error: `No output found in Claude API response: ${JSON.stringify(data)}`,
         };
       }
+
+      const output = outputFromMessage(data as any, showThinking);
+      // Says why an empty completion is empty (e.g. `length` when thinking used up max_tokens).
+      const finishReason = normalizeFinishReason(data.stop_reason);
 
       const tokenUsage: TokenUsage = {
         ...getTokenUsage(data, false),
@@ -592,6 +595,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cached: false,
         output,
         tokenUsage,
+        ...(finishReason && { finishReason }),
         cost: calculateAnthropicCost(
           pricingModelName,
           effectivePricingConfig,
@@ -842,6 +846,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
             return {
               error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+              metadata: { http: { status: res.status, statusText: res.statusText } },
             };
           }
 
@@ -1009,6 +1014,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
           };
         }
 
+        // Vertex may return the text and timing/speaker data in an audioTranscription part.
+        const transcriptionParts =
+          this.modelName === 'gemini-3.5-transcribe'
+            ? dataWithResponse.flatMap((datum) => datum.candidates?.[0]?.content?.parts ?? [])
+            : [];
+        const audioTranscriptions = transcriptionParts.flatMap(
+          (part) => part.audioTranscription ?? [],
+        );
+        if (audioTranscriptions.length) {
+          const transcript = transcriptionParts
+            .map((part) => part.text || part.audioTranscription?.text || '')
+            .filter(Boolean);
+          if (transcript.length) {
+            output = transcript.join('\n');
+          }
+        }
         const lastData = dataWithResponse[dataWithResponse.length - 1];
         const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
         const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
@@ -1061,6 +1082,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           metadata: {
             ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
             ...(actualServiceTier && { serviceTier: actualServiceTier }),
+            ...(audioTranscriptions.length > 0 && { audioTranscriptions }),
             ...(typeof lastData.usageMetadata?.trafficType === 'string' && {
               trafficType: lastData.usageMetadata.trafficType,
             }),
@@ -1200,6 +1222,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
   }
 
+  private getLlamaSamplingOptions() {
+    const generationConfig = this.config.generationConfig;
+    return {
+      max_tokens: generationConfig?.maxOutputTokens ?? this.config.maxOutputTokens ?? 1024,
+      temperature: generationConfig?.temperature ?? this.config.temperature,
+      top_p: generationConfig?.topP ?? this.config.topP,
+      top_k: generationConfig?.topK ?? this.config.topK,
+    };
+  }
+
   async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const region = this.getRegion();
     const regionError = getVertexLlamaRegionError(this.modelName, region);
@@ -1223,15 +1255,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return { error: safetyRequestConfig.error };
     }
 
-    // Prepare the request body for Llama models
     const body = {
-      model: `meta/${this.modelName}`,
+      model: getVertexLlamaWireId(this.modelName),
       messages,
-      max_tokens: this.config.maxOutputTokens || 1024,
       stream: false,
-      temperature: this.config.temperature,
-      top_p: this.config.topP,
-      top_k: this.config.topK,
+      ...this.getLlamaSamplingOptions(),
       ...safetyRequestConfig.bodyFields,
     };
 
@@ -1274,6 +1302,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         message: {
           content: string;
         };
+        finish_reason?: string | null;
       }>;
       usage?: {
         total_tokens: number;
@@ -1328,13 +1357,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      // Extract the completion text from the response
-      let output = '';
-      if (data.choices && data.choices.length > 0) {
-        output = data.choices[0].message.content;
-      }
+      // Extract the completion text; an empty string is a valid completion.
+      const output = data?.choices?.[0]?.message?.content;
 
-      if (!output) {
+      if (typeof output !== 'string') {
         return {
           error: `No output found in Llama API response: ${JSON.stringify(data)}`,
         };
@@ -1348,10 +1374,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
+      const finishReason = normalizeFinishReason(data.choices?.[0]?.finish_reason);
       const response = {
         cached: false,
         output,
         tokenUsage,
+        ...(finishReason && { finishReason }),
       };
 
       if (cache && cacheKey) {
@@ -1399,14 +1427,10 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getRegion(): string {
-    if (this.usesEmbedContent()) {
+    if (isGeminiEmbedding2(this.modelName)) {
       return GoogleAuthManager.resolveRegion(this.config, this.env, undefined, 'global');
     }
     return GoogleAuthManager.resolveRegion(this.config, this.env);
-  }
-
-  private usesEmbedContent(): boolean {
-    return /^gemini-embedding-2(?:$|-)/.test(this.modelName);
   }
 
   getApiVersion(): string {
@@ -1432,14 +1456,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   ): Promise<ProviderEmbeddingResponse> {
     const abortSignal = options?.abortSignal;
     abortSignal?.throwIfAborted();
-    const embedContent = this.usesEmbedContent();
+    const embedContent = isGeminiEmbedding2(this.modelName);
     if (embedContent) {
-      for (const key of ['taskType', 'title', 'autoTruncate'] as const) {
-        if (this.config[key] !== undefined) {
-          throw new Error(
-            `${this.modelName} does not support ${key}. Use instructions in the input text for embedding tasks.`,
-          );
-        }
+      const error = getEmbedding2OptionError(this.config, this.modelName);
+      if (error) {
+        throw new Error(error);
       }
     }
     const dimensions = this.config.outputDimensionality;
@@ -1501,15 +1522,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       throw err;
     }
 
-    logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
-
     const prediction = data.predictions?.[0];
     const embeddingData = prediction?.embeddings;
     const values = embedContent ? data.embedding?.values : embeddingData?.values;
-    if (!values?.length) {
-      const errorMsg = `No valid embeddings returned from API: ${JSON.stringify(data)}`;
-      logger.error(errorMsg);
-      throw new Error(errorMsg);
+    if (!isEmbeddingVector(values)) {
+      throw new Error('No valid embeddings returned from Vertex API.');
     }
 
     const promptTokens = embedContent ? data.usageMetadata?.promptTokenCount : undefined;

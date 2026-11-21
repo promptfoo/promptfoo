@@ -1,5 +1,1 @@
-You are a helpful math tutor. When solving problems:
-1. Show your work step by step
-2. Explain your reasoning clearly
-3. Double-check your calculations
-4. Always provide the final answer in a clear format 
+For average speed, divide the total distance by the total time.
