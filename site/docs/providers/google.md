@@ -298,6 +298,8 @@ A model ID selects a provider route; it does not enable every operation offered 
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
 
+Promptfoo caches self-contained Interactions text responses by endpoint and request body. Requests that differ only in API key share an entry. Cached and shared responses omit the interaction ID. Set `store: true` when you need an ID for follow-ups. To recheck access, Promptfoo skips the cache for tools, remote media and cached content references, custom headers, or credential-bearing values such as signed URLs. Follow-ups (`previousInteractionId`), requests with `store: true`, and Gemini Omni video requests also go directly to the API. Use `--no-cache` to skip the cache for every request.
+
 ### Gemini Decisions API
 
 Use `google:decisions:gemini-decision-1` with a Gemini Developer API key (`GOOGLE_API_KEY` or `GEMINI_API_KEY`). Each rendered prompt becomes the shared input for up to 1,000 questions in `config.questions`. Promptfoo returns the answers as an object keyed by question ID, so JavaScript assertions can read each answer directly.
@@ -588,7 +590,7 @@ prompts:
   - 'Generate a short video of autumn leaves floating down a stream.'
 ```
 
-Promptfoo stores the generated video in blob storage. To edit it in a later Gemini API request, set `store: true` on the first request and pass the returned `metadata.interactionId` as `previousInteractionId` on the next. Vertex supports single requests through this adapter. [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-omni-1.1-flash)
+Promptfoo stores the generated video in blob storage. To edit it in a later Gemini API or Vertex AI request, set `store: true` on the first request and pass the returned `metadata.interactionId` as `previousInteractionId` on the next. [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-omni-1.1-flash)
 
 ### Gemini Robotics ER
 
