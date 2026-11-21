@@ -42,7 +42,7 @@ export function sanitizeConfigForPersistence(
   }
   Reflect.deleteProperty(safe, 'providerPromptMap');
   const inherited = configRequiresTraceRedaction(config.defaultTest);
-  const omitPrivateInputs = <T>(test: T, shared = false): T => {
+  function omitPrivateInputs<T>(test: T, shared = false): T {
     if (!test || typeof test !== 'object') {
       return test;
     }
@@ -59,7 +59,7 @@ export function sanitizeConfigForPersistence(
     Reflect.deleteProperty(copy, 'prompts');
     Reflect.deleteProperty(copy, 'providerOutput');
     return copy;
-  };
+  }
   safe.providers = stripProviderPromptSelectors(safe.providers);
   safe.defaultTest = omitPrivateInputs(safe.defaultTest, true);
   if (Array.isArray(safe.tests)) {

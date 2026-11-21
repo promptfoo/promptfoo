@@ -104,7 +104,8 @@ function hasMarkdownImage(text: string): boolean {
   }
   try {
     let hasImage = false;
-    marked.walkTokens(marked.lexer(text), (token) => {
+    // walkTokens returns the results of this synchronous visitor.
+    void marked.walkTokens(marked.lexer(text), (token) => {
       hasImage ||= token.type === 'image';
     });
     return hasImage;
