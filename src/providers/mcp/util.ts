@@ -49,12 +49,14 @@ function isCredentialContainer(name: string): boolean {
 // Omit opaque encodings, forms and URL parameters before a logger can normalize
 // them. Nested URL/form/JSON decoders can disagree about which layer owns a secret.
 function isOpaque(text: string): boolean {
+  // URL parsers discard leading whitespace and embedded ASCII control characters.
+  const url = text.replace(/\p{Cc}/gu, '').trim();
   return (
     looksLikeSecret(text) ||
     /%[\da-f]{2}|=|\b(?:basic|bearer)\s+\S/i.test(text) ||
     (text.includes('@') && /[:/\\]/.test(text)) ||
-    (/^[a-z][a-z\d+.-]*:/i.test(text) &&
-      (!/^https?:\/\//i.test(text) || /[?#]/.test(text) || sanitizeUrlForLogging(text) !== text))
+    (/^[a-z][a-z\d+.-]*:/i.test(url) &&
+      (!/^https?:\/\//i.test(url) || /[?#]/.test(url) || sanitizeUrlForLogging(url) !== text))
   );
 }
 
