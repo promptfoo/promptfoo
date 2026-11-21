@@ -652,7 +652,7 @@ async function runRedteamConversation({
         prompt: bestNode.prompt,
         metadata: {
           highestScore: maxScore,
-          redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+          redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
           messages: treeOutputs as Record<string, any>[],
           attempts,
           redteamTreeHistory: treeOutputs,
@@ -725,7 +725,7 @@ async function runRedteamConversation({
             error: error.message,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -877,7 +877,7 @@ async function runRedteamConversation({
         let targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
-          iterationContext,
+          iterationContext && { ...iterationContext, vars: updatedVars },
           options,
         );
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
@@ -1152,7 +1152,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1196,7 +1196,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1300,7 +1300,11 @@ async function runRedteamConversation({
   }
 
   if (perTurnLayers.length > 0) {
-    finalUpdatedVars[injectVar] = bestFinalAttackPrompt || lastFinalAttackPrompt || bestPrompt;
+    const transformed = bestFinalAttackPrompt ?? lastFinalAttackPrompt;
+    if (transformed === undefined) {
+      return buildFinalResponse({ error: 'No tree attempt completed the required transforms.' });
+    }
+    finalUpdatedVars[injectVar] = transformed;
   }
 
   const finalTargetPrompt = await renderPrompt(
@@ -1314,7 +1318,7 @@ async function runRedteamConversation({
   const finalTargetResponse = await getTargetResponse(
     targetProvider,
     finalTargetPrompt,
-    context,
+    context && { ...context, vars: finalUpdatedVars },
     options,
   );
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);

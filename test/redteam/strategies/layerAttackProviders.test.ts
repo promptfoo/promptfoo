@@ -118,7 +118,9 @@ describe('registered layer attack adapters', () => {
       metadata: { ...example.metadata, pluginConfig: { excludeStrategies: ['hydra'] } },
     };
 
-    expect(await layer([excluded], { steps: ['hydra'] })).toEqual([]);
+    expect(await layer([excluded], { steps: ['jailbreak:hydra'] })).toEqual([]);
+    excluded.metadata.pluginConfig.excludeStrategies = ['custom'];
+    expect(await layer([excluded], { steps: ['custom:fixture'] })).toEqual([]);
   });
 
   it('excludes sequence providers and strategy-exempt plugins', async () => {

@@ -4,6 +4,7 @@ import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../../../src/redteam/providers/iterativeTree';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import * as runtimeTransform from '../../../src/redteam/shared/runtimeTransform';
 import { loadStrategy, Strategies } from '../../../src/redteam/strategies/index';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
@@ -29,6 +30,7 @@ async function attack(
   mode: 'none' | 'metadata' | 'explicit',
   kind: 'parse' | 'equality' | 'encoding' | 'template',
   overlap = false,
+  expectTransformFailure = false,
 ) {
   const injectVar = 'query';
   const initial = JSON.stringify({ text: 'Initial trusted {{ 7 * 7 }}', number: 3 });
@@ -177,13 +179,21 @@ async function attack(
         : step === 'jailbreak:tree'
           ? new RedteamIterativeTreeProvider(providerConfig.config!)
           : await loadApiProvider(providerConfig.id!, { options: providerConfig });
-    await provider.callApi('Synthetic initial prompt', context);
+    const result = await provider.callApi('Synthetic initial prompt', context);
+    if (expectTransformFailure) {
+      expect(result.error).toMatch(/required transforms/);
+      expect(targetCalls).toHaveLength(0);
+      return;
+    }
   }
   expect(targetCalls.length).toBeGreaterThan(0);
   if (overlap) {
     const encoded = Buffer.from(JSON.stringify(fields)).toString('base64');
     for (const call of targetCalls) {
       expect(call.prompt).toContain(encoded);
+      if (step === 'jailbreak:tree') {
+        expect(call.vars).toMatchObject({ [injectVar]: encoded });
+      }
     }
     return;
   }
@@ -228,3 +238,12 @@ it.each(['jailbreak', 'jailbreak:meta', 'jailbreak:tree'])(
     await attack(step, 'explicit', 'encoding', true);
   },
 );
+
+it('skips the final target call when every required transform failed', async () => {
+  vi.spyOn(runtimeTransform, 'applyRuntimeTransforms').mockResolvedValue({
+    prompt: '',
+    originalPrompt: 'fixture',
+    error: 'Fixture failure',
+  });
+  await attack('jailbreak:tree', 'explicit', 'encoding', true, true);
+});

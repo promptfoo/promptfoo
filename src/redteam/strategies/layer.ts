@@ -69,6 +69,7 @@ export async function addLayerTestCases(
     const attackProvider = isAttackProvider(stepObj.id);
     const actionId = attackProvider ? getAttackStrategyId(stepObj.id) : stepObj.id;
     let stepAction: Strategy['action'] | undefined;
+    let registeredId = actionId;
 
     try {
       if (attackProvider && actionId === 'jailbreak') {
@@ -82,6 +83,7 @@ export async function addLayerTestCases(
           strategies.find((strategy) => strategy.id === actionId) ||
           strategies.find((strategy) => strategy.id === actionId.split(':')[0]);
         stepAction = builtin?.action;
+        registeredId = builtin?.id ?? actionId;
       }
     } catch (e) {
       logger.error(`layer strategy: error loading step ${stepObj.id}: ${e}`);
@@ -93,12 +95,23 @@ export async function addLayerTestCases(
     }
 
     const stepTargets = stepObj.config?.plugins ?? config?.plugins;
-    const applicable = current.filter(
-      (test) =>
-        pluginMatchesStrategyTargets(test, stepObj.id, stepTargets as string[] | undefined) &&
-        (!attackProvider ||
-          pluginMatchesStrategyTargets(test, actionId, stepTargets as string[] | undefined)),
-    );
+    const applicable = current.filter((test) => {
+      if (!pluginMatchesStrategyTargets(test, stepObj.id, stepTargets as string[] | undefined)) {
+        return false;
+      }
+      const excluded = test.metadata?.pluginConfig?.excludeStrategies;
+      return (
+        !attackProvider ||
+        !Array.isArray(excluded) ||
+        !excluded.some(
+          (id) =>
+            id === registeredId ||
+            (typeof id === 'string' &&
+              isAttackProvider(id) &&
+              getAttackStrategyId(id) === actionId),
+        )
+      );
+    });
 
     if (attackProvider) {
       const perTurnLayers: LayerConfig[] = steps
