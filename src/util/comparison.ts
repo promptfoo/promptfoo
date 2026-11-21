@@ -1,7 +1,11 @@
+import * as path from 'path';
+
 import deepEqual from 'fast-deep-equal';
+import cliState from '../cliState';
 import logger from '../logger';
 import { type EvaluateResult, type TestCase } from '../types';
 import { providerToIdentifier } from './provider';
+import { mapVarFileReferences } from './varFileReferences';
 
 import type { Vars } from '../types/index';
 
@@ -125,7 +129,17 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   // These are added by multi-turn providers during evaluation but shouldn't affect test matching.
   const resultVars = filterRuntimeVars(result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
-  const doVarsMatch = varsMatch(testVars, resultVars);
+  // Older saved results used absolute file vars. Compare their path identity without
+  // rewriting authored vars, interpreting globs, or changing nested data.
+  const normalizeFileVars = (vars: Vars | undefined) =>
+    mapVarFileReferences(
+      vars,
+      (reference) =>
+        `file://${path.resolve(cliState.basePath || '', reference.slice('file://'.length))}`,
+    );
+  const doVarsMatch =
+    varsMatch(testVars, resultVars) ||
+    varsMatch(normalizeFileVars(testVars), normalizeFileVars(resultVars));
   const isMatch = doVarsMatch && providersMatch;
 
   // Log matching details at debug level for troubleshooting filter issues

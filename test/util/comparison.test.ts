@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { describe, expect, it } from 'vitest';
+import cliState from '../../src/cliState';
 import {
   deduplicateTestCases,
   extractRuntimeVars,
@@ -40,6 +41,45 @@ describe('varsMatch', () => {
 });
 
 describe('resultIsForTestCase', () => {
+  it.each(['suite', 'suite [acme]'])(
+    'matches legacy absolute file vars against authored vars in %s without changing either',
+    (name) => {
+      const base = path.join(process.cwd(), name);
+      const authored = {
+        doc: 'file://doc.txt',
+        files: ['file://other.txt', { source: 'file://data.txt' }],
+      };
+      const legacy = {
+        doc: `file://${path.join(base, 'doc.txt')}`,
+        files: [`file://${path.join(base, 'other.txt')}`, { source: 'file://data.txt' }],
+      };
+      const originalAuthored = structuredClone(authored);
+      const originalLegacy = structuredClone(legacy);
+
+      expect(
+        cliState.withBasePath(base, () =>
+          resultIsForTestCase(createEvaluateResult({ vars: legacy }), { vars: authored }),
+        ),
+      ).toBe(true);
+      expect(authored).toEqual(originalAuthored);
+      expect(legacy).toEqual(originalLegacy);
+    },
+  );
+
+  it.each([
+    [{ doc: 'file:///first/doc.txt' }, { doc: 'file:///second/doc.txt' }],
+    [{ doc: './doc.txt' }, { doc: path.resolve('doc.txt') }],
+    [
+      { meta: { source: 'file://doc.txt' } },
+      { meta: { source: `file://${path.resolve('doc.txt')}` } },
+    ],
+    [{ doc: 'file://sets/[ab]/*.txt' }, { doc: 'file://sets/[[]ab[]]/*.txt' }],
+  ])('does not conflate distinct paths, data, or patterns %#', (authored, saved) => {
+    expect(resultIsForTestCase(createEvaluateResult({ vars: saved }), { vars: authored })).toBe(
+      false,
+    );
+  });
+
   const testCase: TestCase = {
     provider: 'provider',
     vars: {
