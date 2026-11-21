@@ -154,6 +154,30 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  describe('Claude Managed Agents', () => {
+    it.each(['anthropic:managed-agents', 'anthropic:managed-agents:agent-path'])(
+      'routes %s to the hosted provider',
+      async (providerPath) => {
+        const provider = await loadApiProvider(providerPath, {
+          options: {
+            config: { apiKey: 'test-key', agent_id: 'agent-config', environment_id: 'env-test' },
+          },
+        });
+        expect(provider.constructor.name).toBe('AnthropicManagedAgentsProvider');
+        expect(provider.config?.agent_id).toBe(
+          providerPath.endsWith('agent-path') ? 'agent-path' : 'agent-config',
+        );
+      },
+    );
+    it('rejects an unknown managed agent subtype', async () => {
+      await expect(
+        loadApiProvider('anthropic:managed-agents-unknown', {
+          options: { config: { apiKey: 'test-key' } },
+        }),
+      ).rejects.toThrow('Unknown Anthropic');
+    });
+  });
+
   describe('OpenAI model lifecycle', () => {
     it.each([
       'openai:completion',

@@ -875,6 +875,7 @@ async function runInstalledCodingSdkEval(
   // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
   fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
+  const claudePackage = '@anthropic-ai/claude-agent-sdk@^0.3.284';
   fs.writeFileSync(
     scriptPath,
     `import assert from 'node:assert/strict';
@@ -936,7 +937,7 @@ const expectedSdkErrors = {
     incompatible: 'found 0.154.0',
   },
   'anthropic:claude-agent-sdk': {
-    install: 'npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273',
+    install: 'npm install promptfoo ${claudePackage}',
     incompatible: 'found 0.3.235',
   },
 };
@@ -986,7 +987,7 @@ for (const result of results) {
     await runChecks('incompatible');
     installConsumerPackages(
       'install supported coding SDKs',
-      ['@openai/codex-sdk@^0.169.1', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
+      ['@openai/codex-sdk@^0.169.1', claudePackage],
       consumerDir,
       npmEnv,
     );
