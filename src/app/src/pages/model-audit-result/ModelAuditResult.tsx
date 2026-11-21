@@ -21,7 +21,7 @@ import {
 import { ArrowBackIcon, DeleteIcon, DownloadIcon, MoreVertIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';

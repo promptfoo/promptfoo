@@ -149,7 +149,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
     const url = `${baseUrl}/openai/v1/video/generations/jobs?api-version=${apiVersion}`;
 
     const body: Record<string, unknown> = {
-      model: 'sora', // Azure always uses 'sora' as model name
+      model: this.deploymentName,
       prompt,
       width: config.width || 1280,
       height: config.height || 720,
@@ -278,7 +278,8 @@ export class AzureVideoProvider extends AzureGenericProvider {
 
       if (!response.ok) {
         return {
-          error: `Failed to download video: ${response.status} ${response.statusText}`,
+          error:
+            `Failed to download video: HTTP ${response.status} ${response.statusText}`.trimEnd(),
         };
       }
 
@@ -345,7 +346,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
     });
 
     // Check for cached video
-    const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
+    const cachedVideoKey = (await checkVideoCache(cacheKey, PROVIDER_NAME))?.videoKey;
     if (cachedVideoKey) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 

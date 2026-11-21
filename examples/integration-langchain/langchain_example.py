@@ -16,9 +16,9 @@ def main() -> int:
     # configuration errors stay concise even before the example is installed.
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import PromptTemplate
-    from langchain_openai import OpenAI
+    from langchain_openai import ChatOpenAI
 
-    llm = OpenAI(temperature=0, api_key=api_key)
+    llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0, api_key=api_key)
     math_chain = (
         PromptTemplate.from_template(
             "Solve the following math problem carefully. Return only the final answer.\n\n{question}"

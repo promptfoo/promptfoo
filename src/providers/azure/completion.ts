@@ -15,10 +15,12 @@ import type {
 } from '../../types/index';
 
 export class AzureCompletionProvider extends AzureGenericProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
@@ -37,7 +39,10 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       prompt,
-      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      max_tokens:
+        this.config.max_tokens ??
+        callApiOptions?.defaultOutputTokens ??
+        getEnvInt('OPENAI_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
@@ -92,14 +97,15 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         };
       }
 
-      const choice = data.choices[0];
+      // Missing choices leave output undefined for the evaluator's no-output handling.
+      const choice = data.choices?.[0];
       const finishReason = normalizeFinishReason(choice?.finish_reason);
 
       // Check if content was filtered based on finish_reason
       const contentFilterTriggered = finishReason === 'content_filter';
 
-      let output = choice.text;
-      if (output == null) {
+      let output = choice?.text;
+      if (choice && output == null) {
         if (contentFilterTriggered) {
           output =
             "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
@@ -149,6 +155,9 @@ export class AzureCompletionProvider extends AzureGenericProvider {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
+              ...(data.usage.prompt_tokens_details?.cached_tokens !== undefined && {
+                cached: data.usage.prompt_tokens_details.cached_tokens,
+              }),
             },
         ...(finishReason && { finishReason }),
         cost: calculateAzureCost(
@@ -156,6 +165,13 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           this.config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens,
+          data.usage?.prompt_tokens_details?.audio_tokens,
+          data.usage?.completion_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.image_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
+          data.usage?.completion_tokens_details?.image_tokens,
         ),
         ...(guardrailsTriggered
           ? {

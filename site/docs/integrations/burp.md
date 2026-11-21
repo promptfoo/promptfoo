@@ -76,7 +76,7 @@ redteam:
   strategies:
     - jailbreak
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Generate Burp-compatible payloads:

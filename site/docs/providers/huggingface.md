@@ -16,6 +16,8 @@ To run a model, specify the task type and model name. Supported task types inclu
 - `huggingface:feature-extraction:<model name>`
 - `huggingface:sentence-similarity:<model name>`
 
+A model repository on the Hub is a model artifact, not a guarantee that an Inference Provider serves it. Check the model card's Inference Providers section for chat routing; task providers use [HF Inference](https://huggingface.co/docs/inference-providers/providers/hf-inference) by default and require support for the selected task. For models without that support, deploy a compatible [inference endpoint](#inference-endpoints) and configure `apiEndpoint`; keep the model's labels, embedding dimensions, and preprocessing consistent with your eval.
+
 ## Chat models (recommended)
 
 For LLM chat models, use the `huggingface:chat` provider which connects to HuggingFace's OpenAI-compatible `/v1/chat/completions` endpoint:
@@ -38,8 +40,9 @@ This provider extends the OpenAI provider and supports OpenAI-compatible feature
 
 - Proper message formatting
 - Tool/function calling (model-dependent)
-- Streaming (model-dependent)
 - Token counting (when returned by the provider)
+
+The `huggingface:chat:` provider waits for a complete JSON response; streaming is not supported.
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
@@ -69,7 +72,7 @@ providers:
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
 ```
 
-Available models and providers change over time. To find which providers currently support a model, check the model page on HuggingFace or query the API:
+Available models and providers change over time. To find which providers support a model, check the model page on HuggingFace or query the API:
 
 ```bash
 curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping
@@ -113,7 +116,7 @@ huggingface:token-classification:dslim/bert-base-NER
 
 Embeddings with sentence-transformers:
 
-```yaml
+```text
 # Sentence similarity
 huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 
@@ -154,7 +157,7 @@ Supported environment variables:
 - `HF_TOKEN` - your HuggingFace API token (recommended)
 - `HF_API_TOKEN` - alternative name for your HuggingFace API token
 
-The provider can pass through configuration parameters to the API. See [HuggingFace Inference API documentation](https://huggingface.co/docs/api-inference/tasks/overview) for task-specific parameters.
+The provider can pass through configuration parameters to the API. See [HuggingFace Inference Providers API reference](https://huggingface.co/docs/inference-providers/tasks/index) for task-specific parameters.
 
 Here's an example of how this provider might appear in your promptfoo config:
 
@@ -198,7 +201,7 @@ You can also explicitly disable chat completion format with `chatCompletion: fal
 
 ## Inference endpoints
 
-HuggingFace provides the ability to pay for private hosted inference endpoints. First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
+Hugging Face offers paid, dedicated [Inference Endpoints](https://huggingface.co/docs/inference-endpoints/guides/create_endpoint). Create an endpoint and choose a model, hosting setup, and security level.
 
 ![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
 
@@ -206,7 +209,7 @@ Once the endpoint is created, take the `Endpoint URL` shown on the page:
 
 ![huggingface inference endpoint url](/img/docs/huggingface-inference-endpoint.png)
 
-Then set up your promptfoo config like this:
+Set `HF_INFERENCE_ENDPOINT` to that URL and use a token authorized for the deployment. The endpoint must implement the task selected in the provider ID. Then set up your promptfoo config like this:
 
 ```yaml
 description: 'HF private inference endpoint'
@@ -217,8 +220,8 @@ prompts:
 providers:
   - id: huggingface:text-generation:gemma-7b-it
     config:
-      apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
-      # apiKey: abc123   # Or set HF_API_TOKEN environment variable
+      apiEndpoint: '{{env.HF_INFERENCE_ENDPOINT}}'
+      # apiKey: abc123   # Or set HF_TOKEN environment variable
 
 tests:
   - vars:
@@ -240,7 +243,7 @@ providers:
 
 ## Authentication
 
-If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
+Hosted Inference Providers require a token with [Inference Providers permissions](https://huggingface.co/docs/inference-providers/tasks/text-classification). Private datasets and dedicated endpoints require the corresponding access permissions. Set the `HF_TOKEN` environment variable with your token:
 
 ```bash
 export HF_TOKEN=your_token_here

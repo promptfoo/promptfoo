@@ -28,7 +28,7 @@ NVIDIA_API_KEY=your_api_key_here
 2. Open any model card (for example, [Llama 3.3 70B Instruct](https://build.nvidia.com/meta/llama-3_3-70b-instruct)).
 3. Click **Get API Key**. The key starts with `nvapi-`.
 
-NVIDIA's developer program currently grants a recurring allowance of free request credits per account, which is usually enough for prompt iteration and small evals before any paid usage is needed. Current credit limits and pricing are documented at [build.nvidia.com](https://build.nvidia.com); check there for what is in effect today rather than assuming the value listed in any blog post.
+Check your account at [build.nvidia.com](https://build.nvidia.com) for available credits and usage limits before running an eval.
 
 ## Configuration
 
@@ -38,8 +38,10 @@ Use the `nvidia:` prefix followed by the full model id as listed on the model ca
 providers:
   - nvidia:meta/llama-3.3-70b-instruct
   - nvidia:qwen/qwen2.5-coder-32b-instruct
-  - nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - nvidia:nvidia/nemotron-3-super-120b-a12b
 ```
+
+Use `nvidia:<model>` without a subtype. `nvidia:chat:<model>`, `nvidia:embedding:<model>`, and other subtype forms are rejected.
 
 Standard OpenAI-compatible parameters are passed through:
 
@@ -63,35 +65,40 @@ providers:
       apiKeyEnvar: CUSTOM_NVIDIA_KEY
 ```
 
+`NVIDIA_API_BASE_URL` applies the same override to every NVIDIA provider without editing each
+config. A `config.apiBaseUrl` takes precedence over it, and both take precedence over the default
+`https://integrate.api.nvidia.com/v1`.
+
+```bash
+export NVIDIA_API_BASE_URL=https://your-proxy.example.com/nvidia/v1
+```
+
 ## A few common models
 
-The full list is on [build.nvidia.com](https://build.nvidia.com). Some commonly used ids:
-
-| Model                           | Provider format                                 |
-| ------------------------------- | ----------------------------------------------- |
-| Llama 3.3 70B Instruct          | `nvidia:meta/llama-3.3-70b-instruct`            |
-| Llama 3.1 405B Instruct         | `nvidia:meta/llama-3.1-405b-instruct`           |
-| Llama 3.2 90B Vision Instruct   | `nvidia:meta/llama-3.2-90b-vision-instruct`     |
-| Llama 3.1 Nemotron 70B Instruct | `nvidia:nvidia/llama-3.1-nemotron-70b-instruct` |
-| Mistral Large 2 Instruct        | `nvidia:mistralai/mistral-large-2-instruct`     |
-| Mixtral 8x22B Instruct          | `nvidia:mistralai/mixtral-8x22b-instruct-v0.1`  |
-| Qwen 2.5 Coder 32B Instruct     | `nvidia:qwen/qwen2.5-coder-32b-instruct`        |
-| DeepSeek R1                     | `nvidia:deepseek-ai/deepseek-r1`                |
+The catalog changes over time. Copy the exact publisher/model ID from
+[build.nvidia.com](https://build.nvidia.com/models) or NVIDIA's
+[LLM API reference](https://docs.api.nvidia.com/nim/reference/llm-apis) before adding it to a
+long-lived config.
 
 ## Example
 
 A minimal eval comparing two NIM-hosted models. Uses deterministic assertions so the example runs end-to-end with only `NVIDIA_API_KEY` configured — `llm-rubric` would otherwise fall back to promptfoo's default OpenAI grader and require a separate `OPENAI_API_KEY`.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: nvidia:meta/llama-3.3-70b-instruct
     config:
       temperature: 0.2
       max_tokens: 256
-  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - id: nvidia:nvidia/nemotron-3-super-120b-a12b
     config:
-      temperature: 0.2
-      max_tokens: 256
+      temperature: 1
+      top_p: 0.95
+      max_tokens: 1024
+      passthrough:
+        chat_template_kwargs:
+          enable_thinking: false
 
 prompts:
   - 'Summarise the following in one sentence: {{passage}}'
@@ -105,6 +112,10 @@ tests:
       - type: icontains-any
         value: [light, energy, glucose]
 ```
+
+The Nemotron configuration follows its [model-specific sampling guidance](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b/modelcard) and disables reasoning for this short summarization task. Additional request fields such as `chat_template_kwargs` go under `config.passthrough`. If you enable reasoning, increase `max_tokens` to leave room for both reasoning and the final answer; the [hosted example](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b) uses 16384.
+
+These examples use a model in NVIDIA's [hosted chat catalog](https://docs.api.nvidia.com/nim/reference/llm-apis). Self-hosted NIM deployments can use their own served model identifiers.
 
 If you want a model-graded assertion, point `llm-rubric` at a NIM-hosted grader so the example stays self-contained:
 

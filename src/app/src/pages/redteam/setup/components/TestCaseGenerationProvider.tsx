@@ -17,7 +17,9 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
+import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
@@ -119,6 +121,7 @@ async function callTestGenerationApi(
   turn: number = 0,
   maxTurns: number = 1,
   count: number = 1,
+  provider: Config['provider'] = undefined,
 ) {
   const previewLanguage = getPreviewLanguage(language);
   const pluginLanguage = getPreviewLanguage(plugin.config.language);
@@ -144,6 +147,7 @@ async function callTestGenerationApi(
       plugin: pluginWithLanguage,
       strategy,
       config: { applicationDefinition: { purpose } },
+      provider: normalizeLocalProviders(provider, { forRuntime: true }),
       history,
       turn,
       maxTurns,
@@ -167,7 +171,7 @@ async function callTestExecutionApi(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      providerOptions: target,
+      providerOptions: normalizeLocalProviders(target, { forRuntime: true }),
       prompt,
     }),
     signal: AbortSignal.any([AbortSignal.timeout(TEST_EXECUTION_TIMEOUT), abortController.signal]),
@@ -201,6 +205,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // ===================================================================
   // State
@@ -268,6 +273,15 @@ export const TestCaseGenerationProvider: React.FC<{
         return;
       }
 
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        setIsGenerating(false);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
       try {
         recordEvent('feature_used', {
           feature: 'redteam_generate_test_case',
@@ -286,6 +300,8 @@ export const TestCaseGenerationProvider: React.FC<{
           history,
           currentTurn,
           maxTurns,
+          1,
+          redTeamConfig.provider,
         );
 
         const data = await response.json();
@@ -328,7 +344,7 @@ export const TestCaseGenerationProvider: React.FC<{
         setStrategy(null);
         setIsGenerating(false);
 
-        onErrorRef.current?.(error as Error);
+        onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
       }
     },
     [
@@ -353,6 +369,15 @@ export const TestCaseGenerationProvider: React.FC<{
       const testCase = generatedTestCases[generatedTestCases.length - 1];
       // Guard: if test case was reset (e.g., by a new generation), abort execution
       if (!testCase) {
+        return;
+      }
+
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        setIsGenerating(false);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
         return;
       }
 
@@ -389,19 +414,21 @@ export const TestCaseGenerationProvider: React.FC<{
         }
 
         console.error('Failed to run test against target:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to run test against target';
         setTargetResponses((prev) => [
           ...prev,
           {
             output: null,
-            error: error instanceof Error ? error.message : 'Failed to run test against target',
+            error: errorMessage,
           },
         ]);
-        onErrorRef.current?.(error as Error);
+        onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
       } finally {
         setIsRunningTest(false);
       }
     },
-    [generatedTestCases, redTeamConfig],
+    [generatedTestCases, redTeamConfig, toast],
   );
 
   const resetState = useCallback(() => {
@@ -452,6 +479,7 @@ export const TestCaseGenerationProvider: React.FC<{
           0,
           1,
           count,
+          redTeamConfig.provider,
         );
 
         const data = await response.json();
@@ -480,7 +508,12 @@ export const TestCaseGenerationProvider: React.FC<{
         throw error;
       }
     },
-    [redTeamConfig.applicationDefinition?.purpose, redTeamConfig.language, recordEvent],
+    [
+      redTeamConfig.applicationDefinition?.purpose,
+      redTeamConfig.language,
+      redTeamConfig.provider,
+      recordEvent,
+    ],
   );
 
   /**
@@ -533,6 +566,12 @@ export const TestCaseGenerationProvider: React.FC<{
       testExecutionAbortController.current?.abort();
       resetState();
 
+      if (targetConfigError) {
+        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
+        onError?.(new Error(targetConfigError));
+        return;
+      }
+
       if (onSuccess) {
         onSuccessRef.current = onSuccess;
       }
@@ -566,7 +605,7 @@ export const TestCaseGenerationProvider: React.FC<{
       // Open dialog to show test case generation results
       setIsDialogOpen(true);
     },
-    [shouldEvaluateAgainstTarget, resetState, toast],
+    [shouldEvaluateAgainstTarget, resetState, targetConfigError, toast],
   );
 
   const handleCloseDialog = useCallback(() => {
@@ -641,11 +680,22 @@ export const TestCaseGenerationProvider: React.FC<{
     ],
   );
 
-  const handleContinue = useCallback((additionalTurns: number) => {
-    setMaxTurns((prev) => prev + additionalTurns);
-    setCurrentTurn((prev) => prev + 1);
-    setIsGenerating(true);
-  }, []);
+  const handleContinue = useCallback(
+    (additionalTurns: number) => {
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
+      setMaxTurns((prev) => prev + additionalTurns);
+      setCurrentTurn((prev) => prev + 1);
+      setIsGenerating(true);
+    },
+    [toast],
+  );
 
   // ===================================================================
   // Effects
@@ -690,7 +740,7 @@ export const TestCaseGenerationProvider: React.FC<{
             setStrategy(null);
             setIsGenerating(false);
 
-            onErrorRef.current?.(error as Error);
+            onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
           });
       } else {
         // Multi-turn or subsequent turns: use single generation

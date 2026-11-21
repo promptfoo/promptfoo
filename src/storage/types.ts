@@ -69,11 +69,6 @@ export interface LocalStorageConfig {
 }
 
 /**
- * Storage configuration
- */
-export type StorageConfig = LocalStorageConfig;
-
-/**
  * Storage provider interface
  *
  * Implementations must handle:
@@ -101,6 +96,9 @@ export interface MediaStorageProvider {
    * @throws Error if not found
    */
   retrieve(key: string): Promise<Buffer>;
+
+  /** Retrieve bytes with their persisted MIME type, when the provider supports it. */
+  retrieveWithMetadata?(key: string): Promise<{ data: Buffer; contentType?: string }>;
 
   /**
    * Check if media exists

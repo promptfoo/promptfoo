@@ -631,9 +631,9 @@ Advanced CLI features and assertion capabilities.
 
 | #     | OS      | Node Versions | Special Considerations          |
 | ----- | ------- | ------------- | ------------------------------- |
-| 9.1.1 | Ubuntu  | 20, 22, 24    | Standard                        |
-| 9.1.2 | macOS   | 20, 22, 24    | fsevents, path handling         |
-| 9.1.3 | Windows | 20, 22, 24    | Path separators, shell commands |
+| 9.1.1 | Ubuntu  | 22.22, 24, 26 | Standard                        |
+| 9.1.2 | macOS   | 22.22, 24, 26 | fsevents, path handling         |
+| 9.1.3 | Windows | 22.22, 24, 26 | Path separators, shell commands |
 
 ### Script Language Matrix
 
@@ -658,7 +658,7 @@ smoke-tests:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
@@ -806,7 +806,7 @@ scenarios:
 # Incorrect - will fail validation
 scenarios:
   - config:
-      region: US  # This is wrong
+      region: US # This is wrong
     tests:
       - vars: { name: Alice }
 ```

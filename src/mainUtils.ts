@@ -6,6 +6,7 @@ import { getGlobalDispatcher } from 'undici';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
+import { providerRegistry } from './providers/providerRegistry';
 import telemetry from './telemetry';
 import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
@@ -42,13 +43,21 @@ function getEnvPathKey(envPath: string | string[]): string {
   return Array.isArray(envPath) ? envPath.join('\0') : envPath;
 }
 
-function loadEnvPathOnce(envPath: string | string[], shouldLog: boolean): void {
+function loadEnvPathOnce(
+  envPath: string | string[],
+  shouldLog: boolean,
+  refreshConfigDirectory: boolean = false,
+): void {
   const envPathKey = getEnvPathKey(envPath);
   if (loadedEnvPathKey === envPathKey) {
     return;
   }
 
-  setupEnv(envPath);
+  if (refreshConfigDirectory) {
+    setupEnv(envPath, { refreshConfigDirectory: true });
+  } else {
+    setupEnv(envPath);
+  }
   loadedEnvPathKey = envPathKey;
 
   if (shouldLog) {
@@ -87,8 +96,10 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
 
   const envPath = normalizeEnvPaths(envFileValues);
   if (envPath) {
-    loadEnvPathOnce(envPath, false);
+    loadEnvPathOnce(envPath, false, true);
   }
+
+  telemetry.initialize();
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
@@ -230,6 +241,15 @@ export const shutdownGracefully = async (): Promise<void> => {
     }
   };
 
+  const providerShutdown = withTimeout(
+    providerRegistry.shutdownForProcess(),
+    'providerRegistry.shutdownForProcess()',
+  ).catch((error) => {
+    logger.debug('[shutdownGracefully] Provider shutdown failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+
   try {
     await withTimeout(telemetry.shutdown(), 'telemetry.shutdown()');
   } catch (error) {
@@ -238,15 +258,9 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  logger.debug('Closing logger file transports');
+  const dbClosePromise = closeDbIfOpen();
+  await withTimeout(dbClosePromise, 'closeDbIfOpen()');
 
-  try {
-    await withTimeout(closeLogger(), 'closeLogger()');
-  } catch {
-    // Can't log since logger might be closed.
-  }
-
-  await closeDbIfOpen();
   clearAgentCache();
 
   try {
@@ -254,6 +268,17 @@ export const shutdownGracefully = async (): Promise<void> => {
     await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
   } catch {
     // Silently handle dispatcher destroy errors.
+  }
+
+  // Keep logging available until the database cleanup settles.
+  await dbClosePromise;
+  await providerShutdown;
+
+  logger.debug('Closing logger file transports');
+  try {
+    await withTimeout(closeLogger(), 'closeLogger()');
+  } catch {
+    // Can't log since logger might be closed.
   }
 
   clearTimeout(forceExitTimeout);

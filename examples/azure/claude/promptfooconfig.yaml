@@ -5,21 +5,20 @@ prompts:
   - 'Explain {{concept}} in simple terms, suitable for a beginner.'
 
 providers:
-  - id: azure:chat:claude-opus-4-6-20260205
-    label: claude-opus-4-6
+  # Opus 5 and Sonnet 5 reject temperature/top_p/top_k at the model level.
+  - id: azure:chat:claude-opus-5
+    label: claude-opus-5
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-11-15-preview'
       max_tokens: 1024
-      temperature: 0.7
 
-  - id: azure:chat:claude-sonnet-4-6
-    label: claude-sonnet-4-6
+  - id: azure:chat:claude-sonnet-5
+    label: claude-sonnet-5
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
-      temperature: 0.7
 
   - id: azure:chat:claude-haiku-4-5-20251001
     label: claude-haiku-4-5

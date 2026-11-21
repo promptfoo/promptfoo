@@ -3,7 +3,11 @@ import { getDefaultProviders } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../redteam/constants';
 import invariant from '../util/invariant';
-import { getAndCheckProvider } from './providers';
+import {
+  callGradingProvider,
+  getAndCheckProvider,
+  getGradingProviderCallOptions,
+} from './providers';
 import { normalizeMatcherTokenUsage } from './shared';
 
 import type { ApiModerationProvider, GradingConfig, GradingResult } from '../types/index';
@@ -45,7 +49,12 @@ export async function matchesModeration(
 
   invariant(moderationProvider, 'Moderation provider must be defined');
 
-  const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+  const callApiOptions = getGradingProviderCallOptions();
+  const resp = await callGradingProvider(moderationProvider, 'moderation', (context) =>
+    callApiOptions
+      ? moderationProvider.callModerationApi(userPrompt, assistantResponse, context, callApiOptions)
+      : moderationProvider.callModerationApi(userPrompt, assistantResponse),
+  );
   const tokenUsageResult = resp.tokenUsage
     ? { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }
     : {};

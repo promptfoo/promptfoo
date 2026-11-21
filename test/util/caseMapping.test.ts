@@ -29,6 +29,23 @@ describe('caseMapping utilities', () => {
       expect(result.namedScores).toEqual({ accuracy: 0.8 });
     });
 
+    it.each([null, { accuracy: 2 }])('maps named_score_weights: %j', (weights) => {
+      const original = { named_score_weights: weights };
+      const result = mapSnakeCaseToCamelCase(original);
+
+      expect(result.namedScoreWeights).toEqual(weights);
+      expect(original).not.toHaveProperty('namedScoreWeights');
+    });
+
+    it.each([null, { accuracy: 3 }])('preserves explicit namedScoreWeights: %j', (weights) => {
+      const result = mapSnakeCaseToCamelCase({
+        named_score_weights: { accuracy: 2 },
+        namedScoreWeights: weights,
+      });
+
+      expect(result.namedScoreWeights).toEqual(weights);
+    });
+
     it('should map component_results to componentResults', () => {
       const result = mapSnakeCaseToCamelCase({
         component_results: [{ pass: true }],
@@ -62,13 +79,18 @@ describe('caseMapping utilities', () => {
         component_results: [
           {
             pass_: true,
-            component_results: [{ pass_: false, named_scores: { inner: 1 } }],
+            component_results: [
+              { pass_: false, named_scores: { inner: 1 }, named_score_weights: { inner: 4 } },
+            ],
           },
         ],
       });
       expect(result.componentResults[0].pass).toBe(true);
       expect(result.componentResults[0].componentResults[0].pass).toBe(false);
       expect(result.componentResults[0].componentResults[0].namedScores).toEqual({ inner: 1 });
+      expect(result.componentResults[0].componentResults[0].namedScoreWeights).toEqual({
+        inner: 4,
+      });
     });
 
     it('should handle non-object items in componentResults array', () => {
