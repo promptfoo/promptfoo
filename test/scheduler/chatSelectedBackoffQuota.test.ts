@@ -170,8 +170,15 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
     await first.done;
     expect(first.state.value).toMatchObject({ output: 'A output' });
     expect(dispatches.map(({ caller }) => caller)).toEqual(['A']);
-  });
 
+    const second = start(wrapped, 'B', caller());
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(dispatches).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await second.done;
+    expect(second.state.value).toMatchObject({ output: 'B output' });
+    expect(dispatches.map(({ caller }) => caller)).toEqual(['A', 'B']);
+  });
   it.each(variants)(
     'keeps B queued until the known reset after A cancels its selected %s wait',
     async (variant) => {
