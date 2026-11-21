@@ -872,7 +872,7 @@ describe('evaluator trace integration', () => {
         const pending = evaluate(suite, mockEval, {
           abortSignal: caller.signal,
           pauseSignal: pause.signal,
-          timeoutMs: -1,
+          timeoutMs: 0,
           maxEvalTimeMs: 0,
           maxConcurrency: 1,
           showProgressBar: false,
@@ -975,7 +975,7 @@ describe('evaluator trace integration', () => {
           {
             abortSignal: caller.signal,
             pauseSignal: pause.signal,
-            timeoutMs: -1,
+            timeoutMs: 0,
             maxEvalTimeMs: 0,
             maxConcurrency: 1,
             showProgressBar: false,
@@ -1063,7 +1063,7 @@ describe('evaluator trace integration', () => {
         {
           abortSignal: caller.signal,
           pauseSignal: pause.signal,
-          timeoutMs: -1,
+          timeoutMs: 0,
           maxEvalTimeMs: 0,
           maxConcurrency: 1,
           showProgressBar: false,

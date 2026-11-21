@@ -303,7 +303,7 @@ describe('Transformation integration (real transform)', () => {
             tests: [{ vars: { name: 'world' } }],
           } as TestSuite,
           new Eval({}),
-          { maxConcurrency: 1, abortSignal: caller.signal, timeoutMs: -1, maxEvalTimeMs: 0 },
+          { maxConcurrency: 1, abortSignal: caller.signal, timeoutMs: 0, maxEvalTimeMs: 0 },
         );
         void evaluation.then(
           () => {
