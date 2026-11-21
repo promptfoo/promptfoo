@@ -3,6 +3,7 @@ import { createCipheriv } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
 import { decodeExportTraceServiceRequest } from '../../../src/tracing/protobuf';
+import { SECRET_FIELD_NAMES } from '../../../src/util/sanitizer';
 import type { Span, SpanData } from '@openai/agents';
 
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
@@ -622,7 +623,8 @@ describe('OTLPTracingExporter', () => {
           useSession: true,
           arguments: ['client', '--session-id', 'fixture-session'],
           credentials: 'fixture-credential',
-          certificateContent: 'public certificate',
+          certificateContent: 'fixture certificate',
+          certificateIssuer: 'public issuer',
           token_count: 10,
         },
         format,
@@ -633,7 +635,8 @@ describe('OTLPTracingExporter', () => {
       expect(attributes.useSession).toBe(true);
       expect(attributes.arguments).toEqual(wireStrings('client', '--session-id', '<redacted>'));
       expect(attributes.credentials).toBe('<redacted>');
-      expect(attributes.certificateContent).toBe('public certificate');
+      expect(attributes.certificateContent).toBe('<redacted>');
+      expect(attributes.certificateIssuer).toBe('public issuer');
       expect(attributes.token_count).toBe(10);
     },
   );
@@ -775,6 +778,47 @@ describe('OTLPTracingExporter', () => {
     expect(attributes.fallback).toBe('<redacted>');
     expect(attributes.ordinary).toBe('machine learning uses account metadata');
     expect(JSON.stringify(payload)).not.toContain('opaque');
+  });
+
+  it.each(formats)('masks registered and connection-string credentials in %s', async (format) => {
+    const marker = 'opaque/base64==';
+    const connection =
+      'DefaultEndpointsProtocol=https;AccountName=public;AccountKey=' +
+      marker +
+      ';EndpointSuffix=core.windows.net';
+    const keys = [
+      ...SECRET_FIELD_NAMES,
+      'AccountKey',
+      'SharedAccessKey',
+      'AzureStorageKey',
+      'dbConnectionString',
+      'SENTRY_DSN',
+      'connection.string',
+      'ConnectionStrings__Primary',
+      'SQLCONNSTR_Main',
+      'env.portkeyvirtualkey',
+    ];
+    const fields = Object.fromEntries(keys.map((key) => [key, marker]));
+    const output = { ...fields, AZURE_STORAGE_CONNECTION_STRING: connection, region: 'west' };
+    const payload = await exportSpans(format, [
+      {
+        spanData: {
+          type: 'function',
+          name: 'lookup',
+          input: connection,
+          output: JSON.stringify(output),
+        },
+        traceMetadata: output,
+      },
+    ]);
+    const attrs = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+    expect(JSON.stringify(payload)).not.toContain(marker);
+    expect(attrs['tool.arguments']).toBe(connection.replace(marker, '<redacted>'));
+    expect(JSON.parse(attrs['tool.output'] as string)).toMatchObject({
+      AZURE_STORAGE_CONNECTION_STRING: '<redacted>',
+      region: 'west',
+    });
+    expect(attrs['trace.metadata.AZURE_STORAGE_CONNECTION_STRING']).toBe('<redacted>');
   });
 
   it.each(formats)('redacts complete YAML, ODBC, and XML credentials in %s', async (format) => {

@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { normalizeFieldName, SECRET_FIELD_NAMES } from '../../util/sanitizer';
 import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
 
@@ -973,7 +974,17 @@ function isCredentialAttributeKey(key: string): boolean {
 }
 
 function isCredentialName(key: string): boolean {
-  if (/^(?:x-session-id|(?:code|pkce)[_.-]?verifier)$/i.test(key)) {
+  // Trace metadata and tool fields can be qualified. Use the shared registry
+  // for the final field, including vendors' lowercase and fused spellings.
+  const normalized = normalizeFieldName(key);
+  const field = normalized.slice(normalized.lastIndexOf('.') + 1);
+  if (
+    (SECRET_FIELD_NAMES.has(field) && field !== 'token' && field !== 'signature') ||
+    /(?:connstr_|connectionstrings(?:__|[.:]))/i.test(key) ||
+    /(?:connectionstrings?|connstr|dsn|(?:account|storage|sharedaccess)keys?[12]?|sharedaccesssignature|xsessionid|(?:code|pkce)verifier)$/.test(
+      normalized.replace(/[.[\]]/g, ''),
+    )
+  ) {
     return true;
   }
 
@@ -984,113 +995,51 @@ function isCredentialName(key: string): boolean {
     .filter(Boolean);
 
   return parts.some((part, index) => {
+    const previous = parts[index - 1];
+    const next = parts[index + 1];
     if (part === 'session' || part === 'sessionid') {
       return /(?:^(?:--?)?|\.)session(?:[._-]?id)?$/i.test(key);
     }
     if (part === 'token' || part === 'tokens') {
       return (
-        ![
-          'used',
-          'count',
-          'counts',
-          'usage',
-          'limit',
-          'budget',
-          'length',
-          'type',
-          'id',
-          'ids',
-          'index',
-          'indices',
-          'position',
-          'positions',
-          'mask',
-          'masks',
-          'endpoint',
-          'url',
-          'uri',
-        ].includes(parts[index + 1]) &&
-        ![
-          'num',
-          'estimated',
-          'used',
-          'usage',
-          'input',
-          'output',
-          'total',
-          'cached',
-          'reasoning',
-          'prompt',
-          'completion',
-          'prediction',
-          'response',
-          'max',
-          'min',
-        ].includes(parts[index - 1])
+        !/^(?:used|counts?|usage|limit|budget|length|type|ids?|index|indices|positions?|masks?|endpoint|url|uri)$/.test(
+          next,
+        ) &&
+        !/^(?:num|estimated|used|usage|input|output|total|cached|reasoning|prompt|completion|prediction|response|max|min)$/.test(
+          previous,
+        )
       );
     }
     if (part === 'assertion') {
-      return parts[index - 1] === 'client' && !['type', 'types'].includes(parts[index + 1]);
+      return previous === 'client' && !['type', 'types'].includes(next);
     }
     if (
-      [
-        'authorization',
-        'cookie',
-        'cookies',
-        'password',
-        'passwords',
-        'passwd',
-        'pwd',
-        'passphrase',
-        'passphrases',
-        'secret',
-        'secrets',
-        'credential',
-        'credentials',
-        'apikey',
-        'apikeys',
-        'auth',
-        'jwt',
-        'sig',
-        'signature',
-        'pgpassword',
-      ].includes(part)
+      SECRET_FIELD_NAMES.has(part) ||
+      /^(?:cookies|passwords|passphrases|credential|apikeys|jwt|pgpassword)$/.test(part)
     ) {
       if (
         part === 'auth' &&
-        ['type', 'method', 'methods', 'supported', 'status', 'enabled'].includes(parts[index + 1])
+        ['type', 'method', 'methods', 'supported', 'status', 'enabled'].includes(next)
       ) {
         return false;
       }
       if (
         part === 'signature' &&
-        (parts[index - 1] === 'function' ||
-          ['algorithm', 'method', 'type', 'version', 'format', 'scheme', 'encoding'].includes(
-            parts[index + 1],
-          ))
+        (previous === 'function' ||
+          ['algorithm', 'method', 'type', 'version', 'format', 'scheme', 'encoding'].includes(next))
       ) {
         return false;
       }
-      if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(parts[index + 1])) {
+      if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(next)) {
         return false;
       }
       return true;
     }
     return (
       (part === 'key' || part === 'keys') &&
-      (!['algorithm', 'type', 'format', 'id'].includes(parts[index + 1]) ||
-        (parts[index - 1] === 'access' && parts[index + 1] === 'id')) &&
-      [
-        'api',
-        'access',
-        'subscription',
-        'private',
-        'client',
-        'ssl',
-        'tls',
-        'signing',
-        'encryption',
-      ].includes(parts[index - 1])
+      (!['algorithm', 'type', 'format', 'id'].includes(next) ||
+        (previous === 'access' && next === 'id')) &&
+      /^(?:api|access|subscription|private|client|ssl|tls|signing|encryption)$/.test(previous)
     );
   });
 }
