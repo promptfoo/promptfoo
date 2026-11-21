@@ -528,7 +528,10 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     applyMetaResponsesOutputCap(
       body,
       passthrough,
-      config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
+      config.max_output_tokens ??
+        config.max_completion_tokens ??
+        config.max_tokens ??
+        callApiOptions?.defaultOutputTokens,
     );
     applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);
 

@@ -373,7 +373,10 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
     expect(promptfooProviderMocks.materializeMcpToolCallRemote).toHaveBeenCalledTimes(1);
-    expect(providerManagerMocks.getProvider).toHaveBeenCalledWith({ jsonOnly: true });
+    expect(providerManagerMocks.getProvider).toHaveBeenCalledWith({
+      jsonOnly: true,
+      purpose: 'attack',
+    });
     expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
     expect(response.tokenUsage?.attacker).toMatchObject({
       prompt: 9,

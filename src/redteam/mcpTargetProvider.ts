@@ -147,6 +147,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           };
         } else {
           const materializerProvider = await redteamProviderManager.getProvider({
+            purpose: 'attack',
             jsonOnly: true,
           });
           signal?.throwIfAborted();

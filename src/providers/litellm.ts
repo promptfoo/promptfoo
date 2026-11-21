@@ -108,6 +108,8 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
  * LiteLLM Chat Provider
  */
 class LiteLLMChatProvider extends LiteLLMProviderWrapper {
+  readonly supportsDefaultOutputTokens = true;
+
   constructor(modelName: string, options: ProviderOptions) {
     const provider = new OpenAiChatCompletionProvider(modelName, {
       ...options,
@@ -125,6 +127,8 @@ class LiteLLMChatProvider extends LiteLLMProviderWrapper {
  * LiteLLM Completion Provider
  */
 class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
+  readonly supportsDefaultOutputTokens = true;
+
   constructor(modelName: string, options: ProviderOptions) {
     const provider = new OpenAiCompletionProvider(modelName, options);
     super(provider, 'completion', options.id);

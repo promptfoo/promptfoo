@@ -308,6 +308,8 @@ function reconcileOpenRouterReasoning(
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   private usesOpenRouter(): boolean {
     const system = this.getGenAISystem();
     return (
@@ -494,6 +496,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const isReasoningModel = usesConfiguredCapabilities
       ? this.isReasoningModel()
       : this.isReasoningCapabilityModel(capabilityModelName);
+    if (callApiOptions?.defaultOutputTokens !== undefined) {
+      config.max_tokens ??= config.max_completion_tokens ?? callApiOptions.defaultOutputTokens;
+      config.max_completion_tokens ??= config.max_tokens;
+    }
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -647,7 +653,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         context?.prompt?.config,
         isOpenRouterGpt6,
         {
-          maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+          maxCompletionTokens:
+            callApiOptions?.defaultOutputTokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
           // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
           // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
           // requests, so it applies only when reasoning is turned off. OpenRouter requests,

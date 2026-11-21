@@ -27,6 +27,7 @@ import {
   type GradingResult,
   isApiProvider,
   isProviderOptions,
+  type ProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
@@ -54,9 +55,9 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { withRedteamOutputLimit } from './outputLimit';
 
 import type { TraceContextData } from '../../tracing/traceContext';
-import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
 
@@ -390,29 +391,13 @@ class RedteamProviderManager {
   }
 
   async getProvider({
-    provider,
-    fallbackProvider,
-    ignoreCliState = false,
-    jsonOnly = false,
-    preferSmallModel = false,
-  }: {
-    provider?: RedteamFileConfig['provider'];
-    /** Optional request-scoped fallback used after the cache but before process-global CLI config. */
-    fallbackProvider?: RedteamFileConfig['provider'];
-    /** Skip process-global config for request-scoped callers such as Web UI previews. */
-    ignoreCliState?: boolean;
-    jsonOnly?: boolean;
-    preferSmallModel?: boolean;
+    purpose,
+    ...options
+  }: Parameters<RedteamProviderManager['getProviderSelection']>[0] & {
+    purpose?: 'attack' | 'generation';
   }): Promise<ApiProvider> {
-    return (
-      await this.getProviderSelection({
-        provider,
-        fallbackProvider,
-        ignoreCliState,
-        jsonOnly,
-        preferSmallModel,
-      })
-    ).provider;
+    const { provider } = await this.getProviderSelection(options);
+    return purpose === 'attack' ? withRedteamOutputLimit(provider) : provider;
   }
 
   async getGradingProvider({
@@ -422,40 +407,21 @@ class RedteamProviderManager {
     provider?: RedteamFileConfig['provider'];
     jsonOnly?: boolean;
   } = {}): Promise<ApiProvider> {
-    // 1) Explicit provider argument
-    if (provider) {
-      const loaded = await loadRedteamProvider({ provider, jsonOnly, purpose: 'grading' });
-      return this.wrapProvider(loaded);
+    // Explicit grading selection, grading cache, defaultTest, then normal red-team precedence.
+    if (!provider && this.gradingProvider && this.gradingJsonOnlyProvider) {
+      const cached = jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider;
+      return withRedteamOutputLimit(this.wrapProvider(cached));
     }
-
-    // 2) Cached grading provider
-    if (this.gradingProvider && this.gradingJsonOnlyProvider) {
-      logger.debug(
-        `[RedteamProviderManager] Using cached grading provider: ${this.gradingProvider.id()}`,
-      );
-      return this.wrapProvider(jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider);
+    const gradingProvider = provider || this.getDefaultTestProvider();
+    if (gradingProvider) {
+      const loaded = await loadRedteamProvider({
+        provider: gradingProvider,
+        jsonOnly,
+        purpose: 'grading',
+      });
+      return withRedteamOutputLimit(this.wrapProvider(loaded));
     }
-
-    // 3) Try defaultTest config chain (grading-first)
-    const cfg =
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.provider) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider) ||
-      undefined;
-
-    if (cfg) {
-      const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });
-      logger.debug(
-        `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
-      );
-      return this.wrapProvider(loaded);
-    }
-
-    // 4) Fallback to redteam provider (already wraps)
-    return this.getProvider({ jsonOnly });
+    return this.getProvider({ jsonOnly, purpose: 'attack' });
   }
 
   async getMultilingualProvider(): Promise<ApiProvider | undefined> {

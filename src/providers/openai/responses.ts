@@ -736,6 +736,8 @@ async function coalesceBackgroundResponse(
 }
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
   private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;
@@ -1102,6 +1104,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
+      callApiOptions?.defaultOutputTokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const gpt6Reasoning = isGPT6Model

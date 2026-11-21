@@ -882,7 +882,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
           testOptions,
           context?.prompt?.config,
           this.config,
-        ) ?? getOpenAIChatOutputLimitFromEnv();
+        ) ??
+        callApiOptions?.defaultOutputTokens ??
+        getOpenAIChatOutputLimitFromEnv();
       delete result.body.max_tokens;
       delete result.body.max_completion_tokens;
       if (tokenLimit !== undefined) {
