@@ -88,11 +88,22 @@ export async function loadFromJavaScriptFile(
   return fn(...args);
 }
 
-export function processFileReference(fileRef: string): object | string {
+export function processFileReference(fileRef: string, restrictToBase = false): object | string {
   const basePath = cliState.basePath || '';
-  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
-  const fileContent = fs.readFileSync(filePath, 'utf8');
+  let filePath = path.resolve(basePath, fileRef.slice('file://'.length));
   const extension = path.extname(filePath);
+  if (restrictToBase) {
+    // Test vars can select a fixture, including through a symlink.
+    const realBase = fs.realpathSync(path.resolve(basePath));
+    filePath = fs.realpathSync(filePath);
+    const relative = path.relative(realBase, filePath);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error(
+        'A templated assertion data file must be inside the configuration directory.',
+      );
+    }
+  }
+  const fileContent = fs.readFileSync(filePath, 'utf8');
   if (['.json', '.yaml', '.yml'].includes(extension)) {
     return loadYaml(fileContent) as object;
   } else if (extension === '.txt') {
