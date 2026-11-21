@@ -304,13 +304,14 @@ export default function ResultsView({
     );
   }, 300);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Changing evaluations invalidates pending input even if the URL search stays the same.
   React.useEffect(() => {
     // Navigation wins over pending typing. Do not let an older debounce replace
     // the new URL, and keep the input, table, and badge on the same search.
     debouncedUpdate.cancel();
     setSearchInputValue(urlSearchText);
     setDebouncedSearchText(urlSearchText);
-  }, [urlSearchText, debouncedUpdate]);
+  }, [location.pathname, urlSearchText, debouncedUpdate]);
 
   const handleClearSearch = () => {
     setSearchInputValue('');

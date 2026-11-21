@@ -1,4 +1,5 @@
 import { hasFunctionToolCallValidator } from '../contracts/providers';
+import { getEnvBool } from '../envars';
 
 import type { Assertion, AssertionParams, GradingResult } from '../types/index';
 
@@ -18,7 +19,11 @@ export function toolCallVerdict(
       ? pass
         ? 'Assertion passed'
         : `Expected output to not be a valid ${label}`
-      : reason,
+      : getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT')
+        ? valid
+          ? 'Assertion passed'
+          : `Invalid ${label}`
+        : reason,
     assertion,
   };
 }
@@ -30,7 +35,11 @@ export function toolCallErrorVerdict(
   err: unknown,
   label: string,
 ): GradingResult {
-  const reason = err instanceof Error ? err.message : String(err);
+  const reason = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT')
+    ? `Could not validate ${label}`
+    : err instanceof Error
+      ? err.message
+      : String(err);
   if (!(err instanceof Error) || err.name !== 'InvalidToolCallError') {
     return { pass: false, score: 0, reason, assertion };
   }

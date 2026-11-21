@@ -1762,6 +1762,18 @@ describe('ResultsView URL search state', () => {
     router.dispose();
   });
 
+  it('cancels pending typing when another eval has the same URL search', async () => {
+    const router = renderSearch('search=first');
+    const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+    await interact(() => user.type(screen.getByRole('searchbox'), 'pending'));
+    await act(() => router.navigate('/eval/another?search=first'));
+    act(() => timers.advanceBy(300));
+    expect(screen.getByRole('searchbox')).toHaveValue('first');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'first');
+    expect(mockNavigate).not.toHaveBeenCalled();
+    router.dispose();
+  });
+
   it('keeps pending typing when an unrelated URL parameter changes', async () => {
     const router = renderSearch('search=first');
     const user = userEvent.setup({ advanceTimers: timers.advanceBy });

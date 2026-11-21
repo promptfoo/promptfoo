@@ -113,33 +113,6 @@ async function tryPythonCommands(commands: string[]): Promise<string | null> {
 }
 
 /**
- * Try direct command validation as final fallback.
- */
-async function tryDirectCommands(commands: string[]): Promise<string | null> {
-  for (const cmd of commands) {
-    try {
-      const validated = await tryPath(cmd);
-      if (validated) {
-        return validated;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.debug(`Direct command "${cmd}" failed: ${errorMsg}`);
-
-      // Log permission/access errors differently
-      if (
-        errorMsg.includes('Access is denied') ||
-        errorMsg.includes('EACCES') ||
-        errorMsg.includes('EPERM')
-      ) {
-        logger.warn(`Permission denied when trying Python command "${cmd}": ${errorMsg}`);
-      }
-    }
-  }
-  return null;
-}
-
-/**
  * Attempts to get the Python executable path using platform-appropriate strategies.
  * @returns The Python executable path if successful, or null if failed.
  */
@@ -158,7 +131,7 @@ export async function getSysExecutable(): Promise<string | null> {
     }
 
     // Final fallback to direct python command
-    return await tryDirectCommands(['python']);
+    return await tryPath('python');
   } else {
     // Unix: Standard python3/python detection
     return await tryPythonCommands(['python3', 'python']);

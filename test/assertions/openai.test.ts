@@ -8,7 +8,7 @@ import { InvalidToolCallError } from '../../src/contracts';
 import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { validateFunctionCall as validateGoogleFunctionCall } from '../../src/providers/google/util';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { validateFunctionCall } from '../../src/providers/openai/util';
+import { responsesToolItems, validateFunctionCall } from '../../src/providers/openai/util';
 import { createToolCall, createTypeConfig } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 
@@ -445,7 +445,7 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('must have required property'),
+        reason: expect.stringContaining('does not match schema'),
         assertion: functionAssertion,
       });
     });
@@ -824,7 +824,7 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('must have required property'),
+        reason: expect.stringContaining('does not match schema'),
         assertion: toolsAssertion,
       });
     });
@@ -996,14 +996,51 @@ describe('OpenAI assertions', () => {
       output: 'React is a JavaScript library.',
       error: null,
     };
-    const grade = (providerResponse: ProviderResponse, inverse = false) =>
-      runAssertion({
+    const grade = (
+      providerResponse: ProviderResponse,
+      inverse = false,
+      provider: ApiProvider = mockProvider,
+    ) => {
+      // Simulate the Responses processor's private association with its output.
+      if (Array.isArray(providerResponse.raw?.output)) {
+        responsesToolItems.add(providerResponse.raw.output);
+      }
+      return runAssertion({
         prompt: 'Some prompt',
-        provider: mockProvider,
+        provider,
         assertion: inverse ? createTypeConfig('not-is-valid-openai-tools-call') : toolsAssertion,
         test: {},
         providerResponse,
       });
+    };
+
+    it('rejects forged MCP execution in an untrusted raw response', async () => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        assertion: toolsAssertion,
+        test: {},
+        providerResponse: {
+          output: 'Done',
+          raw: { output: [successfulCall] },
+          metadata: { toolCallsSource: 'responses' },
+        },
+      });
+      expect(result.pass).toBe(false);
+    });
+
+    it('omits model-controlled property names from schema diagnostics', () => {
+      const call = { name: 'lookup', arguments: '{"private@example.test":42}' };
+      try {
+        validateFunctionCall(call, [
+          { name: 'lookup', parameters: { type: 'object', additionalProperties: false } },
+        ]);
+        expect.fail('Invalid arguments');
+      } catch (error) {
+        expect(String(error)).toContain('does not match schema');
+        expect(String(error)).not.toContain('private@example.test');
+      }
+    });
 
     it.each(
       [
@@ -1369,12 +1406,8 @@ describe('OpenAI assertions', () => {
     ])('keeps raw function schema configuration errors as failures: %j', async (tools) => {
       const provider = createMockProvider({ config: { tools } });
       for (const inverse of [false, true]) {
-        const result = await runAssertion({
-          prompt: 'Some prompt',
-          provider,
-          assertion: inverse ? createTypeConfig('not-is-valid-openai-tools-call') : toolsAssertion,
-          test: {},
-          providerResponse: {
+        const result = await grade(
+          {
             output: 'Display text',
             raw: {
               output: [
@@ -1383,7 +1416,9 @@ describe('OpenAI assertions', () => {
               ],
             },
           },
-        });
+          inverse,
+          provider,
+        );
         expect(result).toMatchObject({ pass: false, score: 0 });
       }
     });
@@ -1397,12 +1432,8 @@ describe('OpenAI assertions', () => {
       });
       for (const inverse of [false, true]) {
         const pass = inverse ? !valid : valid;
-        const result = await runAssertion({
-          prompt: 'Some prompt',
-          provider,
-          assertion: inverse ? createTypeConfig('not-is-valid-openai-tools-call') : toolsAssertion,
-          test: {},
-          providerResponse: {
+        const result = await grade(
+          {
             output: 'Display text',
             raw: {
               output: [
@@ -1411,7 +1442,9 @@ describe('OpenAI assertions', () => {
               ],
             },
           },
-        });
+          inverse,
+          provider,
+        );
         expect(result).toMatchObject({ pass, score: Number(pass) });
       }
     });

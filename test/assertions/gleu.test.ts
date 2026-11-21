@@ -149,6 +149,7 @@ describe('GLEU score calculation', () => {
 
     const score = calculateGleuScore(candidate, references, 2);
     expect(score).toBe(0); // This is 0 because there are no 2-grams in common
+    expect(calculateGleuScore('cat', ['dog'], 2, 2)).toBe(0);
   });
 
   it('should handle different maxN values', () => {

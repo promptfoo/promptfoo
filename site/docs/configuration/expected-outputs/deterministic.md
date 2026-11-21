@@ -612,9 +612,13 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 ### is-valid-openai-tools-call
 
-This requires each tool call to have `type: function` and match the schema specified in the provider’s `tools` configuration. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
+This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
-**MCP Support**: This assertion validates MCP (Model Context Protocol) execution using structured `mcp_call` items in the provider’s raw Responses API response, or executed calls in `metadata.toolCalls` from Chat Completions. All recorded MCP calls must succeed; failed or incomplete calls fail the assertion. Function calls in the output, raw Responses API items (including assistant message content), or retained Chat Completions metadata must also pass their type and schema checks, even when a callback replaces their displayed output. Display text such as "MCP Tool Result" is not execution evidence, even when embedded in JSON output.
+**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
+
+- Pass if MCP tool calls succeed (output contains "MCP Tool Result")
+- Fail if MCP tool calls fail (output contains "MCP Tool Error")
+- Continue to validate traditional function tools as before
 
 `not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
 
@@ -637,6 +641,8 @@ tests:
       query: 'What is MCP?'
     assert:
       - type: is-valid-openai-tools-call # Validates MCP tool success
+      - type: contains
+        value: 'MCP Tool Result' # Alternative way to check for MCP success
 ```
 
 ### tool-call-f1
@@ -1004,6 +1010,8 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 ### Latency
 
 The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+
+When the provider does not supply latency, Promptfoo measures elapsed provider-call time with a monotonic clock, so wall-clock adjustments do not affect it. Provider-reported latency is used unchanged.
 
 Example:
 
@@ -1525,20 +1533,9 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores an output against reference text using exact word matches, Porter stemming, and WordNet synonyms. It combines precision and recall with a penalty for fragmented word order.
 
-**What makes METEOR special:**
-
-- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
-- **Handles word forms**: Knows that "running" and "ran" are the same verb
-- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
-- **Balanced scoring**: Combines precision, recall, AND word order into a single score
-
-**When to use METEOR:**
-
-- **High-quality translation**: When semantic accuracy matters more than exact wording
-- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
-- **Flexible matching**: When there are many valid ways to express the same idea
+Use it for translation or other tasks where a reference answer exists and some wording variation is acceptable. METEOR measures lexical overlap, not factual accuracy or general semantic understanding.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
@@ -1546,7 +1543,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.2.3
+npm install natural@^8.2.6
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
@@ -1657,7 +1654,7 @@ F-score (also F1 score) is used for measuring classification accuracy when you n
 
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
-- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+- **Precision and recall**: When both false positives and false negatives matter
 
 See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 

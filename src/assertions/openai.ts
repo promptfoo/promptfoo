@@ -1,4 +1,4 @@
-import { validateFunctionCall } from '../providers/openai/util';
+import { responsesToolItems, validateFunctionCall } from '../providers/openai/util';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { toolCallErrorVerdict, toolCallVerdict } from './functionToolCall';
 
@@ -93,14 +93,16 @@ export const handleIsValidOpenAiToolsCall = async ({
 
   // Display text is model-controlled. Only provider-owned response items or
   // execution metadata establish whether an MCP tool actually succeeded.
-  const responseItems: unknown[] = Array.isArray(providerResponse.raw?.output)
-    ? providerResponse.raw.output
-    : [];
   const metadataToolCalls: unknown[] = Array.isArray(providerResponse.metadata?.toolCalls)
     ? providerResponse.metadata.toolCalls
     : [];
   const toolCallsSource = providerResponse.metadata?.toolCallsSource;
   const declarationsOnly = toolCallsSource === 'declaration' || toolCallsSource === 'activity';
+  const rawOutput = providerResponse.raw?.output;
+  const responseItems: unknown[] =
+    Array.isArray(rawOutput) && (declarationsOnly || responsesToolItems.has(rawOutput))
+      ? rawOutput
+      : [];
   // Some providers forward requested calls or activity summaries in toolCalls.
   // Their producer identifies that origin for metadata and raw output alike;
   // neither establishes MCP execution.

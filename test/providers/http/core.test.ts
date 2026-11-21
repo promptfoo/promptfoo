@@ -95,6 +95,41 @@ describe('HttpProvider', () => {
     );
   });
 
+  it('does not log request headers or body with the string-body JSON warning', async () => {
+    const secret = 'Bearer sk-live-warning-header-secret-1234567890';
+    const privateNote = 'synthetic private note';
+    const warnSpy = vi.spyOn(logger, 'warn');
+    try {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: secret },
+          // A string template that is not valid JSON before rendering triggers the warning.
+          body: `{"messages": {{ prompt }}, "privateNote": "${privateNote}"}`,
+          transformResponse: (data: any) => data.result,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'ok' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await provider.callApi('"hi"');
+
+      const warningCall = warnSpy.mock.calls.find(([message]) =>
+        String(message).includes('Content-Type is application/json, but body is a string'),
+      );
+      expect(warningCall).toBeDefined();
+      expect(warningCall).toHaveLength(1);
+      expect(warningCall?.[0]).not.toContain(secret);
+      expect(warningCall?.[0]).not.toContain(privateNote);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('should handle API call errors', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {
@@ -1384,6 +1419,15 @@ describe('HttpProvider', () => {
         ).body?.params ?? [];
       const container = (body: string, subtype = 'mixed') =>
         `--outer\nContent-Disposition: form-data; name="files"\nContent-Type: multipart/${subtype}; boundary=inner\n\n${body}\n--outer--\n`;
+
+      it('allows sibling multipart containers to reuse a child boundary', async () => {
+        const first = '--inner\nContent-Type: text/plain\n\nfirst{{chunks.close}}';
+        const second = '--inner\nContent-Type: text/plain\n\nsecond\n--inner--';
+        const source = container(first).replace('--outer--\n', container(second));
+        const body = await send(source, { chunks: { close: '\n--inner--' } });
+        expect(body).toBe(crlf(source.replace('{{chunks.close}}', '\n--inner--')));
+        expect(parseOuter(body)).toHaveLength(2);
+      });
 
       it.each(
         foldedHeaders.flatMap((headers) =>
