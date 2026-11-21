@@ -19,6 +19,9 @@ export const DEFAULT_AZURE_MAI_IMAGE_API_PATH = '/mai/v1/images/generations';
  */
 export const DEFAULT_AZURE_MAI_IMAGE_EDIT_API_PATH = '/mai/v1/images/edits';
 
+/** Client-side limit on each decoded MAI reference image. */
+export const MAX_MAI_IMAGE_BYTES = 50 * 1024 * 1024;
+
 // =============================================================================
 // Video Generation Constants (Sora)
 // =============================================================================

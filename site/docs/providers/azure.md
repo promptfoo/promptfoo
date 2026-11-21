@@ -1277,7 +1277,7 @@ The provider returns the generated image as a base64 PNG data URL (rendered inli
 
 #### Image editing
 
-Set `images` to edit existing images instead. The provider then sends the prompt and 1 to 5 reference images to the multipart `/mai/v1/images/edits` route. Each entry is a `file://` path, resolved against the config file's directory, or a base64 data URL. Entries are rendered with the test's vars, so `'{{photo}}'` picks up a var loaded with `file://`. When providers are loaded from a separate file with `file://`, promptfoo reads `file://` values in that file as text, so pass images through test vars there. Reference images must be JPEG or PNG, and the API rejects palette-based (indexed-color) PNGs.
+Set `images` to edit existing images instead. The provider then sends the prompt and 1 to 5 reference images to the multipart `/mai/v1/images/edits` route. Each entry is a `file://` path, resolved against the config file's directory, or a base64 data URL. Entries are rendered with the test's vars, so `'{{photo}}'` picks up a var loaded with `file://`. When providers are loaded from a separate file with `file://`, promptfoo reads `file://` values in that file as text, so pass images through test vars there. Promptfoo accepts regular files and decoded images up to 50 MiB each. The API accepts JPEG and PNG and rejects palette-based (indexed-color) PNGs.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:

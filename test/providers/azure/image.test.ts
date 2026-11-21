@@ -20,6 +20,11 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
+vi.mock(import('../../../src/providers/azure/defaults'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  MAX_MAI_IMAGE_BYTES: 1024,
+}));
+
 const FAKE_B64 = Buffer.from('fake-png-bytes').toString('base64');
 
 function makeProvider(config: Record<string, any> = {}) {
@@ -537,8 +542,20 @@ describe('AzureImageProvider edits', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('limits regular files and decoded data URLs before sending an edit', async () => {
+    const file = path.join(tempDir, 'source.png');
+    fs.truncateSync(file, 1025);
+    const encoded = fs.readFileSync(file).toString('base64');
+    for (const image of [`file://${file}`, `data:image/png;base64,${encoded}`]) {
+      const result = await makeProvider({ images: [image] }).callApi('Edit it');
+      expect(result.error).toContain('1024 bytes');
+    }
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['a WebP file', 'file://source.webp', 'MAI image edits accept only JPEG or PNG images'],
+    ['a directory', 'file://.', 'could not read'],
     ['a missing file', 'file://missing.png', 'file not found:'],
     ['a non-base64 data URL', 'data:image/png,rawbytes', 'data URLs must be base64-encoded'],
     ['an HTTPS URL', 'https://example.com/a.png', 'expected a file:// path or a base64 data URL'],

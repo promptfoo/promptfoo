@@ -22,6 +22,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { buffer } from 'node:stream/consumers';
 
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
@@ -34,6 +35,7 @@ import { getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
 import {
   DEFAULT_AZURE_MAI_IMAGE_API_PATH,
   DEFAULT_AZURE_MAI_IMAGE_EDIT_API_PATH,
+  MAX_MAI_IMAGE_BYTES,
 } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -59,6 +61,12 @@ type MaiEditImageMimeType = 'image/png' | 'image/jpeg';
 export interface MaiEditImage {
   bytes: Buffer<ArrayBuffer>;
   mimeType: MaiEditImageMimeType;
+}
+
+function checkEditImageSize(size: number) {
+  if (size > MAX_MAI_IMAGE_BYTES) {
+    throw new Error(`MAI reference images must be at most ${MAX_MAI_IMAGE_BYTES} bytes`);
+  }
 }
 
 /** Identify a JPEG or PNG from its leading bytes; the edits API accepts only those. */
@@ -91,7 +99,18 @@ export async function loadMaiEditImage(
   if (value.startsWith('file://')) {
     const filePath = path.resolve(basePath ?? '', value.slice('file://'.length));
     try {
-      bytes = await fs.readFile(filePath);
+      // Nonblocking open lets us reject a FIFO without waiting for a writer.
+      const file = await fs.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+      try {
+        const stat = await file.stat();
+        if (!stat.isFile() || !stat.size) {
+          throw new Error('expected a nonempty regular file');
+        }
+        checkEditImageSize(stat.size);
+        bytes = await buffer(file.createReadStream({ end: stat.size - 1 }));
+      } finally {
+        await file.close();
+      }
     } catch (err) {
       throw new Error(
         (err as NodeJS.ErrnoException).code === 'ENOENT'
@@ -104,7 +123,9 @@ export async function loadMaiEditImage(
     if (comma === -1 || !value.slice(0, comma).toLowerCase().endsWith(';base64')) {
       throw new Error('data URLs must be base64-encoded');
     }
-    bytes = Buffer.from(value.slice(comma + 1), 'base64');
+    const encoded = value.slice(comma + 1);
+    checkEditImageSize(Buffer.byteLength(encoded, 'base64'));
+    bytes = Buffer.from(encoded, 'base64');
   } else if (value.includes('�')) {
     // Binary image bytes decoded as UTF-8 text. This happens when a providers
     // file loaded with file:// has already read a file:// image value as text.
