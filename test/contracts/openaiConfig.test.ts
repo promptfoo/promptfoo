@@ -183,6 +183,8 @@ const responseValid = [
     ],
     tool_choice: { type: 'custom', name: 'lookup', future: { keep: true } },
   },
+  { max_completion_tokens: 32, response_format: nestedFormat },
+  { response_format: { type: 'json_schema', schema: schemaDocument, strict: false } },
   ...baseValid,
   {
     model: 'custom-model',
@@ -366,7 +368,7 @@ describe('OpenAI portable configuration contracts', () => {
         { include: [123] },
         { access_programs: { cyber: 'unknown' } },
         { max_tokens: 32 },
-        { max_completion_tokens: 32 },
+        { max_completion_tokens: 15 },
         { mcp: { enabled: true, server: { command: 'node' } } },
         { functionToolCallbacks: { lookup: 'file://callback.js' } },
         { seed: 1 },
@@ -379,15 +381,6 @@ describe('OpenAI portable configuration contracts', () => {
         { tools: [{ type: 'mcp', server_label: 'remote', tunnel_id: 123 }] },
         ...[0, 15, 16.5].map((max_output_tokens) => ({ max_output_tokens })),
         { response_format: { type: 'json_schema', schema: true } },
-        {
-          response_format: {
-            type: 'json_schema',
-            name: 'result',
-            schema: schemaDocument,
-            strict: false,
-          },
-        },
-        { response_format: nestedFormat },
       ],
     },
     {

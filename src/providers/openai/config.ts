@@ -58,9 +58,18 @@ export type OpenAiResponsesConfig = Omit<
   | 'tool_choice'
   | 'response_format'
 > &
-  RuntimeFields<OpenAiResponsesConfigInput> & {
-    /** @deprecated Ignored by Responses; use max_output_tokens. Retained for older callers. */
-    max_completion_tokens?: number;
+  RuntimeFields<OpenAiResponsesConfigInput> &
+  // Shared Chat configurations may reach Responses; these options generate a warning.
+  Pick<
+    OpenAiCompletionOptions,
+    | 'frequency_penalty'
+    | 'presence_penalty'
+    | 'functions'
+    | 'function_call'
+    | 'seed'
+    | 'stop'
+    | 'tool_resources'
+  > & {
     /** @deprecated Only compatible adapters map this alias; use max_output_tokens. */
     max_tokens?: number;
     tools?: OpenAiResponsesConfigInput['tools'] | OpenAiCompletionOptions['tools'];
