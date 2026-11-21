@@ -5,6 +5,8 @@ import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
+import { TempoProvider } from '../../src/tracing/providers/tempo';
+import { IncompleteTraceError } from '../../src/tracing/providers/types';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
 import { createDeferred } from '../util/utils';
@@ -795,6 +797,48 @@ describe('evaluator trace integration', () => {
         }
       },
     );
+
+    it.each(['trace', 'script', 'output'] as const)(
+      'retains completed work after an earlier rejected snapshot with %s grading',
+      async (grading) => {
+        const { fetchTraceContext } = await vi.importActual<
+          typeof import('../../src/tracing/traceContext')
+        >('../../src/tracing/traceContext');
+        vi.spyOn(TempoProvider.prototype, 'fetchTrace').mockRejectedValue(
+          new IncompleteTraceError('Rejected snapshot'),
+        );
+        const provider = createMockProvider({
+          callApi: async () => {
+            expect(await fetchTraceContext(traceId, { providerConfig, queryDelay: 0 })).toBeNull();
+            return { output: 'Target output', cost: 0.01, tokenUsage: { total: 3 } };
+          },
+        });
+        const options = createRunOptions(provider);
+        options.test.assert = [
+          grading === 'trace'
+            ? { type: 'trace-span-count', value: { min: 1 } }
+            : grading === 'script'
+              ? { type: 'javascript', value: 'Boolean(context.trace)' }
+              : { type: 'equals', value: 'Target output' },
+        ];
+        const [result] = await runEval(options);
+        expect(mockFetchTraceContext).toHaveBeenCalledOnce();
+        expect(result.success).toBe(grading === 'output');
+        expect(result.response?.output).toBe('Target output');
+        expect(result.cost).toBe(0.01);
+        expect(result.tokenUsage?.total).toBe(3);
+      },
+    );
+
+    it('allows an output-only script when an external snapshot is absent', async () => {
+      const options = createRunOptions(
+        createMockProvider({ response: { output: 'Target output' } }),
+      );
+      options.test.assert = [{ type: 'javascript', value: "output === 'Target output'" }];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+      const [result] = await runEval(options);
+      expect(result.success).toBe(true);
+    });
 
     it('keeps trace metrics optional for zero-weight assertions and sets', async () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });

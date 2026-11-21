@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { getProviderCallTracingContext } from '../scheduler/providerCallExecutionContext';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import {
   type FetchTraceOptions,
@@ -595,6 +596,25 @@ async function fetchFromLocalStore(
 export async function fetchTraceContext(
   traceId: string,
   options: FetchTraceContextOptions = {},
+): Promise<TraceContextData | null> {
+  try {
+    return await resolveTraceContext(traceId, options);
+  } catch (error) {
+    const execution = getProviderCallTracingContext();
+    if (!execution || !(error instanceof IncompleteTraceError)) {
+      throw error;
+    }
+    // Mark every subscriber to a shared fetch. Observers can retain completed
+    // responses, while grading must reject partial evidence from any turn.
+    execution.externalTraceRejected = true;
+    logger.warn('[TraceContext] Discarding incomplete external trace');
+    return null;
+  }
+}
+
+function resolveTraceContext(
+  traceId: string,
+  options: FetchTraceContextOptions,
 ): Promise<TraceContextData | null> {
   const {
     includeInternalSpans = true,

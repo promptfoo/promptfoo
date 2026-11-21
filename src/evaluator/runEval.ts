@@ -18,6 +18,7 @@ import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLeng
 import { getSessionId } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
+  getProviderCallTracingContext,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
@@ -547,11 +548,12 @@ async function callProviderForRunEval({
           testSuite,
           traceContext,
         });
+        const rejected = getProviderCallTracingContext()?.externalTraceRejected ?? false;
         if (
-          !collected &&
+          (!collected || rejected) &&
           !response?.error &&
           response?.output != null &&
-          test.assert?.some(assertionRequiresTrace)
+          test.assert?.some((assertion) => assertionRequiresTrace(assertion, rejected))
         ) {
           // Local spans alone would make missing external evidence look like an empty trace.
           response.error =

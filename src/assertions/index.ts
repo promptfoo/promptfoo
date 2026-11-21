@@ -151,12 +151,17 @@ function isTraceAssertionType(type: string): boolean {
   );
 }
 
-export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
+export function assertionRequiresTrace(assertion: AssertionOrSet, rejected = false): boolean {
   if (assertion.weight === 0) {
     return false;
   }
-  return assertion.type === 'assert-set'
-    ? assertion.assert.some(assertionRequiresTrace)
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some((child) => assertionRequiresTrace(child, rejected));
+  }
+  // Scripts can access the trace dynamically. Once a snapshot is rejected,
+  // even a script that appears to grade output cannot trust remaining spans.
+  return rejected
+    ? assertionMayNeedTraceContext(assertion)
     : isTraceAssertionType(getAssertionBaseType(assertion));
 }
 
