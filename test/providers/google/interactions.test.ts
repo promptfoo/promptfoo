@@ -2565,14 +2565,16 @@ describe('GoogleInteractionsProvider', () => {
     }
   });
 
-  it('keeps the reported cost of a replayed custom alias response', async () => {
+  it.each(['cached', 'coalesced'])('omits the ID on %s responses', async (source) => {
     mockFetchWithCache.mockResolvedValue({
       data: {
+        id: 'private-interaction',
         status: 'completed',
         steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
         usage: { total_input_tokens: 10, total_output_tokens: 20, total_tokens: 30 },
       },
-      cached: true,
+      cached: source === 'cached',
+      coalesced: source === 'coalesced',
       status: 200,
       statusText: 'OK',
     } as any);
@@ -2589,6 +2591,8 @@ describe('GoogleInteractionsProvider', () => {
     // The evaluator records a replay as incurring no cost; the response keeps the reported one.
     expect(result.error).toBeUndefined();
     expect(result.cached).toBe(true);
+    expect(result.metadata).not.toHaveProperty('interactionId');
+    expect(result.raw).toBeUndefined();
     expect(result.cost).toBeCloseTo(30 * 0.01, 12);
     expect(result.tokenUsage).toMatchObject({
       prompt: 10,

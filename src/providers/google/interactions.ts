@@ -1441,13 +1441,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let httpStatusText: string;
     let deleteFromCache: (() => Promise<void>) | undefined;
     try {
-      ({
-        data,
-        cached,
-        status: httpStatus,
-        statusText: httpStatusText,
-        deleteFromCache,
-      } = (await fetchWithCache(
+      const response = await fetchWithCache<InteractionResponse>(
         endpoint,
         {
           method: 'POST',
@@ -1459,13 +1453,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
         bypassCache
           ? true
           : getInteractionsCacheOptions(endpoint, headers['Api-Revision'], requestBody),
-      )) as {
-        data: InteractionResponse;
-        cached: boolean;
-        status: number;
-        statusText: string;
-        deleteFromCache?: () => Promise<void>;
-      });
+      );
+      ({ status: httpStatus, statusText: httpStatusText, deleteFromCache } = response);
+      cached = response.cached || response.coalesced === true;
+      // A shared ID can belong to another account or outlive Google's retention window.
+      data = cached ? { ...response.data, id: undefined } : response.data;
     } catch (err) {
       return { error: `Gemini Interactions API error: ${String(err)}` };
     }
@@ -1640,7 +1632,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
           output: text,
           tokenUsage,
           cost,
-          metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
+          metadata: {
+            ...(data.id && { interactionId: data.id }),
+            status: data.status,
+            ...groundingMetadata,
+          },
         },
         cached,
       );
