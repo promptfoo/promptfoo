@@ -60,7 +60,10 @@ export const handleIsValidOpenAiToolsCall = async ({
         typeof toolCall?.function?.arguments !== 'string',
     )
   ) {
-    return verdict(false, 'OpenAI did not return a valid-looking tools response');
+    return verdict(
+      false,
+      'OpenAI did not return a valid-looking tools response. Expected a structured function call.',
+    );
   }
 
   let tools: unknown = (provider as OpenAiChatCompletionProvider).config?.tools;

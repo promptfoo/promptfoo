@@ -4,12 +4,13 @@ import { createMockFetchResponse } from '../../mockProviderResponses';
 import './setup';
 
 import { describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../../src/assertions/index';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
 describe('OpenAiResponsesProvider MCP assertions', () => {
   describe('Enhanced OpenAI tools assertion with MCP support', () => {
-    it('should validate MCP tool success correctly', async () => {
+    it('cannot infer success from a formatted MCP tool result', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
         status: 'completed',
@@ -59,17 +60,16 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
       // The output should contain MCP Tool Result
       expect(result.output).toContain('MCP Tool Result (ask_question)');
 
-      // Test the enhanced assertion
-      const { handleIsValidOpenAiToolsCall } = await import('../../../../src/assertions/openai');
-      const assertionResult = await handleIsValidOpenAiToolsCall({
+      const assertionResult = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },
-        output: result.output,
+        providerResponse: { output: result.output },
         provider,
         test: { vars: {} },
-      } as any);
+      });
 
-      expect(assertionResult.pass).toBe(true);
-      expect(assertionResult.reason).toContain('MCP tool call succeeded for ask_question');
+      expect(assertionResult.pass).toBe(false);
+      expect(assertionResult.reason).toContain('Expected a structured function call');
+      expect(assertionResult.reason).not.toContain('ask_question');
     });
 
     it('should validate MCP tool error correctly', async () => {
@@ -114,14 +114,12 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
       // The output should contain MCP Tool Error
       expect(result.output).toContain('MCP Tool Error (ask_question)');
 
-      // Test the enhanced assertion
-      const { handleIsValidOpenAiToolsCall } = await import('../../../../src/assertions/openai');
-      const assertionResult = await handleIsValidOpenAiToolsCall({
+      const assertionResult = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },
-        output: result.output,
+        providerResponse: { output: result.output },
         provider,
         test: { vars: {} },
-      } as any);
+      });
 
       expect(assertionResult.pass).toBe(false);
       expect(assertionResult.reason).toContain(
