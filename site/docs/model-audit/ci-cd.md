@@ -532,7 +532,7 @@ workflows:
 ### Scan Strategy
 
 - **Pull Requests**: Scan only changed files for fast feedback
-- **Main Branch**: Run comprehensive scans on merge
+- **Main Branch**: Scan all model artifacts on merge
 - **Scheduled Scans**: Weekly or daily full audits
 - **Production Gate**: Use `--strict` mode to block deployments
 
