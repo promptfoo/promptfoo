@@ -154,7 +154,7 @@
       "ws": "$ws"
     },
     "engine.io-client": {
-      ".": "6.6.7",
+      ".": "6.6.8",
       "ws": "$ws"
     },
     "socket.io-adapter": {
@@ -258,7 +258,7 @@
     "sharp": "^0.35.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "1.7.0",
+    "@anthropic-ai/sdk": "1.8.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.5",
     "@hono/node-server": "2.1.6",
     "@inquirer/checkbox": "^5.2.8",
