@@ -74,7 +74,7 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
-import { checkProviderApiKeys, isProviderAllowed } from '../util/provider';
+import { checkProviderApiKeys, doesProviderRefMatch, isProviderAllowed } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -127,6 +127,85 @@ function selectEligibleProviders(testSuite: TestSuite): TestSuite['providers'] {
       testSuite.prompts.some((prompt) => isPromptAllowed(prompt, prompts))
     );
   });
+}
+
+function applyTestSelection(
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  prepareTestSuite: (suite: TestSuite) => TestSuite,
+  providerConfigs: UnifiedConfig['providers'] = [],
+) {
+  const originalProviders = [...testSuite.providers];
+  const originalTests = testSuite.tests;
+  const testConfigs = config.tests;
+  const testsBySource =
+    Array.isArray(testConfigs) && originalTests
+      ? new Map(originalTests.map((test, index) => [test, testConfigs[index]]))
+      : undefined;
+  testSuite = prepareTestSuite(testSuite);
+  testSuite.providers = selectEligibleProviders(testSuite);
+  const configs = Array.isArray(providerConfigs) ? providerConfigs : [providerConfigs];
+  if (configs.length !== originalProviders.length) {
+    throw new Error('Could not preserve the selected provider configurations.');
+  }
+  // Replay validates each restriction, including defaults overridden by a test.
+  // Keep empty lists explicit so pruning never broadens a restriction.
+  type Source = Extract<UnifiedConfig['tests'], unknown[]>[number] | UnifiedConfig['defaultTest'];
+  function forReplay<T extends Source>(test: T): T {
+    if (!test || typeof test !== 'object' || !('providers' in test) || !test.providers) {
+      return test;
+    }
+    const providers = test.providers.filter((ref) =>
+      testSuite.providers.some((provider) => doesProviderRefMatch(ref, provider)),
+    );
+    return { ...test, providers };
+  }
+  const selectedTests = testsBySource
+    ? testSuite.tests?.map((test) => forReplay(testsBySource.get(test)!))
+    : testConfigs;
+  const selected = new Set(testSuite.providers);
+  // Resolve grading with the complete lookup. Only generation targets become columns.
+  // Keep the original configs for permission checks, sharing and persistence.
+  const providerMap = buildConfiguredProviderMap(originalProviders);
+  function withGraders<T extends Partial<TestCase>>(test: T): T {
+    const copy = { ...test };
+    resolveRuntimeGradingProviderReferences(copy, providerMap, selected);
+    return copy;
+  }
+  testSuite.tests = testSuite.tests?.map(withGraders);
+  if (testSuite.defaultTest && typeof testSuite.defaultTest === 'object') {
+    testSuite.defaultTest = withGraders(testSuite.defaultTest);
+  }
+  testSuite.scenarios = testSuite.scenarios?.map((scenario) => ({
+    ...scenario,
+    config: scenario.config.map(withGraders),
+    tests: scenario.tests?.map(withGraders),
+  }));
+  config = {
+    ...config,
+    providers: configs.filter((_, index) => selected.has(originalProviders[index])),
+    tests: selectedTests,
+    defaultTest: forReplay(config.defaultTest),
+    scenarios: config.scenarios?.map((scenario) =>
+      typeof scenario === 'string'
+        ? scenario
+        : {
+            ...scenario,
+            config: scenario.config.map(forReplay),
+            tests: scenario.tests?.map(forReplay),
+          },
+    ),
+    // Applying a saved range again could remove every selected row on retry.
+    evaluateOptions: config.evaluateOptions && {
+      ...config.evaluateOptions,
+      filterRange: undefined,
+    },
+    commandLineOptions: config.commandLineOptions && {
+      ...config.commandLineOptions,
+      filterRange: undefined,
+    },
+  };
+  return { testSuite, config };
 }
 
 function runtimeTagsForEval(
@@ -610,50 +689,12 @@ async function doEvalWithEnv(
     // Application callers can select resolved inputs inside the evaluation's env scope.
     // Keep this callback separate from options loaded from user configuration.
     if (prepareTestSuite) {
-      const originalProviders = [...testSuite.providers];
-      const originalTests = testSuite.tests;
-      const testConfigs = config.tests;
-      const testsBySource =
-        Array.isArray(testConfigs) && originalTests
-          ? new Map(originalTests.map((test, index) => [test, testConfigs[index]]))
-          : undefined;
-      testSuite = prepareTestSuite(testSuite);
-      testSuite.providers = selectEligibleProviders(testSuite);
-      const providerConfigs = selectedProviderConfigs ?? config.providers;
-      const configs = Array.isArray(providerConfigs)
-        ? providerConfigs
-        : providerConfigs === undefined
-          ? []
-          : [providerConfigs];
-      if (configs.length !== originalProviders.length) {
-        throw new Error('Could not preserve the selected provider configurations.');
-      }
-      const selectedTests = testsBySource
-        ? testSuite.tests?.map((test) => testsBySource.get(test)!)
-        : testConfigs;
-      const selected = new Set(testSuite.providers);
-      // Resolve grading with the complete lookup. Only generation targets become columns.
-      // Keep the original configs for permission checks, sharing and persistence.
-      const providerMap = buildConfiguredProviderMap(originalProviders);
-      function withGraders<T extends Partial<TestCase>>(test: T): T {
-        const copy = { ...test };
-        resolveRuntimeGradingProviderReferences(copy, providerMap, selected);
-        return copy;
-      }
-      testSuite.tests = testSuite.tests?.map(withGraders);
-      if (testSuite.defaultTest && typeof testSuite.defaultTest === 'object') {
-        testSuite.defaultTest = withGraders(testSuite.defaultTest);
-      }
-      testSuite.scenarios = testSuite.scenarios?.map((scenario) => ({
-        ...scenario,
-        config: scenario.config.map(withGraders),
-        tests: scenario.tests?.map(withGraders),
-      }));
-      config = {
-        ...config,
-        providers: configs.filter((_, index) => selected.has(originalProviders[index])),
-        tests: selectedTests,
-      };
+      ({ testSuite, config } = applyTestSelection(
+        testSuite,
+        config,
+        prepareTestSuite,
+        selectedProviderConfigs ?? config.providers,
+      ));
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>

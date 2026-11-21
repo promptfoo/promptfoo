@@ -523,7 +523,7 @@ describe('MCP evaluation execution contract', () => {
     await writeConfig({
       providers: [selected, { id: 'echo', label: 'Excluded' }],
       prompts: ['Hello'],
-      tests: [{ vars: {} }],
+      tests: [{ vars: {}, providers: ['Allow*', 'Excluded'] }],
     });
 
     const response = await run({ providerFilter: 'Allowed', share: true, write: true });
@@ -532,6 +532,7 @@ describe('MCP evaluation execution contract', () => {
     expect(permissions.mock.calls[1][0].providers).toEqual([selected]);
     const saved = await Eval.findById(response.data.eval.id);
     expect(saved?.config.providers).toEqual([selected]);
+    expect(saved?.config.tests).toMatchObject([{ providers: ['Allow*'] }]);
   });
 
   it.each(['test', 'default', 'scenario'])(
@@ -612,6 +613,12 @@ describe('MCP evaluation execution contract', () => {
       const response = await run({ promptFilter: '0', write: false });
       expect(response.success, response.error).toBe(true);
       expect(permissions.mock.calls[0][0].providers).toEqual([selected]);
+      expect(permissions.mock.calls[0][0].defaultTest).toMatchObject({ providers: [] });
+      if (source === 'scenario') {
+        expect(permissions.mock.calls[0][0].scenarios).toMatchObject([
+          { config: [{ providers: [] }], tests: [{ providers: ['Override'] }] },
+        ]);
+      }
       expect(response.data.results.totalEvals).toBe(1);
     },
   );
@@ -1097,6 +1104,32 @@ describe('MCP evaluation execution contract', () => {
       ).toEqual('testCaseIndices' in filters ? ['Hello Grace'] : ['Hello Ada', 'Hello Grace']);
     },
   );
+
+  it('retries the selected row despite a configured range and excluded provider', async () => {
+    const call = vi
+      .spyOn(EchoProvider.prototype, 'callApi')
+      .mockResolvedValueOnce({ error: 'Fixture failure' })
+      .mockResolvedValue({ output: 'recovered' });
+    await writeConfig({
+      providers: [
+        { id: 'echo', label: 'A' },
+        { id: 'echo', label: 'B' },
+      ],
+      prompts: ['Hello'],
+      tests: [{ vars: {}, providers: ['A', 'B'] }],
+      evaluateOptions: { filterRange: '1:2' },
+      commandLineOptions: { filterRange: '2:3' },
+    });
+    const response = await run({ providerFilter: 'A', write: true, cache: false });
+    expect(response.data.results.stats.errors).toBe(1);
+    const saved = await Eval.findById(response.data.eval.id);
+    vi.spyOn(Eval, 'latest').mockResolvedValue(saved);
+    const retried = await doEval({ retryErrors: true, share: false }, {}, undefined, {
+      eventSource: 'mcp',
+    });
+    expect(call).toHaveBeenCalledTimes(2);
+    expect((await retried.toEvaluateSummary()).stats).toMatchObject({ successes: 1, errors: 0 });
+  });
 
   it('reports missing redteam email without opening an interactive prompt', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
