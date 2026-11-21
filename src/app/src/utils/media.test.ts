@@ -1244,13 +1244,21 @@ describe('evaluation-scoped media URLs', () => {
   });
 });
 
-it('discards detached failed media during later retries', () => {
+it('discards failed media only when no mounted cell shares the source', () => {
   const element = document.createElement('img');
+  const shared = '/api/blobs/shared';
+  const mounted = document.createElement('img');
+  mounted.dataset.mediaRefreshKey = getMediaRefreshKey(shared);
+  document.body.append(mounted);
+  markMediaLoadFailed(shared, element);
+
   const stale = '/api/blobs/stale';
   markMediaLoadFailed(stale, element);
   expect(getMediaRefreshKey(stale)).toBe(`${stale}:1`);
   for (let i = 0; i < 256; i++) {
     markMediaLoadFailed(`/api/blobs/detached-${i}`, element);
   }
+  mounted.remove();
   expect(getMediaRefreshKey(stale)).toBe(`${stale}:0`);
+  expect(getMediaRefreshKey(shared)).toBe(`${shared}:1`);
 });

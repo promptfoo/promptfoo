@@ -10,24 +10,25 @@ const STORAGE_REF_PREFIX = 'storageRef:';
 const MEDIA_URL_REGEX = /promptfoo:\/\/blob\/[a-f0-9]{32,64}|(?:https?:\/\/|\/)[^\s)'"`<>]+/gi;
 const STORAGE_REF_REGEX = /storageRef:\/?([^\s)'"`]+)/gi;
 
-// Keep every mounted media retryable. A weak owner lets us discard entries left by
-// navigation and pagination without evicting media on large result pages.
-const blobMediaRefreshVersions = new Map<
-  string,
-  { version: number; owner: WeakRef<RetryableMediaElement> }
->();
+// Keep retries for every mounted source, including sources shared by several cells.
+const blobMediaRefreshVersions = new Map<string, number>();
 let updatesUntilSweep = 256;
 
-function rememberVersion(source: string, version: number, element: RetryableMediaElement) {
+function rememberVersion(source: string, version: number) {
   if (--updatesUntilSweep === 0) {
-    for (const [url, entry] of blobMediaRefreshVersions) {
-      if (!entry.owner.deref()?.isConnected) {
+    const mounted = new Set(
+      Array.from(document.querySelectorAll<HTMLElement>('[data-media-refresh-key]'), (node) =>
+        node.dataset.mediaRefreshKey?.replace(/:\d+$/, ''),
+      ),
+    );
+    for (const url of blobMediaRefreshVersions.keys()) {
+      if (!mounted.has(url)) {
         blobMediaRefreshVersions.delete(url);
       }
     }
     updatesUntilSweep = 256;
   }
-  blobMediaRefreshVersions.set(source, { version, owner: new WeakRef(element) });
+  blobMediaRefreshVersions.set(source, version);
 }
 const retryingBlobMediaElements = new WeakMap<RetryableMediaElement, number>();
 const pendingBlobMediaRetryTimers = new WeakMap<RetryableMediaElement, number>();
@@ -61,7 +62,7 @@ export function getMediaRefreshKey(source: string | undefined): string {
   if (!isBlobMediaSource(source)) {
     return 'stable';
   }
-  const version = blobMediaRefreshVersions.get(source)?.version ?? 0;
+  const version = blobMediaRefreshVersions.get(source) ?? 0;
   // Include the source so React never reuses a failed node for a different content hash while a
   // bounded retry is still pending for the old source.
   return `${source}:${version}`;
@@ -80,8 +81,8 @@ export function markMediaLoadFailed(
     return;
   }
 
-  const version = blobMediaRefreshVersions.get(source)?.version ?? 0;
-  rememberVersion(source, version + 1, element);
+  const version = blobMediaRefreshVersions.get(source) ?? 0;
+  rememberVersion(source, version + 1);
   if (retryingBlobMediaElements.has(element)) {
     return;
   }
@@ -129,7 +130,7 @@ export function markMediaLoadSucceeded(
   if (mountedVersion === 0) {
     blobMediaRefreshVersions.delete(source);
   } else if (Number.isSafeInteger(mountedVersion)) {
-    rememberVersion(source, mountedVersion, element);
+    rememberVersion(source, mountedVersion);
   }
 }
 
