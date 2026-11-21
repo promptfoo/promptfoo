@@ -797,7 +797,7 @@ When using `AZURE_STORAGE_CONNECTION_STRING`, the storage account comes from the
 
 SAS query strings and `DefaultAzureCredential` use the standard public Azure Blob endpoint for the named account. For Azure Government, Azure operated by 21Vianet, or custom blob endpoints, use `AZURE_STORAGE_CONNECTION_STRING` with the appropriate `EndpointSuffix` or explicit `BlobEndpoint`.
 
-Blob-hosted YAML, JSON, and JSONL files are treated as remote test-case data. Promptfoo does not expand local file references or provider references found inside those blob contents.
+Blob-hosted YAML, JSON, and JSONL files are treated as remote test-case data. Promptfoo does not expand local file references or provider references found inside those blob contents. Remote rows that specify a grading provider are rejected. Set `defaultTest.options.provider` in your local configuration to grade these rows.
 
 ### HuggingFace Datasets
 
