@@ -31,7 +31,6 @@ import {
   buildRemoteMaterializationContextVars,
   buildRemoteMaterializedInputVariables,
 } from '../remoteMaterialization';
-import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -40,7 +39,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -55,6 +54,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   resolveStoredGraderResult,
   runRedteamGrader,
@@ -445,10 +445,7 @@ export async function runRedteamConversation({
       updatedVars,
       filters,
       targetProvider,
-      getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
-        injectVar,
-        ...Object.keys(currentRenderInputVars ?? {}),
-      ]),
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     const iterationStart = Date.now();
@@ -479,6 +476,9 @@ export async function runRedteamConversation({
         error: targetResponse.error,
         response: targetResponse,
       });
+      if (options?.abortSignal?.aborted) {
+        break;
+      }
       continue;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
@@ -869,25 +869,28 @@ export async function runRedteamConversation({
     }
   }
 
-  return {
-    output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar ?? lastInjectVar,
-    metadata: {
-      finalIteration,
-      highestScore,
-      redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-      storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
-      stopReason: stopReason,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-          : undefined,
+  return preserveSelectedError(
+    {
+      output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      prompt: bestInjectVar ?? lastInjectVar,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory: previousOutputs,
+        redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
+        storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
+        stopReason: stopReason,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+            : undefined,
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    lastResponse,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

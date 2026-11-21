@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
-import { getRemoteGeneratedTestProvenance } from '../../remoteTestProvenance';
+import { escapeRegExp } from '../../../util/text';
 
 import type { AssertionValue, AtomicTestCase } from '../../../types/index';
 import type { TraceData } from '../../../types/tracing';
@@ -514,10 +514,6 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function parseProviderRaw(raw: unknown): unknown {
   if (typeof raw !== 'string') {
     return raw;
@@ -570,9 +566,8 @@ function valuesFromAssertionAndTest(
 ): string[] {
   const values = new Set<string>();
   collectValuesByKey(renderedValue, keyNames, undefined, values);
-  for (const source of verifierControlSourcesFromTest(test)) {
-    collectValuesByKey(source, keyNames, undefined, values);
-  }
+  collectValuesByKey(test.vars, keyNames, undefined, values);
+  collectValuesByKey(test.metadata, keyNames, undefined, values);
   return [...values];
 }
 
@@ -583,29 +578,9 @@ function stringsFromAssertionAndTest(
 ): string[] {
   const values = new Set<string>();
   collectStringsByKey(renderedValue, keyNames, undefined, values);
-  for (const source of verifierControlSourcesFromTest(test)) {
-    collectStringsByKey(source, keyNames, undefined, values);
-  }
+  collectStringsByKey(test.vars, keyNames, undefined, values);
+  collectStringsByKey(test.metadata, keyNames, undefined, values);
   return [...values];
-}
-
-function verifierControlSourcesFromTest(test: AtomicTestCase): unknown[] {
-  const metadata = getObject(test.metadata);
-  const remoteOrigin = getRemoteGeneratedTestProvenance(metadata);
-  if (remoteOrigin) {
-    const remoteVarNames = new Set(remoteOrigin.vars);
-    const remoteMetadataNames = new Set(remoteOrigin.metadata);
-    const trustedVars = Object.fromEntries(
-      Object.entries(test.vars ?? {}).filter(([key]) => !remoteVarNames.has(key)),
-    );
-    const trustedMetadata = Object.fromEntries(
-      Object.entries(metadata ?? {}).filter(
-        ([key]) => key !== '__promptfooRemoteGenerated' && !remoteMetadataNames.has(key),
-      ),
-    );
-    return [trustedVars, trustedMetadata];
-  }
-  return [test.vars, test.metadata];
 }
 
 function collectStringsByKey(
@@ -2571,9 +2546,8 @@ function automationHashExpectationsFromAssertionAndTest(
 ): { expectedSha256: string; path: string }[] {
   const expectations = new Map<string, string>();
   addAutomationHashExpectationsFromValue(renderedValue, expectations);
-  for (const source of verifierControlSourcesFromTest(test)) {
-    addAutomationHashExpectationsFromValue(source, expectations);
-  }
+  addAutomationHashExpectationsFromValue(test.vars, expectations);
+  addAutomationHashExpectationsFromValue(test.metadata, expectations);
 
   const genericSha256 = automationExpectedSha256FromAssertionAndTest(renderedValue, test);
   if (genericSha256) {

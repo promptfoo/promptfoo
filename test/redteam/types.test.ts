@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
-import { PluginConfigSchema, StrategyConfigSchema } from '../../src/redteam/types';
+import { StrategyConfigSchema } from '../../src/redteam/types';
 import { createMockProvider } from '../factories/provider';
 
 import type {
@@ -18,10 +18,6 @@ import type {
 } from '../../src/redteam/types';
 
 describe('redteam types', () => {
-  it('should reject blank RAG poisoning intended results', () => {
-    expect(PluginConfigSchema.safeParse({ intendedResults: ['   '] }).success).toBe(false);
-  });
-
   it('should create valid RedteamPluginObject', () => {
     const pluginObj: RedteamPluginObject = {
       id: 'test-plugin',
@@ -41,9 +37,7 @@ describe('redteam types', () => {
       numTests: 5,
     };
 
-    expect(pluginObj.id).toBe('test-plugin');
-    expect(pluginObj.severity).toBe(Severity.Medium);
-    expect(pluginObj.numTests).toBe(5);
+    expectTypeOf(pluginObj).toExtend<RedteamPluginObject>();
   });
 
   it('should create valid RedteamPlugin string or object', () => {
@@ -53,8 +47,8 @@ describe('redteam types', () => {
       severity: Severity.Low,
     };
 
-    expect(typeof pluginStr).toBe('string');
-    expect(typeof pluginObj).toBe('object');
+    expectTypeOf(pluginStr).toExtend<RedteamPlugin>();
+    expectTypeOf(pluginObj).toExtend<RedteamPlugin>();
   });
 
   it('should create valid RedteamStrategyObject', () => {
@@ -67,9 +61,7 @@ describe('redteam types', () => {
       },
     };
 
-    expect(strategyObj.id).toBe('test-strategy');
-    expect(strategyObj.config?.enabled).toBe(true);
-    expect(strategyObj.config?.plugins).toEqual(['plugin1', 'plugin2']);
+    expectTypeOf(strategyObj).toExtend<RedteamStrategyObject>();
   });
 
   it('should create valid PluginActionParams', () => {
@@ -86,9 +78,7 @@ describe('redteam types', () => {
       },
     };
 
-    expect(params.provider.id()).toBe('test-provider');
-    expect(params.purpose).toBe('test purpose');
-    expect(params.n).toBe(5);
+    expectTypeOf(params).toExtend<PluginActionParams>();
   });
 
   it('should create valid RedteamCliGenerateOptions', () => {
@@ -107,9 +97,7 @@ describe('redteam types', () => {
       maxConcurrency: 5,
     };
 
-    expect(options.cache).toBe(true);
-    expect(options.write).toBe(true);
-    expect(options.plugins?.length).toBe(1);
+    expectTypeOf(options).toExtend<RedteamCliGenerateOptions>();
   });
 
   it('should create valid RedteamFileConfig', () => {
@@ -123,8 +111,7 @@ describe('redteam types', () => {
       numTests: 10,
     };
 
-    expect(config.entities).toEqual(['entity1', 'entity2']);
-    expect(config.severity?.[pluginKey]).toBe(Severity.High);
+    expectTypeOf(config).toExtend<RedteamFileConfig>();
   });
 
   it('should create valid SynthesizeOptions', () => {
@@ -147,9 +134,7 @@ describe('redteam types', () => {
       maxConcurrency: 3,
     };
 
-    expect(options.language).toBe('en');
-    expect(options.numTests).toBe(5);
-    expect(options.plugins).toHaveLength(1);
+    expectTypeOf(options).toExtend<SynthesizeOptions>();
   });
 
   it('should create valid RedteamRunOptions', () => {
@@ -163,9 +148,7 @@ describe('redteam types', () => {
       progressBar: true,
     };
 
-    expect(options.id).toBe('test-run');
-    expect(options.target).toBe('test-target');
-    expect(options.maxConcurrency).toBe(5);
+    expectTypeOf(options).toExtend<RedteamRunOptions>();
   });
 
   it('should create RedteamRunOptions with description for custom scan names', () => {
@@ -177,9 +160,7 @@ describe('redteam types', () => {
       maxConcurrency: 5,
     };
 
-    expect(options.description).toBe('My Custom Scan Name');
-    expect(options.config).toBe('config-uuid');
-    expect(options.target).toBe('target-uuid');
+    expectTypeOf(options).toExtend<RedteamRunOptions>();
   });
 
   it('should create valid SavedRedteamConfig', () => {
@@ -216,21 +197,7 @@ describe('redteam types', () => {
       },
     };
 
-    expect(config.description).toBe('Test config');
-    expect(config.prompts).toHaveLength(2);
-    expect(config.plugins).toHaveLength(2);
-    expect(config.maxConcurrency).toBe(5);
-    expect(config.applicationDefinition.features).toBe('key app features');
-    expect(config.applicationDefinition.hasAccessTo).toBe('allowed data and systems');
-    expect(config.applicationDefinition.doesNotHaveAccessTo).toBe('restricted data');
-    expect(config.applicationDefinition.userTypes).toBe('admin, regular users');
-    expect(config.applicationDefinition.securityRequirements).toBe('security controls');
-    expect(config.applicationDefinition.exampleIdentifiers).toBe('sample IDs');
-    expect(config.applicationDefinition.industry).toBe('healthcare');
-    expect(config.applicationDefinition.sensitiveDataTypes).toBe('PHI, PII');
-    expect(config.applicationDefinition.criticalActions).toBe('data deletion');
-    expect(config.applicationDefinition.forbiddenTopics).toBe('restricted topics');
-    expect(config.applicationDefinition.competitors).toBe('competitor list');
+    expectTypeOf(config).toExtend<SavedRedteamConfig>();
   });
 
   it('should create valid BaseRedteamMetadata', () => {
@@ -241,9 +208,7 @@ describe('redteam types', () => {
       redteamHistory: [{ prompt: 'test prompt', output: 'test output' }],
     };
 
-    expect(metadata.redteamFinalPrompt).toBe('final prompt');
-    expect(metadata.messages).toHaveLength(1);
-    expect(metadata.stopReason).toBe('complete');
+    expectTypeOf(metadata).toExtend<BaseRedteamMetadata>();
   });
 
   it('should create valid RedteamGenerateOptions', () => {
@@ -265,14 +230,8 @@ describe('redteam types', () => {
       testGenerationInstructions: 'test instructions',
     };
 
-    expect(emptyOptions).toBeDefined();
-    expect(partialOptions.cache).toBe(true);
-    expect(partialOptions.plugins?.length).toBe(1);
-    expect(partialOptions.maxConcurrency).toBe(3);
-    expect(partialOptions.language).toBe('en');
-    expect(partialOptions.remote).toBe(false);
-    expect(partialOptions.sharing).toBe(true);
-    expect(partialOptions.testGenerationInstructions).toBe('test instructions');
+    expectTypeOf(emptyOptions).toExtend<RedteamGenerateOptions>();
+    expectTypeOf(partialOptions).toExtend<RedteamGenerateOptions>();
   });
 
   describe('StrategyConfigSchema numTests validation', () => {

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -18,12 +18,10 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
-import { verifyCodingAgentResult } from '../../src/redteam/plugins/codingAgent/verifiers';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
-import { UnsupportedRemoteRedteamAssertionsError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { loadYaml } from '../../src/util/yamlLoad';
@@ -31,6 +29,34 @@ import { mockProcessEnv, stripAnsi } from '../util/utils';
 
 import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
+
+function createIncrementFirstProgressBar() {
+  return {
+    increment: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    update: vi.fn(),
+  } as any;
+}
+
+function createStartFirstProgressBar() {
+  return {
+    start: vi.fn(),
+    update: vi.fn(),
+    stop: vi.fn(),
+    increment: vi.fn(),
+  } as any;
+}
+
+function createCustomStrategyFinder(mockCustomAction: (typeof Strategies)[number]['action']) {
+  return function (predicate: any) {
+    if (typeof predicate === 'function') {
+      const strategies = [{ id: 'custom', action: mockCustomAction }];
+      return strategies.find(predicate);
+    }
+    return undefined;
+  };
+}
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -73,7 +99,7 @@ describe('synthesize', () => {
     id: () => 'test-provider',
   };
 
-  afterEach(() => {
+  afterAll(() => {
     vi.restoreAllMocks();
   });
 
@@ -108,22 +134,11 @@ describe('synthesize', () => {
       throw new Error(`Process.exit called with code ${code}`);
     });
     vi.mocked(validateStrategies).mockImplementation(async function () {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-      return {
-        increment: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-        update: vi.fn(),
-      } as any;
-    });
+    vi.mocked(cliProgress.SingleBar).mockImplementation(createIncrementFirstProgressBar);
     // Disable remote generation by default to avoid health checks interfering
     // with tests that don't explicitly set this behaviour
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-      return 'https://api.test/health';
-    });
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
       message: 'Cloud API is healthy',
@@ -262,39 +277,6 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
-    });
-
-    it('should stop synthesis when remote generation returns unsupported redteam graders', async () => {
-      const stopProgressBar = vi.fn();
-      vi.mocked(cliProgress.SingleBar).mockImplementationOnce(function () {
-        return {
-          increment: vi.fn(),
-          start: vi.fn(),
-          stop: stopProgressBar,
-          update: vi.fn(),
-        } as any;
-      });
-      const mockPluginAction = vi
-        .fn()
-        .mockRejectedValue(
-          new UnsupportedRemoteRedteamAssertionsError('ssrf', [
-            'promptfoo:redteam:future-remote-plugin',
-          ]),
-        );
-      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'ssrf' });
-
-      await expect(
-        synthesize({
-          language: 'en',
-          numTests: 1,
-          plugins: [{ id: 'ssrf', numTests: 1 }],
-          prompts: ['Test prompt'],
-          strategies: [],
-          targetIds: ['test-provider'],
-          showProgressBar: true,
-        }),
-      ).rejects.toThrow(UnsupportedRemoteRedteamAssertionsError);
-      expect(stopProgressBar).toHaveBeenCalledOnce();
     });
 
     it('should aggregate token usage and count unmetered generation provider calls', async () => {
@@ -1212,13 +1194,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include the exact 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
-        if (typeof predicate === 'function') {
-          const strategies = [{ id: 'custom', action: mockCustomAction }];
-          return strategies.find(predicate);
-        }
-        return undefined;
-      });
+      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(mockCustomAction));
 
       const result = await synthesize({
         language: 'en',
@@ -1243,144 +1219,6 @@ describe('synthesize', () => {
       );
     });
 
-    it.each([
-      [false, false],
-      [false, true],
-      [true, false],
-      [true, true],
-    ])(
-      'tracks strategy copies (in-place: %s, verifier provenance: %s)',
-      async (mutatesInputs, tracksVerifier) => {
-        const attack = '{{ range.constructor("return process.version")() }}';
-        const secret = 'FRESH_LOCAL_STRATEGY_SECRET_9239';
-        const mockPluginAction = vi.fn().mockResolvedValue([
-          {
-            vars: { query: attack, trusted: '{{ 6 * 7 }}' },
-            metadata: {
-              __promptfooRemoteGenerated: {
-                metadata: [],
-                unsafeRenderVars: ['query'],
-                vars: tracksVerifier ? ['query'] : [],
-              },
-              pluginId: 'test-plugin',
-            },
-          },
-        ]);
-        vi.spyOn(Plugins, 'find').mockReturnValue({
-          action: mockPluginAction,
-          key: 'test-plugin',
-        });
-
-        const mockCustomAction = vi.fn().mockImplementation((testCases: any[]) =>
-          testCases.map((testCase) => {
-            const vars = {
-              ...testCase.vars,
-              query: 'safe transformed payload',
-              copiedAttack: testCase.vars.query,
-              secretEnvValue: secret,
-            };
-            return mutatesInputs ? Object.assign(testCase, { vars }) : { ...testCase, vars };
-          }),
-        );
-        vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
-          return [{ id: 'custom', action: mockCustomAction }].find(predicate);
-        });
-
-        const result = await synthesize({
-          language: 'en',
-          numTests: 1,
-          plugins: [{ id: 'test-plugin', numTests: 1 }],
-          prompts: ['{{query}}'],
-          strategies: [{ id: 'custom' }],
-          targetIds: ['test-provider'],
-        });
-
-        expect(result.testCases.find((testCase) => !testCase.metadata?.strategyId)?.vars).toEqual({
-          query: attack,
-          trusted: '{{ 6 * 7 }}',
-        });
-        const strategyTestCase = result.testCases.find(
-          (testCase) => testCase.metadata?.strategyId === 'custom',
-        );
-        expect(strategyTestCase?.vars).toEqual({
-          query: 'safe transformed payload',
-          copiedAttack: attack,
-          trusted: '{{ 6 * 7 }}',
-          secretEnvValue: secret,
-        });
-        expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
-          metadata: [],
-          unsafeRenderVars: ['query', 'copiedAttack', 'secretEnvValue'],
-          vars: tracksVerifier ? ['query', 'copiedAttack'] : [],
-        });
-        await expect(
-          verifyCodingAgentResult(
-            'coding-agent:secret-env-read',
-            secret,
-            strategyTestCase!,
-            undefined,
-          ),
-        ).resolves.toMatchObject({ kind: 'sensitive-value-observed' });
-      },
-    );
-
-    it('should mark fresh strategy materialization variables as unsafe render data', async () => {
-      const attack = '{{ range.constructor("return process.version")() }}';
-      const inputs = {
-        document: { description: 'Document text', type: 'text' },
-        question: { description: 'Question text', type: 'text' },
-      } satisfies Inputs;
-      const mockPluginAction = vi.fn().mockResolvedValue([
-        {
-          metadata: {
-            pluginConfig: { inputs },
-            pluginId: 'test-plugin',
-          },
-          vars: {
-            [MULTI_INPUT_VAR]: JSON.stringify({ document: 'safe document', question: 'safe' }),
-            document: 'safe document',
-            question: 'safe',
-          },
-        },
-      ]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({
-        action: mockPluginAction,
-        key: 'test-plugin',
-      });
-
-      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
-        testCases.map((testCase) => ({
-          ...testCase,
-          vars: {
-            ...testCase.vars,
-            [MULTI_INPUT_VAR]: JSON.stringify({ document: attack, question: 'safe' }),
-          },
-        })),
-      );
-      vi.spyOn(Strategies, 'find').mockReturnValue({
-        action: mockStrategyAction,
-        id: 'jailbreak:composite',
-      });
-
-      const result = await synthesize({
-        inputs,
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['{{document}} {{question}}'],
-        provider: mockProvider,
-        purpose: 'Review a document',
-        strategies: [{ id: 'jailbreak:composite' }],
-        targetIds: ['test-provider'],
-      });
-
-      const strategyTestCase = result.testCases.find(
-        (testCase) => testCase.metadata?.strategyId === 'jailbreak:composite',
-      );
-      expect(strategyTestCase?.vars?.document).toBe(attack);
-      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toBeUndefined();
-    });
-
     it('should fall back to base strategy ID for custom variants', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
@@ -1393,13 +1231,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include only the base 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
-        if (typeof predicate === 'function') {
-          const strategies = [{ id: 'custom', action: mockCustomAction }];
-          return strategies.find(predicate);
-        }
-        return undefined;
-      });
+      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(mockCustomAction));
 
       const result = await synthesize({
         language: 'en',
@@ -2034,12 +1866,8 @@ describe('synthesize', () => {
         return ['query'];
       });
 
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-        return 'https://api.test/health';
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
       vi.mocked(checkRemoteHealth).mockResolvedValue({
         status: 'OK',
         message: 'Cloud API is healthy',
@@ -2062,9 +1890,7 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when remote generation is disabled', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 
       await synthesize({
         language: 'en',
@@ -2099,9 +1925,7 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when URL is null', async () => {
-      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-        return null;
-      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue(null);
 
       await synthesize({
         language: 'en',
@@ -2746,20 +2570,9 @@ describe('Language configuration', () => {
     vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     vi.mocked(validateStrategies).mockImplementation(async function () {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-      return {
-        increment: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-        update: vi.fn(),
-      } as any;
-    });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-      return 'https://api.test/health';
-    });
+    vi.mocked(cliProgress.SingleBar).mockImplementation(createIncrementFirstProgressBar);
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
       message: 'OK',
@@ -3511,14 +3324,7 @@ describe('Language configuration', () => {
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
       vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
 
-      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          update: vi.fn(),
-          stop: vi.fn(),
-          increment: vi.fn(),
-        } as any;
-      });
+      vi.mocked(cliProgress.SingleBar).mockImplementation(createStartFirstProgressBar);
     });
 
     it('should cap strategy output when numTests is configured', async () => {
@@ -4131,14 +3937,7 @@ describe('Language configuration', () => {
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
       vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
 
-      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          update: vi.fn(),
-          stop: vi.fn(),
-          increment: vi.fn(),
-        } as any;
-      });
+      vi.mocked(cliProgress.SingleBar).mockImplementation(createStartFirstProgressBar);
     });
 
     it('should pass the resolved request provider to strategy actions', async () => {
@@ -4417,174 +4216,117 @@ describe('Language configuration', () => {
   });
 
   describe('Multi-input mode plugin exclusion', () => {
-    it('should exclude dataset-exempt plugins in multi-input mode', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'aegis', numTests: 1 }, // DATASET_EXEMPT_PLUGIN
-          { id: 'contracts', numTests: 1 }, // Regular plugin
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
-      });
+    const keys = [
+      'aegis',
+      'cca',
+      'cross-session-leak',
+      'contracts',
+      'special-token-injection',
+      'system-prompt-override',
+      'ascii-smuggling',
+    ];
+    const registry = keys.map((key) => ({
+      key,
+      action: vi.fn<(typeof Plugins)[number]['action']>(),
+    }));
 
-      // aegis should be excluded, contracts should remain
-      // Result should only contain test cases from contracts
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Check that logger.info was called with skipping message
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
-
-      expect(skipMessage).toBeDefined();
-      expect(skipMessage).toContain('aegis');
+    beforeEach(() => {
+      for (const plugin of registry) {
+        plugin.action.mockReset();
+        plugin.action.mockImplementation(async ({ injectVar, config }) => [
+          {
+            vars: {
+              [injectVar]: config?.inputs
+                ? JSON.stringify({
+                    query: `${plugin.key} attack`,
+                    context: `${plugin.key} context`,
+                  })
+                : `${plugin.key} attack`,
+            },
+          },
+        ]);
+      }
+      vi.spyOn(Plugins, 'find').mockImplementation((predicate) => registry.find(predicate));
     });
 
-    it('should exclude multi-input excluded plugins in multi-input mode', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
-          { id: 'cross-session-leak', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
-          { id: 'contracts', numTests: 1 }, // Regular plugin
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
-      });
-
-      // cca and cross-session-leak should be excluded
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Check that logger.info was called with skipping message
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
-
-      expect(skipMessage).toBeDefined();
-      expect(skipMessage).toContain('cca');
-      expect(skipMessage).toContain('cross-session-leak');
+    afterEach(() => {
+      vi.mocked(Plugins.find).mockRestore();
     });
 
-    it('should NOT exclude plugins when inputs is empty object', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
-          { id: 'contracts', numTests: 1 },
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: {}, // Empty inputs - not multi-input mode
-      });
-
-      // No plugins should be excluded
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Should NOT have skipping message for cca
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find(
-          (arg): arg is string =>
-            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
-        );
-
-      expect(skipMessage).toBeUndefined();
-    });
-
-    it('should NOT exclude plugins when inputs is undefined', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
-          { id: 'contracts', numTests: 1 },
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        // No inputs - not multi-input mode
-      });
-
-      // No plugins should be excluded
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Should NOT have skipping message for cca
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find(
-          (arg): arg is string =>
-            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
-        );
-
-      expect(skipMessage).toBeUndefined();
-    });
-
-    it('should log info about using multi-input mode', async () => {
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'contracts', numTests: 1 }],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
+    it.each([
+      {
+        name: 'dataset plugins',
+        requested: ['aegis', 'contracts'],
         inputs: { query: 'user query', context: 'additional context' },
-      });
-
-      // Check that logger.info was called with multi-input mode message
-      const multiInputMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('multi-input mode'));
-
-      expect(multiInputMessage).toBeDefined();
-      expect(multiInputMessage).toContain('2 variables');
-      expect(multiInputMessage).toContain('query');
-      expect(multiInputMessage).toContain('context');
-    });
-
-    it('should exclude only plugins that still do not support multi-input mode', async () => {
-      await synthesize({
+        retained: ['contracts'],
+      },
+      {
+        name: 'plugins without multi-input support',
+        requested: ['cca', 'cross-session-leak', 'contracts'],
+        inputs: { query: 'user query', context: 'additional context' },
+        retained: ['contracts'],
+      },
+      {
+        name: 'empty inputs',
+        requested: ['cca', 'contracts'],
+        inputs: {} as Inputs,
+        retained: ['cca', 'contracts'],
+      },
+      {
+        name: 'undefined inputs',
+        requested: ['cca', 'contracts'],
+        inputs: undefined,
+        retained: ['cca', 'contracts'],
+      },
+      {
+        name: 'supported multi-input plugins',
+        requested: [
+          'cca',
+          'cross-session-leak',
+          'special-token-injection',
+          'system-prompt-override',
+          'ascii-smuggling',
+          'contracts',
+        ],
+        inputs: { query: 'user query', context: 'additional context' },
+        retained: [
+          'special-token-injection',
+          'system-prompt-override',
+          'ascii-smuggling',
+          'contracts',
+        ],
+      },
+    ])('runs only retained actions for $name', async ({ requested, inputs, retained }) => {
+      const result = await synthesize({
         language: 'en',
         numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 },
-          { id: 'cross-session-leak', numTests: 1 },
-          { id: 'special-token-injection', numTests: 1 },
-          { id: 'system-prompt-override', numTests: 1 },
-          { id: 'ascii-smuggling', numTests: 1 },
-          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
-        ],
+        plugins: requested.map((id) => ({ id, numTests: 1 })),
         prompts: ['Test {{query}}'],
         strategies: [],
         targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' },
+        inputs,
       });
 
-      // Check that only the explicit non-dataset exclusions are in the skip message.
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 2 plugin'));
-
-      expect(skipMessage).toBeDefined();
-      expect(skipMessage).toContain('cca');
-      expect(skipMessage).toContain('cross-session-leak');
-      expect(skipMessage).not.toContain('special-token-injection');
-      expect(skipMessage).not.toContain('system-prompt-override');
-      expect(skipMessage).not.toContain('ascii-smuggling');
+      expect(result.testCases.map((test) => test.metadata?.pluginId).sort()).toEqual(
+        [...retained].sort(),
+      );
+      for (const plugin of registry) {
+        expect(plugin.action).toHaveBeenCalledTimes(retained.includes(plugin.key) ? 1 : 0);
+      }
+      const messages = vi.mocked(logger.info).mock.calls.map(([message]) => String(message));
+      const removed = requested.filter((id) => !retained.includes(id));
+      const skipMessage = messages.find((message) => message.includes('Skipping'));
+      if (removed.length) {
+        expect(skipMessage).toBeDefined();
+        for (const id of removed) {
+          expect(skipMessage).toContain(id);
+        }
+      } else {
+        expect(skipMessage).toBeUndefined();
+      }
+      if (inputs && Object.keys(inputs).length) {
+        expect(messages).toContain('Using multi-input mode with 2 variables: query, context');
+      }
     });
   });
 });

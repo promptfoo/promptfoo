@@ -37,7 +37,6 @@ import {
   buildRemoteMaterializationContextVars,
   buildRemoteMaterializedInputVariables,
 } from '../remoteMaterialization';
-import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -46,7 +45,11 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractMaterializedVariablesFromJsonWithMetadata, extractPromptFromTags } from '../util';
+import {
+  extractMaterializedVariablesFromJsonWithMetadata,
+  extractPromptFromTags,
+  getSessionId,
+} from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -61,6 +64,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
 } from './shared';
@@ -499,7 +503,8 @@ type StopReason =
   | 'MAX_DEPTH'
   | 'NO_IMPROVEMENT'
   | 'GRADER_FAILED'
-  | 'ATTACKER_ERROR';
+  | 'ATTACKER_ERROR'
+  | 'TARGET_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -637,6 +642,34 @@ async function runRedteamConversation({
   // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
   let lastFinalAttackPrompt: string | undefined;
   let bestFinalAttackPrompt: string | undefined;
+
+  function buildFinalResponse(finalTargetResponse: ProviderResponse): RedteamTreeResponse {
+    return preserveSelectedError(
+      {
+        output:
+          bestResponse ||
+          (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+        prompt: bestNode.prompt,
+        metadata: {
+          highestScore: maxScore,
+          redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+          messages: treeOutputs as Record<string, any>[],
+          attempts,
+          redteamTreeHistory: treeOutputs,
+          stopReason: stoppingReason,
+          storedGraderResult: getBestGraderResult(),
+          sessionIds: extractSessionIds(treeOutputs),
+          ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+            transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: finalTargetResponse?.guardrails,
+        ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
+      },
+      finalTargetResponse,
+    );
+  }
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -793,20 +826,20 @@ async function runRedteamConversation({
           ...iterationVars,
           [injectVar]: finalInjectVar,
         };
-        const currentRenderInputVarNames: string[] = [];
 
         // If inputs is defined, extract individual keys from the attack prompt JSON
         if (inputs && Object.keys(inputs).length > 0) {
           if (attackerUsesRemoteProvider) {
             try {
               const parsed = JSON.parse(newInjectVar);
-              const remoteMaterializedVars = buildRemoteMaterializedInputVariables(
-                { inputMaterialization, materializationHandled, materializedVars },
-                parsed,
-                inputs,
+              Object.assign(
+                updatedVars,
+                buildRemoteMaterializedInputVariables(
+                  { inputMaterialization, materializationHandled, materializedVars },
+                  parsed,
+                  inputs,
+                ).vars,
               );
-              Object.assign(updatedVars, remoteMaterializedVars.vars);
-              currentRenderInputVarNames.push(...Object.keys(remoteMaterializedVars.vars));
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
@@ -822,7 +855,6 @@ async function runRedteamConversation({
                   purpose: test?.metadata?.purpose as string | undefined,
                 });
               Object.assign(updatedVars, localMaterializedVars);
-              currentRenderInputVarNames.push(...Object.keys(localMaterializedVars));
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
@@ -834,10 +866,7 @@ async function runRedteamConversation({
           updatedVars,
           filters,
           targetProvider,
-          getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
-            injectVar,
-            ...currentRenderInputVarNames,
-          ]),
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         let targetResponse = await getTargetResponse(
@@ -879,6 +908,10 @@ async function runRedteamConversation({
             guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
+          if (options?.abortSignal?.aborted) {
+            stoppingReason = 'TARGET_ERROR';
+            return buildFinalResponse(targetResponse);
+          }
           continue;
         }
         invariant(
@@ -1225,7 +1258,6 @@ async function runRedteamConversation({
     ...vars,
     [injectVar]: bestPrompt,
   };
-  const finalRenderInputVarNames: string[] = [];
 
   // If inputs is defined, extract individual keys from the best prompt JSON
   if (inputs && Object.keys(inputs).length > 0) {
@@ -1238,13 +1270,11 @@ async function runRedteamConversation({
           materializedVars: bestNode.materializedVars,
         };
         if (remoteBestNodeMaterialization.materializationHandled) {
-          const remoteMaterializedVars = buildRemoteMaterializedInputVariables(
-            remoteBestNodeMaterialization,
-            parsed,
-            inputs,
+          Object.assign(
+            finalUpdatedVars,
+            buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed, inputs)
+              .vars,
           );
-          Object.assign(finalUpdatedVars, remoteMaterializedVars.vars);
-          finalRenderInputVarNames.push(...Object.keys(remoteMaterializedVars.vars));
         }
       } else {
         const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
@@ -1258,7 +1288,6 @@ async function runRedteamConversation({
           },
         );
         Object.assign(finalUpdatedVars, materializedVars);
-        finalRenderInputVarNames.push(...Object.keys(materializedVars));
       }
     } catch {
       // If parsing fails, it's plain text - keep original vars
@@ -1270,7 +1299,7 @@ async function runRedteamConversation({
     finalUpdatedVars,
     filters,
     targetProvider,
-    getRemoteGeneratedRenderSkipVars(test?.metadata, [injectVar, ...finalRenderInputVarNames]),
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(
@@ -1302,28 +1331,7 @@ async function runRedteamConversation({
     guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
-  return {
-    output:
-      bestResponse ||
-      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-    prompt: bestNode.prompt,
-    metadata: {
-      highestScore: maxScore,
-      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-      messages: treeOutputs as Record<string, any>[],
-      attempts,
-      redteamTreeHistory: treeOutputs,
-      stopReason: stoppingReason,
-      storedGraderResult: getBestGraderResult(),
-      sessionIds: extractSessionIds(treeOutputs),
-      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-      }),
-    },
-    tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse?.guardrails,
-    ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
-  };
+  return buildFinalResponse(finalTargetResponse);
 }
 
 /**

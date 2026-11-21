@@ -4,7 +4,6 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import Clone from 'rfdc';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -49,13 +48,6 @@ import {
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
 import {
-  getChangedVarNames,
-  getRemoteGeneratedTestProvenance,
-  propagateRemoteGeneratedVarProvenance,
-  type RemoteGeneratedTestProvenance,
-  setRemoteGeneratedTestProvenance,
-} from './remoteTestProvenance';
-import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -63,7 +55,6 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import { RemoteRedteamAssertionContractError } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -81,67 +72,7 @@ import type {
   SynthesizeOptions,
 } from './types';
 
-const clone = Clone();
-
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-
-function mergeRemoteGeneratedTestProvenance(
-  left: RemoteGeneratedTestProvenance | undefined,
-  right: RemoteGeneratedTestProvenance,
-): RemoteGeneratedTestProvenance {
-  return {
-    metadata: [...new Set([...(left?.metadata ?? []), ...right.metadata])],
-    vars: [...new Set([...(left?.vars ?? []), ...right.vars])],
-    ...((left?.unsafeRenderVars?.length ?? 0) > 0 || (right.unsafeRenderVars?.length ?? 0) > 0
-      ? {
-          unsafeRenderVars: [
-            ...new Set([...(left?.unsafeRenderVars ?? []), ...(right.unsafeRenderVars ?? [])]),
-          ],
-        }
-      : {}),
-  };
-}
-
-type StrategyRemoteSource = {
-  metadata: TestCaseWithPlugin['metadata'];
-  vars: NonNullable<TestCase['vars']>;
-};
-
-function collectStrategyRemoteProvenance(testCases: TestCaseWithPlugin[]): StrategyRemoteSource[] {
-  return testCases
-    .filter((testCase) => getRemoteGeneratedTestProvenance(testCase.metadata))
-    .map(({ metadata, vars }) => ({ metadata, vars: vars ?? {} }));
-}
-
-function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
-  metadata: T,
-  vars: TestCase['vars'],
-  sources: StrategyRemoteSource[],
-): T {
-  const matchingSources = sources.filter(
-    (source) => source.metadata.pluginId === metadata.pluginId,
-  );
-  // Strategies can fan out, mutate inputs, or omit source metadata. Keep the original
-  // values so copied attack text stays tracked without marking unchanged local vars.
-  for (const source of matchingSources.length > 0 ? matchingSources : sources) {
-    metadata = propagateRemoteGeneratedVarProvenance(
-      setRemoteGeneratedTestProvenance(
-        metadata,
-        mergeRemoteGeneratedTestProvenance(
-          getRemoteGeneratedTestProvenance(metadata),
-          getRemoteGeneratedTestProvenance(source.metadata)!,
-        ),
-      ),
-      getChangedVarNames(source.vars, vars ?? {}),
-      {
-        metadataBeforeTransform: source.metadata,
-        varsAfterTransform: vars ?? {},
-        varsBeforeTransform: source.vars,
-      },
-    );
-  }
-  return metadata;
-}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -740,14 +671,8 @@ async function applyStrategies(
       }
     }
 
-    const remoteProvenance = collectStrategyRemoteProvenance(testCasesToProcess);
-
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
-      testCasesToProcess.map((testCase) => ({
-        ...testCase,
-        vars: clone(testCase.vars),
-        metadata: clone(testCase.metadata),
-      })),
+      testCasesToProcess,
       injectVar,
       {
         ...(strategy.config || {}),
@@ -803,32 +728,28 @@ async function applyStrategies(
             ...(t?.metadata?.strategyConfig || {}),
           };
 
-          const pluginId = t.metadata?.pluginId;
-          let metadata = {
-            ...(t?.metadata || {}),
-            // Don't set strategyId for retry strategy (it's not user-facing)
-            ...(strategy.id !== 'retry' && {
-              strategyId: t?.metadata?.strategyId || strategy.id,
-            }),
-            ...(pluginId && { pluginId }),
-            ...(t?.metadata?.pluginConfig && {
-              pluginConfig: t.metadata.pluginConfig,
-            }),
-            ...(inputMaterialization && {
-              inputMaterialization,
-            }),
-            ...(Object.keys(strategyConfig).length > 0 && {
-              strategyConfig,
-            }),
-            ...getMaterializedMultiInputPromptMetadata(vars),
-          };
-          metadata = propagateStrategyRemoteProvenance(metadata, vars, remoteProvenance);
-
           return {
             ...t,
             vars,
-            metadata,
-          } as TestCaseWithPlugin;
+            metadata: {
+              ...(t?.metadata || {}),
+              // Don't set strategyId for retry strategy (it's not user-facing)
+              ...(strategy.id !== 'retry' && {
+                strategyId: t?.metadata?.strategyId || strategy.id,
+              }),
+              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+              ...(t?.metadata?.pluginConfig && {
+                pluginConfig: t.metadata.pluginConfig,
+              }),
+              ...(inputMaterialization && {
+                inputMaterialization,
+              }),
+              ...(Object.keys(strategyConfig).length > 0 && {
+                strategyConfig,
+              }),
+              ...getMaterializedMultiInputPromptMetadata(vars),
+            },
+          };
         }),
       )),
     );
@@ -1032,12 +953,6 @@ export function calculateTotalTests(
  */
 function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
   return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
-}
-
-function rethrowRemoteRedteamAssertionContractError(reason: unknown): void {
-  if (reason instanceof RemoteRedteamAssertionContractError) {
-    throw reason;
-  }
 }
 
 /**
@@ -1424,13 +1339,6 @@ export async function synthesize({
     // Use totalTests to include both plugin and strategy tests in progress tracking
     progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
-  const stopProgressBar = () => {
-    progressBar?.stop();
-    if (progressBar) {
-      // Newline after progress bar to avoid overlap
-      logger.info('');
-    }
-  };
 
   // Replace progress bar updates with logger calls when in web UI
   if (showProgressBar) {
@@ -1455,7 +1363,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  const pluginGeneration = async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1557,7 +1465,6 @@ export async function synthesize({
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
-          rethrowRemoteRedteamAssertionContractError(result.reason);
           const lang = languages[index];
           // Handle rejected promise
           logger.warn(
@@ -1749,10 +1656,7 @@ export async function synthesize({
         if (definedLanguages.length > 1) {
           for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
             const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
-            pluginResults[displayId] = {
-              requested: result.requested,
-              generated: result.generated,
-            };
+            pluginResults[displayId] = { requested: result.requested, generated: result.generated };
           }
         } else {
           pluginResults[baseDisplayId] = {
@@ -1774,12 +1678,6 @@ export async function synthesize({
       progressBar?.increment(plugin.numTests);
     }
   });
-  try {
-    await pluginGeneration;
-  } catch (error) {
-    stopProgressBar();
-    throw error;
-  }
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
@@ -1849,7 +1747,11 @@ export async function synthesize({
   checkAbort();
 
   progressBar?.update({ task: 'Done.' });
-  stopProgressBar();
+  progressBar?.stop();
+  if (progressBar) {
+    // Newline after progress bar to avoid overlap
+    logger.info('');
+  }
 
   logger.info(generateReport(pluginResults, strategyResults));
 

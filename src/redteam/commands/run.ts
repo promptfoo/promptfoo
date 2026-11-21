@@ -11,11 +11,7 @@ import { getConfigFromCloud } from '../../util/cloud';
 import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
-import {
-  ProbeLimitExceededError,
-  type RedteamRunOptions,
-  RemoteRedteamAssertionContractError,
-} from '../types';
+import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
 
@@ -127,8 +123,6 @@ export function redteamRunCommand(program: Command) {
           });
         } else if (error instanceof ConfigResolutionError) {
           logConfigResolutionError(error);
-        } else if (error instanceof RemoteRedteamAssertionContractError) {
-          logger.error(error.message);
         } else if (
           !(error instanceof EmailValidationError) &&
           !(error instanceof ProbeLimitExceededError)

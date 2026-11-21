@@ -33,14 +33,6 @@ import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
-function isRemoteRedteamAssertionContractError(error: unknown): error is Error {
-  return (
-    error instanceof Error &&
-    'isRemoteRedteamAssertionContractError' in error &&
-    error.isRemoteRedteamAssertionContractError === true
-  );
-}
-
 /**
  * Generates a test case for a given plugin/strategy combination.
  */
@@ -239,11 +231,6 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }),
     );
   } catch (error) {
-    if (isRemoteRedteamAssertionContractError(error)) {
-      logger.warn('Remote test generation returned an incompatible assertion payload', { error });
-      res.status(502).json({ error: error.message });
-      return;
-    }
     logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
@@ -310,21 +297,11 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     })
     .catch((error) => {
-      const isRemoteContractError = isRemoteRedteamAssertionContractError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      if (isRemoteContractError) {
-        logger.error('Red team generation stopped by a remote compatibility error', { error });
-      } else {
-        logger.error(`Error running red team: ${errorMessage}\n${errorStack || ''}`);
-      }
+      logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
       if (currentJobId === id) {
         evalJobService.fail(
           id,
-          [
-            `Error: ${errorMessage}`,
-            ...(!isRemoteContractError && errorStack ? [`Stack trace: ${errorStack}`] : []),
-          ],
+          [`Error: ${error.message}`, ...(error.stack ? [`Stack trace: ${error.stack}`] : [])],
           { append: true, resetResult: false },
         );
       }

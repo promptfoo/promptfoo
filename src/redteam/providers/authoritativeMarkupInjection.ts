@@ -16,9 +16,8 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { getRemoteGeneratedRenderSkipVars } from '../remoteTestProvenance';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { callTargetProvider } from './shared';
+import { callTargetProvider, preserveSelectedError } from './shared';
 
 import type {
   ApiProvider,
@@ -124,7 +123,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       targetVars,
       context.filters,
       targetProvider,
-      getRemoteGeneratedRenderSkipVars(context.test?.metadata, [this.config.injectVar]),
+      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug(`[AuthoritativeMarkupInjection] Rendered attack prompt`, {
@@ -146,10 +145,13 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     });
 
     if (targetResponse.error) {
-      return {
-        ...targetResponse,
-        tokenUsage: totalTokenUsage,
-      };
+      return preserveSelectedError(
+        {
+          ...targetResponse,
+          tokenUsage: totalTokenUsage,
+        },
+        targetResponse,
+      );
     }
 
     return {

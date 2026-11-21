@@ -2,6 +2,7 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
+import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { pluginDescriptions } from './constants';
@@ -19,7 +20,7 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { ApiProvider, ProviderResponse } from '../types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -48,14 +49,7 @@ export function extractPromptFromTags(text: string): string | null {
  * @returns Array of extracted prompt contents (trimmed)
  */
 export function extractAllPromptsFromTags(text: string): string[] {
-  const results: string[] = [];
-  let match;
-
-  while ((match = PROMPT_TAG_REGEX_GLOBAL.exec(text)) !== null) {
-    results.push(match[1].trim());
-  }
-
-  return results;
+  return Array.from(text.matchAll(PROMPT_TAG_REGEX_GLOBAL), (match) => match[1].trim());
 }
 
 /**
@@ -284,13 +278,7 @@ const REFUSAL_SUBSTRING_PATTERNS = [
 ].map((s) => new RegExp(`\\b${escapeRegExp(s.toLowerCase())}\\b`));
 
 export function isEmptyResponse(response: string): boolean {
-  return (
-    !response ||
-    response.trim() === '' ||
-    response.trim() === '{}' ||
-    response.trim().toLowerCase() === 'undefined' ||
-    response.trim().toLowerCase() === 'null'
-  );
+  return !response || response.trim() === '' || response.trim() === '{}';
 }
 
 export function isBasicRefusal(response: string): boolean {
@@ -419,4 +407,29 @@ export async function extractGoalFromPrompt(
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }
+}
+
+function toSessionIdString(value: any): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  // Stringify non-string values (numbers, objects, arrays, etc.)
+  try {
+    return safeJsonStringify(value);
+  } catch (error) {
+    logger.debug(`Failed to stringify sessionId: ${value}`, { error });
+    return undefined;
+  }
+}
+
+export function getSessionId(
+  response: ProviderResponse | undefined | null,
+  context: Pick<CallApiContextParams, 'vars'> | undefined,
+): string | undefined {
+  return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
 }

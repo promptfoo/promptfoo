@@ -58,7 +58,7 @@ We're committed to being the best open-source LLM red teaming and eval tool avai
 - [**Follow us on GitHub**](https://github.com/promptfoo/promptfoo) to stay updated and contribute
 - Reach out with your ideas, feedback, or collaborations—we'd love to hear from you!
 - Spread the word and help grow our community even further
-- [Join our Discord](https://discord.gg/promptfoo) for real-time discussions and support
+- [Join our Discord](https://discord.gg/gHPS9jjfbs) for real-time discussions and support
 
 ## Thank You
 

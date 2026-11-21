@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -97,10 +99,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Transformed: ${output}`',
     };
 
@@ -189,100 +188,6 @@ describeEvaluator('evaluator transforms', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('propagates remote render and verifier provenance through transformVars', async () => {
-    const attack = '{{ range.constructor("return process.version")() }}';
-    const callApi = vi.fn().mockResolvedValue({ output: 'ok' });
-    const provider: ApiProvider = {
-      id: () => 'capture-provider',
-      callApi,
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('COPIED={{copiedAttack}} PRIMARY={{prompt}} TRUSTED={{trusted}}')],
-      defaultTest: {
-        vars: { trusted: '{{ 6 * 7 }}' },
-      },
-      redteam: { injectVar: 'prompt' },
-      tests: [
-        {
-          metadata: {
-            __promptfooRemoteGenerated: {
-              metadata: [],
-              unsafeRenderVars: ['prompt'],
-              vars: ['prompt'],
-            },
-            pluginConfig: {},
-            pluginId: 'coding-agent:secret-env-read',
-          },
-          options: {
-            transformVars: '{ ...vars, copiedAttack: vars.prompt }',
-          },
-          vars: { prompt: attack },
-        },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(testSuite.tests?.[0].vars).toEqual(
-      expect.objectContaining({ copiedAttack: attack, prompt: attack, trusted: '{{ 6 * 7 }}' }),
-    );
-    expect(callApi.mock.calls[0][1].vars).toEqual(
-      expect.objectContaining({ copiedAttack: attack, prompt: attack, trusted: '{{ 6 * 7 }}' }),
-    );
-    expect(callApi.mock.calls[0][0]).toBe(`COPIED=${attack} PRIMARY=${attack} TRUSTED=42`);
-    expect(callApi.mock.calls[0][1].test.metadata.__promptfooRemoteGenerated).toEqual({
-      metadata: [],
-      unsafeRenderVars: ['prompt', 'copiedAttack'],
-      vars: ['prompt', 'copiedAttack'],
-    });
-  });
-
-  it('keeps freshly minted local transform vars out of verifier provenance', async () => {
-    const attack = '{{ range.constructor("return process.version")() }}';
-    const callApi = vi.fn().mockResolvedValue({ output: 'ok' });
-    const provider: ApiProvider = {
-      id: () => 'capture-provider',
-      callApi,
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('PRIMARY={{prompt}} SECRET={{secretEnvValue}}')],
-      redteam: { injectVar: 'prompt' },
-      tests: [
-        {
-          metadata: {
-            __promptfooRemoteGenerated: {
-              metadata: [],
-              unsafeRenderVars: ['prompt'],
-              vars: ['prompt'],
-            },
-            pluginConfig: {},
-            pluginId: 'coding-agent:secret-env-read',
-          },
-          options: {
-            // A local transform mints a fresh secret for the deterministic verifier to detect.
-            transformVars: '{ ...vars, secretEnvValue: "FRESH-LOCAL-SECRET-0123456789" }',
-          },
-          vars: { prompt: attack },
-        },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-
-    await evaluate(testSuite, evalRecord, {});
-
-    // `secretEnvValue` is a locally minted verifier control, so it must NOT be marked remote
-    // (otherwise the coding-agent verifier filters it out of its trusted inputs and misses the
-    // leak). It is still render-skipped, which is always the safe direction.
-    expect(callApi.mock.calls[0][1].test.metadata.__promptfooRemoteGenerated).toEqual({
-      metadata: [],
-      unsafeRenderVars: ['prompt', 'secretEnvValue'],
-      vars: ['prompt'],
-    });
-  });
-
   it('evaluate with context in vars transform in defaultTest', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -345,10 +250,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`ProviderTransformed: ${output}`',
     };
 
@@ -401,10 +303,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with multiple transforms', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -438,10 +337,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -479,10 +375,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -523,7 +416,7 @@ describeEvaluator('evaluator transforms', () => {
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('evaluate with no output', async () => {
+  it.each([false, true])('evaluate with no output and redteam=%s', async (isRedteam) => {
     const mockApiProviderNoOutput: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-no-output'),
       callApi: vi.fn().mockResolvedValue({
@@ -536,13 +429,15 @@ describeEvaluator('evaluator transforms', () => {
       providers: [mockApiProviderNoOutput],
       prompts: [toPrompt('Test prompt')],
       tests: [],
+      redteam: isRedteam ? {} : undefined,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(0);
-    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.errors).toBe(1);
     expect(summary.results[0].error).toBe('No output');
     expect(summary.results[0].success).toBe(false);
     expect(summary.results[0].score).toBe(0);

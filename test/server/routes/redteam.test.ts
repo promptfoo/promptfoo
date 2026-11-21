@@ -1,6 +1,13 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { createConfigItem } from '../../factories/literalFixtures';
+
+const createAssistantConfig = () => ({
+  applicationDefinition: {
+    purpose: 'test assistant',
+  },
+});
 
 // Mock dependencies
 vi.mock('../../../src/redteam/plugins/index');
@@ -17,7 +24,6 @@ import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import { Strategies } from '../../../src/redteam/strategies/index';
-import { UnsupportedRemoteRedteamAssertionsError } from '../../../src/redteam/types';
 import {
   extractGeneratedPrompt,
   getPluginConfigurationError,
@@ -75,19 +81,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -106,14 +102,8 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
             config: {
               applicationDefinition: {},
             },
@@ -136,19 +126,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -168,19 +148,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
             provider: 'openai:chat:gpt-4.1',
           });
 
@@ -362,15 +332,8 @@ describe('Redteam Routes', () => {
                 inputs: { query: 'user query', context: 'additional context' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -388,15 +351,8 @@ describe('Redteam Routes', () => {
                 inputs: { query: 'user query', context: 'additional context' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -418,15 +374,8 @@ describe('Redteam Routes', () => {
               id: 'cca',
               config: {}, // No inputs - should not be excluded
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -453,15 +402,8 @@ describe('Redteam Routes', () => {
                 inputs: {}, // Empty inputs - should not be excluded
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -485,15 +427,8 @@ describe('Redteam Routes', () => {
                 inputs: { systemPrompt: 'system', userInput: 'user' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -515,15 +450,8 @@ describe('Redteam Routes', () => {
               id: 'special-token-injection',
               config: {}, // No inputs
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -541,19 +469,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'harmful:hate',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('harmful:hate'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -579,15 +497,8 @@ describe('Redteam Routes', () => {
                 inputs: { query: 'user input', context: 'context' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -612,15 +523,8 @@ describe('Redteam Routes', () => {
                 functionalCategories: ['contextual'],
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -643,27 +547,6 @@ describe('Redteam Routes', () => {
     });
 
     describe('validation', () => {
-      it('should return an actionable remote assertion contract error', async () => {
-        const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
-          'promptfoo:redteam:future-remote-plugin',
-        ]);
-        mockedPlugins.find = vi.fn().mockReturnValue({
-          key: 'ssrf',
-          action: vi.fn().mockRejectedValue(contractError),
-        });
-
-        const response = await request(app)
-          .post('/api/redteam/generate-test')
-          .send({
-            plugin: { id: 'ssrf', config: {} },
-            strategy: { id: 'basic', config: {} },
-            config: { applicationDefinition: { purpose: 'test assistant' } },
-          });
-
-        expect(response.status).toBe(502);
-        expect(response.body.error).toBe(contractError.message);
-      });
-
       it('should return 400 for invalid plugin ID', async () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
@@ -672,15 +555,8 @@ describe('Redteam Routes', () => {
               id: 'invalid-plugin-id',
               config: {},
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(400);
@@ -691,19 +567,12 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'harmful:hate',
-              config: {},
-            },
+            plugin: createConfigItem('harmful:hate'),
             strategy: {
               id: 'invalid-strategy',
               config: {},
             },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(400);
@@ -718,19 +587,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'harmful:hate',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('harmful:hate'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(400);
@@ -899,25 +758,6 @@ describe('Redteam Routes', () => {
         expect(failedResponse.body).toMatchObject({
           status: 'error',
           logs: expect.arrayContaining(['working', 'Error: run failed']),
-        });
-      });
-    });
-
-    it('should publish remote assertion contract errors without stack traces', async () => {
-      const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
-        'promptfoo:redteam:future-remote-plugin',
-      ]);
-      mockedDoRedteamRun.mockRejectedValueOnce(contractError);
-
-      const runResponse = await request(app)
-        .post('/api/redteam/run')
-        .send({ config: { purpose: 'test' } });
-
-      await vi.waitFor(async () => {
-        const failedResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
-        expect(failedResponse.body).toMatchObject({
-          status: 'error',
-          logs: [`Error: ${contractError.message}`],
         });
       });
     });
