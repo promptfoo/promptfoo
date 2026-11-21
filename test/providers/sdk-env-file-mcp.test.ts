@@ -60,7 +60,7 @@ beforeEach(() => {
     this: AzureFoundryAgentProvider,
   ) {
     const client = await Reflect.get(this, 'initializeClient').call(this);
-    expect(Reflect.get(client, '_credential').constructor.name).toBe('ClientSecretCredential');
+    expect(Reflect.get(client, 'credential').constructor.name).toBe('ClientSecretCredential');
     const project = Reflect.get(this, 'getProjectUrl').call(this);
     return { output: new URL(project).hostname.split('.')[0] };
   });

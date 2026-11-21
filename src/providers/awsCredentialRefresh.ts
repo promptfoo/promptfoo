@@ -11,10 +11,16 @@ export function memoizeAwsCredentials(
   let initial: Promise<AwsCredentialIdentity> | undefined;
   let background: Promise<void> | undefined;
   let forced: Promise<AwsCredentialIdentity> | undefined;
+  let issued = 0;
+  let published = 0;
   const refresh: AwsCredentialIdentityProvider = async (properties) => {
+    const generation = ++issued;
     const next = await resolve(properties);
-    current = next;
-    return next;
+    if (generation > published) {
+      published = generation;
+      current = next;
+    }
+    return current ?? next;
   };
   const provider: AwsCredentialIdentityProvider = async (properties) => {
     if (properties?.forceRefresh) {
@@ -25,15 +31,15 @@ export function memoizeAwsCredentials(
     if (current?.expiration && current.expiration.getTime() < Date.now()) {
       current = undefined;
     }
-    if (initial) {
-      return initial;
-    }
     if (!current) {
-      return (initial = refresh(properties).finally(() => {
+      if (forced) {
+        return forced;
+      }
+      return (initial ??= refresh(properties).finally(() => {
         initial = undefined;
       }));
     }
-    if (needsRefresh(current) && !background) {
+    if (needsRefresh(current) && !background && !forced) {
       background = refresh(properties)
         .then(() => undefined)
         // The existing credentials remain usable until their actual expiration.

@@ -137,7 +137,7 @@ describe('Azure environment username precedence', () => {
       });
     const first = await namespace('first@example.invalid');
     expect(await namespace('first@example.invalid')).toBe(first);
-    expect(await namespace('first@example.invalid', 'rotated-password')).toBe(first);
+    expect(await namespace('first@example.invalid', 'rotated-password')).not.toBe(first);
     expect(await namespace('second@example.invalid')).not.toBe(first);
     expect(first).not.toContain('first@example.invalid');
     expect(first).not.toContain('first-password');

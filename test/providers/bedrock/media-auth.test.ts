@@ -13,6 +13,7 @@ import cliState from '../../../src/cliState';
 import { LumaRayVideoProvider } from '../../../src/providers/bedrock/luma-ray';
 import { NovaReelVideoProvider } from '../../../src/providers/bedrock/nova-reel';
 import { mockProcessEnv } from '../../util/utils';
+import { invokeMedia } from './mediaFixture';
 import type { HttpRequest } from '@smithy/types';
 
 const invocationArn = 'arn:aws:bedrock:us-east-1:123456789012:async-invoke/fixture';
@@ -107,23 +108,11 @@ async function providerRequests(
     kind === 'nova-reel'
       ? new NovaReelVideoProvider('amazon.nova-reel-v1:1', options)
       : new LumaRayVideoProvider('luma.ray-v2:0', options);
-  const start = await Reflect.get(provider, 'startVideoGeneration').call(
-    provider,
-    {},
-    's3://fixture-bucket/output',
-  );
-  const poll = await Reflect.get(provider, 'pollForCompletion').call(
-    provider,
-    invocationArn,
-    1000,
-    60_000,
-  );
+  const result = await invokeMedia(provider, 'runtime');
   if (expectedError) {
-    expect(start.error).toContain(expectedError);
-    expect(poll.error).toContain(expectedError);
+    expect(result.error).toContain(expectedError);
   } else {
-    expect(start).toEqual({ invocationArn });
-    expect(poll).toMatchObject({ response: { invocationArn, status: 'Completed' } });
+    expect(result).toMatchObject({ response: { invocationArn, status: 'Completed' } });
   }
 }
 

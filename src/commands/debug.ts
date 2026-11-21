@@ -15,12 +15,14 @@ import type { Command } from 'commander';
 import type { UnifiedConfig } from '../types/index';
 
 interface DebugOptions {
+  envPath?: string | string[];
   config?: string;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }
 
 async function doDebug(options: DebugOptions): Promise<void> {
+  const fileEnv = { ...cliState.envFileOverrides };
   let configEnv = options.config ? undefined : options.defaultConfig.env;
   const configInfo = {
     defaultConfigPath: options.defaultConfigPath,
@@ -40,13 +42,17 @@ async function doDebug(options: DebugOptions): Promise<void> {
         },
         options.defaultConfig,
       );
-      configInfo.configContent = resolved;
+      configInfo.configContent = resolved.config;
       configEnv = resolved.config.env;
-    } catch (err) {
-      configInfo.configContent = `Error loading config: ${err}`;
+      if (!options.envPath?.length && resolved.commandLineOptions?.envPath) {
+        setupEnv(resolved.commandLineOptions.envPath, { processEnv: fileEnv });
+      }
+    } catch {
+      configInfo.configContent = 'Could not load config. Run promptfoo validate for details.';
     }
   }
 
+  const env = configEnv ?? cliState.env;
   const debugInfo = {
     version: VERSION,
     platform: {
@@ -55,20 +61,22 @@ async function doDebug(options: DebugOptions): Promise<void> {
       arch: os.arch(),
       nodeVersion: process.version,
     },
-    env: cliState.withEnv(configEnv ?? cliState.env, () => {
-      const proxies = getProxyEnvironment();
-      return {
-        NODE_ENV: getEnvString('NODE_ENV'),
-        httpProxy: proxies.http_proxy,
-        httpsProxy: proxies.https_proxy,
-        allProxy: proxies.all_proxy,
-        noProxy: proxies.no_proxy,
-        nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
-        nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
-        telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
-        telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
-      };
-    }),
+    env: cliState.withEnvFileOverrides(fileEnv, () =>
+      cliState.withEnv(env, () => {
+        const proxies = getProxyEnvironment();
+        return {
+          NODE_ENV: getEnvString('NODE_ENV'),
+          httpProxy: proxies.http_proxy,
+          httpsProxy: proxies.https_proxy,
+          allProxy: proxies.all_proxy,
+          noProxy: proxies.no_proxy,
+          nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
+          nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
+          telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
+          telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
+        };
+      }),
+    ),
     configInfo,
   };
 
@@ -95,9 +103,9 @@ export function debugCommand(
     .description('Display debug information for troubleshooting')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .action((opts, command: Command) => {
-      const run = () => doDebug({ ...opts, defaultConfig, defaultConfigPath });
       const globalOptions = command.optsWithGlobals();
       const envPath = globalOptions.envFile ?? globalOptions.envPath;
+      const run = () => doDebug({ ...opts, envPath, defaultConfig, defaultConfigPath });
       if (!envPath?.length) {
         return run();
       }

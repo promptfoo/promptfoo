@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { createCache } from 'cache-manager';
 import {
   afterAll,
   afterEach,
@@ -19,10 +20,13 @@ import {
   fetchWithCache,
   getCache,
   getHeadersForCacheKey,
+  getScopedCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
+import { createDiskCache } from '../src/cache/storage';
+import cliState from '../src/cliState';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
@@ -175,19 +179,13 @@ vi.mock('cache-manager', () => ({
   }),
 }));
 
-// Mock keyv and keyv-file with proper class constructors
-vi.mock('keyv', () => {
-  return {
-    Keyv: class MockKeyv {},
-  };
-});
+// The storage suite exercises real packages; these tests exercise the cache policy layer.
+vi.mock('../src/cache/storage', () => ({ createDiskCache: vi.fn() }));
 
-vi.mock('keyv-file', () => {
-  return {
-    __esModule: true,
-    KeyvFile: class MockKeyvFile {},
-    default: class MockKeyvFile {},
-  };
+beforeEach(() => {
+  vi.mocked(createDiskCache)
+    .mockReset()
+    .mockImplementation((_filename, ttl) => createCache({ ttl, refreshThreshold: 0 }));
 });
 
 const mockFetchWithRetriesResponse = (
@@ -246,17 +244,19 @@ describe('cache configuration', () => {
       delete: expect.any(Function),
       clear: expect.any(Function),
     });
-    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
+    expect(createDiskCache).not.toHaveBeenCalled();
   });
 
   it('should use disk cache in non-test environment', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
-    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
     const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(createDiskCache).toHaveBeenCalledWith(
+      path.join(expectedCachePath, 'cache.json'),
+      cacheModule.getCacheTtlMs(),
+    );
     expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
@@ -317,16 +317,13 @@ describe('cache configuration', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
   });
 
-  it('should respect cache configuration from environment', async () => {
-    mockProcessEnv({ PROMPTFOO_CACHE_MAX_FILE_COUNT: '100' });
+  it('converts the configured cache TTL from seconds to milliseconds', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_TTL: '3600' });
-    mockProcessEnv({ PROMPTFOO_CACHE_MAX_SIZE: '1000000' });
     mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
-    const cache = cacheModule.getCache();
-    // Should have disk cache store
-    expect(cache.stores.length).toBeGreaterThan(0);
+    cacheModule.getCache();
+    expect(createDiskCache).toHaveBeenLastCalledWith(expect.any(String), 3_600_000);
   });
 
   it('should handle cache directory creation when it exists', async () => {
@@ -344,6 +341,8 @@ describe('fetchWithCache', () => {
   const response = { data: 'test data' };
 
   beforeEach(async () => {
+    vi.stubEnv('NO_PROXY', '*');
+    vi.stubEnv('no_proxy', '*');
     vi.resetModules();
     mockFetchWithRetries.mockReset();
     vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
@@ -355,6 +354,7 @@ describe('fetchWithCache', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   afterAll(() => {
@@ -499,7 +499,7 @@ describe('fetchWithCache', () => {
 
     it('sanitizes existing cached data and metadata before returning or logging it', async () => {
       await getCache().set(
-        'fetch:v3:metadata-policy:request',
+        'fetch:v4:explicit:plain:metadata-policy:request',
         JSON.stringify({ ...rawMetadata, data: rawData, status: 200, latencyMs: 12 }),
       );
 
@@ -749,6 +749,20 @@ describe('fetchWithCache', () => {
       });
       expect([first.cached, repeat.cached, other.cached]).toEqual([false, true, false]);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares nested namespace policy across separately loaded module copies', async () => {
+      vi.resetModules();
+      const otherCacheModule = await import('../src/cache');
+      await withCacheNamespace('external-provider', async () => {
+        expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+        await otherCacheModule.withCacheNamespace('sample:1', async () => {
+          expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+          expect(getScopedCacheKey('sample')).not.toBe('sample');
+        });
+      });
+      expect(otherCacheModule.getScopedCacheKey('sample')).toBe('sample');
+      expect(getScopedCacheKey('sample')).toBe('sample');
     });
 
     it('should scope cache disabling to the current async context', async () => {
@@ -1116,24 +1130,18 @@ describe('fetchWithCache', () => {
       await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow('Error parsing response');
     });
 
-    it('should handle request timeout', async () => {
-      vi.useFakeTimers();
-      const mockTimeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(mockFetchWithRetriesResponse(true, response)), 2000);
-      });
-      mockFetchWithRetries.mockImplementationOnce(() => mockTimeoutPromise as Promise<Response>);
+    it('forwards the request timeout and propagates a transport timeout', async () => {
+      const timeoutError = new Error('Request timed out');
+      mockFetchWithRetries.mockRejectedValueOnce(timeoutError);
 
-      const fetchPromise = fetchWithCache(url, {}, 100);
-
-      await expect(
-        Promise.race([
-          fetchPromise,
-          new Promise((_, reject) => {
-            vi.advanceTimersByTime(150);
-            reject(new Error('timeout'));
-          }),
-        ]),
-      ).rejects.toThrow('timeout');
+      await expect(fetchWithCache(url, {}, 100)).rejects.toBe(timeoutError);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        expect.any(Object),
+        100,
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should handle network errors', async () => {
@@ -1430,6 +1438,28 @@ describe('fetchWithCache', () => {
       expect(secondResult.data).toEqual({ data: 'second identity' });
       expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
     });
+
+    it.each([undefined, 'custom-key'])(
+      'isolates simultaneous and cached requests by route (%s)',
+      async (cacheKey) => {
+        mockFetchWithRetries.mockImplementation(async () => new Response('{}'));
+        const get = (proxy: string, bypass = '') =>
+          cliState.withEnv({ HTTPS_PROXY: proxy, NO_PROXY: bypass }, () =>
+            fetchWithCache(url, {}, 1000, 'json', { cacheKey }),
+          );
+        const a = 'http://one.example';
+        const b = 'http://two.example';
+        await Promise.all([get(a), get(b)]);
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect((await get(b)).cached).toBe(true);
+        expect((await get(a, '*')).cached).toBe(false);
+        expect((await get(b, '*')).cached).toBe(true);
+        for (let i = 0; i < 2; i++) {
+          expect((await get('http://user:private@one.example')).cached).toBe(false);
+        }
+        expect(JSON.stringify(vi.mocked(getCache().set).mock.calls)).not.toContain('private');
+      },
+    );
 
     it('should isolate cached responses by request headers without storing secrets in the key', async () => {
       const cache = getCache();
@@ -2301,7 +2331,9 @@ describe('fetchWithCache', () => {
       expect(first.cached).toBe(false);
       expect(second.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledOnce();
-      expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe('fetch:v3:project-a:response-hash');
+      expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe(
+        'fetch:v4:explicit:plain:project-a:response-hash',
+      );
     });
 
     it('should isolate different explicit cache keys from each other', async () => {
@@ -2348,7 +2380,7 @@ describe('fetchWithCache', () => {
 
       // The stored key must carry the namespace prefix.
       expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe(
-        'repeat:1:fetch:v3:project-a:response-hash',
+        'repeat:1:fetch:v4:explicit:plain:project-a:response-hash',
       );
 
       // The same explicit key under a different namespace is a MISS...
@@ -2467,7 +2499,7 @@ describe('fetchWithCache', () => {
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
       const cacheKeys = vi.mocked(getCache().set).mock.calls.map(([cacheKey]) => String(cacheKey));
-      expect(cacheKeys).toEqual([expect.stringMatching(/^repeat:1:fetch:v3:/)]);
+      expect(cacheKeys).toEqual([expect.stringMatching(/^repeat:1:fetch:v4:/)]);
       expect(cacheKeys[0]).not.toMatch(/:repeat1$/);
     });
 

@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 describe('proxy diagnostics', () => {
-  it.each(['before', 'after', 'alias', 'repeated', 'comma-separated'])(
+  it.each(['before', 'after', 'alias', 'repeated', 'comma-separated', 'config'])(
     'preserves explicit env-file precedence with %s command options',
     async (placement) => {
       mockProcessEnv({ https_proxy: 'http://shell.example:8080', no_proxy: 'shell.example' });
@@ -66,9 +66,12 @@ describe('proxy diagnostics', () => {
         'HTTPS_PROXY=http://fixture-user:fixture-password@file.example:8080\nNO_PROXY=\n',
       );
       fs.writeFileSync(secondPath, 'HTTPS_PROXY=\n');
-      vi.mocked(resolveConfigs).mockResolvedValue({ config: { env: {} } } as Awaited<
-        ReturnType<typeof resolveConfigs>
-      >);
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: { env: {} },
+        testSuite: { providers: [], prompts: [] },
+        basePath: '',
+        commandLineOptions: { envPath: [placement === 'config' ? firstPath : secondPath] },
+      });
       const program = new Command();
       debugCommand(program, {}, undefined);
       addCommonOptionsRecursively(program);
@@ -83,7 +86,7 @@ describe('proxy diagnostics', () => {
         args.push('--env-file', firstPath, '--env-file', secondPath);
       } else if (placement === 'comma-separated') {
         args.push('--env-file', `${firstPath},${secondPath}`);
-      } else {
+      } else if (placement !== 'config') {
         args.push(placement === 'alias' ? '--env-path' : '--env-file', firstPath);
       }
       const previousFileEnv = cliState.envFileOverrides;
@@ -147,7 +150,7 @@ describe('proxy diagnostics', () => {
     const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
     const info = JSON.parse(output);
     expect(info.env.httpsProxy).toBe('http://host.example:8080');
-    expect(info.configInfo.configContent).toContain('fixture config failure');
+    expect(info.configInfo.configContent).toContain('Could not load config');
   });
 
   it.each(['missing', 'invalid'] as const)(
@@ -171,7 +174,7 @@ describe('proxy diagnostics', () => {
       if (failure === 'missing') {
         expect(resolveConfigs).not.toHaveBeenCalled();
       } else {
-        expect(info.configInfo.configContent).toContain('fixture config failure');
+        expect(info.configInfo.configContent).toContain('Could not load config');
       }
     },
   );
@@ -238,7 +241,9 @@ describe('proxy diagnostics', () => {
       };
       vi.mocked(resolveConfigs).mockResolvedValue({
         config: { env },
-      } as Awaited<ReturnType<typeof resolveConfigs>>);
+        testSuite: { providers: [], prompts: [] },
+        basePath: '',
+      });
       vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         json: async () => ({ status: 'OK' }),

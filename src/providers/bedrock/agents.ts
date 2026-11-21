@@ -1,5 +1,4 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
@@ -237,6 +236,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Get or create the Bedrock Agent Runtime client
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
+    this.checkAgentRuntimeCacheIdentity();
     if (this.agentRuntimeClient) {
       return this.agentRuntimeClient;
     }
@@ -249,23 +249,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // need a custom handler for proxy support.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
-      const credentialOptions = await this.getIamCredentialOptions();
-      try {
-        const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-
-        state.client = new BedrockAgentRuntimeClient({
-          region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
-          retryMode: 'adaptive',
-          ...(handler ? { requestHandler: handler } : {}),
-          ...credentialOptions,
-        });
-      } catch (err) {
-        logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);
-        throw new Error(
-          'The @aws-sdk/client-bedrock-agent-runtime package is required. Please install it: npm install @aws-sdk/client-bedrock-agent-runtime',
-        );
-      }
+      state.client = await this.createAgentRuntimeClient(handler);
       return state.client;
     })().catch((error) => {
       state.initialization = undefined;
@@ -525,9 +509,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
-    const cache = await getCache();
+    const cache = this.allowSharedAgentRuntimeCache ? await getCache() : undefined;
     // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = `bedrock-agent:v2:${this.responseCacheNamespace ? `${this.responseCacheNamespace}:` : ''}${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+    const cacheKey = `bedrock-agent:v3:${this.responseCacheNamespace ? `${this.responseCacheNamespace}:` : ''}${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
       JSON.stringify({
         prompt,
         actionGroups: this.config.actionGroups,
@@ -545,7 +529,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     )}`;
 
     // Check cache
-    if (isCacheEnabled()) {
+    if (cache && isCacheEnabled()) {
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
@@ -583,7 +567,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       };
 
       // Cache the successful response
-      if (isCacheEnabled()) {
+      if (cache && isCacheEnabled()) {
         try {
           await cache.set(cacheKey, JSON.stringify(result));
         } catch (err) {

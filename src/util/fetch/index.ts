@@ -1,5 +1,6 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'path';
+import type { ConnectionOptions } from 'tls';
 
 import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
@@ -10,18 +11,21 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
+import { sha256 } from '../createHash';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
+  getAbortError,
   HttpRateLimitError,
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getProxyForUrl } from './proxy';
 import { getEffectiveRequestSignal } from './requestSignal';
+import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';
@@ -59,18 +63,11 @@ async function resolveAuthenticationHeaders(
   return Object.fromEntries(headers);
 }
 
-type AgentSettings = {
-  connections: number;
-  headersTimeout: number;
-  rejectUnauthorized: boolean;
-  ca?: string;
-  proxyUrl?: string;
-};
-
-// A bounded pool keeps configuration (including proxy credentials) out of serialized cache keys.
-type CachedAgent = { settings: AgentSettings; dispatcher: Dispatcher; users: number };
-const cachedAgents: CachedAgent[] = [];
-const MAX_CACHED_AGENTS = 32;
+type ActiveAgent = { key: string; dispatcher: Dispatcher; users: number };
+const activeAgents = new Map<string, ActiveAgent>();
+// Limit retained transport configurations, independently of how many requests are in flight.
+const MAX_IDLE_AGENTS = 32;
+const idleAgents = new Map<string, Dispatcher>();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -90,73 +87,71 @@ function getConnectionPoolSize(): number {
   return cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
 }
 
-/** Clear cached agents and let their outstanding requests drain. */
+/**
+ * Close cached dispatchers on shutdown and between tests.
+ */
 export function clearAgentCache(): void {
-  for (const entry of cachedAgents.splice(0)) {
-    if (entry.users === 0) {
-      closeAgent(entry.dispatcher);
+  activeAgents.clear(); // Outstanding calls close their dispatcher on last release.
+  for (const agent of idleAgents.values()) {
+    if (typeof agent.close === 'function') {
+      agent.close();
     }
   }
+  idleAgents.clear();
 }
 
-function closeAgent(dispatcher: Dispatcher): void {
-  void Promise.resolve(dispatcher.close()).catch((error) => {
-    logger.debug('Failed to close cached HTTP agent', { error });
-  });
-}
-
-function acquireAgent(
-  tlsOptions: { rejectUnauthorized: boolean; ca?: string },
-  proxyUrl?: string,
-): CachedAgent {
-  const settings: AgentSettings = {
-    connections: getConnectionPoolSize(),
-    headersTimeout: getRequestTimeoutMs(),
-    ...tlsOptions,
-    proxyUrl,
-  };
-  const index = cachedAgents.findIndex(
-    ({ settings: previous }) =>
-      previous.connections === settings.connections &&
-      previous.headersTimeout === settings.headersTimeout &&
-      previous.rejectUnauthorized === settings.rejectUnauthorized &&
-      previous.ca === settings.ca &&
-      previous.proxyUrl === settings.proxyUrl,
-  );
-  if (index !== -1) {
-    const [entry] = cachedAgents.splice(index, 1);
-    cachedAgents.unshift(entry);
-    entry.users++;
-    return entry;
-  }
+function createAgent(
+  proxyUrl: string,
+  tlsOptions: ConnectionOptions,
+  connections: number,
+  headersTimeout: number,
+): Dispatcher {
   const options = {
-    headersTimeout: settings.headersTimeout,
+    connections,
+    headersTimeout,
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
-    connections: settings.connections,
   };
-  const dispatcher = (
-    proxyUrl
-      ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls: tlsOptions, requestTls: tlsOptions })
-      : new Agent({ ...options, connect: tlsOptions })
-  )
-    .compose(createDecompressionInterceptor())
-    .compose(stripDecompressionHeaders());
-  const entry = { settings, dispatcher, users: 1 };
-  cachedAgents.unshift(entry);
-  if (cachedAgents.length > MAX_CACHED_AGENTS) {
-    const evicted = cachedAgents.pop()!;
-    if (evicted.users === 0) {
-      closeAgent(evicted.dispatcher);
-    }
+  const agent = proxyUrl
+    ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls: tlsOptions, requestTls: tlsOptions })
+    : new Agent({ ...options, connect: tlsOptions });
+  return agent.compose(createDecompressionInterceptor()).compose(stripDecompressionHeaders());
+}
+
+function acquireAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ActiveAgent {
+  const connections = getConnectionPoolSize();
+  const headersTimeout = getRequestTimeoutMs();
+  // Hash the effective settings so cache keys don't retain proxy credentials or CA bundles.
+  const key = sha256(JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout]));
+  const active = activeAgents.get(key);
+  if (active) {
+    active.users++;
+    return active;
   }
+  const dispatcher =
+    idleAgents.get(key) ?? createAgent(proxyUrl, tlsOptions, connections, headersTimeout);
+  idleAgents.delete(key);
+  const entry = { key, dispatcher, users: 1 };
+  activeAgents.set(key, entry);
   return entry;
 }
 
-function releaseAgent(entry: CachedAgent): void {
-  entry.users--;
-  if (entry.users === 0 && !cachedAgents.includes(entry)) {
-    closeAgent(entry.dispatcher);
+function releaseAgent(entry: ActiveAgent): void {
+  if (--entry.users > 0) {
+    return;
+  }
+  if (activeAgents.get(entry.key) !== entry) {
+    // clearAgentCache ran while this request was pending.
+    void entry.dispatcher.close();
+    return;
+  }
+  activeAgents.delete(entry.key);
+  idleAgents.set(entry.key, entry.dispatcher);
+  if (idleAgents.size > MAX_IDLE_AGENTS) {
+    const [key, oldest] = idleAgents.entries().next().value!;
+    idleAgents.delete(key);
+    // Undici drains outstanding response bodies before closing the dispatcher.
+    void oldest.close();
   }
 }
 
@@ -239,7 +234,7 @@ export async function fetchWithProxy(
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
-  const finalOptions: FetchOptions & { dispatcher?: any } = {
+  const finalOptions: FetchOptions & { dispatcher?: Dispatcher } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
@@ -289,7 +284,12 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: { rejectUnauthorized: boolean; ca?: string } = {
+  // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
+  if (finalOptions.dispatcher) {
+    return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
+  }
+
+  const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL'),
   };
 
@@ -309,73 +309,79 @@ export async function fetchWithProxy(
       }
     }
   }
-  const proxyUrl = getProxyForUrl(finalUrlString);
+  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
-  // Bind the dispatcher per-request to avoid global state races under concurrency.
-  // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
-  let ownedAgent: CachedAgent | undefined;
-  if (!finalOptions.dispatcher) {
-    if (proxyUrl && logEnabled) {
-      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    }
-    ownedAgent = acquireAgent(tlsOptions, proxyUrl || undefined);
-    finalOptions.dispatcher = ownedAgent.dispatcher;
+  if (proxyUrl && !/^https?:/i.test(proxyUrl)) {
+    throw new Error('HTTP requests require an HTTP or HTTPS proxy.');
   }
+  if (proxyUrl && logEnabled) {
+    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+  }
+  // Hold the same transport across asynchronous auth, redirects and retry backoff.
+  const agent = acquireAgent(proxyUrl, tlsOptions);
+  finalOptions.dispatcher = agent.dispatcher;
+  try {
+    return await fetchWithTransientRetries(
+      finalUrl,
+      finalOptions,
+      getAuthHeaders,
+      logEnabled,
+      proxyUrl,
+    );
+  } finally {
+    releaseAgent(agent);
+  }
+}
 
+async function fetchWithTransientRetries(
+  url: RequestInfo,
+  options: FetchOptions,
+  getAuthHeaders: FetchOptions['getAuthHeaders'],
+  logEnabled: boolean,
+  proxyUrl?: string,
+): Promise<Response> {
   // Transient error retry logic (502/503/504/524 with matching status text).
   // When a provider sets maxRetries: 0 and the caller did not pass an explicit
   // disableTransientRetries, honor the provider intent via the retry context.
   const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
-  try {
-    for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-      let attemptOptions = finalOptions;
-      if (getAuthHeaders) {
-        attemptOptions = {
-          ...finalOptions,
-          headers: await resolveAuthenticationHeaders(
-            getAuthHeaders,
-            finalOptions.headers,
-            combinedSignal,
-          ),
-        };
-      }
-      const response = await monkeyPatchFetch(
-        finalUrl,
-        attemptOptions,
-        ownedAgent ? proxyUrl : undefined,
-      );
+  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    let attemptOptions = options;
+    if (getAuthHeaders) {
+      attemptOptions = {
+        ...options,
+        headers: await resolveAuthenticationHeaders(
+          getAuthHeaders,
+          options.headers,
+          options.signal,
+        ),
+      };
+    }
+    const response = await monkeyPatchFetch(url, attemptOptions, proxyUrl);
 
-      if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
-        const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-        if (logEnabled) {
-          logger.debug(
-            `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
-          );
-        }
-        await sleep(backoffMs);
-        continue;
+    if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
+      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      if (logEnabled) {
+        logger.debug(
+          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+        );
       }
-
-      return response;
+      await sleep(backoffMs);
+      continue;
     }
 
-    // This should be unreachable, but TypeScript needs it
-    throw new Error('Unexpected end of transient retry loop');
-  } finally {
-    // Keep the dispatcher alive across authentication, request preparation, and retries.
-    // Undici's close() drains any response body still being consumed by the caller.
-    if (ownedAgent) {
-      releaseAgent(ownedAgent);
-    }
+    return response;
   }
+
+  // This should be unreachable, but TypeScript needs it
+  throw new Error('Unexpected end of transient retry loop');
 }
 
 export function fetchWithTimeout(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number,
+  configuredTimeout: number | `${number}`,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
@@ -386,6 +392,9 @@ export function fetchWithTimeout(
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
 
+    // Provider config templates can render numeric settings as strings.
+    const timeout = Number(configuredTimeout);
+    const expiresAt = performance.now() + timeout;
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
@@ -397,6 +406,7 @@ export function fetchWithTimeout(
     })
       .then((response) => {
         clearTimeout(timeoutId);
+        trackResponseDeadline(response, { controller: timeoutController, expiresAt, timeout });
         resolve(response);
       })
       .catch((error) => {
@@ -457,21 +467,6 @@ export function computeRateLimitWaitMs(response: Response): number {
  */
 const RATE_LIMIT_JITTER_MS = 1000;
 
-/**
- * Handle rate limiting by waiting the appropriate amount of time, plus a
- * uniform random jitter to avoid synchronized retry storms when many
- * concurrent requests hit the same rate limit.
- */
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
   if (!signal) {
     await sleep(waitTime);
@@ -494,6 +489,11 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
   });
 }
 
+/**
+ * Handle rate limiting by waiting the appropriate amount of time, plus a
+ * uniform random jitter to avoid synchronized retry storms when many
+ * concurrent requests hit the same rate limit.
+ */
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,
@@ -528,14 +528,13 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
 
 /**
  * Read the body of a rate-limited response without consuming the original
- * stream. Returns the parsed body (JSON if parseable, else raw text) and
- * any extracted error code (e.g. `insufficient_quota`).
+ * stream. Returns the parsed body (JSON if parseable, else raw text).
  *
  * Why clone: `Response.text()` consumes the underlying stream. The original
  * response may still be observed by upstream wrappers (logging middleware,
  * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Clone/read failures degrade to `{ body: undefined, code: undefined }`
+ * Clone/read failures return `undefined`
  * unless the caller cancelled the unfinished peek. Losing the body code only
  * widens classification from `quota` to `rate_limit`, which is the safer
  * (retryable) side of the misclassification.
@@ -544,7 +543,7 @@ async function peekRateLimitBody(
   response: Response,
   logEnabled: boolean,
   signal?: AbortSignal | null,
-): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
+): Promise<unknown> {
   let cloned: Response;
   try {
     cloned = response.clone();
@@ -555,12 +554,14 @@ async function peekRateLimitBody(
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
     }
-    return { body: undefined, code: undefined, type: undefined };
+    return undefined;
   }
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
+    text = await readWithResponseDeadline(response, () =>
+      readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true }),
+    );
   } catch (err) {
     if (signal?.aborted) {
       throw getAbortError(signal);
@@ -568,26 +569,21 @@ async function peekRateLimitBody(
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     }
-    return { body: undefined, code: undefined, type: undefined };
+    return undefined;
   }
 
   if (!text) {
-    return { body: undefined, code: undefined, type: undefined };
+    return undefined;
   }
 
   try {
-    const json = JSON.parse(text);
-    return {
-      body: json,
-      code: extractRateLimitErrorCode(json),
-      type: extractRateLimitErrorType(json),
-    };
+    return JSON.parse(text);
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
     if (logEnabled) {
       logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
     }
-    return { body: text, code: undefined, type: undefined };
+    return text;
   }
 }
 
@@ -657,21 +653,19 @@ export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
   return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
 }
 
-function buildHttpRateLimitError(
-  response: Response,
+export function buildHttpRateLimitError(
+  response: { status: number; statusText?: string; headers?: Headers },
   body: unknown,
-  code: string | undefined,
-  type: string | undefined,
 ): HttpRateLimitError {
-  const headers = Object.fromEntries(response.headers.entries());
+  const headers = Object.fromEntries(response.headers ?? []);
   const parsed = parseRateLimitHeaders(headers);
   return new HttpRateLimitError({
     status: response.status,
     statusText: response.statusText,
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
-    code,
-    type,
+    code: extractRateLimitErrorCode(body),
+    type: extractRateLimitErrorType(body),
     headers,
     body,
   });
@@ -748,8 +742,8 @@ async function handleRateLimitedResponse(
   // sees the same classification callers do.
   let rateLimitError: HttpRateLimitError | undefined;
   if (isHardRateLimit) {
-    const { body, code, type } = await peekRateLimitBody(response, logEnabled, signal);
-    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+    const body = await peekRateLimitBody(response, logEnabled, signal);
+    rateLimitError = buildHttpRateLimitError(response, body);
   }
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail

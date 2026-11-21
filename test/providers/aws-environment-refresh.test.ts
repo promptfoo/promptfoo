@@ -7,9 +7,10 @@ import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { NodeHttp2Handler, NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { memoizeAwsCredentials } from '../../src/providers/awsCredentialRefresh';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../../src/contracts/env';
@@ -312,4 +313,17 @@ describe.each(['bedrock', 'sagemaker'])('%s direct environment credential refres
       await expect(credentials({ forceRefresh: true })).resolves.toEqual(first);
     },
   );
+});
+
+it('keeps newer forced AWS credentials when an older request settles last', async () => {
+  const current = { accessKeyId: 'new', secretAccessKey: 'fixture' };
+  const pending = createDeferred<typeof current>();
+  const load = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(current);
+  const get = memoizeAwsCredentials(load, () => false);
+  const first = get();
+  expect(await get({ forceRefresh: true })).toEqual(current);
+  pending.resolve({ ...current, accessKeyId: 'old' });
+  expect(await first).toEqual(current);
+  expect(await get()).toEqual(current);
+  expect(load).toHaveBeenCalledTimes(2);
 });

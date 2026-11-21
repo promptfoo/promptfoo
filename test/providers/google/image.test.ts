@@ -1,7 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
-import { mockProcessEnv } from '../../util/utils';
+import { mockGoogleImageEnv, mockProcessEnv } from '../../util/utils';
+
+const createImagePredictionResponse = () => ({
+  status: 200,
+  data: {
+    predictions: [
+      {
+        bytesBase64Encoded: 'base64data',
+        mimeType: 'image/png',
+      },
+    ],
+  },
+  cached: false,
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -27,17 +40,11 @@ describe('GoogleImageProvider', async () => {
   const mockLoadCredentials = utilMocks.loadCredentials as Mock;
   const mockResolveProjectId = utilMocks.resolveProjectId as Mock;
 
+  let restoreImageEnv: () => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
-    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-    mockProcessEnv({ VERTEX_REGION: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_LOCATION: undefined });
+    restoreImageEnv = mockGoogleImageEnv();
 
     // Set up default mock behaviors
     mockLoadCredentials.mockImplementation(function (creds) {
@@ -46,17 +53,7 @@ describe('GoogleImageProvider', async () => {
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
-  afterEach(() => {
-    mockProcessEnv({ GOOGLE_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-    mockProcessEnv({ VERTEX_REGION: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-  });
+  afterEach(() => restoreImageEnv());
 
   it('should construct with model name', () => {
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
@@ -68,18 +65,7 @@ describe('GoogleImageProvider', async () => {
     mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
-    mockFetchWithCache.mockResolvedValueOnce({
-      status: 200,
-      data: {
-        predictions: [
-          {
-            bytesBase64Encoded: 'base64data',
-            mimeType: 'image/png',
-          },
-        ],
-      },
-      cached: false,
-    });
+    mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
 
     const result = await provider.callApi('Test prompt');
 
@@ -434,13 +420,7 @@ describe('GoogleImageProvider', async () => {
 
     for (const { model, expectedCost } of testCases) {
       const provider = new GoogleImageProvider(model);
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
-        },
-        cached: false,
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
 
       const result = await provider.callApi('Test prompt');
       expect(result.cost).toBe(expectedCost);
@@ -467,6 +447,33 @@ describe('GoogleImageProvider', async () => {
     beforeEach(() => {
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
+    });
+
+    it('rejects an explicit slash-only host without sending a request', async () => {
+      const provider = new GoogleImageProvider('imagen-4.0-generate-001', {
+        config: { apiHost: '///' },
+      });
+      expect(await provider.callApi('Test prompt')).toEqual({
+        error: 'Google AI Studio apiHost must contain a host',
+      });
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should not double the path separator when apiHost has a trailing slash', async () => {
+      const provider = new GoogleImageProvider('imagen-4.0-generate-001', {
+        config: { apiHost: 'proxy.example/google//' },
+      });
+      mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'https://proxy.example/google/v1beta/models/imagen-4.0-generate-001:predict',
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+      );
     });
 
     it('should make correct API request to Google AI Studio', async () => {
@@ -569,18 +576,7 @@ describe('GoogleImageProvider', async () => {
 
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          predictions: [
-            {
-              bytesBase64Encoded: 'base64data',
-              mimeType: 'image/png',
-            },
-          ],
-        },
-        cached: false,
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
 
       const result = await provider.callApi('Test prompt');
 

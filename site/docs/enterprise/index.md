@@ -23,7 +23,7 @@ Promptfoo offers two deployment options to meet your security needs:
 
 Both solutions offer a suite of tools to help you secure your LLM applications, including:
 
-- Robust RBAC controls to manage multiple users and teams
+- Role-based access control (RBAC) for users and teams
 - Teams-based configurability for customizing targets, plugins, and scan configurations
 - Detailed reporting and analytics to monitor the security of your LLM applications
 - Remediation suggestions to help you fix vulnerabilities

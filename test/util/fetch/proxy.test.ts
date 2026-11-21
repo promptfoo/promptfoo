@@ -187,6 +187,15 @@ describe('proxy routing compatibility', () => {
     );
   });
 
+  it.each(['unknown://user:private@host.example', 'http://user:private@bad host'])(
+    'rejects unsafe routes without exposing credentials',
+    (https_proxy) => {
+      expect(() => getProxyForUrl('https://fixture.example', { https_proxy })).toThrow(
+        /^Invalid or unsupported proxy URL\.$/,
+      );
+    },
+  );
+
   it('uses protocol settings before ALL_PROXY and supplies a missing scheme', () => {
     const env = {
       http_proxy: 'http-proxy.example:8080',

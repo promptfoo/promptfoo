@@ -114,13 +114,12 @@ describe('scoped AWS endpoint cache identity', () => {
           provider.knowledgeBaseClient?.destroy();
         }
       }
-      expect(rows).toMatchObject([
-        { output: 'first.invalid' },
-        { output: 'second.invalid' },
-        { output: 'first.invalid', cached: true },
-      ]);
-      expect(destinations).toEqual(['first.invalid', 'second.invalid']);
-      expect(authorizations).toHaveLength(2);
+      const endpoints = ['first.invalid', 'second.invalid', 'first.invalid'];
+      const shared = auth === 'ambient';
+      expect(rows.map((row) => row.output)).toEqual(endpoints);
+      expect(rows[2].cached === true).toBe(shared);
+      expect(destinations).toEqual(shared ? endpoints.slice(0, 2) : endpoints);
+      expect(fixtures.cache.size).toBe(shared ? 2 : 0);
       for (const authorization of authorizations) {
         expect(authorization).toContain(
           auth === 'bearer'

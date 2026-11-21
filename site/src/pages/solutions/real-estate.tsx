@@ -11,45 +11,12 @@ import LockIcon from '@mui/icons-material/Lock';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import ShieldIcon from '@mui/icons-material/Shield';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import { ApplicationCard } from '@site/src/components/ApplicationCard';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import { ComplianceCard, RiskCard } from '../../components/SolutionCards';
 import styles from '../landing-page.module.css';
-
-function RiskCard({ name, description }: { name: string; description: string }) {
-  return (
-    <div className={styles.vulnCard}>
-      <h4 className={styles.vulnName}>{name}</h4>
-      <p className={styles.vulnDescription}>{description}</p>
-    </div>
-  );
-}
-
-function ComplianceCard({
-  icon,
-  title,
-  items,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  items: { name: string; description: string }[];
-}) {
-  return (
-    <div className={styles.solutionCard}>
-      <div className={styles.solutionTitle}>
-        <span className={styles.solutionIcon}>{icon}</span>
-        {title}
-      </div>
-      <div className={styles.regulationBadges}>
-        {items.map((item) => (
-          <div key={item.name} className={styles.regulationBadge}>
-            <span className={styles.badgeName}>{item.name}</span>
-            <span className={styles.badgeDesc}>{item.description}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function RealEstate() {
   return (
@@ -216,36 +183,30 @@ export default function RealEstate() {
             <h2 className={styles.sectionTitle}>Tested across the enterprise</h2>
 
             <div className={styles.solutionGrid}>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <HomeIcon className={styles.solutionIcon} />
-                  Property Search & Recommendations
-                </div>
-                <p>
-                  Home search assistants, neighborhood recommendation engines, property matching
-                  tools, and school district comparison features.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <AccountBalanceIcon className={styles.solutionIcon} />
-                  Mortgage & Lending
-                </div>
-                <p>
-                  Pre-qualification bots, rate comparison tools, loan officer assistants, and
-                  automated underwriting support systems.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <ApartmentIcon className={styles.solutionIcon} />
-                  Property Management
-                </div>
-                <p>
-                  Tenant screening assistants, lease management bots, maintenance request handlers,
-                  and rental listing generators.
-                </p>
-              </div>
+              <ApplicationCard
+                styles={styles}
+                icon={<HomeIcon className={styles.solutionIcon} />}
+                title="Property Search & Recommendations"
+              >
+                Home search assistants, neighborhood recommendation engines, property matching
+                tools, and school district comparison features.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<AccountBalanceIcon className={styles.solutionIcon} />}
+                title="Mortgage & Lending"
+              >
+                Pre-qualification bots, rate comparison tools, loan officer assistants, and
+                automated underwriting support systems.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<ApartmentIcon className={styles.solutionIcon} />}
+                title="Property Management"
+              >
+                Tenant screening assistants, lease management bots, maintenance request handlers,
+                and rental listing generators.
+              </ApplicationCard>
             </div>
           </div>
         </section>
@@ -341,37 +302,30 @@ export default function RealEstate() {
             <h2 className={styles.sectionTitle}>Why real estate teams choose Promptfoo</h2>
 
             <div className={styles.benefitsList}>
-              <div className={styles.benefitItem}>
-                <LockIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Self-hosted deployment</h3>
-                  <p>
-                    Run entirely within your infrastructure. No applicant or transaction data leaves
-                    your environment, meeting the strictest data residency and security
-                    requirements.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <MonitorHeartIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Continuous compliance monitoring</h3>
-                  <p>
-                    Integrate with CI/CD pipelines to catch fair housing regressions before
-                    deployment. Track compliance posture across model updates and listing changes.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <VerifiedUserIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Audit-ready documentation</h3>
-                  <p>
-                    Generate structured reports that map directly to Fair Housing Act and ECOA
-                    requirements. Demonstrate due diligence with reproducible test results.
-                  </p>
-                </div>
-              </div>
+              <BenefitItem
+                styles={styles}
+                icon={<LockIcon className={styles.benefitIcon} />}
+                title="Self-hosted deployment"
+              >
+                Run entirely within your infrastructure. No applicant or transaction data leaves
+                your environment, meeting the strictest data residency and security requirements.
+              </BenefitItem>
+              <BenefitItem
+                styles={styles}
+                icon={<MonitorHeartIcon className={styles.benefitIcon} />}
+                title="Continuous compliance monitoring"
+              >
+                Integrate with CI/CD pipelines to catch fair housing regressions before deployment.
+                Track compliance posture across model updates and listing changes.
+              </BenefitItem>
+              <BenefitItem
+                styles={styles}
+                icon={<VerifiedUserIcon className={styles.benefitIcon} />}
+                title="Audit-ready documentation"
+              >
+                Generate structured reports that map directly to Fair Housing Act and ECOA
+                requirements. Demonstrate due diligence with reproducible test results.
+              </BenefitItem>
             </div>
           </div>
         </section>

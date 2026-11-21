@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { statSync } from 'node:fs';
 
 /** Partition by public identity selectors, including changes to selected credential files. */
@@ -21,16 +21,9 @@ export function getCredentialCacheNamespace(
     .digest('hex');
 }
 
-const opaqueNamespaces = new Map<string, string>();
-/** Opaque tokens without a public identity can only share a cache within this process. */
+const namespaceKey = randomBytes(32);
+
+/** Share opaque identities only within this process, without keeping raw credentials. */
 export function getOpaqueCredentialCacheNamespace(token: string): string {
-  let namespace = opaqueNamespaces.get(token);
-  if (namespace === undefined) {
-    namespace = randomUUID();
-    if (opaqueNamespaces.size >= 256) {
-      opaqueNamespaces.delete(opaqueNamespaces.keys().next().value!);
-    }
-    opaqueNamespaces.set(token, namespace);
-  }
-  return namespace;
+  return createHmac('sha256', namespaceKey).update(token).digest('hex');
 }

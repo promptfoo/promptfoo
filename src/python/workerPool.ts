@@ -14,6 +14,7 @@ export class PythonWorkerPool {
   private queue: QueuedRequest[] = [];
   private isInitialized: boolean = false;
   private shuttingDown: boolean = false;
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(
     private scriptPath: string,
@@ -93,7 +94,7 @@ export class PythonWorkerPool {
     }
 
     // Try to get available worker
-    const worker = this.getAvailableWorker();
+    const worker = this.workers.find((worker) => worker.isReady() && !worker.isBusy()) ?? null;
 
     if (worker) {
       // Worker available, execute immediately and trigger queue processing when done
@@ -108,29 +109,26 @@ export class PythonWorkerPool {
     }
   }
 
-  private getAvailableWorker(): PythonWorker | undefined {
-    return this.workers.find((worker) => worker.isReady() && !worker.isBusy());
-  }
-
   private processQueue(): void {
     if (this.workers.length > 0 && this.workers.every((worker) => worker.hasFailed())) {
       for (const request of this.queue.splice(0)) {
-        request.reject(new Error('Python worker pool has no usable workers'));
+        request.reject(
+          new Error(
+            `All ${this.workers.length} Python worker(s) for ${this.scriptPath} crashed and could not be restarted. Check the logs for the Python worker stderr output.`,
+          ),
+        );
       }
       return;
     }
 
     // Drain the entire queue - process all waiting requests with available workers
     while (this.queue.length > 0) {
-      const worker = this.getAvailableWorker();
+      const worker = this.workers.find((worker) => worker.isReady() && !worker.isBusy()) ?? null;
       if (!worker) {
         return; // No workers available right now
       }
 
-      const request = this.queue.shift();
-      if (!request) {
-        return;
-      }
+      const request = this.queue.shift()!;
 
       logger.debug(`Processing queued request (${this.queue.length} remaining)`);
 
@@ -148,6 +146,11 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.shutdownWorkers();
+    return this.shutdownPromise;
+  }
+
+  private async shutdownWorkers(): Promise<void> {
     this.shuttingDown = true;
     this.isInitialized = false;
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);

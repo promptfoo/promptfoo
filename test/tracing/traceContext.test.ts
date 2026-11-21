@@ -84,7 +84,7 @@ describe('fetchTraceContext', () => {
       startTime: 2,
       attributes: { 'otel.span.kind': 'client' },
     };
-    const fetchTrace = mockExternalTrace([internalSpan, targetSpan]);
+    const fetchTrace = mockExternalTrace([internalSpan, targetSpan], 'other');
 
     const result = await fetchTraceContext('trace-1', {
       providerConfig,
@@ -105,6 +105,7 @@ describe('fetchTraceContext', () => {
       sanitizeAttributes: true,
       spanFilter: ['target'],
     });
+    expect(result?.traceId).toBe('trace-1');
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
@@ -124,12 +125,14 @@ describe('fetchTraceContext', () => {
       },
       {
         spanId: 'model',
+        parentSpanId: 'tool',
         name: 'chat gpt-4.1-mini',
         startTime: 3,
         attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
       },
       {
         spanId: 'tool',
+        parentSpanId: 'handler',
         name: 'execute_tool search',
         startTime: 4,
         attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
@@ -146,6 +149,7 @@ describe('fetchTraceContext', () => {
     });
 
     expect(storedSpans).toEqual(spans);
+    expect(result?.spans.map((span) => span.depth)).toEqual([1, 0]);
     expect(result?.spans.map((span) => span.name)).toEqual([
       'chat gpt-4.1-mini',
       'execute_tool search',

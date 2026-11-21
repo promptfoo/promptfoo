@@ -166,7 +166,6 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
-  // Azure storage connection strings can contain an account key or SAS token.
   'azurestorageconnectionstring',
 
   // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips

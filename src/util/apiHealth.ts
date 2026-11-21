@@ -16,18 +16,18 @@ interface HealthResponse {
  * @returns A promise that resolves to the health check response.
  */
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
-  const proxyEnvironment = getProxyEnvironment();
-  logger.debug('[CheckRemoteHealth] Checking API health', {
-    url,
-    selectedProxy: sanitizeUrl(getProxyForUrl(url, proxyEnvironment)),
-    env: {
-      ...proxyEnvironment,
-      nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
-      nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
-    },
-  });
-
   try {
+    const proxyEnvironment = getProxyEnvironment();
+    logger.debug('[CheckRemoteHealth] Checking API health', {
+      url,
+      selectedProxy: sanitizeUrl(getProxyForUrl(url, proxyEnvironment)),
+      env: {
+        ...proxyEnvironment,
+        nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
+        nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
+      },
+    });
+
     const cloudConfig = new CloudConfig();
     const requestOptions = {
       headers: {

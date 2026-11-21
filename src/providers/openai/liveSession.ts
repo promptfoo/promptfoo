@@ -1033,6 +1033,7 @@ export class LiveSession {
         completionDetails: details,
       });
       const cost = calculateOpenAIUsageCost(model, this.options.config, usage, {
+        createdAt: response.created_at,
         serviceTier:
           response.service_tier ??
           (config?.type === 'responses' ? config.responses.service_tier : undefined),

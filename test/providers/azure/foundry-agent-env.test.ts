@@ -5,7 +5,8 @@ import { getEnvString } from '../../../src/envars';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { loadApiProvider } from '../../../src/providers/index';
 import { mockProcessEnv } from '../../util/utils';
-import type { AIProjectClient } from '@azure/ai-projects';
+
+import type { FoundryProjectClient } from '../../../src/providers/azure/foundryProjectClient';
 
 const fixtures = vi.hoisted(() => ({
   cache: new Map<string, unknown>(),
@@ -25,16 +26,14 @@ vi.mock('../../../src/cache', () => ({
 function createClient(clientId: string) {
   fixtures.clients(clientId);
   return {
-    agents: {
-      get: async () => {
-        fixtures.lookup(clientId);
-        return { id: clientId, name: clientId };
-      },
+    getAgent: async () => {
+      fixtures.lookup(clientId);
+      return { id: clientId, name: clientId };
     },
     getOpenAIClient: () => ({
       responses: {
-        create: async (_body: unknown, options: unknown) => {
-          fixtures.requests(clientId, options);
+        create: async (body: unknown) => {
+          fixtures.requests(clientId, body);
           return {
             id: 'fixture-response',
             model: 'gpt-4.1',
@@ -107,8 +106,8 @@ describe('Foundry invocation ownership', () => {
       ]);
       expect(fixtures.lookup).toHaveBeenCalledTimes(2);
       expect(fixtures.requests).toHaveBeenCalledTimes(4);
-      for (const [clientId, options] of fixtures.requests.mock.calls) {
-        expect(options).toMatchObject({ body: { agent_reference: { name: clientId } } });
+      for (const [clientId, body] of fixtures.requests.mock.calls) {
+        expect(body).toMatchObject({ agent_reference: { name: clientId } });
       }
     },
   );
@@ -157,7 +156,7 @@ describe('Foundry SDK endpoint scopes', () => {
     vi.restoreAllMocks();
   });
 
-  function client(provider: AzureFoundryAgentProvider): Promise<AIProjectClient> {
+  function client(provider: AzureFoundryAgentProvider): Promise<FoundryProjectClient> {
     return Reflect.get(provider, 'initializeClient').call(provider);
   }
 
@@ -165,15 +164,15 @@ describe('Foundry SDK endpoint scopes', () => {
     'matches endpoint and principal on reused providers (concurrent: %s)',
     async (concurrent) => {
       const provider = new AzureFoundryAgentProvider('agent-name');
-      const seen: AIProjectClient[] = [];
+      const seen: FoundryProjectClient[] = [];
       const run = async (tenant: string) => {
         const url = `https://${tenant}.services.ai.azure.com/api/projects/${tenant}`;
         await cliState.withEnv(
           { ...scopeEnv(tenant), AZURE_TENANT_ID: tenant, AZURE_AI_PROJECT_URL: url },
           async () => {
             const selected = await client(provider);
-            expect(selected.endpoint).toBe(url);
-            const credential = Reflect.get(selected, '_credential');
+            expect(Reflect.get(selected, 'endpoint')).toBe(url);
+            const credential = Reflect.get(selected, 'credential');
             expect(credential).toBeInstanceOf(ClientSecretCredential);
             expect(credential.tenantId).toBe(tenant);
             expect(await client(provider)).toBe(selected);
@@ -197,7 +196,7 @@ describe('Foundry SDK endpoint scopes', () => {
     await cliState.withEnvFileOverrides(
       { ...scopeEnv('file'), AZURE_AI_PROJECT_URL: url },
       async () => {
-        expect((await client(provider)).endpoint).toBe(url);
+        expect(Reflect.get(await client(provider), 'endpoint')).toBe(url);
       },
     );
   });
@@ -228,7 +227,7 @@ describe('Foundry SDK endpoint scopes', () => {
                 : { env: { AZURE_AI_PROJECT_URL: url } },
             );
       await cliState.withEnv({ ...scopeEnv('active'), AZURE_AI_PROJECT_URL: '' }, async () => {
-        expect((await client(provider)).endpoint).toBe(url);
+        expect(Reflect.get(await client(provider), 'endpoint')).toBe(url);
       });
     },
   );
