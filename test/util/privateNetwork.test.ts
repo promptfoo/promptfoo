@@ -1,0 +1,1345 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './utils';
+
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+
+import { lookup } from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
+
+import {
+  assertProviderTargetPublic,
+  assertUrlResolvesPublic,
+  getCallerSuppliedBaseUrls,
+  isPrivateIpAddress,
+  isPrivateRangeBlockedMessage,
+  isPrivateRangeBlockingEnabled,
+  PrivateRangeBlockedError,
+} from '../../src/util/privateNetwork';
+
+const mockedLookup = vi.mocked(
+  lookup as unknown as (hostname: string, options: { all: true }) => Promise<LookupAddress[]>,
+);
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
+
+describe('isPrivateRangeBlockedMessage', () => {
+  it.each([
+    'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "noresolve.example.com" could not be resolved: getaddrinfo ENOTFOUND',
+    'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "internal.example.com" resolves to a private address',
+    'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with private address "10.1.2.3"',
+  ])('matches a guard failure message: %s', (message) => {
+    expect(isPrivateRangeBlockedMessage(message)).toBe(true);
+  });
+
+  it('matches a guard message wrapped by another layer', () => {
+    expect(
+      isPrivateRangeBlockedMessage(
+        'Provider returned error: PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "internal.example.com" resolves to a private address',
+      ),
+    ).toBe(true);
+  });
+
+  it.each(['Request failed after 4 retries: socket hang up', '', undefined, 42])(
+    'does not match a non-guard message: %s',
+    (message) => {
+      expect(isPrivateRangeBlockedMessage(message)).toBe(false);
+    },
+  );
+});
+
+describe('isPrivateIpAddress', () => {
+  it.each([
+    '10.0.0.1',
+    '10.255.255.255',
+    '172.16.0.1',
+    '172.31.255.255',
+    '192.168.0.1',
+    '192.168.255.255',
+    '127.0.0.1',
+    '127.0.0.2',
+    '169.254.169.254',
+    '169.254.0.1',
+    '0.0.0.0',
+    '100.64.0.1',
+    '100.100.100.200',
+    '100.127.255.255',
+  ])('flags private IPv4 %s', (ip) => {
+    expect(isPrivateIpAddress(ip)).toBe(true);
+  });
+
+  it.each([
+    '8.8.8.8',
+    '1.1.1.1',
+    '172.15.255.255',
+    '172.32.0.1',
+    '192.167.255.255',
+    '11.0.0.1',
+    '100.63.255.255',
+    '100.128.0.1',
+  ])('allows public IPv4 %s', (ip) => {
+    expect(isPrivateIpAddress(ip)).toBe(false);
+  });
+
+  it.each([
+    '::1',
+    '::',
+    'fe80::1',
+    'fe80::abcd',
+    'fec0::1',
+    'fec0::abcd',
+    'feff::1',
+    'fc00::1',
+    'fd00::1234',
+    '::ffff:10.0.0.1',
+  ])('flags private IPv6 %s', (ip) => {
+    expect(isPrivateIpAddress(ip)).toBe(true);
+  });
+
+  it.each(['2001:db8::1', '2606:4700:4700::1111', '::ffff:8.8.8.8', '[::1]'])(
+    'handles IPv6 %s',
+    (ip) => {
+      // [::1] keeps brackets after URL parsing; ::ffff:8.8.8.8 embeds public v4.
+      expect(isPrivateIpAddress(ip)).toBe(ip === '[::1]');
+    },
+  );
+
+  it('returns false for non-IP input', () => {
+    expect(isPrivateIpAddress('not-an-ip')).toBe(false);
+    expect(isPrivateIpAddress('')).toBe(false);
+  });
+});
+
+describe('getCallerSuppliedBaseUrls', () => {
+  it('returns every config URL instead of letting one mask another', () => {
+    // HttpProvider requests `config.url || id` and never reads apiBaseUrl, so
+    // a public apiBaseUrl must not mask a private id.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http://169.254.169.254/latest',
+        config: { apiBaseUrl: 'https://8.8.8.8' },
+      }),
+    ).toEqual(['https://8.8.8.8', 'http://169.254.169.254/latest']);
+  });
+
+  it('falls back to a bare http(s) provider id', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'http://169.254.169.254/' })).toEqual([
+      'http://169.254.169.254/',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'https://example.com/v1' })).toEqual([
+      'https://example.com/v1',
+    ]);
+  });
+
+  it('catches non-canonical http(s) provider ids accepted by the registry', () => {
+    // The registry accepts any `http:` prefix; Node canonicalizes these to
+    // loopback before HttpProvider fetches them.
+    expect(getCallerSuppliedBaseUrls({ id: 'http:127.0.0.1' })).toEqual(['http:127.0.0.1']);
+    expect(getCallerSuppliedBaseUrls({ id: 'http:\\\\127.0.0.1\\x' })).toEqual([
+      'http:\\\\127.0.0.1\\x',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'HTTP://169.254.169.254/' })).toEqual([
+      'HTTP://169.254.169.254/',
+    ]);
+  });
+
+  it('unwraps webhook: provider ids before returning the inner URL', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'webhook:http://169.254.169.254/latest' })).toEqual([
+      'http://169.254.169.254/latest',
+    ]);
+  });
+
+  it('unwraps n8n: and a2a: provider ids before returning the inner URL', () => {
+    // createN8nProvider strips the n8n: prefix for the webhook URL and
+    // A2AProvider stores the a2a: remainder as config.url, so the inner
+    // URL is the fetched target in both cases.
+    expect(
+      getCallerSuppliedBaseUrls({ id: 'n8n:http://169.254.169.254/latest/meta-data' }),
+    ).toEqual(['http://169.254.169.254/latest/meta-data']);
+    expect(getCallerSuppliedBaseUrls({ id: 'a2a:http://127.0.0.1:8080' })).toEqual([
+      'http://127.0.0.1:8080',
+    ]);
+  });
+
+  it('returns ws:/wss: provider ids for validation', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'ws://169.254.169.254/socket' })).toEqual([
+      'ws://169.254.169.254/socket',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'wss://example.com/socket' })).toEqual([
+      'wss://example.com/socket',
+    ]);
+  });
+
+  it('refuses a file-backed provider id instead of letting the loader expand it unseen', () => {
+    // loadApiProvider expands file:// YAML/JSON configs and instantiates the
+    // inner provider, so a file whose single provider points at metadata
+    // would bypass the preflight entirely: the preflight sees no URL here.
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file:///tmp/provider.yaml' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file:///tmp/provider.json' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file:///tmp/provider.yml' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('refuses a templated file:// id that could render into a config reference', () => {
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file://{{ env.HOME }}/provider.yaml' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('refuses a cloud provider id instead of letting the loader resolve it unseen', () => {
+    // loadApiProvider replaces a promptfoo://provider/<uuid> id with the
+    // saved provider from Cloud and instantiates it, so the preflight sees
+    // no URL here: a saved provider pointing at a private address would
+    // bypass the guard entirely.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc',
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it.each([
+    // The finding's payload: an exec id produces no URL, so the old
+    // preflight passed it, while the registry routes it to
+    // ScriptCompletionProvider, which runs it with execFile.
+    "exec:/bin/sh -c 'curl http://169.254.169.254/latest/meta-data/'",
+    'exec:./scripts/probe.sh',
+    'python:script.py',
+    'golang:main.go',
+    'ruby:script.rb',
+    'file://path/to/custom_provider.py:call_api',
+    'file://path/to/main.go',
+    'file://path/to/script.rb',
+    'file://path/to/custom.js',
+    'file://path/to/custom.ts',
+    'file://path/to/custom.JS',
+    'custom_provider.js',
+    'custom_provider.JS',
+  ])('refuses a script provider id instead of letting it execute unseen: %s', (id) => {
+    expect(() => getCallerSuppliedBaseUrls({ id })).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('leaves a bare script extension that no factory routes alone', () => {
+    // A bare .py path matches no registry factory (the python factory needs
+    // a python: prefix or a file:// path), so the loader fails without
+    // executing anything; only routed script shapes are refused.
+    expect(getCallerSuppliedBaseUrls({ id: 'custom_provider.py' })).toEqual([]);
+  });
+
+  it.each([
+    // The finding's payload: an mcp id contributes no URL, so the old
+    // preflight passed it, while initializing the provider launches
+    // server.command with StdioClientTransport (or runs a server.path
+    // script) before parsing any prompt.
+    {
+      id: 'mcp',
+      config: {
+        server: {
+          command: '/bin/sh',
+          args: ['-c', 'curl http://169.254.169.254/latest/meta-data/'],
+        },
+      },
+    },
+    { id: 'mcp:prod', config: { server: { command: 'npx', args: ['-y', 'mcp-server'] } } },
+    { id: 'mcp', config: { server: { path: './server.js' } } },
+    {
+      id: 'mcp',
+      config: { servers: [{ command: '/bin/sh' }, { url: 'https://public.example.com/mcp' }] },
+    },
+    { id: 'mcp', config: { servers: [{ path: './server.py' }] } },
+  ])(
+    'refuses an MCP subprocess transport instead of letting it execute unseen: %s',
+    ({ id, config }) => {
+      expect(() => getCallerSuppliedBaseUrls({ id, config })).toThrow(PrivateRangeBlockedError);
+    },
+  );
+
+  it('leaves an MCP id with no server transport to configure', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'mcp' })).toEqual([]);
+    expect(getCallerSuppliedBaseUrls({ id: 'mcp:prod', config: {} })).toEqual([]);
+  });
+
+  it('reads MCP server urls for validation', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'mcp',
+        config: { server: { url: 'https://public.example.com/mcp' } },
+      }),
+    ).toEqual(['https://public.example.com/mcp']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'mcp',
+        config: {
+          servers: [{ url: 'https://a.example.com/mcp' }, { url: 'https://b.example.com/mcp' }],
+        },
+      }),
+    ).toEqual(['https://a.example.com/mcp', 'https://b.example.com/mcp']);
+  });
+
+  it('refuses an embedded MCP command transport on a non-MCP provider id', () => {
+    // OpenAiChatCompletionProvider starts MCPClient.initialize() from its
+    // constructor when config.mcp.enabled is set, so an openai:chat id
+    // with a nested MCP command transport would spawn a subprocess the
+    // standalone mcp: check never sees.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:chat:gpt-4o',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          mcp: {
+            enabled: true,
+            server: {
+              command: '/bin/sh',
+              args: ['-c', 'curl http://169.254.169.254/latest/meta-data/'],
+            },
+          },
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:chat:gpt-4o',
+        config: { mcp: { enabled: true, servers: [{ path: './server.js' }] } },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    // Not gated on enabled: the flag defaults to true at execution parse
+    // in some paths, so a disabled-looking transport is still refused.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'anthropic:messages:claude-sonnet-4-5',
+        config: { mcp: { server: { command: 'npx', args: ['-y', 'mcp-server'] } } },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('reads embedded MCP remote server urls for validation', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'openai:chat:gpt-4o',
+        config: { mcp: { server: { url: 'https://public.example.com/mcp' } } },
+      }),
+    ).toEqual(['https://public.example.com/mcp']);
+    expect(getCallerSuppliedBaseUrls({ id: 'openai:chat:gpt-4o', config: { mcp: {} } })).toEqual(
+      [],
+    );
+  });
+
+  it('refuses an opencode-sdk MCP local server command', () => {
+    // opencode-sdk carries its MCP servers as a record of per-server
+    // configs, with local servers as an argv array instead of a string.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'opencode:sdk',
+        config: {
+          mcp: { local: { type: 'local', command: ['curl', 'http://169.254.169.254/'] } },
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'opencode:sdk',
+        config: { mcp: { remote: { type: 'remote', url: 'https://public.example.com/mcp' } } },
+      }),
+    ).toEqual(['https://public.example.com/mcp']);
+  });
+
+  it('reads the HttpProvider session endpoint url for validation', () => {
+    // HttpProvider fetches config.session.url before the main request, so
+    // the session URL must be collected alongside config.url.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          session: { url: 'http://169.254.169.254/session', responseParser: 'data.sessionId' },
+        },
+      }),
+    ).toEqual(['https://public.example.com/hook', 'http://169.254.169.254/session']);
+  });
+
+  it('preflights HTTP OAuth and refuses file auth and executable session selectors', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          auth: { type: 'oauth', tokenUrl: 'https://auth.example/token' },
+        },
+      }),
+    ).toEqual(['https://auth.example/token']);
+    for (const config of [
+      { auth: { type: 'file', path: 'file://fixture.js' } },
+      { session: { url: 'https://public.example', responseParser: 'String(data.body.id)' } },
+    ]) {
+      expect(() => getCallerSuppliedBaseUrls({ id: 'http', config })).toThrow(
+        PrivateRangeBlockedError,
+      );
+    }
+  });
+
+  it('reads config.url (the HttpProvider request URL)', () => {
+    expect(
+      getCallerSuppliedBaseUrls({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
+    ).toEqual(['http://127.0.0.1:8080/hook']);
+  });
+
+  it('derives the target of a raw request from its Host header', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: { request: 'GET /latest/meta-data HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n' },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+  });
+
+  it('uses the Host header as the effective authority for an absolute request target', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET http://169.254.169.254/latest HTTP/1.1\r\nHost: example.com\r\n\r\n',
+        },
+      }),
+    ).toEqual(['http://example.com']);
+  });
+
+  it('validates the Host header behind a public absolute request target', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET https://8.8.8.8/latest HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n',
+        },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+  });
+
+  it('uses the last Host header when several are present', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET /latest HTTP/1.1\r\nHost: example.com\r\nHost: 169.254.169.254\r\n\r\n',
+        },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+  });
+
+  it('refuses a raw request with a template in a header name', () => {
+    // With route prompt `Host`, HttpProvider renders `{{prompt}}` to a
+    // second Host header that overwrites the preflighted public one.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET /latest HTTP/1.1\r\nHost: example.com\r\n{{prompt}}: 127.0.0.1\r\n\r\n',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request:
+            'POST /hook HTTP/1.1\r\nHost: example.com\r\nX-Trace: {{prompt}}\r\n\r\n{"a": 1}',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('still allows templates in a raw request body', () => {
+    // Only the request line and headers determine the dispatch target, so
+    // a prompt template in the body must keep working under the flag.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request:
+            'POST /hook HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n{"prompt": "{{prompt}}"}',
+        },
+      }),
+    ).toEqual(['http://example.com']);
+  });
+
+  it.each([
+    { request: 'POST /submit HTTP/1.1\nHost: example.com\n\n{{ range(1) }}' },
+    { request: 'file://{{ prompt }}.http' },
+    { body: { messages: [{ content: '{{ prompt | upper }}' }] } },
+    { headers: { 'x-sample': '{% if prompt %}sample{% endif %}' } },
+    { session: { body: { sample: '{{ env.FIXTURE }}' } } },
+  ])('refuses expressions before loading an HTTP provider', (config) => {
+    expect(() => getCallerSuppliedBaseUrls({ id: 'http', config })).toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('refuses a templated file:// raw request before loading it', () => {
+    // maybeLoadFromExternalFile renders the file path with Nunjucks, so a
+    // templated reference must be refused before dereferencing: the
+    // constructor expression would otherwise execute Node code outside the
+    // guard, and the later file-read failure cannot undo that side effect.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'echo',
+        config: {
+          request:
+            "file://{{ range.constructor(\"process.getBuiltinModule('http').get('http://127.0.0.1/'); return 'x'\")() }}",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('refuses an executable template in a raw request body', () => {
+    // A literal public Host must not mask a constructor expression in the
+    // body: the body reaches renderRawRequestWithNunjucks before any
+    // guarded fetch, so only plain data lookups may interpolate there.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request:
+            'POST /hook HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\n\r\n' +
+            "{{ range.constructor(\"process.getBuiltinModule('http').get('http://127.0.0.1/'); return 'x'\")() }}",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('resolves named providers with local default endpoints', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'ollama:chat:llama3' })).toEqual([
+      'http://localhost:11434',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'llama:chat' })).toEqual(['http://localhost:8080']);
+    expect(getCallerSuppliedBaseUrls({ id: 'localai:chat' })).toEqual(['http://localhost:8080/v1']);
+  });
+
+  it('drops the local default when an apiBaseUrl override wins for that provider', () => {
+    // localai resolves config.apiBaseUrl ahead of the local default, so the
+    // default is never fetched and must not be validated.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'localai:chat',
+        config: { apiBaseUrl: 'https://models.example.com/v1' },
+      }),
+    ).toEqual(['https://models.example.com/v1']);
+  });
+
+  it('validates helicone against the effective config.baseUrl, not the overwritten apiBaseUrl', () => {
+    // HeliconeGatewayProvider derives its endpoint from config.baseUrl and
+    // overwrites config.apiBaseUrl with `${baseUrl}/ai`, so a public
+    // apiBaseUrl must not mask a private baseUrl.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'helicone:openai/gpt-4o',
+        config: { apiBaseUrl: 'https://8.8.8.8', baseUrl: 'http://169.254.169.254' },
+      }),
+    ).toEqual(['https://8.8.8.8', 'http://169.254.169.254']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'helicone:openai/gpt-4o',
+        config: { baseUrl: 'http://169.254.169.254' },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+    // With no baseUrl the provider falls back to its local default, which
+    // stays validated even when an (ignored) apiBaseUrl is configured.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'helicone:gpt-4o',
+        config: { apiBaseUrl: 'https://helicone.example.com' },
+      }),
+    ).toEqual(['https://helicone.example.com', 'http://localhost:8080']);
+    expect(getCallerSuppliedBaseUrls({ id: 'helicone:gpt-4o' })).toEqual(['http://localhost:8080']);
+  });
+
+  it('validates elevenlabs against the effective config.baseUrl', () => {
+    // Every ElevenLabs provider hands config.baseUrl to ElevenLabsClient,
+    // which posts `${baseUrl}${endpoint}` through fetchWithProxy. The
+    // client-side guard validates redirects, not the initial hop, so a
+    // private config.baseUrl must be preflighted here.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'elevenlabs:tts',
+        config: { baseUrl: 'http://169.254.169.254' },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+    // With no baseUrl the provider falls back to its public default, which
+    // resolves publicly and needs no exception.
+    expect(getCallerSuppliedBaseUrls({ id: 'elevenlabs:tts' })).toEqual([
+      'https://api.elevenlabs.io/v1',
+    ]);
+  });
+
+  it('validates litellm against its local proxy default unless apiBaseUrl wins', () => {
+    // createLiteLLMProvider resolves config.apiBaseUrl, then
+    // LITELLM_API_BASE, then the local proxy default, so with no override
+    // the default is the fetched target.
+    expect(getCallerSuppliedBaseUrls({ id: 'litellm:chat:gpt-4o' })).toEqual([
+      'http://0.0.0.0:4000',
+    ]);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'litellm:chat:gpt-4o',
+        config: { apiBaseUrl: 'https://models.example.com/v1' },
+      }),
+    ).toEqual(['https://models.example.com/v1']);
+  });
+
+  it('validates openclaw against its local gateway default unless gateway_url wins', () => {
+    // resolveGatewayTransportUrl resolves config.gateway_url, then the
+    // gateway env overrides, then the local gateway default, so with no
+    // override the default is the fetched target.
+    expect(getCallerSuppliedBaseUrls({ id: 'openclaw' })).toEqual(['http://127.0.0.1:18789']);
+    expect(getCallerSuppliedBaseUrls({ id: 'openclaw:chat' })).toEqual(['http://127.0.0.1:18789']);
+    // The clawdbot alias routes to the same provider and gateway.
+    expect(getCallerSuppliedBaseUrls({ id: 'clawdbot' })).toEqual(['http://127.0.0.1:18789']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'openclaw:chat',
+        config: { gateway_url: 'https://gateway.example.com' },
+      }),
+    ).toEqual(['https://gateway.example.com']);
+  });
+
+  it('keeps the local default when the provider ignores config.apiBaseUrl', () => {
+    // ollama builds its fetch URL from OLLAMA_BASE_URL or the localhost
+    // default and never reads config.apiBaseUrl, so the default remains
+    // the effective target and stays validated.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'ollama:chat:llama3',
+        config: { apiBaseUrl: 'https://models.example.com' },
+      }),
+    ).toEqual(['https://models.example.com', 'http://localhost:11434']);
+  });
+
+  it('refuses a string functionToolCallbacks entry instead of letting it execute unseen', () => {
+    // OpenAiAssistantProvider preloads string callbacks during
+    // construction with new Function, so an inline IIFE can reach a
+    // private service before any guarded fetch runs.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:assistant:asst_123',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          functionToolCallbacks: {
+            getTime: "() => { process.getBuiltinModule('http').get('http://169.254.169.254/'); }",
+          },
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:assistant:asst_123',
+        config: { functionToolCallbacks: { getTime: 'file://./callbacks.js:getTime' } },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('leaves a function functionToolCallbacks entry alone', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'openai:assistant:asst_123',
+        config: { functionToolCallbacks: { getTime: () => 'now' } },
+      }),
+    ).toEqual([]);
+  });
+
+  it('refuses string sessionParser and validateStatus values', () => {
+    // HttpProvider compiles both with new Function around the fetch, the
+    // same as the responseParser strings refused above.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          sessionParser: "process.mainModule.require('http').get('http://169.254.169.254/')",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          validateStatus: 'status === 200',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('refuses a string or file-backed streamResponse instead of letting it execute unseen', () => {
+    // WebSocketProvider compiles a string streamResponse with new Function
+    // (or loads a file:// module) and runs it with a process shim on the
+    // first message, outside the guarded transport, so a public URL must
+    // not mask a transform that can reach a private service.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'ws',
+        config: {
+          url: 'ws://8.8.8.8/',
+          streamResponse:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return [{output:'x'}, true];",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'ws',
+        config: {
+          url: 'ws://8.8.8.8/',
+          streamResponse: 'file://./transform.js:handler',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('returns an empty list for named providers without overrides', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini' })).toEqual([]);
+    expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini', config: {} })).toEqual([]);
+    expect(getCallerSuppliedBaseUrls({})).toEqual([]);
+  });
+});
+
+describe('assertUrlResolvesPublic', () => {
+  beforeEach(() => {
+    mockedLookup.mockReset();
+  });
+
+  it('throws for a private IP literal without touching DNS', async () => {
+    await expect(
+      assertUrlResolvesPublic('http://169.254.169.254/latest/meta-data/'),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('throws for 127.0.0.1', async () => {
+    await expect(assertUrlResolvesPublic('http://127.0.0.1:11434/v1')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('passes for a public IP literal', async () => {
+    await expect(assertUrlResolvesPublic('https://8.8.8.8/v1')).resolves.toBeUndefined();
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('throws when the hostname resolves to a private address', async () => {
+    mockedLookup.mockResolvedValue([{ address: '10.1.2.3', family: 4 } as LookupAddress]);
+    await expect(assertUrlResolvesPublic('https://internal.example.com/v1')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).toHaveBeenCalledWith('internal.example.com', { all: true });
+  });
+
+  it('passes when the hostname resolves to public addresses', async () => {
+    mockedLookup.mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:2800:220:1:248:1893:25c8:1946', family: 6 },
+    ] as LookupAddress[]);
+    await expect(assertUrlResolvesPublic('https://example.com/v1')).resolves.toBeUndefined();
+  });
+
+  it('fails closed when the hostname cannot be resolved', async () => {
+    mockedLookup.mockRejectedValue(Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' }));
+    await expect(assertUrlResolvesPublic('https://nonexistent.invalid/v1')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('fails closed for unparseable URLs', async () => {
+    await expect(assertUrlResolvesPublic('http://exa mple.com/%')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a URL with an unresolved template without touching DNS', async () => {
+    // HttpProvider renders config.url with the prompt at call time, so the
+    // raw template preflights as public.example while the rendered URL can
+    // dispatch to loopback through the userinfo slot.
+    await expect(assertUrlResolvesPublic('http://{{prompt}}@public.example/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a URL with a Nunjucks block tag that renders to a private host', async () => {
+    // No `{{` here, so an interpolation-only check passes it: the URL
+    // parses as the public host 8.8.8.8, but WebSocketProvider renders it
+    // to ws://127.0.0.1/ and dials that directly.
+    await expect(
+      assertUrlResolvesPublic('ws://{% if false %}@8.8.8.8/{% endif %}127.0.0.1/'),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a URL with a Nunjucks comment tag without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('ws://8.8.8.8/{# comment #}127.0.0.1/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks shared-address space literals without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('http://100.100.100.200/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks the unspecified address without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('http://0.0.0.0:8080/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    await expect(assertUrlResolvesPublic('http://[::]:8080/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for a hostless ws+unix Unix socket URL without touching DNS', async () => {
+    // new URL('ws+unix:///path/to/service.sock:/endpoint').hostname is '',
+    // and dns.lookup('') returns [] with no error, so without this check
+    // the DNS verdict below would pass a target WebSocketProvider dials
+    // via the ws library, outside the fetch guard.
+    await expect(
+      assertUrlResolvesPublic('ws+unix:///path/to/service.sock:/endpoint'),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for an unsupported scheme without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('file:///etc/passwd')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+});
+
+describe('assertProviderTargetPublic', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    mockedLookup.mockReset();
+  });
+
+  afterEach(() => {
+    restoreEnv?.();
+  });
+
+  it('is a no-op when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    expect(isPrivateRangeBlockingEnabled()).toBe(false);
+    await expect(
+      assertProviderTargetPublic({ id: 'http://169.254.169.254/' }),
+    ).resolves.toBeUndefined();
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a private target when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    expect(isPrivateRangeBlockingEnabled()).toBe(true);
+    await expect(assertProviderTargetPublic({ id: 'http://169.254.169.254/' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('skips named providers with no caller-chosen URL when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'openai:gpt-4o-mini' })).resolves.toBeUndefined();
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a file-backed provider id when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'file:///tmp/provider.yaml' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a file-backed provider id when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(
+      assertProviderTargetPublic({ id: 'file:///tmp/provider.yaml' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('checks config.apiBaseUrl when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:chat',
+        config: { apiBaseUrl: 'http://192.168.1.5/v1' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+  });
+
+  it('checks config.url (HttpProvider request URL) when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { url: 'http://127.0.0.1:8080/hook' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a script provider id when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: "exec:/bin/sh -c 'curl http://169.254.169.254/latest/meta-data/'",
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a script provider id when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(assertProviderTargetPublic({ id: 'exec:/bin/sh -c id' })).resolves.toBeUndefined();
+  });
+
+  it('refuses an MCP subprocess transport when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'mcp',
+        config: { server: { command: '/bin/sh', args: ['-c', 'id'] } },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse an MCP subprocess transport when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'mcp',
+        config: { server: { command: '/bin/sh' } },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a private MCP server url when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'mcp',
+        config: { server: { url: 'http://127.0.0.1:8080/mcp' } },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks non-canonical http: provider ids when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'http:127.0.0.1' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks named providers with local default endpoints when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 } as LookupAddress]);
+    await expect(assertProviderTargetPublic({ id: 'ollama:chat:llama3' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).toHaveBeenCalledWith('localhost', { all: true });
+  });
+
+  it('does not let a public apiBaseUrl mask a private provider id', async () => {
+    // HttpProvider requests `config.url || id` and ignores apiBaseUrl.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http://169.254.169.254/latest',
+        config: { apiBaseUrl: 'https://8.8.8.8' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not let a public apiBaseUrl mask a private helicone baseUrl', async () => {
+    // HeliconeGatewayProvider derives its endpoint from config.baseUrl and
+    // overwrites config.apiBaseUrl, so the guard must reject the private
+    // effective target even though the apiBaseUrl is public.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'helicone:openai/gpt-4o',
+        config: { apiBaseUrl: 'https://8.8.8.8', baseUrl: 'http://169.254.169.254' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a private elevenlabs config.baseUrl when the flag is set', async () => {
+    // ElevenLabsClient posts `${baseUrl}${endpoint}` through fetchWithProxy;
+    // the client-side guard validates redirects, not the initial hop, so the
+    // preflight must reject a private config.baseUrl outright.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'elevenlabs:tts',
+        config: { baseUrl: 'http://169.254.169.254' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows elevenlabs with no baseUrl override when the flag is set', async () => {
+    // No override: the effective target is the public default, which the
+    // preflight resolves publicly instead of rejecting.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(assertProviderTargetPublic({ id: 'elevenlabs:tts' })).resolves.toBeUndefined();
+  });
+
+  it('validates the unwrapped target of webhook: provider ids', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({ id: 'webhook:http://169.254.169.254/latest' }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('validates the unwrapped target of n8n: and a2a: provider ids', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({ id: 'n8n:http://169.254.169.254/latest/meta-data' }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    await expect(assertProviderTargetPublic({ id: 'a2a:http://127.0.0.1:8080' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks litellm and openclaw local defaults when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'litellm:chat:gpt-4o' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    await expect(assertProviderTargetPublic({ id: 'openclaw' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows litellm and openclaw when an explicit public endpoint wins', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'litellm:chat:gpt-4o',
+        config: { apiBaseUrl: 'https://8.8.8.8/v1' },
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openclaw:chat',
+        config: { gateway_url: 'http://8.8.8.8:18789' },
+      }),
+    ).resolves.toBeUndefined();
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows a webhook: id whose inner URL is public', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({ id: 'webhook:https://example.com/hook' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('blocks ws:/wss: provider ids pointing at private addresses', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'ws://169.254.169.254/socket' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a raw request whose Host header points at a private address', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { request: 'GET /latest/meta-data HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a raw request with a public absolute target but a private Host header', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          request: 'GET https://8.8.8.8/latest HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n',
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows a raw request whose Host header resolves publicly', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { request: 'GET /hook HTTP/1.1\r\nHost: example.com\r\n\r\n' },
+      }),
+    ).resolves.toBeUndefined();
+    expect(mockedLookup).toHaveBeenCalledWith('example.com', { all: true });
+  });
+
+  it('fails closed on a raw request with no verifiable target', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { request: 'GET /hook HTTP/1.1\r\nX-Custom: yes\r\n\r\n' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+  });
+
+  it('fails closed on a raw request with an absolute target but no Host header', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The provider strips an absolute target to its path and re-resolves it
+    // against the Host header, so with no Host header the dispatch target
+    // is http://undefined, not this public URL. Validating the absolute
+    // target would approve a URL that is never fetched.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          request: 'GET https://public.example.com/hook HTTP/1.1\r\nX-Custom: yes\r\n\r\n',
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+  });
+
+  it('refuses a string transformRequest that HttpProvider would compile and run', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // HttpProvider compiles a string transformRequest with new Function
+    // and runs it before dispatch, outside fetchWithProxy, with a process
+    // shim that exposes require: a public URL must not mask code that can
+    // reach private services on its own.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          transformRequest:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return prompt",
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a string transformResponse that HttpProvider would compile and run', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          transformResponse:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return json",
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a string responseParser that HttpProvider would compile and run', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          responseParser:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return json",
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a top-level string transform that the evaluator would execute', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // loadApiProvider attaches the top-level transform to the loaded
+    // provider and the evaluator runs the string with the process shim, so
+    // the nested config transform checks above do not cover it: even an
+    // echo provider could run code against a private service.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'echo',
+        transform:
+          "process.mainModule.require('http').get('http://169.254.169.254/'); return output",
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses an openai:chat provider with an embedded MCP command transport when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The provider constructor starts MCPClient.initialize() before any
+    // guarded fetch runs, so the preflight must refuse the transport.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:chat:gpt-4o',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          mcp: { enabled: true, server: { command: '/bin/sh', args: ['-c', 'id'] } },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses an openai:assistant provider with a string functionToolCallbacks entry when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The provider preloads the entry during construction with new
+    // Function, so the preflight must refuse it before loading.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:assistant:asst_123',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          functionToolCallbacks: {
+            getTime: "() => process.getBuiltinModule('http').get('http://169.254.169.254/')",
+          },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a private HttpProvider session endpoint when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The session endpoint is fetched before the main request through a
+    // guarded transport. During route preflight, the public
+    // main URL resolves first; the private session literal then refuses
+    // without a DNS lookup of its own.
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          session: { url: 'http://169.254.169.254/session', responseParser: 'data.sessionId' },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).toHaveBeenCalledWith('public.example.com', { all: true });
+    expect(mockedLookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a templated HttpProvider session endpoint when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          session: {
+            url: 'http://{{prompt}}@public.example/session',
+            responseParser: 'data.sessionId',
+          },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).toHaveBeenCalledWith('public.example.com', { all: true });
+    expect(mockedLookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a raw request whose header name is a template when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // With route prompt `Host`, the rendered request gains a second Host
+    // header that overwrites the preflighted public one.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          request: 'GET /latest HTTP/1.1\r\nHost: example.com\r\n{{prompt}}: 127.0.0.1\r\n\r\n',
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse the new executable fields when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:assistant:asst_123',
+        config: { functionToolCallbacks: { getTime: '() => "now"' } },
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:chat:gpt-4o',
+        config: { mcp: { server: { command: '/bin/sh' } } },
+      }),
+    ).resolves.toBeUndefined();
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a templated provider URL whose rendered target cannot be validated', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The raw template preflights as public.example, but HttpProvider
+    // renders it with the prompt at call time: with prompt '127.0.0.1/'
+    // the request dispatches to loopback instead.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { url: 'http://{{prompt}}@public.example/' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a function transform, which cannot arrive over a JSON route', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // Only string transforms compile to code execution at load time; a
+    // function value is already in-process code, and JSON route bodies
+    // cannot carry one.
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          transformRequest: () => 'prompt',
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a provider id carrying an unresolved env template', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The preflight sees this id as a non-script literal, but loadApiProvider
+    // renders env templates afterward: with OPENAI_API_KEY set to an exec:
+    // value the registry would execute a script provider the preflight
+    // never saw. Refusing unresolved templates keeps the check fail closed.
+    await expect(assertProviderTargetPublic({ id: '{{ env.OPENAI_API_KEY }}' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+});

@@ -13,6 +13,7 @@ import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sha256 } from '../createHash';
+import { assertUrlResolvesPublic, PrivateRangeBlockedError } from '../privateNetwork';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
@@ -23,7 +24,13 @@ import {
   HttpRateLimitError,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { isPrivateRangeGuardContextActive } from './guardContext';
+import {
+  isPromptfooCloudApiHost,
+  monkeyPatchFetch,
+  preserveCloudAuthRedirects,
+} from './monkeyPatchFetch';
+import { isRedirectStatus } from './redirectStatus';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
@@ -212,6 +219,267 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+const MAX_GUARDED_REDIRECT_HOPS = 5;
+
+// Credentials dropped when a guarded redirect crosses origins, mirroring what
+// fetch strips automatically in 'follow' mode.
+const CROSS_ORIGIN_REDIRECT_DROP_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+]);
+
+// Entity headers that must not survive a 301/302/303 downgrade to GET.
+const BODY_HEADERS = new Set([
+  'content-length',
+  'content-type',
+  'content-encoding',
+  'content-language',
+]);
+
+function stripHeadersByName(headers: Record<string, string>, names: Set<string>): void {
+  for (const name of Object.keys(headers)) {
+    if (names.has(name.toLowerCase())) {
+      delete headers[name];
+    }
+  }
+}
+
+/**
+ * True when a request body is a web ReadableStream that can be teed for
+ * replay across redirect hops. String, Buffer, and other replayable bodies
+ * need no tee; async-iterable bodies have no tee and keep their existing
+ * behavior.
+ */
+function isTeeableStreamBody(body: unknown): body is ReadableStream {
+  return (
+    typeof body === 'object' && body !== null && typeof (body as ReadableStream).tee === 'function'
+  );
+}
+
+/**
+ * Compute the request options for following a redirect hop, mirroring the
+ * fetch spec: 301/302/303 downgrade to GET with the body dropped (303 for any
+ * non-HEAD method), 307/308 preserve method and body, and credentials are
+ * dropped when crossing origins.
+ */
+function buildRedirectHopOptions(
+  status: number,
+  currentUrl: string,
+  nextUrl: string,
+  currentOptions: FetchOptions & { dispatcher?: any },
+): FetchOptions & { dispatcher?: any } {
+  const nextOptions: FetchOptions & { dispatcher?: any } = {
+    ...currentOptions,
+    headers: { ...headersInitToRecord(currentOptions.headers) },
+  };
+  const headers = nextOptions.headers as Record<string, string>;
+  const method = (nextOptions.method || 'GET').toUpperCase();
+  const downgradeToGet =
+    status === 303 ? method !== 'HEAD' : (status === 301 || status === 302) && method === 'POST';
+  if (downgradeToGet) {
+    nextOptions.method = 'GET';
+    delete nextOptions.body;
+    stripHeadersByName(headers, BODY_HEADERS);
+  }
+  if (new URL(nextUrl).origin !== new URL(currentUrl).origin) {
+    if (currentOptions.restrictCloudAuthRedirects) {
+      // The request carries the Cloud credential under a custom header name,
+      // which the native-follow path binds to the initial origin via
+      // restrictCloudAuthRedirects. Rebinding the dispatcher per hop would
+      // leak that header to the redirect destination, so refuse the hop
+      // instead, mirroring the CloudAuthRedirectError the unguarded path
+      // raises on a cross-origin redirect.
+      throw new CloudAuthRedirectError();
+    }
+    stripHeadersByName(headers, CROSS_ORIGIN_REDIRECT_DROP_HEADERS);
+  }
+  return nextOptions;
+}
+
+/**
+ * Follow redirects manually, re-validating every destination against the
+ * private-range guard. Used only inside a guarded server-route context
+ * (see `guardContext.ts`):
+ * the default `redirect: 'follow'` would let a publicly-resolving URL 302
+ * into link-local/cloud-metadata space after the preflight check passed.
+ *
+ * Redirect semantics mirror the fetch spec for the common cases (301/302/303
+ * downgrade to GET with the body dropped; 307/308 preserve method and body).
+ * The caller's redirect mode is preserved: the follow loop runs only for
+ * callers whose mode was `follow` (or unset, which defaults to `follow`).
+ * A `manual` caller gets the first response untouched, so it can inspect the
+ * Location itself, and an `error` caller gets a rejection on a redirect
+ * response, matching what native fetch would do.
+ */
+async function fetchWithRedirectValidation(
+  initialUrl: string,
+  options: FetchOptions & { dispatcher?: any },
+  tlsOptions: ConnectionOptions,
+): Promise<Response> {
+  // Providers can derive URLs after route preflight (for example raw HTTP
+  // request targets and OAuth token endpoints). Validate the actual first
+  // destination for every redirect mode before sending a request.
+  await assertUrlResolvesPublic(initialUrl);
+  let currentUrl = initialUrl;
+  let currentOptions: FetchOptions & { dispatcher?: any } = {
+    ...options,
+    redirect: 'manual',
+  };
+  // Cloud-auth injection eligibility is bound to the initial request:
+  // monkeyPatchFetch re-injects the saved Cloud token on any hop whose URL
+  // matches the Cloud origin, so a caller-controlled public URL that
+  // redirects into the Cloud origin must be barred from injection on every
+  // hop. buildRedirectHopOptions spreads currentOptions per hop, which
+  // carries this flag through the whole chain.
+  if (!isPromptfooCloudApiHost(initialUrl)) {
+    currentOptions.skipCloudAuthInjection = true;
+  }
+  // `redirect: 'manual'` stops after the first 3xx, so recompute the
+  // dispatcher per hop: proxy selection depends on the hop's URL. A
+  // caller-supplied dispatcher (e.g. mTLS) is kept for every hop.
+  const callerDispatcher = options.dispatcher;
+
+  // Preserve the caller's redirect mode: only `follow` (the default) enters
+  // the follow loop. A `manual` caller gets the first response untouched so
+  // it can inspect the Location itself, and an `error` caller gets a
+  // rejection on a redirect response, matching native fetch. Following every
+  // redirect here would silently break both contracts.
+  if ((options.redirect ?? 'follow') !== 'follow') {
+    let hopAgent: ActiveAgent | undefined;
+    if (!callerDispatcher) {
+      const hopProxyUrl = getProxyForUrl(currentUrl);
+      hopAgent = acquireAgent(hopProxyUrl, tlsOptions);
+      currentOptions.dispatcher = hopAgent.dispatcher;
+    }
+    try {
+      const response = await monkeyPatchFetch(currentUrl, currentOptions);
+      if (
+        options.redirect === 'error' &&
+        isRedirectStatus(response.status) &&
+        response.headers.get('location')
+      ) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new TypeError(
+          'fetch failed: redirects are not allowed for a request with redirect mode "error"',
+        );
+      }
+      return response;
+    } finally {
+      if (hopAgent) {
+        releaseAgent(hopAgent);
+      }
+    }
+  }
+
+  for (let hop = 0; hop <= MAX_GUARDED_REDIRECT_HOPS; hop++) {
+    let hopAgent: ActiveAgent | undefined;
+    if (!callerDispatcher) {
+      const hopProxyUrl = getProxyForUrl(currentUrl);
+      hopAgent = acquireAgent(hopProxyUrl, tlsOptions);
+      currentOptions.dispatcher = hopAgent.dispatcher;
+    }
+
+    try {
+      // A stream body can only be consumed once, but a 307/308 hop must
+      // replay it: tee the stream before each hop and carry the untouched
+      // branch forward, so the next hop gets a fresh stream instead of the
+      // disturbed one. Native fetch replays the POST the same way; without
+      // this the second fetch fails on the disturbed stream. A stream that
+      // cannot be teed (already disturbed or locked) is left for the fetch
+      // to fail on as it would have before.
+      let carriedBody: ReadableStream | undefined;
+      if (isTeeableStreamBody(currentOptions.body)) {
+        try {
+          const [branch, rest] = currentOptions.body.tee();
+          currentOptions.body = branch;
+          carriedBody = rest;
+        } catch {
+          // Leave the body untouched; the fetch below fails as before.
+        }
+      }
+
+      const response = await monkeyPatchFetch(currentUrl, currentOptions);
+      const location = response.headers.get('location');
+      if (!isRedirectStatus(response.status) || !location) {
+        return response;
+      }
+      // Discard the redirect response's body to release its socket before
+      // following it. Cancel instead of draining: the body is untrusted and
+      // may be huge or never-ending, so it must never be buffered in memory.
+      await response.body?.cancel().catch(() => undefined);
+
+      if (hop === MAX_GUARDED_REDIRECT_HOPS) {
+        throw new PrivateRangeBlockedError(
+          `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to follow more than ${MAX_GUARDED_REDIRECT_HOPS} redirects from ${JSON.stringify(sanitizeUrl(initialUrl))}`,
+        );
+      }
+
+      const nextUrl = new URL(location, currentUrl).toString();
+      // Fail closed: a public URL must not redirect into private space.
+      await assertUrlResolvesPublic(nextUrl);
+
+      const nextOptions = buildRedirectHopOptions(
+        response.status,
+        currentUrl,
+        nextUrl,
+        currentOptions,
+      );
+      // A downgrade (301/302/303 to GET) deletes the body, so only a
+      // preserved-method hop replays the carried branch.
+      if (carriedBody !== undefined && nextOptions.body !== undefined) {
+        nextOptions.body = carriedBody;
+      }
+
+      logger.debug('[fetchWithProxy] Following guarded redirect', {
+        from: sanitizeUrlForLogging(currentUrl),
+        to: sanitizeUrlForLogging(nextUrl),
+      });
+      currentUrl = nextUrl;
+      currentOptions = nextOptions;
+    } finally {
+      if (hopAgent) {
+        releaseAgent(hopAgent);
+      }
+    }
+  }
+
+  // Unreachable: the loop either returns a response or throws.
+  throw new Error('Unexpected end of redirect loop');
+}
+
+/**
+ * Seed an options object with the fields a Request object carries itself.
+ * The unguarded path passes the Request to the fetch implementation, so
+ * those survive; the guarded path only forwards an options object and the
+ * URL string, so without this seeding a guarded POST Request would silently
+ * downgrade to a GET. Explicit options win over the Request-owned values,
+ * mirroring fetch(Request, init).
+ */
+function seedRequestOwnedOptions(
+  finalOptions: FetchOptions & { dispatcher?: any },
+  url: RequestInfo,
+): void {
+  if (!(url instanceof Request)) {
+    return;
+  }
+  finalOptions.method ??= url.method;
+  if (finalOptions.body === undefined && url.body !== null) {
+    finalOptions.body = url.body;
+    // A stream body passed as init requires duplex, which the Request
+    // itself carries but an init body does not inherit.
+    (finalOptions as FetchOptions & { duplex?: 'half' }).duplex ??= 'half';
+  }
+  finalOptions.referrer ??= url.referrer;
+  finalOptions.credentials ??= url.credentials;
+  // A Request-owned redirect mode must survive the same way: the guarded
+  // path forwards only the URL string plus an options object, so without
+  // this seeding fetchWithRedirectValidation would see the default follow
+  // mode instead of the Request's manual/error mode. Explicit options win,
+  // mirroring fetch(Request, init).
+  finalOptions.redirect ??= url.redirect;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -226,11 +494,12 @@ export async function fetchWithProxy(
   }
 
   // Combine abort signals: incoming abortSignal parameter + any signal in options
+  const requestSignal = getEffectiveRequestSignal(url, options);
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
@@ -239,6 +508,9 @@ export async function fetchWithProxy(
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
+  if (isPrivateRangeGuardContextActive()) {
+    seedRequestOwnedOptions(finalOptions, url);
+  }
   const logEnabled = new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
 
   if (typeof url === 'string') {
@@ -309,16 +581,45 @@ export async function fetchWithProxy(
       }
     }
   }
+  // Inside a guarded server-route context, redirects are followed manually so
+  // every hop can be re-validated; otherwise a single automatic fetch is used.
+  // The context is request-scoped: the process-wide
+  // `PROMPTFOO_BLOCK_PRIVATE_RANGES` flag alone must not switch unrelated
+  // callers in the same process (for example eval runs against local targets)
+  // into private-hop validation.
+  const guardRedirects = isPrivateRangeGuardContextActive();
+
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   if (proxyUrl && logEnabled) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
   }
+  // Inside the guard context, do NOT bind a pooled dispatcher here:
+  // fetchWithRedirectValidation reads options.dispatcher as the
+  // caller-supplied dispatcher, and a pooled one would make it look
+  // caller-supplied on every hop, so the per-hop proxy recomputation there
+  // would never run. The validation function binds the per-hop dispatcher
+  // itself.
+  if (guardRedirects) {
+    return fetchWithTransientRetries(
+      finalUrl,
+      finalOptions,
+      getAuthHeaders,
+      logEnabled,
+      tlsOptions,
+    );
+  }
   // Hold the same transport across asynchronous auth, redirects and retry backoff.
   const agent = acquireAgent(proxyUrl, tlsOptions);
   finalOptions.dispatcher = agent.dispatcher;
   try {
-    return await fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
+    return await fetchWithTransientRetries(
+      finalUrl,
+      finalOptions,
+      getAuthHeaders,
+      logEnabled,
+      tlsOptions,
+    );
   } finally {
     releaseAgent(agent);
   }
@@ -329,12 +630,28 @@ async function fetchWithTransientRetries(
   options: FetchOptions,
   getAuthHeaders: FetchOptions['getAuthHeaders'],
   logEnabled: boolean,
+  tlsOptions?: ConnectionOptions,
 ): Promise<Response> {
   // Transient error retry logic (502/503/504/524 with matching status text).
   // When a provider sets maxRetries: 0 and the caller did not pass an explicit
   // disableTransientRetries, honor the provider intent via the retry context.
   const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
+
+  // Inside a guarded server-route context, redirects are followed manually so
+  // every hop can be re-validated; otherwise a single automatic fetch is used.
+  // The context is request-scoped: the process-wide
+  // `PROMPTFOO_BLOCK_PRIVATE_RANGES` flag alone must not switch unrelated
+  // callers in the same process (for example eval runs against local targets)
+  // into private-hop validation.
+  // The caller-owned dispatcher path never reaches the TLS options here
+  // because the guard keeps the caller dispatcher for every hop, so the
+  // fallback is unused on that path.
+  const guardRedirects = isPrivateRangeGuardContextActive();
+  const doSingleFetch = (options: FetchOptions & { dispatcher?: any }): Promise<Response> =>
+    guardRedirects
+      ? fetchWithRedirectValidation(getFetchUrlString(url) ?? '', options, tlsOptions ?? {})
+      : monkeyPatchFetch(url, options);
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
     let attemptOptions = options;
@@ -348,7 +665,7 @@ async function fetchWithTransientRetries(
         ),
       };
     }
-    const response = await monkeyPatchFetch(url, attemptOptions);
+    const response = await doSingleFetch(attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -841,9 +1158,13 @@ export async function fetchWithRetries(
       }
       // Preserve completed policy and rate-limit diagnostics even if cancellation
       // arrives after the response. These failures never consume another retry.
+      // A private-range policy failure is final too: retrying it would replay
+      // the original request (including non-idempotent POSTs) against the
+      // public endpoint that redirected into private space.
       if (
         error instanceof CloudAuthRedirectError ||
         error instanceof HttpRateLimitError ||
+        error instanceof PrivateRangeBlockedError ||
         error instanceof RequestAuthenticationError
       ) {
         throw error;

@@ -6,6 +6,7 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { restrictCloudAuthRedirects, unwrapCloudAuthRedirectError } from './cloudAuthRedirects';
+import { isRedirectStatus } from './redirectStatus';
 import type { Dispatcher } from 'undici';
 
 import type { FetchOptions } from './types';
@@ -207,6 +208,29 @@ export function preserveCloudAuthRedirects(
 }
 
 /**
+ * Fire-and-forget request logging for a completed fetch. With
+ * `redirect: 'manual'` a 3xx response is an intermediate hop whose body the
+ * caller discards (fetchWithRedirectValidation cancels it before following):
+ * the logger must not clone().text() it, or a huge or never-ending body
+ * would keep draining after the caller's cancel.
+ */
+function logFetchResponse(
+  urlString: string,
+  originalBody: BodyInit | null | undefined,
+  opts: { method?: string; redirect?: RequestRedirect },
+  response: Response,
+): void {
+  const skipResponseBody = opts.redirect === 'manual' && isRedirectStatus(response.status);
+  void logRequestResponse({
+    url: urlString,
+    requestBody: originalBody,
+    requestMethod: opts.method || 'GET',
+    response,
+    ...(skipResponseBody ? { skipResponseBody: true } : {}),
+  });
+}
+
+/**
  * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
 export async function monkeyPatchFetch(
@@ -272,12 +296,7 @@ export async function monkeyPatchFetch(
     const response = await fetch(url, opts);
 
     if (logEnabled) {
-      void logRequestResponse({
-        url: urlString,
-        requestBody: originalBody,
-        requestMethod: opts.method || 'GET',
-        response,
-      });
+      logFetchResponse(urlString, originalBody, opts, response);
     }
 
     return response;

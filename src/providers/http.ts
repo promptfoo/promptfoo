@@ -46,7 +46,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
-import { getNunjucksEngine } from '../util/templates';
+import { getNunjucksEngine, renderRawHttpRequest } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
   HttpMultipartConfigSchema,
@@ -240,37 +240,6 @@ function renderJsonTemplate(template: string, vars: Record<string, any>): any {
     const reRendered = renderVarsInObject(template, escapedVars);
     return JSON.parse(reRendered); // This will throw if still invalid
   }
-}
-
-/**
- * Safely render raw HTTP templates with Nunjucks by wrapping the entire
- * template in raw blocks and selectively allowing only {{...}} variables.
- */
-function renderRawRequestWithNunjucks(template: string, vars: Record<string, any>): string {
-  // Protect literal Nunjucks syntax in the source by raw-wrapping
-  // and then re-enabling only variable tags.
-  const VAR_TOKEN = '__PF_VAR__';
-  let working = template;
-
-  // 1) Temporarily replace all {{...}} occurrences with placeholders
-  const placeholders: string[] = [];
-  working = working.replace(/\{\{[\s\S]*?\}\}/g, (m) => {
-    const idx = placeholders.push(m) - 1;
-    return `${VAR_TOKEN}${idx}__`;
-  });
-
-  // 2) Wrap everything in raw so Nunjucks ignores any {%...%} found in headers/cookies
-  working = `{% raw %}${working}{% endraw %}`;
-
-  // 3) Re-enable variables by inserting endraw/raw around each placeholder
-  working = working.replace(new RegExp(`${VAR_TOKEN}(\\d+)__`, 'g'), (_m, g1) => {
-    const original = placeholders[Number(g1)];
-    return `{% endraw %}${original}{% raw %}`;
-  });
-
-  // 4) Render with Nunjucks normally
-  const nunjucks = getNunjucksEngine();
-  return nunjucks.renderString(working, vars);
 }
 
 // This function is used to encode the URL in the first line of a raw request
@@ -2736,7 +2705,7 @@ export class HttpProvider implements ApiProvider {
       prompt: transformedPrompt,
     });
 
-    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
+    const renderedRequest = renderRawHttpRequest(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
     logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
 

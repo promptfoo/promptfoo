@@ -88,6 +88,15 @@ type EnvVars = {
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
+  /**
+   * When `true`, the server refuses to fetch caller-supplied provider URLs that
+   * resolve to private, loopback, or link-local addresses (`POST
+   * /api/providers/test` and `POST /api/providers/discover`). Intended for
+   * deployments that intentionally expose the local server beyond loopback, so
+   * it cannot be used as an SSRF proxy for cloud-metadata theft or quiet
+   * internal port scanning. Default local behavior is unchanged.
+   */
+  PROMPTFOO_BLOCK_PRIVATE_RANGES?: boolean;
 
   //=========================================================================
   // OpenTelemetry tracing configuration

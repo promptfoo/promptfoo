@@ -5,7 +5,9 @@ vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
 
+import { withPrivateRangeGuard } from '../../src/util/fetch/guardContext';
 import { fetchOAuthToken, TOKEN_REFRESH_BUFFER_MS } from '../../src/util/oauth';
+import { PrivateRangeBlockedError } from '../../src/util/privateNetwork';
 
 describe('oauth utils', () => {
   beforeEach(() => {
@@ -249,6 +251,62 @@ describe('oauth utils', () => {
 
       const callBody = mockFetchWithProxy.mock.calls[0][1].body;
       expect(callBody).not.toContain('scope');
+    });
+
+    describe('inside a guarded server route', () => {
+      it('should refuse a private tokenUrl before posting credentials', async () => {
+        await expect(
+          withPrivateRangeGuard(() =>
+            fetchOAuthToken({
+              tokenUrl: 'http://127.0.0.1:8080/token',
+              grantType: 'client_credentials',
+              clientId: 'test-client',
+              clientSecret: 'test-secret',
+            }),
+          ),
+        ).rejects.toThrow(PrivateRangeBlockedError);
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      });
+
+      it('should allow a public tokenUrl', async () => {
+        mockFetchWithProxy.mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            access_token: 'public-token',
+            expires_in: 3600,
+          }),
+        });
+
+        const result = await withPrivateRangeGuard(() =>
+          fetchOAuthToken({
+            tokenUrl: 'https://8.8.8.8/token',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+          }),
+        );
+
+        expect(result.accessToken).toBe('public-token');
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('should still fetch a private tokenUrl outside the guard', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          access_token: 'local-token',
+          expires_in: 3600,
+        }),
+      });
+
+      const result = await fetchOAuthToken({
+        tokenUrl: 'http://127.0.0.1:8080/token',
+        grantType: 'client_credentials',
+      });
+
+      expect(result.accessToken).toBe('local-token');
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
     });
 
     it('should URL-encode special characters in credentials', async () => {

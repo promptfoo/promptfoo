@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
+import { withPrivateRangeGuard } from '../../src/util/fetch/guardContext';
 import { maybeLoadToolsFromExternalFile } from '../../src/util/file';
 
 describe('executable tools import cancellation', () => {
@@ -19,6 +20,19 @@ describe('executable tools import cancellation', () => {
     vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
+
+  it.each(['file://absent-tools.py:get_tools', 'file://absent-tools.cjs:getTools'])(
+    'refuses a rendered executable tool reference in guarded diagnostics: %s',
+    async (reference) => {
+      await expect(
+        withPrivateRangeGuard(() =>
+          maybeLoadToolsFromExternalFile(['{{ definition }}'], { definition: reference }),
+        ),
+      ).rejects.toThrow(
+        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing executable tool definitions',
+      );
+    },
+  );
 
   it.each([false, true])(
     'does not invoke after a cancelled real import (array: %s)',
