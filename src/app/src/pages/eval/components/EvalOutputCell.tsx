@@ -2,18 +2,19 @@ import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { useCopyFeedback } from '@app/hooks/useCopyFeedback';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
+import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
   normalizeMediaText,
   resolveAudioSource,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -1040,8 +1041,6 @@ function renderOutputActions({
   cloudConfig,
   addFilter,
   resetFilters,
-  replayEvaluation,
-  fetchTraces,
   handleCopy,
   handleToggleHighlight,
   handleRowShareLink,
@@ -1068,8 +1067,6 @@ function renderOutputActions({
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
-  replayEvaluation: ReturnType<typeof useEvalOperations>['replayEvaluation'];
-  fetchTraces: ReturnType<typeof useEvalOperations>['fetchTraces'];
   handleCopy: () => void;
   handleToggleHighlight: () => void;
   handleRowShareLink: () => void;
@@ -1313,7 +1310,6 @@ function EvalOutputCell({
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
-  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const locationHash = useEvalDetailsHash();
@@ -1474,55 +1470,15 @@ function EvalOutputCell({
     setScoreDialogOpen(false);
   };
 
-  const [linked, setLinked] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const [linked, showLinked] = useCopyFeedback(3000);
+  const [copied, showCopied] = useCopyFeedback(3000);
   const isMountedRef = React.useRef(true);
-  const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-
-  const clearLinkedResetTimeout = useCallback(() => {
-    if (linkedResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(linkedResetTimeoutRef.current);
-      linkedResetTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearCopiedResetTimeout = useCallback(() => {
-    if (copiedResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(copiedResetTimeoutRef.current);
-      copiedResetTimeoutRef.current = null;
-    }
-  }, []);
-
   React.useEffect(() => {
     isMountedRef.current = true;
-
     return () => {
       isMountedRef.current = false;
-      clearLinkedResetTimeout();
-      clearCopiedResetTimeout();
     };
-  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
-
-  const scheduleLinkedReset = useCallback(() => {
-    clearLinkedResetTimeout();
-    linkedResetTimeoutRef.current = globalThis.setTimeout(() => {
-      linkedResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setLinked(false);
-      }
-    }, 3000);
-  }, [clearLinkedResetTimeout]);
-
-  const scheduleCopiedReset = useCallback(() => {
-    clearCopiedResetTimeout();
-    copiedResetTimeoutRef.current = globalThis.setTimeout(() => {
-      copiedResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setCopied(false);
-      }
-    }, 3000);
-  }, [clearCopiedResetTimeout]);
+  }, []);
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
@@ -1533,13 +1489,7 @@ function EvalOutputCell({
 
     navigator.clipboard
       .writeText(url.toString())
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setLinked(true);
-        scheduleLinkedReset();
-      })
+      .then(showLinked)
       .catch((error) => {
         if (!isMountedRef.current) {
           return;
@@ -1551,13 +1501,7 @@ function EvalOutputCell({
   const handleCopy = () => {
     navigator.clipboard
       .writeText(text)
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setCopied(true);
-        scheduleCopiedReset();
-      })
+      .then(showCopied)
       .catch((error) => {
         if (!isMountedRef.current) {
           return;
@@ -1617,7 +1561,10 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+            renderMarkdown &&
+            (output.images?.length ||
+              isImageProvider(output.provider) ||
+              isVideoProvider(output.provider))
               ? 0
               : maxTextLength
           }
@@ -1652,8 +1599,6 @@ function EvalOutputCell({
         cloudConfig,
         addFilter,
         resetFilters,
-        replayEvaluation,
-        fetchTraces,
         handleCopy,
         handleToggleHighlight,
         handleRowShareLink,

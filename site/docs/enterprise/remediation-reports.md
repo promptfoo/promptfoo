@@ -153,7 +153,7 @@ The report page automatically polls for updates while a report is generating, so
 
 If you run a new scan after a remediation report has been generated, the report will be marked as **Outdated**. An alert will appear prompting you to regenerate the report to include the most recent results.
 
-Regenerating ensures your remediation recommendations reflect your current security posture.
+Regenerate the report to base recommendations on the latest scan results.
 
 ## Best Practices
 
