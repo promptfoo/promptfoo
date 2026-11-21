@@ -495,8 +495,21 @@ function truncateJudgeTrajectorySteps(
   ];
 }
 
-export function summarizeTrajectoryForJudge(trace: TraceData): string {
+export function summarizeTrajectoryForJudge(
+  trace: TraceData,
+  { typesOnly = false }: { typesOnly?: boolean } = {},
+): string {
   const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+    // Commands, search terms, span names and status messages can contain credentials.
+    if (typesOnly) {
+      return {
+        index: index + 1,
+        type: step.type,
+        name: step.type,
+        status:
+          step.statusCode === 1 || step.statusCode === 2 ? { code: step.statusCode } : undefined,
+      };
+    }
     const status = getTrajectoryStepStatus(step);
     return {
       index: index + 1,
@@ -511,7 +524,7 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 
   return JSON.stringify(
     {
-      traceId: trace.traceId,
+      traceId: typesOnly ? undefined : trace.traceId,
       stepCount: rawSteps.length,
       compactedStepCount: compactedSteps.length,
       steps,

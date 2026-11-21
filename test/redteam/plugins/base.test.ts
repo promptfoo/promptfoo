@@ -2550,7 +2550,8 @@ describe('RedteamGraderBase', () => {
 
       const TestGraderWithTrace = class extends RedteamGraderBase {
         id = 'test-grader-trace';
-        rubric = 'Test rubric. Trace summary: {{ traceSummary }}';
+        rubric =
+          'Test rubric. Trace summary: {{ traceSummary }} {% if traceData %}{{ traceData | dump }}{% endif %}';
       };
 
       const traceGrader = new TestGraderWithTrace();
@@ -2563,9 +2564,18 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         undefined,
-        { traceSummary: 'Important trace summary' },
+        {
+          traceSummary: 'Important trace summary',
+          traceData: {
+            traceId: 'private-fixture',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [],
+          },
+        },
       );
 
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).not.toContain('private-fixture');
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('Trace summary: Important trace summary'),
         'test output',

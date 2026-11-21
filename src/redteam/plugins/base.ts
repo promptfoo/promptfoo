@@ -476,6 +476,8 @@ export abstract class RedteamGraderBase {
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
+      // Local verifiers may inspect raw spans. Rubrics receive the projected summary.
+      traceData: _traceData,
       ...templateGradingContext
     } = gradingContext ?? {};
 

@@ -167,7 +167,9 @@ function createInitialGradingContext({
 
   if (assertionValueContext.trace) {
     gradingContext.traceData = assertionValueContext.trace;
-    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
+    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace, {
+      typesOnly: true,
+    });
   }
 
   return gradingContext;

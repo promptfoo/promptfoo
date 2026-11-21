@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { isCacheEnabled, withCacheEnabled } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
@@ -785,6 +786,30 @@ describe('evaluator trace integration', () => {
         `[Evaluator] Successfully fetched traces for traceId=${traceId}`,
       );
     });
+
+    it.each([true, false])(
+      'scopes live target caching to trace-aware red team assertions (%s)',
+      async (redteam) => {
+        let cacheEnabled: boolean | undefined;
+        const provider = createMockProvider({
+          callApi: async () => {
+            cacheEnabled = isCacheEnabled();
+            return { output: 'Cached output', cached: true };
+          },
+        });
+        const options = createRunOptions(provider);
+        if (redteam) {
+          options.test.assert = [{ type: 'promptfoo:redteam:coding-agent:secret-env-read' }];
+        }
+        const [result] = await withCacheEnabled(true, () => runEval(options));
+
+        expect(cacheEnabled).toBe(!redteam);
+        expect(result.success).toBe(!redteam);
+        if (redteam) {
+          expect(result.error).toContain('requires a live target response');
+        }
+      },
+    );
 
     it('skips external trace collection for cached provider responses', async () => {
       const provider = createMockProvider({

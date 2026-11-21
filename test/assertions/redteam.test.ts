@@ -143,7 +143,22 @@ describe('redteam strategy result grading', () => {
         traceId: 'trace',
         evaluationId: 'eval',
         testCaseId: 'test',
-        spans: hasActions ? [{ spanId: 'one', name: 'describe-color', startTime: 1 }] : [],
+        metadata: { commandToolNames: ['bash'] },
+        spans: hasActions
+          ? [
+              {
+                spanId: 'one',
+                name: 'private-fixture-label',
+                startTime: 1,
+                statusCode: 1,
+                statusMessage: 'private-fixture-status',
+                attributes: {
+                  'tool.name': 'bash',
+                  'tool.arguments': { cmd: 'private-fixture-value' },
+                },
+              },
+            ]
+          : [],
       };
       const result = await handleRedteam({
         assertion: piiAssertion,
@@ -172,6 +187,12 @@ describe('redteam strategy result grading', () => {
       });
       expect(result.pass).toBe(!hasActions);
       expect(getResult).toHaveBeenCalledTimes(Number(hasActions));
+      if (hasActions) {
+        const context = getResult.mock.calls[0][7];
+        expect(context?.traceData).toBe(trace);
+        expect(context?.traceSummary).toContain('command');
+        expect(context?.traceSummary).not.toContain('private-fixture');
+      }
       expect(result.tokensUsed?.total).toBe(storedResult.tokensUsed.total);
     },
   );
