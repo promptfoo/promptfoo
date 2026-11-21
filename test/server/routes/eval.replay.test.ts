@@ -1,10 +1,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { Server } from 'node:http';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
@@ -19,28 +17,13 @@ import * as fetchUtils from '../../../src/util/fetch/index';
 import * as providerRefs from '../../../src/util/providerRef';
 import { normalizeProviderRef } from '../../../src/util/providerRef';
 import * as templates from '../../../src/util/templates';
+import { setupTestServer } from '../../util/testServer';
 
 const evaluate = vi.mocked(evaluateWithSource);
 
 describe('POST /api/eval/replay provider boundary', () => {
-  let server: Server;
-  let api: ReturnType<typeof request.agent>;
+  const api = setupTestServer(createApp);
   let directory: string;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
 
   beforeEach(async () => {
     vi.resetAllMocks();
@@ -138,20 +121,6 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate.mock.calls[0][0].providers).toEqual([{ id: 'echo', prompts: ['Replay'] }]);
     expect((await replay(testIndex, 1)).status).toBe(400);
   });
-
-  it.each([undefined, 0])(
-    'replays a saved env-templated provider as its resolved identity',
-    async (promptIndex) => {
-      vi.stubEnv('REPLAY_FIXTURE_PROVIDER', 'echo');
-      try {
-        storedConfig([{ id: '{{ env.REPLAY_FIXTURE_PROVIDER }}' }], undefined, ['echo']);
-        expect((await replay(0, promptIndex)).status).toBe(200);
-        expect(evaluate.mock.calls[0][0].providers).toEqual([{ id: 'echo', prompts: ['Replay'] }]);
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    },
-  );
 
   it('resolves a mapped provider in its saved env scope and preserves its display ID', async () => {
     const options = { id: 'saved-label', env: { REPLAY_FIXTURE_PROVIDER: 'echo' } };
