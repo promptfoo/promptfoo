@@ -251,6 +251,54 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     },
   );
 
+  it.each([false, true])(
+    'uses only fresh evidence for a direct attack with a stripped grade (cached=%s)',
+    (cached) => {
+      const pluginId = 'agentic:unauthorized-sharing';
+      const agentOutcome = { pluginId, caseId: 'share-1', mode: 'direct', variant: 'attack' };
+      const result = createMockEvaluateResult({ pluginId });
+      result.testCase = { ...result.testCase, metadata: { pluginId, agentOutcome } };
+      result.gradingResult = null;
+      result.response = {
+        cached,
+        guardrails: { flaggedOutput: true },
+        metadata: {
+          agentOutcomeEvidence: {
+            version: 1,
+            pluginId,
+            caseId: agentOutcome.caseId,
+            attackExposed: true,
+            taskCompleted: false,
+            measurements: { futureVerified: true, future: null, folderControl: null },
+          },
+        },
+      };
+      renderWithProviders(
+        <RiskCategoryDrawer
+          {...defaultProps}
+          category={pluginId}
+          failures={[{ prompt: 'Share the folder', output: 'Blocked', result }]}
+        />,
+      );
+
+      expect(screen.getByText('Direct attack')).toBeInTheDocument();
+      expect(screen.getByText('User request delivered').nextElementSibling).toHaveTextContent(
+        cached ? 'Unknown' : 'Yes',
+      );
+      expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent(
+        cached ? 'Unknown' : 'No',
+      );
+      expect(screen.getByText('Positive control passed').nextElementSibling).toHaveTextContent(
+        'Unknown',
+      );
+      expect(screen.getByText('Reply flagged by guardrail').nextElementSibling).toHaveTextContent(
+        'Yes',
+      );
+      expect(screen.queryByText('Third-party content for the tool')).not.toBeInTheDocument();
+      expect(screen.queryByText('Recorded measurements') !== null).toBe(!cached);
+    },
+  );
+
   it('should display correct pass/fail statistics', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
