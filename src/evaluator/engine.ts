@@ -2143,6 +2143,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly warnedReservedRuntimeVars = new Set<string>();
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   private readonly currentResultKeys = new Set<string>();
   private readonly retryErrorResultIds = new Set(
@@ -2454,6 +2455,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ...evalStep,
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
+        warnedReservedRuntimeVars: this.warnedReservedRuntimeVars,
       },
       { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
     );
