@@ -566,17 +566,14 @@ export function calculateBedrockCost(
   const normalizedModelId = modelId.toLowerCase();
   const claude = normalizedModelId.includes('anthropic.claude');
   const nova = isNovaPromptCachingModel(normalizedModelId, config);
-  if (inputOverride !== undefined || outputOverride !== undefined) {
+  const hasOverrides = inputOverride !== undefined || outputOverride !== undefined;
+  if (hasOverrides) {
     if (
       [promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens, cacheWrite1hTokens].some(
         (count) => !Number.isSafeInteger(count) || count < 0,
       ) ||
       cacheWrite1hTokens > cacheWriteTokens
     ) {
-      return undefined;
-    }
-    // Input/output overrides alone cannot establish a custom cache meter.
-    if (!nova && !claude && (cacheReadTokens > 0 || cacheWriteTokens > 0)) {
       return undefined;
     }
     if (
@@ -711,6 +708,11 @@ export function calculateBedrockCost(
       completionTokens * (outputOverride ?? output / 1_000_000) +
       (cacheReadTokens * cachedInput) / 1_000_000
     );
+  }
+  // The profiles above have published cache meters. In the generic table
+  // only Claude and Nova have verified cache rates.
+  if (hasOverrides && !nova && !claude && (cacheReadTokens > 0 || cacheWriteTokens > 0)) {
+    return undefined;
   }
   const pricing = getBedrockPricing(normalizedModelId, region);
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%

@@ -703,6 +703,14 @@ describe('explicit Bedrock cost rates', () => {
     },
   );
 
+  it('keeps verified cache input prices when overriding only the output rate', () => {
+    expect(
+      calculateBedrockCost('global.xai.grok-4.7', 100, 20, 10, 0, 'us-east-1', undefined, 0, {
+        outputCost: 0,
+      }),
+    ).toBeCloseTo((100 * 2 + 10 * 0.5) / 1e6, 12);
+  });
+
   it('omits a charge when cache meters are unknown', () => {
     expect(
       calculateBedrockCost('custom-model', 10, 20, 20, 5, undefined, undefined, 0, {
