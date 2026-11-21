@@ -52,6 +52,21 @@ describe('EvalPage', () => {
     expect(mockEvalComponent).toHaveAttribute('data-fetch-id', routeEvalId);
   });
 
+  it.each(['archive/spring', 'archive%2Fspring', 'archive%252Fspring', 'archive%3Fspring'])(
+    'preserves the exact stored ID %s under a basename with a trailing slash',
+    (id) => {
+      render(
+        <MemoryRouter basename="/app" initialEntries={[`/app/eval/${encodeURIComponent(id)}/`]}>
+          <Routes>
+            <Route path="/eval/:evalId" element={<EvalPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByTestId('mock-eval')).toHaveAttribute('data-fetch-id', id);
+    },
+  );
+
   it('should pass the evalId from useSearchParams as fetchId to the Eval component when evalId is not present in the route params but is present in the search params', () => {
     const searchEvalId = 'eval-from-search-params-456';
 
