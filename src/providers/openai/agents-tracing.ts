@@ -694,13 +694,16 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
 
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
-  const usesCurlAuth = isCurlCommand(value);
+  const redactCurl = curlArgumentRedactor(value);
+  if (redactCurl) {
+    value = value.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
+  }
   let match: RegExpExecArray | null;
   let sanitized = '';
   let copied = 0;
   while ((match = options.exec(value))) {
     const [, prefix, option, separator] = match;
-    if (isCredentialOption(option, usesCurlAuth)) {
+    if (isCredentialAttributeKey(option)) {
       sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
       copied = options.lastIndex;
     } else {
@@ -792,14 +795,14 @@ function hasEncodedCredential(raw: string): boolean {
   return false;
 }
 
-function isCurlCommand(command: unknown): boolean {
-  const words = Array.isArray(command)
-    ? command
-    : typeof command === 'string'
-      ? command.match(/(?:[^\s"']|"[^"]*"|'[^']*')+/g)
-      : undefined;
-  for (const word of words ?? []) {
-    if (typeof word !== 'string') {
+// Keep adjacent quoted and escaped fragments in the same shell argument.
+const COMMAND_WORDS = /(?:[^\s"'\\]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"?|'[^']*'?)+/g;
+
+function isCurlCommand(command: string | unknown[]): boolean {
+  const words = typeof command === 'string' ? (command.match(COMMAND_WORDS) ?? []) : command;
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index];
+    if (typeof word !== 'string' || word.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
       return false;
     }
     const arg = word.replace(/^(["'])(.*)\1$/, '$2');
@@ -813,11 +816,33 @@ function isCurlCommand(command: unknown): boolean {
   return false;
 }
 
-function isCredentialOption(option: string, usesCurlAuth: boolean): boolean {
-  return (
-    isCredentialAttributeKey(option) ||
-    (usesCurlAuth && ['-u', '--user', '--proxy-user'].includes(option))
-  );
+// Share curl option handling between text and native argv. Scan wrappers once per command.
+function curlArgumentRedactor(command: string | unknown[]) {
+  if (!isCurlCommand(command)) {
+    return;
+  }
+  let maskNext = false;
+  return (word: unknown) => {
+    if (maskNext) {
+      maskNext = false;
+      return '<redacted>';
+    }
+    if (typeof word !== 'string') {
+      return;
+    }
+    const arg = word.replace(/^(["'])(.*)\1$/s, '$2');
+    const flag =
+      /^(?:-[sSfLkvI]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
+        arg,
+      )?.[0];
+    if (!flag) {
+      return;
+    }
+    if (arg !== flag || flag.endsWith('=')) {
+      return flag + '<redacted>';
+    }
+    maskNext = true;
+  };
 }
 
 function hasCredentialNamedPayload(value: string): boolean {
@@ -982,9 +1007,17 @@ function isCredentialAttributeKey(key: string): boolean {
       (part === 'key' || part === 'keys') &&
       (!['algorithm', 'type', 'format', 'id'].includes(parts[index + 1]) ||
         (parts[index - 1] === 'access' && parts[index + 1] === 'id')) &&
-      ['api', 'access', 'private', 'client', 'ssl', 'tls', 'signing', 'encryption'].includes(
-        parts[index - 1],
-      )
+      [
+        'api',
+        'access',
+        'subscription',
+        'private',
+        'client',
+        'ssl',
+        'tls',
+        'signing',
+        'encryption',
+      ].includes(parts[index - 1])
     );
   });
 }
@@ -1023,10 +1056,7 @@ function isCredentialPairValue(
     if (headerPairs && Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)) {
       return isCredentialAttributeKey(option);
     }
-    return (
-      /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) &&
-      isCredentialOption(option, isCurlCommand(source))
-    );
+    return /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) && isCredentialAttributeKey(option);
   }
   return (
     key.toLowerCase() === 'value' &&
@@ -1129,15 +1159,17 @@ function sanitizeStructuredAttributeValue(
       }
       (target as unknown[]).length = source.length;
     }
-    for (const [key, entry] of structuredAttributeEntries(source)) {
+    const redactCurl = Array.isArray(source) ? curlArgumentRedactor(source) : undefined;
+    for (const [key, value] of structuredAttributeEntries(source)) {
       if (
         --budget.remaining < 0 ||
         key.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
-        (typeof entry === 'string' && entry.length > MAX_STRUCTURED_ATTRIBUTE_BYTES)
+        (typeof value === 'string' && value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES)
       ) {
         return '<redacted>';
       }
 
+      const entry = redactCurl?.(value) ?? value;
       let sanitized: unknown;
       if (
         typeof entry === 'function' ||

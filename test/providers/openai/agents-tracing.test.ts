@@ -153,23 +153,28 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
-  it.each(['json', 'protobuf'] as const)(
-    'redacts session credential headers in every supported container in %s',
-    async (format) => {
+  it.each([
+    ['json', 'X-Session-Id'],
+    ['protobuf', 'X-Session-Id'],
+    ['json', 'Ocp-Apim-Subscription-Key'],
+    ['protobuf', 'Ocp-Apim-Subscription-Key'],
+  ] as const)(
+    'redacts %s header records for %s in every supported container',
+    async (format, header) => {
       const { attributes, payload } = await exportCustomData(
         {
-          headers: { 'x-session-id': 'opaque/object', 'Content-Type': 'text/plain' },
-          rawHeaders: ['X-Session-Id', 'opaque/raw', 'Content-Type', 'text/plain'],
-          records: [{ name: 'X-Session-Id', value: 'opaque/record' }],
-          text: 'X-Session-Id: opaque/text',
-          nested: JSON.stringify({ headers: { 'x-session-id': 'opaque/serialized' } }),
+          headers: { [header.toLowerCase()]: 'opaque/object', 'Content-Type': 'text/plain' },
+          rawHeaders: [header, 'opaque/raw', 'Content-Type', 'text/plain'],
+          records: [{ name: header, value: 'opaque/record' }],
+          text: `${header}: opaque/text`,
+          nested: JSON.stringify({ headers: { [header.toLowerCase()]: 'opaque/serialized' } }),
           session_status: 'completed',
           session_duration: 42,
         },
         format,
       );
       expect(JSON.parse(attributes.headers as string)).toEqual({
-        'x-session-id': '<redacted>',
+        [header.toLowerCase()]: '<redacted>',
         'Content-Type': 'text/plain',
       });
       expect(attributes.session_status).toBe('completed');
@@ -204,6 +209,53 @@ describe('OTLPTracingExporter', () => {
       expect(JSON.stringify(payload)).not.toContain('private callable contents');
     },
   );
+
+  it.each(['json', 'protobuf'] as const)(
+    'masks attached curl credentials and separate OAuth and proxy arguments in %s',
+    async (format) => {
+      const args = [
+        'curl',
+        '-ubot:opaque/user',
+        '-U',
+        'bot:opaque/proxy',
+        '--oauth2-bearer',
+        'opaque/bearer',
+        '-Ubot:opaque/attached',
+        '--proxy-user=bot:opaque/long',
+        '-su"bot:opaque/secret phrase"',
+        '--pass',
+        'opaque/pass',
+        '-Efile:opaque/cert',
+        '-bname=opaque/cookie',
+        'https://host',
+      ];
+      const { attributes, payload } = await exportCustomData(
+        {
+          argv: args,
+          text: args.join(' '),
+          unrelated: 'git push -uorigin main',
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toMatch(/opaque|phrase/);
+      expect(attributes.text).toContain('https://host');
+      expect(attributes.unrelated).toBe('git push -uorigin main');
+    },
+  );
+
+  it('scans native curl wrappers once, independent of the number of options', async () => {
+    const args = ['env', ...Array(2000).fill('-i'), 'curl', '-u', 'bot:opaque/password'];
+    let reads = 0;
+    Object.defineProperty(args, 0, {
+      get: () => {
+        reads++;
+        return 'env';
+      },
+    });
+    const { payload } = await exportCustomData({ argv: args }, 'json');
+    expect(reads).toBeLessThan(10);
+    expect(JSON.stringify(payload)).not.toContain('opaque/password');
+  });
 
   it.each(['json', 'protobuf'] as const)(
     'keeps ordinary short options and masks curl authentication in %s',
