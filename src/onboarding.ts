@@ -468,8 +468,33 @@ export async function createDummyFiles(
       });
     }
 
+    const weatherFunction = {
+      name: 'get_current_weather',
+      description: 'Get the current weather in a given location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: 'The city and state, e.g. San Francisco, CA',
+          },
+        },
+        required: ['location'],
+      },
+    };
+    const gpt62Models = ['openai:gpt-6.2-sol', 'openai:gpt-6.2-astra'];
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
       { name: `I'll choose later`, value: defaultProviders },
+      {
+        name: '[OpenAI] GPT-6.2 Sol and Astra',
+        value:
+          action === 'agent'
+            ? gpt62Models.map((id) => ({
+                id,
+                config: { tools: [{ type: 'function', ...weatherFunction }] },
+              }))
+            : gpt62Models,
+      },
       {
         name: action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
         value:
@@ -482,20 +507,7 @@ export async function createDummyFiles(
                     tools: [
                       {
                         type: 'function',
-                        function: {
-                          name: 'get_current_weather',
-                          description: 'Get the current weather in a given location',
-                          parameters: {
-                            type: 'object',
-                            properties: {
-                              location: {
-                                type: 'string',
-                                description: 'The city and state, e.g. San Francisco, CA',
-                              },
-                            },
-                            required: ['location'],
-                          },
-                        },
+                        function: weatherFunction,
                       },
                     ],
                   },
