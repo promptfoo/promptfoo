@@ -101,6 +101,7 @@ export const ADDITIONAL_STRATEGIES = [
   'morse',
   'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
+  'posterior',
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
   'retry',
   'rot13',

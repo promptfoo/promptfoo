@@ -179,6 +179,7 @@ const redTeamSidebar = [
           'red-team/strategies/math-prompt',
           'red-team/strategies/other-encodings',
           'red-team/strategies/rot13',
+          'red-team/strategies/posterior',
         ],
       },
       {
