@@ -66,6 +66,7 @@ import { PolicyPlugin } from './policy/index';
 import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
+import { toRagDraft } from './ragPoisoning';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
@@ -674,6 +675,13 @@ function createRemotePlugin<T extends PluginConfig>(
         redteamGenerationContext ?? targetId,
         provider,
       );
+      if (key === 'rag-poisoning') {
+        invariant(testCases.length <= n, 'Too many generated RAG cases');
+        const drafts = testCases.map((row) =>
+          toRagDraft(row, injectVar, configWithDefaults?.intendedResults),
+        );
+        return addPluginMetadata(drafts, pluginId, () => configWithDefaults);
+      }
       const testsWithMetadata = addPluginMetadata(testCases, pluginId, () => configWithDefaults);
 
       if (key.startsWith('harmful:') || key.startsWith('bias:')) {
@@ -706,7 +714,9 @@ remotePlugins.push(
     'rag-poisoning',
     (config: { intendedResults: string[] }) =>
       invariant(
-        Array.isArray(config.intendedResults) && config.intendedResults.length > 0,
+        Array.isArray(config.intendedResults) &&
+          config.intendedResults.length > 0 &&
+          config.intendedResults.every((result) => typeof result === 'string' && result.trim()),
         'RAG Poisoning plugin requires `config.intendedResults` to be set to a non-empty array of expected outcomes from poisoned documents',
       ),
   ),

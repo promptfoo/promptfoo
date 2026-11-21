@@ -219,6 +219,15 @@ export const handleRedteam = async (
   // Hydra and Goblin retain their current-turn grading behavior. Their saved
   // messages are still available for attack generation and reporting.
   const providerId = getConfiguredProviderId(test, provider);
+  if (baseType === 'promptfoo:redteam:rag-poisoning') {
+    // Only the rendered request sent by the evaluator can bind a local approval.
+    invariant(
+      prompt === effectivePrompt &&
+        !test.metadata?.strategyId &&
+        !isAttackProvider(providerId ?? ''),
+      'RAG grading requires the original single-turn evaluation prompt',
+    );
+  }
   const gradesCurrentTurnOnly =
     providerId === 'promptfoo:redteam:hydra' ||
     providerId === 'promptfoo:redteam:goblin' ||
