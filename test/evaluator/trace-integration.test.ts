@@ -404,9 +404,10 @@ describe('evaluator trace integration', () => {
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
 
-    // Verify trace was fetched with the correct traceId
+    // The lazy assertion read must use only the target trace.
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
+      excludeGraders: true,
     });
 
     // Verify result was added with passing assertion
