@@ -34,20 +34,19 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
     python -m pip install promptfoo
     ```
 
-    The [Python wrapper](https://github.com/promptfoo/promptfoo-python) runs the npm CLI. It requires Python 3.10 or newer, Node.js 22.22.0 or newer, and npm and npx on your `PATH`.
+    The [Python wrapper](https://github.com/promptfoo/promptfoo-python) runs the npm CLI. It requires Python 3.10 or newer, a [supported Node.js version](#nodejs-runtime-support), and npm and npx on your `PATH`.
 
   </TabItem>
 </Tabs>
 
 :::note
-npm and npx require [Node.js](https://nodejs.org/en/download) `>=22.22.0`.
+To run Promptfoo with npm or npx, install a supported version of [Node.js](https://nodejs.org/en/download).
 :::
 
 ## Node.js runtime support
 
-Promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
-
-If you are on an older release, upgrade Node.js before installing or updating promptfoo.
+Promptfoo supports Node.js 22.x from 22.22.2, 24.x from 24.15.0, and 26 or later.
+We recommend the latest Node.js 24 LTS release.
 
 <Tabs groupId="node-version-manager">
   <TabItem value="nvm" label="nvm" default>
