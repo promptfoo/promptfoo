@@ -1,4 +1,4 @@
-import { addEncodedTestCases } from './testCaseAdapters';
+import { mapEncodingTestCases } from './encoding';
 
 import type { TestCase } from '../../types/index';
 
@@ -82,9 +82,9 @@ export function toHomoglyphs(text: string): string {
  * Add homoglyph encoding to test cases
  */
 export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCase[] {
-  return addEncodedTestCases(testCases, injectVar, {
-    strategyId: 'homoglyph',
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: toHomoglyphs,
     metricSuffix: 'Homoglyph',
-    encode: toHomoglyphs,
+    metadata: { strategyId: 'homoglyph' },
   });
 }

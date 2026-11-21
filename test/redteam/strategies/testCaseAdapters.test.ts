@@ -46,3 +46,18 @@ describe.each([
     expect(add([], config)).toEqual([]);
   });
 });
+
+it('reads custom strategy metadata once without forwarding plugin inputs', () => {
+  let reads = 0;
+  const pluginConfig = { inputs: { query: 'input' } };
+  const metadata = {
+    get pluginConfig() {
+      reads++;
+      return pluginConfig;
+    },
+  };
+  const [result] = addCustom([{ ...tests[0], metadata }], 'query', {});
+  expect(reads).toBe(1);
+  expect(result.metadata?.pluginConfig).toBe(pluginConfig);
+  expect((result.provider as ProviderOptions).config).not.toHaveProperty('inputs');
+});

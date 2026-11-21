@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { addProviderTestCases } from './testCaseAdapters';
+import { createAdaptiveMultiTurnStrategy } from './hydra';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
@@ -9,10 +9,8 @@ export async function addGoatTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   logger.debug('Adding GOAT test cases');
-  return addProviderTestCases(testCases, injectVar, config, {
-    providerName: 'promptfoo:redteam:goat',
-    metricSuffix: 'GOAT',
-    strategyId: 'goat',
-    forwardPluginInputs: true,
-  });
+  return createAdaptiveMultiTurnStrategy(
+    { providerName: 'promptfoo:redteam:goat', metricSuffix: 'GOAT', strategyId: 'goat' },
+    false,
+  )(testCases, injectVar, config);
 }

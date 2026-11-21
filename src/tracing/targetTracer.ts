@@ -11,6 +11,7 @@ import {
   GenAIAttributes,
   getGenAITracer,
   PromptfooAttributes,
+  recordSpanError,
   sanitizeBody,
   withGenAISpan,
 } from './genaiTracer';
@@ -62,13 +63,7 @@ export async function withTestCaseSpan<T>(
     const rootContext = trace.setSpan(ROOT_CONTEXT, rootSpan);
     result = await context.with(rootContext, () => withSpanRole('test_case', fn));
   } catch (error) {
-    rootSpan.setStatus({
-      code: SpanStatusCode.ERROR,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    if (error instanceof Error) {
-      rootSpan.recordException(error);
-    }
+    recordSpanError(rootSpan, error);
     rootSpan.end();
     throw error;
   }
@@ -156,13 +151,7 @@ export async function withTargetSpan<T>(
         }
         return result;
       } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        if (error instanceof Error) {
-          span.recordException(error);
-        }
+        recordSpanError(span, error);
         throw error;
       } finally {
         span.end();
@@ -322,13 +311,7 @@ export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promis
         span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        if (error instanceof Error) {
-          span.recordException(error);
-        }
+        recordSpanError(span, error);
         throw error;
       } finally {
         span.end();

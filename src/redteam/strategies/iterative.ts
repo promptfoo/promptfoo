@@ -1,4 +1,4 @@
-import { addProviderTestCases } from './testCaseAdapters';
+import { createAdaptiveMultiTurnStrategy } from './hydra';
 
 import type { TestCase } from '../../types/index';
 
@@ -29,10 +29,9 @@ export function addIterativeJailbreaks(
         ? 'jailbreak:tree'
         : 'jailbreak:meta';
 
-  return addProviderTestCases(testCases, injectVar, config, {
-    providerName,
-    metricSuffix,
-    strategyId,
-    forwardPluginInputs: true,
-  });
+  return createAdaptiveMultiTurnStrategy({ providerName, metricSuffix, strategyId }, false)(
+    testCases,
+    injectVar,
+    config,
+  );
 }

@@ -1,4 +1,4 @@
-import { addEncodedTestCases } from './testCaseAdapters';
+import { mapEncodingTestCases } from './encoding';
 
 import type { TestCase } from '../../types/index';
 
@@ -27,9 +27,9 @@ export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase
       .join('');
   };
 
-  return addEncodedTestCases(testCases, injectVar, {
-    strategyId: 'leetspeak',
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: toLeetspeak,
     metricSuffix: 'Leetspeak',
-    encode: toLeetspeak,
+    metadata: { strategyId: 'leetspeak' },
   });
 }

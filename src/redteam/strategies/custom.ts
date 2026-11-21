@@ -1,4 +1,4 @@
-import { addProviderTestCases } from './testCaseAdapters';
+import { createAdaptiveMultiTurnStrategy } from './hydra';
 
 import type { TestCase } from '../../types/index';
 
@@ -12,10 +12,14 @@ export function addCustom(
   const variant = strategyId.includes(':') ? strategyId.split(':')[1] : '';
   const displayName = variant ? `Custom:${variant}` : 'Custom';
 
-  return addProviderTestCases(testCases, injectVar, config, {
-    providerName: `promptfoo:redteam:${strategyId}`,
-    defaults: { variant },
-    metricSuffix: displayName,
-    strategyId,
-  });
+  return createAdaptiveMultiTurnStrategy(
+    {
+      providerName: `promptfoo:redteam:${strategyId}`,
+      metricSuffix: displayName,
+      strategyId,
+      defaults: { variant },
+      forwardPluginInputs: false,
+    },
+    false,
+  )(testCases, injectVar, config);
 }

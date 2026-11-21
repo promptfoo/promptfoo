@@ -1,4 +1,4 @@
-import { addProviderTestCases } from './testCaseAdapters';
+import { createAdaptiveMultiTurnStrategy } from './hydra';
 
 import type { TestCase } from '../../types/index';
 
@@ -7,10 +7,12 @@ export function addCrescendo(
   injectVar: string,
   config: Record<string, any>,
 ): TestCase[] {
-  return addProviderTestCases(testCases, injectVar, config, {
-    providerName: 'promptfoo:redteam:crescendo',
-    metricSuffix: 'Crescendo',
-    strategyId: 'crescendo',
-    forwardPluginInputs: true,
-  });
+  return createAdaptiveMultiTurnStrategy(
+    {
+      providerName: 'promptfoo:redteam:crescendo',
+      metricSuffix: 'Crescendo',
+      strategyId: 'crescendo',
+    },
+    false,
+  )(testCases, injectVar, config);
 }

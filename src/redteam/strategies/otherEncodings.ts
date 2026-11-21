@@ -1,4 +1,4 @@
-import { addEncodedTestCases } from './testCaseAdapters';
+import { mapEncodingTestCases } from './encoding';
 
 import type { TestCase } from '../../types/index';
 
@@ -192,10 +192,9 @@ export function addOtherEncodings(
     }
   })();
 
-  return addEncodedTestCases(testCases, injectVar, {
-    strategyId: encodingType,
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: transformer,
     metricSuffix: encodingName,
-    encode: transformer,
-    encodingType,
+    metadata: { strategyId: encodingType, encodingType },
   });
 }
