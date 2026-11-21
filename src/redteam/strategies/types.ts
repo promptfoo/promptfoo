@@ -52,6 +52,11 @@ export async function getStrategyGenerationProvider({
       }
     }
 
+    if (selection?.source === 'cache' && jsonOnly && selection.cachedJsonOnlyProvider) {
+      // Bind the captured variant to the registry active at resolution time.
+      return wrap(redteamProviderManager.wrapProvider(selection.cachedJsonOnlyProvider));
+    }
+
     const provider =
       selection?.source === 'default'
         ? await redteamProviderManager.getDefaultProvider({ jsonOnly, preferSmallModel })
