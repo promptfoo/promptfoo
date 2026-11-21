@@ -65,12 +65,12 @@ export function getHeaderCredentialForms(value: string): string[] {
 /** Characters that continue a credential-like token, such as base64 or URL-safe text. */
 const TOKEN_CHARACTER = /[A-Za-z0-9._~+/=-]/;
 
-/** Replace long credentials anywhere and short credentials only at token boundaries. */
-function redactCredential(text: string, credential: string): string {
+/** Restrict ambiguous short values to token boundaries. */
+function redactCredential(text: string, credential: string, anywhere: boolean): string {
   if (credential.length > text.length) {
     return text;
   }
-  if (credential.length >= 8 && !/%[\da-f]{2}/i.test(credential)) {
+  if (anywhere && !/%[\da-f]{2}/i.test(credential)) {
     return text.split(credential).join(REDACTED);
   }
   // A percent escape may change hex case or have its '%' encoded again by nested transports.
@@ -83,7 +83,7 @@ function redactCredential(text: string, credential: string): string {
     )
     .join('');
   return text.replace(new RegExp(pattern, 'g'), (match, start: number) => {
-    if (credential.length >= 8) {
+    if (anywhere) {
       return REDACTED;
     }
     const end = start + match.length;
@@ -102,11 +102,19 @@ function redactCredential(text: string, credential: string): string {
  * Redact known credentials, longest first so a credential containing another is fully removed,
  * then bearer/Basic tokens and OpenAI-style keys that were never configured locally.
  */
-export function redactCredentials(text: string, credentials: Iterable<string>): string {
+export function redactCredentials(
+  text: string,
+  credentials: Iterable<string>,
+  embedded?: ReadonlySet<string>,
+): string {
   let redacted = text;
   const ordered = [...new Set(credentials)].filter(Boolean).sort((a, b) => b.length - a.length);
   for (const credential of ordered) {
-    redacted = redactCredential(redacted, credential);
+    redacted = redactCredential(
+      redacted,
+      credential,
+      credential.length >= 8 || embedded?.has(credential) === true,
+    );
   }
   return redacted
     .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]+/gi, `$1 ${REDACTED}`)
@@ -147,21 +155,27 @@ const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
 };
 
 /** Redact known credentials, URLs, and credential fields in upstream diagnostics. */
-export function redactDiagnosticText(text: string, credentials: Iterable<string>): string {
-  // Preserve literal backslashes in known credentials before normalizing JSON-escaped
-  // slashes. Apply bearer-token rules afterwards so a slash cannot split a token.
+export function redactDiagnosticText(
+  text: string,
+  credentials: Iterable<string>,
+  embedded?: ReadonlySet<string>,
+): string {
+  // Undo slash escaping on both sides before sorting, preserving the original
+  // strength of a credential that contained a literal backslash.
   if (text.includes('\\/')) {
     const slash = /(?<!\\)\\+\//g;
-    const forms = [...credentials].sort((a, b) => b.length - a.length);
-    for (const credential of forms) {
-      if (credential.includes('\\/')) {
-        text = redactCredential(text, credential);
+    const strong = new Set<string>();
+    credentials = Array.from(credentials, (value) => {
+      const normalized = value.replace(slash, '/');
+      if (value.length >= 8 || embedded?.has(value)) {
+        strong.add(normalized);
       }
-    }
+      return normalized;
+    });
     text = text.replace(slash, '/');
-    credentials = forms.map((credential) => credential.replace(slash, '/'));
+    embedded = strong;
   }
-  const source = redactCredentials(text, credentials).replace(DIAGNOSTIC_URL, (url) =>
+  const source = redactCredentials(text, credentials, embedded).replace(DIAGNOSTIC_URL, (url) =>
     sanitizeUrlForLogging(url),
   );
   let redacted = '';

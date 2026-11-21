@@ -1409,11 +1409,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       details.message =
         'Upstream diagnostic withheld because an MCP server may transform credentials';
     }
-    let text = describeOpenCodeError(details);
-    for (const credential of this.shortCredentials) {
-      text = text.split(credential).join('[REDACTED]');
-    }
-    return redactDiagnosticText(text, this.knownCredentials)
+    return redactDiagnosticText(
+      describeOpenCodeError(details),
+      this.knownCredentials,
+      this.shortCredentials,
+    )
       .replace(/[\r\n]+/g, ' ')
       .slice(0, 500);
   }
@@ -2261,7 +2261,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const redactId = (id: string) =>
       this.withholdMcpDiagnostics || id.length > 4_096
         ? '[REDACTED]'
-        : redactDiagnosticText(id, this.knownCredentials);
+        : redactDiagnosticText(id, this.knownCredentials, this.shortCredentials);
     if (startIndex === -1) {
       logger.debug(
         `[OpenCode SDK] Parent message ${redactId(parentId)} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,

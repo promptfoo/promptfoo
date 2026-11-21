@@ -3598,6 +3598,15 @@ describe('OpenCodeSDKProvider', () => {
           },
         ],
         [
+          'a long provider key and an inherited shorter key inside and outside it',
+          {
+            config: { apiKey: 'prod-q7x9-private-suffix' },
+            processEnv: { FAL_KEY: 'q7x9' },
+            echo: ['prod-q7x9-private-suffix', 'prefix-q7x9-tail'],
+            secrets: ['q7x9', 'private-suffix'],
+          },
+        ],
+        [
           'lowercase and repeatedly percent-encoded API keys',
           {
             config: { apiKey: 'abc/defgh' },

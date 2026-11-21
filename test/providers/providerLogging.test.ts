@@ -137,9 +137,17 @@ describe('redactDiagnosticText', () => {
     expect(redacted).not.toMatch(/upstream-|sk-proj-/);
   });
 
-  it('redacts configured credentials before normalizing escaped slashes', () => {
+  it('preserves literal backslash credential matching when normalizing escaped slashes', () => {
     const credential = 'synthetic\\/credential';
     expect(redactDiagnosticText(`failed ${credential}`, [credential])).toBe(`failed ${REDACTED}`);
+  });
+
+  it('redacts longer credentials before shorter literal slash variants', () => {
+    const literal = 'abc\\/def';
+    const credentials = [literal, 'prefix-abc/def-private'];
+    expect(redactDiagnosticText('prefix-abc\\/def-private; xabc\\/defy', credentials)).toBe(
+      '[REDACTED]; x[REDACTED]y',
+    );
   });
 
   it('redacts escaped credentials before inspecting bearer tokens', () => {
