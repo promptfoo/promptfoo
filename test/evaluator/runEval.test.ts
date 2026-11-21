@@ -850,9 +850,13 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
   });
 
-  it.each([false, true])(
-    'errors on missing provider outputs with isRedteam=%s',
-    async (isRedteam) => {
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    'errors on missing provider outputs without a control grader, isRedteam=%s, isSafe=%s',
+    async (isRedteam, isSafe) => {
       for (const response of [{}, { output: undefined }, { output: null }]) {
         const provider: ApiProvider = {
           id: () => 'missing-output-provider',
@@ -863,7 +867,7 @@ describe('runEval', () => {
           ...defaultOptions,
           provider,
           prompt: { raw: 'Test prompt', label: 'test-label' },
-          test: { assert: [{ type: 'javascript', value: assertion }] },
+          test: { metadata: { isSafe }, assert: [{ type: 'javascript', value: assertion }] },
           conversations: {},
           registers: {},
           isRedteam,

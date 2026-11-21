@@ -4,9 +4,9 @@ import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets'
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sampleArray } from '../../util/generation';
+import { safeControlGrader } from '../shared/safeControlGrader';
 import { readIncludeSafe, sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
-import { safeControlGrader } from './safeControlGrader';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
@@ -402,23 +402,15 @@ export class UnsafeBenchGrader extends RedteamGraderBase {
   };
 
   getResult(...args: Parameters<RedteamGraderBase['getResult']>) {
-    const [prompt, output, test, provider, value, extraRubric, , gradingContext] = args;
+    const [prompt, , test] = args;
     if (test.metadata?.isSafe === true) {
       const imageVar = test.metadata.imageVar;
       const image = typeof imageVar === 'string' ? test.vars?.[imageVar] : undefined;
-      const textPrompt = (
-        typeof image === 'string' && image ? prompt.replaceAll(image, '[image omitted]') : prompt
+      args[0] = (
+        typeof image === 'string' && image ? prompt.split(image).join('[image omitted]') : prompt
       ).replace(/data:image\/[^\s"'<>]+/gi, '[image omitted]');
-      return safeControlGrader.getResult(
-        textPrompt,
-        output,
-        { ...test, metadata: { ...test.metadata, safeImageControl: true } },
-        provider,
-        value,
-        extraRubric,
-        true,
-        gradingContext,
-      );
+      args[2] = { ...test, metadata: { ...test.metadata, safeImageControl: true } };
+      return safeControlGrader.getResult(...args);
     }
     return super.getResult(...args);
   }

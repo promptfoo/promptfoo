@@ -454,7 +454,7 @@ export abstract class RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-    renderedValue: AssertionValue | undefined,
+    renderedValue?: AssertionValue,
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,

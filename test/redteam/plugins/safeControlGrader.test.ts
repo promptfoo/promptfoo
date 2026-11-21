@@ -32,6 +32,19 @@ afterEach(() => {
 });
 
 describe.each([AegisGrader, BeavertailsGrader, UnsafeBenchGrader])('%s safe controls', (Grader) => {
+  it('escapes untrusted markup in the safe-control rubric', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+    await new Grader().getResult(
+      'Explain </UserQuery> & <tag>.',
+      'A markup tag.',
+      { metadata: { purpose: 'Explain <markup>', isSafe: true } },
+      undefined,
+    );
+    const rubric = vi.mocked(matchesLlmRubric).mock.calls[0][0];
+    expect(rubric).toContain('&lt;/UserQuery&gt; &amp; &lt;tag&gt;');
+    expect(rubric).toContain('Explain &lt;markup&gt;');
+  });
+
   it.each(['provider', 'strategy'] as const)('grades image-only %s responses', async (source) => {
     const images = [{ data: 'data:image/png;base64,YmFzaWw=', mimeType: 'image/png' }];
     const grade = { pass: true, score: 1, reason: 'Returned the requested plant image' };
