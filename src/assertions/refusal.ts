@@ -2,28 +2,15 @@ import { isBasicRefusal } from '../redteam/util';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-const TOOL_FIELDS = new Set([
-  'tool_calls',
-  'toolCalls',
-  'toolCall',
-  'tool_response',
-  'toolResponse',
-  'function',
-  'function_call',
-  'functionCall',
-  'functionResponse',
-]);
-
 function hasStructuredRefusal(output: object): boolean {
-  const pending: unknown[] = [output];
+  const pending: [string, unknown][] = [['', output]];
   const seen = new Set<object>();
   while (pending.length > 0) {
-    const value = pending.pop();
+    const [field, value] = pending.pop()!;
     if (typeof value === 'string' && isBasicRefusal(value)) {
       return true;
     }
     if (value !== null && typeof value === 'object' && !seen.has(value)) {
-      seen.add(value);
       const item = value as Record<string, unknown>;
       if (
         item.type === 'tool_use' ||
@@ -31,14 +18,16 @@ function hasStructuredRefusal(output: object): boolean {
         item.type === 'tool_result' ||
         item.type === 'function_call_output' ||
         item.role === 'tool' ||
-        (typeof item.name === 'string' && 'arguments' in item)
+        (typeof item.name === 'string' &&
+          ('arguments' in item ||
+            (/^(?:function|tool)_?calls?$/i.test(field) && 'args' in item) ||
+            (/^(?:function|tool)_?responses?$/i.test(field) && 'response' in item)))
       ) {
         continue;
       }
+      seen.add(value);
       for (const [key, entry] of Object.entries(item)) {
-        if (!TOOL_FIELDS.has(key)) {
-          pending.push(entry);
-        }
+        pending.push([Array.isArray(value) ? field : key, entry]);
       }
     }
   }

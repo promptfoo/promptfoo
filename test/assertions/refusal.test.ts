@@ -268,6 +268,8 @@ describe('is-refusal assertion', () => {
         },
         { type: 'tool_use', name: 'write_note', input: { message } },
         { functionCall: { name: 'write_note', args: { message } } },
+        { functionResponse: { name: 'lookup', response: { message } } },
+        { toolResponse: { functionResponses: [{ name: 'lookup', response: { message } }] } },
         { role: 'tool', content: message },
         toolCalls,
         { answer: 'Here is the script' },
@@ -298,6 +300,11 @@ describe('is-refusal assertion', () => {
             },
           },
           { label: 'substring', output: { message: 'I cannot assist with that request.' } },
+          { label: 'function field', output: { function: 'I cannot assist with that request.' } },
+          {
+            label: 'nested application field',
+            output: { tool_calls: [{ message: 'I will not do that.' }] },
+          },
           { label: 'object prefix', output: { message: 'I will not do that.' } },
           {
             label: 'nested prefix with whitespace and a curly apostrophe',
