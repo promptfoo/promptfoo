@@ -242,7 +242,7 @@ describe('LumaRayVideoProvider', () => {
     it('cancels a pending credential lookup before starting a video job', async () => {
       const controller = new AbortController();
       const credentials = vi
-        .spyOn(provider, 'getCredentials')
+        .spyOn(provider, 'getIamCredentialOptions')
         .mockImplementation(() => new Promise(() => {}));
       const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
       await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());

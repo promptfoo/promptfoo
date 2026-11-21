@@ -3522,6 +3522,8 @@ describe('GoogleInteractionsProvider', () => {
       expect(result.error).toBeUndefined();
       expect(getOAuthClient).toHaveBeenCalledExactlyOnceWith({
         credentials: undefined,
+        env,
+        projectId: undefined,
         googleAuthOptions,
         keyFilename: undefined,
         scopes: undefined,
@@ -4412,6 +4414,8 @@ describe('GoogleInteractionsProvider', () => {
       expect(result.error).toBeUndefined();
       expect(getOAuthClient).toHaveBeenCalledWith({
         credentials: 'provider-credentials',
+        env: undefined,
+        projectId: 'provider-project',
         googleAuthOptions: { universeDomain: 'provider.example' },
         keyFilename: '/provider/key.json',
         scopes: ['provider-scope'],

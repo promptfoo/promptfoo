@@ -137,7 +137,7 @@ describe('NovaReelVideoProvider', () => {
       config: { s3OutputUri: 's3://bucket/prefix' } as NovaReelVideoOptions,
     });
     const credentials = vi
-      .spyOn(provider, 'getCredentials')
+      .spyOn(provider, 'getIamCredentialOptions')
       .mockImplementation(() => new Promise(() => {}));
     const controller = new AbortController();
     const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });

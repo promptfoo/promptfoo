@@ -44,7 +44,7 @@ vi.mock('../../../src/logger');
 const provider = {
   modelName: 'fixture-model',
   getRegion: () => 'us-east-1',
-  getCredentials: vi.fn(),
+  getIamCredentialOptions: vi.fn(),
 };
 const config = {
   label: 'Fixture',
@@ -57,7 +57,7 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) {
     mock.mockReset();
   }
-  provider.getCredentials.mockReset().mockResolvedValue(undefined);
+  provider.getIamCredentialOptions.mockReset().mockResolvedValue({});
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -140,14 +140,14 @@ describe('Bedrock async video jobs', () => {
     await expect(
       runBedrockVideoJob(provider, config, AbortSignal.abort(new Error('cancelled'))),
     ).rejects.toThrow('cancelled');
-    expect(provider.getCredentials).not.toHaveBeenCalled();
+    expect(provider.getIamCredentialOptions).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it('stops a credential wait before creating a client', async () => {
     const controller = new AbortController();
     const entered = createDeferred<void>();
-    provider.getCredentials.mockImplementation(() => {
+    provider.getIamCredentialOptions.mockImplementation(() => {
       entered.resolve();
       return new Promise(() => {});
     });

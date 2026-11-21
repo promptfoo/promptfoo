@@ -1,8 +1,9 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
+import { getAwsCredentialCacheNamespace } from '../awsCredentials';
+import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
@@ -179,7 +180,22 @@ interface BedrockAgentsOptions {
  * ```
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  protected override get responseCacheNamespace(): string | undefined {
+    return this.getClientState().cacheNamespace;
+  }
+
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
+  private readonly getClientState = createEnvironmentScopedState(
+    () => ({
+      cacheNamespace: getAwsCredentialCacheNamespace(this.getIamCredentialConfig(), this.env),
+      client: undefined as BedrockAgentRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
+    }),
+    (state) =>
+      destroyScopedClient(state.client, state.initialization, (error) =>
+        logger.warn('Error destroying late SDK client', { error }),
+      ),
+  );
   config: BedrockAgentsOptions; // Make public to match base class
 
   constructor(
@@ -221,33 +237,24 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     this.checkAgentRuntimeCacheIdentity();
-    if (!this.agentRuntimeClient) {
+    if (this.agentRuntimeClient) {
+      return this.agentRuntimeClient;
+    }
+    const state = this.getClientState();
+    if (state.client) {
+      return state.client;
+    }
+    return (state.initialization ??= (async () => {
       // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
       // need a custom handler for proxy support.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
-      try {
-        const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const credentials = await this.getCredentials();
-        if (credentials) {
-          this.allowSharedAgentRuntimeCache = false;
-        }
-
-        this.agentRuntimeClient = new BedrockAgentRuntimeClient({
-          region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
-          retryMode: 'adaptive',
-          ...(handler ? { requestHandler: handler } : {}),
-          ...(credentials ? { credentials } : {}),
-        });
-      } catch (err) {
-        logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);
-        throw new Error(
-          'The @aws-sdk/client-bedrock-agent-runtime package is required. Please install it: npm install @aws-sdk/client-bedrock-agent-runtime',
-        );
-      }
-    }
-    return this.agentRuntimeClient;
+      state.client = await this.createAgentRuntimeClient(handler);
+      return state.client;
+    })().catch((error) => {
+      state.initialization = undefined;
+      throw error;
+    }));
   }
 
   /**
@@ -503,8 +510,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = this.allowSharedAgentRuntimeCache ? await getCache() : undefined;
-    // Older entries may contain responses from explicitly credentialed clients.
-    const cacheKey = `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+    // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
+    const cacheKey = `bedrock-agent:v3:${this.responseCacheNamespace ? `${this.responseCacheNamespace}:` : ''}${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
       JSON.stringify({
         prompt,
         actionGroups: this.config.actionGroups,
