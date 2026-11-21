@@ -2001,6 +2001,152 @@
         }
       }
     },
+    "/api/eval/{id}/traces": {
+      "post": {
+        "operationId": "addEvalTraces",
+        "tags": ["Eval", "Traces"],
+        "summary": "Append traces to an evaluation",
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "description": "JSON request body",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "traceId": { "type": "string", "minLength": 1, "maxLength": 512 },
+                    "evaluationId": { "type": "string", "minLength": 1 },
+                    "testCaseId": { "type": "string" },
+                    "metadata": { "type": "object", "additionalProperties": {} },
+                    "spans": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "spanId": { "type": "string" },
+                          "parentSpanId": { "type": "string" },
+                          "name": { "type": "string" },
+                          "startTime": { "type": "number" },
+                          "endTime": { "type": "number" },
+                          "attributes": { "type": "object", "additionalProperties": {} },
+                          "status": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "oneOf": [
+                                  { "type": "string", "enum": ["unset", "ok", "error"] },
+                                  { "type": "integer", "minimum": 0, "maximum": 2 }
+                                ]
+                              },
+                              "message": { "type": "string" }
+                            },
+                            "required": ["code"]
+                          },
+                          "statusCode": { "type": "integer", "minimum": 0, "maximum": 2 },
+                          "statusMessage": { "type": "string" }
+                        },
+                        "required": ["spanId", "name", "startTime"],
+                        "additionalProperties": {}
+                      },
+                      "maxItems": 10000
+                    }
+                  },
+                  "required": ["traceId", "evaluationId", "testCaseId", "spans"],
+                  "additionalProperties": {}
+                },
+                "maxItems": 1000,
+                "description": "Accepts at most 1000 traces, 10000 spans per trace, and 20000 spans total. Trace fields outside spans and each complete span must serialize to at most 1000000 characters. The complete request must serialize to at most 8388608 characters."
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "Traces added" },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Evaluation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trace ID already belongs to another evaluation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/eval/replay": {
       "post": {
         "operationId": "replayEval",
@@ -5569,6 +5715,143 @@
         }
       }
     },
+    "/api/blobs": {
+      "post": {
+        "operationId": "uploadBlob",
+        "tags": ["Blobs"],
+        "summary": "Upload blob bytes to local storage",
+        "requestBody": {
+          "description": "JSON request body",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "data": { "type": "string", "minLength": 1, "maxLength": 69905068 },
+                  "mimeType": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "pattern": "^[A-Za-z0-9!#$&^_.+-]+\\/[A-Za-z0-9!#$&^_.+-]+$"
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "evalId": { "type": "string", "minLength": 1 },
+                      "testIdx": { "type": "integer", "minimum": 0 },
+                      "promptIdx": { "type": "integer", "minimum": 0 },
+                      "location": { "type": "string", "maxLength": 512 },
+                      "kind": { "type": "string", "maxLength": 64 }
+                    },
+                    "required": ["evalId"]
+                  }
+                },
+                "required": ["data", "mimeType", "context"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "object",
+                      "properties": {
+                        "uri": { "type": "string" },
+                        "hash": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+                        "mimeType": { "type": "string" },
+                        "sizeBytes": { "type": "number", "minimum": 0 },
+                        "provider": { "type": "string" }
+                      },
+                      "required": ["uri", "hash", "mimeType", "sizeBytes", "provider"]
+                    },
+                    "deduplicated": { "type": "boolean" }
+                  },
+                  "required": ["ref", "deduplicated"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Blob storage is disabled or evaluation was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Blob exceeds maximum size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/blobs/library": {
       "get": {
         "operationId": "listMediaLibrary",
@@ -5841,6 +6124,12 @@
             "required": true,
             "name": "hash",
             "in": "path"
+          },
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "evalId",
+            "in": "query"
           }
         ],
         "responses": {

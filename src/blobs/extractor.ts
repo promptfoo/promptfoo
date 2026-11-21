@@ -4,7 +4,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
-import { type BlobRef, recordBlobReference, storeBlob } from './index';
+import { type BlobRef, hasBlobReferenceOwner, recordBlobReference, storeBlob } from './index';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -117,9 +117,18 @@ type StoreOnce = (
 
 function createStoreOnce(blobContext: BlobContext): StoreOnce {
   const cache = new Map<string, Promise<BlobRef>>();
+  let hasOwner: Promise<boolean> | undefined;
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
     if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
+      return null;
+    }
+
+    if (
+      !isBlobStorageEnabled() ||
+      !blobContext.evalId ||
+      !(await (hasOwner ??= hasBlobReferenceOwner(blobContext.evalId)))
+    ) {
       return null;
     }
 
@@ -127,10 +136,6 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
     const existing = cache.get(cacheKey);
     if (existing) {
       return existing;
-    }
-
-    if (!isBlobStorageEnabled()) {
-      return null;
     }
 
     // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
@@ -331,13 +336,13 @@ export async function extractAndStoreBinaryData(
   response: ProviderResponse | null | undefined,
   context?: BlobContext,
 ): Promise<ProviderResponse | null | undefined> {
-  if (!response) {
+  if (!response || !context?.evalId) {
     return response;
   }
 
   let mutated = false;
   const next: ProviderResponse = { ...response };
-  const blobContext = context || {};
+  const blobContext = context;
   const storeOnce = createStoreOnce(blobContext);
 
   // Audio at top level

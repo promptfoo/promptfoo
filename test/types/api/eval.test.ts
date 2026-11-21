@@ -86,4 +86,61 @@ describe('Eval API schemas', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects traces whose metadata cannot be serialized safely', () => {
+    const metadata: Record<string, unknown> = {};
+    metadata.self = metadata;
+
+    const result = EvalSchemas.AddTraces.Request.safeParse([
+      {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        metadata,
+        spans: [],
+      },
+    ]);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts traces for evaluation IDs accepted by the route', () => {
+    const result = EvalSchemas.AddTraces.Request.safeParse([
+      {
+        traceId: 'trace-1',
+        evaluationId: 'e'.repeat(129),
+        testCaseId: 'test-1',
+        spans: [],
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('preserves stored span identifiers and names within the serialized record limit', () => {
+    const name = 'stored operation '.repeat(260);
+    const span = { name, spanId: 'a'.repeat(513), parentSpanId: 'b'.repeat(513), startTime: 1 };
+    const traces = [
+      {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        spans: [span],
+      },
+    ];
+    expect(EvalSchemas.AddTraces.Request.parse(traces)[0].spans[0]).toMatchObject(span);
+  });
+
+  it('accepts persisted long test-case IDs', () => {
+    const result = EvalSchemas.AddTraces.Request.safeParse([
+      {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 't'.repeat(513),
+        spans: [],
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+  });
 });

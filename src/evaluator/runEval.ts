@@ -463,6 +463,7 @@ async function callProviderForRunEval({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -482,6 +483,7 @@ async function callProviderForRunEval({
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
@@ -514,6 +516,7 @@ async function callProviderForRunEval({
         repeatIndex,
         test,
         testIndex,
+        promptIndex,
         testSuite,
         traceContext,
         vars,
@@ -639,6 +642,7 @@ async function callActiveProvider({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -652,6 +656,7 @@ async function callActiveProvider({
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
@@ -671,6 +676,7 @@ async function callActiveProvider({
     repeatIndex,
     test,
     testIndex,
+    promptIndex,
     traceContext,
     vars,
   });
@@ -784,6 +790,7 @@ function buildCallApiContext({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   traceContext,
   vars,
 }: {
@@ -794,6 +801,7 @@ function buildCallApiContext({
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -807,6 +815,7 @@ function buildCallApiContext({
     getCache,
     repeatIndex,
     testIdx: testIndex,
+    promptIdx: promptIndex,
   };
 
   if (!isCacheEnabled()) {
@@ -1418,6 +1427,7 @@ export async function runEvalInternal(
             repeatIndex,
             test,
             testIndex,
+            promptIndex,
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,

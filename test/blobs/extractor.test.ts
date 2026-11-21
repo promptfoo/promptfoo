@@ -15,6 +15,7 @@ vi.mock('../../src/blobs/remoteUpload', () => ({
 
 // Mock the blob index module
 vi.mock('../../src/blobs/index', () => ({
+  hasBlobReferenceOwner: vi.fn(async () => true),
   storeBlob: vi.fn().mockResolvedValue({
     ref: {
       uri: 'promptfoo://blob/abc123',
@@ -150,7 +151,7 @@ describe('Audio MIME type normalization (integration)', () => {
         },
       };
 
-      const result = await extractAndStoreBinaryData(response);
+      const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
       expect(result).toBeDefined();
       expect(result?.audio).toBeDefined();
     });
@@ -168,7 +169,7 @@ describe('Audio MIME type normalization (integration)', () => {
         ],
       } as any;
 
-      const result = await extractAndStoreBinaryData(response);
+      const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
       expect(result).toBeDefined();
       expect((result as any)?.turns).toBeDefined();
     });
@@ -178,7 +179,7 @@ describe('Audio MIME type normalization (integration)', () => {
         output: 'test',
       };
 
-      const result = await extractAndStoreBinaryData(response);
+      const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
       expect(result).toEqual(response);
     });
 
@@ -224,12 +225,23 @@ describe('Local blob extraction', () => {
   const base64 = Buffer.alloc(2000).toString('base64');
   const image = { b64_json: base64 };
   const uri = 'promptfoo://blob/abc123def456';
+
+  it.each([undefined, {}, { evalId: 'unsaved' }])(
+    'keeps inline data without a saved owner %j',
+    async (context) => {
+      const { hasBlobReferenceOwner } = await import('../../src/blobs/index');
+      vi.mocked(hasBlobReferenceOwner).mockResolvedValueOnce(false);
+      const response = { output: `data:image/png;base64,${base64}` };
+      expect(await extractAndStoreBinaryData(response, context)).toEqual(response);
+      expect(mockStoreBlob).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     ['a data URL', `data:image/png;base64,${base64}`, undefined],
     ['one JSON image', JSON.stringify({ data: [null, image] }), [uri]],
     ['two JSON images', JSON.stringify({ data: [image, image] }), [uri, uri]],
   ] as const)('stores %s locally without eagerly uploading it', async (_label, output, uris) => {
-    const result = await extractAndStoreBinaryData({ output });
+    const result = await extractAndStoreBinaryData({ output }, { evalId: 'fixture' });
     expect(result?.output).toBe(uris && uris.length > 1 ? JSON.stringify(uris) : uri);
     expect(result?.metadata?.blobUris).toEqual(uris);
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
@@ -243,7 +255,7 @@ describe('Local blob extraction', () => {
       images: [{ data: `data:image/png;base64,${largeBase64}`, mimeType: 'image/png' }],
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
     expect(result?.images?.[0].data).toBeUndefined();
     expect(result?.images?.[0].blobRef).toBeDefined();
     expect(result?.images?.[0].blobRef?.uri).toContain('promptfoo://blob/');
@@ -263,10 +275,11 @@ describe('Local blob extraction', () => {
     const decode = vi.spyOn(Buffer, 'from');
 
     try {
-      const result = await extractAndStoreBinaryData(response);
+      const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
       expect(decode.mock.calls.filter(([value]) => value === base64)).toHaveLength(1);
       expect(mockStoreBlob).toHaveBeenCalledExactlyOnceWith(bytes, mimeType, {
+        evalId: 'fixture',
         location: field === 'output' ? 'response.output' : 'response.metadata.preview',
         kind,
       });
@@ -286,7 +299,7 @@ describe('Local blob extraction', () => {
       images: [{ data: dataUri, mimeType: 'image/png' }],
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.output).toBe(result?.images?.[0].blobRef?.uri);
     expect(result?.images?.[0].data).toBeUndefined();
@@ -312,7 +325,7 @@ describe('Local blob extraction', () => {
       ],
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.images?.[0].data).toBeUndefined();
     expect(result?.images?.[1].data).toBeUndefined();
@@ -336,7 +349,7 @@ describe('Local blob extraction', () => {
       ],
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
     expect(result).toEqual(response);
   });
 
@@ -349,12 +362,13 @@ describe('Local blob extraction', () => {
     };
     mockStoreBlob.mockRejectedValueOnce(new Error('temporary write failure'));
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.output).toBe(response.output);
     expect(result?.metadata?.preview).toBe('promptfoo://blob/abc123def456');
     expect(mockStoreBlob).toHaveBeenCalledTimes(2);
     expect(mockStoreBlob).toHaveBeenNthCalledWith(2, bytes, 'image/png', {
+      evalId: 'fixture',
       location: 'response.metadata.preview',
       kind: 'image',
     });
@@ -403,7 +417,7 @@ describe('Local blob extraction', () => {
       ],
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
     // First image externalized
     expect(result?.images?.[0].data).toBeUndefined();
     expect(result?.images?.[0].blobRef).toBeDefined();
@@ -467,7 +481,7 @@ describe('Local blob extraction', () => {
       },
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.audio?.data).toBeUndefined();
     expect(result?.audio?.blobRef).toBeDefined();
@@ -496,7 +510,7 @@ describe('Local blob extraction', () => {
       },
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.metadata?.audio?.data).toBeUndefined();
     expect(result?.metadata?.audio?.blobRef).toBeDefined();
@@ -530,7 +544,7 @@ describe('Local blob extraction', () => {
       },
     } as unknown as ProviderResponse;
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     const turnsBlob = (result as any)?.turns?.[0]?.audio?.blobRef;
     expect(turnsBlob).toBeDefined();
@@ -560,7 +574,7 @@ describe('Local blob extraction', () => {
       },
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.images?.[0].blobRef?.uri).toBeDefined();
     expect(result?.metadata?.previewImage).toBe(result?.images?.[0].blobRef?.uri);
@@ -585,7 +599,7 @@ describe('Local blob extraction', () => {
       images: [{ data: `data:image/png;base64,${largeBase64}`, mimeType: 'image/png' }],
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.output).toBe(result?.images?.[0].blobRef?.uri);
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
@@ -595,7 +609,7 @@ describe('Local blob extraction', () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
     const response: ProviderResponse = { output: svg };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result?.output).toBe(svg);
     expect(result?.metadata?.blobUris).toEqual(['promptfoo://blob/abc123def456']);
@@ -619,7 +633,7 @@ describe('Local blob extraction', () => {
       },
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result).toBe(response);
     expect(mockStoreBlob).not.toHaveBeenCalled();
@@ -630,7 +644,7 @@ describe('Local blob extraction', () => {
       output: '<svg><circle/></svg>\n\n<svg><rect/></svg>',
     };
 
-    const result = await extractAndStoreBinaryData(response);
+    const result = await extractAndStoreBinaryData(response, { evalId: 'fixture' });
 
     expect(result).toBe(response);
     expect(mockStoreBlob).not.toHaveBeenCalled();

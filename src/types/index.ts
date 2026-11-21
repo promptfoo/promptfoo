@@ -425,6 +425,12 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
+  /** Evaluation owning this output in a server-generated comparison table. */
+  sourceEvalId?: string;
+  /** Prompt index within sourceEvalId before comparison columns are merged. */
+  sourcePromptIndex?: number;
+  /** Custom test-case ID from the output's source row. */
+  sourceTestCaseId?: string;
   cost: number;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
