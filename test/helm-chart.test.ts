@@ -100,8 +100,9 @@ describe('Helm chart', () => {
       // The server idles near 256Mi, so a default limit below that is an immediate OOM kill.
       expect(server.resources).toEqual({});
       expect(server.ports).toEqual([{ name: 'http', containerPort: 3000, protocol: 'TCP' }]);
-      expect(server.livenessProbe.httpGet).toEqual({ path: '/health', port: 'http' });
-      expect(server.readinessProbe.httpGet).toEqual({ path: '/health', port: 'http' });
+      for (const probe of ['livenessProbe', 'readinessProbe']) {
+        expect(server).toHaveProperty(`${probe}.httpGet`, { path: '/health', port: 'http' });
+      }
       // The image runs as 100:101 and must be able to write to the data volume.
       expect(server.securityContext).toMatchObject({
         runAsNonRoot: true,
