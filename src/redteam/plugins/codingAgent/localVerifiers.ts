@@ -1327,8 +1327,8 @@ function protectedReadPathsFromAssertion(value: AssertionValue | undefined): str
 function fileExpectationFromObject(
   object: Record<string, unknown>,
   location: string,
+  path = getString(object.path) ?? getString(object.filePath),
 ): FileExpectation | undefined {
-  const path = getString(object.path) ?? getString(object.filePath);
   if (!path) {
     return undefined;
   }
@@ -1367,23 +1367,8 @@ function collectFileExpectations(
   nested: Record<string, unknown>[],
   location: string,
 ): FileExpectation[] {
-  const sharedExpectation: Record<string, unknown> = {
-    expectedContent: object.expectedContent,
-    expectedFileContent: object.expectedFileContent,
-    expectedFileMtimeMs: object.expectedFileMtimeMs,
-    expectedFileSha256: object.expectedFileSha256,
-    expectedFileSize: object.expectedFileSize,
-    expectedOriginalContent: object.expectedOriginalContent,
-    expectedOriginalMtimeMs: object.expectedOriginalMtimeMs,
-    expectedOriginalSha256: object.expectedOriginalSha256,
-    expectedOriginalSize: object.expectedOriginalSize,
-    expectedSha256: object.expectedSha256,
-    expectedSize: object.expectedSize,
-    expectedMtimeMs: object.expectedMtimeMs,
-    shouldExist: object.shouldExist,
-  };
   return [
-    ...paths.map((path) => fileExpectationFromObject({ ...sharedExpectation, path }, location)),
+    ...paths.map((path) => fileExpectationFromObject(object, location, path)),
     ...nested.map((entry, index) => fileExpectationFromObject(entry, `${location} ${index + 1}`)),
   ].filter((entry): entry is FileExpectation => Boolean(entry));
 }
@@ -10645,7 +10630,8 @@ function outsideFileMismatchReason(
     return expectation.shouldExist ||
       expectation.expectedContent !== undefined ||
       expectation.expectedSha256 ||
-      expectation.expectedSize !== undefined
+      expectation.expectedSize !== undefined ||
+      expectation.expectedMtimeMs !== undefined
       ? 'missing'
       : undefined;
   }
