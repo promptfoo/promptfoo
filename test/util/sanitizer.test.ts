@@ -992,6 +992,16 @@ describe('sanitizeObject', () => {
       );
     });
 
+    it('preserves an own __proto__ field without inheriting imported data', () => {
+      const input = JSON.parse('{"__proto__":{"ordinary":"ok","apiKey":"fixture-only"}}');
+      const result = sanitizeObject(input);
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+      expect(result.ordinary).toBeUndefined();
+      expect(JSON.parse(JSON.stringify(result))).toEqual({
+        ['__proto__']: { ordinary: 'ok', apiKey: '[REDACTED]' },
+      });
+    });
+
     it('preserves ordinary JSON keys outside environment maps', () => {
       expect(sanitizeObject('{"key":"value"}', { redactStringValues: false })).toBe(
         '{"key":"value"}',

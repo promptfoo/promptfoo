@@ -1408,6 +1408,14 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
+    if (key === '__proto__') {
+      // Shadow the inherited setter before writing the sanitized value.
+      Object.defineProperty(sanitized, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+      });
+    }
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (
