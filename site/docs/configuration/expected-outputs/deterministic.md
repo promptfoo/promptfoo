@@ -295,7 +295,7 @@ See [`is-sql`](#is-sql) for advanced usage, including specific database types an
 
 ### Cost
 
-The `cost` assertion checks whether the cost reported by the selected provider is at or below a specified threshold.
+The `cost` assertion checks whether the cost reported by the selected provider is at or below a specified threshold. In a [CSV assertion cell](/docs/configuration/test-cases/#csv-with-assertions), write the cost limit explicitly, for example `cost(0.001)`. A bare `cost` cell no longer supplies a limit of 0.75 USD.
 
 This requires the provider to return cost information; an unknown cost cannot be checked. Use `--no-cache` when comparing fresh inference costs, because response-cache cost reporting depends on the provider.
 
