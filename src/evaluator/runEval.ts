@@ -52,6 +52,7 @@ import type winston from 'winston';
 
 import type {
   EvalConversations,
+  EvalRegisters,
   RateLimitRegistryRef,
   ScoringFunction,
   Vars,
@@ -60,6 +61,10 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { CallApiContextParams, CallApiOptionsParams } from '../types/providers';
 
 export const CONVERSATION_VAR_NAME = '_conversation';
+// Local providers can pass media paths to later steps. Once a run consumes
+// imported data, keep its registers literal, even across aliases and live turns.
+const localMediaRegisters = new WeakMap<EvalRegisters, Map<string, string> | null>();
+
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
@@ -395,6 +400,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  literalRegisters,
   test,
   testSuite,
   vars,
@@ -403,20 +409,23 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  literalRegisters: string[];
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
-  const renderedPrompt = await renderPrompt(
-    promptForRender,
-    vars,
-    filters,
-    provider,
-    skipRenderVars,
-  );
+  const skipRenderVars = new Set(literalRegisters);
+  if (test.metadata?.__promptfoo?.remote === true) {
+    for (const name of test.metadata.__promptfoo.remoteVars ?? Object.keys(vars)) {
+      skipRenderVars.add(name);
+    }
+  }
+  if (shouldSkipRedteamInjectVar(test, testSuite, isRedteam)) {
+    skipRenderVars.add(getRedteamInjectVar(test, promptForRender, testSuite));
+  }
+  const renderedPrompt = await renderPrompt(promptForRender, vars, filters, provider, [
+    ...skipRenderVars,
+  ]);
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
   }
@@ -491,14 +500,7 @@ async function callProviderForRunEval({
   let providerFailed = false;
 
   try {
-    if (test.providerOutput) {
-      response = {
-        output: test.providerOutput,
-        tokenUsage: createEmptyTokenUsage(),
-        cost: 0,
-        cached: false,
-      };
-    } else {
+    if (test.providerOutput === undefined) {
       response = await callActiveProvider({
         abortSignal,
         pauseSignal,
@@ -518,6 +520,13 @@ async function callProviderForRunEval({
         traceContext,
         vars,
       });
+    } else {
+      response = {
+        output: test.providerOutput,
+        tokenUsage: createEmptyTokenUsage(),
+        cost: 0,
+        cached: false,
+      };
     }
 
     sanitizeResponseMetadata(response);
@@ -1343,6 +1352,13 @@ export async function runEvalInternal(
     test,
     vars: state.vars,
   });
+  if (registers && test.metadata?.__promptfoo?.remote === true) {
+    localMediaRegisters.set(registers, null);
+  }
+  const media =
+    registers && !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+      ? localMediaRegisters.get(registers)
+      : undefined;
   Object.assign(state.vars, registers);
   Object.assign(
     state.vars,
@@ -1362,17 +1378,28 @@ export async function runEvalInternal(
   let workspace: AgentWorkspace | undefined;
 
   try {
+    if (
+      test.providerOutput === undefined &&
+      test.metadata?.__promptfoo?.providerOutputRedacted === true
+    ) {
+      throw new Error(
+        'Stored provider output was removed from this test. Restore providerOutput before replaying it.',
+      );
+    }
     const rendered = await renderRunEvalPrompt({
       filters,
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      literalRegisters: Object.keys(registers ?? {}).filter(
+        (name) => media?.get(name) !== state.vars[name],
+      ),
       test,
       testSuite,
       vars: state.vars,
     });
     setup = rendered.setup;
-    if (!test.providerOutput) {
+    if (test.providerOutput === undefined) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       workspace = await createAgentWorkspaceForConfig(
         { ...activeProvider.config, ...rendered.setup.prompt.config },
@@ -1382,20 +1409,21 @@ export async function runEvalInternal(
     }
     const stepWorkspace = workspace;
 
-    traceContext = test.providerOutput
-      ? null
-      : await generateTraceContextIfNeeded(
-          test,
-          evaluateOptions,
-          testIndex,
-          promptIndex,
-          testSuite,
-          {
-            providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
-            promptLabel: state.promptForRender.label,
-            repeatIndex,
-          },
-        );
+    traceContext =
+      test.providerOutput === undefined
+        ? await generateTraceContextIfNeeded(
+            test,
+            evaluateOptions,
+            testIndex,
+            promptIndex,
+            testSuite,
+            {
+              providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
+              promptLabel: state.promptForRender.label,
+              repeatIndex,
+            },
+          )
+        : null;
     const executionTraceContext = traceContext;
     const runExecution = () =>
       withTestCaseSpan(
@@ -1444,7 +1472,9 @@ export async function runEvalInternal(
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          if (test.providerOutput === undefined) {
+            await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          }
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1499,8 +1529,21 @@ export async function runEvalInternal(
           }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
-            // Save the output in a register for later use
-            registers[test.options.storeOutputAs] = ret.response.output;
+            const name = test.options.storeOutputAs;
+            const output = ret.response.output;
+            registers[name] = output;
+            const saved = localMediaRegisters.get(registers);
+            saved?.delete(name);
+            if (
+              saved !== null &&
+              test.providerOutput === undefined &&
+              typeof output === 'string' &&
+              collectFileMetadata({ output }).output
+            ) {
+              const paths = saved ?? new Map<string, string>();
+              paths.set(name, output);
+              localMediaRegisters.set(registers, paths);
+            }
           }
 
           return [ret];

@@ -2,7 +2,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getNunjucksEngine } from './templates';
 
-import type { VarValue } from '../types';
+import type { TestCase, VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -128,10 +128,28 @@ export function renderEnvOnlyInObject<T>(
     }
 
     if (typeof value === 'object' && value !== null) {
-      return mapObjectValues(value, (key, child) =>
-        // Conversation history is runtime data and may contain untrusted model output.
-        key === '_conversation' ? child : render(child),
-      );
+      const origin = (value as TestCase).metadata?.__promptfoo;
+      return mapObjectValues(value, (key, child) => {
+        // Imported fields and conversation history are data, never environment templates.
+        if (key === '_conversation') {
+          return child;
+        }
+        if (origin?.remote === true) {
+          if (key === 'providerOutput' || key === 'description' || key === 'metadata') {
+            return child;
+          }
+          if (key === 'vars') {
+            if (!origin.remoteVars || !child || typeof child !== 'object' || Array.isArray(child)) {
+              return child;
+            }
+            const remoteVars = new Set(origin.remoteVars);
+            return mapObjectValues(child, (name, item) =>
+              remoteVars.has(name) ? item : render(item),
+            );
+          }
+        }
+        return render(child);
+      });
     }
 
     return value;

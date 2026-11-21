@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { renderPrompt } from '../src/evaluatorHelpers';
 
 describe('renderPrompt with skipRenderVars', () => {
+  it('renders trusted filters and conditions around imported aliases once', async () => {
+    const vars = {
+      input: '{{literal}}',
+      alias: '{{input}}',
+      suffix: 'done',
+      context: '{% if alias %}{{alias}} / {{suffix | upper}}{% endif %}',
+      literal: 'must-not-replace',
+    };
+    await expect(
+      renderPrompt({ raw: '{{context}}', label: 'fixture' }, vars, {}, undefined, ['input']),
+    ).resolves.toBe('{{literal}} / DONE');
+  });
   it('should skip rendering variables in skipRenderVars array', async () => {
     const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
     const vars = {
