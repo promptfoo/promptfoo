@@ -6,6 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { sha256 } from '../util/createHash';
+import { readFileBounded } from './boundedRead';
 import { BLOB_SCHEME, DEFAULT_FILESYSTEM_SUBDIR } from './constants';
 
 import type {
@@ -152,12 +153,19 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     };
   }
 
-  async getByHash(hash: string): Promise<StoredBlob> {
+  async getByHashBounded(hash: string, maxBytes: number): Promise<StoredBlob> {
+    return this.getByHash(hash, maxBytes);
+  }
+
+  async getByHash(hash: string, maxBytes?: number): Promise<StoredBlob> {
     const filePath = this.getFilePath(hash);
 
     let data: Buffer;
     try {
-      data = await fsPromises.readFile(filePath);
+      data =
+        maxBytes === undefined
+          ? await fsPromises.readFile(filePath)
+          : await readFileBounded(filePath, maxBytes);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new Error(`Blob not found: ${hash}`);
@@ -165,8 +173,9 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       throw error;
     }
 
+    // For bounded reads use the registered database MIME instead of an unbounded sidecar.
     const metadata =
-      (await this.readMetadata(filePath)) ||
+      (maxBytes === undefined && (await this.readMetadata(filePath))) ||
       ({
         mimeType: 'application/octet-stream',
         sizeBytes: data.length,

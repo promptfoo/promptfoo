@@ -72,7 +72,7 @@ import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
-import { handleLlmRubric } from './llmRubric';
+import { handleLlmRubric, handleVideoRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
@@ -139,6 +139,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
   'search-rubric',
   'trajectory:goal-success',
+  'video-rubric',
 ]);
 
 const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
@@ -322,6 +323,7 @@ const ASSERTION_HANDLERS: Record<
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
+  'video-rubric': handleVideoRubric,
   webhook: handleWebhook,
   'word-count': handleWordCount,
 };
@@ -420,6 +422,7 @@ function applyAssertionWeight(result: GradingResult, weight: number | undefined)
  * @see evaluate for full evaluation pipeline
  */
 async function runAssertionInternal({
+  resolveVideo,
   prompt,
   provider,
   assertion,
@@ -431,6 +434,7 @@ async function runAssertionInternal({
   traceData,
   claimStoredGradingUsage,
 }: {
+  resolveVideo?: AssertionParams['resolveVideo'];
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
@@ -638,6 +642,7 @@ async function runAssertionInternal({
   );
 
   const assertionParams: AssertionParams = {
+    resolveVideo,
     assertion,
     baseType: getAssertionBaseType(assertion),
     providerCallContext,
@@ -752,6 +757,7 @@ export async function runAssertion(
  * @see evaluate for full evaluation pipeline
  */
 export async function runAssertions({
+  resolveVideo,
   assertScoringFunction,
   latencyMs,
   prompt,
@@ -761,6 +767,7 @@ export async function runAssertions({
   vars,
   traceId,
 }: {
+  resolveVideo?: AssertionParams['resolveVideo'];
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
   prompt?: string;
@@ -853,6 +860,7 @@ export async function runAssertions({
     }
 
     const result = await runAssertion({
+      resolveVideo,
       prompt,
       provider,
       providerResponse,

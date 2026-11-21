@@ -739,6 +739,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'trace-span-count',
   'trace-span-duration',
   'search-rubric',
+  'video-rubric',
   'webhook',
   'word-count',
 ]);
@@ -856,6 +857,10 @@ export type AssertionValue = string | string[] | number | object | AssertionValu
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 export interface AssertionParams {
+  /** Reads only the video owned by this result. Errors must be safe to display. */
+  resolveVideo?: (
+    maxBytes: number,
+  ) => Promise<{ buffer: Buffer; mimeType: string } | { error: string }>;
   assertion: Assertion;
   baseType: AssertionType;
   /** Context passed to provider.callApi() for model-graded assertions */
