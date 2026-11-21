@@ -351,6 +351,163 @@ class TestTracedCall(unittest.TestCase):
         self.assertNotIn("gen_ai.usage.total_tokens", attribute_names)
 
 
+class TestTracedCallExecution(unittest.TestCase):
+    """Tracing failures must never replay a provider invocation."""
+
+    def setUp(self) -> None:
+        self.span = MagicMock()
+        self.tracer = MagicMock()
+        self.manager = self.tracer.start_as_current_span.return_value
+        self.manager.__enter__.return_value = self.span
+        propagate = ModuleType("opentelemetry.propagate")
+        propagate.extract = MagicMock(return_value=object())
+        trace = ModuleType("opentelemetry.trace")
+        trace.SpanKind = SimpleNamespace(CLIENT="client")
+        trace.Status = MagicMock()
+        trace.StatusCode = SimpleNamespace(OK="ok", ERROR="error")
+        patches = [
+            patch.dict(
+                sys.modules,
+                {
+                    "opentelemetry.propagate": propagate,
+                    "opentelemetry.trace": trace,
+                },
+            ),
+            patch.object(persistent_wrapper, "_tracer", self.tracer),
+            patch.object(persistent_wrapper, "_tracing_enabled", True),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.args = [
+            "prompt",
+            {},
+            {"traceparent": "00-" + "1" * 32 + "-" + "2" * 16 + "-01"},
+        ]
+
+    def test_provider_error_is_not_retried(self) -> None:
+        for asynchronous in [False, True]:
+            for telemetry_failure in [None, "record_exception", "set_status", "exit"]:
+                with self.subTest(
+                    asynchronous=asynchronous, telemetry_failure=telemetry_failure
+                ):
+                    self.span.reset_mock(side_effect=True)
+                    self.manager.__exit__.reset_mock(side_effect=True)
+                    if telemetry_failure == "exit":
+                        self.manager.__exit__.side_effect = RuntimeError(
+                            "span exit failed"
+                        )
+                    elif telemetry_failure:
+                        getattr(
+                            self.span, telemetry_failure
+                        ).side_effect = RuntimeError("span failed")
+                    original = ValueError("provider failed")
+                    provider_call = MagicMock(side_effect=original)
+
+                    async def async_provider(*args, provider_call=provider_call):
+                        return provider_call(*args)
+
+                    provider = async_provider if asynchronous else provider_call
+                    with self.assertRaises(ValueError) as raised:
+                        persistent_wrapper._traced_call(provider, self.args, "call_api")
+                    self.assertIs(raised.exception, original)
+                    provider_call.assert_called_once_with(*self.args)
+
+    def test_process_control_exceptions_are_not_retried(self) -> None:
+        for exception_type in [KeyboardInterrupt, SystemExit]:
+            for exit_failure in [False, True]:
+                with self.subTest(
+                    exception_type=exception_type, exit_failure=exit_failure
+                ):
+                    self.manager.__exit__.reset_mock(side_effect=True)
+                    if exit_failure:
+                        self.manager.__exit__.side_effect = RuntimeError(
+                            "span exit failed"
+                        )
+                    original = exception_type()
+                    provider = MagicMock(side_effect=original)
+                    with self.assertRaises(exception_type) as raised:
+                        persistent_wrapper._traced_call(provider, self.args, "call_api")
+                    self.assertIs(raised.exception, original)
+                    provider.assert_called_once_with(*self.args)
+
+    def test_completed_result_survives_telemetry_errors(self) -> None:
+        for asynchronous in [False, True]:
+            for telemetry_failure in ["response_attribute", "set_status", "exit"]:
+                with self.subTest(
+                    asynchronous=asynchronous, telemetry_failure=telemetry_failure
+                ):
+                    self.span.reset_mock(side_effect=True)
+                    self.manager.__exit__.reset_mock(side_effect=True)
+                    if telemetry_failure == "exit":
+                        self.manager.__exit__.side_effect = RuntimeError(
+                            "span exit failed"
+                        )
+                    elif telemetry_failure == "set_status":
+                        self.span.set_status.side_effect = RuntimeError("span failed")
+                    else:
+
+                        def set_attribute(name, _value):
+                            if name == "promptfoo.response.body":
+                                raise RuntimeError("response attribute failed")
+
+                        self.span.set_attribute.side_effect = set_attribute
+                    expected = {"output": "completed"}
+                    provider_call = MagicMock(return_value=expected)
+
+                    async def async_provider(*args, provider_call=provider_call):
+                        return provider_call(*args)
+
+                    provider = async_provider if asynchronous else provider_call
+                    result = persistent_wrapper._traced_call(
+                        provider, self.args, "call_api"
+                    )
+                    self.assertIs(result, expected)
+                    provider_call.assert_called_once_with(*self.args)
+
+    def test_completed_none_result_is_not_retried(self) -> None:
+        self.manager.__exit__.side_effect = RuntimeError("span exit failed")
+        provider = MagicMock(return_value=None)
+        self.assertIsNone(
+            persistent_wrapper._traced_call(provider, self.args, "call_api")
+        )
+        provider.assert_called_once_with(*self.args)
+
+    def test_setup_failure_falls_back_once(self) -> None:
+        for failure in ["enter", "request_attribute"]:
+            with self.subTest(failure=failure):
+                self.manager.__enter__.reset_mock(side_effect=True)
+                self.span.reset_mock(side_effect=True)
+                if failure == "enter":
+                    self.manager.__enter__.side_effect = RuntimeError(
+                        "span entry failed"
+                    )
+                else:
+                    self.span.set_attribute.side_effect = RuntimeError(
+                        "attribute failed"
+                    )
+                provider = MagicMock(return_value={"output": "done"})
+                self.assertIs(
+                    persistent_wrapper._traced_call(provider, self.args, "call_api"),
+                    provider.return_value,
+                )
+                provider.assert_called_once_with(*self.args)
+
+    def test_untraced_calls_execute_once(self) -> None:
+        for enabled, context in [(False, self.args[2]), (True, {})]:
+            with self.subTest(enabled=enabled, context=context):
+                provider = MagicMock(return_value=None)
+                with patch.object(persistent_wrapper, "_tracing_enabled", enabled):
+                    self.assertIsNone(
+                        persistent_wrapper._traced_call(
+                            provider, ["prompt", {}, context], "call_api"
+                        )
+                    )
+                provider.assert_called_once_with("prompt", {}, context)
+        self.tracer.start_as_current_span.assert_not_called()
+
+
 class TestMain(unittest.TestCase):
     """Tests for main function."""
 
