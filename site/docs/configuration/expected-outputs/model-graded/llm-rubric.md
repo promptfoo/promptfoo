@@ -7,7 +7,7 @@ description: 'Create flexible custom rubrics using natural language to evaluate 
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
 
-It is similar to OpenAI's [model-graded-closedqa](/docs/configuration/expected-outputs) prompt, but can be more effective and robust in certain cases.
+See also [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa), which uses a different grading prompt.
 
 ## How to use it
 
@@ -22,11 +22,11 @@ assert:
 
 This assertion will use a language model to grade the output based on the specified rubric.
 
-Treat candidate text as untrusted data and keep grading rules separate from it. Give the grader only the tools and data needed for the task. A valid JSON response confirms the result's format; it does not establish that the judgment is correct.
+Keep grading rules separate from untrusted candidate text. Give the grader only the tools and data it needs. Use [deterministic assertions](/docs/configuration/expected-outputs/deterministic) for criteria you can enforce in code.
 
-Before relying on scores, check a small labeled set of ordinary responses: clear passes, clear failures, and representative edge cases. Inspect `pass`, `score`, and `reason` against those labels. Keep transport and parsing errors separate from judged failures, and repeat these checks when the rubric or grader changes.
+Calibrate the grader with labeled passes, failures, and edge cases. JSON parsing alone checks syntax. Missing fields can default to a passing result, so check that the raw grader response includes a boolean `pass`, numeric `score`, and a `reason` that agrees with the label. Track malformed responses and provider errors separately.
 
-Set the grader provider explicitly and record its model, parameters, and rubric for comparable runs. Use [deterministic assertions](/docs/configuration/expected-outputs/deterministic), such as equality or schema checks, for criteria that can be enforced in code.
+Set the grader provider explicitly. Record the model, parameters, and rubric, and repeat the calibration whenever they change.
 
 ## How it works
 
@@ -335,28 +335,25 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 ## Pass vs. Score Semantics
 
 - PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
-- If the model omits `pass`, promptfoo assumes `pass: true` by default.
-- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
+- If the model omits `pass`, a finite numeric `score` determines the verdict: it must be greater than zero, or greater than or equal to your configured `threshold`. Numeric strings are also accepted.
+- If the model omits both fields, or supplies only an invalid score, grading fails. Negating the assertion does not turn a grader error into a pass.
+- With an explicit `pass`, `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
 - When `threshold` is set, both must be true for the assertion to pass:
   - `pass === true`
   - `score >= threshold`
 
 This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
 
-:::caution
-If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
-:::
-
 ### Common misconfiguration
 
 ```yaml
-# ❌ Problem: Returns 0/1 scores but no threshold set
+# Problem: Partial credit passes without a threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # Missing threshold - always passes due to pass defaulting to true
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
+    # Any positive score passes when pass and threshold are omitted.
 ```
 
 **Fixes:**
@@ -366,8 +363,8 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
+      Return a JSON object with a score between 0 and 1.
+      Award partial credit for a partly correct response.
     threshold: 1
 
 # ✅ Option B: Control pass explicitly
