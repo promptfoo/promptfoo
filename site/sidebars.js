@@ -426,6 +426,7 @@ const sidebars = {
                 'guides/test-agent-skills',
                 'guides/factuality-eval',
                 'guides/llm-as-a-judge',
+                'guides/image-evaluation',
                 'guides/testing-llm-chains',
                 'guides/evaluate-llm-temperature',
                 'guides/text-to-sql-evaluation',

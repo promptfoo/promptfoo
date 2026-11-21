@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade product photos
+
+prompts:
+  - 'A product photo of {{product}}.'
+  - 'A product photo of {{product}} on a white background, viewed from above in soft daylight.'
+
+providers:
+  - id: openai:image
+    config:
+      quality: low
+
+tests:
+  - vars:
+      product: a blue ceramic mug
+    assert:
+      - type: llm-rubric
+        provider: openai:gpt-6-sol
+        value: The image shows {{product}} in the style of a product photograph.
