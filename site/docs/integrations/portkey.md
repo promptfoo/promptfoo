@@ -50,12 +50,14 @@ providers:
 
 A Portkey request can carry two credentials, and they are sent in different places:
 
-| Credential                  | Sent as                 | Set with                                        |
-| --------------------------- | ----------------------- | ----------------------------------------------- |
-| Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config |
-| The upstream provider's key | `Authorization: Bearer` | `OPENAI_API_KEY`, or `apiKey` in config         |
+| Credential                  | Sent as                 | Set with                                                               |
+| --------------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config                        |
+| The upstream provider's key | `Authorization: Bearer` | `apiKey` in config, or `OPENAI_API_KEY` when `portkeyProvider: openai` |
 
-When Portkey holds the provider credential — a model catalog provider slug or a virtual key — the Portkey key is all you need, and promptfoo does not forward a provider key. A provider key is only sent for direct passthrough, such as `portkeyProvider: openai` with no slug.
+For direct passthrough, set `portkeyProvider` to the upstream provider. OpenAI passthrough can use `OPENAI_API_KEY`. Other providers need an explicit `apiKey`. Credential selection follows the effective `x-portkey-provider` and `x-portkey-virtual-key` headers, including provider-level overrides. Catalog slugs, virtual keys, and models without an upstream selector use credentials managed by Portkey and do not forward a bearer automatically.
+
+Prompt headers override matching provider headers case-insensitively. If a prompt changes the upstream provider, virtual key, custom host, gateway config, Azure resource or deployment, Vertex project or region, or AWS region, it must include its own nonempty `Authorization` header. Otherwise, promptfoo rejects the request before contacting Portkey. You can also set the route on the provider and keep prompt headers for unrelated settings.
 
 To send additional headers, use `config.headers`:
 
