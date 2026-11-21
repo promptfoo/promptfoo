@@ -1595,23 +1595,57 @@ describe('resolveConfigs', () => {
     );
   });
 
-  it('should return the provider configs selected by a target filter', async () => {
-    const providers = [
-      { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
-      { id: 'promptfoo://provider/selected-target', config: { label: 'selected' } },
-    ];
+  it.each([undefined, 'custom'])(
+    'rejects a selected loader path that differs from the runtime ID (filter %s)',
+    async (filterProviders) => {
+      const path = 'file://custom.js';
+      const tests = [{ providers: [path] }];
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ prompts: ['hello'], providers: [path], tests }),
+      );
+      vi.mocked(globSync).mockReturnValue(['config.json']);
+      vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'runtime-custom' })]);
+      vi.mocked(readTests).mockResolvedValue(tests);
+
+      await expect(
+        resolveConfigs({ config: ['config.json'], filterProviders }, {}),
+      ).rejects.toThrow(`references provider "${path}" which does not exist`);
+    },
+  );
+
+  it.each([
+    { filterTargets: 'selected-target' },
+    { providers: ['promptfoo://provider/selected-target'] },
+  ])('validates excluded providers without loading them (%o)', async (selection) => {
+    const selected = { id: 'promptfoo://provider/selected-target' };
+    const excluded = {
+      id: 'promptfoo://provider/{{ env.PR_FILTER_TARGET }}',
+      label: '{{ env.PR_FILTER_LABEL }}',
+      env: { PR_FILTER_LABEL: 'excluded' },
+    };
+    const tests = [{ providers: ['promptfoo://provider/excluded-target', 'excluded'] }];
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider(selected)]);
+    vi.mocked(readTests).mockResolvedValue(tests);
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ prompts: ['prompt1'], providers }));
+    vi.mocked(fs.readFileSync).mockImplementation((filename) =>
+      JSON.stringify(
+        String(filename).endsWith('excluded.yaml')
+          ? excluded
+          : {
+              prompts: ['prompt1'],
+              providers: ['file://excluded.yaml', selected],
+              env: { PR_FILTER_TARGET: 'excluded-target' },
+              tests,
+            },
+      ),
+    );
     vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
-    const result = await resolveConfigs(
-      { config: ['config.json'], filterTargets: 'selected-target' },
-      {},
-    );
+    const result = await resolveConfigs({ config: ['config.json'], ...selection }, {});
 
-    expect(result.selectedProviderConfigs).toEqual([providers[1]]);
-    expect(cliState.selectedProviderConfigs).toEqual([providers[1]]);
-    expect(loadApiProviders).toHaveBeenCalledWith([providers[1]], expect.any(Object));
+    expect(result.selectedProviderConfigs).toEqual([selected]);
+    expect(cliState.selectedProviderConfigs).toEqual([selected]);
+    expect(loadApiProviders).toHaveBeenCalledWith([selected], expect.any(Object));
   });
 
   it('should load scenarios and tests from external files', async () => {

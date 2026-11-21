@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   filterProviderConfigs,
   filterProviders,
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
+  getProviderIdAndLabel,
 } from '../../../src/util/eval/filterProviders';
 
 import type { ApiProvider, TestSuiteConfig } from '../../../src/types/index';
@@ -121,6 +122,16 @@ describe('filterProviderConfigs', () => {
       const result = filterProviderConfigs('openai:gpt-4', 'gpt-[0-9]');
       expect(result).toBe('openai:gpt-4');
     });
+  });
+
+  it('reads an instantiated provider’s ID and label without calling it', () => {
+    const instance = { id: () => 'actual-runtime-id', callApi: vi.fn() };
+    expect(getProviderIdAndLabel(instance, 0)).toEqual({ id: 'actual-runtime-id' });
+    expect(getProviderIdAndLabel({ ...instance, label: 'live' }, 1)).toEqual({
+      id: 'actual-runtime-id',
+      label: 'live',
+    });
+    expect(instance.callApi).not.toHaveBeenCalled();
   });
 
   describe('function providers', () => {

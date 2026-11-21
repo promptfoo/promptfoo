@@ -1,7 +1,10 @@
-import { doesProviderRefMatch, getProviderDescription } from './provider';
+import {
+  doesProviderRefMatch,
+  getProviderDescriptionForLog,
+  type ProviderIdentity,
+} from './provider';
 
 import type { Scenario, TestCase } from '../types/index';
-import type { ApiProvider } from '../types/providers';
 
 export class ProviderReferenceValidationError extends Error {
   constructor(message: string) {
@@ -10,91 +13,44 @@ export class ProviderReferenceValidationError extends Error {
   }
 }
 
-/**
- * Validates a single provider reference against available providers.
- */
-function validateProviderRef(ref: string, providers: ApiProvider[], context: string): void {
-  if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
-    const available = providers.map(getProviderDescription).join(', ');
-    throw new ProviderReferenceValidationError(
-      `${context} references provider "${ref}" which does not exist. Available providers: ${available}`,
-    );
-  }
-}
-
-/**
- * Validates provider references for a single test case.
- */
-function validateTestProviders(
-  test: TestCase | Partial<TestCase>,
-  providers: ApiProvider[],
-  context: string,
-): void {
-  if (!test.providers) {
-    return;
-  }
-
-  if (!Array.isArray(test.providers)) {
-    throw new ProviderReferenceValidationError(`${context}.providers must be an array`);
-  }
-
-  const desc = 'description' in test && test.description ? ` ("${test.description}")` : '';
-  for (const ref of test.providers) {
-    validateProviderRef(ref, providers, `${context}${desc}`);
-  }
-}
-
-/**
- * Validate that test case provider references match available providers.
- *
- * @param tests - Array of test cases to validate
- * @param providers - Array of available providers
- * @param defaultTest - Optional default test case to validate
- * @param scenarios - Optional array of scenarios to validate
- * @throws ProviderReferenceValidationError if any provider reference is invalid
- */
+/** Check every declared provider, but only name selected providers in diagnostics. */
 export function validateTestProviderReferences(
   tests: TestCase[],
-  providers: ApiProvider[],
+  providers: ProviderIdentity[],
   defaultTest?: Partial<TestCase>,
   scenarios?: Scenario[],
+  excluded: ProviderIdentity[] = [],
 ): void {
-  // Validate defaultTest.providers
+  const known = [...providers, ...excluded];
+
+  function validate(test: Partial<TestCase>, context: string) {
+    if (!test.providers) {
+      return;
+    }
+    if (!Array.isArray(test.providers)) {
+      throw new ProviderReferenceValidationError(`${context}.providers must be an array`);
+    }
+    for (const ref of test.providers) {
+      if (!known.some((provider) => doesProviderRefMatch(ref, provider))) {
+        const available =
+          providers.map(getProviderDescriptionForLog).join(', ') || '(none selected)';
+        const omitted = excluded.length ? `. Excluded by filter: ${excluded.length}` : '';
+        const desc = test.description ? ` ("${test.description}")` : '';
+        throw new ProviderReferenceValidationError(
+          `${context}${desc} references provider "${getProviderDescriptionForLog(ref)}" which does not exist. Available providers: ${available}${omitted}`,
+        );
+      }
+    }
+  }
+
   if (defaultTest) {
-    validateTestProviders(defaultTest, providers, 'defaultTest');
+    validate(defaultTest, 'defaultTest');
   }
-
-  // Validate each test's providers
-  for (let i = 0; i < tests.length; i++) {
-    validateTestProviders(tests[i], providers, `Test #${i + 1}`);
-  }
-
-  // Validate scenario tests and config
-  if (scenarios) {
-    scenarios.forEach((scenario, i) => {
-      const scenarioDesc = scenario.description ? ` ("${scenario.description}")` : '';
-
-      // Validate scenario config items (partial test cases)
-      if (scenario.config) {
-        scenario.config.forEach((configItem, j) => {
-          validateTestProviders(
-            configItem,
-            providers,
-            `Scenario #${i + 1}${scenarioDesc} config[${j}]`,
-          );
-        });
-      }
-
-      // Validate scenario tests
-      if (scenario.tests) {
-        scenario.tests.forEach((test, j) => {
-          validateTestProviders(
-            test,
-            providers,
-            `Scenario #${i + 1}${scenarioDesc} test #${j + 1}`,
-          );
-        });
-      }
-    });
-  }
+  tests.forEach((test, index) => validate(test, `Test #${index + 1}`));
+  scenarios?.forEach((scenario, index) => {
+    const desc = scenario.description ? ` ("${scenario.description}")` : '';
+    const context = `Scenario #${index + 1}${desc}`;
+    scenario.config?.forEach((item, j) => validate(item, `${context} config[${j}]`));
+    scenario.tests?.forEach((test, j) => validate(test, `${context} test #${j + 1}`));
+  });
 }
