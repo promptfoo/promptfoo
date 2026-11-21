@@ -43,7 +43,7 @@ interface TempoSpan {
 }
 
 interface TempoTraceResponse {
-  batches?: Array<{
+  batches: Array<{
     resource?: {
       attributes?: Array<{ key: string; value: TempoAttributeValue }>;
       droppedAttributesCount?: unknown;
@@ -241,6 +241,24 @@ function transformSpan(
   };
 }
 
+function parseTrace(body: string): TempoTraceResponse {
+  try {
+    // JSON numbers like 1e-400 round to zero. Preserve the token for the same
+    // exact zero check as quoted OTLP counters, after selecting the requested trace.
+    const data = JSON.parse(body, (key, value, context?: { source: string }) =>
+      value === 0 && /^dropped(Attributes|Events|Links)Count$/.test(key)
+        ? (context?.source ?? value)
+        : value,
+    ) as TempoTraceResponse;
+    if (Array.isArray(data?.batches)) {
+      return data;
+    }
+  } catch {
+    // JSON parser errors can include response excerpts. Report only the incomplete snapshot.
+  }
+  throw new IncompleteTraceError('Tempo returned an invalid trace response');
+}
+
 export class TempoProvider implements TraceProvider {
   readonly id = 'tempo';
   private readonly baseUrl: string;
@@ -291,7 +309,7 @@ export class TempoProvider implements TraceProvider {
     const requestedId = traceId.toLowerCase();
     let malformedSpans = 0;
 
-    for (const batch of data.batches ?? []) {
+    for (const batch of data.batches) {
       const resourceCount = batch?.resource?.droppedAttributesCount;
       if (!Array.isArray(batch?.scopeSpans) || batch.scopeSpans.length === 0) {
         // Without children we cannot establish that the lost telemetry belongs elsewhere.
@@ -374,20 +392,8 @@ export class TempoProvider implements TraceProvider {
       return null;
     }
     const body = await readLimitedResponse(response, 'Tempo');
-    // JSON numbers like 1e-400 round to zero. Preserve the token for the same
-    // exact zero check as quoted OTLP counters, after selecting the requested trace.
-    const data = JSON.parse(body, (key, value, context?: { source: string }) =>
-      value === 0 && /^dropped(Attributes|Events|Links)Count$/.test(key)
-        ? (context?.source ?? value)
-        : value,
-    ) as TempoTraceResponse;
-    if (!Array.isArray(data.batches)) {
-      throw new TraceProviderError('Tempo returned an invalid trace response');
-    }
-
-    const spans = this.transformSpans(data, traceId);
     return {
-      spans,
+      spans: this.transformSpans(parseTrace(body), traceId),
       fetchedAt: Date.now(),
     };
   }

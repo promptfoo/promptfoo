@@ -7,7 +7,7 @@ vi.mock('../../../src/logger', () => ({
 
 import logger from '../../../src/logger';
 import { TempoProvider } from '../../../src/tracing/providers/tempo';
-import { TraceProviderError } from '../../../src/tracing/providers/types';
+import { IncompleteTraceError, TraceProviderError } from '../../../src/tracing/providers/types';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedFetch = vi.mocked(fetchWithProxy);
@@ -406,11 +406,19 @@ describe('TempoProvider', () => {
     });
   });
 
-  it('rejects invalid or oversized trace responses', async () => {
-    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-    mockedFetch.mockResolvedValueOnce(response({ unexpected: [] }));
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('invalid trace response');
+  it.each(['private-fragment', 'null', '{}', '{"batches":{}}'])(
+    'fails closed on malformed snapshots without exposing their contents',
+    async (body) => {
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      mockedFetch.mockResolvedValueOnce(new Response(body));
+      const result = provider.fetchTrace(TRACE_ID);
+      await expect(result).rejects.toThrow(IncompleteTraceError);
+      await expect(result).rejects.toThrow(/^Tempo returned an invalid trace response$/);
+    },
+  );
 
+  it('rejects oversized trace responses', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     mockedFetch.mockResolvedValueOnce(
       new Response('{}', { headers: { 'content-length': '10485761' } }),
     );
