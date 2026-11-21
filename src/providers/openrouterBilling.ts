@@ -1,4 +1,4 @@
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { OpenAiSharedOptions } from './openai/types';
 
 type OpenRouterUsage = {
   prompt_tokens?: unknown;
@@ -13,7 +13,9 @@ type OpenRouterBillingData = { usage?: OpenRouterUsage | null };
 
 export function isOpenRouterEndpoint(apiUrl: string): boolean {
   try {
-    return new URL(apiUrl).hostname === 'openrouter.ai';
+    return ['openrouter.ai', 'eu.openrouter.ai', 'us.openrouter.ai'].includes(
+      new URL(apiUrl).hostname,
+    );
   } catch {
     return false;
   }
@@ -25,7 +27,7 @@ function isNonNegativeFiniteNumber(value: unknown): value is number {
 
 export function calculateOpenRouterResponseCost(
   data: OpenRouterBillingData,
-  config: OpenAiCompletionOptions,
+  config: OpenAiSharedOptions,
   api: 'chat' | 'responses' = 'chat',
 ): number | undefined {
   // Cache replay preserves logical cost; the evaluator tracks incurred spending separately.

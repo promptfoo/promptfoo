@@ -23,7 +23,9 @@ To also surface findings in GitHub Code Scanning, configure `sarif-output-path` 
 
 Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
-The action runs the scanner with its bundled Node.js 24 runtime. Older action releases and workflow steps that run Promptfoo directly require Node.js `>=22.22.0` on the runner's `PATH`. Configure Node.js 24 LTS for compatibility:
+The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
+
+The action runs the scanner with its bundled Node.js 24 runtime. For workflow steps that install and run Promptfoo directly, use Node.js 24 or later for full-repository scans. Diff-only scans also support Node.js 22.22 or later. Configure the runtime before installing Promptfoo:
 
 ```yaml
 - name: Set up Node.js
@@ -66,6 +68,8 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
     category: promptfoo-code-scan
 ```
 
+Full scans can share eligible committed text files from the compared revision with the hosted scanner. Set `diffsOnly: true` in the file selected by `config-path` to share only the Git diff.
+
 ## Supply Chain Security
 
 The hardening below applies to releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
@@ -84,8 +88,8 @@ The hardening below applies to releases after v0.1.8; earlier releases resolve `
 - **Verify build provenance.** The committed `dist/` bundle and the `action.yml` that selects the entrypoint are built and exported by the [promptfoo monorepo release workflow](https://github.com/promptfoo/promptfoo/blob/main/.github/workflows/release-please.yml), which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout of this repository with:
 
   ```bash
-  gh attestation verify dist/index.js --repo promptfoo/promptfoo
-  gh attestation verify action.yml --repo promptfoo/promptfoo
+  gh attestation verify dist/index.js --repo promptfoo/promptfoo --signer-workflow promptfoo/promptfoo/.github/workflows/release-please.yml --source-ref refs/heads/main
+  gh attestation verify action.yml --repo promptfoo/promptfoo --signer-workflow promptfoo/promptfoo/.github/workflows/release-please.yml --source-ref refs/heads/main
   ```
 
   Additionally, every release PR in this repository is validated by a workflow that rebuilds `dist/` from the pinned monorepo source commit and fails on any byte difference.
