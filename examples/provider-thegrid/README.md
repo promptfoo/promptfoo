@@ -2,6 +2,8 @@
 
 Compare the `text-standard` and `text-prime` tiers on arithmetic, instruction following, and JSON extraction. Both use [The Grid AI's OpenAI-compatible endpoint](https://thegrid.ai).
 
+## Run the example
+
 ```bash
 npx promptfoo@latest init --example provider-thegrid
 cd provider-thegrid
