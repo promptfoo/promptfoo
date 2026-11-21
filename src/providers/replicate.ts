@@ -59,7 +59,7 @@ interface ReplicatePrediction {
   output?: any;
   logs?: string;
   error?: string | null;
-  status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled';
+  status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled' | 'aborted';
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -70,6 +70,8 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+// Entries written before terminal-state validation may contain partial outputs without a status.
+const REPLICATE_RESULT_CACHE_PREFIX = 'replicate-result-v2';
 const pendingPredictions = new Map<
   string,
   {
@@ -358,7 +360,7 @@ export class ReplicateProvider implements ApiProvider {
     let cacheKey;
     if (isCacheEnabled()) {
       cache = await getCache();
-      cacheKey = `replicate:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+      cacheKey = `${REPLICATE_RESULT_CACHE_PREFIX}:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
         data,
       )}`;
 
@@ -403,8 +405,12 @@ export class ReplicateProvider implements ApiProvider {
         response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
 
-      if (response.status === 'failed') {
-        throw new Error(response.error || 'Prediction failed');
+      if (
+        response.status === 'failed' ||
+        response.status === 'canceled' ||
+        response.status === 'aborted'
+      ) {
+        throw new Error(response.error || `Prediction ${response.status}`);
       }
 
       response = response.output;
@@ -487,7 +493,8 @@ export class ReplicateProvider implements ApiProvider {
       if (
         prediction.status === 'succeeded' ||
         prediction.status === 'failed' ||
-        prediction.status === 'canceled'
+        prediction.status === 'canceled' ||
+        prediction.status === 'aborted'
       ) {
         return prediction;
       }
@@ -637,7 +644,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     }
 
     const cache = getCache();
-    const cacheKey = `replicate:image:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+    const cacheKey = `${REPLICATE_RESULT_CACHE_PREFIX}:image:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
       {
         config: this.config,
         prompt,
@@ -702,9 +709,17 @@ export class ReplicateImageProvider extends ReplicateProvider {
         ...getReplicateValueSummary('output', prediction.output),
       });
 
-      if (prediction.status === 'failed') {
+      if (
+        prediction.status === 'failed' ||
+        prediction.status === 'canceled' ||
+        prediction.status === 'aborted'
+      ) {
         return {
-          error: prediction.error || 'Image generation failed',
+          error:
+            prediction.error ||
+            (prediction.status === 'failed'
+              ? 'Image generation failed'
+              : `Prediction ${prediction.status}`),
         };
       }
 
