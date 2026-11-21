@@ -493,10 +493,13 @@ async function runAssertionInternal({
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
-  const baseType = getAssertionBaseType(assertion);
   let valueFromScript: ValueFromScriptType;
-  const scriptFailure = (reason: string): GradingResult =>
+  const failure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+  const baseType = getAssertionBaseType(assertion);
+  if (!context.trace && (baseType.startsWith('trace-') || baseType.startsWith('trajectory:'))) {
+    return failure(`No trace data available for ${baseType} assertion`);
+  }
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -518,7 +521,7 @@ async function runAssertionInternal({
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return scriptFailure(
+          return failure(
             `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
           );
         }
@@ -535,7 +538,7 @@ async function runAssertionInternal({
           );
           logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return scriptFailure((error as Error).message);
+          return failure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -552,7 +555,7 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        return scriptFailure(
+        return failure(
           `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
         );
       }

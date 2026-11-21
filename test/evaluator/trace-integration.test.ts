@@ -796,15 +796,21 @@ describe('evaluator trace integration', () => {
       },
     );
 
-    it('keeps trace metrics optional for zero-weight assertions and sets', async () => {
+    it.each([true, false])('keeps trace metrics optional with local evidence=%s', async (local) => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       const options = createRunOptions(provider);
-      const trace = { type: 'trace-span-count' as const, value: { min: 1 } };
+      const trace = {
+        type: 'trace-span-count' as const,
+        value: { pattern: 'target.call', min: 2 },
+      };
       options.test.assert = [
         { type: 'equals', value: 'Target output' },
         { ...trace, weight: 0 },
         { type: 'assert-set', weight: 0, assert: [trace] },
       ];
+      if (!local) {
+        mockTraceStore.getTrace.mockRejectedValueOnce(new Error('Store unavailable'));
+      }
       mockFetchTraceContext.mockResolvedValueOnce(null);
       const [result] = await runEval(options);
       expect(result.success).toBe(true);
