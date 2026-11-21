@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
+import { addAbortListener, once } from 'node:events';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -190,9 +190,9 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
       String(seconds),
       '--json',
     ];
-    const { stdout } = await exec(process.execPath, args, {
+    signal?.throwIfAborted();
+    const command = exec(process.execPath, args, {
       cwd: workspace,
-      signal,
       timeout: (seconds + 60) * 1000,
       killSignal: 'SIGKILL',
       env: {
@@ -205,6 +205,9 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
         OPENCLAW_NO_RESPAWN: '1',
       },
     });
+    // execFile aborts with SIGTERM and rejects before the child closes. Wait for exit before cleanup.
+    const cancellation = signal && addAbortListener(signal, () => command.child.kill('SIGKILL'));
+    const { stdout } = await command.finally(() => cancellation?.[Symbol.dispose]());
     const result = JSON.parse(stdout);
     if (!result.ok || typeof result.final !== 'string')
       throw new Error('OpenClaw returned no final reply');
@@ -218,7 +221,8 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
     });
     return result.final;
   } catch (error) {
-    const message = String(error.message).replaceAll(key, '[redacted]');
+    const reason = signal?.aborted ? signal.reason : error;
+    const message = String(reason?.message ?? reason).replaceAll(key, '[redacted]');
     throw new Error(message.slice(-1200));
   } finally {
     try {
