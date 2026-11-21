@@ -20,6 +20,7 @@ scratch
 venv
 *.sqlite
 
-# Not read by the image build
+# The server bundles the OpenAPI document from the docs workspace.
 examples
 site
+!site/static/openapi.json

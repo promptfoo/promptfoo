@@ -34,6 +34,7 @@ const included = [
   'package-lock.json',
   'src/app/package.json',
   'src/index.ts',
+  'site/static/openapi.json',
   'test/__fixtures__/mock-packages/node_modules/@test/cjs-pkg/lib/index.js',
   'test/__fixtures__/mock-packages/node_modules/@test/cjs-pkg/package.json',
   'test/__fixtures__/mock-packages/node_modules/@test/esm-only-pkg/dist/index.js',
