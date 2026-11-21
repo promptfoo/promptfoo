@@ -14,8 +14,6 @@ providers:
 
 # Hide verbose columns by default in the web viewer
 defaultColumnVisibility:
-  variables: visible
-  prompts: visible
   hideColumns:
     - var:context
     - var:system_prompt
@@ -31,25 +29,3 @@ tests:
     assert:
       - type: contains
         value: '30 days'
-
-  - vars:
-      system_prompt: You are a helpful assistant. Answer based only on the provided context.
-      context: |
-        Our support team is available Monday through Friday, 9am to 5pm EST.
-        For urgent issues, use the emergency hotline.
-        Average response time is 2 business hours.
-      question: When is support available?
-    assert:
-      - type: icontains
-        value: monday
-
-  - vars:
-      system_prompt: You are a helpful assistant. Answer based only on the provided context.
-      context: |
-        Premium plans include unlimited API calls.
-        Basic plans are limited to 1000 calls per month.
-        Enterprise plans include custom SLAs.
-      question: How many API calls does premium include?
-    assert:
-      - type: icontains
-        value: unlimited

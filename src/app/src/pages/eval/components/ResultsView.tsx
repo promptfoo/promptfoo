@@ -440,7 +440,7 @@ export default function ResultsView({
   };
 
   const hasAnyDescriptions = React.useMemo(
-    () => table.body?.some((row) => row.description),
+    () => table.body?.some((row) => row.test?.description || row.description),
     [table.body],
   );
 
@@ -494,31 +494,19 @@ export default function ResultsView({
 
   const schemaHash = React.useMemo(() => hashVarSchema(head.vars), [head.vars]);
 
-  const hiddenVarNames = React.useMemo(
-    () => hiddenVarNamesBySchema[schemaHash] ?? [],
-    [hiddenVarNamesBySchema, schemaHash],
+  const hiddenVarNames = hiddenVarNamesBySchema[schemaHash];
+  const savedVisibility = columnStates[currentEvalId]?.columnVisibility;
+  const currentColumnState = React.useMemo(
+    () =>
+      resolveColumnVisibility({
+        allColumns,
+        varNames: head.vars,
+        perEvalColumnState: savedVisibility,
+        hiddenVarNames,
+        configDefaults: getConfigColumnVisibility(config),
+      }),
+    [allColumns, head.vars, savedVisibility, hiddenVarNames, config],
   );
-
-  const currentColumnState = React.useMemo(() => {
-    const savedState = columnStates[currentEvalId];
-    return resolveColumnVisibility({
-      allColumns,
-      varNames: head.vars,
-      perEvalColumnState: savedState?.columnVisibility,
-      hiddenVarNames,
-      hasSchemaPreference: Object.prototype.hasOwnProperty.call(hiddenVarNamesBySchema, schemaHash),
-      configDefaults: getConfigColumnVisibility(config),
-    });
-  }, [
-    allColumns,
-    head.vars,
-    hiddenVarNames,
-    hiddenVarNamesBySchema,
-    schemaHash,
-    columnStates,
-    currentEvalId,
-    config,
-  ]);
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -796,7 +784,7 @@ export default function ResultsView({
   return (
     <>
       <div
-        className="flex flex-col bg-zinc-50 dark:bg-zinc-950 print:bg-white"
+        className="flex flex-col bg-background text-foreground print:bg-white"
         style={{
           isolation: 'isolate',
           minHeight: 'calc(100vh - var(--nav-height) - var(--update-banner-height, 0px))',
@@ -831,8 +819,8 @@ export default function ResultsView({
                         debouncedUpdate(value);
                       }}
                       onClear={handleClearSearch}
-                      containerClassName="w-[200px]"
-                      className="h-8 text-xs"
+                      containerClassName="w-full sm:w-72"
+                      className="h-9 text-sm"
                     />
                     <FiltersForm />
                     <div className="flex-1" />
@@ -857,7 +845,7 @@ export default function ResultsView({
                     {chartsToggleButton}
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-xs font-medium text-muted-foreground">Display:</span>
+                    <span className="sr-only">Display:</span>
                     <FilterModeSelector
                       filterMode={filterMode}
                       onChange={handleFilterModeChange}

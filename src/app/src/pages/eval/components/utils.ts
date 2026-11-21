@@ -213,8 +213,8 @@ export interface ResolveColumnVisibilityParams {
   allColumns: string[];
   varNames: string[];
   perEvalColumnState?: VisibilityState;
+  /** An empty list means the viewer explicitly chose to show every variable. */
   hiddenVarNames?: string[];
-  hasSchemaPreference?: boolean;
   configDefaults?: DefaultColumnVisibility;
 }
 
@@ -231,15 +231,14 @@ export function resolveColumnVisibility({
   allColumns,
   varNames,
   perEvalColumnState,
-  hiddenVarNames = [],
-  hasSchemaPreference = false,
+  hiddenVarNames,
   configDefaults,
 }: ResolveColumnVisibilityParams) {
   const columnVisibility: VisibilityState = {};
   const selectedColumns: string[] = [];
   const shownColumns = new Set(configDefaults?.showColumns ?? []);
   const hiddenColumns = new Set(configDefaults?.hideColumns ?? []);
-  const hiddenVariables = new Set(hiddenVarNames);
+  const hiddenVariables = hiddenVarNames && new Set(hiddenVarNames);
 
   for (const columnId of allColumns) {
     const varName = getVariableNameFromColumnId(columnId, varNames);
@@ -253,9 +252,7 @@ export function resolveColumnVisibility({
     const savedVisibility =
       varName === null
         ? perEvalColumnState?.[columnId]
-        : hasSchemaPreference
-          ? !hiddenVariables.has(varName)
-          : undefined;
+        : hiddenVariables && !hiddenVariables.has(varName);
     const isVisible = savedVisibility ?? configuredVisibility;
 
     columnVisibility[columnId] = isVisible;

@@ -13,68 +13,33 @@ describe('columnVisibility', () => {
   };
 
   describe('resolveColumnVisibility', () => {
-    it('shows all columns by default', () => {
-      const result = resolveColumnVisibility(defaultParams);
-
-      expect(result.selectedColumns).toEqual(defaultParams.allColumns);
-      expect(result.columnVisibility).toEqual({
-        description: true,
-        'Variable 1': true,
-        'Variable 2': true,
-        'Prompt 1': true,
-        'Prompt 2': true,
-      });
-    });
-
-    it('applies config defaults when no user preference exists', () => {
-      const result = resolveColumnVisibility({
-        ...defaultParams,
-        configDefaults: {
-          variables: 'hidden',
-          prompts: 'hidden',
-          showColumns: ['var:question'],
+    it.each([
+      { defaults: {}, visible: defaultParams.allColumns },
+      {
+        defaults: { variables: 'hidden', prompts: 'hidden', showColumns: ['var:question'] },
+        visible: ['description', 'Variable 1'],
+      },
+      {
+        defaults: { hideColumns: ['var:context', 'Prompt 2'] },
+        visible: ['description', 'Variable 1', 'Prompt 1'],
+      },
+      {
+        defaults: {
+          hideColumns: ['var:context', 'description', 'Prompt 1'],
+          showColumns: ['description', 'var:context', 'Prompt 1'],
         },
-      });
-
-      expect(result.columnVisibility).toEqual({
-        description: true,
-        'Variable 1': true,
-        'Variable 2': false,
-        'Prompt 1': false,
-        'Prompt 2': false,
-      });
-      expect(result.selectedColumns).toEqual(['description', 'Variable 1']);
-    });
-
-    it('lets hideColumns target explicit variable selectors or standard column IDs', () => {
-      const result = resolveColumnVisibility({
-        ...defaultParams,
-        configDefaults: {
-          variables: 'visible',
-          prompts: 'visible',
-          hideColumns: ['var:context', 'Prompt 2'],
-        },
-      });
-
-      expect(result.columnVisibility['Variable 1']).toBe(true);
-      expect(result.columnVisibility['Variable 2']).toBe(false);
-      expect(result.columnVisibility['Prompt 1']).toBe(true);
-      expect(result.columnVisibility['Prompt 2']).toBe(false);
-    });
-
-    it('prioritizes showColumns over hideColumns', () => {
-      const result = resolveColumnVisibility({
-        ...defaultParams,
-        configDefaults: {
-          variables: 'visible',
-          prompts: 'visible',
-          hideColumns: ['var:context'],
-          showColumns: ['var:context'],
-        },
-      });
-
-      expect(result.columnVisibility['Variable 2']).toBe(true);
-    });
+        visible: defaultParams.allColumns,
+      },
+    ] satisfies { defaults: ResolveColumnVisibilityParams['configDefaults']; visible: string[] }[])(
+      'applies group and column defaults in case %#',
+      ({ defaults, visible }) => {
+        const result = resolveColumnVisibility({ ...defaultParams, configDefaults: defaults });
+        expect(result.selectedColumns).toEqual(visible);
+        for (const column of defaultParams.allColumns) {
+          expect(result.columnVisibility[column]).toBe(visible.includes(column));
+        }
+      },
+    );
 
     it('distinguishes variable names from standard IDs and selector prefixes', () => {
       const result = resolveColumnVisibility({
@@ -92,37 +57,10 @@ describe('columnVisibility', () => {
       });
     });
 
-    it('prioritizes explicit shows over hides for non-variable columns', () => {
-      const result = resolveColumnVisibility({
-        ...defaultParams,
-        configDefaults: {
-          hideColumns: ['description', 'Prompt 1'],
-          showColumns: ['description', 'Prompt 1'],
-        },
-      });
-
-      expect(result.columnVisibility.description).toBe(true);
-      expect(result.columnVisibility['Prompt 1']).toBe(true);
-    });
-
-    it('defaults omitted visibility groups to visible', () => {
-      const result = resolveColumnVisibility({
-        ...defaultParams,
-        configDefaults: {
-          hideColumns: ['var:context'],
-        },
-      });
-
-      expect(result.columnVisibility['Variable 1']).toBe(true);
-      expect(result.columnVisibility['Variable 2']).toBe(false);
-      expect(result.columnVisibility['Prompt 1']).toBe(true);
-    });
-
     it('uses schema-scoped hidden variable names over config defaults', () => {
       const result = resolveColumnVisibility({
         ...defaultParams,
         hiddenVarNames: ['question'],
-        hasSchemaPreference: true,
         configDefaults: {
           variables: 'hidden',
           prompts: 'visible',
@@ -138,7 +76,6 @@ describe('columnVisibility', () => {
       const result = resolveColumnVisibility({
         ...defaultParams,
         hiddenVarNames: [],
-        hasSchemaPreference: true,
         configDefaults: {
           variables: 'hidden',
           prompts: 'visible',

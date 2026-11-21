@@ -10,7 +10,7 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
-The config hides `context` and `system_prompt` while leaving the question and provider output visible:
+The config hides `context` and `system_prompt` while leaving the question and provider output visible.
 
 ```yaml
 defaultColumnVisibility:
@@ -19,6 +19,4 @@ defaultColumnVisibility:
     - var:system_prompt
 ```
 
-Use `var:<name>` for variables, including names such as `description` or `Prompt 1`. Standard columns use their display IDs: `description`, `Prompt 1`, `Prompt 2`, and so on. `showColumns` overrides `hideColumns`; omitted group defaults remain visible.
-
-Saved browser choices take priority over config defaults. Variable choices are shared across evals with the same variable names; prompt and description choices are saved per eval. Use **Columns** to change them.
+Saved choices in the **Columns** menu take priority. See the [web viewer guide](https://www.promptfoo.dev/docs/usage/web-ui/#column-visibility) for selector syntax and how the browser saves your choices.

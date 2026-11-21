@@ -12,12 +12,14 @@ import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
+  type FileRecord,
+  FilesystemMcpError,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
-import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
-import { validateOnBranch } from '../git/diff';
+import { runGit } from '../git/command';
+import { countUncommittedFiles, getDefaultBaseBranch, validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
 import {
@@ -25,14 +27,42 @@ import {
   stopFilesystemMcpServer,
   waitForFilesystemMcpServerReady,
 } from '../mcp/filesystem';
+import { createFilesystemSnapshot } from '../mcp/snapshot';
 import { SocketIoMcpBridge } from '../mcp/transport';
 import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
 import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
-import { buildScanRequest, executeScanRequestWithRetry } from './request';
+import { buildScanRequest, connectScanClient, executeScanRequestWithRetry } from './request';
 
-import type { Config } from '../config/schema';
+async function describeEmptyScan(
+  repoPath: string,
+  files: FileRecord[],
+  baseBranch: string,
+  compareRef: string,
+): Promise<string> {
+  const details = [`No files to scan in ${baseBranch}...${compareRef}.`];
+  const skipped = files.filter((file) => file.skipReason);
+  const reasons = [...new Set(skipped.map((file) => file.skipReason))].join(', ');
+  details.push(
+    files.length === 0
+      ? 'There are no net file changes in this range.'
+      : `${files.length} changed file(s) contain no scannable patches.`,
+  );
+  if (skipped.length) {
+    details.push(`${skipped.length} file(s) skipped: ${reasons}.`);
+  }
+  try {
+    const dirtyCount = await countUncommittedFiles(repoPath);
+    if (dirtyCount) {
+      details.push(`${dirtyCount} uncommitted file(s) are not part of the scan.`);
+    }
+  } catch {
+    // Status is best-effort context; the compared range is still useful.
+  }
+  details.push('Commit relevant changes, or use --base/--compare to select another range.');
+  return details.join(' ');
+}
 
 /**
  * Options for executing a scan
@@ -67,6 +97,11 @@ export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat 
   return options.json ? CodeScanOutputFormat.JSON : parsed.data;
 }
 
+const createFlushCallback = (exitCode: number) => async () => {
+  await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
+  process.exitCode = exitCode;
+};
+
 /**
  * Execute a complete security scan
  *
@@ -83,7 +118,8 @@ export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat 
  * @param options - Scan options from CLI
  */
 export async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
-  let client: AgentClient | null = null;
+  let client: Awaited<ReturnType<typeof connectScanClient>> | null = null;
+  let snapshot: Awaited<ReturnType<typeof createFilesystemSnapshot>> | undefined;
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
@@ -96,9 +132,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   const absoluteRepoPath = path.resolve(repoPath);
   let outputFormat: CodeScanOutputFormat | null = null;
   let spinner: ReturnType<typeof createSpinner> | undefined;
-  let showSpinner = false;
 
   const startTime = Date.now();
+
+  const displayResults = (response: ScanResponse, format: CodeScanOutputFormat) =>
+    displayScanResults(response, Date.now() - startTime, {
+      format,
+      githubPr: options.githubPr,
+    });
 
   try {
     outputFormat = resolveOutputFormat(options);
@@ -111,8 +152,13 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     }
 
     // Load and merge configuration
-    const baseConfig: Config = loadConfigOrDefault(options.config);
-    const config = mergeConfigWithOptions(baseConfig, options);
+    const config = mergeConfigWithOptions(loadConfigOrDefault(options.config), options);
+
+    if (!config.diffsOnly && Number.parseInt(process.versions.node, 10) < 24) {
+      throw new FilesystemMcpError(
+        'Full-repository code scans require Node.js 24 or later. Reinstall and run promptfoo with Node.js 24 or later, or use --diffs-only.',
+      );
+    }
 
     // Resolve guidance (CLI options take precedence)
     const guidance = resolveGuidance(options, config);
@@ -135,14 +181,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     registerCleanupHandlers(abortController);
 
     // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
-    const isWebUI = Boolean(cliState.webUI);
     spinner = createSpinner({
       format: outputFormat,
-      isWebUI,
+      isWebUI: Boolean(cliState.webUI),
       logLevel: getLogLevel(),
     });
-
-    showSpinner = Boolean(spinner);
 
     // Parse PR context early for auth (if --github-pr provided)
     // This is needed for fork PR authentication where OIDC is unavailable
@@ -160,23 +203,29 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Create agent client connection (uses shared Socket.IO layer)
     // Host and base auth are resolved automatically; code scanning overrides
     // with custom auth (OIDC + fork PR) and config-driven host.
-    if (!showSpinner) {
+    if (!spinner) {
       logger.debug('Connecting to server...');
     }
 
-    client = await createAgentClient({
-      agent: 'code-scan',
-      host: config.apiHost || 'https://api.promptfoo.app',
-      auth: resolveAuthCredentials(options.apiKey, parsedPR),
-    });
+    client = await connectScanClient(
+      config.apiHost,
+      resolveAuthCredentials(options.apiKey, parsedPR),
+    );
     sessionId = client.sessionId;
+
+    const compareRef = options.compare || 'HEAD';
 
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
       logger.debug('Setting up repo MCP access...');
       logger.debug(`Using session ID: ${sessionId}`);
 
-      const startedMcpProcess = startFilesystemMcpServer(absoluteRepoPath);
+      snapshot = await createFilesystemSnapshot(
+        absoluteRepoPath,
+        compareRef,
+        abortController.signal,
+      );
+      const startedMcpProcess = startFilesystemMcpServer(snapshot.rootDir, snapshot.checkout);
       try {
         await waitForFilesystemMcpServerReady(startedMcpProcess);
         logger.debug('Filesystem MCP server ready');
@@ -190,7 +239,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
         client.socket.emit('runner:hello', {
           session_id: sessionId,
-          repo_root: absoluteRepoPath,
+          repo_root: snapshot.rootDir,
         });
 
         mcpProcess = startedMcpProcess;
@@ -204,71 +253,59 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Validate branch and determine base branch
     logger.debug('Processing git diff...');
 
-    const simpleGit = (await import('simple-git')).default;
-    const git = simpleGit(absoluteRepoPath);
-
     // Validate we're on a branch (only if compare ref not specified)
     if (!options.compare) {
-      await validateOnBranch(git);
+      await validateOnBranch(absoluteRepoPath);
     }
 
     // Determine base branch (use provided or auto-detect)
-    let baseBranch: string;
-    if (options.base) {
-      baseBranch = options.base;
-    } else {
-      const branches = await git.branch();
-      baseBranch =
-        branches.all.includes('main') || branches.all.includes('origin/main')
-          ? 'main'
-          : branches.all.includes('master') || branches.all.includes('origin/master')
-            ? 'master'
-            : 'main';
-    }
-
-    // Determine compare ref (use provided or default to HEAD)
-    const compareRef = options.compare || 'HEAD';
+    const baseBranch = options.base || (await getDefaultBaseBranch(absoluteRepoPath));
 
     logger.debug(`Comparing: ${baseBranch}...${compareRef}`);
 
-    // Process diff with focused pipeline
-    const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
+    const fullScanMetadata = snapshot
+      ? await extractMetadata(absoluteRepoPath, baseBranch, snapshot.commit, true)
+      : undefined;
+    // Use the same immutable revisions for the snapshot, patches and hosted metadata.
+    const files = await processDiff(
+      absoluteRepoPath,
+      fullScanMetadata?.baseSha ?? baseBranch,
+      snapshot?.commit ?? compareRef,
+      !config.diffsOnly,
+    );
 
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
-    const skippedFiles = files.filter((f) => f.skipReason);
 
     logger.debug(
-      `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
+      `Files changed: ${files.length} (${includedFiles.length} included, ${files.filter((f) => f.skipReason).length} skipped)`,
     );
 
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
-      const msg = 'No files to scan';
-
-      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
-      if (outputFormat !== CodeScanOutputFormat.TEXT) {
-        const response: ScanResponse = { success: true, comments: [], review: msg };
-        displayScanResults(response, Date.now() - startTime, {
-          format: outputFormat,
-          githubPr: options.githubPr,
-        });
-      } else if (showSpinner && spinner) {
-        spinner.succeed(msg);
+      // For non-text formats (JSON, SARIF), keep the stable machine-readable
+      // review string for programmatic consumption
+      if (outputFormat === CodeScanOutputFormat.TEXT) {
+        const msg = snapshot
+          ? 'No eligible committed changes to scan in the selected directory.'
+          : await describeEmptyScan(absoluteRepoPath, files, baseBranch, compareRef);
+        if (spinner) {
+          spinner.succeed(msg);
+        } else {
+          logger.info(msg);
+        }
       } else {
-        logger.info(msg);
+        displayResults({ success: true, comments: [], review: 'No files to scan' }, outputFormat);
       }
 
       // Exit with code 0 (success) when no files to scan
-      cliState.postActionCallback = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
-        process.exitCode = 0;
-      };
+      cliState.postActionCallback = createFlushCallback(0);
 
       return;
     }
 
     // Extract git metadata
-    const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
+    const metadata =
+      fullScanMetadata ?? (await extractMetadata(absoluteRepoPath, baseBranch, compareRef));
     logger.debug(`Compare ref: ${metadata.branch}`);
     logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
@@ -277,7 +314,8 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     let pullRequest: PullRequestContext | undefined = undefined;
     if (parsedPR) {
       // Get current commit SHA
-      const currentCommit = await git.revparse(['HEAD']);
+      const currentCommit =
+        snapshot?.commit ?? (await runGit(absoluteRepoPath, ['rev-parse', '--verify', 'HEAD']));
 
       pullRequest = {
         owner: parsedPR.owner,
@@ -292,31 +330,24 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     }
 
     // Send scan request via agent client
-    if (!showSpinner) {
+    if (!spinner) {
       logger.debug('Scanning code...');
     }
 
     const scanRequest = buildScanRequest(files, metadata, config, sessionId, pullRequest, guidance);
 
     const scanResponse = await executeScanRequestWithRetry(client, scanRequest, {
-      showSpinner,
       spinner,
       abortController,
     });
 
     // Stop spinner silently
-    if (showSpinner && spinner) {
+    if (spinner) {
       spinner.stop();
     }
 
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-
     // Display results
-    displayScanResults(scanResponse, duration, {
-      format: outputFormat,
-      githubPr: options.githubPr,
-    });
+    displayResults(scanResponse, outputFormat);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -334,34 +365,25 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           comments: [],
           skipReason: msg,
         };
-        displayScanResults(response, Date.now() - startTime, {
-          format: outputFormat,
-          githubPr: options.githubPr,
-        });
+        displayResults(response, outputFormat);
       } else if (outputFormat === CodeScanOutputFormat.SARIF) {
         console.error(
           `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
         );
-        cliState.postActionCallback = async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          process.exitCode = 1;
-        };
+        cliState.postActionCallback = createFlushCallback(1);
         return;
-      } else if (showSpinner && spinner) {
+      } else if (spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);
       }
 
-      cliState.postActionCallback = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        process.exitCode = 0; // Success - not an error condition
-      };
+      cliState.postActionCallback = createFlushCallback(0); // Success - not an error condition
       return;
     }
 
     const msg = `Scan failed: ${errorMessage}`;
-    if (showSpinner && spinner) {
+    if (spinner) {
       spinner.fail(msg);
     } else if (structuredOutputRequested) {
       // Structured modes reserve stdout for the payload, so errors go to stderr. This
@@ -393,6 +415,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       await stopFilesystemMcpServer(mcpProcess).catch(() => {
         logger.debug('MCP server cleanup completed');
       });
+    }
+
+    if (snapshot) {
+      await snapshot
+        .dispose()
+        .catch(() => logger.warn('Could not remove the private full-scan snapshot.'));
     }
 
     if (client) {

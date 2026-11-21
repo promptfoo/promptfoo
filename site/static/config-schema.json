@@ -55,13 +55,13 @@
         "writeLatestResults": {
           "$ref": "#/definitions/__schema70"
         },
-        "defaultColumnVisibility": {
+        "tracing": {
           "$ref": "#/definitions/__schema71"
         },
-        "tracing": {
-          "$ref": "#/definitions/__schema72"
-        },
         "basePath": {
+          "$ref": "#/definitions/__schema76"
+        },
+        "defaultColumnVisibility": {
           "$ref": "#/definitions/__schema77"
         },
         "evaluateOptions": {
@@ -198,6 +198,9 @@
         "ANTHROPIC_CUSTOM_HEADERS": {
           "type": "string"
         },
+        "ANTHROPIC_TEMPERATURE": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -220,6 +223,9 @@
           "type": "string"
         },
         "AZURE_API_BASE_URL": {
+          "type": "string"
+        },
+        "AZURE_AI_PROJECT_URL": {
           "type": "string"
         },
         "AZURE_API_HOST": {
@@ -294,7 +300,13 @@
         "CF_AIG_TOKEN": {
           "type": "string"
         },
+        "CEREBRAS_API_KEY": {
+          "type": "string"
+        },
         "COMETAPI_KEY": {
+          "type": "string"
+        },
+        "COHERE_API_BASE_URL": {
           "type": "string"
         },
         "COHERE_API_KEY": {
@@ -307,6 +319,9 @@
           "type": "string"
         },
         "DATABRICKS_WORKSPACE_URL": {
+          "type": "string"
+        },
+        "DASHSCOPE_API_KEY": {
           "type": "string"
         },
         "DEEPSEEK_API_KEY": {
@@ -348,6 +363,9 @@
         "GOOGLE_API_HOST": {
           "type": "string"
         },
+        "GOOGLE_APPLICATION_CREDENTIALS": {
+          "type": "string"
+        },
         "GOOGLE_API_BASE_URL": {
           "type": "string"
         },
@@ -367,6 +385,9 @@
           "type": "string"
         },
         "GOOGLE_GENERATIVE_AI_API_KEY": {
+          "type": "string"
+        },
+        "GOOGLE_GENAI_USE_VERTEXAI": {
           "type": "string"
         },
         "GEMINI_API_KEY": {
@@ -414,7 +435,13 @@
         "LLAMA_BASE_URL": {
           "type": "string"
         },
+        "LLAMA_API_KEY": {
+          "type": "string"
+        },
         "LOCALAI_BASE_URL": {
+          "type": "string"
+        },
+        "LOCALAI_TEMPERATURE": {
           "type": "string"
         },
         "MISTRAL_API_BASE_URL": {
@@ -519,13 +546,31 @@
         "PALM_API_KEY": {
           "type": "string"
         },
+        "PERPLEXITY_API_KEY": {
+          "type": "string"
+        },
+        "PORTKEY_API_BASE_URL": {
+          "type": "string"
+        },
         "PORTKEY_API_KEY": {
           "type": "string"
         },
         "PROMPTFOO_CA_CERT_PATH": {
           "type": "string"
         },
+        "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
+          "type": "string"
+        },
+        "PROMPTFOO_DISABLE_TEMPLATING": {
+          "type": "string"
+        },
+        "PROMPTFOO_MAX_CONCURRENCY": {
+          "type": "string"
+        },
         "PROMPTFOO_PFX_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_TRACING_ENABLED": {
           "type": "string"
         },
         "PROMPTFOO_PFX_PASSWORD": {
@@ -541,6 +586,12 @@
           "type": "string"
         },
         "PROMPTFOO_INSECURE_SSL": {
+          "type": "string"
+        },
+        "PROMPTFOO_PYTHON": {
+          "type": "string"
+        },
+        "PROMPTFOO_PYTHON_WORKERS": {
           "type": "string"
         },
         "QUIVERAI_API_KEY": {
@@ -570,7 +621,16 @@
         "SLACK_BOT_TOKEN": {
           "type": "string"
         },
+        "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+          "type": "string"
+        },
         "TOGETHER_API_KEY": {
+          "type": "string"
+        },
+        "TRUEFOUNDRY_API_KEY": {
+          "type": "string"
+        },
+        "TYPESAFE_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -865,8 +925,17 @@
         "id": {},
         "callApi": {},
         "callEmbeddingApi": {},
+        "supportsEmbeddingCancellation": {
+          "type": "boolean"
+        },
         "callClassificationApi": {},
         "label": {},
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "transform": {
           "type": "string"
         },
@@ -1002,6 +1071,17 @@
         },
         "contextTransform": {
           "type": "string"
+        },
+        "normalizeUnicode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": ["NFC", "NFD", "NFKC", "NFKD"]
+            }
+          ]
         }
       },
       "required": ["type"]
@@ -1055,7 +1135,9 @@
         "perplexity-score",
         "python",
         "regex",
+        "rouge-l",
         "rouge-n",
+        "rouge-s",
         "ruby",
         "similar",
         "similar:cosine",
@@ -1587,7 +1669,7 @@
           "items": {
             "$ref": "#/definitions/__schema61"
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports arabic-presentation-forms, audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -2446,6 +2528,7 @@
         {
           "type": "string",
           "enum": [
+            "arabic-presentation-forms",
             "audio",
             "authoritative-markup-injection",
             "base64",
@@ -2604,31 +2687,6 @@
     "__schema71": {
       "type": "object",
       "properties": {
-        "variables": {
-          "type": "string",
-          "enum": ["visible", "hidden"]
-        },
-        "prompts": {
-          "type": "string",
-          "enum": ["visible", "hidden"]
-        },
-        "hideColumns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "showColumns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "__schema72": {
-      "type": "object",
-      "properties": {
         "enabled": {
           "default": false,
           "type": "boolean"
@@ -2737,19 +2795,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema73"
+                  "$ref": "#/definitions/__schema72"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema74"
+                      "$ref": "#/definitions/__schema73"
                     },
                     "username": {
-                      "$ref": "#/definitions/__schema75"
+                      "$ref": "#/definitions/__schema74"
                     },
                     "password": {
-                      "$ref": "#/definitions/__schema76"
+                      "$ref": "#/definitions/__schema75"
                     }
                   }
                 },
@@ -2778,7 +2836,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema73"
+                  "$ref": "#/definitions/__schema72"
                 },
                 "projectId": {
                   "type": "string",
@@ -2820,7 +2878,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema73"
+                  "$ref": "#/definitions/__schema72"
                 },
                 "auth": {
                   "type": "object",
@@ -2866,9 +2924,13 @@
         }
       }
     },
-    "__schema73": {
+    "__schema72": {
       "type": "string",
       "format": "uri"
+    },
+    "__schema73": {
+      "type": "string",
+      "minLength": 1
     },
     "__schema74": {
       "type": "string",
@@ -2879,11 +2941,32 @@
       "minLength": 1
     },
     "__schema76": {
-      "type": "string",
-      "minLength": 1
+      "type": "string"
     },
     "__schema77": {
-      "type": "string"
+      "type": "object",
+      "properties": {
+        "variables": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "prompts": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "hideColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "showColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "__schema78": {
       "type": "object",
@@ -3023,6 +3106,9 @@
           "type": "boolean"
         },
         "watch": {
+          "type": "boolean"
+        },
+        "safeMode": {
           "type": "boolean"
         },
         "filterErrorsOnly": {

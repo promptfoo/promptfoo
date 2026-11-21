@@ -86,6 +86,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'huggingface-similarity': 'huggingface/similarity',
   hyperbolic: 'provider-hyperbolic',
   'image-classification': 'eval-image-classification',
+  'integration-hermeneutic': 'eval-python-assert',
   'javascript-assert-external': 'eval-javascript-assert-external',
   'javascript-test-cases': 'config-javascript-test-cases',
   'jest-integration': 'integration-jest',
@@ -187,6 +188,8 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
 // Aliases where the old example was removed and we route to the closest maintained alternative.
 export const EXAMPLE_REPLACEMENTS: Record<string, string> = {
   'dbrx-benchmark': 'dbrx-benchmark was removed because DBRX is no longer available.',
+  'integration-hermeneutic':
+    'The Hermeneutic integration was removed. Use the maintained Python assertion example for custom output checks.',
 };
 
 // Examples that were intentionally removed from current examples/
