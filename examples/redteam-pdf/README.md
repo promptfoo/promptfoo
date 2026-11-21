@@ -4,7 +4,7 @@ A local invoice-review application that consumes real PDF uploads. The `pdf` str
 
 ## Run the app
 
-Requires Node.js 22.22+ and an `OPENAI_API_KEY` with access to `gpt-5.4-mini` for the app and attack generation, and `gpt-5.5-2026-04-23` for grading.
+Requires [a supported Node.js release](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support) and an `OPENAI_API_KEY` with access to `gpt-5.4-mini` for the app and attack generation, and `gpt-5.5-2026-04-23` for grading.
 
 ```bash
 npx promptfoo@latest init --example redteam-pdf

@@ -6,7 +6,7 @@
     "start": "node --env-file-if-exists=.env server.js"
   },
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
