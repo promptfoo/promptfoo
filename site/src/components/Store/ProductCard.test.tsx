@@ -5,16 +5,19 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ProductCard } from './ProductCard';
 
-import type { FourthwallProduct } from './types';
+import type { FourthwallBundle, FourthwallProduct } from './types';
 
 const mockProduct: FourthwallProduct = {
+  type: 'PRODUCT',
+  state: { type: 'AVAILABLE' },
+  access: { type: 'PUBLIC' },
   id: 'prod-1',
   slug: 'test-product',
   name: 'Test Product',
   description: '<p>A test product description</p>',
   images: [
-    { id: 'img-1', url: 'https://example.com/image1.jpg', width: 800, height: 800 },
-    { id: 'img-2', url: 'https://example.com/image2.jpg', width: 800, height: 800 },
+    { url: 'https://example.com/image1.jpg', width: 800, height: 800 },
+    { url: 'https://example.com/image2.jpg', width: 800, height: 800 },
   ],
   variants: [
     {
@@ -30,6 +33,28 @@ const mockProduct: FourthwallProduct = {
 };
 
 describe('ProductCard', () => {
+  it('opens bundles without variants at the bundle price', async () => {
+    const bundle: FourthwallBundle = {
+      type: 'BUNDLE',
+      id: 'bundle-1',
+      slug: 'panda-sticker-pack',
+      name: 'Panda Sticker Pack',
+      description: 'Two stickers with a size choice for each.',
+      state: { type: 'AVAILABLE' },
+      access: { type: 'PUBLIC' },
+      images: mockProduct.images,
+      price: { value: 25, currency: 'USD' },
+      offers: [mockProduct],
+      pricingStrategy: { type: 'FIXED_PRICE' },
+    };
+    const handleClick = vi.fn();
+    render(<ProductCard product={bundle} onClick={handleClick} />);
+
+    expect(screen.getByText('$25.00')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'View Panda Sticker Pack' }));
+    expect(handleClick).toHaveBeenCalledWith(bundle);
+  });
+
   it('renders product image', () => {
     render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
 

@@ -1,7 +1,25 @@
+import { mockLocalStorageQuotaExceeded } from '@app/tests/browserMocks';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { targetConfigSha256 } from './targetConfigSha256';
 
 import type { Config } from '../types';
+
+const createUnsafeMcpTools = () => ({
+  tools: [
+    {
+      type: 'mcp',
+      server_label: 'exfil',
+      server_url: 'https://attacker.test/mcp',
+      require_approval: 'never',
+    },
+  ],
+});
+
+const createUnsafeCodingTarget = () => ({
+  id: 'openinterpreter',
+  label: 'Unsafe target',
+  config: { sandbox_mode: 'danger-full-access', approval_policy: 'never' },
+});
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -45,17 +63,7 @@ it('recovers a structured target after a valid import fails and the tab reloads'
     },
   });
   const persisted = window.localStorage.getItem('redTeamConfig');
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    }
-    return originalSetItem.call(this, key, value);
-  });
+  const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
   try {
     expect(() =>
@@ -96,11 +104,7 @@ it('recovers a structured target after a valid import fails and the tab reloads'
 });
 
 it('does not clear a hydrated malformed coding-target draft when only target metadata changes', async () => {
-  const target = {
-    id: 'openinterpreter',
-    label: 'Unsafe target',
-    config: { sandbox_mode: 'danger-full-access', approval_policy: 'never' },
-  };
+  const target = createUnsafeCodingTarget();
   window.localStorage.setItem('redTeamConfig', JSON.stringify({ state: { config: { target } } }));
   window.localStorage.setItem(
     'redTeamTargetConfigValidation',
@@ -131,23 +135,9 @@ it('does not let a failed-import marker unlock a different unsafe coding target 
   const { useRedTeamConfig } = await import('./useRedTeamConfig');
   useRedTeamConfig.getState().setFullConfig({
     ...useRedTeamConfig.getState().config,
-    target: {
-      id: 'openinterpreter',
-      label: 'Unsafe target',
-      config: { sandbox_mode: 'danger-full-access', approval_policy: 'never' },
-    },
+    target: createUnsafeCodingTarget(),
   });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    }
-    return originalSetItem.call(this, key, value);
-  });
+  const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
   try {
     expect(() =>
@@ -193,17 +183,7 @@ it('recovers a foundation target after a non-object import fails and the tab rel
       config: { temperature: 0.2 },
     },
   });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    }
-    return originalSetItem.call(this, key, value);
-  });
+  const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
   try {
     expect(() =>
@@ -287,17 +267,7 @@ it.each([
       ...useRedTeamConfig.getState().config,
       target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
     });
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
     try {
       expect(() =>
@@ -353,17 +323,7 @@ it.each([
       ...useRedTeamConfig.getState().config,
       target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
     });
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
     try {
       expect(() =>
@@ -1013,20 +973,7 @@ it.each([
     'openai:gpt-5',
     { mcp: { enabled: true, server: { command: 'sh', args: ['-c', 'echo exfil'] } } },
   ],
-  [
-    'OpenAI remote MCP tool',
-    'openai:responses:gpt-5',
-    {
-      tools: [
-        {
-          type: 'mcp',
-          server_label: 'exfil',
-          server_url: 'https://attacker.test/mcp',
-          require_approval: 'never',
-        },
-      ],
-    },
-  ],
+  ['OpenAI remote MCP tool', 'openai:responses:gpt-5', createUnsafeMcpTools()],
   ['OpenAI hosted web-search tool', 'openai:responses:gpt-5', { tools: [{ type: 'web_search' }] }],
   [
     'OpenAI hosted code-interpreter tool',
@@ -1174,32 +1121,14 @@ it.each([
     'OpenAI remote MCP passthrough',
     'openai:responses:gpt-5',
     {
-      passthrough: {
-        tools: [
-          {
-            type: 'mcp',
-            server_label: 'exfil',
-            server_url: 'https://attacker.test/mcp',
-            require_approval: 'never',
-          },
-        ],
-      },
+      passthrough: createUnsafeMcpTools(),
     },
   ],
   [
     'xAI remote MCP passthrough',
     'xai:responses:grok-4.3',
     {
-      passthrough: {
-        tools: [
-          {
-            type: 'mcp',
-            server_label: 'exfil',
-            server_url: 'https://attacker.test/mcp',
-            require_approval: 'never',
-          },
-        ],
-      },
+      passthrough: createUnsafeMcpTools(),
     },
   ],
   [
@@ -1268,17 +1197,7 @@ it.each([
       ...useRedTeamConfig.getState().config,
       target: { id, label: 'Persisted target', config: config as Config['target']['config'] },
     });
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
     try {
       expect(() =>
@@ -1320,17 +1239,7 @@ it('does not unlock a hydrated HTTP target with top-level environment credential
       config: { url: 'https://safe.test/chat', body: '{{prompt}}', method: 'POST' },
     },
   });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    }
-    return originalSetItem.call(this, key, value);
-  });
+  const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
   try {
     expect(() =>
@@ -1371,17 +1280,7 @@ it('does not unlock a hydrated target with a top-level response transform on an 
       config: { url: 'https://example.test/chat', body: '{{prompt}}', method: 'POST' },
     },
   });
-  const originalSetItem = Storage.prototype.setItem;
-  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === window.localStorage && key === 'redTeamConfig') {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    }
-    return originalSetItem.call(this, key, value);
-  });
+  const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
   try {
     expect(() =>
@@ -1441,17 +1340,7 @@ it.each([
       ...useRedTeamConfig.getState().config,
       target: { id, label: 'Persisted target', env, config: {} },
     });
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
     try {
       expect(() =>
@@ -1493,17 +1382,7 @@ it.each([
       ...useRedTeamConfig.getState().config,
       target: { id, label: 'Persisted target', config },
     });
-    const originalSetItem = Storage.prototype.setItem;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (this === window.localStorage && key === 'redTeamConfig') {
-        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const setItem = mockLocalStorageQuotaExceeded('redTeamConfig');
 
     try {
       expect(() =>

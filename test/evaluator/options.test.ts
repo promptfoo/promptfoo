@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -12,6 +14,21 @@ import { mockApiProvider, mockApiProvider2, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator options and hooks', () => {
+  const maxTimer = 2_147_483_647;
+  const timedSuite = (provider: ApiProvider = mockApiProvider): TestSuite => ({
+    providers: [provider],
+    prompts: [toPrompt('Fixture request')],
+    tests: [{}],
+  });
+
+  function deferredProvider() {
+    let finish!: () => void;
+    const response = new Promise<{ output: string }>((resolve) => {
+      finish = () => resolve({ output: 'fixture response' });
+    });
+    return { provider: { id: () => 'deferred', callApi: () => response }, finish };
+  }
+
   it.each([false, true])(
     'reports completed rows to CI and the caller (timeout=%s)',
     async (timedOut) => {
@@ -32,13 +49,8 @@ describeEvaluator('evaluator options and hooks', () => {
         );
       }
       try {
-        const suite: TestSuite = {
-          providers: [mockApiProvider],
-          prompts: [toPrompt('Fixture request')],
-          tests: [{}],
-        };
         const evaluation = new Eval({});
-        const pending = evaluate(suite, evaluation, {
+        const pending = evaluate(timedSuite(), evaluation, {
           timeoutMs: timedOut ? 10 : 0,
           progressCallback,
         });
@@ -109,15 +121,10 @@ describeEvaluator('evaluator options and hooks', () => {
       const scheduled = vi.spyOn(globalThis, 'setTimeout');
       const otherOption = name === 'timeoutMs' ? 'maxEvalTimeMs' : 'timeoutMs';
       const otherTimeoutMs = 61_337;
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('Fixture request')],
-        tests: [{}],
-      };
       try {
         for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, '100', null]) {
           await expect(
-            evaluate(testSuite, new Eval({}), {
+            evaluate(timedSuite(), new Eval({}), {
               [name]: value,
               [otherOption]: otherTimeoutMs,
               silent: true,
@@ -136,24 +143,16 @@ describeEvaluator('evaluator options and hooks', () => {
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_EVAL_TIMEOUT_MS', '5');
     vi.stubEnv('PROMPTFOO_MAX_EVAL_TIME_MS', '5');
-    let finish!: (value: { output: string }) => void;
-    const provider: ApiProvider = {
-      id: () => 'deferred-fixture',
-      callApi: () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    };
-    const suite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Fixture request')],
-      tests: [{}],
-    };
+    const { provider, finish } = deferredProvider();
     const evaluation = new Eval({});
     try {
-      const pending = evaluate(suite, evaluation, { timeoutMs: 0, maxEvalTimeMs: 0, silent: true });
+      const pending = evaluate(timedSuite(provider), evaluation, {
+        timeoutMs: 0,
+        maxEvalTimeMs: 0,
+        silent: true,
+      });
       await vi.advanceTimersByTimeAsync(20);
-      finish({ output: 'fixture response' });
+      finish();
       await pending;
       expect((await evaluation.toEvaluateSummary()).stats).toMatchObject({
         successes: 1,
@@ -170,28 +169,16 @@ describeEvaluator('evaluator options and hooks', () => {
       vi.useFakeTimers();
       const scheduled = vi.spyOn(globalThis, 'setTimeout');
       const cleared = vi.spyOn(globalThis, 'clearTimeout');
-      let finish!: (value: { output: string }) => void;
-      const provider: ApiProvider = {
-        id: () => 'long-timeout-fixture',
-        callApi: () =>
-          new Promise((resolve) => {
-            finish = resolve;
-          }),
-      };
-      const suite: TestSuite = {
-        providers: [provider],
-        prompts: [toPrompt('Fixture request')],
-        tests: [{}],
-      };
+      const { provider, finish } = deferredProvider();
       const evaluation = new Eval({});
-      const pending = evaluate(suite, evaluation, {
+      const pending = evaluate(timedSuite(provider), evaluation, {
         timeoutMs: 0,
         maxEvalTimeMs: 0,
         silent: true,
-        [name]: 2_147_483_647 + 100,
+        [name]: maxTimer + 100,
       });
-      await vi.advanceTimersByTimeAsync(2_147_483_647 + 50);
-      finish({ output: 'fixture response' });
+      await vi.advanceTimersByTimeAsync(maxTimer + 50);
+      finish();
       await pending;
       expect((await evaluation.toEvaluateSummary()).stats).toMatchObject({
         successes: 1,
@@ -211,17 +198,12 @@ describeEvaluator('evaluator options and hooks', () => {
     const scheduled = vi.spyOn(globalThis, 'setTimeout');
     const cleared = vi.spyOn(globalThis, 'clearTimeout');
     vi.mocked(runExtensionHook).mockRejectedValueOnce(new Error('fixture setup failed'));
-    const suite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Fixture request')],
-      tests: [{}],
-      extensions: ['file://fixture.js'],
-    };
+    const suite = { ...timedSuite(), extensions: ['file://fixture.js'] };
     try {
       await expect(
-        evaluate(suite, new Eval({}), { maxEvalTimeMs: 2_147_483_647 + 100, silent: true }),
+        evaluate(suite, new Eval({}), { maxEvalTimeMs: maxTimer + 100, silent: true }),
       ).rejects.toThrow('fixture setup failed');
-      const deadlineChunk = scheduled.mock.calls.findIndex((call) => call[1] === 2_147_483_647);
+      const deadlineChunk = scheduled.mock.calls.findIndex((call) => call[1] === maxTimer);
       expect(deadlineChunk).toBeGreaterThanOrEqual(0);
       expect(cleared).toHaveBeenCalledWith(scheduled.mock.results[deadlineChunk].value);
     } finally {
@@ -256,10 +238,7 @@ describeEvaluator('evaluator options and hooks', () => {
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Test response')),
     };
 
     const testSuite: TestSuite = {
@@ -317,17 +296,14 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
   });
 
   it('should apply dynamic prompt function config to provider call', async () => {
     const mockDynamicConfigProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Test response')),
     };
 
     const testSuite: TestSuite = {
@@ -372,7 +348,7 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
   });
 
@@ -392,6 +368,16 @@ describeEvaluator('evaluator options and hooks', () => {
 
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if ('suite' in context) {
+        expect(context.suite).not.toBe(testSuite);
+        expect(testSuite).not.toHaveProperty('providerPromptMap');
+        expect(context.suite.providerPromptMap).toEqual(
+          hookName === 'beforeAll' ? { 'test-provider': ['Test prompt {{ var1 }}'] } : {},
+        );
+      }
+      return context;
+    });
     const evalRecord = persisted
       ? await Eval.create({}, testSuite.prompts, { id: randomUUID() })
       : new Eval({});
@@ -404,7 +390,7 @@ describeEvaluator('evaluator options and hooks', () => {
       1,
       [mockExtension],
       'beforeAll',
-      expect.objectContaining({ suite: testSuite }),
+      expect.objectContaining({ suite: expect.objectContaining(testSuite) }),
     );
 
     // Check beforeEach call
@@ -471,9 +457,10 @@ describeEvaluator('evaluator options and hooks', () => {
             response: expect.objectContaining({ output: 'Test output' }),
           }),
         ],
-        suite: testSuite,
+        suite: expect.objectContaining(testSuite),
       }),
     );
+    expect(testSuite).not.toHaveProperty('providerPromptMap');
   });
 
   it('retains an in-memory timeout row for afterAll and summary reads', async () => {
