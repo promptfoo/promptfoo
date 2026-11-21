@@ -831,7 +831,7 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
         if (typeof scenario === 'object' && scenario?.tests) {
           watchSources.push({ tests: scenario.tests, basePath });
         }
-        scenarioBasePaths.push(basePath);
+        scenarioBasePaths.push(path.resolve(basePath));
         scenarios.push(
           typeof scenario === 'object' && scenario?.tests
             ? {
