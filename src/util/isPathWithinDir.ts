@@ -9,6 +9,12 @@ import * as path from 'node:path';
 
 import logger from '../logger';
 
+/** Compare realpath results without folding the case of distinct Windows directories. */
+export function isCanonicalPathWithinDir(filePath: string, dir: string): boolean {
+  const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep;
+  return filePath === dir || filePath.startsWith(prefix);
+}
+
 /**
  * Check if a file path is within a given directory.
  *
@@ -18,34 +24,20 @@ import logger from '../logger';
  */
 export async function isPathWithinDir(filePath: string, dir: string): Promise<boolean> {
   // Validate dir exists first — fail fast on configuration errors
-  let realDirRaw: string;
+  let realDir: string;
   try {
-    realDirRaw = await fs.realpath(dir);
+    realDir = await fs.realpath(dir);
   } catch {
     throw new Error(`Directory does not exist or is inaccessible: ${dir}`);
   }
 
+  const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
   try {
-    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
-    const realTargetRaw = await fs.realpath(absoluteTarget);
-
-    // Windows: compare case-insensitive
-    const realDir = process.platform === 'win32' ? realDirRaw.toLowerCase() : realDirRaw;
-    const realTarget = process.platform === 'win32' ? realTargetRaw.toLowerCase() : realTargetRaw;
-
-    // Equal means the dir itself
-    if (realTarget === realDir) {
-      return true;
-    }
-
-    // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
-    const rel = path.relative(realDir, realTarget);
-    return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+    return isCanonicalPathWithinDir(await fs.realpath(absoluteTarget), realDir);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.
     // This allows writes to create new files in valid directories.
     if (error.code === 'ENOENT') {
-      const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
       const parentDir = path.dirname(absoluteTarget);
 
       // Stop recursion if we've reached root

@@ -3,7 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isPathWithinDir } from '../../src/util/isPathWithinDir';
+import { isCanonicalPathWithinDir, isPathWithinDir } from '../../src/util/isPathWithinDir';
+
+it('distinguishes canonical siblings even when only their case differs', () => {
+  const root = path.parse(process.cwd()).root;
+  const file = path.join(root, 'Eval', 'report.txt');
+  expect(isCanonicalPathWithinDir(file, root)).toBe(true);
+  expect(isCanonicalPathWithinDir(file, path.join(root, 'eval'))).toBe(false);
+  expect(isCanonicalPathWithinDir(file, path.join(root, 'Eva'))).toBe(false);
+});
 
 describe('isPathWithinDir', () => {
   let testRoot: string;

@@ -366,31 +366,21 @@ describe('HttpProvider structured multipart requests', () => {
     ).rejects.toBe(error);
   });
 
-  it('honors cancellation while resolving a local file', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-abort-'));
-    tempDirs.push(tempDir);
-    const filePath = path.join(tempDir, 'report.txt');
-    fs.writeFileSync(filePath, 'fixture');
-    const previousBasePath = cliState.basePath;
-    cliState.basePath = tempDir;
+  it('aborts without waiting for path resolution or reading a file', async () => {
     const controller = new AbortController();
-    const realpath = fs.promises.realpath;
-    vi.spyOn(fs.promises, 'realpath').mockImplementationOnce(async (...args) => {
-      const resolved = await realpath(...args);
-      controller.abort();
-      return resolved;
-    });
-    try {
-      await expect(
-        renderHttpMultipartBody(
-          { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: filePath } }] },
-          {},
-          controller.signal,
-        ),
-      ).rejects.toMatchObject({ name: 'AbortError' });
-    } finally {
-      cliState.basePath = previousBasePath;
-    }
+    const realpath = vi
+      .spyOn(fs.promises, 'realpath')
+      .mockReturnValueOnce(new Promise<never>(() => {}));
+    const read = vi.spyOn(fs.promises, 'readFile');
+    const upload = renderHttpMultipartBody(
+      { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: 'report.txt' } }] },
+      {},
+      controller.signal,
+    );
+    expect(realpath).toHaveBeenCalled();
+    controller.abort();
+    await expect(upload).rejects.toMatchObject({ name: 'AbortError' });
+    expect(read).not.toHaveBeenCalled();
   });
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {

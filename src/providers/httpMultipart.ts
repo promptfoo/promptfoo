@@ -9,8 +9,9 @@ import {
   HttpPathFileSourceSchema as PathFileSourceSchema,
   HttpMultipartConfigSchema as PortableHttpMultipartConfigSchema,
 } from '../contracts/providerConfig/httpMultipart';
-import { isPathWithinDir } from '../util/isPathWithinDir';
+import { isCanonicalPathWithinDir } from '../util/isPathWithinDir';
 import { getNunjucksEngine } from '../util/templates';
+import { waitForPromiseWithAbort } from './shared';
 import { decodeUrlComponent } from './urlEncoding';
 
 export const HttpMultipartConfigSchema = PortableHttpMultipartConfigSchema;
@@ -220,8 +221,11 @@ async function loadFilePart(
   const basePath = cliState.basePath || process.cwd();
   const renderedPath = renderTemplate(source.path, vars);
   const resolvedPath = resolvePath(renderedPath);
-  const canonicalPath = await fs.realpath(resolvedPath);
-  if (!(await isPathWithinDir(canonicalPath, basePath))) {
+  const [canonicalPath, canonicalBase] = await waitForPromiseWithAbort(
+    Promise.all([fs.realpath(resolvedPath), fs.realpath(basePath)]),
+    abortSignal,
+  );
+  if (!isCanonicalPathWithinDir(canonicalPath, canonicalBase)) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
   const buffer = await fs.readFile(canonicalPath, { signal: abortSignal });
