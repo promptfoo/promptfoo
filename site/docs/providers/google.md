@@ -288,7 +288,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | `generateContent`                                             | Chat, multimodal input, structured output, thinking, tools, and [speech output](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) |
 | `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                     |
 | Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
-| Interactions API                                              | File transcription, Gemini 4 Argon and Hydrogen, Gemini Omni video, and Gemini Robotics ER                                                                |
+| Interactions API                                              | File transcription, Gemini 4 Argon and Hydrogen, Gemini Omni video, Gemini Robotics ER, and [managed agents](#gemini-managed-agents)                      |
 | [Decisions API](#gemini-decisions-api)                        | Yes/no probabilities, classifications, and ordered scores through `google:decisions:gemini-decision-1`                                                    |
 | Video generation                                              | Gemini Omni uses Interactions (`google:gemini-omni-1.1-flash`). For Veo, use the Vertex long-running prediction API (`vertex:video:`).                    |
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
@@ -371,6 +371,49 @@ To run the same text-grading assertions with TypeSafe Jev or OpenAI Decisions, c
 - `classifier` accepts `config.instructions` and `config.labels`. Use a list of label strings or a map of labels to descriptions. Use `null` for a label that needs no description. The assertion compares the probability of its requested label with its own `threshold`.
 
 For direct evaluations, Gemini and Jev use question IDs as keys in both `config.questions` and `output`, with question types `noul`, `choice`, and `score`. OpenAI takes an ordered question list, calls its yes/no question a `predicate`, and exposes the ordered answers through `JSON.parse(output).answers`. Each API has its own criteria format. See the [TypeSafe Jev provider](./typesafe.md) and [OpenAI Decisions provider](./openai-decisions.md) for examples.
+
+### Gemini managed agents
+
+Google's [managed agents](https://ai.google.dev/gemini-api/docs/agents) run multi-step tasks through the Interactions API. Use `google:interactions:agent:<agent-id>` with a Gemini API key; Vertex AI is not supported on this route.
+
+| Provider ID                                                   | Agent                                                                                                                                                  |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `google:interactions:agent:deep-research-preview-04-2026`     | [Deep Research](https://ai.google.dev/gemini-api/docs/deep-research): plans, searches, reads, and writes a cited report                                |
+| `google:interactions:agent:deep-research-max-preview-04-2026` | Deep Research Max: more searching and reading for comprehensive reports                                                                                |
+| `google:interactions:agent:antigravity-preview-09-2026`       | [Antigravity](https://ai.google.dev/gemini-api/docs/antigravity-agent): runs code, manages files, and browses the web in a Google-hosted Linux sandbox |
+
+A custom agent created with Google's Agents API uses its own ID, for example `google:interactions:agent:data-analyst`.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: google:interactions:agent:deep-research-preview-04-2026
+    config:
+      maxPollTimeMs: 1800000
+      agentConfig:
+        visualization: 'off'
+
+prompts:
+  - 'List the release dates of the three most recent Gemini 4 models with sources.'
+```
+
+Promptfoo starts each task with `background: true` and polls it until it finishes. The output is the text of the final report. `metadata` includes `interactionId`, `status`, `citations`, `toolCallCounts`, `groundingToolCount` (Google Search requests), and, for sandboxed agents, `environmentId`.
+
+| Option                  | Default                | Description                                                                                                                                                                                                                |
+| ----------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agentConfig`           | None                   | Sent as `agent_config` with Google's field names, such as `thinking_summaries`, `visualization`, and `collaborative_planning` for Deep Research, or `model` and `max_total_tokens` for Antigravity. Promptfoo adds `type`. |
+| `environment`           | `remote` (Antigravity) | `remote` for a new sandbox, an existing environment ID, or an environment object with sources and network rules. Custom agents must set it.                                                                                |
+| `pollIntervalMs`        | `10000`                | Time between status checks.                                                                                                                                                                                                |
+| `maxPollTimeMs`         | `3600000`              | How long to wait for the task. Deep Research runs for at most 60 minutes.                                                                                                                                                  |
+| `previousInteractionId` | None                   | Continue a stored interaction, for example to approve a Deep Research plan.                                                                                                                                                |
+| `passthrough`           | None                   | Additional request fields, such as `tools` with `google_search`, `url_context`, `code_execution`, `file_search`, or `mcp_server`.                                                                                          |
+
+Model options such as `generationConfig`, `temperature`, `systemInstruction`, and `responseSchema` do not apply to agents.
+
+Promptfoo sends each task request only once. If the request fails without a response, or the task does not finish within `maxPollTimeMs`, Promptfoo returns an error that includes the interaction ID instead of starting another billed task. A task that exceeds `maxPollTimeMs` keeps running; retrieve it with `GET https://generativelanguage.googleapis.com/v1beta/interactions/<interaction-id>`. If you cancel the eval while Promptfoo is waiting for a task, Promptfoo cancels that interaction. Agent responses are not cached, so every run starts a new task.
+
+An `incomplete` status, such as an Antigravity task that reaches `max_total_tokens`, returns the partial text with `metadata.status: incomplete`. Continue it with `previousInteractionId` and `environment: <metadata.environmentId>`. Promptfoo rejects `function` and `computer_use` tools because it does not answer `requires_action` responses. Deep Research does not support structured output.
+
+Google bills agents at the token rates of the underlying Gemini model, plus tool fees. Promptfoo prices Antigravity usage at the `agentConfig.model` rates, or at Gemini 4 Hydrogen rates for `antigravity-preview-09-2026`, its documented default. Google does not name the model behind Deep Research, and the response does not include it, so Deep Research `cost` is undefined unless you set `inputCost` and `outputCost`. Google estimates $1–$3 per Deep Research task and $3–$7 per Deep Research Max task. Reported costs exclude Google Search fees: 5,000 free requests per month across Gemini 3 and newer models, then $14 per 1,000 requests. See [agent pricing](https://ai.google.dev/gemini-api/docs/pricing#pricing-for-agents).
 
 ## Available Models
 
