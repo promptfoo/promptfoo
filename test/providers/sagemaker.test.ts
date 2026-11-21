@@ -67,6 +67,51 @@ describe('SageMakerCompletionProvider', () => {
     vi.restoreAllMocks();
   });
 
+  describe('config validation warning', () => {
+    it('does not log an exception thrown by a config accessor', () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const config = {
+        modelType: 'custom' as const,
+        get accessKeyId(): string {
+          throw new Error('synthetic-accessor-secret');
+        },
+      };
+      new SageMakerCompletionProvider('test-endpoint', { config });
+      expect(warnSpy).toHaveBeenCalledWith('Error validating SageMaker config');
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('synthetic-accessor-secret');
+    });
+
+    it('logs the validation problem without attaching the rejected config', () => {
+      const secretAccessKey = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+      const sessionToken = 'FwoGZXIvYXdzEXAMPLESESSIONTOKEN1234567890';
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          modelType: 'custom',
+          region: 'us-east-1',
+          accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+          secretAccessKey,
+          sessionToken,
+          // The strict schema rejects unknown fields, which can hold arbitrary secrets.
+          unknownOption: 'invalid-config-value-sentinel',
+        } as any,
+      });
+
+      const warningCall = warnSpy.mock.calls.find(([message]) =>
+        String(message).startsWith('Error validating SageMaker config'),
+      );
+      expect(warningCall).toBeDefined();
+      expect(warningCall).toHaveLength(1);
+      const [message] = warningCall!;
+      expect(message).toContain('unknownOption');
+      expect(message).not.toContain('invalid-config-value-sentinel');
+      expect(message).not.toContain(secretAccessKey);
+      expect(message).not.toContain(sessionToken);
+      expect(message).not.toContain('AKIAIOSFODNN7EXAMPLE');
+    });
+  });
+
   describe('cache flag behavior', () => {
     it('should set cached flag when returning cached response from callApi', async () => {
       const mockCachedResponse = {
