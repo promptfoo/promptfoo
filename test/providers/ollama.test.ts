@@ -1453,9 +1453,202 @@ describe('OllamaChatProvider', () => {
   });
 });
 
+describe('Ollama prompt config', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const providers = [
+    {
+      kind: 'completion',
+      Provider: OllamaCompletionProvider,
+      data: '{"response":"hi","done":true}\n',
+    },
+    {
+      kind: 'chat',
+      Provider: OllamaChatProvider,
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+    },
+  ];
+
+  const promptContext = (config: Record<string, unknown>): CallApiContextParams => ({
+    prompt: { raw: 'test prompt', label: 'test prompt', config },
+    vars: {},
+  });
+
+  const requestBody = (callIndex = 0) =>
+    JSON.parse(vi.mocked(fetchWithCache).mock.calls[callIndex][1]?.body as string);
+
+  it.each(providers)(
+    'lets the prompt config override the $kind provider config for one call',
+    async ({ Provider, data }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+      const provider = new Provider('llama3.3', {
+        config: { temperature: 0.8, num_predict: 64, think: true },
+      });
+
+      // A prompt function's returned `config` and `tests[].options` both arrive here.
+      await provider.callApi(
+        'test prompt',
+        promptContext({ num_predict: 3, think: false, format: 'json' }),
+      );
+      await provider.callApi('test prompt', promptContext({}));
+
+      expect(requestBody(0).options).toEqual({ temperature: 0.8, num_predict: 3 });
+      expect(requestBody(0).think).toBe(false);
+      expect(requestBody(0).format).toBe('json');
+      expect(requestBody(1).options).toEqual({ temperature: 0.8, num_predict: 64 });
+      expect(requestBody(1).think).toBe(true);
+      expect(requestBody(1).format).toBeUndefined();
+      expect(provider.config).toEqual({ temperature: 0.8, num_predict: 64, think: true });
+    },
+  );
+
+  it.each(providers)(
+    'omits a $kind provider setting the prompt config sets to undefined',
+    async ({ Provider, data }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+      const provider = new Provider('llama3.3', { config: { temperature: 0.8, think: true } });
+
+      // Same contract as the other providers' prompt config overrides (for example Groq).
+      await provider.callApi(
+        'test prompt',
+        promptContext({ temperature: undefined, think: undefined }),
+      );
+
+      expect(requestBody().options).toEqual({});
+      expect(requestBody()).not.toHaveProperty('think');
+    },
+  );
+
+  it.each(providers)(
+    'does not send the prompt suffix to the $kind endpoint',
+    async ({ Provider, data }) => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+
+      // --prompt-prefix/--prompt-suffix and tests[].options.prefix/suffix are already
+      // part of the prompt text. Sent on, `suffix` would switch /api/generate into
+      // fill-in-the-middle mode and draw an endpoint warning on /api/chat.
+      await new Provider('llama3.3').callApi(
+        'Before. test prompt After.',
+        promptContext({ prefix: 'Before. ', suffix: ' After.' }),
+      );
+      const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+
+      expect(requestBody()).not.toHaveProperty('suffix');
+      expect(requestBody()).not.toHaveProperty('prefix');
+      expect(requestBody().options).toEqual({});
+      expect(warnings.filter((w) => w.includes('does not accept'))).toHaveLength(0);
+    },
+  );
+
+  it('keeps a fill-in-the-middle suffix set in the completion provider config', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createStreamResponse('{"response":"hi","done":true}\n'),
+    );
+    const provider = new OllamaCompletionProvider('qwen2.5-coder', {
+      config: { suffix: '\n    return total' },
+    });
+
+    await provider.callApi('def add(a, b):', promptContext({ suffix: ' After.' }));
+
+    expect(requestBody().suffix).toBe('\n    return total');
+  });
+
+  it.each(providers)(
+    'does not report promptfoo test options as dropped $kind config',
+    async ({ Provider, data }) => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+
+      // The CLI's defaultTest.options always carries prefix, suffix and provider (unset
+      // unless --prompt-prefix, --prompt-suffix or --grader is passed), and graders and
+      // transforms are common test options.
+      await new Provider('llama3.3').callApi(
+        'test prompt',
+        promptContext({
+          prefix: undefined,
+          suffix: undefined,
+          provider: 'openai:gpt-5-mini',
+          transform: 'output.trim()',
+          storeOutputAs: 'answer',
+          runSerially: true,
+          // Added to every test's options when redteam.graderExamples is set.
+          redteamGraderExamples: [{ output: 'No.', pass: true, score: 1, reason: 'Refused' }],
+        }),
+      );
+      const droppedCalls = debugSpy.mock.calls.filter((c) =>
+        String(c[0]).includes('Ignoring unsupported config keys'),
+      );
+
+      expect(droppedCalls).toHaveLength(0);
+      expect(requestBody().options).toEqual({});
+      expect(requestBody()).not.toHaveProperty('provider');
+      expect(requestBody()).not.toHaveProperty('redteamGraderExamples');
+    },
+  );
+
+  it.each(providers)(
+    'still reports a prompt config key $kind does not know',
+    async ({ Provider, data }) => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+
+      // An OpenAI key in a prompt config shared across providers.
+      await new Provider('llama3.3').callApi('test prompt', promptContext({ max_tokens: 99 }));
+      const dropped = debugSpy.mock.calls.find((c) =>
+        String(c[0]).includes('Ignoring unsupported config keys'),
+      );
+
+      expect(dropped?.[1]).toMatchObject({ dropped: ['max_tokens'] });
+      expect(requestBody().options).toEqual({});
+    },
+  );
+});
+
 describe('Ollama provider tracing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it.each([
+    {
+      operation: 'completion',
+      Provider: OllamaCompletionProvider,
+      data: '{"response":"hi","done":true}\n',
+    },
+    {
+      operation: 'chat',
+      Provider: OllamaChatProvider,
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+    },
+  ])('records prompt config overrides in $operation spans', async ({ Provider, data }) => {
+    const attributes: Record<string, unknown> = {};
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: createAttributeRecordingSpan(attributes),
+    } as any);
+
+    try {
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+
+      await new Provider('llama3.3', { config: { temperature: 0.8, num_predict: 64 } }).callApi(
+        'test prompt',
+        {
+          prompt: { raw: 'test prompt', label: 'test prompt', config: { num_predict: 3 } },
+          vars: {},
+        },
+      );
+
+      expect(attributes['gen_ai.request.max_tokens']).toBe(3);
+      expect(attributes['gen_ai.request.temperature']).toBe(0.8);
+    } finally {
+      getTracer.mockRestore();
+    }
   });
 
   it.each([
