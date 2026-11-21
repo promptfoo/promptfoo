@@ -15,7 +15,7 @@ keywords:
 
 # CI/CD Integration for LLM Evaluation and Security
 
-Integrate promptfoo into your CI/CD pipelines to automatically evaluate prompts, test for security vulnerabilities, and ensure quality before deployment. This guide covers modern CI/CD workflows for both quality testing and security scanning.
+Run Promptfoo evals and red team tests in CI/CD to check prompt changes and security regressions before deployment.
 
 ## Why CI/CD for LLM Apps?
 
@@ -123,7 +123,7 @@ if (( $(echo "$PASS_RATE < 95" | bc -l) )); then
 fi
 ```
 
-See [assertions and metrics](/docs/configuration/expected-outputs) for comprehensive validation options.
+See [assertions and metrics](/docs/configuration/expected-outputs) for available checks.
 
 ## Platform-Specific Guides
 
@@ -323,7 +323,7 @@ steps:
 
 ### 3. Scheduled Security Scans
 
-Run comprehensive security scans on a schedule:
+Run red team scans on a schedule:
 
 ```yaml
 # GitHub Actions

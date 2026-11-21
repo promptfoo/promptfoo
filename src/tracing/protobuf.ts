@@ -11,70 +11,27 @@ import protobuf from 'protobufjs';
 import { getDirectory } from '../esm';
 import logger from '../logger';
 
-// Cached protobuf root
-let protoRoot: protobuf.Root | null = null;
-let ExportTraceServiceRequest: protobuf.Type | null = null;
+let exportRequestType: Promise<protobuf.Type> | undefined;
 
-/**
- * Get the path to the proto files directory.
- * This works correctly in both development (tsx) and production (bundled) environments.
- */
-function getProtoDir(): string {
-  // getDirectory() returns the src/ or dist/src/ directory
-  // Proto files are in src/tracing/proto/ or dist/src/tracing/proto/
-  return path.join(getDirectory(), 'tracing', 'proto');
+async function loadExportTraceServiceRequestType(): Promise<protobuf.Type> {
+  logger.debug('[Protobuf] Loading OTLP proto definitions');
+  // getDirectory() points at src/ in development and dist/src/ in packaged builds.
+  const protoDir = path.join(getDirectory(), 'tracing', 'proto');
+  logger.debug(`[Protobuf] Proto directory: ${protoDir}`);
+  const root = new protobuf.Root();
+  root.resolvePath = (_origin: string, target: string) => path.join(protoDir, target);
+  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
+  const type = root.lookupType('opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest');
+  logger.debug('[Protobuf] Successfully loaded OTLP proto definitions');
+  return type;
 }
 
-/**
- * Load and cache the OTLP proto definitions
- */
-async function loadProtoDefinitions(): Promise<protobuf.Root> {
-  if (protoRoot) {
-    return protoRoot;
-  }
-
-  logger.debug('[Protobuf] Loading OTLP proto definitions');
-
-  const protoDir = getProtoDir();
-  logger.debug(`[Protobuf] Proto directory: ${protoDir}`);
-
-  try {
-    // Create a new Root with the proto directory as the include path
-    // This allows imports like "opentelemetry/proto/trace/v1/trace.proto" to resolve correctly
-    const root = new protobuf.Root();
-
-    // Configure the root to resolve imports from the proto directory
-    root.resolvePath = (_origin: string, target: string) => {
-      // Always resolve imports relative to the proto root directory
-      return path.join(protoDir, target);
-    };
-
-    // Load the main trace service proto which imports the others
-    await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-
-    protoRoot = root;
-    logger.debug('[Protobuf] Successfully loaded OTLP proto definitions');
-    return protoRoot;
-  } catch (error) {
+function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
+  return (exportRequestType ??= loadExportTraceServiceRequestType().catch((error) => {
+    exportRequestType = undefined;
     logger.error(`[Protobuf] Failed to load proto definitions: ${error}`);
     throw error;
-  }
-}
-
-/**
- * Get the ExportTraceServiceRequest message type
- */
-async function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
-  if (ExportTraceServiceRequest) {
-    return ExportTraceServiceRequest;
-  }
-
-  const root = await loadProtoDefinitions();
-  ExportTraceServiceRequest = root.lookupType(
-    'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-  );
-
-  return ExportTraceServiceRequest;
+  }));
 }
 
 /**
@@ -180,20 +137,6 @@ interface Long {
 }
 
 /**
- * Convert a Long or number to a JavaScript number
- */
-export function longToNumber(value: Long | number | undefined): number {
-  if (value === undefined) {
-    return 0;
-  }
-  if (typeof value === 'number') {
-    return value;
-  }
-  // It's a Long object
-  return value.toNumber();
-}
-
-/**
  * Convert a Uint8Array to a hex string
  */
 export function bytesToHex(bytes: Uint8Array | undefined, expectedLength: number): string {
@@ -250,14 +193,4 @@ export async function encodeExportTraceServiceRequest(
     logger.error(`[Protobuf] Failed to encode ExportTraceServiceRequest: ${error}`);
     throw new Error(`Invalid trace data: ${error instanceof Error ? error.message : error}`);
   }
-}
-
-/**
- * Initialize the protobuf loader (preload proto definitions)
- * Call this at startup for faster first request handling
- */
-export async function initializeProtobuf(): Promise<void> {
-  await loadProtoDefinitions();
-  await getExportTraceServiceRequestType();
-  logger.debug('[Protobuf] Protobuf decoder initialized');
 }

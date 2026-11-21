@@ -1,12 +1,14 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
 import type {
   EvalTableDTO,
+  EvaluateSummaryV2,
   EvaluateTable,
   EvaluateTableOutput,
   PromptMetrics,
@@ -39,6 +41,22 @@ const baseMetrics: Omit<PromptMetrics, 'namedScores'> = {
   tokenUsage: {},
   namedScoresCount: {},
 };
+
+async function loadTable(table: EvaluateTable, config?: ResultsFile['config'], version?: number) {
+  vi.mocked(callApi).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ table, config, version, totalCount: table.body.length }),
+  } as Response);
+  await useTableStore.getState().fetchEvalData('fixture');
+}
+
+async function loadResultsFile(file: ResultsFile) {
+  const table =
+    file.version && file.version >= 4
+      ? convertResultsToTable(file)
+      : (file.results as EvaluateSummaryV2).table;
+  await loadTable(table, file.config, file.version);
+}
 
 // Helper function to compute available metrics (mimics the store's computeAvailableMetrics)
 function computeAvailableMetrics(table: EvaluateTable | null): string[] {
@@ -388,7 +406,7 @@ describe('useTableStore', () => {
       ];
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile({
+        await loadResultsFile({
           version: 4,
           config: {
             redteam: {
@@ -783,7 +801,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual([]);
     });
 
-    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', async () => {
+    it('should not populate strategy options when fetchEvalData receives non-redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -799,7 +817,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+        await loadResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
@@ -808,7 +826,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toBeUndefined();
     });
 
-    it('should populate strategy options when setTableFromResultsFile receives redteam config', async () => {
+    it('should populate strategy options when fetchEvalData receives redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -826,7 +844,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+        await loadResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
@@ -1119,6 +1137,75 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('commits a foreground page before refreshing it and keeps that page if the refresh fails', async () => {
+      let finishPage!: (response: Response) => void;
+      vi.mocked(callApi)
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finishPage = resolve;
+            }),
+        )
+        .mockResolvedValueOnce({ ok: false } as Response);
+
+      const store = useTableStore.getState();
+      const page = store.fetchEvalData('eval', { pageIndex: 1 });
+      const refresh = store.fetchEvalData('eval', { pageIndex: 1, skipLoadingState: true });
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(useTableStore.getState().isFetching).toBe(true);
+      finishPage({
+        ok: true,
+        json: async () => ({
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [{ vars: ['page 2'], outputs: [], test: {} }],
+          },
+          totalCount: 120,
+          filteredCount: 120,
+        }),
+      } as Response);
+      await Promise.all([page, refresh]);
+
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(useTableStore.getState().table?.body[0].vars).toEqual(['page 2']);
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
+    it('does not let a delayed background refresh overwrite a newly selected page', async () => {
+      const response = (marker: string) =>
+        ({
+          ok: true,
+          json: async () => ({
+            table: {
+              head: { prompts: [], vars: [] },
+              body: [{ vars: [marker], outputs: [], test: {} }],
+            },
+            totalCount: 120,
+            filteredCount: 120,
+          }),
+        }) as Response;
+      let finishRefresh!: (response: Response) => void;
+      vi.mocked(callApi)
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finishRefresh = resolve;
+            }),
+        )
+        .mockResolvedValueOnce(response('page 3'));
+
+      const refresh = useTableStore
+        .getState()
+        .fetchEvalData('eval', { pageIndex: 1, skipLoadingState: true });
+      await useTableStore.getState().fetchEvalData('eval', { pageIndex: 2 });
+      finishRefresh(response('page 2'));
+      await refresh;
+
+      expect(useTableStore.getState().table?.body[0].vars).toEqual(['page 3']);
+      expect(useTableStore.getState().activeEvalQuery?.options.pageIndex).toBe(2);
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';
@@ -1730,8 +1817,8 @@ describe('useTableStore', () => {
     });
   });
 
-  describe('setTableFromResultsFile', () => {
-    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", async () => {
+  describe('fetchEvalData results-file fixtures', () => {
+    it("should set `filters.options.strategy` to only include 'basic' when `fetchEvalData` is called with a resultsFile that has no strategies defined", async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1748,7 +1835,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1773,14 +1860,14 @@ describe('useTableStore', () => {
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(resultsFile);
+        await loadResultsFile(resultsFile);
       });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['strategy1', 'strategy2', 'basic']);
     });
 
-    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', async () => {
+    it('should populate `filters.options.severity` with the correct severities in order when `fetchEvalData` is called with a resultsFile containing redteam plugins with defined severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1802,7 +1889,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1837,7 +1924,7 @@ describe('useTableStore', () => {
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1849,7 +1936,7 @@ describe('useTableStore', () => {
       ]);
     });
 
-    it('should set `userRatedResultsCount` to the correct value when `setTableFromResultsFile` is called with a results file containing user-rated outputs', async () => {
+    it('should set `userRatedResultsCount` to the correct value when `fetchEvalData` is called with a results file containing user-rated outputs', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {},
@@ -1930,7 +2017,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2234,7 +2321,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2261,7 +2348,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2286,7 +2373,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2311,7 +2398,7 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'jailbreak']);
     });
 
-    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', async () => {
+    it('should populate plugin options when resultsFile redteam plugins are string IDs (fetchEvalData)', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: { redteam: { strategies: [], plugins: ['pii', 'bias'] } },
@@ -2322,7 +2409,7 @@ describe('useTableStore', () => {
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
@@ -2342,7 +2429,7 @@ describe('useTableStore', () => {
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();

@@ -52,6 +52,7 @@ function request(route) {
 
 let server;
 let serverLog = '';
+let modelAuditStub;
 try {
   assert.notEqual(process.getuid(), 0, 'The final image must run as its non-root user');
   const manifest = require('./package.json');
@@ -201,6 +202,16 @@ def call_api(prompt, options, context):
     });
   }
 
+  // pip puts CLIs such as modelaudit in the non-root user's script directory.
+  const userScripts = path.join(run('python3', ['-m', 'site', '--user-base']), 'bin');
+  const stub = path.join(userScripts, 'modelaudit');
+  fs.mkdirSync(userScripts, { recursive: true });
+  fs.writeFileSync(stub, '#!/bin/sh\necho "modelaudit, version 0.0.0-smoke"\n', {
+    mode: 0o755,
+    flag: 'wx',
+  });
+  modelAuditStub = stub;
+
   server = spawn('node', ['dist/src/server/index.js'], {
     cwd: app,
     env: { ...env, API_PORT: '3000', HOST: '127.0.0.1' },
@@ -262,6 +273,9 @@ def call_api(prompt, options, context):
     assert.equal(result.error, undefined);
   }
   assert.equal((await request('/api/results/missing-eval')).status, 404);
+  const modelAudit = await (await request('/api/model-audit/check-installed')).json();
+  assert.equal(modelAudit.installed, true, 'Server must find CLIs installed with pip by the user');
+  assert.equal(modelAudit.version, '0.0.0-smoke');
 
   if (process.env.PROMPTFOO_TEST_PRODUCTION_DEPS === '1') {
     for (const dependency of ['vitest', '@docusaurus/core', '@testing-library/react']) {
@@ -273,7 +287,7 @@ def call_api(prompt, options, context):
       {
         version,
         native: ['libsql', 'sharp'],
-        server: 'health, UI JS/CSS, persisted eval, missing eval',
+        server: 'health, UI JS/CSS, persisted eval, missing eval, pip-installed CLI',
         evals: summaries,
       },
       null,
@@ -290,6 +304,9 @@ def call_api(prompt, options, context):
     } finally {
       clearTimeout(forceKill);
     }
+  }
+  if (modelAuditStub) {
+    fs.rmSync(modelAuditStub, { force: true });
   }
   fs.rmSync(temporaryDir, { recursive: true, force: true });
 }

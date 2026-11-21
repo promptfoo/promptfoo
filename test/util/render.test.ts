@@ -90,6 +90,29 @@ describe('renderVarsInObject', () => {
     });
   });
 
+  it('preserves own __proto__ keys through provider config and runtime rendering', () => {
+    const input = { ['__proto__']: { text: '{{ env.TEST_ENV_VAR }} {{ variable }}' } };
+    const config = renderEnvOnlyInObject(input, { TEST_ENV_VAR: 'Hello' });
+    const rendered = renderVarsInObject(config, { variable: 'world' });
+
+    expect(Object.getPrototypeOf(rendered)).toBe(Object.prototype);
+    expect(Object.hasOwn(rendered, '__proto__')).toBe(true);
+    expect(rendered.__proto__.text).toBe('Hello world');
+  });
+
+  it('keeps inherited enumerable config values through provider config and runtime rendering', () => {
+    const input = Object.assign(Object.create({ temperature: 0, label: '{{ variable }}' }), {
+      seed: 1,
+    });
+    const config = renderEnvOnlyInObject(input, {});
+    expect(config).toEqual({ seed: 1, temperature: 0, label: '{{ variable }}' });
+    expect(renderVarsInObject(input, { variable: 'world' })).toEqual({
+      seed: 1,
+      temperature: 0,
+      label: 'world',
+    });
+  });
+
   it('should handle function objects by calling them with vars', async () => {
     const mockFunction = vi.fn().mockReturnValue({ result: '{{ value }}' });
     const vars = { value: 'function_result' };
