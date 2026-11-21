@@ -9,13 +9,9 @@ A false positive is a reported vulnerability that is not actually a violation. A
 
 ## Understanding How the Grader Makes Decisions
 
-When you run a red team scan against a target, Promptfoo evaluates the results and determines whether the output passes or fails. These results are determined by a model, `gpt-5` by default.
+When you run a red team scan against a target, Promptfoo evaluates its outputs against the configured assertions. Model-graded assertions use the configured grading provider and the application context supplied with the test.
 
-A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
-
-Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the vulnerabilities results, which determines the severity of findings and details about remediations.
-
-Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs that are more impactful or higher risk. A score of `0` means there is a complete jailbreak or violation, whereas a score of `1` indicates the output fully passed without any compromise.
+**PASS** and **FAIL** describe the grader's verdict. Scores range from 0 to 1 and can reflect partial credit. A provider failure or malformed response can produce an **error**. Track severity and remediation separately from the verdict.
 
 ## Your Role in Ensuring Accurate Results
 
@@ -57,15 +53,7 @@ When you provide vague descriptions like the one above, the grader lacks the nec
 
 #### In Promptfoo Enterprise
 
-Plugin-specific examples can be used for advanced grading. Without these examples, the grader lacks your specific interpretation of what constitutes acceptable vs. unacceptable outputs.
-
-Within Promptfoo Enterprise, you should customize the grader at the plugin level by providing clear examples of what you consider passing and failing outputs, along with your reasoning.
-
-The more detailed your examples, the better the grader can align with your expectations.
-
-<div align="center">
-  <img src="/img/docs/grading/customize_grader.png" alt="Customize grader" width="900" />
-</div>
+Follow the [Enterprise false-positive tuning workflow](/docs/enterprise/customization/#tune-false-positives) for target context, custom instructions, saved examples, and document review. To reuse a manual correction in later runs, save a grading example.
 
 #### In Open Source
 
