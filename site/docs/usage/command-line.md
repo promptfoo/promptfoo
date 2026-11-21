@@ -99,7 +99,9 @@ Without `--env-file`, promptfoo loads `.env` from the current directory if it ex
 
 ## `promptfoo eval`
 
-By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
+The `eval` command reads `promptfooconfig.yaml` from the current directory. CLI result cells show assertion groups and their child statuses before the response, including each group’s score and threshold. These details use the existing `--table-cell-max-length` limit.
+
+Use the following options to override configuration settings:
 
 | Option                               | Description                                                                                                                                                                           |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
