@@ -1,4 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
 import { Severity } from '@promptfoo/redteam/constants';
@@ -307,6 +308,12 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   activeEvalQuery: EvalTableQuery | null;
   isFetching: boolean;
+  tableError: { status?: number } | null;
+  tableSource: {
+    apiBaseUrl: string | undefined;
+    evalId: string;
+    comparisonEvalIds: string[];
+  } | null;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -554,14 +561,25 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tableSource: null,
+    tableError: null,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
      * are not updated.
      */
     setTable: (table: EvaluateTable | null) => {
+      if (!table) {
+        foregroundEvalRequest = null;
+      }
       set((prevState) => ({
         table,
+        ...(!table && {
+          activeEvalQuery: null,
+          tableSource: null,
+          tableError: null,
+          isFetching: false,
+        }),
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -635,13 +653,11 @@ export const useTableStore = create<TableState>()(
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
       // Cancel any existing metadata keys request and reset state for new eval
-      const currentState = get();
-      if (currentState.currentMetadataKeysRequest) {
-        currentState.currentMetadataKeysRequest.abort();
-      }
+      get().currentMetadataKeysRequest?.abort();
 
       set({
         activeEvalQuery: query,
+        tableError: null,
         isFetching: skipLoadingState ? get().isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
@@ -689,8 +705,8 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        // Remove the origin as it was only added to satisfy the URL constructor.
-        const resp = await callApi(url.toString().replace(window.location.origin, ''));
+        const { apiBaseUrl } = useApiConfig.getState();
+        const resp = await callApi(url.pathname + url.search);
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
@@ -708,6 +724,7 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => ({
             table: data.table,
+            tableSource: { apiBaseUrl, evalId: id, comparisonEvalIds },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
@@ -737,11 +754,15 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
+        set((state) =>
+          state.activeEvalQuery === query ? { tableError: { status: resp.status } } : state,
+        );
         return null;
       } catch (error) {
         console.error('Error fetching eval data:', error);
         if (get().activeEvalQuery === query) {
           set({
+            tableError: {},
             isStreaming: false,
             metadataKeysLoading: false,
             currentMetadataKeysRequest: null,

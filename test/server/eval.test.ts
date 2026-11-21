@@ -88,6 +88,66 @@ describe('eval routes', () => {
     return payload;
   }
 
+  describe('comparison dataset validation', () => {
+    it.each([undefined, 'csv', 'json'])(
+      'rejects incompatible datasets for %s tables',
+      async (format) => {
+        const base = await EvalFactory.create();
+        const comparison = await Eval.create(
+          { tests: [{ vars: { input: 'different fixture' } }] },
+          [],
+        );
+        testEvalIds.add(base.id);
+        testEvalIds.add(comparison.id);
+        const response = await api.get(`/api/eval/${base.id}/table`).query({
+          comparisonEvalIds: comparison.id,
+          ...(format ? { format } : {}),
+        });
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ error: 'Comparison evals must use the same dataset' });
+      },
+    );
+
+    it.each([undefined, 'csv', 'json'])(
+      'compares matching datasets for %s tables',
+      async (format) => {
+        const base = await EvalFactory.create();
+        const comparison = await EvalFactory.create();
+        testEvalIds.add(base.id);
+        testEvalIds.add(comparison.id);
+        const response = await api.get(`/api/eval/${base.id}/table`).query({
+          comparisonEvalIds: comparison.id,
+          ...(format ? { format } : {}),
+        });
+        expect(response.status).toBe(200);
+        if (!format) {
+          expect(response.body.table.head.prompts).toHaveLength(2);
+        }
+      },
+    );
+
+    it('derives the dataset ID of a legacy import from its tests', async () => {
+      const legacy = await EvalFactory.createOldResult();
+      const comparison = await Eval.create({ tests: legacy.config.tests }, []);
+      testEvalIds.add(legacy.id);
+      testEvalIds.add(comparison.id);
+      const response = await api.get(`/api/eval/${legacy.id}/table`).query({
+        comparisonEvalIds: comparison.id,
+      });
+      expect(response.status).toBe(200);
+    });
+
+    it('rejects a missing comparison without returning a partial table', async () => {
+      const base = await EvalFactory.create();
+      testEvalIds.add(base.id);
+      const response = await api
+        .get(`/api/eval/${base.id}/table`)
+        .query({ comparisonEvalIds: 'deleted-eval' });
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Comparison eval not found' });
+    });
+  });
+
   describe('POST /', () => {
     it('returns 500 when v4 prompt persistence fails', async () => {
       const createSpy = vi.spyOn(Eval, 'create');

@@ -359,7 +359,7 @@ describe('Eval', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(queryByText('404 Eval not found')).toBeInTheDocument();
+    expect(queryByText('Unable to load evaluation. Please try again.')).toBeInTheDocument();
     expect(queryByText('Waiting for eval data')).not.toBeInTheDocument();
   });
 
@@ -878,12 +878,11 @@ describe('Eval', () => {
     const firstGate = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
-    baseMockTableStore.fetchEvalData.mockImplementation(async (id: string) => {
-      fetchStarts.push(id);
-      if (fetchStarts.length === 1) {
-        await firstGate;
-      }
-      return { table: mockTable, config: {}, totalCount: 0, filteredCount: 0 };
+    baseMockTableStore.fetchEvalData.mockResolvedValue({
+      table: mockTable,
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
     });
 
     render(
@@ -893,6 +892,15 @@ describe('Eval', () => {
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Let the route's initial fetch finish before testing socket-event ordering.
+    baseMockTableStore.fetchEvalData.mockImplementation(async (id: string) => {
+      fetchStarts.push(id);
+      if (fetchStarts.length === 1) {
+        await firstGate;
+      }
+      return { table: mockTable, config: {}, totalCount: 0, filteredCount: 0 };
     });
 
     const handler = mockSocketHandlers.get('update');
