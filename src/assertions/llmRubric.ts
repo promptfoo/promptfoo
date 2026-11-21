@@ -1,7 +1,7 @@
-import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
+import { matchesLlmRubric } from '../matchers/llmGrading';
 import { matchesVideoRubric } from '../matchers/rubric';
-import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
+import { finalizeGradedAssertion } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -39,19 +39,11 @@ export const handleLlmRubric = async ({
     providerCallContext,
   );
 
-  if (isGraderFailure(resp)) {
-    return { ...resp, assertion };
-  }
-
-  const score = inverse ? invertScore(resp.score) : resp.score;
-  return {
-    ...resp,
-    pass: resp.pass !== inverse,
-    score,
-  };
+  return finalizeGradedAssertion(resp, assertion, inverse);
 };
 
 export const handleVideoRubric = async ({
+  resolveVideo,
   assertion,
   inverse,
   renderedValue,
@@ -89,20 +81,12 @@ export const handleVideoRubric = async ({
 
   const result = await matchesVideoRubric(
     renderedValue ?? '',
-    video,
+    resolveVideo,
     grading,
     test.vars,
     resultAssertion,
     providerCallContext,
   );
 
-  if (isGraderFailure(result)) {
-    return result;
-  }
-
-  return {
-    ...result,
-    pass: result.pass !== inverse,
-    score: inverse ? invertScore(result.score) : result.score,
-  };
+  return finalizeGradedAssertion(result, resultAssertion, inverse);
 };

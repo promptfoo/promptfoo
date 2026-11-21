@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Classify and score CI failures
+
+prompts:
+  - '{{log}}'
+
+providers:
+  - id: openai:decisions:gpt-6-luna
+    config:
+      questions:
+        - type: choice
+          name: category
+          instructions: Classify the cause of this CI failure.
+          choices:
+            - value: compile
+              description: Source code fails compilation or type checking
+            - value: test
+              description: A test runs and reports a failed assertion
+            - value: infrastructure
+              description: The runner or its dependencies fail independently of the source code
+        - type: predicate
+          name: infrastructure_failure
+          instructions: Infrastructure caused this failure, rather than a source-code error or failed test assertion.
+        - type: score
+          name: impact
+          instructions: How much does this failure prevent CI from validating the change?
+          levels:
+            - label: Routine
+              description: Validation completed with only an advisory warning
+            - label: Degraded
+              description: Some validation completed, but part of the checks failed
+            - label: Blocked
+              description: The pipeline cannot validate the change
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const answer = JSON.parse(output).answers[0];
+        return answer.type === 'choice' && answer.choice === context.vars.expectedCategory;
+    - type: javascript
+      value: |
+        const answer = JSON.parse(output).answers[1];
+        return answer.type === 'predicate' && (context.vars.expectedInfrastructure
+          ? answer.probability >= 0.8
+          : answer.probability <= 0.2);
+    - type: javascript
+      value: |
+        const answer = JSON.parse(output).answers[2];
+        return answer.type === 'score' && answer.score >= 0 && answer.score <= 2;
+
+tests:
+  - vars:
+      log: 'TypeScript compilation failed: src/index.ts(12,3): error TS2322: Type string is not assignable to type number.'
+      expectedCategory: compile
+      expectedInfrastructure: false
+  - vars:
+      log: 'The CI runner lost its network connection before checkout. No source code was compiled and no tests were run. The runner service reports a regional outage.'
+      expectedCategory: infrastructure
+      expectedInfrastructure: true

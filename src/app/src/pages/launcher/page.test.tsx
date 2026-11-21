@@ -14,25 +14,23 @@ import LauncherPage from './page';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { Mock } from 'vitest';
 
-const mockFetch = vi.fn();
-
 const mockLocalStorage = {
   getItem: vi.fn(),
   removeItem: vi.fn(),
   setItem: vi.fn(),
 };
 
+const healthData = { status: 'unknown', message: null };
 let mockMatchMedia: ReturnType<typeof installMatchMedia>;
 
-const renderLauncher = () => {
-  return render(
-    <TooltipProvider delayDuration={0}>
-      <MemoryRouter>
-        <LauncherPage />
-      </MemoryRouter>
-    </TooltipProvider>,
-  );
-};
+const renderLauncher = () =>
+  render(<LauncherPage />, {
+    wrapper: ({ children }) => (
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </TooltipProvider>
+    ),
+  });
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn().mockReturnValue({
@@ -44,11 +42,10 @@ vi.mock('@app/hooks/useApiHealth', () => ({
 
 describe('LauncherPage', () => {
   beforeEach(() => {
-    mockFetch.mockReset();
+    healthData.status = 'unknown';
     mockLocalStorage.getItem.mockReset();
     mockLocalStorage.removeItem.mockReset();
     mockLocalStorage.setItem.mockReset();
-    mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
     mockBrowserProperty(window, 'localStorage', mockLocalStorage as unknown as Storage);
     mockMatchMedia = installMatchMedia();
   });
@@ -153,17 +150,17 @@ describe('LauncherPage', () => {
     });
   });
 
-  it('should call checkHealth every 2 seconds after the initial 3-second delay', async () => {
+  it('polls after startup and cancels pending redirects on disconnect and unmount', () => {
     const timers = useTestTimers();
 
     const checkHealthMock = vi.fn();
     (useApiHealth as Mock).mockReturnValue({
-      data: { status: 'unknown', message: null },
+      data: healthData,
       refetch: checkHealthMock,
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    renderLauncher();
+    const view = renderLauncher();
 
     timers.advanceBy(3000);
     expect(checkHealthMock).toHaveBeenCalledTimes(1);
@@ -173,5 +170,17 @@ describe('LauncherPage', () => {
 
     timers.advanceBy(2000);
     expect(checkHealthMock).toHaveBeenCalledTimes(3);
+
+    const pollingTimers = timers.getTimerCount();
+    healthData.status = 'connected';
+    view.rerender(<LauncherPage />);
+    expect(timers.getTimerCount()).toBe(pollingTimers + 1);
+    healthData.status = 'blocked';
+    view.rerender(<LauncherPage />);
+    expect(timers.getTimerCount()).toBe(pollingTimers);
+    healthData.status = 'connected';
+    view.rerender(<LauncherPage />);
+    view.unmount();
+    expect(timers.getTimerCount()).toBe(0);
   });
 });

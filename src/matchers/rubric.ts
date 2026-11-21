@@ -5,19 +5,15 @@ import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
-import { DEFAULT_VIDEO_GRADING_PROMPT } from '../prompts/grading';
+import { DEFAULT_VIDEO_GRADING_PROMPT, VIDEO_EVIDENCE_INSTRUCTION } from '../prompts/grading';
 import { getDefaultProviders, getDefaultVideoGradingProvider } from '../providers/defaults';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
-import {
-  resolveVideoBytes,
-  VIDEO_INLINE_LIMIT_BYTES,
-  videoResolutionErrorMessage,
-} from '../util/video';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
@@ -25,6 +21,7 @@ import { graderFail, normalizeMatcherTokenUsage } from './shared';
 import type {
   ApiProvider,
   Assertion,
+  AssertionParams,
   CallApiContextParams,
   GradingConfig,
   GradingResult,
@@ -35,6 +32,7 @@ import type {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
+const VIDEO_INLINE_LIMIT_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const GRADING_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
@@ -166,7 +164,7 @@ export async function renderLlmRubricPrompt(
 }
 
 type MultimodalPromptPart =
-  | { type: 'text'; text: string }
+  | { type?: 'text'; text: string }
   | { type: 'input_audio'; input_audio: { data: string; format: 'wav' | 'mp3' } }
   | { type: 'image_url'; image_url: { url: string } }
   | { type: 'input_text'; text: string }
@@ -937,42 +935,43 @@ function graderFailureFromResponse(
   return failure;
 }
 
-function gradingOutcome(
-  parsed: Partial<GradingResult>,
-  configuredThreshold: number | string | undefined,
-  video: boolean,
-): Pick<GradingResult, 'pass' | 'score' | 'reason'> {
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+function deriveVerdictFromGrader(
+  parsed: { pass?: unknown; score?: unknown },
+  threshold: number | undefined,
+): { pass: boolean; score: number } | undefined {
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
+  // Without an explicit verdict, only a finite numeric score can be graded.
+  // Reject malformed values as grader errors so negation cannot make them pass.
+  if (parsed.pass === undefined || parsed.pass === null) {
+    const score =
+      typeof parsed.score === 'number'
+        ? parsed.score
+        : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+          ? Number(parsed.score)
+          : NaN;
+    if (!Number.isFinite(score)) {
+      return undefined;
+    }
+    return { pass: hasThreshold ? score >= threshold : score > 0, score };
   }
 
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
+  let pass =
+    typeof parsed.pass === 'boolean'
+      ? parsed.pass
+      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  const numericScore = Number(parsed.score);
+  const score =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : Number.isFinite(numericScore)
+        ? numericScore
+        : Number(pass);
 
-  const threshold =
-    typeof configuredThreshold === 'string' ? Number(configuredThreshold) : configuredThreshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+  if (hasThreshold) {
     pass = pass && score >= threshold;
   }
-
-  const thresholdFailed =
-    typeof threshold === 'number' && Number.isFinite(threshold) && score < threshold;
-  const reason =
-    video && thresholdFailed
-      ? `Score ${score} below threshold ${threshold}`
-      : parsed.reason ||
-        (video
-          ? pass
-            ? 'Video grading passed'
-            : 'Video grading failed'
-          : pass
-            ? 'Grading passed'
-            : `Score ${score} below threshold ${threshold}`);
-
-  return { pass, score, reason };
+  return { pass, score };
 }
 
 export async function runJsonGradingPrompt({
@@ -987,7 +986,7 @@ export async function runJsonGradingPrompt({
   vars,
   images,
   audio,
-  video,
+  resolveVideo,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -1001,13 +1000,13 @@ export async function runJsonGradingPrompt({
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
-  video?: Awaited<ReturnType<typeof resolveVideoBytes>>;
+  resolveVideo?: AssertionParams['resolveVideo'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
 
-  const defaultProviders = video ? undefined : await getDefaultProviders();
-  const defaultProvider = video
+  const defaultProviders = resolveVideo ? undefined : await getDefaultProviders();
+  const defaultProvider = resolveVideo
     ? grading.provider
       ? null
       : getDefaultVideoGradingProvider()
@@ -1023,10 +1022,29 @@ export async function runJsonGradingPrompt({
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
+  if (resolveVideo && !/^(google|vertex):(?:chat:)?gemini(?:-|$)/i.test(finalProvider.id())) {
+    return graderFail('video-rubric requires a Gemini grader on Google AI Studio or Vertex AI');
+  }
+  // Reserve room for base64 before reading the stored file. The provider also checks the wire body.
+  const maxBytes = Math.floor((VIDEO_INLINE_LIMIT_BYTES - 1) / 4) * 3;
+  const video =
+    resolveVideo &&
+    (await resolveVideo(maxBytes).catch(() => ({ error: 'Failed to resolve managed video' })));
+  if (video && 'error' in video) {
+    return graderFail(video.error);
+  }
+  if (video && video.buffer.length > maxBytes) {
+    return graderFail('Video and rubric exceed the 20 MiB video-grading request budget');
+  }
   const providerPrompt = video
     ? appendMediaToChatPrompt(
         renderedPrompt,
-        [{ inlineData: { mimeType: video.mimeType, data: video.buffer.toString('base64') } }],
+        [
+          ...(rubricPrompt === DEFAULT_VIDEO_GRADING_PROMPT
+            ? []
+            : [{ text: VIDEO_EVIDENCE_INSTRUCTION }]),
+          { inlineData: { mimeType: video.mimeType, data: video.buffer.toString('base64') } },
+        ],
         'google',
       )
     : mediaPrompt;
@@ -1040,10 +1058,15 @@ export async function runJsonGradingPrompt({
     vars,
     providerCallContext,
     providerPromptConfig,
-  );
+  ).catch((error): ProviderResponse => {
+    if (!video) {
+      throw error;
+    }
+    getProviderCallExecutionContext()?.abortSignal?.throwIfAborted();
+    return { error: 'Video grading provider returned an error' };
+  });
   if (resp.error || !resp.output) {
     if (video) {
-      logger.debug('[VideoRubric] Grading provider returned an error', { error: resp.error });
       return graderFailureFromResponse(
         resp.error
           ? 'Video grading provider returned an error'
@@ -1061,7 +1084,26 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  const { pass, score, reason } = gradingOutcome(parsed, assertion?.threshold, Boolean(video));
+  const threshold =
+    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+
+  const verdict = deriveVerdictFromGrader(parsed, threshold);
+  if (!verdict) {
+    return graderFailureFromResponse(
+      'Grader response contained neither a pass verdict nor a finite numeric score',
+      resp,
+    );
+  }
+  const { pass, score } = verdict;
+
+  const belowThreshold = `Score ${score} below threshold ${threshold}`;
+  let reason = parsed.reason || (pass ? 'Grading passed' : belowThreshold);
+  if (video) {
+    reason =
+      threshold !== undefined && Number.isFinite(threshold) && score < threshold
+        ? belowThreshold
+        : parsed.reason || (pass ? 'Video grading passed' : 'Video grading failed');
+  }
 
   let responseMetadata: Record<string, unknown> = {};
   if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
@@ -1094,7 +1136,7 @@ export async function runJsonGradingPrompt({
 
 export async function matchesVideoRubric(
   rubric: string | object,
-  video: NonNullable<ProviderResponse['video']>,
+  resolveVideo: AssertionParams['resolveVideo'],
   grading?: GradingConfig,
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
@@ -1105,18 +1147,17 @@ export async function matchesVideoRubric(
       'Cannot grade video without grading config. Specify --grader option or grading config.',
     );
   }
-  let resolved;
-  try {
-    resolved = await resolveVideoBytes(video, providerCallContext?.evaluationId);
-  } catch (error) {
-    logger.debug('[VideoRubric] Failed to resolve managed video', { error });
-    return { ...graderFail(videoResolutionErrorMessage(error)), assertion };
+  if (!resolveVideo) {
+    return {
+      ...graderFail('Video grading requires a trusted blob from this evaluation result'),
+      assertion,
+    };
   }
   const result = await runJsonGradingPrompt({
     assertion,
     grading,
     providerCallContext,
-    video: resolved,
+    resolveVideo,
     defaultPrompt: DEFAULT_VIDEO_GRADING_PROMPT,
     label: 'video-rubric',
     checkName: 'video-rubric check',

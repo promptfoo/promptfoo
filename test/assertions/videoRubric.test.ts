@@ -29,7 +29,8 @@ function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams
     outputString: 'test output',
     test,
     providerResponse,
-    providerCallContext: {} as any,
+    providerCallContext: { prompt: { raw: '', label: '' }, vars: {} },
+    resolveVideo: vi.fn(),
     ...overrides,
   };
 }
@@ -93,7 +94,7 @@ describe('handleVideoRubric', () => {
 
     expect(matchesVideoRubric).toHaveBeenCalledWith(
       'test rubric',
-      expect.objectContaining({ blobRef }),
+      params.resolveVideo,
       expect.any(Object),
       expect.any(Object),
       expect.any(Object),
@@ -131,7 +132,7 @@ describe('handleVideoRubric', () => {
 
     expect(matchesVideoRubric).toHaveBeenCalledWith(
       rubricObject,
-      expect.objectContaining({ url: 'https://example.com/video.mp4' }),
+      params.resolveVideo,
       expect.any(Object),
       expect.any(Object),
       expect.any(Object),
@@ -171,7 +172,7 @@ describe('handleVideoRubric', () => {
 
     expect(matchesVideoRubric).toHaveBeenCalledWith(
       '',
-      expect.any(Object),
+      params.resolveVideo,
       expect.objectContaining({ rubricPrompt: 'Custom rubric from options' }),
       expect.any(Object),
       expect.any(Object),
@@ -208,7 +209,7 @@ describe('handleVideoRubric', () => {
     expect(params.test.options?.rubricPrompt).toBe(rubricPrompt);
     expect(matchesVideoRubric).toHaveBeenCalledWith(
       '',
-      expect.any(Object),
+      params.resolveVideo,
       expect.objectContaining({ rubricPrompt: JSON.stringify(rubricPrompt) }),
       expect.any(Object),
       expect.objectContaining({ value: JSON.stringify(rubricPrompt) }),
@@ -265,6 +266,7 @@ describe('handleVideoRubric', () => {
       score: 0,
       reason: 'grader failed',
       metadata: { graderError: true },
+      assertion: { type: 'not-video-rubric', value: 'test rubric' },
     });
   });
 });

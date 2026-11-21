@@ -33,6 +33,10 @@ vi.mock('../src/cache', () => ({
     set: vi.fn(),
     wrap: vi.fn((_key: any, fn: any) => fn()),
   })),
+  isCacheEnabled: vi.fn(() => true),
+  withCacheEnabled: vi.fn(async (_enabled: boolean | undefined, fn: () => Promise<unknown>) =>
+    fn(),
+  ),
   withCacheNamespace: vi.fn(async (_namespace: string | undefined, fn: () => Promise<unknown>) =>
     fn(),
   ),
@@ -46,11 +50,6 @@ vi.mock('../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
-}));
-
-// Mock file operations
-vi.mock('../src/util/file', () => ({
-  readFileCached: vi.fn(() => Promise.resolve('')),
 }));
 
 // Mock evaluator helpers

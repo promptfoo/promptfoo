@@ -53,6 +53,8 @@ describe('blob share authorization', () => {
         id: randomUUID(),
         blobHash: trustedHash,
         evalId,
+        testIdx: 0,
+        promptIdx: 1,
         kind: 'image',
         location: 'response.output',
       },
@@ -85,6 +87,21 @@ describe('blob share authorization', () => {
       .where(inArray(blobReferencesTable.evalId, [evalId, otherEvalId]));
     await db.delete(blobAssetsTable).where(inArray(blobAssetsTable.hash, hashes));
     await db.delete(evalsTable).where(inArray(evalsTable.id, [evalId, otherEvalId]));
+  });
+
+  it('requires classified provenance for the exact result when grading', async () => {
+    await expect(
+      isBlobAllowedForShare(trustedHash, evalId, { testIdx: 0, promptIdx: 1 }),
+    ).resolves.toBe(true);
+    await expect(
+      isBlobAllowedForShare(trustedHash, evalId, { testIdx: 1, promptIdx: 1 }),
+    ).resolves.toBe(false);
+    await expect(
+      isBlobAllowedForShare(trustedHash, evalId, { testIdx: 0, promptIdx: 2 }),
+    ).resolves.toBe(false);
+    await expect(
+      isBlobAllowedForShare(importedHash, evalId, { testIdx: 0, promptIdx: 1 }),
+    ).resolves.toBe(false);
   });
 
   it('allows only trusted references associated with the local eval', async () => {
@@ -472,6 +489,16 @@ describe('bounded blob provider capability', () => {
     resetBlobStorageProvider();
     vi.restoreAllMocks();
   });
+  it('rejects substituted bytes from a bounded reader', async () => {
+    const getByHashBounded = vi.fn().mockResolvedValue({ data: Buffer.from('wrong') });
+    setBlobStorageProvider({
+      providerId: 'custom',
+      getByHashBounded,
+    } as unknown as BlobStorageProvider);
+    await expect(getBlobByHash('a'.repeat(64), 10)).rejects.toThrow('integrity');
+    await expect(getBlobByHash('a'.repeat(64), 2)).rejects.toMatchObject({ code: 'too-large' });
+  });
+
   it('does not fall back to an unbounded custom reader', async () => {
     const getByHash = vi.fn();
     setBlobStorageProvider({ providerId: 'custom', getByHash } as unknown as BlobStorageProvider);

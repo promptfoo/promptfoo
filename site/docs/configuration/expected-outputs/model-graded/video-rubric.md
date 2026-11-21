@@ -22,10 +22,14 @@ or `GEMINI_API_KEY`; `GOOGLE_API_KEY` takes precedence when both are set.
 
 ## Supported video providers
 
-The assertion requires a blob stored for the current evaluation by a trusted provider
-or included in a portable import. Google Veo and Gemini Interactions record this
-provenance when they save generated videos. A copied blob URI alone does not authorize
-grading its contents. The stored MIME type must identify a video.
+Google Veo and Gemini Interactions save generated videos with the evaluation, test, and
+prompt that produced them. All three must match the result being graded. A copied URI
+or an import without result ownership cannot authorize a read. The stored MIME type must
+identify a video.
+
+The grader receives an instruction to treat visuals, text, and speech as untrusted
+evidence. Check high-stakes grades yourself, since models may still follow instructions
+embedded in media.
 
 Sora's legacy `storageRef` output is not supported. External video URLs, including S3
 and cloud-storage URLs, are not downloaded by the assertion. Custom blob adapters must
@@ -33,7 +37,7 @@ implement `getByHashBounded`; adapters without that capability produce a grading
 
 ## Overriding the grading provider
 
-Choose a video-capable Google AI Studio or Vertex AI model:
+Choose a video-capable Gemini model on Google AI Studio or Vertex AI. Other providers are rejected before the video is read.
 
 ```yaml
 assert:
@@ -99,12 +103,6 @@ Use `not-video-rubric` to invert a valid grade. Grading errors remain failures.
 
 See the [video-rubric example](https://github.com/promptfoo/promptfoo/tree/main/examples/video-rubric)
 and the [video evaluation guide](/docs/guides/evaluate-video) for runnable configurations.
-
-## Requirements
-
-- A judge that accepts Google's inline video message format
-- A trusted video blob associated with the evaluation, in storage that supports bounded reads
-- Credentials for generation and grading
 
 ## Further reading
 

@@ -1,12 +1,14 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import * as video from '../../src/blobs/video';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
-import * as video from '../../src/util/video';
 import {
   mockApiProvider,
   mockGradingApiProviderFails,
@@ -36,7 +38,7 @@ describeEvaluator('evaluator assertions', () => {
         },
       });
       const grader: ApiProvider = {
-        id: () => 'fixture-video-grader',
+        id: () => 'google:gemini-fixture',
         callApi: vi
           .fn()
           .mockResolvedValue({ output: { pass: true, score: 1, reason: 'Fixture grade' } }),
@@ -54,7 +56,11 @@ describeEvaluator('evaluator assertions', () => {
       const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
       try {
         await evaluate(suite, evalRecord, { maxConcurrency });
-        expect(resolve).toHaveBeenCalledWith(expect.any(Object), evalRecord.id);
+        expect(resolve).toHaveBeenCalledWith(
+          expect.any(Object),
+          expect.any(Number),
+          expect.objectContaining({ evaluationId: evalRecord.id, testIdx: 0, promptIdx: 0 }),
+        );
         expect((await evalRecord.toEvaluateSummary()).results[0].success).toBe(true);
       } finally {
         resolve.mockRestore();
@@ -84,7 +90,7 @@ describeEvaluator('evaluator assertions', () => {
       };
     });
     const grader: ApiProvider = {
-      id: () => 'fixture-video-grader',
+      id: () => 'google:gemini-fixture',
       callApi: vi.fn(async () => {
         callOrder.push('grader');
         return { output: { pass: true, score: 1, reason: 'Fixture grade' } };
@@ -431,16 +437,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderPasses,
@@ -657,16 +654,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderFails,
