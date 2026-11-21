@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+import { ScanResult, VERSION } from '@openai/codex-security';
 import { satisfies, validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -217,7 +218,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response).toEqual({
-        error: expect.stringContaining('npm install promptfoo @openai/codex-security'),
+        error: expect.stringContaining('npm install promptfoo "@openai/codex-security'),
       });
       expect(response.error).toContain(
         'If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.',
@@ -232,7 +233,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       expect(response.error).toContain('Failed to load @openai/codex-security');
       expect(response.error).toContain('even-numbered Node.js');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security');
+      expect(response.error).toContain('npm install promptfoo "@openai/codex-security');
     });
 
     it('ignores an outdated trusted SDK and loads a compatible Promptfoo installation', async () => {
@@ -316,7 +317,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it.each([...incompatibleSdkVersions, '0.3.0', '1.0.0'])(
+    it.each([...incompatibleSdkVersions, '0.9.0', '1.0.0'])(
       'rejects incompatible security SDK %s',
       async (version) => {
         vi.mocked(importModule).mockResolvedValue({
@@ -329,7 +330,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
         expect(response.error).toContain(`package is incompatible (${version})`);
         const suggestedRange = response.error?.match(
-          /npm install promptfoo @openai\/codex-security@(\S+)/,
+          /npm install promptfoo "@openai\/codex-security@([^"]+)"/,
         )?.[1];
         expect(suggestedRange).toBeDefined();
         expect(validRange(suggestedRange)).not.toBeNull();
@@ -341,6 +342,74 @@ describe('OpenAICodexSecurityProvider', () => {
         expect(mockRun).not.toHaveBeenCalled();
       },
     );
+
+    it('preserves legacy SDK coverage and its saved artifact path', async () => {
+      const result = createScanResult();
+      mockRun.mockResolvedValue(result);
+
+      const response = await new OpenAICodexSecurityProvider().callApi('Scan');
+
+      expect(response.metadata).toMatchObject({
+        coverage: result.coverage,
+        coveragePath: result.coveragePath,
+        manifestPath: result.manifestPath,
+      });
+      expect(response.metadata).not.toHaveProperty('review');
+    });
+
+    it('preserves review exclusions from SDKs that no longer report coverage', async () => {
+      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION });
+      const review = { excludedPaths: ['vendor'] };
+      const result = new ScanResult({
+        manifest: {
+          documentType: 'codex-security.scan-manifest',
+          schemaVersion: '1.0',
+          scan: {
+            id: 'scan-fixture',
+            producer: { name: 'codex-security', version: 'fixture' },
+            status: 'interrupted',
+            startedAt: '2026-01-01T00:00:00Z',
+            completedAt: '2026-01-01T00:00:01Z',
+            sealedAt: '2026-01-01T00:00:01Z',
+            target: { kind: 'directory_snapshot', targetId: 'fixture', displayName: 'fixture' },
+            scope: {
+              includePaths: ['src'],
+              excludePaths: ['vendor'],
+              limitations: ['Interrupted'],
+            },
+            mode: 'repository',
+            review,
+            findingsRef: 'findings.json',
+            artifacts: [
+              { path: 'findings.json', sha256: '0'.repeat(64), mediaType: 'application/json' },
+            ],
+          },
+        },
+        findings: {
+          documentType: 'codex-security.findings',
+          schemaVersion: '1.0',
+          scanId: 'scan-fixture',
+          findings: [],
+        },
+        scanDir: path.join('fixtures', 'security-scan'),
+        threadId: 'fixture-thread',
+        turnResult: {},
+        sarifPath: null,
+      });
+      mockRun.mockResolvedValue(result);
+
+      const response = await new OpenAICodexSecurityProvider().callApi('Scan');
+      expect(response.error).toBeUndefined();
+      expect(response.raw).toEqual(result.toJSON());
+      expect(JSON.parse(response.output as string).manifest.scan).toMatchObject({
+        status: 'interrupted',
+        scope: { limitations: ['Interrupted'] },
+      });
+      expect(response.metadata?.review).toEqual(review);
+      expect(response.metadata?.manifestPath).toBe(result.manifestPath);
+      expect(response.metadata).not.toHaveProperty('coverage');
+      expect(response.metadata).not.toHaveProperty('coveragePath');
+    });
 
     it('reports multiple incompatible trusted SDK versions together', async () => {
       const firstTrustedRoot = path.resolve(getDirectory(), '..');
@@ -361,7 +430,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain(
         `package is incompatible (${incompatibleSdkVersions.slice(0, 2).join(', ')})`,
       );
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security@');
+      expect(response.error).toContain('npm install promptfoo "@openai/codex-security@');
       expect(mockRun).not.toHaveBeenCalled();
     });
 

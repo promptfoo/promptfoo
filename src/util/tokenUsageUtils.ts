@@ -506,6 +506,16 @@ export function accumulateResponseTokenUsage(
   });
 }
 
+export function hasGenerationTokenUsage(usage: TokenUsage): boolean {
+  const observed = (value: unknown) => typeof value === 'number' && value !== 0;
+  return [usage, usage.incurredTokenUsage].some(
+    (part) =>
+      part &&
+      (Object.values(part).some(observed) ||
+        Object.values(part.completionDetails ?? {}).some(observed)),
+  );
+}
+
 /**
  * Record generation-time provider tokens separately from target usage and probes.
  * Returns whether the payload contained observable generation usage.
@@ -523,15 +533,7 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     incurredTokenUsage,
     ...generationUsage
   } = parsed.data;
-  const hasUsage = [generationUsage, incurredTokenUsage].some(
-    (usage) =>
-      usage &&
-      (Object.values(usage).some((value) => typeof value === 'number' && value !== 0) ||
-        Object.values(usage.completionDetails ?? {}).some(
-          (value) => typeof value === 'number' && value !== 0,
-        )),
-  );
-  if (!hasUsage) {
+  if (!hasGenerationTokenUsage(parsed.data)) {
     return false;
   }
   accumulateTokenUsage(target, {
