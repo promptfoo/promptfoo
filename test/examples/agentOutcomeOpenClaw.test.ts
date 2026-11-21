@@ -37,12 +37,14 @@ async function listen(server: Server) {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-async function startProxy(status = 200) {
+async function startProxy(status = 200, replies?: { type: string; body: string }[]) {
   const forwarded = vi.fn();
   const observe = vi.fn();
   const upstream = createServer(async (req, res) => {
     forwarded(await text(req), req.headers.authorization);
-    res.writeHead(status).end('upstream reply');
+    const reply = replies?.shift();
+    res.writeHead(status, { 'content-type': reply?.type ?? 'application/json' });
+    res.end(reply?.body ?? 'upstream reply');
   });
   const proxy = await serveFixture({ read_ticket: {} }, vi.fn(), {
     endpoint: await listen(upstream),
@@ -58,10 +60,31 @@ async function startProxy(status = 200) {
       body: typeof body === 'string' ? body : JSON.stringify(body),
     });
   }
-  return { forwarded, observe, send };
+  return { forwarded, observe, send, finishReason: proxy.finishReason };
 }
 
 describe('OpenClaw inference proxy', () => {
+  it('uses the latest protocol finish reason even with long text, usage trailers and retries', async () => {
+    const sse = (body: string) => ({ type: 'text/event-stream', body });
+    const chunk = (reason: string | null, content = '') =>
+      JSON.stringify({ choices: [{ delta: { content }, finish_reason: reason }] });
+    const replies = [
+      sse(
+        `data: ${chunk(null, 'x'.repeat(70_000))}\n\ndata: ${chunk('length')}\r\n\r\ndata: {"choices":[]}\r\n\r\ndata: [DONE]\r\n\r\n`,
+      ),
+      {
+        type: 'application/json',
+        body: chunk('stop', 'Reply truncated at the model output token limit'),
+      },
+      sse(`data: ${chunk(null, '{"finish_reason":"stop"}')}\n\ndata: [DONE]\n\n`),
+    ];
+    const { send, finishReason } = await startProxy(200, [...replies]);
+    for (const [index, expected] of ['length', 'stop', null].entries()) {
+      expect(await (await send(request)).text()).toBe(replies[index].body);
+      expect(finishReason()).toBe(expected);
+    }
+  });
+
   it.each([200, 503])('relays HTTP %i and records exposure only on success', async (status) => {
     const { send, forwarded, observe } = await startProxy(status);
     const response = await send(request);

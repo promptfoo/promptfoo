@@ -9,6 +9,13 @@ export function getLiteralVarNames(parent: object, field = 'vars'): string[] | u
         ? (parent as Metadata)
         : undefined;
   const names = metadata?.__promptfoo?.literalVars;
+  // Old exports can redact a secret-shaped name in this list while retaining the
+  // original key in vars. Its value must never fall through to file/template loading.
+  if (Array.isArray(names) && names.includes('[REDACTED]') && field in parent) {
+    throw new Error(
+      'Cannot replay redacted literal variable names. Regenerate the test with short variable names.',
+    );
+  }
   return Array.isArray(names) && names.every((name) => typeof name === 'string')
     ? names
     : undefined;
@@ -31,26 +38,4 @@ export function processConfigField(
       keys.includes(name) ? child : processValue(child),
     ]),
   );
-}
-
-/** Keep only metadata required for safe replay after user metadata has been stripped. */
-export function projectOperationalMetadata(
-  metadata: unknown,
-  keepVars: boolean,
-  includeProviderOrigin = false,
-) {
-  const internal = (
-    metadata as { __promptfoo?: { remote?: unknown; providerBasePath?: unknown } } | undefined
-  )?.__promptfoo;
-  const literalVars = keepVars ? getLiteralVarNames({ metadata }) : undefined;
-  const origin =
-    internal?.remote === true
-      ? { remote: true }
-      : includeProviderOrigin && typeof internal?.providerBasePath === 'string'
-        ? { providerBasePath: internal.providerBasePath }
-        : undefined;
-  if (!origin && !literalVars) {
-    return undefined;
-  }
-  return { __promptfoo: { ...origin, ...(literalVars && { literalVars }) } };
 }

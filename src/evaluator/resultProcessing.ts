@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
-import { projectOperationalMetadata } from '../contracts/literalVars';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
@@ -11,6 +10,7 @@ import { safeJsonStringify } from '../util/json';
 import {
   isSecretField,
   mapTestProviderRefs,
+  projectOperationalMetadata,
   REDACTED,
   sanitizeObject,
   stripProviderPromptSelectors,
@@ -223,7 +223,7 @@ export function projectTestCase(
     delete projectedTestCase.providerOutput;
   }
   if (options.stripMetadata) {
-    const metadata = projectOperationalMetadata(testCase.metadata, !options.stripVars);
+    const metadata = projectOperationalMetadata(testCase.metadata, projectedTestCase.vars);
     if (metadata) {
       projectedTestCase.metadata = metadata;
     }

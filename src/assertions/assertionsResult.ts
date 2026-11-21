@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
+import { AGENT_OUTCOME_PLUGINS } from '../contracts/agentOutcomes';
 import { addCompletionDetails } from '../contracts/completionDetails';
 import { getEnvBool } from '../envars';
 import { asGradingResult } from './scriptResultNormalization';
@@ -331,11 +332,6 @@ export class AssertionsResult {
       reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;
     }
 
-    if (this.failedContentSafetyChecks) {
-      pass = true;
-      reason = GUARDRAIL_BLOCKED_REASON;
-    }
-
     // Flatten nested component results, and copy the assertion into the child results.
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
       if (result.componentResults) {
@@ -350,6 +346,18 @@ export class AssertionsResult {
         return result;
       }
     });
+
+    if (this.failedContentSafetyChecks) {
+      // Filtering a reply cannot undo a committed action. Keep the measured failure
+      // (including one inside an assertion set) and report the guardrail separately.
+      const violation = flattenedComponentResults.find(
+        (result) =>
+          !result.pass &&
+          AGENT_OUTCOME_PLUGINS.some((id) => result.assertion?.type === `promptfoo:redteam:${id}`),
+      );
+      pass = !violation;
+      reason = violation?.reason ?? GUARDRAIL_BLOCKED_REASON;
+    }
 
     const normalizedNamedScores: Record<string, number> = Object.fromEntries(
       Object.entries(this.namedScores).map(([key, value]) => [

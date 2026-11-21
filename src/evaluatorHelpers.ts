@@ -244,6 +244,8 @@ function detectMimeFromBase64(base64Data: string): string | null {
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
+ * @param options.literalFunctionResult Treat prompt function output as final when it can contain
+ *                                      generated literal variables.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -252,6 +254,7 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
+  options?: { literalFunctionResult?: boolean },
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
@@ -414,6 +417,11 @@ export async function renderPrompt(
 
         // Merge config if provided
         if (result.config) {
+          if (options?.literalFunctionResult && Object.keys(result.config).length) {
+            throw new Error(
+              'Move dynamic prompt config to static config when using generated literal variables.',
+            );
+          }
           prompt.config = {
             ...(prompt.config || {}),
             ...result.config,
@@ -425,6 +433,11 @@ export async function renderPrompt(
       }
     } else {
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
+    }
+    // The function had access to the raw payload. Rendering its output again could execute
+    // attacker-supplied Nunjucks tags, even inside an otherwise valid JSON prompt.
+    if (options?.literalFunctionResult) {
+      return basePrompt;
     }
   }
 

@@ -4,10 +4,11 @@
  */
 import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
-import { projectOperationalMetadata } from '../contracts/literalVars';
+import { AgentOutcomeCaseSchema } from '../contracts/agentOutcomes';
+import { getLiteralVarNames } from '../contracts/literalVars';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
-import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
+import type { EvalRuntimeOptions, TestCaseWithVarsFile, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -790,6 +791,54 @@ export function stripTestProviderPromptSelectors<T>(test: T): T {
   return mapTestProviderRefs(test, stripProviderPromptSelectors);
 }
 
+/** Keep only metadata required for safe replay after user metadata has been stripped. */
+export function projectOperationalMetadata(
+  metadata: TestCaseWithVarsFile['metadata'],
+  retainedVars: TestCaseWithVarsFile['vars'],
+  includeProviderOrigin = false,
+) {
+  const internal = metadata?.__promptfoo;
+  const literalVars = retainedVars ? getLiteralVarNames({ metadata }) : undefined;
+  // Preserve only the validated assignment already disclosed in the retained vars. Never
+  // promote vars to a trusted assignment or erase a conflicting plugin ID to validate one.
+  const assigned = metadata?.agentOutcome
+    ? AgentOutcomeCaseSchema.safeParse(metadata.agentOutcome)
+    : undefined;
+  const sent =
+    retainedVars && typeof retainedVars === 'object' && !Array.isArray(retainedVars)
+      ? retainedVars.agentOutcome
+      : undefined;
+  const trial = sent ? AgentOutcomeCaseSchema.safeParse(sent) : undefined;
+  const agentOutcome =
+    assigned?.success &&
+    trial?.success &&
+    (metadata?.pluginId === undefined || metadata.pluginId === assigned.data.pluginId) &&
+    deepEqual(assigned.data, trial.data)
+      ? assigned.data
+      : undefined;
+  const limit = metadata?.pluginConfig?.maxCharsPerMessage;
+  const maxCharsPerMessage =
+    agentOutcome && typeof limit === 'number' && Number.isSafeInteger(limit) && limit > 0
+      ? limit
+      : undefined;
+  const origin =
+    internal?.remote === true
+      ? { remote: true }
+      : includeProviderOrigin && typeof internal?.providerBasePath === 'string'
+        ? { providerBasePath: internal.providerBasePath }
+        : undefined;
+  if (!origin && !literalVars && !agentOutcome) {
+    return undefined;
+  }
+  return {
+    ...((origin || literalVars) && {
+      __promptfoo: { ...origin, ...(literalVars && { literalVars }) },
+    }),
+    ...(agentOutcome && { agentOutcome }),
+    ...(maxCharsPerMessage !== undefined && { pluginConfig: { maxCharsPerMessage } }),
+  };
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -876,7 +925,7 @@ export function sanitizeConfigForOutput(
       delete test.vars;
     }
     if (stripMetadata && 'metadata' in test) {
-      const metadata = projectOperationalMetadata(test.metadata, !stripVars, true);
+      const metadata = projectOperationalMetadata(test.metadata, test.vars, true);
       if (metadata) {
         test.metadata = metadata;
       } else {

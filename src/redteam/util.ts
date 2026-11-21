@@ -5,7 +5,13 @@ import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { getErrorTokenUsage } from '../util/tokenUsageUtils';
-import { AgentOutcomeCaseSchema, pluginDescriptions } from './constants';
+import {
+  AGENT_OUTCOME_PLUGINS,
+  AgentOutcomeCaseSchema,
+  getAgentOutcomeCase,
+  MULTI_INPUT_VAR,
+  pluginDescriptions,
+} from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
@@ -24,8 +30,71 @@ import type {
   ApiProvider,
   AtomicTestCase,
   CallApiContextParams,
+  Prompt,
   ProviderResponse,
+  Vars,
 } from '../types/index';
+
+// Both setup UIs build {"field":"{{field}}",...} for targets with declared inputs.
+// An outcome trial already binds its user message to __prompt. Rendering the whole
+// object would put third-party tool content in the user channel of an indirect trial.
+function isMultiInputTemplate(raw: string, inputs: ApiProvider['inputs'], vars: Vars): boolean {
+  let template: unknown;
+  try {
+    template = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!template || typeof template !== 'object' || Array.isArray(template)) {
+    return false;
+  }
+  const entries = Object.entries(template);
+  // Metadata-stripped replays may retain only the trial identity and its variables.
+  return (
+    entries.length > 0 &&
+    (!inputs || entries.length === Object.keys(inputs).length) &&
+    entries.every(([key, value]) => Object.hasOwn(inputs ?? vars, key) && value === `{{${key}}}`)
+  );
+}
+
+function hasAgentOutcomeAssertion(
+  assertion: NonNullable<AtomicTestCase['assert']>[number],
+): boolean {
+  return assertion.type === 'assert-set'
+    ? Boolean(assertion.assert?.some(hasAgentOutcomeAssertion))
+    : AGENT_OUTCOME_PLUGINS.some((id) => assertion.type === `promptfoo:redteam:${id}`);
+}
+
+export function getAgentOutcomePrompt(
+  test: AtomicTestCase,
+  prompt: Prompt,
+  provider: ApiProvider,
+  vars: Vars,
+) {
+  const outcome = getAgentOutcomeCase(test);
+  // Older metadata-stripped exports can retain the assertion and payload without a
+  // trusted assignment. Refuse to dispatch a trial whose measurement cannot be graded.
+  if (!outcome && test.assert?.some(hasAgentOutcomeAssertion)) {
+    throw new Error(
+      '[inconclusive] Missing or invalid agentOutcome case metadata. Regenerate the test.',
+    );
+  }
+  if (!outcome) {
+    return undefined;
+  }
+  let raw = prompt.raw;
+  if (outcome.injectVar === MULTI_INPUT_VAR && !prompt.function) {
+    const inputs = test.metadata?.pluginConfig?.inputs ?? provider.inputs;
+    // The engine retains the original template when adding a task prefix or suffix.
+    const template = prompt.template ?? raw;
+    if (isMultiInputTemplate(template, inputs, vars) && raw.includes(template)) {
+      raw = raw.replaceAll(template, `{{${MULTI_INPUT_VAR}}}`);
+    } else if (template !== raw && isMultiInputTemplate(raw, inputs, vars)) {
+      raw = `{{${MULTI_INPUT_VAR}}}`;
+    }
+  }
+  return { raw, message: outcome.message };
+}
 
 /** Independent trials must never reuse measurements from concurrent requests or earlier runs. */
 export function needsFreshTargetResponse(test: AtomicTestCase): boolean {

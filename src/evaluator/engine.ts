@@ -12,7 +12,9 @@ import {
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { AgentOutcomeCaseSchema } from '../contracts/agentOutcomes';
 import { getLiteralVarNames } from '../contracts/literalVars';
+import { InputsSchema } from '../contracts/shared';
 import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars';
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
@@ -93,6 +95,7 @@ import {
   isNonCredentialHeader,
   isSecretEnvVarName,
   isSecretField,
+  looksLikeSecret,
   REDACTED,
   sanitizeObject,
   sanitizeUrl,
@@ -323,11 +326,8 @@ export function generateVarCombinations(
   for (const key of keys) {
     let values: Array<string | object> = [];
 
-    if (
-      !literalVars?.includes(key) &&
-      typeof vars[key] === 'string' &&
-      vars[key].startsWith('file://')
-    ) {
+    const literal = literalVars?.includes(key);
+    if (!literal && typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
@@ -348,8 +348,8 @@ export function generateVarCombinations(
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
     }
 
-    // Check if it's an array but not a string array
-    if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
+    // A literal array is one payload, even when every item is a string.
+    if (Array.isArray(vars[key]) && (literal || typeof vars[key][0] !== 'string')) {
       values = [vars[key]];
     }
 
@@ -1113,9 +1113,13 @@ async function applyInputTransform(
     return;
   }
 
+  const literalVars = getLiteralVarNames(testCase);
+  // A transform can mutate its input, including nested objects shared with the assigned trial.
+  // Keep the originals for comparison and leave the assignment intact.
+  const inputVars = literalVars?.length ? structuredClone(testCase.vars) : testCase.vars;
   const transformedVars = await transform(
     inputTransform,
-    testCase.vars,
+    inputVars,
     {
       prompt: {},
       uuid: crypto.randomUUID(),
@@ -1127,7 +1131,45 @@ async function applyInputTransform(
     typeof transformedVars === 'object',
     'Transform function did not return a valid object',
   );
-  testCase.vars = { ...testCase.vars, ...transformedVars };
+  const vars = { ...inputVars, ...transformedVars };
+  if (literalVars?.length) {
+    // Arbitrary transforms can derive a value from any input. Only unchanged operator vars
+    // may still be interpreted as files, scripts or templates, including on replay.
+    const names = new Set(literalVars);
+    for (const [name, value] of Object.entries(vars)) {
+      if (
+        !Object.hasOwn(testCase.vars ?? {}, name) ||
+        !isDeepStrictEqual(testCase.vars?.[name], value)
+      ) {
+        // On replay the schema resolver follows $ref before variable loading, and
+        // names from literalVars occur as strings in config metadata. Secret-looking
+        // names are redacted there, leaving the corresponding vars key unprotected.
+        invariant(
+          InputsSchema.keyType.safeParse(name).success &&
+            !Object.hasOwn(Object.prototype, name) &&
+            !looksLikeSecret(name) &&
+            !hasConfigRef(value),
+          'Cannot replay transformVars output with an unsafe variable name or a $ref. Keep the generated content as a literal string under a short, fixed variable name.',
+        );
+        names.add(name);
+      }
+    }
+    testCase.metadata = {
+      ...testCase.metadata,
+      __promptfoo: { ...testCase.metadata?.__promptfoo, literalVars: [...names] },
+    };
+  }
+  testCase.vars = vars;
+}
+
+function hasConfigRef(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return (
+    Object.hasOwn(value, '$ref') || Object.values(value).some((child) => hasConfigRef(child, seen))
+  );
 }
 
 async function buildRunEvalOptions({
@@ -1533,13 +1575,30 @@ function createRunEvalTest(
     options: testOptions,
   };
 
+  // Each dispatch (including prompt/provider columns and repeats) needs a fresh receipt.
+  // Bind the nonce to the persisted assignment too so deferred grading can match it.
+  if (testCase.metadata?.agentOutcome) {
+    const assigned = AgentOutcomeCaseSchema.safeParse(testCase.metadata.agentOutcome);
+    if (assigned.success) {
+      const caseId = crypto.randomUUID();
+      baseTest.metadata = {
+        ...testCase.metadata,
+        agentOutcome: { ...assigned.data, caseId },
+      };
+      const sent = AgentOutcomeCaseSchema.safeParse(vars?.agentOutcome);
+      if (sent.success && sent.data.caseId === assigned.data.caseId) {
+        baseTest.vars = { ...vars, agentOutcome: { ...sent.data, caseId } };
+      }
+    }
+  }
+
   if (!isTracingEnabledForTest(testSuite, testCase)) {
     return baseTest;
   }
   return {
     ...baseTest,
     metadata: {
-      ...testCase.metadata,
+      ...baseTest.metadata,
       tracingEnabled: true,
       evaluationId: evalId,
     },

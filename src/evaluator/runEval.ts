@@ -12,7 +12,7 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
-import { getSessionId, needsFreshTargetResponse } from '../redteam/util';
+import { getAgentOutcomePrompt, getSessionId, needsFreshTargetResponse } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
   withProviderCallExecutionContext,
@@ -408,6 +408,10 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
+  const outcome = getAgentOutcomePrompt(test, promptForRender, provider, vars);
+  if (outcome) {
+    promptForRender.raw = outcome.raw;
+  }
   const literalVars = getLiteralVarNames(test);
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
     ? [getRedteamInjectVar(test, promptForRender, testSuite), ...(literalVars ?? [])]
@@ -418,9 +422,13 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    { literalFunctionResult: Boolean(literalVars?.length) },
   );
-  if (isRedteam) {
-    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+  if (isRedteam || outcome) {
+    const limit =
+      testSuite?.redteam?.maxCharsPerMessage ??
+      (outcome ? test.metadata?.pluginConfig?.maxCharsPerMessage : undefined);
+    throwIfTargetPromptExceedsMaxChars(renderedPrompt, limit, renderedPrompt === outcome?.message);
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
