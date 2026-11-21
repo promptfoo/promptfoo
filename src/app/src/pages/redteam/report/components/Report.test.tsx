@@ -117,11 +117,15 @@ describe('Report filtering logic', () => {
       const passed = variant === 'authorized';
       const row = createComponentMockResult(0, pluginId, passed, passed ? [] : [moderationFailure]);
       row.response = { output: variant };
-      row.testCase = {
-        ...row.testCase,
-        metadata: {
-          pluginId,
-          agentOutcome: { pluginId, variant, mode: 'indirect', caseId: variant },
+      const assigned = { pluginId, variant, mode: 'indirect', caseId: variant };
+      row.testCase.metadata = { pluginId, agentOutcome: assigned };
+      row.gradingResult!.metadata = {
+        agentOutcomeResult: {
+          ...assigned,
+          status: passed ? 'safe' : 'violation',
+          attackExposed: true,
+          taskCompleted: true,
+          reason: 'Measured outcome',
         },
       };
       return row;
@@ -131,7 +135,7 @@ describe('Report filtering logic', () => {
     expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
     const readStats = () =>
       JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[pluginId];
-    const attackStats = { total: 1, pass: 0, passWithFilter: 1, failCount: 1 };
+    const attackStats = { total: 1, pass: 0, passWithFilter: 0, failCount: 1 };
     expect(readStats().attacks).toEqual(attackStats);
     expect(readStrategyStats()).toEqual({ basic: { pass: 0, total: 1, failCount: 1 } });
     expect(readGroups().failuresByPlugin[pluginId]).toHaveLength(2);
@@ -140,6 +144,100 @@ describe('Report filtering logic', () => {
     await userEvent.click(screen.getAllByLabelText('filter results')[0]);
     await userEvent.type(screen.getByPlaceholderText('Search prompts & outputs'), 'attack');
     expect(readStats()).toEqual(attackStats);
+  });
+
+  it.each([false, null])(
+    'keeps a finding with delivery %s outside attack and baseline counts',
+    async (attackExposed) => {
+      const pluginId = 'agentic:private-to-public-disclosure';
+      const row = createComponentMockResult(0, pluginId, false);
+      const assigned = { pluginId, variant: 'attack', mode: 'indirect', caseId: 'leak' };
+      row.metadata = {};
+      row.testCase.metadata = { agentOutcome: assigned };
+      row.gradingResult!.metadata = {
+        agentOutcomeResult: {
+          ...assigned,
+          status: 'violation',
+          attackExposed,
+          taskCompleted: true,
+          reason: 'Disclosed',
+        },
+      };
+      const inconclusive = {
+        ...row,
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: null,
+      };
+      await renderReportData(1, [row, inconclusive]);
+      const stats = JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[
+        pluginId
+      ];
+      expect(stats).toMatchObject({
+        total: 1,
+        failCount: 1,
+        attacks: { total: 0, failCount: 0 },
+        unverifiedFailures: 1,
+      });
+      expect(readGroups().failuresByPlugin[pluginId]).toHaveLength(1);
+      expect(readStrategyStats()).toEqual({});
+      expect(screen.getByRole('alert')).toHaveTextContent('1 agent outcome test with errors');
+    },
+  );
+
+  it('uses stored success and matching target evidence before and after filtering when grades are stripped', async () => {
+    const pluginId = 'coding-agent:consent-bypass';
+    const cases = ['attack', 'attack', 'control', 'control'].map((variant, i) => {
+      const row = createComponentMockResult(0, pluginId, true);
+      const assigned = {
+        pluginId,
+        variant,
+        mode: i % 2 ? 'indirect' : 'direct',
+        caseId: String(i),
+      };
+      row.metadata = {};
+      row.testCase.metadata = { agentOutcome: assigned };
+      row.gradingResult = null;
+      row.response = {
+        output: 'Consent',
+        metadata: {
+          agentOutcomeEvidence: {
+            pluginId,
+            version: 1,
+            caseId: assigned.caseId,
+            attackExposed: true,
+            taskCompleted: true,
+            measurements: {
+              beforeReject: { decision: 'reject', actionId: 'before', collectedActionIds: [] },
+              afterReject: { decision: 'reject', actionId: 'after', collectedActionIds: [] },
+              afterAccept: {
+                decision: 'accept',
+                actionId: 'accept',
+                collectedActionIds: ['accept'],
+              },
+            },
+          },
+        },
+      };
+      return row;
+    });
+    await renderReportData(1, cases);
+    function checkCounts() {
+      const stats = JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[
+        pluginId
+      ];
+      expect(stats).toMatchObject({
+        total: 4,
+        pass: 4,
+        failCount: 0,
+        attacks: { total: 2, pass: 2, failCount: 0 },
+      });
+      expect(readStrategyStats()).toEqual({ basic: { total: 2, pass: 2, failCount: 0 } });
+      expect(readGroups().failuresByPlugin).toEqual({});
+    }
+    checkCounts();
+    await userEvent.click(screen.getAllByLabelText('filter results')[0]);
+    await userEvent.type(screen.getByPlaceholderText('Search prompts & outputs'), 'Consent');
+    checkCounts();
   });
 
   it('links to excluded agent outcome errors for the current target and preserves owner requests', async () => {

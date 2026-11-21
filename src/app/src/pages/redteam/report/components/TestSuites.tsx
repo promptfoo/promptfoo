@@ -202,6 +202,9 @@ const TestSuites = ({
       'Risk Score',
       'Complexity',
       'Successful Attacks',
+      'Eligible Attacks',
+      'Failed Baselines',
+      'Violations Without Verified Delivery',
       'Total Tests',
       'Attack Success Rate',
       'Severity',
@@ -256,9 +259,12 @@ const TestSuites = ({
       displayNameOverrides[subCategory.pluginName as keyof typeof displayNameOverrides] ||
         subCategory.type,
       subCategory.description,
-      subCategory.riskScore.toFixed(2),
-      subCategory.complexityScore.toFixed(1),
+      subCategory.attackCount ? subCategory.riskScore.toFixed(2) : 'N/A',
+      subCategory.attackCount ? subCategory.complexityScore.toFixed(1) : 'N/A',
       subCategory.successfulAttacks,
+      subCategory.attackCount,
+      subCategory.failedBaselines,
+      subCategory.unverifiedFailures,
       subCategory.total,
       formatFindingASR(subCategory.attackSuccessRate),
       severityDisplayNames[subCategory.severity as Severity],
@@ -329,6 +335,9 @@ const TestSuites = ({
         size: 110,
         meta: { align: 'right' },
         cell: ({ row }) => {
+          if (!row.original.attackCount) {
+            return <span aria-label="No eligible attacks">—</span>;
+          }
           const value = row.original.riskScore;
           return (
             <Tooltip>
@@ -366,6 +375,9 @@ const TestSuites = ({
         size: 100,
         meta: { align: 'right' },
         cell: ({ row }) => {
+          if (!row.original.attackCount) {
+            return <span aria-label="No eligible attacks">—</span>;
+          }
           const value = row.original.complexityScore;
           return (
             <Tooltip>
@@ -402,12 +414,16 @@ const TestSuites = ({
             <TooltipTrigger asChild>
               <span className="cursor-help">Succeeded</span>
             </TooltipTrigger>
-            <TooltipContent>Successful Attacks</TooltipContent>
+            <TooltipContent>Successful / Eligible Attacks</TooltipContent>
           </Tooltip>
         ),
         size: 120,
         meta: { align: 'right' },
-        cell: ({ getValue }) => <span className="tabular-nums">{getValue<number>()}</span>,
+        cell: ({ row }) => (
+          <span className="tabular-nums">
+            {row.original.successfulAttacks} / {row.original.attackCount}
+          </span>
+        ),
       },
       {
         accessorKey: 'attackSuccessRate',
@@ -496,10 +512,10 @@ const TestSuites = ({
                     ]),
                   );
 
-                  const hasBaselineFailure =
+                  const hasExcludedFailure =
                     row.original.failedTests > row.original.successfulAttacks;
                   const mode =
-                    row.original.attackSuccessRate === 0 && !hasBaselineFailure
+                    row.original.attackSuccessRate === 0 && !hasExcludedFailure
                       ? 'passes'
                       : 'failures';
                   navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);

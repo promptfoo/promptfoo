@@ -4,6 +4,7 @@ import {
   AGENT_OUTCOME_PLUGINS,
   type categoryAliases,
   categoryAliasesReverse,
+  classifyAgentOutcome,
   getAgentOutcomeCase,
 } from '@promptfoo/redteam/constants';
 import {
@@ -21,6 +22,7 @@ import type { CategoryStats, TestResultStats } from './FrameworkComplianceUtils'
  * This interface aligns with the structure expected by getStrategyIdFromTest and getPluginIdFromResult.
  */
 export interface TestWithMetadata {
+  agentOutcomeClassification?: ReturnType<typeof classifyAgentOutcome>;
   prompt: string;
   output: string;
   gradingResult?: GradingResult;
@@ -32,17 +34,33 @@ export interface TestWithMetadata {
 }
 
 /** All graded trials contribute findings. Attacks supply exploitability metrics. */
-export type FindingStats = Required<TestResultStats> & { attacks?: Required<TestResultStats> };
+export type FindingStats = Required<TestResultStats> & {
+  attacks?: Required<TestResultStats>;
+  unverifiedFailures?: number;
+};
 
 export function getFindingMetrics(stats: FindingStats, description: string) {
   const attacks = stats.attacks ?? stats;
   const successfulAttacks = attacks.total - attacks.pass;
   const failedTests = stats.total - stats.pass;
-  const failedBaselines = failedTests - successfulAttacks;
+  const unverifiedFailures = stats.unverifiedFailures ?? 0;
+  const failedBaselines = failedTests - successfulAttacks - unverifiedFailures;
+  const details = [];
+  if (failedBaselines) {
+    details.push(
+      `${failedBaselines} matched ${failedBaselines === 1 ? 'baseline' : 'baselines'} failed.`,
+    );
+  }
+  if (unverifiedFailures) {
+    details.push(
+      `${unverifiedFailures} ${unverifiedFailures === 1 ? 'violation' : 'violations'} without verified attack delivery.`,
+    );
+  }
   return {
-    description: failedBaselines
-      ? `${failedBaselines} matched ${failedBaselines === 1 ? 'baseline' : 'baselines'} failed. ${description}`
-      : description,
+    description: [...details, description].join(' ').trim(),
+    attackCount: attacks.total,
+    failedBaselines,
+    unverifiedFailures,
     total: stats.total,
     successfulAttacks,
     failedTests,
@@ -58,20 +76,35 @@ export function formatFindingASR(rate: number | null, digits = 2) {
   return rate === null ? 'N/A' : formatASRForDisplay(rate, digits) + '%';
 }
 
+/** The final verdict survives grade stripping. Legacy report files can omit success. */
+export function reportRowPassed(row: EvaluateResult) {
+  return row.success ?? row.gradingResult?.pass === true;
+}
+
 export function flaggedByModeration(grade?: GradingResult | null) {
   return grade?.componentResults?.some(
     (result) => result.assertion?.type === 'moderation' && !result.pass,
   );
 }
 
-export function buildAttackReport<
-  T extends {
-    result?: { testCase?: Parameters<typeof getAgentOutcomeCase>[0] };
-    gradingResult?: GradingResult;
-    // Legacy verdicts can survive even when the grade is incomplete for display.
-    moderationFlagged?: boolean;
-  },
->(
+type OutcomeExample = {
+  /** Allow callers to classify legacy grades before projecting them for display. */
+  agentOutcomeClassification?: ReturnType<typeof classifyAgentOutcome>;
+  result?: Parameters<typeof classifyAgentOutcome>[0];
+  gradingResult?: GradingResult;
+};
+
+export function classifyReportOutcome(test: OutcomeExample, plugin: string) {
+  return (
+    test.agentOutcomeClassification ??
+    classifyAgentOutcome(
+      { ...test.result, gradingResult: test.gradingResult ?? test.result?.gradingResult },
+      plugin,
+    )
+  );
+}
+
+export function buildAttackReport<T extends OutcomeExample>(
   failures: Record<string, T[]>,
   passes: Record<string, T[]>,
   stats: Record<string, Required<TestResultStats>>,
@@ -81,32 +114,39 @@ export function buildAttackReport<
   const passesByPlugin = { ...passes };
   const categoryStats = { ...stats };
   const findingStats: Record<string, FindingStats> = { ...stats };
-  const countsAsAttack = (test: T) => {
-    const variant = getAgentOutcomeCase(test.result?.testCase)?.variant;
-    return !variant || variant === 'attack';
-  };
   for (const plugin of AGENT_OUTCOME_PLUGINS) {
     if (!stats[plugin]) {
       continue;
     }
-    const failed = failures[plugin]?.filter(countsAsAttack) ?? [];
-    const passed = passes[plugin]?.filter(countsAsAttack) ?? [];
+    let unverifiedFailures = 0;
+    const failed = (failures[plugin] ?? []).filter((test) => {
+      const classification = classifyReportOutcome(test, plugin);
+      if (classification === 'unverified') {
+        unverifiedFailures++;
+      }
+      return classification === 'attack';
+    });
+    const passed = (passes[plugin] ?? []).filter(
+      (test) => classifyReportOutcome(test, plugin) === 'attack',
+    );
     const total = failed.length + passed.length;
-    if (total === stats[plugin].total) {
-      continue;
-    }
     failuresByPlugin[plugin] = failed;
     passesByPlugin[plugin] = passed;
     const attacks = {
       total,
       failCount: failed.length,
       pass: passed.length,
-      passWithFilter:
-        passed.length +
-        failed.filter((test) => test.moderationFlagged ?? flaggedByModeration(test.gradingResult))
-          .length,
+      // Filtering the reply cannot undo a measured effect.
+      passWithFilter: passed.length,
     };
-    findingStats[plugin] = { ...stats[plugin], attacks };
+    findingStats[plugin] =
+      total === stats[plugin].total
+        ? attacks
+        : {
+            ...stats[plugin],
+            attacks,
+            ...(unverifiedFailures ? { unverifiedFailures } : {}),
+          };
     if (total) {
       categoryStats[plugin] = attacks;
     } else {
@@ -131,7 +171,7 @@ export function buildAttackReport<
   return { categoryStats, strategyStats, failuresByPlugin, passesByPlugin, findingStats };
 }
 
-export function getStrategyIdFromTest(test: TestWithMetadata): string {
+export function getStrategyIdFromTest(test: Pick<TestWithMetadata, 'result' | 'metadata'>): string {
   // Check metadata directly on test
   if (test.metadata?.strategyId) {
     return test.metadata.strategyId as string;
@@ -147,12 +187,15 @@ export function getStrategyIdFromTest(test: TestWithMetadata): string {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  if (
-    result.metadata?.pluginId &&
-    // Policy plugins are handled separately
-    result.metadata.pluginId !== 'policy'
-  ) {
-    return result.metadata.pluginId as string;
+  const assigned = getAgentOutcomeCase(result.testCase);
+  if (assigned) {
+    return assigned.pluginId;
+  }
+
+  // Policy plugins are handled separately.
+  const id = result.metadata?.pluginId ?? result.testCase?.metadata?.pluginId;
+  if (typeof id === 'string' && id && id !== 'policy') {
+    return id;
   }
 
   const harmCategory = result.vars?.harmCategory || result.metadata?.harmCategory;

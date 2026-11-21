@@ -1,8 +1,12 @@
 import {
   AGENT_OUTCOME_PLUGINS,
+  type AgentOutcomeCase,
   AgentOutcomeCaseSchema,
+  AgentOutcomeEvidenceSchema,
   type AgentOutcomePluginId,
   AgentOutcomePluginIdSchema,
+  AgentOutcomeResultSchema,
+  isAgentOutcomePlugin,
 } from '../../contracts/agentOutcomes';
 
 export * from '../../contracts/agentOutcomes';
@@ -71,4 +75,85 @@ export function getAgentOutcomeCase(test?: {
     message: typeof message === 'string' ? message : undefined,
     artifact: typeof artifact === 'string' ? artifact : undefined,
   };
+}
+
+type OutcomeRow = {
+  testCase?: Parameters<typeof getAgentOutcomeCase>[0];
+  gradingResult?: unknown;
+  response?: { cached?: boolean; metadata?: Record<string, unknown> } | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export function getAgentOutcomeResult(grade: unknown, assigned: AgentOutcomeCase) {
+  if (!grade || typeof grade !== 'object') {
+    return undefined;
+  }
+  const components: unknown[] =
+    'componentResults' in grade && Array.isArray(grade.componentResults)
+      ? grade.componentResults
+      : [];
+  for (const component of [grade, ...components]) {
+    if (!component || typeof component !== 'object' || !('metadata' in component)) {
+      continue;
+    }
+    const assertion = 'assertion' in component ? component.assertion : undefined;
+    if (
+      assertion &&
+      typeof assertion === 'object' &&
+      'type' in assertion &&
+      assertion.type != null &&
+      assertion.type !== `promptfoo:redteam:${assigned.pluginId}`
+    ) {
+      continue;
+    }
+    const metadata = component.metadata;
+    if (!metadata || typeof metadata !== 'object' || !('agentOutcomeResult' in metadata)) {
+      continue;
+    }
+    const result = AgentOutcomeResultSchema.safeParse(metadata.agentOutcomeResult);
+    if (
+      result.success &&
+      result.data.pluginId === assigned.pluginId &&
+      result.data.caseId === assigned.caseId &&
+      result.data.mode === assigned.mode &&
+      result.data.variant === assigned.variant
+    ) {
+      return result.data;
+    }
+  }
+}
+
+export function getAgentOutcomeEvidence(
+  response: OutcomeRow['response'],
+  assigned: AgentOutcomeCase,
+) {
+  const parsed = AgentOutcomeEvidenceSchema.safeParse(response?.metadata?.agentOutcomeEvidence);
+  if (
+    !response?.cached &&
+    parsed.success &&
+    parsed.data.pluginId === assigned.pluginId &&
+    parsed.data.caseId === assigned.caseId
+  ) {
+    return parsed.data;
+  }
+}
+
+/** Classify non-error trials for rate calculations. All failures remain findings. */
+export function classifyAgentOutcome(row: OutcomeRow, pluginId?: string | null) {
+  const assigned = getAgentOutcomeCase(row.testCase);
+  if (!assigned) {
+    const id = pluginId ?? row.metadata?.pluginId ?? row.testCase?.metadata?.pluginId;
+    return typeof id === 'string' && isAgentOutcomePlugin(id) ? 'unverified' : undefined;
+  }
+  if (assigned.variant !== 'attack') {
+    return 'control';
+  }
+
+  // When the viewer strips the grade, only the target's matching observation verifies
+  // delivery. Merged result metadata can include values supplied by the test author.
+  const observed =
+    row.gradingResult == null
+      ? getAgentOutcomeEvidence(row.response, assigned)
+      : getAgentOutcomeResult(row.gradingResult, assigned);
+  return observed?.attackExposed === true ? 'attack' : 'unverified';
 }
