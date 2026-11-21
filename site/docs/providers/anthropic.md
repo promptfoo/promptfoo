@@ -1169,10 +1169,9 @@ The `openTelemetry` option controls the Anthropic SDK's own
 The SDK's spans are named `anthropic.messages.create`, one per request under promptfoo's span, with
 retries recorded on it as `http.request.resend_count`. They count in
 [trace assertions](/docs/tracing/#4-assert-on-traced-workflows), and they carry token usage too, so a
-backend that adds up tokens across spans counts each request twice. The SDK writes trace context with
-your application's registered propagator; promptfoo runs it without your application's baggage, so
-requests carry a `baggage` header only when the config sets one, and trace context headers that the
-config sets win.
+backend that adds up tokens across spans counts each request twice. Promptfoo sends the SDK span's
+context using your application's registered propagator. It excludes application baggage from these
+requests and preserves explicit headers, including `baggage`.
 
 To record prompts and responses on the SDK's spans, set the SDK's content mode. Promptfoo stores the
 content with the trace, up to `maxContentBytes` per span (default 750,000):
