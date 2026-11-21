@@ -406,12 +406,17 @@ describe('EvalResult', () => {
 
     const serializer = vi.spyOn(metadata, 'toJSON');
     expect(sanitizeResultForJsonlArtifact({ metadata }).metadata).toBe('[REDACTED]');
-    const nested = { records: [metadata], sessionId: 'session' };
+    const callable = Object.assign(() => {}, { toJSON: serializer });
+    const error = Object.assign(new Error('fixture'), { detail: metadata });
+    const nested = { records: [metadata, callable, error], sessionId: 'session' };
     const result = sanitizeResultForJsonlArtifact({
       metadata: nested,
       response: { metadata: nested },
     });
-    expect(result.metadata).toEqual({ records: ['[REDACTED]'], sessionId: 'session' });
+    expect(result.metadata).toEqual({
+      records: ['[REDACTED]', '[REDACTED]', { detail: '[REDACTED]' }],
+      sessionId: 'session',
+    });
     expect(result.response.metadata).toEqual(result.metadata);
     expect(serializer).not.toHaveBeenCalled();
   });

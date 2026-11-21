@@ -1524,7 +1524,7 @@ function recursiveSanitize(
 }
 
 function hasUnsafeJsonSerializer(value: unknown): boolean {
-  if (!value || typeof value !== 'object') {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
     return false;
   }
   if (hasPropertyGetter(value, 'toJSON')) {
@@ -1562,19 +1562,28 @@ export function snapshotJsonData(
   value: unknown,
   seen = new WeakMap<object, unknown>(),
   throwOnAccessor = false,
+  redactErrorMessages?: boolean,
 ): unknown {
-  if (!value || typeof value !== 'object') {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
     return value;
   }
   if (hasUnsafeJsonSerializer(value)) {
     return value instanceof Error ? { name: REDACTED, message: REDACTED } : REDACTED;
   }
-  if (
-    value instanceof URL ||
-    Buffer.isBuffer(value) ||
-    value instanceof Date ||
-    value instanceof Error
-  ) {
+  if (typeof value === 'function') {
+    // JSON drops ordinary functions but invokes their custom toJSON before the replacer.
+    return undefined;
+  }
+  // sanitizeObject retains only standard error text. Persistence snapshots instead
+  // recurse through enumerable error properties, like regular JSON serialization.
+  if (value instanceof Error && redactErrorMessages !== undefined) {
+    const field = (key: 'name' | 'message') =>
+      !redactErrorMessages && !hasPropertyGetter(value, key) && typeof value[key] === 'string'
+        ? value[key]
+        : REDACTED;
+    return { name: field('name'), message: field('message') };
+  }
+  if (value instanceof URL || Buffer.isBuffer(value) || value instanceof Date) {
     return value;
   }
   const existing = seen.get(value);
@@ -1597,7 +1606,12 @@ export function snapshotJsonData(
       copy[key as keyof typeof copy] = REDACTED;
       continue;
     }
-    copy[key as keyof typeof copy] = snapshotJsonData(descriptor.value, seen, throwOnAccessor);
+    copy[key as keyof typeof copy] = snapshotJsonData(
+      descriptor.value,
+      seen,
+      throwOnAccessor,
+      redactErrorMessages,
+    );
   }
   return copy;
 }
@@ -1645,7 +1659,7 @@ export function sanitizeObject(
 
     // Handle other primitives
     if (typeof obj !== 'object') {
-      return obj;
+      return hasUnsafeJsonSerializer(obj) ? REDACTED : obj;
     }
     if (obj instanceof URL && obj.toJSON === URL.prototype.toJSON) {
       return sanitizeUrl(URL.prototype.toString.call(obj));
@@ -1657,7 +1671,7 @@ export function sanitizeObject(
     const ancestors: object[] = [];
     const safeObj = JSON.parse(
       JSON.stringify(
-        snapshotJsonData(obj, new WeakMap<object, unknown>(), throwOnError),
+        snapshotJsonData(obj, new WeakMap<object, unknown>(), throwOnError, redactErrorMessages),
         function (this: Record<string, unknown>, key, val) {
           const descriptor = Object.getOwnPropertyDescriptor(this, key);
           // Keep original credential fields when toJSON would hide their names.
@@ -1665,12 +1679,7 @@ export function sanitizeObject(
           const value =
             originalValue instanceof URL && originalValue.toJSON === URL.prototype.toJSON
               ? sanitizeUrl(URL.prototype.toString.call(originalValue))
-              : originalValue instanceof Error
-                ? {
-                    name: redactErrorMessages ? REDACTED : originalValue.name,
-                    message: redactErrorMessages ? REDACTED : originalValue.message,
-                  }
-                : val;
+              : val;
           if (typeof value === 'bigint') {
             return value.toString();
           }
