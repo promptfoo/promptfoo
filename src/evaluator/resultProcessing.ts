@@ -112,20 +112,23 @@ export function projectOutputMetadata<T>(
   // Reserved keys can contain output even if a hook replaced their original values.
   const projected = { ...metadata } as Record<string, unknown>;
   for (const key of RESPONSE_OUTPUT_METADATA_KEYS) {
-    if (testMetadata && Object.hasOwn(testMetadata, key)) {
+    if (testMetadata && Object.prototype.hasOwnProperty.call(testMetadata, key)) {
       projected[key] = sanitizeForDb(testMetadata[key]);
     } else {
       delete projected[key];
     }
   }
   for (const key of Object.keys(responseMetadata ?? {})) {
-    if (!Object.hasOwn(projected, key) || RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
+    if (
+      !Object.prototype.hasOwnProperty.call(projected, key) ||
+      RESPONSE_OUTPUT_METADATA_KEYS.includes(key)
+    ) {
       continue;
     }
     const value = sanitizeForDb(projected[key]);
     if (
       testMetadata &&
-      Object.hasOwn(testMetadata, key) &&
+      Object.prototype.hasOwnProperty.call(testMetadata, key) &&
       isDeepStrictEqual(value, sanitizeForDb(testMetadata[key]))
     ) {
       continue;

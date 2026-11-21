@@ -70,7 +70,6 @@ import type {
   InferenceConfiguration,
   Message,
   PerformanceConfiguration,
-  ServiceTier,
   SystemContentBlock,
   Tool,
   ToolChoice,
@@ -1343,27 +1342,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
   }
 
-  /**
-   * Build service tier configuration
-   */
-  private buildServiceTier(): ServiceTier | undefined {
-    if (!this.config.serviceTier) {
-      return undefined;
-    }
-    if (
-      isBedrockGrokRuntimeProfile(this.modelName) &&
-      this.modelName.endsWith('grok-4.7') &&
-      this.config.serviceTier.type !== 'default'
-    ) {
-      throw new Error(
-        'Grok 4.7 Converse supports the default service tier only. Use Runtime Chat, Responses, or InvokeModel for Priority or Flex.',
-      );
-    }
-    return {
-      type: this.config.serviceTier.type,
-    };
-  }
-
   private getEffectiveInferenceConfig(): InferenceConfiguration | undefined {
     if (MANAGED_PROMPT_ARN.test(this.modelName)) {
       return undefined;
@@ -1385,7 +1363,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       guardrailConfig: this.buildGuardrailConfig(),
       additionalModelResponseFieldPaths: this.config.additionalModelResponseFieldPaths,
       performanceConfig: this.buildPerformanceConfig(),
-      serviceTier: this.buildServiceTier(),
+      serviceTier: this.config.serviceTier && { type: this.config.serviceTier.type },
       outputConfig: this.config.outputConfig,
       promptVariables: promptVariables
         ? Object.fromEntries(
@@ -1474,6 +1452,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
     throwIfAborted(abortSignal);
+    if (
+      this.config.serviceTier &&
+      isBedrockGrokRuntimeProfile(this.modelName) &&
+      this.modelName.endsWith('grok-4.7') &&
+      this.config.serviceTier.type !== 'default'
+    ) {
+      throw new Error(
+        'Grok 4.7 Converse supports the default service tier only. Use Runtime Chat, Responses, or InvokeModel for Priority or Flex.',
+      );
+    }
     const initErrorResponse = await waitForPromiseWithAbort(
       this.awaitMcpReadyForRequest(context),
       abortSignal,

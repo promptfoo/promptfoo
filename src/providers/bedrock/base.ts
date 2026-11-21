@@ -105,7 +105,10 @@ export function hasBedrockS3Location(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.some(hasBedrockS3Location);
   }
-  return Object.hasOwn(value, 's3Location') || Object.values(value).some(hasBedrockS3Location);
+  return (
+    Object.prototype.hasOwnProperty.call(value, 's3Location') ||
+    Object.values(value).some(hasBedrockS3Location)
+  );
 }
 
 export function createBedrockCacheKeyHash({
