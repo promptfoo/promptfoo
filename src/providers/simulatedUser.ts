@@ -242,13 +242,6 @@ export class SimulatedUser implements ApiProvider {
     accumulateResponseTokenUsage(tokenUsage, response);
   }
 
-  protected snapshotTargetResponse(
-    response: ProviderResponse,
-    _context: CallApiContextParams,
-  ): ProviderResponse {
-    return response;
-  }
-
   private async sendMessageToAgent(
     prompt: string,
     messages: Message[],
@@ -277,10 +270,7 @@ export class SimulatedUser implements ApiProvider {
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
-    const response = this.snapshotTargetResponse(
-      await targetProvider.callApi(targetPrompt, context),
-      context,
-    );
+    const response = await targetProvider.callApi(targetPrompt, context);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };

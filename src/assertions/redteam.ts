@@ -2,6 +2,11 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
+  FINANCIAL_CALCULATION,
+  isNumericReference,
+  validateFinancialAssertions,
+} from '../redteam/grading/financialReference';
+import {
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
@@ -13,7 +18,6 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
-import { isExternalAssertionValue } from './utils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
@@ -25,29 +29,17 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
-// Only these built-in wrappers record the selected target output's original type.
-const TEXT_PROVENANCE_PROVIDERS = new Set([
-  'promptfoo:redteam:iterative',
-  'promptfoo:redteam:iterative:meta',
-  'promptfoo:redteam:iterative:tree',
-  'promptfoo:redteam:iterative:image',
-  'promptfoo:redteam:hydra',
-  'promptfoo:redteam:goblin',
-  'promptfoo:redteam:crescendo',
-  'promptfoo:redteam:goat',
-  'promptfoo:redteam:custom',
-  'promptfoo:redteam:mischievous-user',
-  'promptfoo:redteam:best-of-n',
-  'promptfoo:redteam:authoritative-markup-injection',
-  'promptfoo:redteam:indirect-web-pwn',
-]);
-
 /**
  * Analyzes grader errors in the redteam history.
  * Returns whether some (but not all) turns have grader errors.
  * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
  */
-function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
+function analyzeGraderErrors(
+  redteamHistory:
+    | Array<{ graderError?: string; prompt?: string; output?: string; gradingInputHash?: string }>
+    | undefined,
+  coveredTurn?: { prompt: string; output: string; gradingInputHash: string },
+): {
   hasAnyErrors: boolean;
   allTurnsHaveErrors: boolean;
 } {
@@ -56,7 +48,16 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   }
 
   const turnsWithErrors = redteamHistory.filter(
-    (turn) => turn.graderError && turn.graderError.length > 0,
+    (turn, index) =>
+      turn?.graderError &&
+      turn.graderError.length > 0 &&
+      !(
+        coveredTurn &&
+        index === redteamHistory.length - 1 &&
+        (turn.gradingInputHash
+          ? turn.gradingInputHash === coveredTurn.gradingInputHash
+          : turn.prompt === coveredTurn.prompt && turn.output === coveredTurn.output)
+      ),
   );
   const hasAnyErrors = turnsWithErrors.length > 0;
   const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
@@ -76,25 +77,6 @@ function getConfiguredProviderId(
       : isProviderOptions(configuredProvider)
         ? configuredProvider.id
         : undefined;
-}
-
-/** Read executor-captured target metadata without exposing it as trusted strategy state. */
-export function getRecordedTargetMetadata(
-  test: AtomicTestCase,
-  provider: ApiProvider | undefined,
-  response: ProviderResponse,
-): ProviderResponse['metadata'] {
-  const providerId = getConfiguredProviderId(test, provider);
-  if (
-    providerId &&
-    (TEXT_PROVENANCE_PROVIDERS.has(providerId) ||
-      providerId.startsWith('promptfoo:redteam:custom:')) &&
-    response.metadata &&
-    Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata')
-  ) {
-    return response.metadata.redteamTargetMetadata ?? undefined;
-  }
-  return response.metadata;
 }
 
 function matchesStoredGraderResult(
@@ -207,8 +189,6 @@ export const handleRedteam = async (
     test,
     prompt,
     outputString,
-    output,
-    outputIsText: evaluatorOutputIsText,
     provider,
     renderedValue,
     providerResponse,
@@ -216,6 +196,24 @@ export const handleRedteam = async (
   }: AssertionParams,
   claimStoredGradingUsage: () => boolean = () => true,
 ): Promise<GradingResult> => {
+  if (
+    baseType === FINANCIAL_CALCULATION &&
+    (isNumericReference(assertion.value) || isNumericReference(renderedValue))
+  ) {
+    validateFinancialAssertions({ ...test, assert: [assertion] }, provider);
+    if (!isNumericReference(assertion.value)) {
+      throw new Error('Financial numeric grading requires a trusted inline reference');
+    }
+    if (
+      providerResponse.metadata?.storedGraderResult ||
+      providerResponse.metadata?.redteamHistory ||
+      providerResponse.metadata?.redteamFinalPrompt
+    ) {
+      throw new Error('Financial numeric grading cannot verify a saved strategy response');
+    }
+    // Keep trusted configuration independent of template variables and target data.
+    renderedValue = assertion.value;
+  }
   // Skip grading if stored result exists from strategy execution for this specific assertion
   const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
   const reportedConversation = getTargetConversation(providerResponse.prompt);
@@ -251,25 +249,6 @@ export const handleRedteam = async (
       test.metadata?.strategyId ?? '',
     );
 
-  const isRedteamProvider = providerId?.startsWith('promptfoo:redteam:') === true;
-  const strategyOutputIsText =
-    providerId &&
-    (TEXT_PROVENANCE_PROVIDERS.has(providerId) ||
-      providerId.startsWith('promptfoo:redteam:custom:'))
-      ? providerResponse.metadata?.redteamOutputIsText
-      : undefined;
-  const outputIsText =
-    evaluatorOutputIsText !== false &&
-    typeof output === 'string' &&
-    typeof providerResponse.output === 'string' &&
-    // A live evaluator can establish a direct target's source type. Standalone
-    // replay must retain negative evidence even when the provider identity is known.
-    (evaluatorOutputIsText === true || providerResponse.metadata?.redteamOutputIsText !== false) &&
-    (!isRedteamProvider || strategyOutputIsText === true);
-  const grader = getGraderById(assertion.type);
-  // Numeric checks require source text even when a matching stored grade exists.
-  grader?.validateOutput?.(renderedValue, { providerResponse, outputIsText });
-
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
@@ -277,27 +256,7 @@ export const handleRedteam = async (
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
-  // Resolved file/function values can differ behind the same assertion identity.
-  // Numeric comparisons are cheap; recompute them instead of trusting a saved verdict.
-  const requiresFreshNumericGrade =
-    grader?.id === 'promptfoo:redteam:financial:calculation-error' &&
-    typeof renderedValue === 'object' &&
-    renderedValue !== null &&
-    Object.prototype.hasOwnProperty.call(renderedValue, 'type') &&
-    'type' in renderedValue &&
-    renderedValue.type === 'numeric';
   if (
-    requiresFreshNumericGrade &&
-    isRedteamProvider &&
-    isExternalAssertionValue(assertion.value) &&
-    assertion.config?.numeric !== true
-  ) {
-    throw new Error(
-      'Numeric external references used with redteam strategies require config.numeric: true on the assertion',
-    );
-  }
-  if (
-    !requiresFreshNumericGrade &&
     hasStrategyGrade &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
@@ -307,7 +266,6 @@ export const handleRedteam = async (
         outputString,
         gradesCurrentTurnOnly ? undefined : gradingMessages,
         test.metadata?.pluginId,
-        typeof strategyOutputIsText === 'boolean' ? strategyOutputIsText : undefined,
       )
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
@@ -332,6 +290,7 @@ export const handleRedteam = async (
     };
   }
 
+  const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
 
   // Build grading context from provider response metadata, test metadata, and locally
@@ -343,7 +302,6 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
-  gradingContext.outputIsText = outputIsText;
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,
@@ -402,6 +360,22 @@ export const handleRedteam = async (
       );
     }
 
+    // A fresh verdict resolves only the matching final turn, not earlier ungraded attempts.
+    const { hasAnyErrors } = analyzeGraderErrors(
+      isAttackProvider(providerId ?? '') ? providerResponse.metadata?.redteamHistory : undefined,
+      grade.metadata?.graderError === true
+        ? undefined
+        : {
+            prompt: effectivePrompt,
+            output: outputString,
+            gradingInputHash: getGradingInputHash(
+              effectivePrompt,
+              outputString,
+              undefined,
+              test.metadata?.pluginId,
+            ),
+          },
+    );
     const gradeWithUsage = tokensUsed ? withGradingUsage(grade, tokensUsed) : grade;
     return {
       ...gradeWithUsage,
@@ -418,11 +392,16 @@ export const handleRedteam = async (
         // Pass through all test metadata for redteam
         ...test.metadata,
         ...gradeWithUsage.metadata,
+        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
     };
   } catch (error) {
-    // Invalid assertion configuration cannot recover through a successful prior turn.
-    if (error instanceof Error && error.name === 'RedteamGradingConfigError') {
+    // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
+    if (
+      providerId === 'promptfoo:redteam:iterative:meta' ||
+      providerId === 'promptfoo:redteam:hydra' ||
+      providerId === 'promptfoo:redteam:goblin'
+    ) {
       throw error;
     }
     // For iterative strategies, check if only SOME turns had grader errors (not all).

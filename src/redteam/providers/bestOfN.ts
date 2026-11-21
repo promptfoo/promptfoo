@@ -18,13 +18,7 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
-import {
-  callTargetProvider,
-  getForwardedTargetMetadata,
-  preserveSelectedError,
-  restoreNumericSourceOutput,
-  snapshotTargetMetadata,
-} from './shared';
+import { callTargetProvider } from './shared';
 
 import type {
   ApiProvider,
@@ -192,26 +186,13 @@ export default class BestOfNProvider implements ApiProvider {
             // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
             // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
-            const targetResponse = await callTargetProvider(
+            const response = await callTargetProvider(
               targetProvider,
               renderedPrompt,
               context,
               options,
             );
-            const targetMetadata = snapshotTargetMetadata(targetResponse, context.test);
-            const response = preserveSelectedError(
-              {
-                ...targetResponse,
-                metadata: {
-                  ...(targetMetadata === undefined
-                    ? targetResponse.metadata
-                    : getForwardedTargetMetadata(targetMetadata)),
-                  redteamTargetMetadata: targetMetadata,
-                },
-              },
-              targetResponse,
-            );
-            const sessionId = getSessionId(targetResponse, context);
+            const sessionId = getSessionId(response, context);
             if (sessionId) {
               sessionIds.push(sessionId);
             }
@@ -274,13 +255,14 @@ export default class BestOfNProvider implements ApiProvider {
           }
         }
 
-        aggregatedResponse.metadata = {
-          ...aggregatedResponse.metadata,
-          redteamOutputIsText: typeof aggregatedResponse.output === 'string',
-          ...(successfulResponse ? {} : { sessionIds }),
-        };
+        if (!successfulResponse) {
+          aggregatedResponse.metadata = {
+            ...(aggregatedResponse.metadata ?? {}),
+            sessionIds,
+          };
+        }
 
-        return restoreNumericSourceOutput(aggregatedResponse, undefined, context);
+        return aggregatedResponse;
       }
 
       return {

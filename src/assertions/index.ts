@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
+import path from 'path';
 
 import async from 'async';
+import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
@@ -16,6 +18,8 @@ import {
   matchesContextRelevance,
 } from '../matchers/rag';
 import { matchesSimilarity } from '../matchers/similarity';
+import { isPackagePath, loadFromPackage } from '../providers/packageParser';
+import { runPython } from '../python/pythonUtils';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -26,12 +30,14 @@ import {
   type ApiProvider,
   type Assertion,
   type AssertionType,
+  type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
   type TraceData,
   type VarValue,
 } from '../types/index';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -73,7 +79,7 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { getRecordedTargetMetadata, handleRedteam } from './redteam';
+import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -96,13 +102,9 @@ import {
 } from './trajectory';
 import {
   coerceString,
-  getAssertionLeaves,
   getFinalTest,
-  isExternalAssertionValue,
-  isNumericFinancialAssertion,
   processFileReference,
-  resolveExternalAssertionValue,
-  validateNumericReferenceMode,
+  resolveJavaScriptFileFunction,
 } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
@@ -174,14 +176,16 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return true;
   }
 
-  return isExternalAssertionValue(assertion.value);
+  return typeof assertion.value === 'string'
+    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
+    : false;
 }
 
 export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
 }
 
-export async function loadTraceData(traceId: string): Promise<TraceData | null> {
+async function loadTraceData(traceId: string): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -283,7 +287,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
           assertion: params.assertion,
         };
       }
@@ -299,7 +303,9 @@ const ASSERTION_HANDLERS: Record<
   python: handlePython,
   regex: handleRegex,
   ruby: handleRuby,
+  'rouge-l': handleRougeScore,
   'rouge-n': handleRougeScore,
+  'rouge-s': handleRougeScore,
   'search-rubric': handleSearchRubric,
   'skill-used': handleSkillUsed,
   similar: handleSimilar,
@@ -370,28 +376,9 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
-export function hasNumericFinancialAssertions(assertions: AssertionOrSet[] | undefined): boolean {
-  return getAssertionLeaves(assertions).some(isNumericFinancialAssertion);
-}
-
-/** Numeric preparation reads target data separately from trusted strategy bookkeeping. */
-export function getNumericPreparationMetadata(
-  assertions: AssertionOrSet[] | undefined,
-  test: AtomicTestCase,
-  provider: ApiProvider | undefined,
-  response: ProviderResponse,
-): ProviderResponse['metadata'] {
-  const usesNumericReference = hasNumericFinancialAssertions(assertions);
-  if (!usesNumericReference && !hasNumericFinancialAssertions(test.assert)) {
-    return response.metadata;
-  }
-  const targetMetadata = getRecordedTargetMetadata(test, provider, response);
-  if (usesNumericReference || targetMetadata === response.metadata) {
-    return targetMetadata;
-  }
-  // Sibling callbacks retain target data and executor fields, with executor values winning.
-  // This view is only for assertion context; framework grading still uses the original response.
-  return { ...targetMetadata, ...response.metadata };
+// Zero-weight assertions record their scores without failing the test.
+function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
+  return weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -440,7 +427,6 @@ async function runAssertionInternal({
   vars,
   latencyMs,
   providerResponse,
-  outputIsText,
   traceId,
   traceData,
   claimStoredGradingUsage,
@@ -451,7 +437,6 @@ async function runAssertionInternal({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
-  outputIsText?: boolean;
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
@@ -463,25 +448,14 @@ async function runAssertionInternal({
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
-  const assertionMetadata = getNumericPreparationMetadata(
-    [assertion],
-    test,
-    provider,
-    providerResponse,
-  );
-  const valueProviderResponse =
-    assertionMetadata === providerResponse.metadata
-      ? providerResponse
-      : { ...providerResponse, metadata: assertionMetadata };
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  validateNumericReferenceMode(assertion);
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },
-      ...(assertionMetadata && { metadata: assertionMetadata }),
+      ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -491,9 +465,9 @@ async function runAssertionInternal({
     test,
     logProbs,
     provider,
-    providerResponse: valueProviderResponse,
+    providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
-    ...(assertionMetadata && { metadata: assertionMetadata }),
+    ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
   // Add trace data if traceId is available
@@ -514,34 +488,131 @@ async function runAssertionInternal({
     }
   }
 
-  // Render assertion values after transforms and trace context are available.
+  // Render assertion values
+  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
-  let valueFromScript: AssertionParams['valueFromScript'];
-  if (isExternalAssertionValue(renderedValue)) {
-    const resolved = await resolveExternalAssertionValue(
-      assertion,
-      output,
-      context,
-      getAssertionBaseType(assertion),
-    );
-    if (resolved.errorResult) {
-      if (isNumericFinancialAssertion(assertion)) {
-        throw new Error(resolved.errorResult.reason);
+  let valueFromScript: ValueFromScriptType;
+  const scriptFailure = (reason: string): GradingResult =>
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+  if (typeof renderedValue === 'string') {
+    if (renderedValue.startsWith('file://')) {
+      const basePath = cliState.basePath || '';
+      const fileRef = renderedValue.slice('file://'.length);
+      let filePath = fileRef;
+      let functionName: string | undefined;
+
+      if (fileRef.includes(':')) {
+        const colonIndex = fileRef.indexOf(':');
+        filePath = fileRef.slice(0, colonIndex);
+        functionName = fileRef.slice(colonIndex + 1);
       }
-      return resolved.errorResult;
+
+      filePath = path.resolve(basePath, filePath);
+
+      if (isJavascriptFile(filePath)) {
+        // Load errors (missing file or export) are config mistakes and still throw.
+        const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
+        try {
+          valueFromScript = await assertionFunction(output, context);
+        } catch (error) {
+          return scriptFailure(
+            `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          );
+        }
+        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
+        try {
+          const runScript = filePath.endsWith('.py')
+            ? runPython
+            : (await import('../ruby/rubyUtils.js')).runRuby;
+          valueFromScript = await runScript<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
+          logger.debug(`Script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return scriptFailure((error as Error).message);
+        }
+      } else {
+        renderedValue = processFileReference(renderedValue);
+      }
+    } else if (isPackagePath(renderedValue)) {
+      const basePath = cliState.basePath || '';
+      const requiredModule = await loadFromPackage(renderedValue, basePath);
+      if (typeof requiredModule !== 'function') {
+        throw new Error(
+          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
+        );
+      }
+
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return scriptFailure(
+          `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+        );
+      }
+    } else {
+      // It's a normal string value
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
-    ({ renderedValue, valueFromScript } = resolved);
-  } else if (typeof renderedValue === 'string') {
-    renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    renderedValue = renderedValue.map((value) => {
-      if (typeof value === 'string') {
-        return value.startsWith('file://')
-          ? processFileReference(value)
-          : nunjucks.renderString(value, resolvedVars);
+    // Process each element in the array
+    renderedValue = renderedValue.map((v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return processFileReference(v);
+        }
+        return nunjucks.renderString(v, resolvedVars);
       }
-      return value;
+      return v;
     });
+  }
+
+  // Centralized script output resolution
+  // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
+  // All other types should use the script output as the comparison value
+  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+  const baseType = getAssertionBaseType(assertion);
+
+  if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
+    // Validate the script result type - only javascript/python/ruby can return functions
+    if (typeof valueFromScript === 'function') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a function. ` +
+          `Only javascript/python/ruby assertion types can return functions. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Validate the script didn't return boolean or GradingResult
+    // These are only valid for javascript/python/ruby assertion types
+    if (typeof valueFromScript === 'boolean') {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a boolean. ` +
+          `Only javascript/python/ruby assertion types can return boolean values. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Check if it's a GradingResult object (has 'pass' property)
+    if (
+      valueFromScript &&
+      typeof valueFromScript === 'object' &&
+      !Array.isArray(valueFromScript) &&
+      'pass' in valueFromScript
+    ) {
+      throw new Error(
+        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+          `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
+          `For other assertion types, return the expected value (string, number, array, or object).`,
+      );
+    }
+
+    // Update renderedValue with the script output
+    // Type assertion is now safe because we've validated the type
+    renderedValue = valueFromScript as AssertionValue;
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
@@ -576,7 +647,6 @@ async function runAssertionInternal({
     latencyMs,
     logProbs,
     output,
-    outputIsText,
     outputString: coerceString(output),
     prompt,
     provider,
@@ -606,15 +676,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return applyAssertionWeight(result, assertion.weight);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
@@ -695,8 +757,6 @@ export async function runAssertions({
   prompt,
   provider,
   providerResponse,
-  numericGradingInput,
-  outputIsText,
   test,
   vars,
   traceId,
@@ -706,9 +766,6 @@ export async function runAssertions({
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
-  /** Evaluator-owned pre-media view for numeric leaves only; never persisted. */
-  numericGradingInput?: { providerResponse: ProviderResponse; outputIsText: boolean };
-  outputIsText?: boolean;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
@@ -795,12 +852,10 @@ export async function runAssertions({
       return;
     }
 
-    const numericInput = isNumericFinancialAssertion(assertion) ? numericGradingInput : undefined;
     const result = await runAssertion({
       prompt,
       provider,
-      providerResponse: numericInput?.providerResponse ?? providerResponse,
-      outputIsText: numericInput?.outputIsText ?? outputIsText,
+      providerResponse,
       assertion,
       test,
       vars,

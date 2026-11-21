@@ -22,7 +22,6 @@ export const handleContextRecall = async ({
   test,
   output,
   providerResponse,
-  assertionValueContext,
   providerCallContext,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
@@ -32,14 +31,7 @@ export const handleContextRecall = async ({
   );
   invariant(prompt, 'context-recall assertion requires a prompt');
 
-  const context = await resolveContext(
-    assertion,
-    test,
-    output,
-    prompt,
-    prompt,
-    assertionValueContext?.providerResponse ?? providerResponse,
-  );
+  const context = await resolveContext(assertion, test, output, prompt, prompt, providerResponse);
 
   // RAGAS context-recall checks if ground truth (renderedValue) can be attributed to context
   const result = await matchesContextRecall(

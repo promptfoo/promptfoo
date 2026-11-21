@@ -48,15 +48,11 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
-  getRedteamAssertion,
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
-  prepareNumericGrading,
   preserveSelectedError,
-  restoreNumericSourceOutput,
   runRedteamGrader,
-  snapshotTargetMetadata,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
@@ -83,8 +79,6 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
-  redteamOutputIsText?: boolean;
-  redteamTargetMetadata?: TargetResponse['metadata'] | null;
   hydraRoundsCompleted?: number;
   hydraBacktrackCount?: number;
   hydraResult?: boolean;
@@ -97,6 +91,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     message: string;
     response: string;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
@@ -108,8 +103,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
     outputAudio?: MediaData;
     outputImage?: MediaData;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -345,12 +343,7 @@ export class HydraProvider implements ApiProvider {
     this.conversationHistory = [];
     this.sessionId = undefined;
     const sessionIds: string[] = [];
-    const successfulAttacks: Array<{
-      turn: number;
-      message: string;
-      response: string;
-      traceSummary?: string;
-    }> = [];
+    const successfulAttacks: NonNullable<HydraMetadata['successfulAttacks']> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
@@ -359,24 +352,11 @@ export class HydraProvider implements ApiProvider {
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
-    let lastTargetMetadata: TargetResponse['metadata'] | null;
-    let lastNumericOutput: string | undefined;
     let lastResponseMessages: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      graderPassed: boolean | undefined;
-      trace?: Record<string, unknown>;
-      traceSummary?: string;
-      inputVars?: Record<string, string>;
-    }> = [];
+    const redteamHistory: HydraMetadata['redteamHistory'] = [];
     let lastTransformResult: TransformResult | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
@@ -387,7 +367,12 @@ export class HydraProvider implements ApiProvider {
 
     // Find the grader
     const { getGraderById } = await import('../../graders');
-    const assertToUse = getRedteamAssertion(test);
+    let assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
+    if (!assertToUse) {
+      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
 
     // Track the previous turn's trace summary for attack generation
     let previousTraceSummary: string | undefined;
@@ -416,7 +401,7 @@ export class HydraProvider implements ApiProvider {
         conversationHistory: conversationHistoryForCloud,
         ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
-          turn > 1 && storedGraderResult
+          turn > 1 && storedGraderResult && storedGraderResult.metadata?.graderError !== true
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,
@@ -689,8 +674,6 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
-      lastTargetMetadata = snapshotTargetMetadata(targetResponse, test);
-      lastNumericOutput = lastTargetMetadata === undefined ? undefined : targetResponse.output;
       lastTargetResponse = targetResponse;
       lastResponseMessages = [
         ...this.conversationHistory,
@@ -791,15 +774,11 @@ export class HydraProvider implements ApiProvider {
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
       if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
         const beforeOutput = targetResponse.output;
-        targetResponse = await externalizeResponseForRedteamHistory(
-          targetResponse,
-          {
-            evalId: context?.evaluationId,
-            testIdx: context?.testIdx,
-            promptIdx: context?.promptIdx,
-          },
-          lastNumericOutput,
-        );
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        });
         if (targetResponse.output !== beforeOutput) {
           logger.debug(`${this.logPrefix} Externalized binary output`, {
             turn,
@@ -818,7 +797,7 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
-      // Keep the normalized response for conversation history and legacy grading.
+      // Externalization can replace the response object. Return the same output we grade.
       lastTargetResponse = targetResponse;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
@@ -832,26 +811,8 @@ export class HydraProvider implements ApiProvider {
       });
       lastResponseMessages = [...this.conversationHistory];
 
-      const preparedNumeric =
-        test && assertToUse
-          ? await prepareNumericGrading(
-              {
-                assertion: assertToUse,
-                targetProvider,
-                prompt,
-                context,
-                targetMetadata: lastTargetMetadata,
-                targetOutput: lastNumericOutput,
-              },
-              lastFinalAttackPrompt || nextMessage,
-              targetResponse.output,
-              test,
-              getGraderAssertionValue(assertToUse),
-              { providerResponse: targetResponse, outputIsText: targetResponse.outputIsText },
-            )
-          : undefined;
-      // Explicit numeric contracts take precedence over refusal heuristics.
-      const isRefusal = !preparedNumeric?.numeric && isBasicRefusal(targetResponse.output);
+      // Check for refusal and backtrack if in stateless mode and backtracking enabled
+      const isRefusal = isBasicRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
@@ -911,7 +872,6 @@ export class HydraProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
-            outputIsText: targetResponse.outputIsText,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
@@ -969,7 +929,6 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            { assertion: assertToUse, targetProvider, prompt, context, preparedNumeric },
             lastFinalAttackPrompt || nextMessage,
             targetResponse.output,
             test,
@@ -989,7 +948,6 @@ export class HydraProvider implements ApiProvider {
             {
               prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
-              outputIsText: targetResponse.outputIsText,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
@@ -1002,6 +960,11 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
+      const graderError =
+        graderResult?.metadata?.graderError === true
+          ? graderResult.reason || 'Grading failed'
+          : undefined;
+
       // Store in redteam history (with audio/image if transforms were applied)
       redteamHistory.push({
         prompt: nextMessage,
@@ -1012,15 +975,19 @@ export class HydraProvider implements ApiProvider {
           ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
           : undefined,
         // Note: outputImage would come from provider if model responds with image
-        graderPassed: graderResult?.pass,
+        graderPassed: graderError ? undefined : graderResult?.pass,
+        graderError,
+        gradingInputHash: graderError
+          ? storedGraderResult?.metadata?.redteamGradingInputHash
+          : undefined,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
 
-      // Check if vulnerability was achieved
-      if (graderResult?.pass === false) {
+      // Only a valid grader verdict can establish a vulnerability.
+      if (graderResult?.pass === false && !graderError) {
         vulnerabilityAchieved = true;
         successfulAttacks.push({
           turn,
@@ -1097,39 +1064,33 @@ export class HydraProvider implements ApiProvider {
           };
 
     return preserveSelectedError(
-      await restoreNumericSourceOutput(
-        {
-          output: lastTargetResponse?.output || '',
-          ...(failClosedError
-            ? { error: failClosedError }
-            : lastTargetResponse?.error
-              ? { error: lastTargetResponse.error }
-              : {}),
-          metadata: {
-            redteamOutputIsText: lastTargetResponse?.outputIsText,
-            redteamTargetMetadata: lastTargetMetadata,
-            sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-            messages,
-            ...strategyMetadata,
-            stopReason,
-            successfulAttacks,
-            totalSuccessfulAttacks: successfulAttacks.length,
-            storedGraderResult,
-            redteamHistory,
-            sessionIds,
-            traceSnapshots:
-              traceSnapshots.length > 0
-                ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-                : undefined,
-            ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-            redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
-          },
-          tokenUsage: totalTokenUsage,
-          guardrails: lastTargetResponse?.guardrails,
+      {
+        output: lastTargetResponse?.output || '',
+        ...(failClosedError
+          ? { error: failClosedError }
+          : lastTargetResponse?.error
+            ? { error: lastTargetResponse.error }
+            : {}),
+        metadata: {
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+          messages,
+          ...strategyMetadata,
+          stopReason,
+          successfulAttacks,
+          totalSuccessfulAttacks: successfulAttacks.length,
+          storedGraderResult,
+          redteamHistory,
+          sessionIds,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+              : undefined,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+          redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
         },
-        lastNumericOutput,
-        context,
-      ),
+        tokenUsage: totalTokenUsage,
+        guardrails: lastTargetResponse?.guardrails,
+      },
       failClosedError ? undefined : lastTargetResponse,
     );
   }

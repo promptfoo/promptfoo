@@ -29,6 +29,21 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
+const createNestedAuthorizationFixture = () => ({
+  transformedRequest: {
+    headers: {
+      Authorization: 'Bearer nested-secret',
+    },
+  },
+});
+
+const createUserTraceMetadataFixture = () => ({
+  __promptfoo: {
+    traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+    retained: 'user-metadata',
+  },
+});
+
 describe('EvalResult', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -294,6 +309,24 @@ describe('EvalResult', () => {
       });
     });
 
+    it('preserves repeat linkage across single-row persistence', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-repeat-linkage', {
+        ...mockEvaluateResult,
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
     it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -326,12 +359,7 @@ describe('EvalResult', () => {
         ...mockEvaluateResult,
         traceId: 'internal-trace',
         evaluationId: 'internal-evaluation',
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       expect(warnSpy).toHaveBeenCalledWith(
@@ -347,12 +375,7 @@ describe('EvalResult', () => {
     it('strips user-supplied reserved trace linkage from untraced rows', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
         ...mockEvaluateResult,
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       const retrieved = await EvalResult.findById(result.id);
@@ -709,79 +732,6 @@ describe('EvalResult', () => {
         );
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
       });
-
-      it.each(['single', 'batch', 'jsonl'])(
-        'redacts target snapshot transport headers through the %s boundary without mutating live data',
-        async (boundary) => {
-          const targetMetadata = {
-            foo: 'target metadata remains available',
-            headers: {
-              'Set-Cookie': 'synthetic-target-session',
-              'api-key': 'synthetic-target-api-key',
-              'content-type': 'application/json',
-            },
-            http: {
-              status: 200,
-              headers: { 'x-request-id': 'synthetic-target-request', 'x-safe-debug': 'keep' },
-              requestHeaders: {
-                authorization: 'synthetic-target-auth',
-                accept: 'application/json',
-              },
-            },
-            details: { http: { headers: { 'set-cookie': 'ordinary nested content' } } },
-          };
-          const output = { http: { headers: { 'set-cookie': 'ordinary output content' } } };
-          const metadata = { redteamTargetMetadata: targetMetadata };
-          const input: EvaluateResult = {
-            ...mockEvaluateResult,
-            id: crypto.randomUUID(),
-            response: createProviderResponse({ output, metadata }),
-            metadata,
-            gradingResult: {
-              pass: true,
-              score: 1,
-              reason: 'ok',
-              metadata,
-              componentResults: [{ pass: true, score: 1, reason: 'ok', metadata }],
-            },
-          };
-          let saved: Pick<EvaluateResult, 'response' | 'metadata' | 'gradingResult'>;
-          if (boundary === 'jsonl') {
-            saved = sanitizeResultForJsonlArtifact(input);
-          } else {
-            const evalId = `numeric-transport-${crypto.randomUUID()}`;
-            const result =
-              boundary === 'single'
-                ? await EvalResult.createFromEvaluateResult(evalId, input, { persist: true })
-                : (await EvalResult.createManyFromEvaluateResult([input], evalId))[0];
-            saved = (await EvalResult.findById(result.id))!;
-          }
-          for (const copy of [
-            saved.response?.metadata?.redteamTargetMetadata,
-            saved.metadata?.redteamTargetMetadata,
-            saved.gradingResult?.metadata?.redteamTargetMetadata,
-            saved.gradingResult?.componentResults?.[0].metadata?.redteamTargetMetadata,
-          ]) {
-            expect(copy).toEqual({
-              ...targetMetadata,
-              headers: {
-                'Set-Cookie': '[REDACTED]',
-                'api-key': '[REDACTED]',
-                'content-type': 'application/json',
-              },
-              http: {
-                status: 200,
-                headers: { 'x-request-id': '[REDACTED]', 'x-safe-debug': 'keep' },
-                requestHeaders: { authorization: '[REDACTED]', accept: 'application/json' },
-              },
-            });
-          }
-          expect(saved.response?.output).toEqual(output);
-          expect(input.response?.metadata?.redteamTargetMetadata).toBe(targetMetadata);
-          expect(targetMetadata.headers['Set-Cookie']).toBe('synthetic-target-session');
-          expect(targetMetadata.http.requestHeaders.authorization).toBe('synthetic-target-auth');
-        },
-      );
 
       it('preserves arbitrary legacy headers in grading metadata', async () => {
         const evalId = 'test-eval-preserve-grading-metadata-headers';
@@ -1425,6 +1375,54 @@ describe('EvalResult', () => {
 
   describe('toEvaluateResult', () => {
     it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].flatMap((strip) =>
+          [
+            'native-conversation-text',
+            [
+              { text: 'native-conversation-text', thoughtSignature: 'signed-text' },
+              { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLWltYWdl' } },
+            ],
+          ].map((conversationOutput) => ({ boundary, strip, conversationOutput })),
+        ),
+      ),
+    )(
+      'projects native conversation output at $boundary (strip: $strip)',
+      async ({ boundary, strip, conversationOutput }) => {
+        const response = { output: 'display output', conversationOutput };
+        const original = structuredClone(response);
+        const input = createEvaluateResult({ response });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'conversation-projection',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          expect(loaded?.response?.conversationOutput).toEqual(conversationOutput);
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded?.response?.conversationOutput).toEqual(conversationOutput);
+        }
+
+        if (strip) {
+          expect(projected.response).toEqual({ output: '[output stripped]' });
+          expect(JSON.stringify(projected)).not.toContain('native-conversation-text');
+          expect(JSON.stringify(projected)).not.toContain('bmF0aXZlLWltYWdl');
+        } else {
+          expect(projected.response).toEqual(response);
+        }
+        expect(response).toEqual(original);
+        expect(input.response).toEqual(original);
+      },
+    );
+
+    it.each(
       [
         { boundary: 'model', strip: true },
         { boundary: 'model', strip: false },
@@ -1473,14 +1471,6 @@ describe('EvalResult', () => {
           application: { text: { prompts: ['ordinary application payload'] } },
         };
         const gradingProvider = mapped ? providerMap : liveProvider;
-        const targetMetadata = {
-          headers: { 'set-cookie': 'synthetic-target-session', 'content-type': 'application/json' },
-          details: { headers: { 'set-cookie': 'ordinary domain data' } },
-        };
-        const numericMetadata = {
-          redteamOutputIsText: false,
-          redteamTargetMetadata: targetMetadata,
-        };
         const assertion: Assertion = { type: 'equals', value: 'ok', provider: gradingProvider };
         const testCase: AtomicTestCase = {
           provider: liveProvider,
@@ -1493,8 +1483,6 @@ describe('EvalResult', () => {
         const input = createEvaluateResult({
           provider,
           testCase,
-          response: createProviderResponse({ output: 'ok', metadata: numericMetadata }),
-          metadata: numericMetadata,
           prompt: {
             raw: 'Hello',
             label: 'Greeting',
@@ -1509,10 +1497,8 @@ describe('EvalResult', () => {
             score: 1,
             reason: 'ok',
             assertion,
-            componentResults: [
-              { pass: true, score: 1, reason: 'ok', assertion, metadata: numericMetadata },
-            ],
-            metadata: { prompts: ['ordinary grading metadata'], ...numericMetadata },
+            componentResults: [{ pass: true, score: 1, reason: 'ok', assertion }],
+            metadata: { prompts: ['ordinary grading metadata'] },
           },
         });
         const flags = getStripFlags({ PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) });
@@ -1572,26 +1558,9 @@ describe('EvalResult', () => {
         expect(JSON.stringify(projected)).not.toContain('ordinary working state');
         expect(projected.prompt.config.options).toEqual(input.prompt.config.options);
         expect(projected.prompt.config.assert).toEqual(input.prompt.config.assert);
-        const redactedNumericMetadata = {
-          ...numericMetadata,
-          redteamTargetMetadata: {
-            ...targetMetadata,
-            headers: { 'set-cookie': '[REDACTED]', 'content-type': 'application/json' },
-          },
-        };
         expect(projected.gradingResult?.metadata).toEqual({
           prompts: ['ordinary grading metadata'],
-          ...redactedNumericMetadata,
         });
-        for (const metadata of [
-          projected.response?.metadata,
-          projected.metadata,
-          projected.gradingResult?.componentResults?.[0].metadata,
-        ]) {
-          expect(metadata).toMatchObject(redactedNumericMetadata);
-        }
-        expect(input.response?.metadata).toBe(numericMetadata);
-        expect(targetMetadata.headers['set-cookie']).toBe('synthetic-target-session');
         expect(provider.prompts).toEqual(['ordinary nested selector']);
         expect(testCase.options?.provider).toBe(gradingProvider);
         expect(input.gradingResult?.componentResults?.[0].assertion?.provider).toBe(
@@ -1627,13 +1596,7 @@ describe('EvalResult', () => {
     it('should preserve the original response object when response stripping is disabled', () => {
       const response = {
         output: 'provider output',
-        metadata: {
-          transformedRequest: {
-            headers: {
-              Authorization: 'Bearer nested-secret',
-            },
-          },
-        },
+        metadata: createNestedAuthorizationFixture(),
       };
 
       const result = new EvalResult({
@@ -1773,13 +1736,7 @@ describe('EvalResult', () => {
           response: {
             output: 'provider output',
             latencyMs: 42,
-            metadata: {
-              transformedRequest: {
-                headers: {
-                  Authorization: 'Bearer nested-secret',
-                },
-              },
-            },
+            metadata: createNestedAuthorizationFixture(),
           },
           gradingResult: null,
           provider: mockProvider,

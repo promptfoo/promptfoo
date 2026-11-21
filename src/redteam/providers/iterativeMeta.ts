@@ -44,13 +44,10 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
-  getRedteamAssertion,
   getTargetResponse,
   preserveSelectedError,
   redteamProviderManager,
-  restoreNumericSourceOutput,
   runRedteamGrader,
-  snapshotTargetMetadata,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -66,7 +63,6 @@ import type {
   Inputs,
   NunjucksFilterMap,
   Prompt,
-  ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
   VarValue,
@@ -76,8 +72,6 @@ import type { RedteamGradingContext } from '../grading/types';
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
 interface IterativeMetaMetadata {
-  redteamOutputIsText?: boolean;
-  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   finalIteration: number;
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
@@ -96,6 +90,8 @@ interface IterativeMetaMetadata {
     outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
@@ -189,8 +185,6 @@ export async function runMetaAgentRedteam({
   let storedGraderResult: GradingResult | undefined = undefined;
   let stopReason: IterativeMetaMetadata['stopReason'] = 'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
-  let lastTargetOutput: string | undefined;
-  let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   let failClosedError: string | undefined;
   let agentRequestError: string | undefined;
 
@@ -241,7 +235,10 @@ export async function runMetaAgentRedteam({
                 ? '[Hidden for privacy]'
                 : lastResponse.output,
               responseLength: lastResponse.output.length,
-              graderPassed: redteamHistory[i - 1].graderPassed || false,
+              graderPassed:
+                storedGraderResult?.metadata?.graderError === true
+                  ? undefined
+                  : redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
@@ -468,8 +465,6 @@ export async function runMetaAgentRedteam({
       targetContext,
       options,
     );
-    lastTargetMetadata = snapshotTargetMetadata(initialTargetResponse, test);
-    lastTargetOutput = lastTargetMetadata === undefined ? undefined : initialTargetResponse.output;
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
       {
@@ -477,7 +472,6 @@ export async function runMetaAgentRedteam({
         testIdx: context?.testIdx,
         promptIdx: context?.promptIdx,
       },
-      lastTargetOutput,
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -556,7 +550,13 @@ export async function runMetaAgentRedteam({
     // Update previous trace summary for next iteration's attack generation
     previousTraceSummary = attackTraceSummary;
 
-    const assertToUse = getRedteamAssertion(test);
+    let assertToUse = test?.assert?.find(
+      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+    );
+
+    if (!assertToUse) {
+      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
 
     const { getGraderById } = await import('../graders');
 
@@ -571,7 +571,6 @@ export async function runMetaAgentRedteam({
         // Build grading context with image outputs, tracing, and exfil tracking data.
         const gradingContext: RedteamGradingContext = {
           providerResponse: targetResponse,
-          outputIsText: targetResponse.outputIsText,
           ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
           ...(tracingOptions.includeInGrading
             ? { traceContext, traceSummary: gradingTraceSummary }
@@ -630,14 +629,6 @@ export async function runMetaAgentRedteam({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          {
-            assertion: assertToUse,
-            targetProvider,
-            prompt,
-            context,
-            targetMetadata: lastTargetMetadata,
-            targetOutput: lastTargetOutput,
-          },
           finalAttackPrompt,
           targetResponse.output,
           iterationTest,
@@ -654,7 +645,6 @@ export async function runMetaAgentRedteam({
         storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult, {
           prompt: finalAttackPrompt,
           output: targetResponse.output,
-          outputIsText: targetResponse.outputIsText,
           pluginId: test.metadata?.pluginId,
           assertion: assertToUse,
         });
@@ -665,6 +655,11 @@ export async function runMetaAgentRedteam({
         });
       }
     }
+
+    const graderError =
+      graderResult?.metadata?.graderError === true
+        ? graderResult.reason || 'Grading failed'
+        : undefined;
 
     // Store in redteam history for Messages tab
     redteamHistory.push({
@@ -682,7 +677,11 @@ export async function runMetaAgentRedteam({
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy
-      graderPassed: graderResult?.pass,
+      graderPassed: graderError ? undefined : graderResult?.pass,
+      graderError,
+      gradingInputHash: graderError
+        ? storedGraderResult?.metadata?.redteamGradingInputHash
+        : undefined,
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
@@ -690,8 +689,8 @@ export async function runMetaAgentRedteam({
       inputVars: currentRenderInputVars,
     });
 
-    // Check if vulnerability was achieved
-    if (graderResult?.pass === false) {
+    // Only a valid grader verdict can establish a vulnerability.
+    if (graderResult?.pass === false && !graderError) {
       vulnerabilityAchieved = true;
       bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
       bestResponse = targetResponse.output;
@@ -708,35 +707,29 @@ export async function runMetaAgentRedteam({
 
   const error = agentRequestError || failClosedError || lastResponse?.error;
   return preserveSelectedError(
-    await restoreNumericSourceOutput(
-      {
-        output: bestResponse || lastResponse?.output || '',
-        prompt: bestPrompt,
-        ...(error ? { error } : {}),
-        metadata: {
-          redteamOutputIsText: lastResponse?.outputIsText,
-          redteamTargetMetadata: lastTargetMetadata,
-          finalIteration,
-          vulnerabilityAchieved,
-          // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-          // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-          redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-          storedGraderResult,
-          stopReason,
-          redteamHistory,
-          sessionIds,
-          traceSnapshots:
-            traceSnapshots.length > 0
-              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-              : undefined,
-          // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
-          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        },
-        tokenUsage: totalTokenUsage,
+    {
+      output: bestResponse || lastResponse?.output || '',
+      prompt: bestPrompt,
+      ...(error ? { error } : {}),
+      metadata: {
+        finalIteration,
+        vulnerabilityAchieved,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        storedGraderResult,
+        stopReason,
+        redteamHistory,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+            : undefined,
+        // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
-      lastTargetOutput,
-      context,
-    ),
+      tokenUsage: totalTokenUsage,
+    },
     agentRequestError || failClosedError ? undefined : lastResponse,
   );
 }

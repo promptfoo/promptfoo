@@ -13,27 +13,17 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { RedteamGradingConfigError } from '../grading/errors';
-import { withGradingUsage } from '../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
 } from '../inputVariables';
 import {
-  accumulateGraderResult,
-  buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
-  getGraderAssertionValue,
-  getRedteamAssertion,
   getTargetResponse,
   isTargetCallAbortError,
-  prepareNumericGrading,
   preserveSelectedError,
   redteamProviderManager,
-  restoreNumericSourceOutput,
-  runRedteamGrader,
-  snapshotTargetMetadata,
   type TargetResponse,
 } from './shared';
 
@@ -42,7 +32,6 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  GradingResult,
   Inputs,
   NunjucksFilterMap,
   Prompt,
@@ -71,11 +60,9 @@ interface ImageGenerationOutput {
 }
 
 interface BestResponse extends TargetResponse {
-  targetOutput?: string;
-  targetMetadata?: ProviderResponse['metadata'] | null;
   imageUrl?: string;
   imageDescription?: string;
-  score?: number;
+  score: number;
   scoreComponents?: {
     safetyBypass: number;
     goalAchievement: number;
@@ -299,11 +286,7 @@ async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
-  let storedGraderResult: GradingResult | undefined;
-  let bestGraderResult: GradingResult | undefined;
   let lastResponse: TargetResponse | undefined = undefined;
-  let lastTargetOutput: string | undefined;
-  let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
@@ -407,20 +390,12 @@ async function runRedteamConversation({
         targetContext,
         options,
       );
-      const targetMetadata = snapshotTargetMetadata(targetResponse, test);
-      const targetOutput = targetMetadata === undefined ? undefined : targetResponse.output;
-      targetResponse = await externalizeResponseForRedteamHistory(
-        targetResponse,
-        {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        },
-        targetOutput,
-      );
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      });
       lastResponse = targetResponse;
-      lastTargetOutput = targetOutput;
-      lastTargetMetadata = targetMetadata;
       // Count the target request even when the target returns an error.
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error) {
@@ -430,69 +405,6 @@ async function runRedteamConversation({
           break;
         }
         continue;
-      }
-
-      const assertToUse = getRedteamAssertion(test);
-      if (assertToUse && test) {
-        const iterationTest = { ...test, vars: iterationVars };
-        const graderInput = {
-          assertion: assertToUse,
-          targetProvider,
-          prompt,
-          context,
-          targetMetadata,
-          targetOutput,
-        };
-        const gradingContext = {
-          providerResponse: targetResponse,
-          outputIsText: targetResponse.outputIsText,
-        };
-        const preparedNumeric = await prepareNumericGrading(
-          graderInput,
-          targetPrompt,
-          targetResponse.output,
-          iterationTest,
-          getGraderAssertionValue(assertToUse),
-          gradingContext,
-        );
-        if (preparedNumeric.numeric) {
-          const { getGraderById } = await import('../graders');
-          const grader = getGraderById(assertToUse.type);
-          invariant(grader, 'Expected a grader for the numeric assertion');
-          const { grade, rubric } = await runRedteamGrader(
-            grader,
-            { ...graderInput, preparedNumeric },
-            targetPrompt,
-            targetResponse.output,
-            iterationTest,
-            undefined,
-            getGraderAssertionValue(assertToUse),
-            undefined,
-            undefined,
-            gradingContext,
-          );
-          storedGraderResult = accumulateGraderResult(
-            storedGraderResult,
-            {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            },
-            {
-              prompt: targetPrompt,
-              output: targetResponse.output,
-              outputIsText: targetResponse.outputIsText,
-              pluginId: test.metadata?.pluginId,
-              assertion: assertToUse,
-            },
-          );
-          // Numeric failures do not depend on an image URL or an auxiliary vision score.
-          if (!grade.pass) {
-            bestResponse = { ...targetResponse, targetMetadata, targetOutput };
-            bestGraderResult = storedGraderResult;
-            finalIteration = i + 1;
-            break;
-          }
-        }
       }
 
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
@@ -632,14 +544,11 @@ async function runRedteamConversation({
           highestScore = score;
           bestResponse = {
             ...targetResponse,
-            targetMetadata,
-            targetOutput,
             imageUrl: url[0],
             imageDescription,
             score,
             scoreComponents,
           };
-          bestGraderResult = storedGraderResult;
           finalIteration = i + 1;
         }
 
@@ -669,10 +578,8 @@ async function runRedteamConversation({
         continue;
       }
     } catch (err) {
-      if (
-        err instanceof RedteamGradingConfigError ||
-        isTargetCallAbortError(err, options?.abortSignal)
-      ) {
+      // Re-throw abort errors to properly cancel the operation
+      if (isTargetCallAbortError(err, options?.abortSignal)) {
         throw err;
       }
       logger.error(`Iteration ${i + 1} failed: ${err}`);
@@ -681,38 +588,22 @@ async function runRedteamConversation({
   }
 
   return preserveSelectedError(
-    await restoreNumericSourceOutput(
-      {
-        output:
-          bestResponse?.output ||
-          (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
-        prompt: targetPrompt || undefined,
-        metadata: {
-          redteamTargetMetadata: bestResponse?.output
-            ? bestResponse.targetMetadata
-            : lastTargetMetadata,
-          redteamOutputIsText: bestResponse?.output
-            ? bestResponse.outputIsText
-            : lastResponse?.outputIsText,
-          finalIteration,
-          highestScore,
-          redteamHistory,
-          redteamFinalPrompt: targetPrompt || undefined,
-          bestImageUrl: bestResponse?.imageUrl,
-          bestImageDescription: bestResponse?.imageDescription,
-          ...(storedGraderResult && {
-            storedGraderResult:
-              bestResponse?.output && bestGraderResult
-                ? withGradingUsage(bestGraderResult, storedGraderResult.tokensUsed)
-                : storedGraderResult,
-          }),
-        },
-        tokenUsage: totalTokenUsage,
-        ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    {
+      output:
+        bestResponse?.output ||
+        (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+      prompt: targetPrompt || undefined,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory,
+        redteamFinalPrompt: targetPrompt || undefined,
+        bestImageUrl: bestResponse?.imageUrl,
+        bestImageDescription: bestResponse?.imageDescription,
       },
-      bestResponse?.output ? bestResponse.targetOutput : lastTargetOutput,
-      context,
-    ),
+      tokenUsage: totalTokenUsage,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    },
     lastResponse,
   );
 }

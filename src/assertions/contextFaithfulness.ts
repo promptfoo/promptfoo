@@ -21,7 +21,6 @@ export async function handleContextFaithfulness({
   output,
   prompt,
   providerResponse,
-  assertionValueContext,
   providerCallContext,
   inverse,
 }: AssertionParams): Promise<GradingResult> {
@@ -41,7 +40,7 @@ export async function handleContextFaithfulness({
     output,
     prompt,
     undefined,
-    assertionValueContext?.providerResponse ?? providerResponse,
+    providerResponse,
   );
 
   return {

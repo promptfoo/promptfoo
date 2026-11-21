@@ -11,7 +11,6 @@ import type {
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
-import type { TraceData } from './tracing';
 import type { TransformFunction } from './transform';
 
 export type {
@@ -69,10 +68,11 @@ interface AtomicTestCase {
   metadata?: Record<string, any>;
   options?: Record<string, any>;
 }
-export interface ProviderOptions {
+// Keep the legacy default while allowing adapters and callers to select a checked config type.
+export interface ProviderOptions<TConfig = any> {
   id?: ProviderId;
   label?: ProviderLabel;
-  config?: any;
+  config?: TConfig;
   prompts?: string[];
   transform?: string | TransformFunction;
   delay?: number;
@@ -85,13 +85,6 @@ export interface CallApiContextParams {
   getCache?: any;
   logger?: winston.Logger;
   originalProvider?: ApiProvider;
-  /** Original evaluator inputs for strategy-side assertion preparation; never persisted. */
-  originalAssertionInput?: {
-    prompt: string;
-    transformPrompt?: Prompt;
-    getVars: () => Record<string, VarValue>;
-    getTraceData?: () => Promise<TraceData | null>;
-  };
   prompt: Prompt;
   vars: Record<string, VarValue>;
   debug?: boolean;

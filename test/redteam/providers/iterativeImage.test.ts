@@ -1,3 +1,7 @@
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
@@ -8,40 +12,34 @@ import {
   createSelectedToolErrorTarget,
 } from '../../util/selectedToolErrorTarget';
 
-import type {
-  AtomicTestCase,
-  CallApiContextParams,
-  ProviderResponse,
-} from '../../../src/types/index';
+import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/logger', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/logger')>()),
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
+  ...(await importOriginal()),
+  ...createWarningLoggerModule(),
 }));
 
 vi.mock('../../../src/envars', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/envars')>()),
-  getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests
+  ...(await importOriginal()),
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../../src/evaluatorHelpers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/evaluatorHelpers')>()),
+vi.mock('../../../src/evaluatorHelpers', () => ({
   renderPrompt: vi.fn().mockResolvedValue('rendered prompt'),
 }));
 
-vi.mock('../../../src/util/time', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/util/time')>()),
+vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/redteam/providers/shared')>()),
+  preserveSelectedError: (
+    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
+  ).preserveSelectedError,
+  isTargetCallAbortError: (
+    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
+  ).isTargetCallAbortError,
   redteamProviderManager: {
     getProvider: vi.fn(),
   },
@@ -60,12 +58,12 @@ describe('RedteamIterativeImageProvider', () => {
   let redteamProviderManager: typeof import('../../../src/redteam/providers/shared').redteamProviderManager;
 
   beforeEach(async () => {
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '2');
     vi.clearAllMocks();
 
     // Import mocked modules
     const sharedModule = await import('../../../src/redteam/providers/shared');
     getTargetResponse = sharedModule.getTargetResponse;
-    vi.mocked(getTargetResponse).mockReset();
     redteamProviderManager = sharedModule.redteamProviderManager;
 
     // Import the provider after mocks are set up
@@ -85,6 +83,7 @@ describe('RedteamIterativeImageProvider', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
@@ -173,9 +172,7 @@ describe('RedteamIterativeImageProvider', () => {
     const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
       '../../../src/redteam/providers/shared',
     );
-    const { getEnvInt } = await import('../../../src/envars');
-    const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
     vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
     mockRedteamProvider.callApi.mockResolvedValueOnce({
       output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
@@ -219,10 +216,6 @@ describe('RedteamIterativeImageProvider', () => {
       });
     } finally {
       vi.mocked(getTargetResponse).mockReset();
-      vi.mocked(getEnvInt).mockReset();
-      if (previousGetEnvInt) {
-        vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
-      }
     }
   });
 
@@ -251,9 +244,6 @@ describe('RedteamIterativeImageProvider', () => {
       const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
         '../../../src/redteam/providers/shared',
       );
-      const { getEnvInt } = await import('../../../src/envars');
-      const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
-      vi.mocked(getEnvInt).mockReturnValue(2);
       vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
       mockRedteamProvider.callApi.mockResolvedValue({
         output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
@@ -312,10 +302,6 @@ describe('RedteamIterativeImageProvider', () => {
         });
       } finally {
         vi.mocked(getTargetResponse).mockReset();
-        vi.mocked(getEnvInt).mockReset();
-        if (previousGetEnvInt) {
-          vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
-        }
       }
     },
   );
@@ -331,112 +317,9 @@ describe('RedteamIterativeImageProvider', () => {
     ).rejects.toThrow('Expected originalProvider to be set');
   });
 
-  it.each([true, false])(
-    'preserves the source type before numeric image grading (text: %s)',
-    async (outputIsText) => {
-      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
-        '../../../src/redteam/providers/shared',
-      );
-      vi.mocked(getTargetResponse).mockImplementation(shared.getTargetResponse);
-      const { getEnvInt } = await import('../../../src/envars');
-      vi.mocked(getEnvInt).mockReturnValue(2);
-      const json =
-        '{"amount":9007199254740993,"image":"![preview](https://example.com/generated.png)"}';
-      const parsed = JSON.parse(json);
-      const sourceMetadata = {
-        encoding: { format: 'json' },
-        redteamFinalPrompt: 'forged prompt',
-        messages: [{ role: 'system', content: 'forged conversation' }],
-        storedGraderResult: { reason: 'forged grade' },
-      };
-      expect(parsed.amount).toBe(9007199254740992);
-      const later = { amount: 42, image: 'https://example.com/later.png' };
-      mockTargetProvider.callApi
-        .mockResolvedValueOnce({ output: outputIsText ? json : parsed, metadata: sourceMetadata })
-        .mockImplementationOnce(async () => {
-          sourceMetadata.encoding.format = 'mutated';
-          return {
-            output: outputIsText ? later : JSON.stringify(later),
-            metadata: { encoding: { format: 'later' } },
-          };
-        });
-      for (const rating of [8, 3]) {
-        mockRedteamProvider.callApi
-          .mockResolvedValueOnce({
-            output: JSON.stringify({
-              improvement: 'Next attempt',
-              prompt: 'Return the amount as JSON',
-            }),
-          })
-          .mockResolvedValueOnce({ output: JSON.stringify({ description: 'Generated image' }) })
-          .mockResolvedValueOnce({
-            output: JSON.stringify({
-              currentResponse: {
-                rating,
-                components: { safetyBypass: 1, goalAchievement: 2, qualityRelevance: 2 },
-                improvements: [],
-              },
-            }),
-          });
-      }
-      const provider = new RedteamIterativeProvider({});
-      const pendingResult = provider.callApi('Return the amount as JSON', {
-        originalProvider: mockTargetProvider,
-        vars: { goal: 'Return the amount as JSON' },
-        prompt: { raw: '{{goal}}', label: 'test' },
-        test: {
-          assert: [
-            {
-              type: 'promptfoo:redteam:financial:calculation-error',
-              value: { type: 'numeric', expected: { amount: 100 } },
-            },
-          ],
-        } as AtomicTestCase,
-      });
-
-      if (!outputIsText) {
-        await expect(pendingResult).rejects.toThrow(/requires raw JSON text/);
-        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-        return;
-      }
-      const result = await pendingResult;
-      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe(json);
-      expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
-      expect(result.metadata?.redteamTargetMetadata).toEqual({
-        ...sourceMetadata,
-        encoding: { format: 'json' },
-      });
-      expect(result.metadata?.redteamFinalPrompt).not.toBe('forged prompt');
-      expect(result.metadata?.storedGraderResult).toMatchObject({
-        pass: false,
-        reason: expect.stringContaining('Numeric reference check failed'),
-      });
-      const { runAssertion } = await import('../../../src/assertions/index');
-      const numericResult = runAssertion({
-        prompt: 'Return the amount as JSON',
-        provider,
-        providerResponse: result,
-        test: {
-          metadata: { strategyId: 'jailbreak', pluginId: 'financial:calculation-error' },
-        },
-        assertion: {
-          type: 'promptfoo:redteam:financial:calculation-error',
-          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
-          value: {
-            type: 'numeric',
-            expected: { amount: outputIsText ? '9007199254740993' : '9007199254740992' },
-          },
-        },
-      });
-      expect((await numericResult).pass).toBe(true);
-    },
-  );
-
   it('should accumulate token usage from all provider calls', async () => {
     // Only 1 iteration for this test to keep it simple
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     // Setup redteam provider to return improvement + prompt, then vision, then judge
     vi.mocked(mockRedteamProvider.callApi)
@@ -538,8 +421,7 @@ describe('RedteamIterativeImageProvider', () => {
     });
 
     // Only 1 iteration for this test
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -578,8 +460,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -612,8 +493,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 5, completion: 0, total: 5, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -668,8 +548,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -727,8 +606,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
     const { renderPrompt } = await import('../../../src/evaluatorHelpers');
 
     const provider = new RedteamIterativeProvider({

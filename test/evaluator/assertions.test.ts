@@ -1,3 +1,5 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -6,7 +8,6 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
-import { transform } from '../../src/util/transform';
 import {
   mockApiProvider,
   mockGradingApiProviderFails,
@@ -16,60 +17,6 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
-  it.each([
-    ['provider serialization', false, 'JSON.stringify(output)', undefined, false],
-    ['test serialization', false, undefined, 'JSON.stringify(output)', false],
-    ['text-object-text chain', true, 'JSON.parse(output)', 'JSON.stringify(output)', false],
-    ['text-preserving transforms', true, 'output.trim()', 'output.trim()', true],
-    ['raw text', true, undefined, undefined, true],
-  ])(
-    'preserves numeric source eligibility across %s',
-    async (_name, startsAsText, providerTransform, testTransform, success) => {
-      const originalTransform = vi.mocked(transform).getMockImplementation()!;
-      const actual = await vi.importActual<typeof import('../../src/util/transform')>(
-        '../../src/util/transform',
-      );
-      vi.mocked(transform).mockImplementation(actual.transform);
-      try {
-        const raw = '{"amount":9007199254740993}';
-        vi.mocked(mockApiProvider.callApi).mockResolvedValue({
-          output: startsAsText ? raw : JSON.parse(raw),
-          metadata: { redteamOutputIsText: true },
-        });
-        const testSuite: TestSuite = {
-          providers: [{ ...mockApiProvider, transform: providerTransform }],
-          prompts: [toPrompt('Return a synthetic amount')],
-          tests: [
-            {
-              options: { transform: testTransform },
-              assert: [
-                {
-                  type: 'promptfoo:redteam:financial:calculation-error',
-                  value: {
-                    type: 'numeric',
-                    expected: { amount: success ? '9007199254740993' : '9007199254740992' },
-                  },
-                },
-              ],
-            },
-          ],
-        };
-        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
-        const summary = await evalRecord.toEvaluateSummary();
-        expect(summary.results).toHaveLength(1);
-        const row = summary.results[0];
-        expect(row.success).toBe(success);
-        if (!success) {
-          expect(row.failureReason).toBe(ResultFailureReason.ERROR);
-          expect(row.error).toContain('requires raw JSON text');
-        }
-      } finally {
-        vi.mocked(transform).mockImplementation(originalTransform);
-      }
-    },
-  );
-
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {
@@ -384,16 +331,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderPasses,
@@ -610,16 +548,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderFails,

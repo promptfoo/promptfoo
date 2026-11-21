@@ -2,13 +2,15 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import ArticleIcon from '@mui/icons-material/Article';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BiotechIcon from '@mui/icons-material/Biotech';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import ProofBannerSection from '../../components/CodeScanProofBanner';
+import VulnerabilityTypesSection from '../../components/CodeScanVulnerabilities';
 import LogoContainer from '../../components/LogoContainer';
 import styles from '../landing-page.module.css';
 
@@ -61,89 +63,6 @@ function GitHubActionHeader() {
   );
 }
 
-function VulnerabilityTypesSection() {
-  const vulnerabilities = [
-    {
-      severity: 'critical',
-      name: 'Prompt Injection',
-      description: 'Untrusted input reaches LLM prompts without proper sanitization or boundaries.',
-    },
-    {
-      severity: 'critical',
-      name: 'Data Exfiltration',
-      description: 'Indirect prompt injection vectors that could extract data through agent tools.',
-    },
-    {
-      severity: 'high',
-      name: 'PII Exposure',
-      description:
-        'Code that may leak sensitive user data to LLMs or log confidential information.',
-    },
-    {
-      severity: 'high',
-      name: 'Improper Output Handling',
-      description: 'LLM outputs used in dangerous contexts like SQL queries or shell commands.',
-    },
-    {
-      severity: 'medium',
-      name: 'Excessive Agency',
-      description: 'LLMs with overly broad tool access or missing approval gates for actions.',
-    },
-    {
-      severity: 'medium',
-      name: 'Jailbreak Risks',
-      description: 'Weak system prompts and guardrail bypasses that could allow harmful outputs.',
-    },
-  ];
-
-  return (
-    <section className={styles.vulnerabilitySection}>
-      <div className="container">
-        <div className={styles.vulnEyebrow}>LLM-specific vulnerabilities</div>
-        <h2 className={styles.vulnTitle}>Catch issues that other review tools miss</h2>
-        <p className={styles.vulnSubtitle}>
-          Our scanner is laser-focused on the kinds of vulnerabilities that apps built on LLMs and
-          agents are uniquely susceptible to.
-        </p>
-        <div className={styles.vulnGrid}>
-          {vulnerabilities.map((vuln) => (
-            <div key={vuln.name} className={styles.vulnCard}>
-              <div className={`${styles.vulnSeverity} ${styles[vuln.severity]}`}>
-                {vuln.severity}
-              </div>
-              <h3 className={styles.vulnName}>{vuln.name}</h3>
-              <p className={styles.vulnDescription}>{vuln.description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ProofBannerSection() {
-  return (
-    <section className={styles.proofBanner}>
-      <div className={clsx('container', styles.proofBannerContainer)}>
-        <ArticleIcon className={styles.proofBannerIcon} />
-        <div className={styles.proofBannerContent}>
-          <h3 className={styles.proofBannerTitle}>See it in action</h3>
-          <p className={styles.proofBannerText}>
-            We tested the scanner against real CVEs in LangChain, Vanna.AI, and LlamaIndex. Read the
-            technical deep dive to see how it catches vulnerabilities that other tools miss.
-          </p>
-        </div>
-        <Link
-          className={clsx('button button--secondary', styles.proofBannerButton)}
-          to="/blog/building-a-security-scanner-for-llm-apps"
-        >
-          Read the technical breakdown
-        </Link>
-      </div>
-    </section>
-  );
-}
-
 function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
@@ -152,38 +71,32 @@ function BenefitsSection() {
         <h2 className={styles.sectionTitle}>Real security that fits your workflow</h2>
         <p className={styles.sectionSubtitle}>Flag dangerous code without adding friction.</p>
         <div className={styles.benefitsList}>
-          <div className={styles.benefitItem}>
-            <BiotechIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Deep tracing</h3>
-              <p>
-                Beyond the PR itself, the scanner agentically traces LLM inputs, outputs, and
-                capability changes deep into the larger repository to identify subtle yet critical
-                issues that human reviewers can struggle to catch.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <VolumeOffIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>No noise</h3>
-              <p>
-                Despite the comprehensive approach, it has a high bar for reporting, avoiding false
-                positives and alert fatigue. Maintainers can configure severity levels and provide
-                custom instructions to tailor sensitivity to their needs.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <AutoFixHighIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Fix suggestions</h3>
-              <p>
-                Every finding includes a suggested remediation, as well as a prompt that can be
-                passed straight to an AI coding agent to further investigate and address the issue.
-              </p>
-            </div>
-          </div>
+          <BenefitItem
+            styles={styles}
+            icon={<BiotechIcon className={styles.benefitIcon} />}
+            title="Deep tracing"
+          >
+            Beyond the PR itself, the scanner agentically traces LLM inputs, outputs, and capability
+            changes deep into the larger repository to identify subtle yet critical issues that
+            human reviewers can struggle to catch.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<VolumeOffIcon className={styles.benefitIcon} />}
+            title="No noise"
+          >
+            Despite the comprehensive approach, it has a high bar for reporting, avoiding false
+            positives and alert fatigue. Maintainers can configure severity levels and provide
+            custom instructions to tailor sensitivity to their needs.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<AutoFixHighIcon className={styles.benefitIcon} />}
+            title="Fix suggestions"
+          >
+            Every finding includes a suggested remediation, as well as a prompt that can be passed
+            straight to an AI coding agent to further investigate and address the issue.
+          </BenefitItem>
         </div>
       </div>
     </section>
@@ -232,7 +145,13 @@ export default function GitHubAction(): React.ReactElement {
       <div className={styles.pageContainer}>
         <GitHubActionHeader />
         <main className={styles.mainContent}>
-          <VulnerabilityTypesSection />
+          <VulnerabilityTypesSection
+            eyebrow="LLM-specific vulnerabilities"
+            title="Catch issues that other review tools miss"
+          >
+            Our scanner is laser-focused on the kinds of vulnerabilities that apps built on LLMs and
+            agents are uniquely susceptible to.
+          </VulnerabilityTypesSection>
           <ProofBannerSection />
           <BenefitsSection />
           <CallToActionSection />

@@ -21,7 +21,6 @@ export const handleContextRelevance = async ({
   output,
   prompt,
   providerResponse,
-  assertionValueContext,
   providerCallContext,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
@@ -37,7 +36,7 @@ export const handleContextRelevance = async ({
     output,
     prompt,
     undefined,
-    assertionValueContext?.providerResponse ?? providerResponse,
+    providerResponse,
   );
 
   const result = await matchesContextRelevance(

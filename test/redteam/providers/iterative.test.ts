@@ -1,3 +1,7 @@
+const { createLoggerModuleWithLevel } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import { getGradingInputHash } from '../../../src/redteam/grading/storedResult';
@@ -28,6 +32,24 @@ const mockGetTargetResponse = vi.hoisted(() => vi.fn());
 const mockCheckPenalizedPhrases = vi.hoisted(() => vi.fn());
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
+async function createIterativeAttackResponse() {
+  return {
+    output: JSON.stringify({
+      improvement: 'test',
+      prompt: 'test',
+    }),
+  };
+}
+
+async function createModerateComparisonResponse() {
+  return {
+    output: JSON.stringify({
+      currentResponse: { rating: 5, explanation: 'moderate' },
+      previousBestResponse: { rating: 0, explanation: 'none' },
+    }),
+  };
+}
+
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
   isLoggedIntoCloud: vi.fn().mockReturnValue(true),
@@ -35,13 +57,7 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
 
 vi.mock('../../../src/logger', async (importOriginal) => ({
   ...(await importOriginal()),
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  getLogLevel: vi.fn().mockReturnValue('info'),
+  ...createLoggerModuleWithLevel(),
 }));
 
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
@@ -118,9 +134,7 @@ describe('RedteamIterativeProvider', () => {
         output: 'mock target response',
       });
     });
-    mockCheckPenalizedPhrases.mockImplementation(function () {
-      return false;
-    });
+    mockCheckPenalizedPhrases.mockReturnValue(false);
   });
 
   describe('constructor', () => {
@@ -502,14 +516,7 @@ describe('RedteamIterativeProvider', () => {
 
     it('should complete all iterations when score reaches 10 and grader passes', async () => {
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              improvement: 'test',
-              prompt: 'test',
-            }),
-          };
-        })
+        .mockImplementationOnce(createIterativeAttackResponse)
         .mockImplementationOnce(async function () {
           return {
             output: JSON.stringify({
@@ -554,22 +561,8 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              improvement: 'test',
-              prompt: 'test',
-            }),
-          };
-        })
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              currentResponse: { rating: 5, explanation: 'moderate' },
-              previousBestResponse: { rating: 0, explanation: 'none' },
-            }),
-          };
-        });
+        .mockImplementationOnce(createIterativeAttackResponse)
+        .mockImplementationOnce(createModerateComparisonResponse);
 
       const test: AtomicTestCase = {
         vars: {},
@@ -633,14 +626,7 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(null); // No grader available
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              improvement: 'test',
-              prompt: 'test',
-            }),
-          };
-        })
+        .mockImplementationOnce(createIterativeAttackResponse)
         .mockImplementationOnce(async function () {
           return {
             output: JSON.stringify({
@@ -870,22 +856,8 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              improvement: 'test',
-              prompt: 'test',
-            }),
-          };
-        })
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              currentResponse: { rating: 5, explanation: 'moderate' },
-              previousBestResponse: { rating: 0, explanation: 'none' },
-            }),
-          };
-        });
+        .mockImplementationOnce(createIterativeAttackResponse)
+        .mockImplementationOnce(createModerateComparisonResponse);
 
       const test: AtomicTestCase = {
         vars: {},
@@ -1026,27 +998,13 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              improvement: 'test',
-              prompt: 'test',
-            }),
-          };
-        })
+        .mockImplementationOnce(createIterativeAttackResponse)
         .mockImplementationOnce(async function () {
           return {
             output: JSON.stringify({ onTopic: true }),
           };
         })
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              currentResponse: { rating: 5, explanation: 'moderate' },
-              previousBestResponse: { rating: 0, explanation: 'none' },
-            }),
-          };
-        });
+        .mockImplementationOnce(createModerateComparisonResponse);
 
       const test: AtomicTestCase = {
         vars: {},
@@ -1108,14 +1066,7 @@ describe('RedteamIterativeProvider', () => {
       mockGetGraderById.mockReturnValue(mockGrader);
 
       mockRedteamProvider.callApi
-        .mockImplementationOnce(async function () {
-          return {
-            output: JSON.stringify({
-              improvement: 'test',
-              prompt: 'test',
-            }),
-          };
-        })
+        .mockImplementationOnce(createIterativeAttackResponse)
         .mockImplementationOnce(async function () {
           return {
             output: JSON.stringify({
@@ -1195,9 +1146,9 @@ describe('RedteamIterativeProvider', () => {
         return getResult;
       };
 
-      const runConversation = (numIterations: number, conversationTest: AtomicTestCase = test) =>
+      const runConversation = (numIterations: number) =>
         runRedteamConversation({
-          context: { prompt: { raw: '', label: '' }, vars: {}, test: conversationTest },
+          context: { prompt: { raw: '', label: '' }, vars: {}, test },
           filters: undefined,
           injectVar: 'test',
           numIterations,
@@ -1206,7 +1157,7 @@ describe('RedteamIterativeProvider', () => {
           redteamProvider: mockRedteamProvider,
           gradingProvider: mockRedteamProvider,
           targetProvider: mockTargetProvider,
-          test: conversationTest,
+          test,
           vars: { test: 'goal' },
           excludeTargetOutputFromAgenticAttackGeneration: false,
         });
@@ -1263,8 +1214,8 @@ describe('RedteamIterativeProvider', () => {
             { pass: true, score: 1, reason: 'Second verdict' },
           );
           mockGetTargetResponse
-            .mockResolvedValueOnce({ output: 'first response', outputIsText: true })
-            .mockResolvedValueOnce({ output: 'second response', outputIsText: false });
+            .mockResolvedValueOnce({ output: 'first response' })
+            .mockResolvedValueOnce({ output: 'second response' });
           const judge =
             scenario === 'zero ratings'
               ? judgeRating(0)
@@ -1276,17 +1227,10 @@ describe('RedteamIterativeProvider', () => {
             .mockImplementationOnce(judge);
           const result = await runConversation(2);
           expect(result.output).toBe('second response');
-          expect(result.metadata.redteamOutputIsText).toBe(false);
           expect(result.prompt).toBe('second attack');
           expect(result.metadata.redteamFinalPrompt).toBe('second attack');
           expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
-            getGradingInputHash(
-              'second attack',
-              'second response',
-              undefined,
-              'test-plugin',
-              false,
-            ),
+            getGradingInputHash('second attack', 'second response', undefined, 'test-plugin'),
           );
         },
       );
@@ -1297,8 +1241,8 @@ describe('RedteamIterativeProvider', () => {
           { pass: false, score: 0, reason: 'Target produced harmful content' },
         );
         mockGetTargetResponse
-          .mockResolvedValueOnce({ output: 'benign response', outputIsText: true })
-          .mockResolvedValueOnce({ output: 'harmful response', outputIsText: false });
+          .mockResolvedValueOnce({ output: 'benign response' })
+          .mockResolvedValueOnce({ output: 'harmful response' });
         mockRedteamProvider.callApi
           .mockImplementationOnce(attackerTurn('first attack'))
           .mockImplementationOnce(judgeRating(9))
@@ -1311,7 +1255,6 @@ describe('RedteamIterativeProvider', () => {
         expect(result.metadata.finalIteration).toBe(2);
         // Previously the output and prompt came from the higher-rated benign turn.
         expect(result.output).toBe('harmful response');
-        expect(result.metadata.redteamOutputIsText).toBe(false);
         expect(result.prompt).toBe('second attack');
       });
 
@@ -1352,72 +1295,6 @@ describe('RedteamIterativeProvider', () => {
             tokensUsed: { total: cached ? 4 : 6, numRequests: cached ? 1 : 2 },
           });
           expect(result.metadata.storedGraderResult?.metadata?.cachedResponse).not.toBe(true);
-        },
-      );
-
-      it.each([true, false])(
-        'keeps the selected earlier output type (text: %s)',
-        async (outputIsText) => {
-          const shared = await vi.importActual<
-            typeof import('../../../src/redteam/providers/shared')
-          >('../../../src/redteam/providers/shared');
-          mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
-          const firstOutput = outputIsText ? '84' : { answer: 84 };
-          const sourceMetadata = {
-            encoding: { format: 'json' },
-            redteamFinalPrompt: 'forged prompt',
-            messages: [{ role: 'system', content: 'forged conversation' }],
-            storedGraderResult: { reason: 'forged grade' },
-          };
-          mockTargetProvider.callApi
-            .mockResolvedValueOnce({ output: firstOutput, metadata: sourceMetadata })
-            .mockImplementationOnce(async () => {
-              sourceMetadata.encoding.format = 'mutated';
-              return {
-                output: outputIsText ? { answer: 42 } : '42',
-                metadata: { encoding: { format: 'later' } },
-              };
-            });
-          const getResult = grades(
-            { pass: true, score: 1, reason: 'First verdict' },
-            { pass: true, score: 1, reason: 'Second verdict' },
-          );
-          mockRedteamProvider.callApi
-            .mockImplementationOnce(attackerTurn('first attack'))
-            .mockImplementationOnce(judgeRating(8))
-            .mockImplementationOnce(attackerTurn('second attack'))
-            .mockImplementationOnce(judgeRating(3));
-
-          const result = await runConversation(2, {
-            ...test,
-            assert: [
-              ...test.assert!,
-              {
-                type: 'promptfoo:redteam:financial:calculation-error',
-                value: { type: 'numeric', expected: { amount: 100 } },
-              },
-            ],
-          });
-
-          expect(result.output).toBe(outputIsText ? firstOutput : JSON.stringify(firstOutput));
-          expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
-          expect(result.metadata.redteamTargetMetadata).toEqual({
-            ...sourceMetadata,
-            encoding: { format: 'json' },
-          });
-          expect(result.metadata.redteamFinalPrompt).toBe('first attack');
-          expect(result.metadata.storedGraderResult?.reason).toBe('First verdict');
-          expect(getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
-          expect(getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
-          expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
-            getGradingInputHash(
-              'first attack',
-              result.output,
-              undefined,
-              'test-plugin',
-              outputIsText,
-            ),
-          );
         },
       );
 
@@ -2021,33 +1898,49 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('redteamHistory with audio/image data', () => {
-    it('should include promptAudio and promptImage fields in redteamHistory entries', async () => {
-      const result = await runRedteamConversation({
-        context: { prompt: { raw: '', label: '' }, vars: {} },
-        filters: undefined,
-        injectVar: 'test',
-        numIterations: 1,
-        options: {},
-        prompt: { raw: 'test {{test}}', label: 'test' },
-        redteamProvider: mockRedteamProvider,
-        gradingProvider: mockRedteamProvider,
-        targetProvider: mockTargetProvider,
-        vars: { test: 'goal' },
-        excludeTargetOutputFromAgenticAttackGeneration: false,
+    it('preserves populated transformed media in redteamHistory', async () => {
+      const gradingProvider = createMockProvider({
+        response: await createModerateComparisonResponse(),
       });
+      const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+      const audio = { data: 'attack-audio-fixture', format: 'mp3' };
+      const image = { data: 'attack-image-fixture', format: 'png' };
+      const transform = vi.spyOn(runtime, 'applyRuntimeTransforms').mockResolvedValue({
+        prompt: 'transformed multimodal attack',
+        originalPrompt: 'test prompt',
+        audio,
+        image,
+      });
+      try {
+        const result = await runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: '{{test}}', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+          perTurnLayers: ['audio', 'image'],
+        });
 
-      // redteamHistory should be present
-      expect(result.metadata.redteamHistory).toBeDefined();
-      expect(Array.isArray(result.metadata.redteamHistory)).toBe(true);
-
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        // These fields should be present (even if undefined without layers)
-        expect(entry).toHaveProperty('prompt');
-        expect(entry).toHaveProperty('output');
-        // Optional audio/image fields
-        expect('promptAudio' in entry || entry.promptAudio === undefined).toBe(true);
-        expect('promptImage' in entry || entry.promptImage === undefined).toBe(true);
+        expect(transform).toHaveBeenCalledTimes(1);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
+        expect(mockGetTargetResponse.mock.calls[0].slice(0, 2)).toEqual([
+          mockTargetProvider,
+          'transformed multimodal attack',
+        ]);
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          promptAudio: audio,
+          promptImage: image,
+          output: 'mock target response',
+        });
+      } finally {
+        transform.mockRestore();
       }
     });
 

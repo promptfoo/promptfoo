@@ -52,11 +52,6 @@ export function shouldRetry(
     return false;
   }
 
-  // Retrying an attack cannot repair invalid grading configuration.
-  if (error?.name === 'RedteamGradingConfigError') {
-    return false;
-  }
-
   // Hard quotas (insufficient_quota, billing_hard_limit_reached, …) won't
   // resolve on retry — retrying just amplifies load against an exhausted
   // account. The transport already fails fast, but isRateLimited may
@@ -81,6 +76,7 @@ export function shouldRetry(
     return (
       isTransientConnectionError(error) ||
       message.includes('timeout') ||
+      message.startsWith('websocket request timed out after ') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       message.includes('503') ||

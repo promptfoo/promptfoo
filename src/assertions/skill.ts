@@ -10,8 +10,7 @@ interface SkillCountValue {
 }
 
 function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
-  const rawSkillCalls = (params.assertionValueContext?.providerResponse ?? params.providerResponse)
-    ?.metadata?.skillCalls;
+  const rawSkillCalls = params.providerResponse?.metadata?.skillCalls;
   if (!Array.isArray(rawSkillCalls)) {
     return [];
   }
