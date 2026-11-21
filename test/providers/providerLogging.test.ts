@@ -149,6 +149,18 @@ describe('redactDiagnosticText', () => {
     expect(redacted).not.toMatch(/upstream-|sk-proj-/);
   });
 
+  it.each([
+    ['Authorization', 'Digest username="user;name", response="upstream-1"'],
+    ['Proxy-Authorization', 'Digest username="escaped\\";name",\r\n\tresponse="upstream-1"'],
+    ['Authorization', 'AWS4-HMAC-SHA256 SignedHeaders=host;date, Signature=upstream-1'],
+    ['Cookie', 'sid="user,name"; other=upstream-1'],
+    ['Set-Cookie', 'sid=first; Expires=Wed, 21 Oct, sid=upstream-1'],
+  ])('masks the complete %s header while preserving the next line (%#)', (name, header) => {
+    expect(redactDiagnosticText(name + ': ' + header + '\r\nstatus=400', [])).toBe(
+      name + ': ' + REDACTED + '\r\nstatus=400',
+    );
+  });
+
   it.each(['\\secret', 'left\\right', 'left\\;right', 'left\\ right'])(
     'masks backslashes in a bare credential and preserves the next field (%#)',
     (value) => {

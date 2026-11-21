@@ -128,13 +128,38 @@ const DIAGNOSTIC_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'<>]+/gi;
 // `name: value`, `name=value`, and quoted or (repeatedly) JSON-escaped `"name": "value"` fields.
 const CREDENTIAL_FIELD =
   /(?<![\w.\\-])(\\{0,8}["']?)([A-Za-z_][\w.-]{0,63})\1\s*[:=]\s*(\\{0,8}["'])?/g;
-const CREDENTIAL_FIELD_END = new Map([
-  ['"', /(?<!\\)"/g],
-  ["'", /(?<!\\)'/g],
-  // Authorization can span comma-separated parameters, cookies can span semicolon-separated pairs.
-  ['authorization', /[;\r\n]/g],
-  ['cookie', /[,\r\n]/g],
-]);
+/** Punctuation can belong to Digest parameters, signed headers or combined cookie values. */
+function credentialHeaderEnd(source: string, start: number, name: string): number {
+  let simpleAuth = /authorization/i.test(name);
+  let quote: string | undefined;
+  for (let i = start; i < source.length; i++) {
+    const char = source[i];
+    if (quote) {
+      if (char === '\\') {
+        i++;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+    } else if (char === '\\') {
+      // An escaped envelope has no reliable boundary in the original diagnostic.
+      return source.length;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      simpleAuth = false;
+    } else if (char === '=' || char === ',') {
+      simpleAuth = false;
+    } else if (char === ';' && simpleAuth) {
+      return i;
+    } else if (char === '\r' || char === '\n') {
+      const next = i + (char === '\r' && source[i + 1] === '\n' ? 2 : 1);
+      if (source[next] !== ' ' && source[next] !== '\t') {
+        return i;
+      }
+      i = next - 1;
+    }
+  }
+  return source.length;
+}
 
 function matchDiagnosticFields(source: string, redact: Redact) {
   for (const match of source.matchAll(DIAGNOSTIC_URL)) {
@@ -158,10 +183,13 @@ function matchDiagnosticFields(source: string, redact: Redact) {
       redact(start, source.length);
       return;
     }
-    const kind = quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? '';
-    const end = CREDENTIAL_FIELD_END.get(kind) ?? /(?<!\\)[\s,;&})\]"']/g;
-    end.lastIndex = source.startsWith(REDACTED, start) ? start + REDACTED.length : start;
-    copied = end.exec(source)?.index ?? source.length;
+    if (!quote && /authorization|cookie/i.test(name)) {
+      copied = credentialHeaderEnd(source, start, name);
+    } else {
+      const end = quote === '"' ? /(?<!\\)"/g : quote ? /(?<!\\)'/g : /(?<!\\)[\s,;&})\]"']/g;
+      end.lastIndex = source.startsWith(REDACTED, start) ? start + REDACTED.length : start;
+      copied = end.exec(source)?.index ?? source.length;
+    }
     redact(start, copied);
   }
 }
