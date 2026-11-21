@@ -62,6 +62,26 @@ function isShallowClone(): boolean {
 // Without these bounds, release-please re-scans the full git history on every run and
 // either times out or emits a giant changelog when something perturbs the prior tag.
 describe('release-please automation', () => {
+  it('ignores release-like push titles and requires both native tests before publishing', () => {
+    const { jobs } = yaml.load(
+      readRepoFile('.github/workflows/docker.yml'),
+    ) as ReleasePleaseWorkflow;
+    const matrix = { platforms: [{ platform: 'linux/amd64' }, { platform: 'linux/arm64' }] };
+    const publish = jobs?.['build-docker-and-push-digests'];
+    expect(jobs?.test).toMatchObject({
+      if: "github.event_name != 'release' || github.event.release.author.type != 'Bot'",
+      strategy: { matrix },
+      outputs: { source_sha: '${{ steps.source.outputs.sha }}' },
+    });
+    expect(publish).toMatchObject({ needs: ['test'], strategy: { matrix } });
+    expect(publish?.steps?.find((step) => step.name === 'Checkout repository')?.with).toMatchObject(
+      {
+        ref: '${{ needs.test.outputs.source_sha }}',
+        'persist-credentials': false,
+      },
+    );
+  });
+
   it('pins last-release-sha to a 40-char commit SHA', () => {
     const sha = readReleasePleaseConfig()['last-release-sha'];
     assert(typeof sha === 'string', 'last-release-sha must be a string');
