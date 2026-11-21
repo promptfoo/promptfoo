@@ -97,6 +97,8 @@ export default class EvalResult {
         };
     const args = {
       ...fields,
+      response: fields.response ?? null,
+      gradingResult: fields.gradingResult ?? null,
       id: crypto.randomUUID(),
       evalId,
       promptIdx: result.promptIdx,
