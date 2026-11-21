@@ -47,7 +47,7 @@ export default class EvalResult {
     result: EvaluateResult,
     opts?: { persist: boolean },
   ) {
-    const persist = opts?.persist == null ? true : opts.persist;
+    const persist = opts?.persist ?? true;
     const {
       prompt,
       error,
@@ -80,33 +80,33 @@ export default class EvalResult {
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
-    const sanitizedFields = persist
+    // A null field from the persistence projection is final. Retrying the original
+    // value could run a serializer that bypasses transport and credential redaction.
+    const fields = persist
       ? sanitizeResultFieldsForDb({ ...result, response: processedResponse }, persistedMetadata)
-      : undefined;
-
-    // Persisted results share one projection; in-memory fields keep their existing shape.
+      : {
+          testCase: sanitizeTestCaseForDb(testCase),
+          prompt: sanitizePromptForDb(prompt),
+          response: sanitizeForDb(processedResponse || null),
+          gradingResult: sanitizeForDb(
+            mapGradingResultProviderRefs(gradingResult || null, toSerializableProviderRef),
+          ),
+          namedScores: sanitizeForDb(namedScores),
+          provider: sanitizeProvider(provider),
+          metadata: sanitizeForDb(persistedMetadata),
+        };
     const args = {
+      ...fields,
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizedFields?.testCase ?? sanitizeTestCaseForDb(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
-      prompt: sanitizedFields?.prompt ?? sanitizePromptForDb(prompt),
       promptId: hashPrompt(prompt),
       error: error?.toString(),
       success,
-      score: score == null ? 0 : score,
-      response: sanitizedFields?.response ?? sanitizeForDb(processedResponse || null),
-      gradingResult:
-        sanitizedFields?.gradingResult ??
-        sanitizeForDb(
-          mapGradingResultProviderRefs(gradingResult || null, toSerializableProviderRef),
-        ),
-      namedScores: sanitizedFields?.namedScores ?? sanitizeForDb(namedScores),
-      provider: sanitizedFields?.provider ?? sanitizeProvider(provider),
+      score: score ?? 0,
       latencyMs,
       cost,
-      metadata: sanitizedFields?.metadata ?? sanitizeForDb(persistedMetadata),
       failureReason,
     };
     if (persist) {

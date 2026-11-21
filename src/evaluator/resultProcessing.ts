@@ -1038,7 +1038,7 @@ function redactSensitiveResultFieldsForDb<
     gradingResult: sanitizeForDb(sanitizeGradingResultForDb(fields.gradingResult)),
     metadata: redactHttpHeadersOnMetadata(snapshotMetadata(fields.metadata), {
       // Match legacy result headers against their source before redaction.
-      legacyHeadersSource: plainResponse?.metadata,
+      legacyHeadersSource: response?.metadata,
     }),
   };
 }
