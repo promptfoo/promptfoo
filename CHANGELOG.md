@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.127.0](https://github.com/promptfoo/promptfoo/compare/0.126.0...0.127.0) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** Promptfoo requires Node.js ^22.22.2, ^24.15.0 or >=26.
+
+### Bug Fixes
+
+* **deps:** require patched parse5 ([#12473](https://github.com/promptfoo/promptfoo/issues/12473)) ([ee3713d](https://github.com/promptfoo/promptfoo/commit/ee3713d7efdbb44f95d30db84cb8fdee538f8c00))
+* **deps:** update anthropic packages ([#12498](https://github.com/promptfoo/promptfoo/issues/12498)) ([eb0f11f](https://github.com/promptfoo/promptfoo/commit/eb0f11f41fbe906a8f939179c0ccd7566769e56d))
+* **deps:** update dependency @anthropic-ai/sdk to v1.8.0 ([#12532](https://github.com/promptfoo/promptfoo/issues/12532)) ([3c2c86d](https://github.com/promptfoo/promptfoo/commit/3c2c86d3a173df1242b698f0c40fe4112a77288d))
+* **deps:** update dependency @hono/node-server to v2.1.7 ([#12551](https://github.com/promptfoo/promptfoo/issues/12551)) ([8f42ad9](https://github.com/promptfoo/promptfoo/commit/8f42ad9f74d6fe8ce507bf799dfb479e853e858a))
+* **deps:** update Inquirer and supported Node.js releases ([#12531](https://github.com/promptfoo/promptfoo/issues/12531)) ([d3d91a8](https://github.com/promptfoo/promptfoo/commit/d3d91a8e877e0f0dbcc946b6d0fceaeea44fc7de))
+* **deps:** update opentelemetry ([#12499](https://github.com/promptfoo/promptfoo/issues/12499)) ([60424a1](https://github.com/promptfoo/promptfoo/commit/60424a1e7532d24eafc9b0fb0d103d43a841501f))
+* **eval:** preserve custom filters in JSON prompts ([#12486](https://github.com/promptfoo/promptfoo/issues/12486)) ([1b7e4e5](https://github.com/promptfoo/promptfoo/commit/1b7e4e54ae5a35587babf705000c2a034eb5091f))
+
 ## [0.126.0](https://github.com/promptfoo/promptfoo/compare/0.125.1...0.126.0) (2026-11-18)
 
 ### ⚠ BREAKING CHANGES
