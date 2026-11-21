@@ -3,10 +3,15 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
+/**
+ * These cover the paths watch mode needs to observe. The watcher previously duplicated
+ * the loader's resolution rules and drifted from them, so each case here pins one rule
+ * that the loader already applies in readTests()/loadTestsFromGlob().
+ */
 describe('resolveTestsWatchPaths', () => {
   let base: string;
 
@@ -41,13 +46,39 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
-  it('expands a glob, because chokidar v5 does not', () => {
+  it('reads and watches the same workbook when its directory and filename contain a hash', async () => {
+    const directory = path.join(base, 'C# fixtures');
+    fs.mkdirSync(directory);
+    const workbook = path.join(directory, 'cases#2.XLSX');
+    fs.copyFileSync(path.join(__dirname, '../fixtures/xlsx-xml-entities.xlsx'), workbook);
+
+    const reference = 'file://C# fixtures/cases#2.XLSX#Sheet1';
+    expect(await readTests([reference], base)).toMatchObject([
+      { vars: { 'q&a': 'Does AT&T <b> work?' } },
+    ]);
+    expect(resolve(reference)).toEqual([workbook]);
+    await expect(readTests([reference + '#missing'], base)).rejects.toThrow(
+      'Sheet "Sheet1#missing" not found',
+    );
+  });
+
+  it('expands a glob, because chokidar does not', () => {
     // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
     expect([...watched].sort()).toEqual([
       path.join(base, 'tests/a.yaml'),
       path.join(base, 'tests/b.yaml'),
     ]);
+  });
+
+  it('watches the files matched by POSIX punctuation and printable classes', () => {
+    const symbol = path.join(base, 'fixtures/case-€.yaml');
+    const letter = path.join(base, 'fixtures/case-a.yaml');
+    fs.writeFileSync(symbol, '[]');
+    fs.writeFileSync(letter, '[]');
+
+    expect(resolve('file://fixtures/case-[[:punct:]].yaml')).toEqual([symbol]);
+    expect(resolve('file://fixtures/case-[[:print:]].yaml').sort()).toEqual([letter, symbol]);
   });
 
   it('expands test globs beneath a directory containing brackets', () => {
@@ -59,10 +90,15 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it("never watches a glob's parent directory", () => {
-    // Watching a parent would rerun on unrelated changes, including eval output.
+    // chokidar watches a directory recursively, and doEval reruns the whole evaluation
+    // on any `change` beneath it. Watching the parent would therefore rerun on every
+    // unrelated edit in the tree -- including the run writing its own output file,
+    // which reruns forever. It also buys nothing: a newly added file emits `add`, and
+    // the watcher only handles `change`.
     expect(resolve('file://tests/*.yaml' as TestSuiteConfig['tests'])).not.toContain(
       path.join(base, 'tests'),
     );
+    // The worst shape: a pattern anchored at the config directory itself.
     expect(resolve('file://*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
     expect(resolve('file://**/*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
   });
@@ -120,6 +156,7 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it('returns the literal path when a reference matches nothing yet', () => {
+    // Creating the file later should still trigger a rerun.
     expect(resolve('file://not-created-yet.yaml' as TestSuiteConfig['tests'])).toEqual([
       path.join(base, 'not-created-yet.yaml'),
     ]);

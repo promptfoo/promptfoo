@@ -3,17 +3,11 @@ import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
-import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
+import { getFileHashes, parseScriptParts, stripText } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
-
-const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
-
-function stripText(text: string) {
-  return text.replace(ANSI_ESCAPE, '');
-}
 
 /**
  * Executable prompt function. Executes any script/binary and returns its output as the prompt.
@@ -82,11 +76,9 @@ export const executablePromptFunction = async (
       const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
-      if (errorOutput) {
-        if (!standardOutput) {
-          reject(new Error(errorOutput));
-          return;
-        }
+      if (errorOutput && !standardOutput) {
+        reject(new Error(errorOutput));
+        return;
       }
 
       if (fileHashes.length > 0 && isCacheEnabled()) {

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesModeration } from '../../src/matchers/moderation';
+import { withProviderCleanup } from '../../src/providers/lifecycle';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';
 import {
@@ -10,6 +12,11 @@ import {
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+
+const createConversationInput = () => ({
+  userPrompt: 'test prompt',
+  assistantResponse: 'test response',
+});
 
 describe('matchesModeration', () => {
   const mockModerationResponse = {
@@ -87,10 +94,7 @@ describe('matchesModeration', () => {
       .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    await matchesModeration(createConversationInput());
 
     expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
@@ -142,10 +146,7 @@ describe('matchesModeration', () => {
       mockModerationResponse,
     );
 
-    const result = await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    const result = await matchesModeration(createConversationInput());
 
     expect(result.tokensUsed).toEqual(normalizedTokenUsage);
   });
@@ -156,11 +157,10 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    const shutdown = vi.spyOn(providerRegistry, 'shutdown');
+    await withProviderCleanup(() => matchesModeration(createConversationInput()));
 
+    expect(shutdown).toHaveBeenCalledExactlyOnceWith(replicateSpy.mock.contexts[0]);
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
@@ -170,15 +170,9 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration(
-      {
-        userPrompt: 'test prompt',
-        assistantResponse: 'test response',
-      },
-      {
-        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-      },
-    );
+    await matchesModeration(createConversationInput(), {
+      provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+    });
 
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });

@@ -24,7 +24,7 @@ import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } fr
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { renderEnvOnlyInObject } from './render';
-import { parseXlsxFile } from './xlsx';
+import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
@@ -214,6 +214,12 @@ async function readLocalStandaloneTestsFile(
     });
     return readJavascriptTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
   }
+  if (getExcelWorkbookPath(pathWithoutFunction)) {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
+  }
   if (fileExtension === 'py') {
     telemetry.record('feature_used', {
       feature: 'python tests file',
@@ -226,12 +232,6 @@ async function readLocalStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
-  }
-  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-    telemetry.record('feature_used', {
-      feature: 'xlsx tests file - local',
-    });
-    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
   }
   if (fileExtension === 'json') {
     telemetry.record('feature_used', {
@@ -285,20 +285,12 @@ function getStandaloneTestsFileMetadata(
   const pathWithoutFunction = stripFunctionSuffix(resolvedVarsPath);
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
-  // characters in parent directories and non-Excel filenames.
-  const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
-  const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
-  const fileExtension =
-    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
-      ? sheetAwareExtension
-      : parsePath(pathWithoutFunction).ext.slice(1);
 
   return {
     resolvedVarsPath,
     pathWithoutFunction,
     maybeFunctionName,
-    fileExtension,
+    fileExtension: parsePath(pathWithoutFunction).ext.slice(1),
   };
 }
 
@@ -383,6 +375,10 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
   return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
+function withDefaultDescription(testCase: TestCase, index: number): TestCase {
+  return { ...testCase, description: testCase.description || `Row #${index + 1}` };
+}
+
 function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
   let jsonData: any;
   try {
@@ -393,10 +389,7 @@ function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
     );
   }
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  return testCases.map(withDefaultDescription);
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -434,10 +427,7 @@ function parseJsonlLines(fileContent: string, filePath: string): TestCase[] {
 }
 
 function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] {
-  return parseJsonlLines(fileContent, filePath).map((testCase, idx) => ({
-    ...testCase,
-    description: testCase.description || `Row #${idx + 1}`,
-  }));
+  return parseJsonlLines(fileContent, filePath).map(withDefaultDescription);
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
@@ -445,10 +435,7 @@ function parseYamlTestCases(fileContent: string): TestCase[] {
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  return testCases.map(withDefaultDescription);
 }
 
 async function loadTestWithVars(
@@ -572,19 +559,13 @@ async function readTestWithEnv(
     // Inherit the suite environment without turning it into an explicit override
     // of defaults in a provider file. Resolve paths relative to the test case.
     const provider = testCase.provider;
-    if (typeof provider === 'string') {
+    const providerId = typeof provider === 'string' ? provider : provider.id;
+    if (typeof providerId === 'string') {
       testCase.provider = trackProvider(
         await cliState.withEnv(env, () =>
-          loadApiProvider(provider, { basePath: effectiveBasePath }),
-        ),
-      );
-    } else if (typeof provider.id === 'string') {
-      const providerPath = provider.id;
-      testCase.provider = trackProvider(
-        await cliState.withEnv(env, () =>
-          loadApiProvider(providerPath, {
-            options: provider as ProviderOptions,
+          loadApiProvider(providerId, {
             basePath: effectiveBasePath,
+            ...(typeof provider === 'string' ? {} : { options: provider as ProviderOptions }),
           }),
         ),
       );
@@ -703,15 +684,12 @@ async function loadTestsFromGlobWithEnv(
     // Extract path without function name (Windows-aware)
     const pathWithoutFunction = stripFunctionSuffix(testFile);
 
-    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-    const fileWithoutSheet = testFile.split('#')[0];
     if (
       testFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py') ||
-      fileWithoutSheet.endsWith('.xlsx') ||
-      fileWithoutSheet.endsWith('.xls')
+      getExcelWorkbookPath(testFile)
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
@@ -774,6 +752,17 @@ export async function readTestConfigs(
 ): Promise<TestCase[]> {
   return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env, false)),
+  );
+}
+
+function usesStandaloneWorkbookLoader(source: string, basePath: string): boolean {
+  const workbookPath = getExcelWorkbookPath(source);
+  // A sheet name can contain glob characters. Expand only bare workbook globs.
+  return (
+    workbookPath !== undefined &&
+    (workbookPath !== source ||
+      !hasGlobMagic(workbookPath) ||
+      fs.existsSync(path.resolve(basePath, workbookPath)))
   );
 }
 
@@ -840,15 +829,12 @@ async function readTestsWithEnv(
       // Extract path without function name (Windows-aware)
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
       const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
-      // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-      const pathWithoutSheet = globOrTest.split('#')[0];
       // Read standalone sources, then resolve provider and vars references for local rows.
       if (
         isRemoteTestsReference(globOrTest) ||
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
-        pathWithoutSheet.endsWith('.xlsx') ||
-        pathWithoutSheet.endsWith('.xls') ||
+        usesStandaloneWorkbookLoader(pathWithoutScheme, basePath) ||
         pathWithoutFunction !== pathWithoutScheme
       ) {
         ret.push(...(await loadStandalone(globOrTest)));
@@ -910,27 +896,6 @@ function stripFunctionSuffix(resolvedPath: string): string {
   return lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
 }
 
-/**
- * Strip an Excel `#SheetName` selector from a path.
- *
- * Sheet specifiers apply only to xlsx/xls basenames, so this inspects the basename and
- * preserves `#` characters in parent directories and in non-Excel filenames, matching
- * `getStandaloneTestsFileMetadata`.
- */
-function stripSheetSelector(resolvedPath: string): string {
-  const base = path.basename(resolvedPath);
-  const hashIndex = base.indexOf('#');
-  if (hashIndex === -1) {
-    return resolvedPath;
-  }
-  const baseWithoutSheet = base.slice(0, hashIndex);
-  const ext = parsePath(baseWithoutSheet).ext.slice(1).toLowerCase();
-  if (ext !== 'xlsx' && ext !== 'xls') {
-    return resolvedPath;
-  }
-  return path.join(path.dirname(resolvedPath), baseWithoutSheet);
-}
-
 /** References the loader fetches over the network rather than reading from disk. */
 export function isRemoteTestsReference(reference: string): boolean {
   return reference.includes('://') && !reference.startsWith('file://');
@@ -940,7 +905,14 @@ function hasGlobMagic(reference: string): boolean {
   return hasMagic(reference, { windowsPathsNoEscape: true, magicalBraces: true });
 }
 
-/** Expand test references into files; watching parent directories causes unrelated reruns. */
+/**
+ * Resolve a single `tests` string reference to the file paths the loader will read.
+ *
+ * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
+ * chokidar does not expand glob patterns itself. Only concrete files are returned:
+ * watching a pattern's parent directory instead would rerun the evaluation on every
+ * unrelated edit beneath it, including the run's own output file.
+ */
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
@@ -958,7 +930,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
       { windowsPathsNoEscape: true },
     );
     if (matches.length > 0) {
-      return matches.map((match) => stripSheetSelector(match));
+      return matches.map((match) => getExcelWorkbookPath(match) ?? match);
     }
     // No matches: fall through, since the reference may be a literal filename that
     // happens to contain a glob metacharacter.
@@ -966,7 +938,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   // A concrete path. Only strip a `:functionName` suffix for script references, so that
   // a vars file whose name legally contains a colon is still watched in full.
-  const withoutSheet = stripSheetSelector(resolved);
+  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
   const withoutFunction = stripFunctionSuffix(withoutSheet);
   const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
   return [isScript ? withoutFunction : withoutSheet];
@@ -1026,7 +998,13 @@ function collectNestedFileReferences(
   }
 }
 
-/** Collect nested references that the config loader resolves before evaluation. */
+/**
+ * Collect `file://` references nested anywhere inside a parsed value.
+ *
+ * Used for a test generator's `config` object, which `readStandaloneTestsFile` passes
+ * through `maybeLoadConfigFromExternalFile` before invoking the generator, and for the
+ * contents of a declarative tests file.
+ */
 function collectConfigFileReferences(
   value: unknown,
   basePath: string,
@@ -1038,7 +1016,8 @@ function collectConfigFileReferences(
   if (typeof value !== 'object' || value === null) {
     return [];
   }
-  // YAML anchors can introduce cycles or shared objects.
+  // A YAML anchor can make a config self-referential, which would recurse forever.
+  // Visiting each node once also keeps a widely shared anchor from being re-expanded.
   if (seen.has(value)) {
     return [];
   }
@@ -1047,7 +1026,16 @@ function collectConfigFileReferences(
   return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
 }
 
-/** Resolve watch paths from raw `tests`, before combineConfigs expands its references. */
+/**
+ * Resolve the filesystem paths that a `tests` config reads, for watch mode.
+ *
+ * `readTests` accepts a bare file reference, a test-generator object, or an array of
+ * either plus inline test cases. This mirrors that resolution so the watcher and the
+ * loader agree on which files feed an evaluation, rather than duplicating the rules.
+ *
+ * Must be called with the raw `tests` value from the config file. `combineConfigs`
+ * expands references into concrete test cases and discards the original reference.
+ */
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
@@ -1087,7 +1075,9 @@ export function resolveTestsWatchPaths(
       ];
     }
     if ('vars' in entry && entry.vars) {
-      // Vars-file references support globs without a file:// prefix.
+      // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
+      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
+      // readTestFiles(), so they carry no file:// scheme and resolve as written.
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>

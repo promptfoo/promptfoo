@@ -8,6 +8,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
 import { withProviderCleanup } from '../providers/lifecycle';
+import { waitForPromiseWithAbort } from '../providers/shared';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -963,30 +964,48 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
 export async function synthesize(options: SynthesizeOptions) {
-  return withProviderCleanup(() => synthesizeInternal(options));
+  return withProviderCleanup(async () => {
+    const controller = new AbortController();
+    const abortSignal = options.abortSignal
+      ? AbortSignal.any([options.abortSignal, controller.signal])
+      : controller.signal;
+    const calls = new Set<Promise<unknown>>();
+    const work = synthesizeInternal({ ...options, abortSignal }, calls);
+    try {
+      return await waitForPromiseWithAbort(work, options.abortSignal);
+    } catch (error) {
+      // Stop new calls and bound the wait even if a delegate ignores its signal.
+      controller.abort(error);
+      await waitForSettled([work, ...calls], 1000);
+      throw options.abortSignal?.aborted ? new Error('Operation cancelled') : error;
+    }
+  });
 }
 
-async function synthesizeInternal({
-  abortSignal,
-  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
-  delay,
-  entities: entitiesOverride,
-  injectVar,
-  inputs,
-  language,
-  maxCharsPerMessage,
-  maxConcurrency = 1,
-  plugins,
-  prompts,
-  provider,
-  purpose: purposeOverride,
-  redteamGenerationContext: inputRedteamGenerationContext,
-  strategies,
-  targetIds,
-  showProgressBar: showProgressBarOverride,
-  excludeTargetOutputFromAgenticAttackGeneration,
-  testGenerationInstructions,
-}: SynthesizeOptions): Promise<{
+async function synthesizeInternal(
+  {
+    abortSignal,
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    delay,
+    entities: entitiesOverride,
+    injectVar,
+    inputs,
+    language,
+    maxCharsPerMessage,
+    maxConcurrency = 1,
+    plugins,
+    prompts,
+    provider,
+    purpose: purposeOverride,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    strategies,
+    targetIds,
+    showProgressBar: showProgressBarOverride,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    testGenerationInstructions,
+  }: SynthesizeOptions,
+  calls: Set<Promise<unknown>>,
+): Promise<{
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
@@ -1081,10 +1100,6 @@ async function synthesizeInternal({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const generationController = new AbortController();
-  const generationAbortSignal = abortSignal
-    ? AbortSignal.any([abortSignal, generationController.signal])
-    : generationController.signal;
   const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
@@ -1096,7 +1111,7 @@ async function synthesizeInternal({
     total: 0,
   };
   const wrapGenerationProvider = (providerToWrap: ApiProvider) =>
-    trackGenerationTokenUsage(providerToWrap, generationTokenUsage, generationAbortSignal);
+    trackGenerationTokenUsage(providerToWrap, generationTokenUsage, abortSignal, calls);
   const redteamProvider = wrapGenerationProvider(providerSelection.provider);
   const trackedProviderSelection = {
     ...providerSelection,
@@ -1328,8 +1343,9 @@ async function synthesizeInternal({
     }
   }
 
-  // Start the progress bar
+  checkAbort();
   let progressBar: cliProgress.SingleBar | null = null;
+  const stopProgress = () => progressBar?.stop();
   const isWebUI = Boolean(cliState.webUI);
 
   const showProgressBar =
@@ -1345,7 +1361,7 @@ async function synthesizeInternal({
       },
       cliProgress.Presets.shades_classic,
     );
-    // Use totalTests to include both plugin and strategy tests in progress tracking
+    abortSignal?.addEventListener('abort', stopProgress, { once: true });
     progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
 
@@ -1372,7 +1388,7 @@ async function synthesizeInternal({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  const generatePlugin = async (plugin: (typeof plugins)[number]) => {
+  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1686,24 +1702,7 @@ async function synthesizeInternal({
       pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
-  };
-
-  const inFlightPlugins = new Set<Promise<void>>();
-  try {
-    await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
-      const pending = generatePlugin(plugin);
-      inFlightPlugins.add(pending);
-      try {
-        await pending;
-      } finally {
-        inFlightPlugins.delete(pending);
-      }
-    });
-  } catch (error) {
-    generationController.abort(error);
-    await waitForSettled(inFlightPlugins, 1000);
-    throw error;
-  }
+  });
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
@@ -1714,9 +1713,7 @@ async function synthesizeInternal({
   // Apply retry strategy first if it exists
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   if (retryStrategy) {
-    if (showProgressBar) {
-      progressBar?.update({ task: 'Applying retry strategy' });
-    }
+    progressBar?.update({ task: 'Applying retry strategy' });
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
       targetIds: redteamGenerationContext.providerTargetIds,
@@ -1735,10 +1732,7 @@ async function synthesizeInternal({
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
-    // Update progress bar with retry strategy tests generated
-    if (showProgressBar) {
-      progressBar?.increment(retryTestCases.length);
-    }
+    progressBar?.increment(retryTestCases.length);
   }
 
   // Check for abort signal or apply non-basic strategies
@@ -1773,7 +1767,8 @@ async function synthesizeInternal({
   checkAbort();
 
   progressBar?.update({ task: 'Done.' });
-  progressBar?.stop();
+  abortSignal?.removeEventListener('abort', stopProgress);
+  stopProgress();
   if (progressBar) {
     // Newline after progress bar to avoid overlap
     logger.info('');
