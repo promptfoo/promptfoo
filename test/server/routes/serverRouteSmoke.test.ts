@@ -106,7 +106,8 @@ vi.mock('../../../src/database/index', () => ({
   getDb: mocks.getDb,
 }));
 
-vi.mock('../../../src/envars', () => ({
+vi.mock(import('../../../src/envars'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvBool: mocks.getEnvBool,
   getEnvFloat: mocks.getEnvFloat,
   getEnvInt: mocks.getEnvInt,
@@ -210,7 +211,8 @@ vi.mock('../../../src/util/database', () => ({
   writeResultsToDatabase: mocks.writeResultsToDatabase,
 }));
 
-vi.mock('../../../src/util/fetch/index', () => ({
+vi.mock(import('../../../src/util/fetch/index'), async (importOriginal) => ({
+  ...(await importOriginal()),
   fetchWithProxy: mocks.fetchWithProxy,
 }));
 
@@ -223,7 +225,8 @@ vi.mock('../../../src/node/testProvider', () => ({
   testProviderSession: mocks.testProviderSession,
 }));
 
-vi.mock('../../../src/server/config/serverConfig', () => ({
+vi.mock(import('../../../src/server/config/serverConfig'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getAvailableProviders: mocks.getAvailableProviders,
 }));
 

@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, posix } from 'path';
 
 import * as yaml from 'js-yaml';
-import { getEnvString } from '../../envars';
+import { getEnvString, parseEnvBool } from '../../envars';
 import logger from '../../logger';
 import { loadYaml } from '../../util/yamlLoad';
 import { ProviderOptionsSchema } from '../../validators/providers';
+import type { RequestHandler, Response } from 'express';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -15,6 +16,56 @@ interface ServerConfig {
 }
 
 let cachedConfig: ServerConfig | null = null;
+
+// This must be a process-level opt-in. getEnvBool also reads untrusted
+// evaluation/config env overrides, which must never grant server permissions.
+export function allowLocalCloudProxyRequests(): boolean {
+  return parseEnvBool(process.env.PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY);
+}
+
+export const LOCAL_CLOUD_PROXY_DISABLED_MESSAGE =
+  'Cloud-backed setup is disabled for local API requests. Restart the server with PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY=true only when you trust local callers and accept cloud quota usage.';
+
+/** Keep non-Cloud providers usable when a caller previews a provider or red-team test. */
+export function guardLocalCloudPreview(
+  withCloudDestinationGuard: (check: (target: URL) => void, next: () => void) => void,
+): RequestHandler {
+  return (_req, res, next) => {
+    if (allowLocalCloudProxyRequests()) {
+      next();
+      return;
+    }
+    withCloudDestinationGuard((target) => {
+      const { pathname } = target;
+      let path = pathname;
+      try {
+        path = posix.normalize(decodeURIComponent(pathname));
+      } catch {
+        // Other Cloud APIs can handle malformed escapes themselves.
+      }
+      // Self-hosted deployments may use a custom path for the task service.
+      const configured = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
+      const task = configured && URL.parse(configured);
+      if (
+        res.locals.cloudProxyDenied ||
+        (task && task.origin === target.origin && task.pathname === pathname) ||
+        /\/api\/v1\/(?:task|http-provider-generator)\/?$/i.test(path)
+      ) {
+        res.locals.cloudProxyDenied = true;
+        throw new Error(LOCAL_CLOUD_PROXY_DISABLED_MESSAGE);
+      }
+    }, next);
+  };
+}
+
+// Plugins and providers can turn transport errors into ordinary results.
+export function replyIfCloudProxyDenied(res: Response): boolean {
+  if (!res.locals.cloudProxyDenied) {
+    return false;
+  }
+  res.status(403).json({ error: LOCAL_CLOUD_PROXY_DISABLED_MESSAGE });
+  return true;
+}
 
 /**
  * Get the path to the UI providers config file

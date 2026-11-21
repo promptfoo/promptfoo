@@ -12,8 +12,14 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders } from '../config/serverConfig';
+import { fetchWithProxy, withCloudDestinationGuard } from '../../util/fetch/index';
+import {
+  allowLocalCloudProxyRequests,
+  getAvailableProviders,
+  guardLocalCloudPreview,
+  LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
+  replyIfCloudProxyDenied,
+} from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -46,7 +52,13 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
   }
 });
 
-providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
+providersRouter.post(
+  '/test',
+  guardLocalCloudPreview(withCloudDestinationGuard),
+  testProviderPreview,
+);
+
+async function testProviderPreview(req: Request, res: Response): Promise<void> {
   const bodyResult = ProviderSchemas.Test.Request.safeParse(req.body);
   if (!bodyResult.success) {
     res.status(400).json({ error: z.prettifyError(bodyResult.error) });
@@ -74,6 +86,9 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       inputs: providerOptions.inputs || providerOptions.config?.inputs,
     });
 
+    if (replyIfCloudProxyDenied(res)) {
+      return;
+    }
     res.status(200).json(
       ProviderSchemas.Test.Response.parse({
         testResult: {
@@ -89,9 +104,12 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       }),
     );
   } catch (error) {
+    if (replyIfCloudProxyDenied(res)) {
+      return;
+    }
     sendError(res, 500, 'Failed to test provider', error);
   }
-});
+}
 
 providersRouter.post(
   '/discover',
@@ -144,6 +162,11 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 
   if (neverGenerateRemote()) {
     res.status(400).json({ error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
+  if (!allowLocalCloudProxyRequests()) {
+    res.status(403).json({ error: LOCAL_CLOUD_PROXY_DISABLED_MESSAGE });
     return;
   }
 

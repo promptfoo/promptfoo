@@ -20,8 +20,14 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithProxy, withCloudDestinationGuard } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
+import {
+  allowLocalCloudProxyRequests,
+  guardLocalCloudPreview,
+  LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
+  replyIfCloudProxyDenied,
+} from '../config/serverConfig';
 import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
@@ -36,7 +42,13 @@ export const redteamRouter = Router();
 /**
  * Generates a test case for a given plugin/strategy combination.
  */
-redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
+redteamRouter.post(
+  '/generate-test',
+  guardLocalCloudPreview(withCloudDestinationGuard),
+  generateTestPreview,
+);
+
+async function generateTestPreview(req: Request, res: Response): Promise<void> {
   try {
     const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
     if (!parsedBody.success) {
@@ -107,6 +119,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       },
     });
 
+    if (replyIfCloudProxyDenied(res)) {
+      return;
+    }
     if (testCases.length === 0) {
       res.status(500).json({ error: 'Failed to generate test case' });
       return;
@@ -133,10 +148,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           },
         );
 
+        if (replyIfCloudProxyDenied(res)) {
+          return;
+        }
         if (strategyTestCases && strategyTestCases.length > 0) {
           finalTestCases = strategyTestCases;
         }
       } catch (error) {
+        if (replyIfCloudProxyDenied(res)) {
+          return;
+        }
         logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({
           error: `Failed to apply strategy ${strategy.id}`,
@@ -183,6 +204,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         );
         return;
       } catch (error) {
+        if (replyIfCloudProxyDenied(res)) {
+          return;
+        }
         if (error instanceof RemoteGenerationDisabledError) {
           res.status(400).json({ error: error.message });
           return;
@@ -231,12 +255,15 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }),
     );
   } catch (error) {
+    if (replyIfCloudProxyDenied(res)) {
+      return;
+    }
     logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
     });
   }
-});
+}
 
 // Track the current running job
 let currentJobId: string | null = null;
@@ -368,6 +395,11 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
   const { taskId } = paramsResult.data;
   if (neverGenerateRemote()) {
     res.status(400).json({ success: false, error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
+  if (!allowLocalCloudProxyRequests()) {
+    res.status(403).json({ success: false, error: LOCAL_CLOUD_PROXY_DISABLED_MESSAGE });
     return;
   }
 

@@ -5,7 +5,12 @@ import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
-import { restrictCloudAuthRedirects, unwrapCloudAuthRedirectError } from './cloudAuthRedirects';
+import {
+  guardFetchDispatch,
+  restrictCloudAuthRedirects,
+  unwrapCloudAuthRedirectError,
+} from './cloudAuthRedirects';
+import { getFetchDestinationGuard } from './destinationGuard';
 import type { Dispatcher } from 'undici';
 
 import type { FetchOptions } from './types';
@@ -215,6 +220,8 @@ export async function monkeyPatchFetch(
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const urlString = getRequestUrlString(url);
+  const guard = getFetchDestinationGuard();
+  guard?.(urlString);
   const callerHeaders = getEffectiveHeaders(url, options?.headers);
   const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
@@ -266,6 +273,11 @@ export async function monkeyPatchFetch(
     )
   ) {
     opts.dispatcher = restrictCloudAuthRedirects(urlString, opts.dispatcher);
+  }
+  if (guard) {
+    opts.dispatcher = guardFetchDispatch(opts.dispatcher, ({ origin, path }) => {
+      guard(new URL(origin?.toString() ?? urlString).origin + path);
+    });
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here

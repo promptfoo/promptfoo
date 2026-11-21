@@ -3535,6 +3535,24 @@
               }
             }
           },
+          "403": {
+            "description": "Cloud proxying not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
           "500": {
             "description": "Server error",
             "content": {
@@ -3842,6 +3860,24 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cloud proxying not enabled",
             "content": {
               "application/json": {
                 "schema": {
@@ -4713,6 +4749,24 @@
               }
             }
           },
+          "403": {
+            "description": "Cloud proxying not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
           "500": {
             "description": "Server error",
             "content": {
@@ -4859,6 +4913,24 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cloud proxying not enabled",
             "content": {
               "application/json": {
                 "schema": {

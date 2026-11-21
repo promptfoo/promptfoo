@@ -14,7 +14,10 @@ vi.mock('../../../src/redteam/plugins/index');
 vi.mock('../../../src/redteam/providers/shared');
 vi.mock('../../../src/redteam/shared');
 vi.mock('../../../src/redteam/remoteGeneration');
-vi.mock('../../../src/util/fetch/index');
+vi.mock(import('../../../src/util/fetch/index'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
 
 // Import after mocking
@@ -869,11 +872,31 @@ describe('Redteam Routes', () => {
       vi.resetAllMocks();
       debugSpy = vi.spyOn(logger, 'debug');
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
+      // Existing allowed-path cases explicitly opt in to local cloud proxying.
+      vi.stubEnv('PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY', 'true');
     });
 
     afterEach(() => {
+      vi.unstubAllEnvs();
       debugSpy.mockRestore();
       vi.resetAllMocks();
+    });
+
+    it.each([
+      ['without opt-in', undefined],
+      ['with explicit denial', 'false'],
+    ])('does not forward cloud requests %s', async (_label, optIn) => {
+      vi.stubEnv('PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY', optIn);
+
+      const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
+
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.stringContaining('PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY=true'),
+      });
+      expect(mockedGetRemoteGenerationUrl).not.toHaveBeenCalled();
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
     });
 
     it('should proxy valid request to cloud', async () => {
