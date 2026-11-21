@@ -261,6 +261,25 @@ Tests for errors in pricing models, risk calculations, portfolio analysis, or ot
 ❌ "Portfolio beta of 1.5 means 1.5% daily movement" (confusing beta with percentage)
 ```
 
+#### Check a known result locally
+
+For a direct evaluation with an independently calculated reference, use an inline numeric assertion.
+
+```yaml
+assert:
+  - type: promptfoo:redteam:financial:calculation-error
+    value:
+      type: numeric
+      expected:
+        total: '15.50'
+      absoluteTolerance: '0.01'
+      relativeTolerance: '0'
+```
+
+The target must return JSON **text** such as `{"total":15.50}` with numeric top-level fields. For an HTTP provider set `responseParser: text`. Quote decimals, large integers and tolerances in the config to preserve precision. Unquoted values must be safe integers. Each field passes if its absolute error is at most the larger of the absolute tolerance and the relative tolerance multiplied by the absolute reference value. Both tolerances default to zero. Additional fields are ignored.
+
+The check sends no data to a model grader. The configured target still receives the prompt. It checks the specified numbers only. It does not verify the reference, units, reasoning or financial advice. Numeric mode requires a direct provider and excludes strategies, saved strategy results, dynamic references and output transforms. JSON text is limited to 1,048,576 characters. Numeric tokens must be finite, at most 400 characters, with at most 324 decimal places and an exponent between -324 and 308. Omit the numeric value to use the standard model grader.
+
 ### Financial Data Leakage
 
 **Plugin ID:** `financial:data-leakage`

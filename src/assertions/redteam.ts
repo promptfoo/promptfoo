@@ -2,6 +2,11 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
+  FINANCIAL_CALCULATION,
+  isNumericReference,
+  parseFinancialReference,
+} from '../redteam/grading/financialReference';
+import {
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
@@ -72,6 +77,31 @@ function getConfiguredProviderId(
       : isProviderOptions(configuredProvider)
         ? configuredProvider.id
         : undefined;
+}
+
+export function validateFinancialAssertion(
+  assertion: Assertion,
+  test: AtomicTestCase,
+  provider?: ApiProvider,
+) {
+  if (assertion.type !== FINANCIAL_CALCULATION || !isNumericReference(assertion.value)) {
+    return;
+  }
+  if (
+    !provider ||
+    provider.id().startsWith('promptfoo:redteam:') ||
+    getConfiguredProviderId(test, provider)?.startsWith('promptfoo:redteam:') ||
+    (test.metadata?.strategyId && test.metadata.strategyId !== 'basic') ||
+    provider.transform ||
+    test.options?.transform ||
+    test.options?.postprocess ||
+    assertion.transform
+  ) {
+    throw new Error(
+      'Financial numeric grading requires a direct provider without strategies or output transforms.',
+    );
+  }
+  parseFinancialReference(assertion.value);
 }
 
 function matchesStoredGraderResult(
@@ -191,6 +221,24 @@ export const handleRedteam = async (
   }: AssertionParams,
   claimStoredGradingUsage: () => boolean = () => true,
 ): Promise<GradingResult> => {
+  if (
+    baseType === FINANCIAL_CALCULATION &&
+    (isNumericReference(assertion.value) || isNumericReference(renderedValue))
+  ) {
+    validateFinancialAssertion(assertion, test, provider);
+    if (!isNumericReference(assertion.value)) {
+      throw new Error('Financial numeric grading requires a trusted inline reference');
+    }
+    if (
+      providerResponse.metadata?.storedGraderResult ||
+      providerResponse.metadata?.redteamHistory ||
+      providerResponse.metadata?.redteamFinalPrompt
+    ) {
+      throw new Error('Financial numeric grading cannot verify a saved strategy response');
+    }
+    // Keep trusted configuration independent of template variables and target data.
+    renderedValue = assertion.value;
+  }
   // Skip grading if stored result exists from strategy execution for this specific assertion
   const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
   const reportedConversation = getTargetConversation(providerResponse.prompt);
