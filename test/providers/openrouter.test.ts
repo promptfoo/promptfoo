@@ -474,6 +474,7 @@ describe('OpenRouter', () => {
 
         expect(result).toMatchObject({
           output,
+          latencyMs: expect.any(Number),
           finishReason,
           isRefusal: true,
           guardrails: { flagged: true },
@@ -518,6 +519,7 @@ describe('OpenRouter', () => {
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Hello there');
+        expect(result.latencyMs).toEqual(expect.any(Number));
         expect(result.audio).toEqual({
           id: 'audio-1',
           expiresAt: 1730000000,
@@ -1327,6 +1329,51 @@ describe('OpenRouter', () => {
         expect(body.route).toBe('fallback');
         expect(body.models).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6']);
       } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should preserve fields from the original response on cache hits', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const mockResponse = {
+          choices: [{ message: { content: 'The output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockImplementationOnce(async () => {
+          vi.setSystemTime(Date.now() + 43);
+          return response;
+        });
+
+        const cachedProvider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const first = await cachedProvider.callApi('Repeatable prompt');
+        expect(first.cached).toBe(false);
+        expect(first.output).toBe('The output');
+        expect(first.latencyMs).toBe(43);
+        expect(first.finishReason).toBe('stop');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+
+        vi.setSystemTime(Date.now() + 1000);
+        const second = await cachedProvider.callApi('Repeatable prompt');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1); // Still 1
+        expect(second).toEqual({
+          ...first,
+
+          // The difference when the response is cached
+          cached: true,
+          tokenUsage: { total: 10, cached: 10, numRequests: 0 },
+        });
+      } finally {
+        vi.useRealTimers();
         restoreEnv();
       }
     });
