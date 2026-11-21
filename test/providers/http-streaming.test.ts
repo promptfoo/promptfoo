@@ -4,20 +4,13 @@ import { DEFAULT_RETRY_POLICY, shouldRetry } from '../../src/scheduler/retryPoli
 import * as fetchModule from '../../src/util/fetch';
 import * as monkeyPatchFetchModule from '../../src/util/fetch/monkeyPatchFetch';
 
+import { timedStream } from '../util/timedStream';
+
 function respondInChunks(chunks: string[], delayMs: number) {
-  let index = 0;
-  const stream = new ReadableStream({
-    async pull(controller) {
-      if (index === chunks.length) {
-        controller.close();
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      controller.enqueue(new TextEncoder().encode(chunks[index++]));
-    },
-  });
   vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(
-    new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }),
+    new Response(timedStream(chunks, delayMs), {
+      headers: { 'Content-Type': 'text/event-stream' },
+    }),
   );
 }
 
@@ -337,7 +330,7 @@ describe('HttpProvider streaming integration', () => {
           },
         });
 
-        const result = await settlePendingTimers(provider.callApi('Test'));
+        const result = await provider.callApi('Test');
         expect(result).toMatchObject({
           output: 'Hello world',
           cached: false,
@@ -362,7 +355,7 @@ describe('HttpProvider streaming integration', () => {
           config: { ...config, transformResponse: '() => ({ tokenUsage: { total: 10 } })' },
         });
 
-        const result = await settlePendingTimers(provider.callApi('Test'));
+        const result = await provider.callApi('Test');
         expect(result.streamingMetrics).toMatchObject({
           timeToFirstToken: 30,
           totalStreamTime: 90,
@@ -377,7 +370,7 @@ describe('HttpProvider streaming integration', () => {
       vi.useFakeTimers();
       respondInChunks(chunks, 25);
       const provider = new HttpProvider(url, { config: request });
-      const result = await settlePendingTimers(provider.callApi('Test'));
+      const result = await provider.callApi('Test');
       expect(result.output).toBe(chunks.join(''));
       expect(result.latencyMs).toBe(100);
       expect(result.streamingMetrics?.timeToFirstToken).toBe(25);

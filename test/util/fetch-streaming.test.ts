@@ -4,26 +4,9 @@ import {
   processStreamingResponse,
 } from '../../src/providers/httpStreaming';
 
+import { timedStream } from './timedStream';
+
 const encoder = new TextEncoder();
-function stream(chunks: (string | Uint8Array)[], delay = 20, tailDelay = 0) {
-  let index = 0;
-  return new Response(
-    new ReadableStream<Uint8Array>(
-      {
-        pull(controller) {
-          vi.setSystemTime(Date.now() + (index < chunks.length ? delay : tailDelay));
-          if (index === chunks.length) {
-            controller.close();
-          } else {
-            const chunk = chunks[index++];
-            controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
-          }
-        },
-      },
-      { highWaterMark: 0 },
-    ),
-  );
-}
 async function collect(
   chunks: (string | Uint8Array)[],
   format?: 'openai-chat' | 'openai-responses' | 'anthropic-messages',
@@ -31,10 +14,9 @@ async function collect(
 ) {
   vi.useFakeTimers();
   const start = Date.now();
-  const result = processStreamingResponse(stream(chunks, 20, tailDelay), start - 100, {
+  return processStreamingResponse(new Response(timedStream(chunks, 20, tailDelay)), start - 100, {
     streamFormat: format,
   });
-  return result;
 }
 afterEach(() => {
   vi.restoreAllMocks();
