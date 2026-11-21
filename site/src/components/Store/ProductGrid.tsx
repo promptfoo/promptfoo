@@ -18,7 +18,7 @@ interface ProductGridProps {
 export function ProductGrid({ products, isLoading, error }: ProductGridProps) {
   const { openProductModal } = useCartContext();
 
-  if (isLoading) {
+  if (isLoading || error || products.length === 0) {
     return (
       <Box
         sx={{
@@ -26,45 +26,16 @@ export function ProductGrid({ products, isLoading, error }: ProductGridProps) {
           justifyContent: 'center',
           alignItems: 'center',
           minHeight: '50vh',
+          ...(isLoading ? {} : { px: 3 }),
         }}
       >
-        <CircularProgress sx={{ color: 'var(--ifm-color-primary)' }} />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '50vh',
-          px: 3,
-        }}
-      >
-        <Typography color="error" align="center">
-          Failed to load products. Please try again later.
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (products.length === 0) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '50vh',
-          px: 3,
-        }}
-      >
-        <Typography color="text.secondary" align="center">
-          No products available.
-        </Typography>
+        {isLoading ? (
+          <CircularProgress sx={{ color: 'var(--ifm-color-primary)' }} />
+        ) : (
+          <Typography color={error ? 'error' : 'text.secondary'} align="center">
+            {error ? 'Failed to load products. Please try again later.' : 'No products available.'}
+          </Typography>
+        )}
       </Box>
     );
   }

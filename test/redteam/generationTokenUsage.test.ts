@@ -65,6 +65,36 @@ describe('generation token usage', () => {
     },
   );
 
+  it('counts a billed 429 attempt and the successful retry exactly once', async () => {
+    const usage: TokenUsage = {};
+    const callApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        error: 'Rate limited',
+        metadata: { http: { status: 429, headers: { 'retry-after-ms': '1' } } },
+        tokenUsage: { total: 2, prompt: 2, completion: 0, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Hello',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const source = { ...createProvider(callApi), config: { maxRetries: 1 } };
+    const provider = wrapProviderWithRateLimiting(
+      trackGenerationTokenUsage(source, usage),
+      registry,
+    );
+    try {
+      expect((await provider.callApi('Say hello')).output).toBe('Hello');
+      expect(callApi).toHaveBeenCalledTimes(2);
+      const expected = { total: 5, prompt: 4, completion: 1, numRequests: 2 };
+      expect(usage).toMatchObject(expected);
+      expect(usage.incurredTokenUsage ?? usage).toMatchObject(expected);
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it('preserves cached generation in the logical footprint without incurring usage', async () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(

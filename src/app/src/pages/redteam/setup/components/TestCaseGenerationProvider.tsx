@@ -344,7 +344,7 @@ export const TestCaseGenerationProvider: React.FC<{
         setStrategy(null);
         setIsGenerating(false);
 
-        onErrorRef.current?.(error as Error);
+        onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
       }
     },
     [
@@ -414,14 +414,16 @@ export const TestCaseGenerationProvider: React.FC<{
         }
 
         console.error('Failed to run test against target:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to run test against target';
         setTargetResponses((prev) => [
           ...prev,
           {
             output: null,
-            error: error instanceof Error ? error.message : 'Failed to run test against target',
+            error: errorMessage,
           },
         ]);
-        onErrorRef.current?.(error as Error);
+        onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
       } finally {
         setIsRunningTest(false);
       }
@@ -738,7 +740,7 @@ export const TestCaseGenerationProvider: React.FC<{
             setStrategy(null);
             setIsGenerating(false);
 
-            onErrorRef.current?.(error as Error);
+            onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
           });
       } else {
         // Multi-turn or subsequent turns: use single generation

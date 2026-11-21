@@ -101,7 +101,7 @@ describe('OpenAI default providers', () => {
       expect(DefaultWebSearchProvider.modelName).toBe('gpt-6-sol');
       expect(DefaultWebSearchProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultWebSearchProvider.config).toEqual({
-        tools: [{ type: 'web_search_preview' }],
+        tools: [{ type: 'web_search' }],
       });
     });
   });
@@ -116,7 +116,7 @@ describe('OpenAI default providers', () => {
     expect(grading).not.toHaveProperty('temperature');
     expect(grading).not.toHaveProperty('max_tokens');
     expect(search.model).toBe('gpt-6-sol');
-    expect(search.tools).toEqual([{ type: 'web_search_preview' }]);
+    expect(search.tools).toEqual([{ type: 'web_search' }]);
     expect(search).not.toHaveProperty('temperature');
   });
 });
