@@ -1,3 +1,5 @@
+import { getEventListeners } from 'node:events';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callGradingProvider, callProviderWithContext } from '../../src/matchers/providers';
 import {
@@ -101,6 +103,11 @@ describe('callProviderWithContext', () => {
       () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
     );
 
+    expect(registry.executeSpy).toHaveBeenCalledWith(
+      provider,
+      expect.any(Function),
+      expect.objectContaining({ abortSignal: abortController.signal }),
+    );
     expect(provider.callApi).toHaveBeenCalledWith(
       'grade this',
       {
@@ -238,6 +245,22 @@ describe('callProviderWithContext', () => {
       ]);
     },
   );
+
+  it('does not start a queued grading call after cancellation', async () => {
+    const provider = createProvider();
+    const controller = new AbortController();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, providerCallQueue },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    const reason = new Error('eval paused');
+    controller.abort(reason);
+
+    await Promise.all(providerCallQueue.takeNextGroup().map((job) => providerCallQueue.run(job)));
+    await expect(promise).rejects.toBe(reason);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
 });
 
 describe('callGradingProvider', () => {
@@ -273,7 +296,7 @@ describe('callGradingProvider', () => {
   });
 
   it.each([false, true])(
-    'settles an ignored grading signal and its span, traced=%s',
+    'returns on cancellation and retains the span for the physical call, traced=%s',
     async (traced) => {
       const controller = new AbortController();
       const pending = createDeferred<ProviderResponse>();
@@ -310,11 +333,13 @@ describe('callGradingProvider', () => {
         await new Promise<void>((resolve) => setImmediate(resolve));
         expect(outcome).toBe('AbortError');
         if (traced) {
-          expect(spanEnded).toBe(true);
+          expect(spanEnded).toBe(false);
         }
       } finally {
         pending.reject(new Error('late fixture failure'));
         await settled;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(spanEnded).toBe(traced);
       }
     },
   );
@@ -372,7 +397,7 @@ describe('callGradingProvider', () => {
         expect(await first).toBe('AbortError');
         await new Promise<void>((resolve) => setImmediate(resolve));
         if (traced) {
-          expect(spanEnded).toBe(true);
+          expect(spanEnded).toBe(false);
         }
         if (queued) {
           expect(queueSettled).toBe(true);
@@ -387,6 +412,7 @@ describe('callGradingProvider', () => {
         await first;
         await dispatch;
         await second;
+        expect(spanEnded).toBe(traced);
         registry.dispose();
       }
       expect(next).toHaveBeenCalledOnce();
@@ -473,4 +499,95 @@ describe('callGradingProvider', () => {
     expect(registry.executeSpy).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('grading cancellation through real scheduler boundaries', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it('settles a text grading call when its caller aborts during registry backoff', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const controller = new AbortController();
+    const provider = createProvider();
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      error: '429 rate limit',
+      metadata: {
+        http: {
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after-ms': '60000' },
+        },
+      },
+    });
+    const pending = withProviderCallExecutionContext(
+      { rateLimitRegistry: registry, abortSignal: controller.signal },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', {}),
+    );
+    let caught: unknown;
+    const rejection = pending.catch((error) => {
+      caught = error;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(caught).toMatchObject({ name: 'AbortError' });
+      await rejection;
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(Object.values(registry.getMetrics())[0].activeRequests).toBe(0);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([false, true])(
+    'cancels grouped non-text grading before invocation (group already selected=%s)',
+    async (selected) => {
+      const controller = new AbortController();
+      const survivorController = new AbortController();
+      const provider = createProvider();
+      const providerCallQueue = new ProviderGroupedCallQueue();
+      const cancelledInvoke = vi.fn(
+        async (): Promise<ProviderEmbeddingResponse> => ({ embedding: [0, 1] }),
+      );
+      const survivorInvoke = vi.fn(
+        async (): Promise<ProviderEmbeddingResponse> => ({ embedding: [1, 0] }),
+      );
+      const pending = withProviderCallExecutionContext(
+        { providerCallQueue, abortSignal: controller.signal },
+        () => callGradingProvider(provider, 'cancelled.embedding', cancelledInvoke),
+      );
+      let caught: unknown;
+      const rejection = pending.catch((error) => {
+        caught = error;
+      });
+      const survivor = withProviderCallExecutionContext(
+        { providerCallQueue, abortSignal: survivorController.signal },
+        () => callGradingProvider(provider, 'survivor.embedding', survivorInvoke),
+      );
+      const selectedJobs = selected ? providerCallQueue.takeNextGroup() : undefined;
+      controller.abort();
+      await rejection;
+      expect(caught).toMatchObject({ name: 'AbortError' });
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      const group = selectedJobs ?? providerCallQueue.takeNextGroup();
+      expect(group).toHaveLength(selected ? 2 : 1);
+      for (const job of group) {
+        await providerCallQueue.run(job);
+      }
+      await expect(survivor).resolves.toEqual({ embedding: [1, 0] });
+      expect(cancelledInvoke).not.toHaveBeenCalled();
+      expect(survivorInvoke).toHaveBeenCalledOnce();
+      expect(getEventListeners(survivorController.signal, 'abort')).toHaveLength(0);
+      expect(providerCallQueue.hasJobs()).toBe(false);
+    },
+  );
 });

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { serializeResultProviderRefs } from '../../src/evaluator/resultProcessing';
 import { getGradingProvider } from '../../src/matchers/providers';
 import Eval from '../../src/models/eval';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
@@ -35,7 +36,13 @@ function getProvider(slot: Slot, test: AtomicTestCase): GradingConfig['provider'
 }
 
 function persisted(test: AtomicTestCase): AtomicTestCase {
-  return JSON.parse(JSON.stringify(sanitizeObject(test, { maxDepth: Number.POSITIVE_INFINITY })));
+  return JSON.parse(
+    JSON.stringify(
+      sanitizeObject(serializeResultProviderRefs({ testCase: test }).testCase, {
+        maxDepth: Number.POSITIVE_INFINITY,
+      }),
+    ),
+  );
 }
 
 describe('persisted grading provider references', () => {
@@ -99,7 +106,7 @@ module.exports = class FixtureGrader {
         descriptor === 'string' ? reference : { id: reference, config: { fixture: 'configured' } };
       const initial = await resolveProvider(current, {});
       const saved = persisted(withProvider(slot, initial));
-      expect(getProvider(slot, saved)).not.toHaveProperty('id');
+      expect(getProvider(slot, saved)).toHaveProperty('id', 'offline-file-grader');
       const restored = await store.resolveGradingInputs(
         { output: 'target' },
         saved,
@@ -114,6 +121,29 @@ module.exports = class FixtureGrader {
       expect(grader.id()).toBe('offline-file-grader');
       expect(await grader.callApi('benign fixture')).toEqual({ output: 'fixture completion' });
       expect(fs.readFileSync(constructions, 'utf8')).toBe('xx');
+    },
+  );
+
+  it.each(['id', 'apiBaseUrl'])(
+    'rejects a changed %s before borrowing credentials',
+    async (field) => {
+      const original = {
+        id: 'offline:one',
+        config: { apiBaseUrl: 'https://one.invalid', apiKey: 'fixture' },
+      };
+      const saved = persisted(withProvider('options', original));
+      const changed =
+        field === 'id'
+          ? { ...original, id: 'offline:two' }
+          : { ...original, config: { ...original.config, apiBaseUrl: 'https://two.invalid' } };
+      await expect(
+        store.resolveGradingInputs(
+          { output: 'target' },
+          saved,
+          withProvider('options', changed),
+          resolveGrader,
+        ),
+      ).rejects.toThrow('recipient changed');
     },
   );
 

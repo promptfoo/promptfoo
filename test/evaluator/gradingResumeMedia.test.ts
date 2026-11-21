@@ -35,7 +35,7 @@ describeEvaluator('resuming persisted audio grading', () => {
     vi.restoreAllMocks();
   });
 
-  it.each(['available', 'SDK grader', 'missing', 'another evaluation'] as const)(
+  it.each(['available', 'SDK grader', 'missing', 'another evaluation', 'another row'] as const)(
     'replays only evaluation-owned audio: %s',
     async (availability) => {
       const bytes = Buffer.from(randomUUID().repeat(40));
@@ -97,20 +97,25 @@ describeEvaluator('resuming persisted audio grading', () => {
         });
         if (availability === 'SDK grader') {
           expect(saved.testCase.assert).toMatchObject([
-            { provider: { modelName: 'gpt-4o-audio-preview', config: { temperature: 0.2 } } },
+            { provider: { id: grader.id(), config: { temperature: 0.2 } } },
           ]);
           expect(saved.testCase.assert).toMatchObject([
-            { provider: expect.not.objectContaining({ id: expect.anything() }) },
+            { provider: expect.not.objectContaining({ modelName: expect.anything() }) },
           ]);
         }
         expect(saved.response?.audio?.data).toBeUndefined();
         expect(saved.response?.audio?.blobRef).toBeDefined();
         if (availability === 'missing') {
           await storage.deleteByHash(saved.response!.audio!.blobRef!.hash);
-        } else if (availability === 'another evaluation') {
-          const other = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        } else if (availability === 'another evaluation' || availability === 'another row') {
+          const other =
+            availability === 'another row'
+              ? record
+              : await Eval.create({}, suite.prompts, { id: randomUUID() });
           const foreign = await storeBlob(Buffer.from(randomUUID().repeat(40)), 'audio/wav', {
             evalId: other.id,
+            promptIdx: saved.promptIdx,
+            testIdx: saved.testIdx + 1,
             kind: 'audio',
             location: 'response.audio.data',
           });

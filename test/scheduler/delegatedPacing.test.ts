@@ -2,14 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   callProviderWithContext,
-  waitForProviderCall,
   withProviderCallExecutionContext,
 } from '../../src/scheduler/providerCallExecutionContext';
 
 import type { ApiProvider } from '../../src/types/index';
 
 beforeEach(() => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(0);
 });
 
@@ -39,14 +38,14 @@ describe('delegated pacing after cancellation', () => {
               providerCallOwned: owned,
               abortSignal: signal,
             },
-            () => waitForProviderCall(callProviderWithContext(provider, 'hello'), signal),
+            () => callProviderWithContext(provider, 'hello'),
           );
         const first = invoke(aborted.signal);
-        const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+        const completed = expect(first).resolves.toMatchObject({ output: 'done' });
         const second = invoke();
         await vi.advanceTimersByTimeAsync(10);
         aborted.abort();
-        await rejected;
+        await completed;
         await vi.advanceTimersByTimeAsync(89);
         expect(starts).toEqual([0]);
         await vi.advanceTimersByTimeAsync(1);
@@ -74,7 +73,7 @@ describe('delegated pacing after cancellation', () => {
       const first = callProviderWithContext(provider, 'first', undefined, {
         abortSignal: firstController.signal,
       });
-      const firstRejected = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+      const completed = expect(first).resolves.toMatchObject({ output: 'done' });
       const queued = callProviderWithContext(provider, 'canceled', undefined, {
         abortSignal: queuedController.signal,
       });
@@ -82,7 +81,7 @@ describe('delegated pacing after cancellation', () => {
       const last = callProviderWithContext(provider, 'last');
       await vi.advanceTimersByTimeAsync(10);
       firstController.abort();
-      await firstRejected;
+      await completed;
       queuedController.abort();
       await queuedRejected;
       await vi.advanceTimersByTimeAsync(89);
@@ -105,10 +104,10 @@ describe('delegated pacing after cancellation', () => {
     const first = callProviderWithContext(provider, 'first', undefined, {
       abortSignal: controller.signal,
     });
-    const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    const completed = expect(first).resolves.toMatchObject({ output: 'done' });
     await vi.advanceTimersByTimeAsync(10);
     controller.abort();
-    await rejected;
+    await completed;
     await vi.advanceTimersByTimeAsync(0);
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(40);

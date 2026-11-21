@@ -19,7 +19,7 @@ import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import * as targetTracer from '../../src/tracing/targetTracer';
 import { ResultFailureReason } from '../../src/types/index';
 import { createDeferred } from '../util/utils';
-import { toPrompt } from './helpers';
+import { toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/index';
@@ -32,7 +32,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
   )(
     'settles before releasing an uncooperative $phase after $termination',
     async ({ phase, termination }) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const controller = new AbortController();
       const started = createDeferred<void>();
       const release = createDeferred<void>();
@@ -66,7 +66,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
       const record = new Eval({});
       let settled = false;
       const evaluation = evaluate(suite, record, {
-        abortSignal: controller.signal,
+        pauseSignal: controller.signal,
         timeoutMs: 0,
         maxEvalTimeMs: termination === 'deadline' ? 10 : 0,
       }).then(
@@ -100,8 +100,14 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
       expect(settledBeforeRelease).toBe(true);
       expect(await evaluation).not.toHaveProperty('error');
       expect(provider.callApi).toHaveBeenCalledTimes(phase === 'queue' ? 0 : 1);
-      expect(grade).not.toHaveBeenCalled();
       const results = await record.getResults();
+      if (termination === 'pause' && phase === 'retry') {
+        // A paused backoff can still return its completed first response.
+        expect(grade).toHaveBeenCalledOnce();
+        expect(results).toMatchObject([{ response: { output: 'first attempt' }, success: true }]);
+        return;
+      }
+      expect(grade).not.toHaveBeenCalled();
       if (termination === 'pause') {
         expect(results).toEqual([]);
       } else {
@@ -112,7 +118,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
   );
 
   it('retains the scheduler slot until a timed-out provider really finishes', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
     const response = createDeferred<ProviderResponse>();
     const provider: ApiProvider = {
       id: () => 'offline-slot-ownership',
@@ -144,7 +150,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
   it.each([true, false])(
     'retries persisted interrupted comparisons while preserving ordinary pass=%s',
     async (ordinaryPass) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const controller = new AbortController();
       const started = createDeferred<void>();
       const response = createDeferred<ProviderResponse>();
@@ -209,7 +215,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
             sanitizeResultForJsonlArtifact(asEvaluateResult(row), stripFlags),
           ]) {
             expect(projection.gradingResult).toBeNull();
-            expect(JSON.stringify(projection.metadata)).not.toContain('comparisonBeforeAbort');
+            expect(JSON.stringify(projection.metadata)).not.toContain('comparisonError');
             expect(JSON.stringify(projection.metadata)).not.toContain('ordinary assertion');
           }
         }
@@ -232,15 +238,17 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
         expect(rows.every((row) => !row.error?.startsWith('Aborted: '))).toBe(true);
         expect(JSON.stringify(rows.map((row) => row.gradingResult))).not.toContain('Aborted: ');
         expect(JSON.stringify(rows.map((row) => row.gradingResult))).not.toContain(
-          'comparisonBeforeAbort',
+          'comparisonError',
         );
-        expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonBeforeAbort)).toBe(true);
+        expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonError)).toBe(true);
         expect(provider.callApi).toHaveBeenCalledTimes(2);
         expect(
           recordEvent.mock.calls.filter(([event]) => event === 'eval_ran').at(-1)?.[1],
         ).toMatchObject({
-          numPasses: ordinaryPass ? 1 : 0,
-          numFails: ordinaryPass ? 1 : 2,
+          // Telemetry counts only targets executed in this invocation.
+          numTests: 0,
+          numPasses: 0,
+          numFails: 0,
           numErrors: 0,
         });
         expect(resumed!.getStats()).toMatchObject({
@@ -261,7 +269,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
   it.each(['trace setup', 'provider response'])(
     'bounds the traced invocation when cancelled during %s',
     async (phase) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const controller = new AbortController();
       const started = createDeferred<void>();
       const release = createDeferred<void>();
@@ -295,7 +303,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
       const record = new Eval({});
       let settled = false;
       const evaluation = evaluate({ providers: [provider], prompts: [toPrompt('hello')] }, record, {
-        abortSignal: controller.signal,
+        pauseSignal: controller.signal,
         timeoutMs: 0,
         maxEvalTimeMs: 0,
       }).finally(() => {
@@ -308,7 +316,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(settled).toBe(true);
         if (phase === 'provider response') {
-          expect(spanSettled).toBe(true);
+          expect(spanSettled).toBe(false);
         }
       } finally {
         release.resolve();
@@ -325,7 +333,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
   it.each(['before comparison', 'during comparison'])(
     'preserves completed targets when the deadline expires %s',
     async (phase) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const started = createDeferred<void>();
       const response = createDeferred<ProviderResponse>();
       const grader: ApiProvider = {
@@ -343,7 +351,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
             return new Promise((_resolve, reject) =>
               options?.abortSignal?.addEventListener(
                 'abort',
-                () => reject(new DOMException('Stopped', 'AbortError')),
+                () => reject(options.abortSignal!.reason),
                 { once: true },
               ),
             );
@@ -387,16 +395,14 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
           expect(result.score).toBe(0);
           expect(result.failureReason).toBe(ResultFailureReason.ERROR);
           expect(result.error).toMatch(/^Aborted: /);
-          expect(result.gradingResult).toMatchObject({ pass: false, score: 0 });
+          expect(result.gradingResult?.componentResults ?? []).toEqual([]);
         }
         expect(record.getStats()).toMatchObject({
           successes: 0,
           failures: 0,
           errors: phase === 'before comparison' ? 4 : 2,
         });
-        expect(results.filter((result) => result.error?.includes('max duration'))).toHaveLength(
-          phase === 'before comparison' ? 2 : 0,
-        );
+        expect(results.every((result) => result.error?.includes('max duration'))).toBe(true);
         expect(grader.callApi).toHaveBeenCalledTimes(phase === 'before comparison' ? 0 : 1);
         response.resolve({ output: '0' });
         await vi.advanceTimersByTimeAsync(0);

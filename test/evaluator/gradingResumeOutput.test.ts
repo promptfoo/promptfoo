@@ -10,7 +10,7 @@ import { asEvaluateResult, sanitizeResultForJsonlArtifact } from '../../src/mode
 import telemetry from '../../src/telemetry';
 import { transform } from '../../src/util/transform';
 import { createDeferred } from '../util/utils';
-import { toPrompt } from './helpers';
+import { toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/index';
@@ -18,13 +18,14 @@ import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/i
 describeEvaluator('interrupted grading output boundaries', () => {
   it.each([
     { concurrency: 1, timeoutMs: 0 },
+    { concurrency: 1, timeoutMs: 0, workspace: true },
     { concurrency: 2, timeoutMs: 0 },
     { concurrency: 1, timeoutMs: 10 },
     { concurrency: 2, timeoutMs: 10 },
   ])(
     'keeps removed output absent at concurrency=$concurrency timeout=$timeoutMs',
     async (options) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const originalTransform = vi.mocked(transform).getMockImplementation();
       const actual = await vi.importActual<typeof import('../../src/util/transform')>(
         '../../src/util/transform',
@@ -43,7 +44,10 @@ describeEvaluator('interrupted grading output boundaries', () => {
       const target: ApiProvider = {
         id: () => 'output-boundary-target',
         callApi: vi.fn(async () => ({
-          output: JSON.stringify({ value: 'public', private: 'removed-fixture-marker' }),
+          output: options.workspace
+            ? 'public'
+            : JSON.stringify({ value: 'public', private: 'removed-fixture-marker' }),
+          metadata: options.workspace ? { workingDir: 'expired-fixture-workspace' } : undefined,
         })),
       };
       const suite: TestSuite = {
@@ -51,7 +55,7 @@ describeEvaluator('interrupted grading output boundaries', () => {
         prompts: [toPrompt('hello')],
         tests: [
           {
-            options: { transform: 'JSON.parse(output).value' },
+            options: { transform: options.workspace ? 'output' : 'JSON.parse(output).value' },
             assert: [{ type: 'llm-rubric', value: 'inspect', provider: grader }],
           },
         ],
@@ -89,7 +93,9 @@ describeEvaluator('interrupted grading output boundaries', () => {
         const [resumed] = await saved.getResults();
         expect(resumed.id).toBe(row.id);
         expect(resumed.error).toContain(
-          'Cannot resume assertion grading: a transform changed the output',
+          options.workspace
+            ? 'original workspace is unavailable'
+            : 'a transform changed the output',
         );
         expect(resumed.success).toBe(false);
         expect(JSON.stringify(resumed)).not.toContain('removed-fixture-marker');

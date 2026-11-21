@@ -7,12 +7,18 @@ import { getEnvBool, getEnvFloat } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { getProviderCallTracingContext, wrapProviderWithRateLimiting } from '../../scheduler';
+import {
+  createProviderRateLimitOptions,
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+  getRateLimitKey,
+  isRateLimitWrapped,
+  wrapProviderWithRateLimiting,
+} from '../../scheduler';
 import {
   callProviderWithContext,
   getProviderCallAbortSignal,
-  getProviderCallExecutionContext,
-  waitForProviderCall,
+  runProviderCallWithAbort,
 } from '../../scheduler/providerCallExecutionContext';
 import {
   type ApiProvider,
@@ -29,6 +35,12 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
+import {
+  composeResponseHeadersObservers,
+  preserveResponseHeadersObserverError,
+  preserveResponseHeadersObserverErrorResponse,
+} from '../../util/fetch/responseHeadersObserver';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -461,6 +473,20 @@ export type TargetResponse = {
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
 
+/** Retain only the selected error's origin when a strategy rebuilds its response. */
+export function preserveSelectedError<T extends ProviderResponse>(
+  response: T,
+  selected: ProviderResponse | undefined,
+): T {
+  if (!response.error || !selected?.error) {
+    return response;
+  }
+  if (selected.metadata?.errorOrigin === 'tool') {
+    response.metadata = { ...response.metadata, errorOrigin: 'tool' };
+  }
+  return preserveResponseHeadersObserverErrorResponse(selected, response);
+}
+
 export function isConversationEndedResponse(
   response: Pick<ProviderResponse, 'conversationEnded'> | undefined,
 ): boolean {
@@ -492,7 +518,44 @@ export function callTargetProvider(
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  return callProviderWithContext(targetProvider, targetPrompt, context, options);
+  const executionContext = getProviderCallExecutionContext();
+  const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    const targetOptions = onResponseHeaders
+      ? {
+          ...options,
+          onResponseHeaders: composeResponseHeadersObservers(
+            onResponseHeaders,
+            options?.onResponseHeaders,
+          ),
+        }
+      : options;
+    return callProviderWithContext(targetProvider, targetPrompt, context, targetOptions);
+  };
+  const registry = executionContext?.rateLimitRegistry;
+  const activeProvider = executionContext?.rateLimitProvider;
+  // The evaluator already owns the slot when a same-pool override delegates.
+  // A different raw target needs its own observer; preserve the original object
+  // for rendering, tracing and the actual call receiver.
+  if (
+    registry &&
+    !isRateLimitWrapped(targetProvider) &&
+    (!activeProvider || getRateLimitKey(activeProvider) !== getRateLimitKey(targetProvider))
+  ) {
+    return registry.execute(
+      targetProvider,
+      invoke,
+      createProviderRateLimitOptions(options?.abortSignal),
+    );
+  }
+  return invoke();
+}
+
+/** Preserve caller cancellation across target and strategy error accounting. */
+export function isTargetCallAbortError(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    (error instanceof Error && error.name === 'AbortError') ||
+    isCallerAbortError(error, signal, { requireReasonMatch: true })
+  );
 }
 
 /** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
@@ -508,11 +571,13 @@ export function callGradingProvider(
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const invoke = async (context?: CallApiContextParams) => {
     signal?.throwIfAborted();
-    const result =
-      callOptions === undefined
-        ? provider.callApi(prompt, context)
-        : provider.callApi(prompt, context, callOptions);
-    return waitForProviderCall(result, waitSignal);
+    return runProviderCallWithAbort(
+      () =>
+        callOptions === undefined
+          ? provider.callApi(prompt, context)
+          : provider.callApi(prompt, context, callOptions),
+      waitSignal,
+    );
   };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
@@ -548,17 +613,17 @@ export async function getTargetResponse(
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isTargetCallAbortError(error, options?.abortSignal)) {
       throw error;
     }
-    return {
+    return preserveResponseHeadersObserverError(options?.onResponseHeaders, error, {
       output: '',
       error: (error as Error).message,
       tokenUsage: {
         numRequests:
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
-    };
+    });
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput =
@@ -572,12 +637,15 @@ export async function getTargetResponse(
           ? targetRespRaw.output
           : safeJsonStringify(targetRespRaw.output)) as string)
       : '';
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
+    return preserveSelectedError(
+      {
+        ...(targetRespRaw as ProviderResponse),
+        output,
+        error: targetRespRaw.error,
+        tokenUsage,
+      },
+      targetRespRaw,
+    );
   }
 
   if (hasOutput) {
@@ -923,6 +991,7 @@ export async function createIterationContext({
 type SharedBacktrackingStopReason =
   | 'Grader failed'
   | 'Max backtracks reached'
+  | 'Target error'
   | 'Target ended conversation';
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
@@ -1094,4 +1163,10 @@ export function getGraderAssertionValue(
   }
 
   return assertToUse.value;
+}
+
+export interface SuccessfulAttack {
+  turn: number;
+  prompt: string;
+  response: string;
 }
