@@ -20,7 +20,6 @@ import {
 } from './factories/eval';
 import { createGradingResult } from './factories/gradingResult';
 import { createMockResponse, mockProcessEnv } from './util/utils';
-import type { Mock } from 'vitest';
 
 import type { CsvRow } from '../src/types/index';
 
@@ -504,11 +503,9 @@ describe('Google Sheets Integration', () => {
         const eval_ = new Eval({});
         eval_.oldResults = createEvaluateSummaryV2({ table });
         const before = structuredClone(table);
-        spreadsheets.get.mockResolvedValue({
+        request.mockResolvedValue({}).mockResolvedValueOnce({
           data: { sheets: [{ properties: { sheetId: 98765, title: 'Existing' } }] },
         });
-        spreadsheets.values.update.mockResolvedValue({});
-        spreadsheets.batchUpdate.mockResolvedValue({});
         vi.spyOn(Date, 'now').mockReturnValue(1234);
         const restore = mockProcessEnv({
           PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
@@ -520,38 +517,34 @@ describe('Google Sheets Integration', () => {
         try {
           await writeOutput(existingSheet ? TEST_SHEET_URL_WITH_GID : TEST_SHEET_URL, eval_, null);
           expect(mockGoogleAuth).toHaveBeenCalledOnce();
-          expect(spreadsheets.values.update).toHaveBeenCalledOnce();
-          const request = spreadsheets.values.update.mock.calls[0][0];
+          expect(request).toHaveBeenCalledTimes(2);
+          const [first, update] = request.mock.calls.map(([options]) => options);
+          expect(first.method).toBe(existingSheet ? 'GET' : 'POST');
+          const { values } = update.data;
           const headers = strip
             ? ['input', '[echo] [prompt stripped]', '[echo] [prompt stripped] (2)']
             : ['input', '[echo] Alpha prompt canary', '[echo] Beta prompt canary'];
-          expect(request).toMatchObject({
-            spreadsheetId: '1234567890',
-            auth: mockAuthClient,
-            range: `${existingSheet ? 'Existing' : 'Sheet1234'}!A1:C3`,
-            valueInputOption: 'USER_ENTERED',
+          expect(update).toMatchObject({
+            method: 'PUT',
+            url: `${spreadsheetUrl}/values/${existingSheet ? 'Existing' : 'Sheet1234'}%21A1%3AC3`,
+            params: { valueInputOption: 'USER_ENTERED' },
           });
-          expect(request.requestBody.values).toEqual([
+          expect(values).toEqual([
             headers,
             ['row-0', expect.stringContaining('output-0-0'), expect.stringContaining('output-0-1')],
             ['row-1', expect.stringContaining('output-1-0'), expect.stringContaining('output-1-1')],
           ]);
           for (let row = 0; row < 2; row++) {
-            expect(request.requestBody.values[row + 1][1]).toContain(
-              '[PASS] (0.75, quality: 0.75)',
-            );
-            expect(request.requestBody.values[row + 1][2]).toContain(
-              '[FAIL] (0.25, quality: 0.25)',
-            );
-            expect(request.requestBody.values[row + 1][1]).toContain(`grade-${row}-0`);
-            expect(request.requestBody.values[row + 1][2]).toContain(`grade-${row}-1`);
+            expect(values[row + 1][1]).toContain('[PASS] (0.75, quality: 0.75)');
+            expect(values[row + 1][2]).toContain('[FAIL] (0.25, quality: 0.25)');
+            expect(values[row + 1][1]).toContain(`grade-${row}-0`);
+            expect(values[row + 1][2]).toContain(`grade-${row}-1`);
           }
           if (strip) {
-            expect(JSON.stringify(request.requestBody.values)).not.toContain('prompt canary');
+            expect(JSON.stringify(values)).not.toContain('prompt canary');
           }
           expect(eval_.oldResults.table).toBe(table);
           expect(table).toEqual(before);
-          expect(spreadsheets.batchUpdate).toHaveBeenCalledTimes(existingSheet ? 0 : 1);
         } finally {
           restore();
         }
