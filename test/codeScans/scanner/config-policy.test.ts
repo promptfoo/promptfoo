@@ -8,6 +8,7 @@ import { CodeScanOutputFormat, type FileRecord } from '../../../src/types/codeSc
 type ScannerRequestModule = typeof import('../../../src/codeScan/scanner/request');
 
 describe('scanner config policy boundary', () => {
+  const originalNodeVersion = process.versions.node;
   let repoPath: string;
 
   beforeEach(() => {
@@ -17,6 +18,7 @@ describe('scanner config policy boundary', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    Object.defineProperty(process.versions, 'node', { value: originalNodeVersion });
     fs.rmSync(repoPath, { force: true, recursive: true });
     process.exitCode = 0;
   });
@@ -40,6 +42,7 @@ describe('scanner config policy boundary', () => {
       processDiff: vi.fn().mockResolvedValue(processDiffResult),
     }));
     vi.doMock('../../../src/codeScan/git/diff', () => ({
+      getDefaultBaseBranch: vi.fn().mockResolvedValue('main'),
       validateOnBranch: vi.fn().mockResolvedValue('main'),
     }));
     vi.doMock('../../../src/codeScan/git/metadata', () => ({
@@ -55,11 +58,13 @@ describe('scanner config policy boundary', () => {
         timestamp: '2026-06-26T00:00:00.000Z',
       }),
     }));
-    vi.doMock('simple-git', () => ({
-      simpleGit: vi.fn(() => ({
-        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
-        revparse: vi.fn().mockResolvedValue('abc123'),
-      })),
+    vi.doMock('../../../src/codeScan/mcp/snapshot', () => ({
+      createFilesystemSnapshot: vi.fn().mockResolvedValue({
+        rootDir: path.join(repoPath, 'snapshot'),
+        checkout: repoPath,
+        commit: 'compare123',
+        dispose: vi.fn().mockResolvedValue(undefined),
+      }),
     }));
     vi.doMock('../../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({
@@ -140,6 +145,7 @@ describe('scanner config policy boundary', () => {
         'guidanceFile: missing-guidance.md',
       ].join('\n'),
     );
+    Object.defineProperty(process.versions, 'node', { value: '24.0.0' });
     const { disconnect } = mockScannerBoundaries();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
@@ -157,7 +163,10 @@ describe('scanner config policy boundary', () => {
     expect(createAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'https://api.promptfoo.app' }),
     );
-    expect(startFilesystemMcpServer).toHaveBeenCalledWith(path.resolve(repoPath));
+    expect(startFilesystemMcpServer).toHaveBeenCalledWith(
+      path.join(repoPath, 'snapshot'),
+      repoPath,
+    );
     expect(buildScanRequest).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),
