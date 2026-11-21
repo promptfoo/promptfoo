@@ -116,12 +116,12 @@ describe('thrown MCP tool errors and model quota', () => {
         });
         expect(tool).toHaveBeenCalledOnce();
         expect(retrying).not.toHaveBeenCalled();
+        expect(result.metadata).toMatchObject({ errorOrigin: 'tool', http: { status: 200 } });
         if (cancel) {
           expect(result.error).toContain(message);
-          expect(result.metadata).toMatchObject({ errorOrigin: 'tool', http: { status: 200 } });
         } else {
-          expect(result.error).toBeUndefined();
-          expect(result.output).toBe(`MCP Tool Error (lookup): Error: ${message}`);
+          const diagnostic = `MCP Tool Error (lookup): ${message}`;
+          expect(result).toMatchObject({ error: diagnostic, output: diagnostic });
         }
         if (survivor) {
           if (quota) {
