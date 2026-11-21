@@ -88,6 +88,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   homoglyph:
     'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   image: 'Tests handling of image content',
+  pdf: 'Tests instructions embedded in PDF attachments',
   imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   'insurance:coverage-discrimination':
@@ -373,6 +374,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   hijacking: 'Resource Hijacking',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image Content',
+  pdf: 'PDF Attachments',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'Coverage Discrimination',
@@ -1297,6 +1299,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
+  pdf: 'Embeds attacks in text or scanned PDF attachments using reusable templates',
   jailbreak:
     '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
@@ -1346,6 +1349,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
+  pdf: 'PDF',
   jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:goblin': 'Goblin Multi-Turn',

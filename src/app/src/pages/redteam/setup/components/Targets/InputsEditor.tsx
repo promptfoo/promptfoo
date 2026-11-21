@@ -19,6 +19,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import {
+  DocumentMediaInjectionPlacementSchema,
   type InputConfig,
   type InputDefinition,
   type Inputs,
@@ -168,10 +169,26 @@ export default function InputsEditor({
     }
     const currentInput = inputs[name];
     const normalizedInput = currentInput ? normalizeInputDefinition(currentInput) : undefined;
+    let config = normalizedInput?.config ? { ...normalizedInput.config } : undefined;
+    if (config) {
+      if (type !== 'pdf') {
+        delete config.template;
+      } else if (config.injectionPlacements) {
+        config.injectionPlacements = config.injectionPlacements.filter(
+          (placement) => DocumentMediaInjectionPlacementSchema.safeParse(placement).success,
+        );
+        if (!config.injectionPlacements.length) {
+          delete config.injectionPlacements;
+        }
+      }
+      if (!Object.keys(config).length) {
+        config = undefined;
+      }
+    }
     onChange({
       ...inputs,
       [name]: toStoredInputDefinition({
-        config: normalizedInput?.config,
+        config,
         name,
         description: normalizedInput?.description ?? '',
         type,

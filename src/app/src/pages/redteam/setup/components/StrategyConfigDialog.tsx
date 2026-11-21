@@ -41,7 +41,9 @@ import type { StrategyCardData } from './strategies/types';
 // We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
 // like 'default', 'multilingual' which aren't meant to be composed as layer steps.
 // We exclude 'layer' itself to prevent infinite recursion.
-const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
+  (s) => s !== 'layer' && s !== 'pdf',
+).sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -325,24 +327,14 @@ export default function StrategyConfigDialog({
         const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
         if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
-
-            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
-              // Add step with its config
-              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
-            } else {
-              // Shouldn't reach here due to filtering, but add as string fallback
-              setSteps((prev) => [...prev, trimmedValue]);
-            }
-          } else {
-            // Regular strategy without config requirements
-            setSteps((prev) => [...prev, trimmedValue]);
-          }
+          const strategyConfig = allStrategies.find(
+            (s) => (typeof s === 'string' ? s : s.id) === trimmedValue,
+          );
+          const step =
+            typeof strategyConfig === 'object' && strategyConfig.config
+              ? { id: trimmedValue, config: strategyConfig.config }
+              : trimmedValue;
+          setSteps((prev) => [...prev, step]);
           setNewStep('');
         }
       }
@@ -435,6 +427,7 @@ export default function StrategyConfigDialog({
       strategy === 'custom' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
+      strategy === 'pdf' ||
       strategy === 'mischievous-user'
     ) {
       if (!isCustomStrategyValid()) {
@@ -1308,6 +1301,41 @@ export default function StrategyConfigDialog({
 
   const renderStrategyConfig = () => {
     switch (strategy) {
+      case 'pdf':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="pdf-input">PDF input variable</Label>
+              <Input
+                id="pdf-input"
+                placeholder="Automatically select the PDF input"
+                value={String(localConfig.input ?? '')}
+                onChange={(event) =>
+                  setLocalConfig({ ...localConfig, input: event.target.value || undefined })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pdf-mode">Document format</Label>
+              <Select
+                value={String(localConfig.mode ?? 'text')}
+                onValueChange={(mode) => setLocalConfig({ ...localConfig, mode })}
+              >
+                <SelectTrigger id="pdf-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text PDF</SelectItem>
+                  <SelectItem value="scanned">Scanned PDF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Appends attack notes to a clean template. Configure the template on the target's PDF
+              input in YAML. Supports single-turn generation.
+            </p>
+          </div>
+        );
       case 'basic':
         return renderBasicStrategyConfig();
       case 'jailbreak':

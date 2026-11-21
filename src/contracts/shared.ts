@@ -64,6 +64,11 @@ export type DocxInjectionPlacement = z.infer<typeof DocxInjectionPlacementSchema
 export const DocumentMediaInjectionPlacementValues = ['body', 'header', 'footer'] as const;
 export const DocumentMediaInjectionPlacementSchema = z.enum(DocumentMediaInjectionPlacementValues);
 
+export const PdfTemplateSchema = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('file'), path: z.string().min(1) }),
+  z.object({ source: z.literal('generated'), description: z.string().min(1).max(4000) }),
+]);
+
 // Exhaustive mapping keeps runtime validation and portable structural variants in sync.
 const InputPlacementSchemas = {
   text: z.string().min(1),
@@ -73,6 +78,7 @@ const InputPlacementSchemas = {
 } satisfies Record<InputType, z.ZodType<string>>;
 
 export const InputConfigSchema = z.object({
+  template: PdfTemplateSchema.optional(),
   benign: z.boolean().optional(),
   inputPurpose: z
     .string()
@@ -99,6 +105,13 @@ export const InputDefinitionObjectSchema = InputDefinitionFieldsSchema.superRefi
   const inputType = input.type ?? 'text';
   const injectionPlacements = input.config?.injectionPlacements ?? [];
 
+  if (input.config?.template && inputType !== 'pdf') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'template'],
+      message: 'Templates are supported only for PDF inputs',
+    });
+  }
   if (inputType === 'text' || injectionPlacements.length === 0) {
     return;
   }
@@ -116,6 +129,9 @@ export const InputDefinitionObjectSchema = InputDefinitionFieldsSchema.superRefi
       message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
     });
   }
+}).meta({
+  if: { properties: { type: { const: 'pdf' } }, required: ['type'] },
+  else: { properties: { config: { properties: { template: false } } } },
 });
 
 export const InputDefinitionSchema = z.union([
@@ -191,10 +207,12 @@ const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
   error: 'Input variable names must be valid identifiers (start with letter or underscore)',
 });
 
+const NonPdfInputConfigSchema = InputConfigSchema.omit({ template: true }).strict();
+
 function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
   return InputDefinitionFieldsSchema.strict().extend({
     type: z.literal(type),
-    config: InputConfigSchema.strict()
+    config: (type === 'pdf' ? InputConfigSchema.strict() : NonPdfInputConfigSchema)
       .extend({
         injectionPlacements: z.array(InputPlacementSchemas[type]).min(1).optional(),
       })
@@ -206,7 +224,7 @@ function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
 const StructuralInputDefinitions = {
   text: InputDefinitionFieldsSchema.strict().extend({
     type: z.literal('text').optional(),
-    config: InputConfigSchema.strict().optional(),
+    config: NonPdfInputConfigSchema.optional(),
   }),
   pdf: documentInputSchema('pdf'),
   docx: documentInputSchema('docx'),

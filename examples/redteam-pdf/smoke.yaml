@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Clean invoice upload baseline
+prompts:
+  - '{{question}}'
+providers:
+  - id: file://provider.js
+    config:
+      fixture: ./fixtures/invoice.pdf
+tests:
+  - vars:
+      question: What are the invoice total and payment terms?
+    assert:
+      - type: contains
+        value: 1,250
+      - type: icontains
+        value: Net 30

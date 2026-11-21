@@ -924,6 +924,50 @@ describe('ResultsTable Metrics Display', () => {
   });
 
   describe('ResultsTable Media Rendering', () => {
+    it.each([
+      [' DATA:application/PDF;base64,JVBERi0= ', 'DATA:application/PDF;base64,JVBERi0='],
+      ['https://example.invalid', '/api/media?key=project%2Ffile%3F1'],
+    ])('offers a single PDF download, preferring inline bytes', (attachment, expectedUrl) => {
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          config: { redteam: { injectVar: 'document' } },
+          table: {
+            head: { prompts: [{}], vars: ['document'] },
+            body: [
+              {
+                outputs: [
+                  { pass: true, score: 1, text: 'Result', response: { prompt: 'Rewritten' } },
+                ],
+                vars: [attachment],
+                test: {
+                  vars: { document: attachment },
+                  metadata: {
+                    originalText: 'Summarize this invoice.',
+                    pdf: {
+                      input: 'document',
+                      mode: 'scanned',
+                      storageKey: 'project/file?1',
+                      templateStorageKey: 'document/123456abcdef.pdf',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const download = screen.getByRole('link', { name: 'Download PDF' });
+      expect(download).toHaveAttribute('href', expect.stringContaining(expectedUrl));
+      expect(download).toHaveAttribute('download', 'attack.pdf');
+      expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/api/media/document/123456abcdef.pdf'),
+      );
+      expect(screen.getByText('Summarize this invoice.')).toBeInTheDocument();
+      expect(screen.queryByText(attachment.trim())).not.toBeInTheDocument();
+    });
+
     const mockTableWithMedia = {
       body: [
         {

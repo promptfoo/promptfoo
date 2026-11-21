@@ -561,17 +561,18 @@ def call_api(prompt, options, context):
 
 :::warning
 
-Always set `injectVar` explicitly for multimodal prompts. It defaults to the **last** template variable, which may not be the media variable. With `{{image}} {{question}}`, the default is `question`.
+For single-input image, audio, and video prompts, set `injectVar` explicitly. It defaults to the **last** template variable, which may not be the media variable. With `{{image}} {{question}}`, the default is `question`.
 
 :::
 
-Media strategies put raw base64 in `context.vars[redteam.injectVar]`, not a ready-to-send chat message:
+Image, audio, and video strategies put raw base64 in `context.vars[redteam.injectVar]`. The PDF strategy uses a complete data URI in its selected typed input. Providers must translate these values to the target API:
 
-| Strategy | Value passed to custom providers                 | Gotchas                                                                                                                                                                                                                                      |
-| -------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `image`  | PNG base64 with no `data:` prefix                | Wrap as `data:image/png;base64,...` for APIs that expect data URLs. The original text is also available as `context.vars.image_text`.                                                                                                        |
-| `audio`  | MP3 base64 with no `data:` prefix                | Audio conversion uses remote generation. Forward it as your API's audio input type, usually with MIME type `audio/mpeg` or format `mp3`.                                                                                                     |
-| `video`  | MP4 base64 when local FFmpeg generation succeeds | For a real MP4 payload, install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. If generation falls back, the value may decode to the original text instead of video bytes. |
+| Strategy | Value passed to custom providers                        | Gotchas                                                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pdf`    | PDF data URI with `data:application/pdf;base64,` prefix | Forward as a native file input or decode for multipart upload. See the [PDF guide](/docs/guides/pdf-red-team). Typed inputs use `config.input` to select the document.                                                                       |
+| `image`  | PNG base64 with no `data:` prefix                       | Wrap as `data:image/png;base64,...` for APIs that expect data URLs. The original text is also available as `context.vars.image_text`.                                                                                                        |
+| `audio`  | MP3 base64 with no `data:` prefix                       | Audio conversion uses remote generation. Forward it as your API's audio input type, usually with MIME type `audio/mpeg` or format `mp3`.                                                                                                     |
+| `video`  | MP4 base64 when local FFmpeg generation succeeds        | For a real MP4 payload, install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. If generation falls back, the value may decode to the original text instead of video bytes. |
 
 Static variables and dataset-driven media may already be `data:` URLs or use a different MIME type, so check the value before prepending a media prefix.
 
@@ -582,6 +583,7 @@ See the [Python provider](/docs/providers/python#handling-multimodal-content) an
 ## See Also
 
 - [Red Team Strategies](/docs/red-team/strategies/)
+- [PDF Upload Red Teaming](/docs/guides/pdf-red-team)
 - [Image Inputs Strategy](/docs/red-team/strategies/image)
 - [Audio Inputs Strategy](/docs/red-team/strategies/audio)
 - [Video Inputs Strategy](/docs/red-team/strategies/video)

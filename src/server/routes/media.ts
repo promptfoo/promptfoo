@@ -1,7 +1,7 @@
 /**
  * Media serving routes for the local web UI.
  *
- * Serves media files stored in the local filesystem storage.
+ * Serves media files through the configured storage provider.
  */
 
 import express from 'express';
@@ -9,10 +9,19 @@ import { isSafeInlineBlobMimeType } from '../../blobs';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaRouteParamsSchema, MediaSchemas } from '../../types/api/media';
-import { replyValidationError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
+
+mediaRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+  const queryResult = MediaSchemas.Get.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    replyValidationError(res, queryResult.error);
+    return;
+  }
+  await serveMedia(queryResult.data.key, res, false);
+});
 
 /**
  * Get storage stats
@@ -98,52 +107,36 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     return;
   }
 
+  const { type, filename } = paramsResult.data;
+  await serveMedia(`${type}/${filename}`, res, true);
+});
+
+async function serveMedia(key: string, res: Response, contentAddressed: boolean): Promise<void> {
   try {
-    const { type, filename } = paramsResult.data;
-    const key = `${type}/${filename}`;
-
-    logger.debug(`[Media API] Serving media: ${key}`);
-
-    const exists = await mediaExists(key);
-    if (!exists) {
+    const storage = getMediaStorage();
+    const [type, filename, extra] = key.split('/');
+    if (
+      (!contentAddressed &&
+        !storage.allowOpaqueMediaKeys &&
+        (extra !== undefined || !MediaRouteParamsSchema.safeParse({ type, filename }).success)) ||
+      !(await mediaExists(key))
+    ) {
       res.status(404).json({ error: 'Media not found' });
       return;
     }
 
-    if (type === 'blob') {
-      const storage = getMediaStorage();
-      const { data, contentType } = storage.retrieveWithMetadata
-        ? await storage.retrieveWithMetadata(key)
-        : { data: await storage.retrieve(key), contentType: undefined };
-      const mimeType =
-        typeof contentType === 'string' && /^[a-z]+\/[a-z0-9_+-]+$/i.test(contentType)
-          ? contentType
-          : 'application/octet-stream';
-      res.setHeader('Content-Type', mimeType);
-      if (!isSafeInlineBlobMimeType(mimeType)) {
-        res.setHeader('Content-Disposition', 'attachment');
-      }
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Length', data.length);
-      res.setHeader(
-        'Cache-Control',
-        mimeType === 'application/octet-stream'
-          ? 'no-store'
-          : 'public, max-age=31536000, immutable',
-      );
-      res.send(data);
-      return;
-    }
-
-    const data = await retrieveMedia(key);
+    const { data, contentType } = storage.retrieveWithMetadata
+      ? await storage.retrieveWithMetadata(key)
+      : { data: await retrieveMedia(key), contentType: undefined };
 
     // Determine content type from filename
-    const extension = filename.split('.').pop()?.toLowerCase() || '';
+    const extension = key.split('.').pop()?.toLowerCase() || '';
     const contentTypes: Record<string, string> = {
       wav: 'audio/wav',
       mp3: 'audio/mpeg',
       ogg: 'audio/ogg',
       webm: 'audio/webm',
+      pdf: 'application/pdf',
       png: 'image/png',
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
@@ -153,14 +146,35 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
       ogv: 'video/ogg',
     };
 
-    const contentType = contentTypes[extension] || 'application/octet-stream';
-
-    res.setHeader('Content-Type', contentType);
+    const mimeType =
+      data.subarray(0, 5).toString() === '%PDF-'
+        ? 'application/pdf'
+        : contentType && /^[a-z]+\/[a-z0-9.+_-]+$/i.test(contentType)
+          ? contentType.toLowerCase()
+          : Object.hasOwn(contentTypes, extension)
+            ? contentTypes[extension]
+            : 'application/octet-stream';
+    res.setHeader('Content-Type', mimeType);
+    if (!isSafeInlineBlobMimeType(mimeType)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
     res.setHeader('Content-Length', data.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // 1 year cache (content-addressed)
+    const immutable =
+      contentAddressed &&
+      type !== 'document' &&
+      mimeType !== 'application/pdf' &&
+      (type === 'blob' || storage.hasImmutableKeys === true);
+    res.setHeader(
+      'Cache-Control',
+      mimeType === 'application/octet-stream' && type === 'blob'
+        ? 'no-store'
+        : immutable
+          ? 'public, max-age=31536000, immutable'
+          : 'private, no-cache',
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(data);
   } catch (error) {
-    logger.error('[Media API] Error serving media', { error });
-    res.status(500).json({ error: 'Failed to serve media' });
+    sendError(res, 500, 'Failed to serve media', error);
   }
-});
+}

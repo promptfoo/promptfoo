@@ -315,6 +315,7 @@
     "opener": "^1.5.2",
     "ora": "^10.0.0",
     "parse5": "^8.1.1",
+    "pdf-lib": "^1.17.1",
     "posthog-node": "~5.24.10",
     "protobufjs": "^8.8.1",
     "proxy-agent": "^8.0.0",

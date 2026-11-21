@@ -192,7 +192,9 @@ Define only your real application inputs here. In multi-input mode, Promptfoo au
 
 For upload or multimodal targets, use a structured input definition. Set `type` to `docx`, `pdf`, or `image` when Promptfoo should materialize generated text into that file or media value before calling your provider. Use `config.inputPurpose` to describe what a normal uploaded file should look like, `config.injectionPlacements` to choose where injected instructions may be placed, and `config.benign: true` for companion fields that should remain natural.
 
-DOCX inputs support `body`, `comment`, `footnote`, `header`, and `footer` placements. PDF and image inputs support `body`, `header`, and `footer` placements.
+DOCX inputs support `body`, `comment`, `footnote`, `header`, and `footer` placements. The basic PDF and image renderers support `body`, `header`, and `footer` placements.
+
+For reusable PDF templates and scanned output, use the [PDF strategy](/docs/red-team/strategies/pdf). Set `config.template` on the PDF input to choose a local file or generated document. That strategy appends review notes on new pages and does not use `injectionPlacements`.
 
 ```yaml
 targets:
