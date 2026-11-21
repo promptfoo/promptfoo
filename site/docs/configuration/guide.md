@@ -186,7 +186,9 @@ tests:
   - vars: file://path/to/vars*.yaml
 ```
 
-`vars` also accepts a list of file references, loaded in order. These forms work in `defaultTest.vars` and scenario tests too. Absolute file URLs support encoded characters such as `%20` for a space. Watch mode tracks these vars files and the files they reference.
+`vars` also accepts a list of file references, loaded in order. These forms work in `defaultTest.vars` and scenario tests too. Watch mode tracks these vars files and the files they reference.
+
+Use an absolute file URL such as `file:///path/vars%20file.yaml` to decode URL escapes. Encoded glob characters such as `%3F` are literal. On Windows, use an explicit UNC path such as `\\server\share\vars.yaml` or `file:////server/share/vars.yaml` for a network share. The `file://server/share/vars.yaml` shorthand resolves locally, preventing accidental network access.
 
 When combining configs, vars mappings merge by key. If either value is a file reference or list, the later `vars` value replaces the earlier one. Relative paths resolve from the config that declares them.
 
