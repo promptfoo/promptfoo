@@ -8,6 +8,11 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import Clone from 'rfdc';
 import { z } from 'zod';
+import {
+  expandAssertionFileRefs,
+  expandInlineAssertionIncludes,
+  expandScenarioAssertionIncludes,
+} from '../../assertions/expandAssertionFileRefs';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -546,6 +551,20 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
+async function expandConfigInlineAssertionIncludes(
+  config: UnifiedConfig,
+  baseDir: string,
+): Promise<UnifiedConfig> {
+  const tests = Array.isArray(config.tests)
+    ? await Promise.all(config.tests.map((test) => expandInlineAssertionIncludes(test, baseDir)))
+    : config.tests;
+  const defaultTest =
+    config.defaultTest && typeof config.defaultTest === 'object'
+      ? await expandInlineAssertionIncludes(config.defaultTest, baseDir)
+      : config.defaultTest;
+  return { ...config, tests, defaultTest };
+}
+
 /** Reads config files and resolves their tests using the combined environment. */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const { config, testSources } = await prepareCombinedConfig(configPaths);
@@ -576,6 +595,7 @@ async function readTestSources(
 /** Combines declarative config and keeps each test source's directory for loading and watch. */
 async function prepareCombinedConfig(
   configPaths: string[],
+  skipConfiguredTests = false,
 ): Promise<{ config: UnifiedConfig; testSources: TestSource[]; promptBasePaths: string[] }> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
@@ -592,12 +612,22 @@ async function prepareCombinedConfig(
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
-      configSources.push({ config, basePath: config.basePath ?? path.dirname(globPath) });
+      const basePath = config.basePath ?? path.dirname(globPath);
+      configSources.push({
+        config,
+        basePath,
+      });
     }
   }
 
+  const combinedEnv = configSources.reduce((env, { config }) => ({ ...env, ...config.env }), {});
+  for (const source of configSources) {
+    const config = skipConfiguredTests ? { ...source.config, tests: undefined } : source.config;
+    source.config = await cliState.withEnv(combinedEnv, () =>
+      expandConfigInlineAssertionIncludes(config, source.basePath),
+    );
+  }
   const configs = configSources.map(({ config }) => config);
-  const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
   const functionIds = new Map<Function, number>();
@@ -809,7 +839,17 @@ async function prepareCombinedConfig(
               cliState.withEnv(combinedEnv, () => maybeLoadFromExternalFile(source)),
             )
           : source;
-      for (const scenario of [loaded].flat()) {
+      for (const entry of [loaded].flat()) {
+        const scenarioDir =
+          typeof source === 'string' && source.startsWith('file://')
+            ? path.dirname(resolveConfigPath(basePath, source).slice(7))
+            : basePath;
+        const scenario =
+          typeof entry === 'object' && entry
+            ? await cliState.withEnv(combinedEnv, () =>
+                expandScenarioAssertionIncludes(entry, scenarioDir),
+              )
+            : entry;
         scenarios.push(
           typeof scenario === 'object' && scenario?.tests
             ? {
@@ -929,7 +969,10 @@ export async function resolveConfigs(
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    const prepared = await prepareCombinedConfig(configPaths);
+    const prepared = await prepareCombinedConfig(
+      configPaths,
+      Boolean(cmdObj.tests || cmdObj.vars || cmdObj.assertions),
+    );
     fileConfig = prepared.config;
     promptBasePaths = prepared.promptBasePaths;
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
@@ -1038,13 +1081,27 @@ async function resolveLoadedConfig(
 
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
+  // Assertion includes are relative to the file that declares them.
+  let defaultAssertionBasePath = basePath;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     processedDefaultTest = loaded as Partial<TestCase>;
+    const defaultTestFilePath = path.resolve(basePath, defaultTestRaw.slice('file://'.length));
+    defaultAssertionBasePath = path.dirname(defaultTestFilePath);
   } else if (defaultTestRaw) {
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
+  // Expand the include entries before normalizing the default test. Its vars
+  // and provider continue to resolve from the suite configuration directory.
+  if (processedDefaultTest?.assert) {
+    const expandedDefault = await expandAssertionFileRefs(processedDefaultTest.assert, {
+      baseDir: defaultAssertionBasePath,
+    });
+    if (expandedDefault) {
+      processedDefaultTest.assert = expandedDefault;
+    }
+  }
   const authoredTracing = fileConfig.tracing || defaultConfig.tracing;
   const parsedTracing = TestSuiteConfigSchema.shape.tracing.safeParse(authoredTracing);
   const tracing =
