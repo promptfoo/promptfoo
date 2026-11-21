@@ -614,14 +614,14 @@ export function createServerOpenApiRegistry() {
     tags: ['Eval'],
     summary: 'Preview one deterministic check on a saved output',
     request: {
-      params: params('SubmitRatingParams', EvalSchemas.CheckOutput.Params),
-      body: jsonBody('CheckOutputRequest', EvalSchemas.CheckOutput.Request),
+      params: EvalSchemas.CheckOutput.Params,
+      body: jsonBody(EvalSchemas.CheckOutput.Request),
     },
     responses: {
-      200: jsonResponse('CheckOutputResponse', EvalSchemas.CheckOutput.Response),
-      400: validationError(),
-      404: notFound('Evaluation or result not found'),
-      500: serverError(),
+      200: jsonResponse(EvalSchemas.CheckOutput.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Result or evaluation not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
 
