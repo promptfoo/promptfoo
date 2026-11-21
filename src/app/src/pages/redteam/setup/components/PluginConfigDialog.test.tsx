@@ -100,6 +100,25 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
+  it('validates the indirect task against the scan-wide message limit', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: { ...defaultRedTeamConfig, maxCharsPerMessage: 8 },
+      updatePlugins: mockUpdatePlugins,
+    });
+    render(
+      <PluginConfigDialog
+        open
+        plugin="coding-agent:consent-bypass"
+        config={{ maxCharsPerMessage: 500 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Shorten legitimateTask to 8 characters/);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
   describe('Grading Guidance', () => {
     it('renders gradingGuidance field for all plugins', () => {
       render(

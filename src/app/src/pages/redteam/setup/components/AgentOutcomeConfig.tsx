@@ -19,6 +19,8 @@ interface AgentOutcomeConfigProps {
   onChange: (config: PluginConfig) => void;
   readOnly?: boolean;
   singleTest?: boolean;
+  /** The scan-wide limit from Run Options, which overrides the plugin's own limit. */
+  maxCharsPerMessage?: number;
 }
 
 const modes = [
@@ -27,9 +29,14 @@ const modes = [
   { value: 'both', label: 'Both' },
 ] as const;
 
-export function getAgentOutcomeConfigIssue(plugin: string | null, config: unknown) {
+export function getAgentOutcomeConfigIssue(
+  plugin: string | null,
+  config: unknown,
+  maxCharsPerMessage?: number,
+) {
   if (plugin && isAgentOutcomePlugin(plugin)) {
-    return getAgentOutcomeConfigSchema(plugin).safeParse(config).error?.issues[0];
+    return getAgentOutcomeConfigSchema(plugin, maxCharsPerMessage).safeParse(config).error
+      ?.issues[0];
   }
   return undefined;
 }
@@ -40,11 +47,12 @@ export function AgentOutcomeConfig({
   onChange,
   readOnly,
   singleTest,
+  maxCharsPerMessage,
 }: AgentOutcomeConfigProps) {
   const id = useId();
   const configured = config.mode ?? 'both';
   const mode = singleTest && configured === 'both' ? 'indirect' : configured;
-  const issue = getAgentOutcomeConfigIssue(plugin, config);
+  const issue = getAgentOutcomeConfigIssue(plugin, config, maxCharsPerMessage);
   const invalidTask = issue?.path[0] === 'legitimateTask';
   const invalidVariable = issue?.path[0] === 'indirectInjectionVar';
   const errorId = `${id}-error`;

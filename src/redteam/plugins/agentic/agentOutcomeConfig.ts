@@ -90,14 +90,17 @@ const AgentOutcomeOptionsSchema = z
     }
   });
 
-export function getAgentOutcomeConfigSchema(
-  pluginId: AgentOutcomePluginId,
-  fallbackLimit?: number,
-) {
+/**
+ * @param globalLimit - The scan-wide maxCharsPerMessage. Generation applies it over the
+ * plugin's own limit, so validation does too.
+ */
+export function getAgentOutcomeConfigSchema(pluginId: AgentOutcomePluginId, globalLimit?: number) {
   return AgentOutcomeOptionsSchema.transform((options) => ({
     ...options,
     legitimateTask: options.legitimateTask ?? AGENT_OUTCOME_DEFAULT_TASKS[pluginId],
-    maxCharsPerMessage: getMaxCharsPerMessageFromConfig(options) ?? fallbackLimit,
+    maxCharsPerMessage:
+      getMaxCharsPerMessageFromConfig({ maxCharsPerMessage: globalLimit }) ??
+      getMaxCharsPerMessageFromConfig(options),
   })).superRefine(({ mode, legitimateTask, maxCharsPerMessage }, ctx) => {
     const violation =
       mode !== 'direct' && getLiteralMessageOverLimit(legitimateTask, maxCharsPerMessage);
