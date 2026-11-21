@@ -58,7 +58,7 @@ export async function matchesClassification(
   const score =
     expected === undefined
       ? maxScore
-      : Object.hasOwn(resp.classification, expected)
+      : Object.prototype.hasOwnProperty.call(resp.classification, expected)
         ? resp.classification[expected]
         : 0;
   const pass = score >= threshold - Number.EPSILON;
