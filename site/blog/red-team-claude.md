@@ -41,7 +41,7 @@ Let's start with a simple setup to test Claude 4 Sonnet, then explore more advan
 
 ### Prerequisites
 
-- **Node.js** `>=22.22.0` (Node.js 24 LTS recommended): [Download here](https://nodejs.org/)
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - **API Keys**: Set these environment variables:
 
 ```bash

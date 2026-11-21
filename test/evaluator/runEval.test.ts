@@ -87,6 +87,29 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('keeps an imported media path literal even after a live turn stores it again', async () => {
+    const path = 'file://example.m4a';
+    const options = {
+      ...defaultOptions,
+      provider: { id: () => 'fixture', callApi: vi.fn().mockResolvedValue({ output: path }) },
+      prompt: { raw: '{{answer}}', label: 'register fixture' },
+      conversations: {},
+      registers: {},
+    };
+    await runEval({
+      ...options,
+      test: {
+        providerOutput: path,
+        metadata: { __promptfoo: { remote: true } },
+        options: { storeOutputAs: 'answer' },
+      },
+    });
+    expect(options.registers).toEqual({ answer: path });
+    await runEval({ ...options, test: { options: { storeOutputAs: 'answer' } } });
+    await runEval({ ...options, test: {} });
+    expect(options.provider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual([path, path]);
+  });
+
   it('keeps runtime output registers literal when resolving local templates', async () => {
     const results = await runEval({
       ...defaultOptions,

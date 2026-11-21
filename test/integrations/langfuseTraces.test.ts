@@ -175,6 +175,7 @@ describe('langfuseTraces', () => {
       );
       const root = {
         traceId: 'first',
+        costDetails: { total: 0.012 },
         startTime: '2026-01-01',
         projectId: 'p',
         input: JSON.stringify({ input: 'hello' }),
@@ -184,7 +185,10 @@ describe('langfuseTraces', () => {
       };
       getMany
         .mockResolvedValueOnce({ data: [root], meta: { cursor: 'next' } })
-        .mockResolvedValueOnce({ data: [root, { ...root, traceId: 'second' }], meta: {} });
+        .mockResolvedValueOnce({
+          data: [root, { ...root, traceId: 'second', totalCost: 0 }],
+          meta: {},
+        });
       const tests = await fetchLangfuseTraces(
         'langfuse://traces?name=demo&tags=one&userId=user&limit=2',
       );
@@ -192,7 +196,9 @@ describe('langfuseTraces', () => {
       expect(tests[0]).toMatchObject({
         providerOutput: 'No',
         metadata: { conversationId: 'langfuse:first' },
+        vars: { __langfuse_cost: 0.012 },
       });
+      expect(tests[1].vars?.__langfuse_cost).toBe(0);
       expect(tests[1].metadata?.conversationId).toBe('langfuse:second');
       expect(getMany.mock.calls[1][0].cursor).toBe('next');
       expect(JSON.parse(getMany.mock.calls[0][0].filter)).toEqual(
@@ -428,12 +434,22 @@ describe('langfuseTraces', () => {
       });
     });
 
-    it('rejects an empty selection before it can create an implicit live test', async () => {
-      mockTraceList.mockResolvedValueOnce({ data: [] });
-      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
-        'No Langfuse traces matched the filters',
-      );
-    });
+    it.each(['legacy', 'cloud'])(
+      'rejects empty %s selections before creating an implicit live test',
+      async (api) => {
+        if (api === 'cloud') {
+          vi.mocked(getEnvString).mockImplementation((key) =>
+            key.endsWith('KEY') ? 'key' : 'https://cloud.langfuse.com',
+          );
+          getMany.mockResolvedValueOnce({ data: [] });
+        } else {
+          mockTraceList.mockResolvedValueOnce({ data: [] });
+        }
+        await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+          'No Langfuse traces matched the filters',
+        );
+      },
+    );
 
     it('should paginate through multiple pages', async () => {
       // First page

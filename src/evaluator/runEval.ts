@@ -52,6 +52,7 @@ import type winston from 'winston';
 
 import type {
   EvalConversations,
+  EvalRegisters,
   RateLimitRegistryRef,
   ScoringFunction,
   Vars,
@@ -60,6 +61,10 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { CallApiContextParams, CallApiOptionsParams } from '../types/providers';
 
 export const CONVERSATION_VAR_NAME = '_conversation';
+// Local providers can pass media paths to later steps. Once a run consumes
+// imported data, keep its registers literal, even across aliases and live turns.
+const localMediaRegisters = new WeakMap<EvalRegisters, Map<string, string> | null>();
+
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
@@ -395,7 +400,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
-  registerNames,
+  literalRegisters,
   test,
   testSuite,
   vars,
@@ -404,12 +409,12 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
-  registerNames: string[];
+  literalRegisters: string[];
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = new Set(registerNames);
+  const skipRenderVars = new Set(literalRegisters);
   if (test.metadata?.__promptfoo?.remote === true) {
     for (const name of test.metadata.__promptfoo.remoteVars ?? Object.keys(vars)) {
       skipRenderVars.add(name);
@@ -1347,6 +1352,13 @@ export async function runEvalInternal(
     test,
     vars: state.vars,
   });
+  if (registers && test.metadata?.__promptfoo?.remote === true) {
+    localMediaRegisters.set(registers, null);
+  }
+  const media =
+    registers && !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+      ? localMediaRegisters.get(registers)
+      : undefined;
   Object.assign(state.vars, registers);
   Object.assign(
     state.vars,
@@ -1379,7 +1391,9 @@ export async function runEvalInternal(
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
-      registerNames: Object.keys(registers ?? {}),
+      literalRegisters: Object.keys(registers ?? {}).filter(
+        (name) => media?.get(name) !== state.vars[name],
+      ),
       test,
       testSuite,
       vars: state.vars,
@@ -1515,8 +1529,21 @@ export async function runEvalInternal(
           }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
-            // Save the output in a register for later use
-            registers[test.options.storeOutputAs] = ret.response.output;
+            const name = test.options.storeOutputAs;
+            const output = ret.response.output;
+            registers[name] = output;
+            const saved = localMediaRegisters.get(registers);
+            saved?.delete(name);
+            if (
+              saved !== null &&
+              test.providerOutput === undefined &&
+              typeof output === 'string' &&
+              collectFileMetadata({ output }).output
+            ) {
+              const paths = saved ?? new Map<string, string>();
+              paths.set(name, output);
+              localMediaRegisters.set(registers, paths);
+            }
           }
 
           return [ret];

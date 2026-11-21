@@ -22,7 +22,7 @@ cd integration-crewai
 This example requires the following:
 
 1. **Python 3.10–3.13**
-2. **Node.js >=22.22.0 (Node.js 24 LTS recommended)**
+2. A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 3. **Provider credentials** - The default model requires a valid OpenAI API key
 
 ## Environment Setup

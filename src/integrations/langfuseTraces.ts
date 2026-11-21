@@ -622,6 +622,7 @@ async function fetchRootObservations(
             id: root.traceId,
             name: root.traceName ?? root.name,
             timestamp: root.startTime,
+            totalCost: root.totalCost ?? root.costDetails?.total,
             input: decodeIo(root.input),
             output: decodeIo(root.output),
             htmlPath: `/project/${encodeURIComponent(root.projectId)}/traces/${encodeURIComponent(root.traceId)}`,
@@ -641,31 +642,12 @@ async function fetchRootObservations(
   return [...tests.values()];
 }
 
-export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTestCase[]> {
-  const query = parseTracesUrl(url);
-  const limit = query.limit ?? DEFAULT_LIMIT;
-  const appliedFilters = Object.keys(query).filter((key) => key !== 'limit');
-
-  logger.debug('[Langfuse Traces] Fetching traces', { limit, appliedFilters });
-
-  if (!getEnvString('LANGFUSE_PUBLIC_KEY') || !getEnvString('LANGFUSE_SECRET_KEY')) {
-    throw new Error(
-      'Langfuse credentials not configured. Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.',
-    );
-  }
-  const baseUrl = (
-    getEnvString('LANGFUSE_HOST') ||
-    getEnvString('LANGFUSE_BASE_URL') ||
-    'https://cloud.langfuse.com'
-  ).replace(/\/+$/, '');
-  const langfuse = await getLangfuseClient();
-  const host = new URL(baseUrl).hostname;
-  const legacyApi = langfuse.api.trace as Partial<LegacyTraceApi> | undefined;
-  const list = legacyApi?.list?.bind(legacyApi);
-  if (!list || host === 'cloud.langfuse.com' || host.endsWith('.cloud.langfuse.com')) {
-    return fetchRootObservations(langfuse, query, limit, baseUrl);
-  }
-
+async function fetchLegacyTraces(
+  list: LegacyTraceApi['list'],
+  query: FetchTracesQuery,
+  limit: number,
+  baseUrl: string,
+): Promise<LangfuseTraceTestCase[]> {
   const tests: LangfuseTraceTestCase[] = [];
   let page = 1;
   let hasMore = true;
@@ -703,6 +685,35 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
       logger.debug('[Langfuse Traces] Fetch progress', { traceCount: tests.length });
     }
   }
+
+  return tests;
+}
+
+export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTestCase[]> {
+  const query = parseTracesUrl(url);
+  const limit = query.limit ?? DEFAULT_LIMIT;
+  const appliedFilters = Object.keys(query).filter((key) => key !== 'limit');
+
+  logger.debug('[Langfuse Traces] Fetching traces', { limit, appliedFilters });
+
+  if (!getEnvString('LANGFUSE_PUBLIC_KEY') || !getEnvString('LANGFUSE_SECRET_KEY')) {
+    throw new Error(
+      'Langfuse credentials not configured. Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.',
+    );
+  }
+  const baseUrl = (
+    getEnvString('LANGFUSE_HOST') ||
+    getEnvString('LANGFUSE_BASE_URL') ||
+    'https://cloud.langfuse.com'
+  ).replace(/\/+$/, '');
+  const langfuse = await getLangfuseClient();
+  const host = new URL(baseUrl).hostname;
+  const legacyApi = langfuse.api.trace as Partial<LegacyTraceApi> | undefined;
+  const list = legacyApi?.list?.bind(legacyApi);
+  const tests =
+    !list || host === 'cloud.langfuse.com' || host.endsWith('.cloud.langfuse.com')
+      ? await fetchRootObservations(langfuse, query, limit, baseUrl)
+      : await fetchLegacyTraces(list, query, limit, baseUrl);
 
   logger.info('[Langfuse Traces] Loaded traces', {
     traceCount: tests.length,
