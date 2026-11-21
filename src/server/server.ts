@@ -15,6 +15,7 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
+import { getEnvString } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -57,7 +58,32 @@ import type { Prompt, TestCase, TestSuite } from '../types/index';
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
-const REQUEST_SIZE_LIMIT = '100mb';
+const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
+
+/**
+ * Maximum JSON / urlencoded request body size accepted by the local server.
+ * Operators who expose the server beyond loopback can lower it with
+ * PROMPTFOO_REQUEST_SIZE_LIMIT (any value accepted by body-parser, e.g. "10mb").
+ * Malformed values fall back to the default so an unbound limit is never applied.
+ */
+// Cap magnitude so body-parser's bytes.parse cannot overflow to Infinity
+// (Number.MAX_VALUE ~ 1e308); an unbounded limit would skip raw-body's guard.
+const REQUEST_SIZE_LIMIT_PATTERN = /^\d{1,15}(?:\.\d{1,15})?\s*(?:b|kb|mb|gb|tb|pb)?$/i;
+
+export function getRequestSizeLimit(): string {
+  const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
+  if (!configured) {
+    return DEFAULT_REQUEST_SIZE_LIMIT;
+  }
+  if (!REQUEST_SIZE_LIMIT_PATTERN.test(configured)) {
+    logger.warn('Invalid PROMPTFOO_REQUEST_SIZE_LIMIT; using default', {
+      fallback: DEFAULT_REQUEST_SIZE_LIMIT,
+    });
+    return DEFAULT_REQUEST_SIZE_LIMIT;
+  }
+  // body-parser's bytes parser only accepts ASCII spaces before the unit.
+  return configured.replace(/\s+/g, ' ');
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -124,8 +150,9 @@ export function createApp() {
   app.use(cors());
   app.use(csrfProtection);
   app.use(compression());
-  app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
-  app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  const requestSizeLimit = getRequestSizeLimit();
+  app.use(express.json({ limit: requestSizeLimit }));
+  app.use(express.urlencoded({ limit: requestSizeLimit, extended: true }));
   app.get('/api/openapi.json', async (_req, res) => {
     const { default: spec } = await import('../../site/static/openapi.json', {
       with: { type: 'json' },
