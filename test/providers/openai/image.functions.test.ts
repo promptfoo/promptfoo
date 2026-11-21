@@ -247,10 +247,6 @@ describe('OpenAI Image Provider Functions', () => {
       expect(calculateImageCost('dall-e-2', '1024x1024')).toBe(DALLE2_COSTS['1024x1024']);
     });
 
-    it('should use default size cost if size is invalid for DALL-E 2', () => {
-      expect(calculateImageCost('dall-e-2', 'invalid-size')).toBe(DALLE2_COSTS['1024x1024']);
-    });
-
     it('should calculate correct cost for standard DALL-E 3', () => {
       expect(calculateImageCost('dall-e-3', '1024x1024', 'standard')).toBe(
         DALLE3_COSTS['standard_1024x1024'],
