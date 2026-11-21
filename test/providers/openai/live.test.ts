@@ -2760,6 +2760,46 @@ describe('OpenAiLiveProvider', () => {
     },
   );
 
+  it.each([
+    ['2027-03-01T07:59:59Z', 0.036],
+    ['2027-03-01T08:00:00Z', 0.072],
+  ] as const)(
+    'prices delegated GPT-6.2 Sol Ultrafast at response creation time %s',
+    async (created, expected) => {
+      vi.setSystemTime(new Date('2027-03-02T00:00:00Z'));
+      const model = 'gpt-6.2-sol';
+      const result = provider({ delegation: { type: 'responses', responses: { model } } }).callApi(
+        'Hi',
+      );
+      const socket = await connect();
+      start(socket);
+      delegateResponses(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      backend(socket, {
+        type: 'response.completed',
+        response: {
+          id: 'resp_1',
+          model,
+          created_at: Date.parse(created) / 1000,
+          service_tier: 'ultrafast',
+          output: [],
+          usage: {
+            input_tokens: 1000,
+            input_tokens_details: { cache_write_tokens: 0 },
+            output_tokens: 1000,
+            total_tokens: 2000,
+          },
+        },
+      });
+      text(socket);
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.backendCost).toBeCloseTo(expected, 8);
+    },
+  );
+
   it('ignores malformed delegated Responses usage', async () => {
     const result = provider(createResponsesDelegationConfig()).callApi('Hi');
     const socket = await connect();

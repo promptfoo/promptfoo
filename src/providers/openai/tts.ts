@@ -81,6 +81,7 @@ export type OpenAiTtsOptions = OpenAiSharedOptions & {
   language?: string;
   format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+  stream_format?: 'audio' | 'sse';
   speed?: number;
   passthrough?: object;
 };
@@ -98,6 +99,9 @@ function getValidationError(
   }
   if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
     return `Invalid response_format: ${config.response_format}.`;
+  }
+  if (config.stream_format === 'sse') {
+    return 'The OpenAI TTS provider requires binary speech output. Use stream_format: audio.';
   }
   if (
     config.speed !== undefined &&
@@ -227,6 +231,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.language ? { language: config.language } : {}),
       ...(responseFormat ? { response_format: responseFormat } : {}),
+      ...(config.stream_format ? { stream_format: config.stream_format } : {}),
       ...(config.speed === undefined ? {} : { speed: config.speed }),
       ...(config.passthrough || {}),
     };
