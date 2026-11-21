@@ -71,7 +71,7 @@ describe('generation token usage', () => {
       .fn()
       .mockResolvedValueOnce({
         error: 'Rate limited',
-        metadata: { http: { status: 429, headers: { 'retry-after-ms': '1' } } },
+        metadata: { http: { status: 429, headers: { 'retry-after-ms': '1000' } } },
         tokenUsage: { total: 2, prompt: 2, completion: 0, numRequests: 1 },
       })
       .mockResolvedValueOnce({
@@ -84,14 +84,18 @@ describe('generation token usage', () => {
       trackGenerationTokenUsage(source, usage),
       registry,
     );
+    vi.useFakeTimers();
     try {
-      expect((await provider.callApi('Say hello')).output).toBe('Hello');
+      const response = provider.callApi('Say hello');
+      await vi.runAllTimersAsync();
+      expect((await response).output).toBe('Hello');
       expect(callApi).toHaveBeenCalledTimes(2);
       const expected = { total: 5, prompt: 4, completion: 1, numRequests: 2 };
       expect(usage).toMatchObject(expected);
       expect(usage.incurredTokenUsage ?? usage).toMatchObject(expected);
     } finally {
       registry.dispose();
+      vi.useRealTimers();
     }
   });
 
