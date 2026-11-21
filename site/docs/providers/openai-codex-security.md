@@ -24,7 +24,7 @@ The SDK is installed separately when you use this provider. Install Promptfoo an
 npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
-Promptfoo supports Codex Security SDK versions from 0.2.0 through 0.8.x. The examples that measure file coverage use 0.2.x. To evaluate the current scan result format, install `@openai/codex-security@^0.8.0`. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
+Promptfoo supports Codex Security SDK versions from 0.2.0 through 0.8.x. The examples that measure file coverage use 0.2.x. To evaluate the current scan result format, install `@openai/codex-security@^0.8.0`. Use Node.js `^22.22.2 || ^24.15.0 || ^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -252,7 +252,7 @@ tests:
 - **Deep scan cost appears too low:** Install SDK version `^0.2.0`. SDKs before `0.1.18` can omit independently launched discovery and deduplication workers from token and cost totals.
 - **Sandbox preflight fails:** SDK 0.2.0 checks Unix sandbox support before paid model calls. Run scans in an environment that supports the Codex sandbox.
 - **Scan output parent rejected:** On Unix, SDK 0.8 requires a private output directory owned by the current user. Every ancestor must belong to that user or root and must not allow group or world writes unless it has the sticky bit. Choose a private location with trusted ancestors; a private leaf directory alone does not satisfy this check.
-- **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
+- **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.2 || ^24.15.0 || ^26.0.0`.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.
 - **Output directory is rejected:** Choose an artifact directory outside the target repository, and use a distinct directory for each provider or eval row.
 - **Diff scan fails:** Set `base_ref`, or use `working_tree: true`; do not combine `working_tree` with `head_ref`.

@@ -837,13 +837,17 @@ describe('handleToolCallF1', () => {
       }
     });
 
-    it('recognizes a shared value in call context after visiting it as data', () => {
-      const shared = { name: 'get_weather' };
-      const output = { tool_calls: [shared], records: [shared] };
-      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
-        pass: true,
-        score: 1,
-      });
+    it('visits shared objects as both calls and wrappers regardless of property order', () => {
+      const shared = { name: 'get_weather', nested: { type: 'tool_use', name: 'get_time' } };
+      for (const output of [
+        { tool_calls: [shared], records: [shared] },
+        { records: [shared], tool_calls: [shared] },
+      ]) {
+        expect(handleToolCallF1(createParams(output, ['get_weather', 'get_time']))).toMatchObject({
+          pass: true,
+          score: 1,
+        });
+      }
     });
 
     it('visits shared and cyclic wrappers once while retaining all calls', () => {

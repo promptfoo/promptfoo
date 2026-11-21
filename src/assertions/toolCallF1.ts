@@ -203,18 +203,20 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
 /** Traverse wrappers without entering call arguments or tool definitions. */
 function collectToolNames(output: unknown, names: Set<string>): void {
   const pending = [{ value: output, callList: Array.isArray(output) }];
-  const visited = new WeakMap<object, boolean>();
+  const visitedCalls = new WeakSet<object>();
+  const visitedWrappers = new WeakSet<object>();
 
   while (pending.length) {
     const { value, callList } = pending.pop()!;
     if (!value || typeof value !== 'object') {
       continue;
     }
-    // A shared value can appear as ordinary data before a known call list.
-    if (visited.has(value) && (visited.get(value) || !callList)) {
+    // A named call is terminal, but the same object can also wrap other calls.
+    const visited = callList ? visitedCalls : visitedWrappers;
+    if (visited.has(value)) {
       continue;
     }
-    visited.set(value, callList);
+    visited.add(value);
 
     if (Array.isArray(value)) {
       for (const item of value) {

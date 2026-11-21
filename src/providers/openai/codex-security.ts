@@ -205,7 +205,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`Failed to load @openai/codex-security.
 
-      Promptfoo and the SDK require a supported even-numbered Node.js release: ^22.22.0, ^24.0.0, or ^26.0.0.
+      Promptfoo and the SDK require a supported even-numbered Node.js release: ^22.22.2, ^24.15.0, or ^26.0.0.
       Reinstall them together with:
         npm install promptfoo "@openai/codex-security@${CODEX_SECURITY_SDK_VERSION_RANGE}"
       If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
@@ -234,7 +234,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
       npm install promptfoo "@openai/codex-security@${CODEX_SECURITY_SDK_VERSION_RANGE}"
     If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
-    Requires Node.js ^22.22.0, ^24.0.0, or ^26.0.0.
+    Requires Node.js ^22.22.2, ^24.15.0, or ^26.0.0.
     See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
   );
 }
