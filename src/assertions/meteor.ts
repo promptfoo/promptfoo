@@ -21,13 +21,14 @@ async function ensureNaturalPackage(): Promise<void> {
   }
 
   try {
-    // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    // Native ESM imports expose Natural's CommonJS exports under default.
+    const naturalModule = await import('natural');
+    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
     throw new Error(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
+      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.2.6',
     );
   }
 }
@@ -43,15 +44,7 @@ interface MeteorAssertion {
   gamma?: number;
 }
 
-function preprocessWord(word: string): string {
-  return word.toLowerCase();
-}
-
-function generateEnums(
-  candidate: string[],
-  reference: string[],
-  preprocess: (word: string) => string = preprocessWord,
-): [WordPair[], WordPair[]] {
+function generateEnums(candidate: string[], reference: string[]): [WordPair[], WordPair[]] {
   if (typeof candidate === 'string') {
     throw new TypeError(`"candidate" expects pre-tokenized candidate (string[]): ${candidate}`);
   }
@@ -61,10 +54,10 @@ function generateEnums(
   }
 
   const enumCandidateList: WordPair[] = candidate.map(
-    (word, idx): WordPair => [idx, preprocess(word)],
+    (word, idx): WordPair => [idx, word.toLowerCase()],
   );
   const enumReferenceList: WordPair[] = reference.map(
-    (word, idx): WordPair => [idx, preprocess(word)],
+    (word, idx): WordPair => [idx, word.toLowerCase()],
   );
   return [enumCandidateList, enumReferenceList];
 }
@@ -94,44 +87,36 @@ function matchExactEnums(
 async function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  stemmer?: Stemmer,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   await ensureNaturalPackage();
   invariant(PorterStemmer, 'PorterStemmer should be loaded');
 
-  const actualStemmer = stemmer || PorterStemmer;
-  const candidateCopy = [...enumCandidateList];
-  const referenceCopy = [...enumReferenceList];
+  const actualStemmer = PorterStemmer;
 
   // Create stemmed versions of words
-  const candidateStems = candidateCopy.map(
+  const candidateStems = enumCandidateList.map(
     ([idx, word]) => [idx, actualStemmer.stem(word)] as [number, string],
   );
-  const referenceStems = referenceCopy.map(
+  const referenceStems = enumReferenceList.map(
     ([idx, word]) => [idx, actualStemmer.stem(word)] as [number, string],
   );
 
-  return matchExactEnums(
-    candidateStems.map(([idx, stem]) => [idx, stem] as WordPair),
-    referenceStems.map(([idx, stem]) => [idx, stem] as WordPair),
-  );
+  return matchExactEnums(candidateStems, referenceStems);
 }
 
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet?: unknown,
-): Promise<[MatchPair[], WordPair[], WordPair[]]> {
+): Promise<MatchPair[]> {
   await ensureNaturalPackage();
   invariant(WordNet, 'WordNet should be loaded');
 
-  const actualWordNet = wordnet || new WordNet();
+  const actualWordNet = new WordNet();
   const wordMatch: MatchPair[] = [];
-  const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
 
-  for (let i = candidateCopy.length - 1; i >= 0; i--) {
-    const candidateWord = candidateCopy[i][1];
+  for (let i = enumCandidateList.length - 1; i >= 0; i--) {
+    const candidateWord = enumCandidateList[i][1];
 
     // Get all synsets and their synonyms
     const candidateSynsets = await new Promise<DataRecord[]>((resolve) => {
@@ -150,15 +135,14 @@ async function matchSynonymEnums(
     for (let j = referenceCopy.length - 1; j >= 0; j--) {
       const referenceWord = referenceCopy[j][1];
       if (candidateSynonymSet.has(referenceWord)) {
-        wordMatch.push([candidateCopy[i][0], referenceCopy[j][0]]);
-        candidateCopy.splice(i, 1);
+        wordMatch.push([enumCandidateList[i][0], referenceCopy[j][0]]);
         referenceCopy.splice(j, 1);
         break;
       }
     }
   }
 
-  return [wordMatch, candidateCopy, referenceCopy];
+  return wordMatch;
 }
 
 function countChunks(matches: MatchPair[]): number {
@@ -195,10 +179,10 @@ async function calculateSingleMeteorScore(
   const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] =
     await matchStemEnums(remainingCandidate, remainingReference);
 
-  // Stage 3: Synonym matches
-  const [synonymMatches, ,] = await matchSynonymEnums(
-    remainingCandidateAfterStem,
-    remainingReferenceAfterStem,
+  // WordNet indexes original words, while the previous stage compares stems.
+  const synonymMatches = await matchSynonymEnums(
+    remainingCandidateAfterStem.map(([idx]) => enumCandidate[idx]),
+    remainingReferenceAfterStem.map(([idx]) => enumReference[idx]),
   );
 
   // Combine all matches
@@ -207,12 +191,6 @@ async function calculateSingleMeteorScore(
   );
   const matchesCount = allMatches.length;
 
-  if (matchesCount === 0) {
-    return 0;
-  }
-
-  let fragFrac = 0;
-  let fmean = 0;
   if (translationLength === 0 || referenceLength === 0 || matchesCount === 0) {
     return 0.0;
   }
@@ -225,9 +203,9 @@ async function calculateSingleMeteorScore(
     return 0.0;
   }
 
-  fmean = (precision * recall) / denominator;
+  const fmean = (precision * recall) / denominator;
   const chunkCount = countChunks(allMatches);
-  fragFrac = chunkCount / matchesCount;
+  const fragFrac = chunkCount / matchesCount;
   const penalty = gamma * Math.pow(fragFrac, beta);
 
   return (1 - penalty) * fmean;

@@ -1,27 +1,40 @@
 import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
+
 import { disableCache, enableCache } from '../../../src/cache';
 import { LumaRayVideoProvider } from '../../../src/providers/bedrock/luma-ray';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
 
-// Mock hoisted for proper isolation with dynamic imports
-const mockBedrockSend = vi.hoisted(() => vi.fn());
-const mockS3Send = vi.hoisted(() => vi.fn());
-const mockStoreBlob = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({
+const createInvocationResponse = () => ({
+  invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
+});
+
+function createStoredVideoBlob() {
+  return {
     ref: {
       uri: 'blob://test-video-hash',
       hash: 'test-video-hash',
     },
-  }),
-);
+  };
+}
+
+const createPendingInvocation = () => ({
+  status: 'InProgress',
+});
+
+// Mock hoisted for proper isolation with dynamic imports
+const mockBedrockSend = vi.hoisted(() => vi.fn());
+const mockS3Send = vi.hoisted(() => vi.fn());
+const mockStoreBlob = vi.hoisted(() => vi.fn().mockResolvedValue(createStoredVideoBlob()));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
     BedrockRuntimeClient: vi.fn().mockImplementation(function () {
-      return { send: mockBedrockSend };
+      return { send: mockBedrockSend, destroy: vi.fn() };
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     StartAsyncInvokeCommand: vi.fn().mockImplementation(function (params: any) {
@@ -37,7 +50,7 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => {
 vi.mock('@aws-sdk/client-s3', () => {
   return {
     S3Client: vi.fn().mockImplementation(function () {
-      return { send: mockS3Send };
+      return { send: mockS3Send, destroy: vi.fn() };
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     GetObjectCommand: vi.fn().mockImplementation(function (params: any) {
@@ -50,15 +63,7 @@ vi.mock('../../../src/blobs', () => ({
   storeBlob: mockStoreBlob,
 }));
 
-vi.mock('../../../src/logger', () => ({
-  __esModule: true,
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createEsLoggerModule());
 
 vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
@@ -102,12 +107,7 @@ describe('LumaRayVideoProvider', () => {
       },
     });
 
-    mockStoreBlob.mockResolvedValue({
-      ref: {
-        uri: 'blob://test-video-hash',
-        hash: 'test-video-hash',
-      },
-    });
+    mockStoreBlob.mockResolvedValue(createStoredVideoBlob());
   }
 
   beforeEach(() => {
@@ -239,6 +239,93 @@ describe('LumaRayVideoProvider', () => {
   });
 
   describe('Text-to-Video Generation', () => {
+    it('cancels a pending credential lookup before starting a video job', async () => {
+      const controller = new AbortController();
+      const credentials = vi
+        .spyOn(provider, 'getCredentials')
+        .mockImplementation(() => new Promise(() => {}));
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled credentials'));
+      await expect(call).rejects.toThrow('cancelled credentials');
+      expect(mockBedrockSend).not.toHaveBeenCalled();
+    });
+
+    it('retains the accepted job when polling is cancelled', async () => {
+      const controller = new AbortController();
+      let notifyStarted!: () => void;
+      const polling = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      mockBedrockSend.mockReset();
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'accepted-job' });
+      mockBedrockSend.mockImplementationOnce((_command, options) => {
+        notifyStarted();
+        return new Promise((_resolve, reject) => {
+          options.abortSignal.addEventListener('abort', () => reject(options.abortSignal.reason), {
+            once: true,
+          });
+        });
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await polling;
+      controller.abort(new Error('cancelled polling'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled polling'),
+        metadata: { invocationArn: 'accepted-job', s3OutputUri: 's3://test-bucket/luma-outputs/' },
+      });
+      expect(mockS3Send).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for an S3 response body after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          transformToByteArray: () => {
+            started();
+            return new Promise(() => {});
+          },
+        },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await reading;
+      controller.abort(new Error('cancelled S3 body'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled S3 body'),
+        metadata: {
+          invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/test-job-id',
+          s3OutputUri: 's3://test-bucket/output-prefix',
+        },
+      });
+      expect(mockStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for a blob write after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockStoreBlob.mockImplementationOnce(() => {
+        started();
+        return new Promise(() => {});
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await writing;
+      controller.abort(new Error('cancelled blob write'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled blob write'),
+        metadata: {
+          invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/test-job-id',
+          s3OutputUri: 's3://test-bucket/output-prefix',
+        },
+      });
+    });
+
     it('should successfully generate video from text prompt', async () => {
       const result = await provider.callApi('A red panda climbing a tree');
 
@@ -410,15 +497,9 @@ describe('LumaRayVideoProvider', () => {
     it('should poll until job is completed', async () => {
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
-        .mockResolvedValueOnce({
-          status: 'InProgress',
-        })
-        .mockResolvedValueOnce({
-          status: 'InProgress',
-        })
+        .mockResolvedValueOnce(createInvocationResponse())
+        .mockResolvedValueOnce(createPendingInvocation())
+        .mockResolvedValueOnce(createPendingInvocation())
         .mockResolvedValueOnce({
           status: 'Completed',
           invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
@@ -438,9 +519,7 @@ describe('LumaRayVideoProvider', () => {
     it('should return error when job fails', async () => {
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
+        .mockResolvedValueOnce(createInvocationResponse())
         .mockResolvedValueOnce({
           status: 'Failed',
           failureMessage: 'Content policy violation',
@@ -541,12 +620,8 @@ describe('LumaRayVideoProvider', () => {
       // Mock always returning InProgress
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
-        .mockResolvedValue({
-          status: 'InProgress',
-        });
+        .mockResolvedValueOnce(createInvocationResponse())
+        .mockResolvedValue(createPendingInvocation());
 
       // Mock Date.now to simulate timeout
       const originalDateNow = Date.now;
@@ -566,9 +641,7 @@ describe('LumaRayVideoProvider', () => {
     it('should handle missing output location in response', async () => {
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
+        .mockResolvedValueOnce(createInvocationResponse())
         .mockResolvedValueOnce({
           status: 'Completed',
           // Missing outputDataConfig
