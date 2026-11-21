@@ -33,8 +33,10 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
+import { AgentOutcomePreview } from './AgentOutcomePreview';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -81,6 +83,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   allowPluginChange = false,
 }) => {
   const pluginName = plugin?.id ?? '';
+  const outcomePreview = isAgentOutcomePlugin(pluginName) && generatedTestCases[0];
   const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
@@ -199,13 +202,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
         <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
           <div className="max-h-[50vh] overflow-y-auto">
-            <ChatMessages
-              messages={turnMessages}
-              displayTurnCount={maxTurns > 1}
-              maxTurns={maxTurns}
-            />
+            {outcomePreview ? (
+              <AgentOutcomePreview {...outcomePreview} />
+            ) : (
+              <ChatMessages
+                messages={turnMessages}
+                displayTurnCount={maxTurns > 1}
+                maxTurns={maxTurns}
+              />
+            )}
           </div>
-          {generatedTestCases.length > 0 && (
+          {!outcomePreview && generatedTestCases.length > 0 && (
             <Alert variant="info">
               <Info className="size-4" />
               <AlertContent>
@@ -262,11 +269,19 @@ export const TestCaseGenerateButton: React.FC<{
   isGenerating?: boolean;
   size?: 'small' | 'medium';
   tooltipTitle?: string;
-}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => {
+  localPreview?: boolean;
+}> = ({
+  onClick,
+  disabled = false,
+  isGenerating = false,
+  size = 'small',
+  tooltipTitle,
+  localPreview,
+}) => {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const isRemoteDisabled = apiHealthStatus !== 'connected';
+  const isRemoteDisabled = apiHealthStatus !== 'connected' && !localPreview;
   const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // Tooltip component uses controlled state in order to imperatively close it when the Test Case

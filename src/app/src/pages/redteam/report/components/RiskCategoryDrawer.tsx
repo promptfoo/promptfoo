@@ -17,6 +17,7 @@ import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
+import { AgentOutcomeDetails } from './AgentOutcomeDetails';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
@@ -242,6 +243,7 @@ const RiskCategoryDrawer = ({
 
           {/* Collapsible content */}
           <CollapsibleContent>
+            <AgentOutcomeDetails test={test} />
             {/* Chat conversation */}
             <ChatMessages
               messages={chatMessages}

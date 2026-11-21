@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 
 import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
+import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
@@ -40,7 +41,12 @@ export function useStrategyTestGeneration({
 
   // Select a random plugin from the user's configured plugins, preserving any plugin config.
   const testGenerationTargetPlugin = useMemo<TargetPlugin>(() => {
-    const plugins = config.plugins ?? [];
+    const plugins = (config.plugins ?? []).filter(
+      (p) =>
+        strategyId === 'basic' ||
+        strategyId === 'default' ||
+        !isAgentOutcomePlugin(typeof p === 'string' ? p : p.id),
+    );
     if (plugins.length === 0) {
       return {
         id: DEFAULT_TEST_GENERATION_PLUGIN,
@@ -63,7 +69,7 @@ export function useStrategyTestGeneration({
       config: selectedPlugin.config ?? {},
       isStatic: true,
     };
-  }, [config.plugins]);
+  }, [config.plugins, strategyId]);
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(testGenerationTargetPlugin, {

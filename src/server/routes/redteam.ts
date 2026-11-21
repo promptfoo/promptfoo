@@ -8,6 +8,10 @@ import {
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
 } from '../../redteam/constants';
+import {
+  getAgentOutcomeArtifact,
+  isAgentOutcomePlugin,
+} from '../../redteam/constants/agentOutcomes';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import {
@@ -57,6 +61,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       count,
     } = parsedBody.data;
 
+    if (isAgentOutcomePlugin(plugin.id) && !['basic', 'default'].includes(strategy.id)) {
+      res.status(400).json({ error: 'Select the basic strategy to preview this plugin.' });
+      return;
+    }
     const pluginConfigurationError = getPluginConfigurationError(plugin);
     if (pluginConfigurationError) {
       res.status(400).json({ error: pluginConfigurationError });
@@ -205,7 +213,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const prompt = extractGeneratedPrompt(testCase, injectVar);
         const metadata =
           testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-        return { prompt, context, metadata };
+        return { prompt, context, metadata, artifact: getAgentOutcomeArtifact(testCase) };
       });
 
       res.json(
@@ -228,6 +236,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         prompt: generatedPrompt,
         context,
         metadata: baseMetadata,
+        artifact: getAgentOutcomeArtifact(testCase),
       }),
     );
   } catch (error) {

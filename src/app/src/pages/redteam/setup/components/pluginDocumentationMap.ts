@@ -31,6 +31,9 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   pii: `${BASE_DOCS_URL}/pii/`,
   'prompt-extraction': `${BASE_DOCS_URL}/prompt-extraction/`,
   'agentic:memory-poisoning': `${BASE_DOCS_URL}/memory-poisoning/`,
+  'agentic:private-to-public-disclosure': `${BASE_DOCS_URL}/agent-outcomes/#private-to-public-disclosure`,
+  'agentic:unauthorized-sharing': `${BASE_DOCS_URL}/agent-outcomes/#unauthorized-sharing`,
+  'coding-agent:consent-bypass': `${BASE_DOCS_URL}/agent-outcomes/#consent-bypass`,
 
   // Compliance & Legal
   contracts: `${BASE_DOCS_URL}/contracts/`,

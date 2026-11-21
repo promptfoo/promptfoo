@@ -36,6 +36,7 @@ import {
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
+import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import {
   AlertCircle,
   ChevronDown,
@@ -174,6 +175,7 @@ export interface PluginsTabProps {
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
   isRemoteGenerationDisabled: boolean;
+  hasGenerationProvider?: boolean;
 }
 
 export default function PluginsTab({
@@ -184,6 +186,7 @@ export default function PluginsTab({
   updatePluginConfig,
   recentlyUsedPlugins,
   isRemoteGenerationDisabled,
+  hasGenerationProvider,
 }: PluginsTabProps): React.ReactElement {
   const { recordEvent } = useTelemetry();
   const toast = useToast();
@@ -601,6 +604,8 @@ export default function PluginsTab({
             <div className="mb-6 space-y-2">
               {filteredPlugins.map(({ plugin, category }) => {
                 const pluginDisabled = isPluginDisabled(plugin);
+                const localPreview = isAgentOutcomePlugin(plugin) && hasGenerationProvider;
+                const canPreview = apiHealthStatus === 'connected' || localPreview;
                 const isSelected = selectedPlugins.has(plugin);
                 const requiresConfig = requiresPluginConfig(plugin);
                 const hasConfigError = requiresConfig && isSelected && !isPluginConfigured(plugin);
@@ -670,16 +675,17 @@ export default function PluginsTab({
                     <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
+                        localPreview={localPreview}
                         disabled={
                           pluginDisabled ||
-                          apiHealthStatus !== 'connected' ||
+                          !canPreview ||
                           (generatingTestCase && generatingPlugin === plugin)
                         }
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
                             ? 'This plugin requires remote generation'
-                            : apiHealthStatus === 'connected'
+                            : canPreview
                               ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                               : 'Promptfoo Cloud connection is required for test generation'
                         }
@@ -754,6 +760,7 @@ export default function PluginsTab({
 
           {/* Plugin config dialog */}
           <PluginConfigDialog
+            key={selectedConfigPlugin}
             open={configDialogOpen}
             onClose={() => {
               setConfigDialogOpen(false);

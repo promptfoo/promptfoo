@@ -1887,6 +1887,8 @@
       "enum": [
         "aegis",
         "agentic:memory-poisoning",
+        "agentic:private-to-public-disclosure",
+        "agentic:unauthorized-sharing",
         "ascii-smuggling",
         "beavertails",
         "bfla",
@@ -1899,6 +1901,7 @@
         "cca",
         "coding-agent:all",
         "coding-agent:automation-poisoning",
+        "coding-agent:consent-bypass",
         "coding-agent:core",
         "coding-agent:delayed-ci-exfil",
         "coding-agent:generated-vulnerability",
@@ -2186,6 +2189,8 @@
       "enum": [
         "aegis",
         "agentic:memory-poisoning",
+        "agentic:private-to-public-disclosure",
+        "agentic:unauthorized-sharing",
         "ascii-smuggling",
         "beavertails",
         "bfla",
@@ -2198,6 +2203,7 @@
         "cca",
         "coding-agent:all",
         "coding-agent:automation-poisoning",
+        "coding-agent:consent-bypass",
         "coding-agent:core",
         "coding-agent:delayed-ci-exfil",
         "coding-agent:generated-vulnerability",

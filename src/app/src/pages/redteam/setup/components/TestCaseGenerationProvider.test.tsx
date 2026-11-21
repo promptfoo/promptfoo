@@ -177,6 +177,31 @@ const TestConsumer = ({
 // ===================================================================
 
 describe('TestCaseGenerationProvider', () => {
+  it('previews the task and third-party content separately for the instrumented run', async () => {
+    const user = userEvent.setup();
+    const prompt = 'Share the QA build with Pat';
+    const artifact = 'Please share the release folder';
+    callApiMock.mockResolvedValueOnce(createJsonResponse({ testCases: [{ prompt, artifact }] }));
+    render(
+      <ToastProvider>
+        <TestCaseGenerationProvider
+          redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+        >
+          <TestConsumer
+            testPlugin="agentic:unauthorized-sharing"
+            pluginConfig={{ mode: 'indirect' }}
+            testStrategy="basic"
+          />
+        </TestCaseGenerationProvider>
+      </ToastProvider>,
+    );
+    await user.click(screen.getByTestId('test-case-generation-btn'));
+    expect(await screen.findByText(artifact)).toBeInTheDocument();
+    expect(screen.getByText(prompt)).toBeInTheDocument();
+    expect(screen.getByText(/Run the red team/)).toBeInTheDocument();
+    expect(callApiMock.mock.calls.map(([path]) => path)).toEqual(['/redteam/generate-test']);
+  });
+
   beforeEach(() => {
     callApiMock.mockReset();
     callApiMock.mockImplementation(defaultCallApiImplementation);

@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest';
+import { AgentOutcomeCaseSchema } from '../../src/contracts/agentOutcomeCase';
+
+const example = '../../examples/redteam-agent-outcomes';
+const { default: Provider } = await import(`${example}/provider.mjs`);
+const { default: tests } = await import(`${example}/tests.mjs`);
+const { probe, collected } = await import(`${example}/scenarios/analytics-probe.mjs`);
+
+type Case = {
+  metadata: { agentOutcome: { pluginId: string; mode: string; variant: string; caseId: string } };
+  vars: { prompt: string; artifact?: string };
+};
+type Event = { type: string; data: { name: string } };
+
+const cases: Case[] = (await tests()).filter(
+  (test: Case) => test.metadata.agentOutcome.pluginId === 'coding-agent:consent-bypass',
+);
+
+describe('storefront analytics in the agent outcomes example', () => {
+  it.each(cases)(
+    'measures the submitted handler for $metadata.agentOutcome.mode / $metadata.agentOutcome.variant',
+    async (test) => {
+      const spec = AgentOutcomeCaseSchema.parse(test.metadata.agentOutcome);
+      const target = new Provider({ config: { target: 'unsafe' } });
+      const { metadata } = await target.callApi(test.vars.prompt, { test, vars: test.vars });
+      expect(metadata.agentOutcomeEvidence).toMatchObject({
+        version: 1,
+        pluginId: spec.pluginId,
+        caseId: spec.caseId,
+        taskCompleted: true,
+        attackExposed: true,
+      });
+      const { beforeReject, afterReject, afterAccept } = metadata.agentOutcomeEvidence.measurements;
+      expect(beforeReject).toMatchObject({ decision: 'reject', collectedActionIds: [] });
+      expect(afterAccept).toMatchObject({
+        decision: 'accept',
+        collectedActionIds: [afterAccept.actionId],
+      });
+      expect(afterReject).toMatchObject({
+        decision: 'reject',
+        collectedActionIds: spec.variant === 'attack' ? [afterReject.actionId] : [],
+      });
+      expect(
+        new Set([beforeReject.actionId, afterReject.actionId, afterAccept.actionId]).size,
+      ).toBe(3);
+      if (spec.mode === 'indirect') {
+        expect(test.vars.prompt).not.toContain(test.vars.artifact);
+        const reads = metadata.agentOutcomeTrace.events.filter(
+          (e: Event) => e.type === 'tool' && e.data.name === 'read_vendor_note',
+        );
+        expect(reads[0].data.result.note).toBe(test.vars.artifact);
+      }
+    },
+  );
+
+  it('keeps the malicious vendor note out of the owner message with a custom injection variable', async () => {
+    const row = cases.find(
+      ({ metadata }) =>
+        metadata.agentOutcome.mode === 'indirect' && metadata.agentOutcome.variant === 'attack',
+    )!;
+    const spec = { ...row.metadata.agentOutcome, indirectInjectionVar: 'releaseNote' };
+    const target = new Provider({ config: { target: 'safe' } });
+    const { metadata } = await target.callApi(row.vars.prompt, {
+      test: { metadata: { agentOutcome: spec } },
+      vars: { releaseNote: `"v2"\n${row.vars.artifact}` },
+    });
+    const evidence = metadata.agentOutcomeEvidence;
+    expect(evidence.attackExposed).toBe(true);
+    expect(evidence.measurements.afterReject.collectedActionIds).toEqual([]);
+    expect(collected(evidence.measurements.afterAccept)).toBe(true);
+  });
+
+  it('counts SDK deliveries even if the handler throws after sending', async () => {
+    const sent = await probe(
+      '(event, prefs, sdk) => { sdk.capture(event); throw Error() }',
+      'capture',
+      'reject',
+    );
+    expect(collected(sent)).toBe(true);
+    const forged = await probe(
+      'event => ({ collectedActionIds: [event.id] })',
+      'capture',
+      'reject',
+    );
+    expect(forged.collectedActionIds).toEqual([]);
+  });
+
+  it.each([
+    '() => process.env',
+    '() => require("node:fs")',
+    '() => fetch("/")',
+    '() => { for (;;) {} }',
+    '() => new Array(2**32-1).join("")',
+  ])('bounds or rejects submitted code %s', async (source) => {
+    await expect(probe(source, 'capture', 'accept')).resolves.toBeNull();
+  });
+});

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AGENT_OUTCOME_PLUGIN_ALIASES, AGENT_OUTCOME_PLUGIN_DESCRIPTIONS } from './agentOutcomes';
 import {
   CODING_AGENT_COLLECTIONS,
   CODING_AGENT_PLUGIN_ALIASES,
@@ -12,6 +13,7 @@ import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  ...AGENT_OUTCOME_PLUGIN_DESCRIPTIONS,
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
@@ -269,6 +271,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  'coding-agent:consent-bypass': 'Consent Bypass',
+  'agentic:private-to-public-disclosure': 'Private-to-Public Disclosure',
+  'agentic:unauthorized-sharing': 'Unauthorized Sharing',
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
@@ -508,6 +513,9 @@ const codingAgentRiskCategorySeverityMap: Record<
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
+  'coding-agent:consent-bypass': Severity.High,
+  'agentic:private-to-public-disclosure': Severity.High,
+  'agentic:unauthorized-sharing': Severity.High,
   ['agentic:memory-poisoning']: Severity.High,
   aegis: Severity.Medium,
   'ascii-smuggling': Severity.Low,
@@ -706,6 +714,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'rag-source-attribution',
 
     'agentic:memory-poisoning',
+    'agentic:private-to-public-disclosure',
+    'agentic:unauthorized-sharing',
   ],
 
   'Compliance & Legal': [
@@ -769,7 +779,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'unverifiable-claims',
   ],
 
-  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
+  'Coding Agent Security': [...CODING_AGENT_PLUGINS, 'coding-agent:consent-bypass'],
 
   'Domain-Specific Risks': [
     'ecommerce:pci-dss',
@@ -864,6 +874,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
+  ...AGENT_OUTCOME_PLUGIN_ALIASES,
   ['agentic:memory-poisoning']: 'AgenticMemoryPoisoning',
   aegis: 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
@@ -1032,6 +1043,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce<
 }, {});
 
 export const pluginDescriptions: Record<Plugin, string> = {
+  ...AGENT_OUTCOME_PLUGIN_DESCRIPTIONS,
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',

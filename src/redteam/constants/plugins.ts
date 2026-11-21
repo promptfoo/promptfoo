@@ -1,3 +1,4 @@
+import { AGENT_OUTCOME_PLUGINS } from './agentOutcomes';
 import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
 
 import type { CodingAgentPlugin } from './codingAgents';
@@ -155,7 +156,11 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
 
 export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
 
-export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
+export const AGENTIC_PLUGINS = [
+  'agentic:memory-poisoning',
+  'agentic:private-to-public-disclosure',
+  'agentic:unauthorized-sharing',
+] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = [
@@ -325,6 +330,7 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
+  ...AGENT_OUTCOME_PLUGINS,
   'aegis',
   'ascii-smuggling',
   'beavertails',
@@ -387,6 +393,7 @@ type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
+  ...AGENT_OUTCOME_PLUGINS,
   'system-prompt-override',
   'agentic:memory-poisoning',
 ] as const;

@@ -28,6 +28,37 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
+  it('saves the attack source and separate tool input for an indirect test', async () => {
+    const user = userEvent.setup();
+    const plugin = 'agentic:private-to-public-disclosure';
+    render(
+      <PluginConfigDialog
+        open
+        plugin={plugin}
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+
+    expect(screen.getByRole('radio', { name: 'Both' })).toBeChecked();
+    expect(screen.getByRole('link', { name: 'Set up evidence collection' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/red-team/plugins/agent-outcomes/#private-to-public-disclosure',
+    );
+    expect(screen.queryByText('Grading Guidance (Optional)')).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Indirect via tool' }));
+    await user.type(screen.getByLabelText(/User task for indirect tests/), 'Triage ticket 84');
+    await user.type(screen.getByLabelText('Variable for third-party content'), 'ticket');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith(plugin, {
+      mode: 'indirect',
+      legitimateTask: 'Triage ticket 84',
+      indirectInjectionVar: 'ticket',
+    });
+  });
+
   describe('Grading Guidance', () => {
     it('renders gradingGuidance field for all plugins', () => {
       render(

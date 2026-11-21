@@ -34,6 +34,7 @@ import {
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
+import { isAgentOutcomePlugin } from './constants/agentOutcomes';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -1485,7 +1486,7 @@ export async function synthesize({
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
         // Extract goal for this plugin's tests (only needed for agentic strategies)
-        if (needsGoalExtraction) {
+        if (needsGoalExtraction && !isAgentOutcomePlugin(plugin.id)) {
           logger.debug(
             `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
           );

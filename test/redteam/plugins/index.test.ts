@@ -4,6 +4,7 @@ import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import {
   ADDITIONAL_PLUGINS,
+  AGENT_OUTCOME_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -206,6 +207,40 @@ describe('Plugins', () => {
           modifiers.toolDiscoveryAttackConstraints,
         );
       }
+    },
+  );
+
+  it.each(AGENT_OUTCOME_PLUGINS)(
+    'preserves the local case envelope through remote generation for %s',
+    async (id) => {
+      const plugin = Plugins.find((p) => p.key === id)!;
+      const config = {
+        mode: 'indirect',
+        legitimateTask: 'Owner task',
+        indirectInjectionVar: 'ticket',
+      };
+      const params = {
+        purpose: 'Test agent',
+        n: 1,
+        injectVar: 'query',
+        config,
+        provider: mockProvider,
+        delayMs: 0,
+      };
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Ticket text' });
+      const local = await plugin.action(params);
+      expect(local[0].vars).toMatchObject({ query: 'Owner task', ticket: 'Ticket text' });
+
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse(local));
+      const [remote] = await plugin.action(params);
+      const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+      expect(request).toMatchObject({ task: id, injectVar: 'query', config });
+      expect(remote.vars).toEqual(local[0].vars);
+      expect(remote.metadata?.agentOutcome).toEqual(local[0].metadata?.agentOutcome);
+      expect(remote.assert).toEqual(local[0].assert);
     },
   );
 

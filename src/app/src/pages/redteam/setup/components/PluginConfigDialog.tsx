@@ -12,8 +12,10 @@ import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { AgentOutcomeConfig } from './AgentOutcomeConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -94,6 +96,10 @@ export default function PluginConfigDialog({
   const renderConfigInputs = () => {
     if (!plugin) {
       return null;
+    }
+
+    if (isAgentOutcomePlugin(plugin)) {
+      return <AgentOutcomeConfig plugin={plugin} config={localConfig} onChange={setLocalConfig} />;
     }
 
     let specificConfig;

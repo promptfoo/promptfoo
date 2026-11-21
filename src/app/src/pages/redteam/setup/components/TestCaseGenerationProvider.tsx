@@ -17,6 +17,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { normalizeLocalProviders } from './Targets/helpers';
@@ -241,13 +242,19 @@ export const TestCaseGenerationProvider: React.FC<{
   // Compute available plugins from config
   const availablePlugins = useMemo(() => {
     const plugins =
-      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
+      redTeamConfig.plugins
+        ?.map((p) => (typeof p === 'string' ? p : p.id))
+        .filter(
+          (id) =>
+            id &&
+            (!isAgentOutcomePlugin(id) || strategy?.id === 'basic' || strategy?.id === 'default'),
+        ) ?? [];
     // If no plugins are configured, provide a default
     if (plugins.length === 0) {
       return [DEFAULT_PLUGIN];
     }
     return plugins;
-  }, [redTeamConfig.plugins]);
+  }, [redTeamConfig.plugins, strategy?.id]);
 
   // ===================================================================
   // Refs
@@ -316,6 +323,7 @@ export const TestCaseGenerationProvider: React.FC<{
             prompt: data.prompt,
             context: data.context,
             metadata: data.metadata,
+            artifact: data.artifact,
           },
         ]);
       } catch (error) {
@@ -499,6 +507,7 @@ export const TestCaseGenerationProvider: React.FC<{
             prompt: data.prompt,
             context: data.context,
             metadata: data.metadata,
+            artifact: data.artifact,
           },
         ];
       } catch (error) {
@@ -771,7 +780,9 @@ export const TestCaseGenerationProvider: React.FC<{
       const abortController = new AbortController();
       testExecutionAbortController.current = abortController;
 
-      if (shouldEvaluateAgainstTarget) {
+      // The connectivity endpoint only sends a prompt. Outcome targets need
+      // the generated case and its tool inputs from the full evaluation.
+      if (shouldEvaluateAgainstTarget && !isAgentOutcomePlugin(plugin?.id ?? '')) {
         executeTest(abortController);
       } else {
         // No target, just finish this turn immediately (only for single turn)
@@ -786,6 +797,7 @@ export const TestCaseGenerationProvider: React.FC<{
     generatedTestCases.length,
     targetResponses.length,
     shouldEvaluateAgainstTarget,
+    plugin?.id,
     executeTest,
     generatedTestCases,
   ]);
