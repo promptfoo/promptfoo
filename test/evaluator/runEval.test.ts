@@ -5,9 +5,11 @@ import { getEventListeners } from 'node:events';
 import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as blobs from '../../src/blobs/index';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
+import * as llmGrading from '../../src/matchers/llmGrading';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
@@ -903,6 +905,67 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
     expect(result.error).not.toContain('No output');
   });
+
+  it.each(['null', 'omitted in an assertion set', 'empty descriptor'])(
+    'grades image-only dataset responses with %s',
+    async (mode) => {
+      const mimeType = 'image/png';
+      const input = 'data:image/png;base64,dGVzdA==';
+      const data = 'data:image/png;base64,' + Buffer.alloc(2048, 42).toString('base64');
+      const ref = {
+        uri: 'promptfoo://blob/fixture',
+        hash: 'fixture',
+        mimeType,
+        provider: 'filesystem',
+        sizeBytes: 2048,
+      };
+      const store = vi.spyOn(blobs, 'storeBlob').mockResolvedValue({ ref, deduplicated: false });
+      const grade = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Matches the sample',
+      });
+      const assertion = { type: 'promptfoo:redteam:vlguard' as const };
+      const [result] = await runEval({
+        ...defaultOptions,
+        isRedteam: true,
+        provider: {
+          id: () => 'image-fixture',
+          callApi: vi.fn().mockResolvedValue({
+            ...(mode === 'null' && { output: null }),
+            images: mode === 'empty descriptor' ? [{}] : [{ data, mimeType }],
+          }),
+        },
+        prompt: { raw: 'Describe this sunset', label: 'fixture' },
+        test: {
+          metadata: { purpose: 'Describe images', safe: true },
+          vars: { image: input },
+          options: { provider: mockGradingApiProviderPasses },
+          assert:
+            mode === 'omitted in an assertion set'
+              ? [{ type: 'assert-set', assert: [assertion] }]
+              : [assertion],
+        },
+        conversations: {},
+        registers: {},
+      });
+      if (mode === 'empty descriptor') {
+        expect(result).toMatchObject({
+          failureReason: ResultFailureReason.ERROR,
+          error: 'No output',
+        });
+        expect(grade).not.toHaveBeenCalled();
+        return;
+      }
+      expect(result.success).toBe(true);
+      expect(store).toHaveBeenCalled();
+      expect(result.response?.images?.[0]).toMatchObject({ blobRef: ref, data: undefined });
+      expect(grade.mock.calls[0][5]).toMatchObject({
+        inputImage: input,
+        providerResponse: { images: [{ data, mimeType }] },
+      });
+    },
+  );
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
     'grades transformed OpenAI refusal output at the %s level',
