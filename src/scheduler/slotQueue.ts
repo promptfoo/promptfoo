@@ -124,7 +124,10 @@ export class SlotQueue {
    * Update rate limit state from parsed headers.
    */
   updateRateLimitState(parsed: ParsedRateLimitHeaders): void {
-    const activeReset = this.isQuotaExhausted() ? this.resetAt : null;
+    // A reset-only update explicitly reschedules the timer. Concurrent quota
+    // observations must also account for any limit that is still exhausted.
+    const hasQuota = parsed.remainingRequests !== undefined || parsed.remainingTokens !== undefined;
+    const activeReset = hasQuota && this.isQuotaExhausted() ? this.resetAt : null;
     if (parsed.remainingRequests !== undefined) {
       this.remainingRequests = parsed.remainingRequests;
     }
