@@ -91,6 +91,13 @@ function normalizeAudioMimeType(format?: string): string {
   return `audio/${format || 'mpeg'}`;
 }
 
+function validatePart(part: object): void {
+  const payloads = ['text', 'inlineData', 'inline_data', 'fileData', 'file_data'];
+  if (payloads.filter((name) => Object.prototype.hasOwnProperty.call(part, name)).length > 1) {
+    throw new Error('Gemini Interactions requires separate parts for text and each media item.');
+  }
+}
+
 function getInteractionText(value: unknown): string[] {
   if (typeof value === 'string') {
     return [value];
@@ -101,6 +108,7 @@ function getInteractionText(value: unknown): string[] {
   if (!value || typeof value !== 'object') {
     return [];
   }
+  validatePart(value);
   const record = value as Record<string, unknown>;
   if (typeof record.text === 'string') {
     return [record.text];
@@ -111,7 +119,7 @@ function getInteractionText(value: unknown): string[] {
 function parseInteractionInput(
   prompt: string,
   extractSystemInstructions: boolean,
-): ParsedInteractionInput {
+): ParsedInteractionInput | { error: string } {
   try {
     const parsedPrompt = JSON.parse(prompt) as unknown;
     const promptEnvelope =
@@ -142,6 +150,7 @@ function parseInteractionInput(
           if (!part || typeof part !== 'object') {
             return part;
           }
+          validatePart(part);
           if (!('type' in part)) {
             const geminiPart = part as {
               text?: string;
@@ -266,8 +275,10 @@ function parseInteractionInput(
           }
         : {}),
     };
-  } catch {
-    return { input: prompt };
+  } catch (error) {
+    return error instanceof SyntaxError
+      ? { input: prompt }
+      : { error: error instanceof Error ? error.message : 'Invalid Gemini Interactions input.' };
   }
 }
 
@@ -1155,11 +1166,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'gemini-omni-1.1-flash-preview',
     ].includes(capabilityModel);
     const allowSamplingControls = config.vertexai && isVideoModel;
+    const parsed = parseInteractionInput(prompt, !isVideoModel);
+    if ('error' in parsed) {
+      return parsed;
+    }
     const {
       input: interactionInput,
       systemInstruction: promptSystemInstruction,
       hasSystemInstruction: hasPromptSystemInstruction,
-    } = parseInteractionInput(prompt, !isVideoModel);
+    } = parsed;
     const requestInput =
       promptPassthrough.input ??
       providerPassthrough.input ??
@@ -1244,6 +1259,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
         error:
           'Gemini Interactions computer-use tools are not supported because Promptfoo does not run a computer-use loop. Use function tools or managed built-in tools.',
       };
+    }
+    if (!config.vertexai && config.apiHost) {
+      try {
+        config.apiHost = getNunjucksEngine().renderString(config.apiHost, {}).trim();
+      } catch {
+        return { error: 'Could not render the configured Gemini Interactions apiHost.' };
+      }
+      if (!config.apiHost) {
+        return { error: 'The configured Gemini Interactions apiHost is empty.' };
+      }
     }
     let apiKey: string | undefined;
     let endpoint: string;
@@ -1791,7 +1816,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
       .join('');
 
     if (!isVideoModel) {
+      const thoughtSignatures = turnSteps.flatMap(({ type, signature }) =>
+        (type === 'thought' || type === 'function_call') && typeof signature === 'string'
+          ? [signature]
+          : [],
+      );
       const metadata = {
+        ...(thoughtSignatures.length && { thoughtSignatures }),
         interactionId: data.id,
         status: data.status,
         ...groundingMetadata,
@@ -1989,7 +2020,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       return { error: `Gemini Interactions API error: ${String(err)}` };
     }
 
-    if (data.error?.message) {
+    if (data?.error?.message) {
       return { error: `Gemini Interactions API error: ${data.error.message}` };
     }
     if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
@@ -2002,7 +2033,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
     const pollStartedAt = Date.now();
     let pollCount = 0;
-    while (data.status === 'in_progress' && data.id) {
+    while (data?.status === 'in_progress' && data.id) {
       throwIfAborted(signal);
       const elapsed = Date.now() - pollStartedAt;
       if (elapsed >= pollTimeoutMs) {
@@ -2030,7 +2061,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         return { error: `Gemini Interactions API polling error: ${String(err)}` };
       }
       pollCount++;
-      if (data.error?.message) {
+      if (data?.error?.message) {
         return { error: `Gemini Interactions API error: ${data.error.message}`, raw: data };
       }
       if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
@@ -2040,6 +2071,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
           raw: data,
         };
       }
+    }
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      Array.isArray(data) ||
+      (data.steps !== undefined &&
+        (!Array.isArray(data.steps) ||
+          data.steps.some((step) => !step || typeof step !== 'object')))
+    ) {
+      return { error: 'Gemini Interactions API returned an invalid response.' };
     }
     if (data.status && data.status !== 'completed' && data.status !== 'requires_action') {
       return { error: `Gemini interaction did not complete (status: ${data.status})`, raw: data };

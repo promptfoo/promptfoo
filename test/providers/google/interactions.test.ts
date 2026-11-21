@@ -4773,6 +4773,51 @@ describe('GoogleInteractionsProvider', () => {
     const requestBody = (index: number) =>
       JSON.parse((mockFetchWithCache.mock.calls[index]?.[1] as RequestInit).body as string);
 
+    it.each([false, true])(
+      'rejects a null response, including after polling (%s)',
+      async (poll) => {
+        if (poll) {
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: { status: 'in_progress', id: 'pending' },
+          } as any);
+        }
+        mockFetchWithCache.mockResolvedValue({ data: null } as any);
+        const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+          config: { apiKey: 'test-key' },
+        });
+        expect((await provider.callApi('Weather?')).error).toMatch(/invalid response/i);
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(poll ? 2 : 1);
+      },
+    );
+
+    it.each(['inlineData', 'file_data'])(
+      'rejects mixed text and %s before dispatch',
+      async (media) => {
+        const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+          config: { apiKey: 'test-key' },
+        });
+        const prompt = JSON.stringify([
+          { role: 'user', parts: [{ text: 'Describe', [media]: {} }] },
+        ]);
+        expect((await provider.callApi(prompt)).error).toContain('separate parts');
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('renders the provider host without using prompt values', async () => {
+      mockFetchWithCache.mockResolvedValue(textResponse('Done') as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: { apiKey: 'test-key', apiHost: "{{ 'trusted.example' }}" },
+      });
+      await provider.callApi('Weather?', {
+        prompt: { raw: 'Weather?', label: 'test', config: { apiHost: 'untrusted.example' } },
+        vars: {},
+      });
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+        'https://trusted.example/v1beta/interactions',
+      );
+    });
+
     it('translates generateContent tools and returns pending calls as Gemini parts', async () => {
       mockFetchWithCache.mockResolvedValue(functionCallResponse('interaction-1') as any);
       const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
@@ -4801,6 +4846,7 @@ describe('GoogleInteractionsProvider', () => {
       expect(JSON.parse(result.output as string)).toEqual([
         { functionCall: { name: 'get_weather', args: { city: 'Paris' }, id: 'call-1' } },
       ]);
+      expect(result.metadata?.thoughtSignatures).toEqual(['sig-1']);
       expect(result.tokenUsage).toMatchObject({ prompt: 50, completion: 10, numRequests: 1 });
       expect(() => provider.validateFunctionToolCall(result.output)).not.toThrow();
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
