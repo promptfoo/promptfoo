@@ -85,9 +85,13 @@ export function deduplicateTests(tests: TestCase[]): TestCase[] {
 // Cloud history supplies input, never the provider, grading rules or other executable settings.
 function cloudTemplate(tests: TestCaseWithPlugin[], injectVar: string) {
   let template: TestCaseWithPlugin | undefined;
+  const goals = new Set<string>();
   for (const { description: _description, ...test } of tests) {
     const { [injectVar]: input, ...vars } = test.vars ?? {};
-    const { goal: _goal, ...metadata } = test.metadata;
+    const { goal, ...metadata } = test.metadata;
+    if (goal !== undefined) {
+      goals.add(goal);
+    }
     if (
       typeof input !== 'string' ||
       metadata.pluginConfig?.inputs ||
@@ -103,7 +107,7 @@ function cloudTemplate(tests: TestCaseWithPlugin[], injectVar: string) {
     }
     template = candidate;
   }
-  return template;
+  return template && { template, goals };
 }
 
 interface CloudResult {
@@ -119,9 +123,18 @@ function withoutMetrics(assertions: TestCase['assert']) {
   return assertions?.map((assertion) => ({ ...assertion, metric: undefined })) ?? [];
 }
 
+// Structured inputs can materialize other variables. References and templates can read local files.
+function isPlainText(input: unknown): input is string {
+  return (
+    typeof input === 'string' &&
+    !!input.trim() &&
+    !/^\s*(?:\[|\{|data:)|file:\/\/|package:|\{[{%#]/i.test(input)
+  );
+}
+
 function cloudRetry(
   row: CloudResult,
-  template: TestCaseWithPlugin,
+  { template, goals }: NonNullable<ReturnType<typeof cloudTemplate>>,
   targetId: string,
   injectVar: string,
 ): TestCase | undefined {
@@ -141,26 +154,32 @@ function cloudRetry(
     (strategyId !== undefined &&
       (!ALL_STRATEGIES.includes(strategyId) ||
         isMultiTurnStrategy(strategyId) ||
+        strategyId === 'layer' ||
+        strategyId === 'authoritative-markup-injection' ||
         MULTI_MODAL_STRATEGIES_SET.has(strategyId)))
   ) {
     return;
   }
 
-  const input = isSingleTurnStrategy(strategyId)
-    ? row.response?.metadata?.redteamFinalPrompt
-    : test.vars?.[injectVar];
-  // Structured inputs can materialize additional variables. Templates and references can read local files.
-  if (
-    typeof input !== 'string' ||
-    !input.trim() ||
-    /^\s*(?:\[|\{|data:)|file:\/\/|package:|\{[{%#]/i.test(input)
-  ) {
+  const input =
+    isSingleTurnStrategy(strategyId) || strategyId === 'best-of-n'
+      ? row.response?.metadata?.redteamFinalPrompt
+      : test.vars?.[injectVar];
+  const needsGoal =
+    goals.size > 0 || /^(?:promptfoo:redteam:)?intent$/.test(template.metadata.pluginId);
+  const goal = needsGoal ? test.metadata?.goal : undefined;
+  if (!isPlainText(input) || (needsGoal && (!isPlainText(goal) || !goals.has(goal)))) {
     return;
   }
   return {
     ...template,
     vars: { ...template.vars, [injectVar]: input },
-    metadata: { ...template.metadata, strategyId, originalEvalId: row.evalId },
+    metadata: {
+      ...template.metadata,
+      ...(goal && { goal }),
+      strategyId,
+      originalEvalId: row.evalId,
+    },
   };
 }
 

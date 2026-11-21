@@ -278,10 +278,12 @@ describe('addRetryTestCases', () => {
       { ...row, evalId: 'file://ignored' },
       { ...row, testCase: { ...test, metadata: { pluginId: 'other' } } },
       { ...row, testCase: { ...test, assert: [{ type: 'javascript', value: 'true' }] } },
-      ...['unknown', 'goat', 'image'].map((strategyId) => ({
-        ...row,
-        testCase: { ...test, metadata: { ...test.metadata, strategyId } },
-      })),
+      ...['unknown', 'goat', 'image', 'layer', 'authoritative-markup-injection'].map(
+        (strategyId) => ({
+          ...row,
+          testCase: { ...test, metadata: { ...test.metadata, strategyId } },
+        }),
+      ),
       ...[
         'FILE://ignored',
         'package:ignored',
@@ -318,6 +320,38 @@ describe('addRetryTestCases', () => {
       },
     ]);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped incompatible Cloud'));
+  });
+
+  it('requires an approved intent and the actual Best-of-N candidate', async () => {
+    const seeds = ['first', 'second'].map((goal) => ({
+      vars: { prompt: 'seed' },
+      metadata: { pluginId: 'intent', goal },
+    }));
+    const row = (goal?: string, redteamFinalPrompt?: string) => ({
+      evalId: 'cloud-eval',
+      testCase: { ...seeds[0], metadata: { ...seeds[0].metadata, goal, strategyId: 'best-of-n' } },
+      response: { metadata: { redteamFinalPrompt } },
+    });
+    const results = [
+      row(undefined, 'missing goal'),
+      row('unknown', 'bad goal'),
+      row('first'),
+      row('first', 'file://ignored'),
+      row('second', 'final candidate'),
+    ];
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(Response.json({ results }));
+    limit.mockResolvedValue([]);
+    const retries = await addRetryTestCases(seeds, 'prompt', {
+      targetIds: ['target'],
+      numTests: results.length,
+    });
+    expect(retries).toMatchObject([
+      {
+        vars: { prompt: 'final candidate' },
+        metadata: { goal: 'second', strategyId: 'best-of-n' },
+      },
+    ]);
   });
 
   it('skips ambiguous Cloud templates without suppressing local cases', async () => {
