@@ -51,30 +51,32 @@ Get started quickly using a pre-built image.
 
 ### 1. Pull the Image
 
-Pull the latest image or pin to a specific version (e.g., `0.109.1`):
+Pin a release so you can check the image and its permissions before an upgrade.
 
 ```bash
-# Pull latest
-docker pull ghcr.io/promptfoo/promptfoo:latest
+docker pull ghcr.io/promptfoo/promptfoo:0.126.0
 
-# Or pull a specific version
-# docker pull ghcr.io/promptfoo/promptfoo:0.109.1
-
-# You can verify image authenticity with:
-# gh attestation verify oci://ghcr.io/promptfoo/promptfoo:latest --owner promptfoo
+# Optional image provenance check
+gh attestation verify oci://ghcr.io/promptfoo/promptfoo:0.126.0 --owner promptfoo
 ```
 
 ### 2. Run the Container
 
 :::note Linux bind mounts
-The container runs as user `100:101`. With rootful Docker on Linux, without user namespace remapping, prepare the host directory before starting the container:
+
+With rootful Docker and no user namespace remapping, check the effective user and group IDs of the image you will run. Use these values to prepare a **new, dedicated** data directory.
 
 ```bash
-mkdir -p /path/to/local_promptfoo
-sudo chown -R 100:101 /path/to/local_promptfoo
+image=ghcr.io/promptfoo/promptfoo:0.126.0
+uid=$(docker run --rm --network none --entrypoint id "$image" -u)
+gid=$(docker run --rm --network none --entrypoint id "$image" -g)
+sudo install -d -m 700 -o "${uid:?}" -g "${gid:?}" ./promptfoo_data
 ```
 
-Docker Desktop for Mac bind mounts and new named volumes mounted at `/home/promptfoo/.promptfoo` do not need this ownership change. With rootless Docker or user namespace remapping, use a new named volume at that path because the container user maps to different host IDs.
+On SELinux hosts, append `:Z` to the bind mount in Docker or Compose for a private label. Use this only on a dedicated directory because it relabels the files inside.
+
+For rootless Docker or user namespace remapping, mount a new named volume with `-v promptfoo_data:/home/promptfoo/.promptfoo`. Docker Desktop for Mac needs only `mkdir -p ./promptfoo_data` for a bind mount.
+
 :::
 
 Run the container, mapping a local directory for data persistence:
@@ -82,23 +84,13 @@ Run the container, mapping a local directory for data persistence:
 ```bash
 docker run -d \
   --name promptfoo_container \
-  -p 3000:3000 \
-  -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo \
-  -e OPENAI_API_KEY=sk-abc123 \
-  ghcr.io/promptfoo/promptfoo:latest
+  -p 127.0.0.1:3000:3000 \
+  -v "$PWD/promptfoo_data:/home/promptfoo/.promptfoo" \
+  -e OPENAI_API_KEY \
+  ghcr.io/promptfoo/promptfoo:0.126.0
 ```
 
-:::info
-`~/.promptfoo/` is the default data directory.
-:::
-
-**Key Parameters:**
-
-- **`-d`**: Run in detached mode (background).
-- **`--name promptfoo_container`**: Assign a name to the container.
-- **`-p 3000:3000`**: Map host port 3000 to container port 3000.
-- **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
-- **`-e OPENAI_API_KEY=sk-abc123`**: Example of setting an environment variable. Add necessary API keys here so users can run evals directly from the web UI. Replace `sk-abc123` with your actual key.
+The mount preserves the SQLite database and media when you replace the container. Export `OPENAI_API_KEY` in your shell only if you want the server to use it. The port binds to loopback because the server has no built-in authentication. For remote access, put an authenticated TLS proxy in front of both the UI and API.
 
 Access the UI at `http://localhost:3000`.
 
@@ -113,9 +105,9 @@ Create a `docker-compose.yml` file in your project directory:
 ```yaml title="docker-compose.yml"
 services:
   promptfoo_container: # Consistent service and container name
-    image: ghcr.io/promptfoo/promptfoo:latest # Or pin to a specific version tag
+    image: ghcr.io/promptfoo/promptfoo:0.126.0
     ports:
-      - '3000:3000' # Map host port 3000 to container port 3000
+      - '127.0.0.1:3000:3000'
     volumes:
       # Map host directory to container data directory for persistence
       # Create ./promptfoo_data on your host first!
@@ -123,32 +115,14 @@ services:
     environment:
       # Optional: Adjust chunk size for large evals (See Troubleshooting)
       - PROMPTFOO_SHARE_CHUNK_SIZE=10
-      # Add other necessary environment variables (e.g., API keys)
-      - OPENAI_API_KEY=your_key_here
-      # Example: Google API Key
-      # - GOOGLE_API_KEY=your_google_key_here
-# Optional: Define a named volume managed by Docker (alternative to host path mapping)
-# volumes:
-#   promptfoo_data:
-#     driver: local
-# If using a named volume, change the service volume mapping to:
-#     volumes:
-#       - promptfoo_data:/home/promptfoo/.promptfoo
+      - OPENAI_API_KEY
 ```
 
-:::info Using Host Paths vs. Named Volumes
-The example above uses a host path mapping (`./promptfoo_data:/home/promptfoo/.promptfoo`) which clearly maps to a directory you create. Alternatively, you can use Docker named volumes (uncomment the `volumes:` section and adjust the service `volumes:`).
-:::
+For a Docker-managed volume, use `promptfoo_data:/home/promptfoo/.promptfoo` and declare `volumes: { promptfoo_data: {} }` at the top level of the Compose file.
 
 ### 2. Create Host Directory (if using host path)
 
-If you used `./promptfoo_data` in the `volumes` mapping, create it:
-
-```bash
-mkdir -p ./promptfoo_data
-# Rootful Linux Docker without user namespace remapping only
-sudo chown -R 100:101 ./promptfoo_data
-```
+Prepare `./promptfoo_data` using the [bind mount instructions](#2-run-the-container) for your host. On SELinux hosts, use `./promptfoo_data:/home/promptfoo/.promptfoo:Z`.
 
 ### 3. Run with Docker Compose
 
@@ -185,7 +159,7 @@ Keep `replicaCount: 1` (the default) as the self-hosted server uses a local SQLi
 ### Prerequisites
 
 - A Kubernetes cluster (e.g., Minikube, K3s, GKE, EKS, AKS)
-- Helm v3 installed (`brew install helm` or see [Helm docs](https://helm.sh/docs/intro/install/))
+- Helm 3 or 4 installed (`brew install helm` or see [Helm docs](https://helm.sh/docs/intro/install/))
 - `kubectl` configured to connect to your cluster
 - Git installed
 
@@ -199,70 +173,52 @@ Keep `replicaCount: 1` (the default) as the self-hosted server uses a local SQLi
    cd promptfoo
    ```
 
-2. **Install the Chart:**
-   From the root of the cloned repository, install the chart using its local path. Provide a release name (e.g., `my-promptfoo`):
+2. Check the chart version in the repository root.
+
    ```bash
-   # Install using the default values
-   helm install my-promptfoo ./helm/chart/promptfoo
+   helm show chart ./helm/chart/promptfoo
    ```
+
+:::warning Check for public routes
+
+Chart 0.1.0 always creates a Traefik Ingress, even with `service.type: ClusterIP` and `ingress.enabled: false`. Use Docker or Compose if you only have this chart. For a private Kubernetes install, use a chart that supports disabling Ingress and inspect the rendered resources before installing.
+
+:::
 
 ### Configuration
 
-The Helm chart uses PersistentVolumeClaims (PVCs) for data persistence. By default, it creates a PVC named `promptfoo` requesting 1Gi of storage using the default StorageClass.
-
-Customize the installation using a `values.yaml` file or `--set` flags.
-
-**Example (`my-values.yaml`):**
+For a new installation, save the following values in `my-values.yaml`. Check the image's user and group IDs as [shown above](#2-run-the-container). If they differ, adjust `securityContext.runAsUser`, `securityContext.runAsGroup` and `podSecurityContext.fsGroup` for that image.
 
 ```yaml title="my-values.yaml"
+replicaCount: 1
 image:
-  tag: 0.109.1 # Pin to a specific version
-
+  tag: '0.126.0'
 podSecurityContext:
-  fsGroup: 101 # Allow the container user to write to the volume
-
+  fsGroup: 101
 persistentVolumesClaims:
   - name: promptfoo
-    size: 10Gi # Increase storage size
-    accessModes:
-      - ReadWriteOnce
-    # Optional: Specify a StorageClass if the default is not suitable
-    # storageClassName: my-ssd-storage
-
+    size: 10Gi
+    accessModes: [ReadWriteOnce]
 service:
-  type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
-
-
-# Optional: Configure ingress if you have an ingress controller
-# ingress:
-#   enabled: true
-#   className: "nginx" # Or your ingress controller class
-#   hosts:
-#     - host: promptfoo.example.com
-#       paths:
-#         - path: /
-#           pathType: ImplementationSpecific
-#   tls: []
-#   #  - secretName: promptfoo-tls
-#   #    hosts:
-#   #      - promptfoo.example.com
+  type: ClusterIP
+ingress:
+  enabled: false
 ```
 
-Install with custom values:
+Preview the resources.
 
 ```bash
-# Ensure you are in the root of the cloned promptfoo repository
+helm template my-promptfoo ./helm/chart/promptfoo -f my-values.yaml
+```
+
+Check that the Service is a ClusterIP, the Deployment has one replica and the output contains no Ingress. Then install and forward the service to `http://localhost:3000`.
+
+```bash
 helm install my-promptfoo ./helm/chart/promptfoo -f my-values.yaml
+kubectl port-forward service/my-promptfoo 3000:3000
 ```
 
-Or use `--set` for quick changes:
-
-```bash
-# Ensure you are in the root of the cloned promptfoo repository
-helm install my-promptfoo ./helm/chart/promptfoo \
-  --set image.tag=0.109.1 \
-  --set service.type=NodePort
-```
+ClusterIP still permits in-cluster access. Limit access with a network policy and require authentication and TLS before exposing the server. For an upgrade, review your existing route before disabling Ingress.
 
 Refer to the [chart's `values.yaml`](https://github.com/promptfoo/promptfoo/blob/main/helm/chart/promptfoo/values.yaml) for all available options.
 
@@ -331,8 +287,8 @@ Use the same `docker run` command as in Method 1, but replace the image name:
 ```bash
 docker run -d \
   --name promptfoo_custom_container \
-  -p 3000:3000 \
-  -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo \
+  -p 127.0.0.1:3000:3000 \
+  -v "$PWD/promptfoo_data:/home/promptfoo/.promptfoo" \
   promptfoo:custom
 ```
 
@@ -403,19 +359,13 @@ By default, promptfoo externalizes large binary outputs (for example, images/aud
 
 You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
 
-**Example:** Store data in `/app/data` inside the container, mapped to `./my_custom_data` on the host.
+To use `/app/data`, prepare a new `./my_custom_data` directory using the [bind mount instructions](#2-run-the-container) for your host.
 
 ```bash
-# Create host directory
-mkdir -p ./my_custom_data
-# Rootful Linux Docker without user namespace remapping only
-sudo chown -R 100:101 ./my_custom_data
-
-# Run container
-docker run -d --name promptfoo_container -p 3000:3000 \
-  -v ./my_custom_data:/app/data \
+docker run -d --name promptfoo_container -p 127.0.0.1:3000:3000 \
+  -v "$PWD/my_custom_data:/app/data" \
   -e PROMPTFOO_CONFIG_DIR=/app/data \
-  ghcr.io/promptfoo/promptfoo:latest
+  ghcr.io/promptfoo/promptfoo:0.126.0
 ```
 
 Unlike the default data directory, a new custom mount path is not pre-owned by the container user. Named volumes mounted at custom paths also need writable ownership or permissions.
@@ -452,20 +402,20 @@ providers:
 
 **Docker deployment:**
 
-For the Linux bind mount prepared above, install the provider configuration before starting the container:
+For a rootful Linux bind mount, use the user and group IDs from the [directory setup](#2-run-the-container). Install the file before starting the container and export `INTERNAL_API_KEY` in your shell.
 
 ```bash
-sudo install -o 100 -g 101 -m 600 ui-providers.yaml ./promptfoo_data/ui-providers.yaml
+sudo install -o "${uid:?}" -g "${gid:?}" -m 600 ui-providers.yaml ./promptfoo_data/ui-providers.yaml
 
 docker run -d \
   --name promptfoo_container \
-  -p 3000:3000 \
-  -v ./promptfoo_data:/home/promptfoo/.promptfoo \
-  -e INTERNAL_API_KEY=your-key \
-  ghcr.io/promptfoo/promptfoo:latest
+  -p 127.0.0.1:3000:3000 \
+  -v "$PWD/promptfoo_data:/home/promptfoo/.promptfoo" \
+  -e INTERNAL_API_KEY \
+  ghcr.io/promptfoo/promptfoo:0.126.0
 ```
 
-On Docker Desktop for Mac, use `cp ui-providers.yaml ./promptfoo_data/` instead of `sudo install`. If the container is already running, restart it after replacing the configuration file.
+On Docker Desktop for Mac, copy the file with `cp ui-providers.yaml ./promptfoo_data/`. If the container is already running, restart it after replacing the configuration file.
 
 **Kubernetes ConfigMap:**
 
@@ -489,7 +439,7 @@ spec:
     spec:
       containers:
         - name: promptfoo
-          image: ghcr.io/promptfoo/promptfoo:latest
+          image: ghcr.io/promptfoo/promptfoo:0.126.0
           volumeMounts:
             - name: config
               mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
@@ -666,7 +616,7 @@ The server component is optional; you can run evals locally or in CI/CD without 
 
 **Problem**: The container stops right after starting, and `docker logs` shows `Unable to open connection to local database /home/promptfoo/.promptfoo/promptfoo.db: 14`.
 
-**Solution**: This error can occur when the container user (`100:101`) cannot write to the mounted data directory. For rootful Docker on Linux without user namespace remapping, run `sudo chown -R 100:101` on the host directory, then restart the container. For a new installation, you can instead mount a new named volume at `/home/promptfoo/.promptfoo`.
+The server needs write access to the database and its directory. Stop the container and back up the data before changing permissions. [Check the effective IDs and SELinux label](#2-run-the-container) for the image you deployed, then fix permissions on the dedicated data directory and its files. For a new installation, you can use a named volume at `/home/promptfoo/.promptfoo`.
 
 ### Results Not Appearing in Self-Hosted UI
 
