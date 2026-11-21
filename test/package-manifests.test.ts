@@ -195,6 +195,10 @@ const DOCKER_ALLOWED_RUNS = [
   'RUN ln -s /app /app/node_modules/promptfoo && chown -h promptfoo:promptfoo /app/node_modules/promptfoo && ln -s /app/dist/src/entrypoint.js /usr/local/bin/promptfoo && ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf && mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo',
 ];
 
+// A backslash-newline contributes no whitespace. Only normalize reviewed
+// wraps that already separate the preceding token from the next one.
+const DOCKER_CONTINUATION = /[ \t]+\\\r?\n[ \t]*/g;
+
 function validateDockerInstallCommands(
   dockerfile: string,
   buildManifests: Record<string, PackageManifest> = {},
@@ -208,9 +212,9 @@ function validateDockerInstallCommands(
   const instructions = dockerfile
     .replace(/\r\n/g, '\n')
     .split('\n')
-    .filter((line) => !line.trimStart().startsWith('#'))
+    .filter((line) => line.trim() && !line.trimStart().startsWith('#'))
     .join('\n')
-    .replace(/[ \t]*\\\n[ \t]*/g, ' ')
+    .replace(DOCKER_CONTINUATION, ' ')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
@@ -218,6 +222,7 @@ function validateDockerInstallCommands(
   const runs: string[] = [];
   for (const instruction of instructions) {
     expect(instruction).not.toContain('<<');
+    expect(instruction.endsWith('\\')).toBe(false);
     const kind = instruction.split(/\s+/, 1)[0].toUpperCase();
     // Custom shells, ONBUILD triggers, heredocs and unrecognized continuation bodies
     // are unsupported; otherwise the literal RUN policy would not describe execution.
@@ -826,6 +831,11 @@ describe('package manifests', () => {
     };
 
     expect(() => validateDockerInstallCommands(dockerfile, manifests)).not.toThrow();
+    const joinedFlags = dockerfile.replace(
+      '--include=peer --ignore-scripts',
+      '--include=peer\\\n--ignore-scripts',
+    );
+    expect(() => validateDockerInstallCommands(joinedFlags, manifests)).toThrow();
   });
 
   it.each(['# syntax=example.invalid/custom-frontend:1', ''])(
@@ -964,7 +974,7 @@ describe('package manifests', () => {
   it.each(DOCKER_REQUIRED_RUNS)('requires exactly one reviewed instruction: %s', (required) => {
     const dockerfile = fs
       .readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8')
-      .replace(/[ \t]*\\\r?\n[ \t]*/g, ' ');
+      .replace(DOCKER_CONTINUATION, ' ');
     const manifests = {
       'package.json': readPackageJson<PackageManifest>('package.json'),
       'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
@@ -979,7 +989,7 @@ describe('package manifests', () => {
   it('does not count COPY heredoc contents as required Docker RUN instructions', () => {
     const dockerfile = fs
       .readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8')
-      .replace(/[ \t]*\\\r?\n[ \t]*/g, ' ');
+      .replace(DOCKER_CONTINUATION, ' ');
     const manifests = {
       'package.json': readPackageJson<PackageManifest>('package.json'),
       'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
