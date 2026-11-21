@@ -14,7 +14,7 @@ import cliState from '../../cliState';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { clearCjsModuleCache, ensureTypescriptLoader, importModule } from '../../esm';
 import logger from '../../logger';
-import { readPrompts } from '../../prompts/index';
+import { readCloudPrompts, readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
@@ -912,8 +912,9 @@ async function prepareCombinedConfig(
  */
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
-  _defaultConfig: Partial<UnifiedConfig>,
+  localDefaults: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  cloudConfig?: UnifiedConfig,
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -925,7 +926,6 @@ export async function resolveConfigs(
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
   let promptBasePaths: string[] | undefined;
-  let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
@@ -935,19 +935,21 @@ export async function resolveConfigs(
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
-    defaultConfig = {};
+    localDefaults = {};
   }
+  const defaultConfig = cloudConfig ?? localDefaults;
   const resolved = await cliState.withBasePath(undefined, () =>
     cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
       cliState.withConfig({ ...defaultConfig, ...fileConfig }, () =>
         resolveLoadedConfig(
           cmdObj,
           fileConfig,
-          defaultConfig,
+          localDefaults,
           promptReferenceSources,
           type,
           testSources,
           promptBasePaths,
+          cloudConfig,
         ),
       ),
     ),
@@ -980,12 +982,14 @@ function stringifyEnvValues(env: UnifiedConfig['env']): TestSuite['env'] {
 async function resolveLoadedConfig(
   cmdObj: Partial<CommandLineOptions>,
   fileConfig: Partial<UnifiedConfig>,
-  defaultConfig: Partial<UnifiedConfig>,
+  localDefaults: Partial<UnifiedConfig>,
   promptReferenceSources: PromptReferenceSource[],
   type?: 'DatasetGeneration' | 'AssertionGeneration',
   testSources?: TestSource[],
   promptBasePaths?: string[],
+  cloudConfig?: UnifiedConfig,
 ) {
+  const defaultConfig = cloudConfig ?? localDefaults;
   const configPaths = cmdObj.config;
   // Standalone assertion mode
   if (cmdObj.assertions) {
@@ -1023,7 +1027,7 @@ async function resolveLoadedConfig(
   // Use base path in cases where path was supplied in the config file
   const basePath = path.resolve(
     fileConfig.basePath ??
-      defaultConfig.basePath ??
+      localDefaults.basePath ??
       (configPaths ? path.dirname(configPaths[0]) : ''),
   );
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
@@ -1171,14 +1175,29 @@ async function resolveLoadedConfig(
   // File prompts are labeled with their path, and labels identify prompts (IDs, provider and
   // test prompt references, --filter-prompts). Read the files from the absolute base, but
   // label them relative to the working directory so labels do not embed the checkout path.
-  let parsedPrompts = cmdObj.prompts
-    ? await readPrompts(config.prompts)
-    : await readPrompts(
-        config.prompts,
-        basePath,
-        path.relative(process.cwd(), basePath),
-        cmdObj.assertions ? undefined : promptBasePaths,
-      );
+  let parsedPrompts: Prompt[];
+  // A persisted cloud prompt stays literal even if it happens to match a local path on replay.
+  const savedInline = config.metadata?.__promptfoo?.inlinePrompts === true;
+  const inline =
+    !cmdObj.prompts && !cmdObj.assertions && (cloudConfig !== undefined || savedInline);
+  if (inline !== savedInline) {
+    config.metadata = {
+      ...config.metadata,
+      __promptfoo: { ...config.metadata?.__promptfoo, inlinePrompts: inline },
+    };
+  }
+  if (cmdObj.prompts) {
+    parsedPrompts = await readPrompts(cmdObj.prompts);
+  } else if (inline) {
+    parsedPrompts = readCloudPrompts(config.prompts);
+  } else {
+    parsedPrompts = await readPrompts(
+      fileConfig.prompts || localDefaults.prompts || [],
+      basePath,
+      path.relative(process.cwd(), basePath),
+      cmdObj.assertions ? undefined : promptBasePaths,
+    );
+  }
 
   // Filter prompts if --filter-prompts option is provided
   if (cmdObj.filterPrompts) {

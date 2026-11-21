@@ -339,7 +339,9 @@ puts "\nUser query: #{context['vars']['query']}"
 ### Security Considerations
 
 :::warning
-Executable scripts run with full permissions of the promptfoo process. Be mindful of:
+When you run an evaluation by cloud configuration UUID, Promptfoo treats cloud prompts as inline text, including on resume. Labels and IDs still work. Explicit local paths and commands are rejected, and a cloud-supplied `basePath` is ignored. Use `--prompts` to choose a local text file yourself. For executable prompts, review the configuration and run it from a trusted local file.
+
+Run executable prompts through the CLI, the Node.js library, or MCP over standard input and output. Keep the command in a trusted local configuration. Cloud configurations loaded by UUID and cloud targets cannot select these commands. The web UI, local HTTP API, and MCP over HTTP also block them, including reruns. Other features, such as JavaScript and Python prompt functions, can still run code with the permissions of the Promptfoo process.
 
 - **User Input**: Scripts receive user-controlled `vars` as JSON. Always validate and sanitize inputs before using them in commands.
 - **Untrusted Scripts**: Only run scripts from trusted sources. Scripts can access files, make network calls, and execute commands.

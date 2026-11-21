@@ -1,7 +1,5 @@
-import child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import Stream from 'stream';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
@@ -47,7 +45,6 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
-import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { WebhookProvider } from '../../src/providers/webhook';
 import RedteamGoatProvider from '../../src/redteam/providers/goat';
@@ -62,8 +59,9 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
-const { createProxyAgentFactory, createExecFileFactory, createLocalGenerationFactory } =
-  await vi.hoisted(() => import('../factories/moduleMocks'));
+const { createProxyAgentFactory, createLocalGenerationFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
 
 const createEmptyHttpBody = () => ({
   body: {},
@@ -98,9 +96,6 @@ const createJsonProviderConfig = () => ({
 });
 
 vi.mock('proxy-agent', createProxyAgentFactory());
-
-const mockExecFile = vi.hoisted(() => vi.fn());
-vi.mock('child_process', createExecFileFactory(mockExecFile));
 
 vi.mock('../../src/esm', async () => ({
   ...(await vi.importActual('../../src/esm')),
@@ -190,7 +185,6 @@ const defaultMockResponse = {
 };
 
 beforeEach(() => {
-  mockExecFile.mockReset();
   mockFsReadFileSync.mockReset();
   mockFsExistsSync.mockReset();
   mockFsMkdirSync.mockReset();
@@ -450,61 +444,6 @@ describe('call provider apis', () => {
     expect(result.classification).toEqual({
       nothate: 0.9,
       hate: 0.1,
-    });
-  });
-
-  describe.each([
-    ['python rag.py', 'python', ['rag.py']],
-    ['echo "hello world"', 'echo', ['hello world']],
-    ['./path/to/file.py run', './path/to/file.py', ['run']],
-    ['"/Path/To/My File.py"', '/Path/To/My File.py', []],
-  ])('ScriptCompletionProvider callApi with script %s', (script, inputFile, inputArgs) => {
-    it('returns expected output', async () => {
-      const mockResponse = 'Test script output';
-      const mockChildProcess = {
-        stdout: new Stream.Readable(),
-        stderr: new Stream.Readable(),
-      } as child_process.ChildProcess;
-
-      mockExecFile.mockImplementation(((_file: any, _args: any, _options: any, callback: any) => {
-        process.nextTick(
-          () => callback && callback(null, Buffer.from(mockResponse), Buffer.from('')),
-        );
-        return mockChildProcess;
-      }) as any);
-
-      const provider = new ScriptCompletionProvider(script, {
-        config: {
-          some_config_val: 42,
-        },
-      });
-      const result = await provider.callApi('Test prompt', {
-        prompt: {
-          label: 'Test prompt',
-          raw: 'Test prompt',
-        },
-        vars: {
-          var1: 'value 1',
-          var2: 'value 2 "with some double "quotes""',
-        },
-      });
-
-      expect(result.output).toBe(mockResponse);
-      expect(mockExecFile).toHaveBeenCalledTimes(1);
-      expect(mockExecFile).toHaveBeenCalledWith(
-        expect.stringContaining(inputFile),
-        expect.arrayContaining(
-          inputArgs.concat([
-            'Test prompt',
-            '{"config":{"some_config_val":42}}',
-            '{"prompt":{"label":"Test prompt","raw":"Test prompt"},"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
-          ]),
-        ),
-        expect.any(Object),
-        expect.any(Function),
-      );
-
-      vi.restoreAllMocks();
     });
   });
 });

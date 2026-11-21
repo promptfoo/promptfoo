@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
+import { EchoProvider } from '../../src/providers/echo';
 import { loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud, withCloudProviderResolver } from '../../src/util/cloud';
 import { renderConfigEnvTemplates } from '../../src/util/config/load';
@@ -23,6 +24,33 @@ afterEach(() => {
 });
 
 describe('prepared cloud provider loading', () => {
+  it.each(['exec:fixture', '{{env.TARGET_ID}}'])(
+    'rejects cloud executable selection through %s',
+    async (id) => {
+      await expect(
+        withCloudProviderResolver(
+          () => ({ id, env: { TARGET_ID: 'exec:fixture' } }),
+          () => loadApiProviders([cloudPath]),
+        ),
+      ).rejects.toThrow('Cloud targets cannot select exec providers');
+    },
+  );
+
+  it('keeps nested loads restricted after a cloud target is returned', async () => {
+    vi.spyOn(EchoProvider.prototype, 'callApi').mockImplementationOnce(async () => {
+      await loadApiProviders(['exec:fixture']);
+      return { output: 'unexpected' };
+    });
+    const [target] = await withCloudProviderResolver(
+      () => ({ id: 'echo' }),
+      () => loadApiProviders([cloudPath]),
+    );
+    await expect(target.callApi('Fixture')).rejects.toThrow('disabled for cloud configurations');
+    await expect(target.callApi('Fixture')).resolves.toMatchObject({ output: 'Fixture' });
+    const [local] = await loadApiProviders(['exec:fixture']);
+    expect(local.id()).toBe('exec:fixture');
+  });
+
   it.each([
     { key: 'OPENAI_API_BASE_URL', saved: undefined, local: undefined, expected: 'suite' },
     { key: 'OPENAI_API_BASE_URL', saved: 'saved', local: undefined, expected: 'saved' },

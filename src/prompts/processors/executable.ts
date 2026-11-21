@@ -1,32 +1,33 @@
-import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getProcessEnv } from '../../envars';
-import { getFileHashes, parseScriptParts, stripText } from '../../providers/scriptCompletion';
+import { prepareScript } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
-/**
- * Executable prompt function. Executes any script/binary and returns its output as the prompt.
- * The script receives context as JSON in its arguments.
- * @param scriptPath - Path to the executable script.
- * @param context - Context for the prompt.
- * @returns The prompt output from the script.
- */
-export const executablePromptFunction = async (
+type ExecutablePromptContext = {
+  vars: Record<string, VarValue>;
+  provider?: ApiProvider;
+  config?: { basePath?: string; timeout?: number };
+};
+
+function preparePrompt(scriptPath: string, config: ExecutablePromptContext['config']) {
+  return prepareScript(scriptPath, config?.basePath, config?.timeout || 60_000);
+}
+
+export async function executablePromptFunction(
   scriptPath: string,
-  context: {
-    vars: Record<string, VarValue>;
-    provider?: ApiProvider;
-    config?: {
-      basePath?: string;
-      timeout?: number;
-    };
-  },
-): Promise<string> => {
+  context: ExecutablePromptContext,
+) {
+  return renderExecutablePrompt(preparePrompt(scriptPath, context.config), context);
+}
+
+async function renderExecutablePrompt(
+  script: ReturnType<typeof prepareScript>,
+  context: ExecutablePromptContext,
+) {
   invariant(context.provider?.id, 'provider.id is required');
 
   const transformedContext: PromptFunctionContext = {
@@ -39,57 +40,20 @@ export const executablePromptFunction = async (
     config: context.config ?? {},
   };
 
-  const scriptParts = parseScriptParts(scriptPath);
-  const fileHashes = getFileHashes(scriptParts);
+  const fileHashes = script.getFileHashes();
 
-  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
-
-  let cachedResult;
-  if (fileHashes.length > 0 && isCacheEnabled()) {
-    const cache = getCache();
-    cachedResult = await cache.get(cacheKey);
-
-    if (cachedResult) {
-      return cachedResult as string;
-    }
+  const argument = safeJsonStringify(transformedContext) as string;
+  const cacheKey = `exec-prompt:${script.scriptPath}:${fileHashes.join(':')}:${argument}`;
+  const cache = fileHashes.length && isCacheEnabled() ? getCache() : undefined;
+  const cachedResult = await cache?.get(cacheKey);
+  if (typeof cachedResult === 'string') {
+    return cachedResult;
   }
 
-  return new Promise<string>((resolve, reject) => {
-    const command = scriptParts.shift();
-    invariant(command, 'No command found in script path');
-
-    // Pass context as JSON argument to the script
-    const scriptArgs = scriptParts.concat([safeJsonStringify(transformedContext) as string]);
-
-    const options = {
-      cwd: context.config?.basePath,
-      env: getProcessEnv(),
-      timeout: context.config?.timeout || 60000, // Default 60 second timeout
-    };
-
-    execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
-      const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
-
-      if (errorOutput && !standardOutput) {
-        reject(new Error(errorOutput));
-        return;
-      }
-
-      if (fileHashes.length > 0 && isCacheEnabled()) {
-        const cache = getCache();
-        await cache.set(cacheKey, standardOutput);
-      }
-
-      resolve(standardOutput);
-    });
-  });
-};
+  const output = await script.run([argument]);
+  await cache?.set(cacheKey, output);
+  return output;
+}
 
 /**
  * Processes an executable file to generate prompts.
@@ -110,8 +74,8 @@ export async function processExecutableFile(
 ): Promise<Prompt[]> {
   // For display purposes, try to read the file if it exists and is a text file
   let rawContent = displayPath;
-  const scriptParts = parseScriptParts(filePath);
-  const firstPart = scriptParts[0];
+  const script = preparePrompt(filePath, prompt.config);
+  const firstPart = script.command;
 
   if (firstPart) {
     try {
@@ -135,8 +99,7 @@ export async function processExecutableFile(
     {
       raw: rawContent,
       label,
-      function: (context) =>
-        executablePromptFunction(filePath, { ...context, config: prompt.config }),
+      function: (context) => renderExecutablePrompt(script, { ...context, config: prompt.config }),
       config: prompt.config,
     },
   ];

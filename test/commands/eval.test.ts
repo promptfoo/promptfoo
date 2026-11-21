@@ -707,6 +707,8 @@ describe('evalCommand', () => {
     expect(getEvalConfigFromCloud).toHaveBeenCalledWith(cloudConfigUuid);
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: undefined }),
+      {},
+      undefined,
       cloudConfig,
     );
   });

@@ -1216,6 +1216,27 @@ describe('readTests', () => {
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
+  it.each<TestCase>([
+    { options: { provider: 'echo' } },
+    { assert: [{ type: 'llm-rubric', value: 'ready', provider: { id: 'echo' } }] },
+    {
+      assert: [
+        { type: 'assert-set', assert: [{ type: 'llm-rubric', value: 'ready', provider: 'echo' }] },
+      ],
+    },
+  ])('requires grading providers to be selected locally for remote rows', async (row) => {
+    const error = 'Remote test cases cannot select grading providers';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ ...row, metadata: { __promptfoo: { remote: false } } }]),
+    );
+    await expect(readTests('az://account/container/tests.json')).rejects.toThrow(error);
+    const saved = { ...row, metadata: { __promptfoo: { remote: true } } };
+    await expect(readTests([saved])).rejects.toThrow(error);
+    await expect(readTest(saved)).rejects.toThrow(error);
+    expect(loadApiProvider).not.toHaveBeenCalled();
+    await expect(readTests([row])).resolves.toMatchObject([row]);
+  });
+
   it.each(['C:\\configs\\tests.yaml', 'file://C:\\configs\\tests.yaml'])(
     'reads structured YAML tests from a Windows path (%s)',
     async (file) => {

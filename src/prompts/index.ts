@@ -65,15 +65,10 @@ async function processPromptFile(
   ) {
     return await processExecutableFile(filePath, prompt, functionName, labelPath);
   }
-  // If no extension matched but file exists and is executable, treat it as an executable
-  try {
-    const stats = await stat(filePath);
-    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
-      // File is executable
-      return await processExecutableFile(filePath, prompt, functionName, labelPath);
-    }
-  } catch (_e) {
-    // File doesn't exist or can't be accessed, fall through
+  // Ignore unavailable files, but propagate executable loading and policy errors.
+  const stats = await stat(filePath).catch(() => undefined);
+  if (stats?.isFile() && (stats.mode & 0o111) !== 0) {
+    return processExecutableFile(filePath, prompt, functionName, labelPath);
   }
   return [];
 }
@@ -213,6 +208,23 @@ export async function readPrompts(
     }
   }
   return prompts;
+}
+
+/** Cloud prompt content must never enter local file, glob or executable resolution. */
+export function readCloudPrompts(input: Parameters<typeof normalizeInput>[0]): Prompt[] {
+  return normalizeInput(input).flatMap((prompt) => {
+    const raw = prompt.raw;
+    if (
+      typeof raw !== 'string' ||
+      prompt.function ||
+      /^(?:exec:|file:\/\/|(?:\.{1,2}|~|[a-z]:)?[/\\])/i.test(raw)
+    ) {
+      throw new Error(
+        'Local prompt files and commands are disabled for cloud configurations. Use an inline prompt or a trusted local configuration file.',
+      );
+    }
+    return processString(prompt);
+  });
 }
 
 export async function processPrompts(

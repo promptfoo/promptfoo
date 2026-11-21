@@ -27,7 +27,8 @@ vi.mock('../../src/models/evalMutation', () => ({
   invalidateEvaluationCaches: vi.fn(),
 }));
 
-vi.mock('../../src/util/server', () => ({
+vi.mock('../../src/util/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/server')>()),
   BrowserBehavior: { OPEN: 0, SKIP: 1, ASK: 2 },
   BrowserBehaviorNames: { 0: 'OPEN', 1: 'SKIP', 2: 'ASK' },
   openBrowser: vi.fn().mockResolvedValue(undefined),

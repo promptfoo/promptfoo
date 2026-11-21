@@ -7,7 +7,7 @@ import logger from '../logger';
 import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
-import { getProviderFromCloud } from '../util/cloud';
+import { getProviderFromCloud, withCloudScriptPolicy } from '../util/cloud';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
@@ -552,7 +552,8 @@ export async function doValidateTarget(
     // Test a specific provider ID or cloud UUID
     logger.info(chalk.dim(`Target: ${opts.target}`));
     try {
-      await runProviderTests(opts.target, {} as UnifiedConfig);
+      const run = () => runProviderTests(opts.target, {} as UnifiedConfig);
+      await (isUuid(opts.target) ? withCloudScriptPolicy(run) : run());
     } catch (err) {
       logger.error(
         chalk.red(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`),
