@@ -193,4 +193,4 @@ For TrueFoundry-specific questions:
 For promptfoo-related questions:
 
 - Visit [promptfoo.dev](https://www.promptfoo.dev/)
-- Join the [Discord community](https://discord.gg/promptfoo)
+- Join the [Discord community](https://discord.gg/gHPS9jjfbs)

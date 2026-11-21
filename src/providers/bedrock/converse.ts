@@ -20,8 +20,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { renderVarsInObject } from '../../util/render';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import {
   getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -51,7 +50,11 @@ import {
   collectConverseStream,
   getConverseResponseError,
 } from './converseStream';
-import { calculateBedrockCost } from './pricing';
+import {
+  calculateBedrockCost,
+  getBedrockRuntimeBillingRegion,
+  isBedrockGrokRuntimeProfile,
+} from './pricing';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -1360,6 +1363,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     if (!this.config.serviceTier) {
       return undefined;
     }
+    if (
+      isBedrockGrokRuntimeProfile(this.modelName) &&
+      this.modelName.endsWith('grok-4.7') &&
+      this.config.serviceTier.type !== 'default'
+    ) {
+      throw new Error(
+        'Grok 4.7 Converse supports the default service tier only. Use Runtime Chat, Responses, or InvokeModel for Priority or Flex.',
+      );
+    }
     return {
       type: this.config.serviceTier.type,
     };
@@ -1763,7 +1775,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       completionTokens,
       cacheReadTokens,
       cacheWriteTokens,
-      this.getRegion(),
+      getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
       response.serviceTier?.type ? { type: response.serviceTier.type } : this.config.serviceTier,
       cacheWrite1hTokens,
     );

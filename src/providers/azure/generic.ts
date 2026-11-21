@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
@@ -147,14 +147,18 @@ export class AzureGenericProvider<
   private async createTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
-      (this.env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET'));
+      (getProviderEnvString(this.env, 'AZURE_CLIENT_SECRET') ??
+        getEnvString('AZURE_CLIENT_SECRET'));
     const clientId =
-      this.config?.azureClientId || (this.env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'));
+      this.config?.azureClientId ||
+      (getProviderEnvString(this.env, 'AZURE_CLIENT_ID') ?? getEnvString('AZURE_CLIENT_ID'));
     const tenantId =
-      this.config?.azureTenantId || (this.env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'));
+      this.config?.azureTenantId ||
+      (getProviderEnvString(this.env, 'AZURE_TENANT_ID') ?? getEnvString('AZURE_TENANT_ID'));
     const authorityHost =
       this.config?.azureAuthorityHost ||
-      (this.env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST'));
+      (getProviderEnvString(this.env, 'AZURE_AUTHORITY_HOST') ??
+        getEnvString('AZURE_AUTHORITY_HOST'));
 
     try {
       const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
@@ -194,7 +198,7 @@ export class AzureGenericProvider<
     const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
-      (this.env?.AZURE_TOKEN_SCOPE ?? getEnvString('AZURE_TOKEN_SCOPE'));
+      (getProviderEnvString(this.env, 'AZURE_TOKEN_SCOPE') ?? getEnvString('AZURE_TOKEN_SCOPE'));
     const tokenResponse = await credential.getToken(
       tokenScope || 'https://cognitiveservices.azure.com/.default',
     );

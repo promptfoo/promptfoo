@@ -840,6 +840,11 @@ describe('createShareableUrl', () => {
           additionalModelResponseFields: { text: 'native-response-secret' },
         };
         const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
+        const conversationOutput = [
+          { text: 'native-conversation-private', thoughtSignature: 'private-signature' },
+          { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLXByaXZhdGU=' } },
+          { fileData: { mimeType: 'image/png', fileUri: outputUri } },
+        ];
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
@@ -853,6 +858,7 @@ describe('createShareableUrl', () => {
           response: {
             output: outputUri,
             providerTransformedOutput: outputUri,
+            conversationOutput,
             audio: { data: outputUri },
             video: { url: outputUri },
             images: [{ url: outputUri }],
@@ -875,6 +881,12 @@ describe('createShareableUrl', () => {
 
         await createShareableUrl(mockEval as Eval);
 
+        expect(row.response.conversationOutput).toBe(conversationOutput);
+        expect(row.response.conversationOutput[0]).toEqual({
+          text: 'native-conversation-private',
+          thoughtSignature: 'private-signature',
+        });
+
         const scans = cloud
           ? vi.mocked(uploadBlobRefsForShare).mock.calls
           : vi.mocked(inlineBlobRefsForShare).mock.calls;
@@ -884,6 +896,8 @@ describe('createShareableUrl', () => {
           expect(JSON.stringify(value)).not.toContain('native-response-secret');
           expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).not.toContain(svgUrl);
+          expect(JSON.stringify(value)).not.toContain('native-conversation-private');
+          expect(JSON.stringify(value)).not.toContain('bmF0aXZlLXByaXZhdGU=');
           expect(JSON.stringify(value)).toContain(inputUri);
         }
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
