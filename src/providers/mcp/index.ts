@@ -1,5 +1,6 @@
 import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import logger from '../../logger';
+import { waitForPromiseWithAbort } from '../shared';
 import { loadTransformModule } from '../transformUtils';
 import { McpClientSession } from './session';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
@@ -145,11 +146,15 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return this.transformToolResult(result, {
-        toolName,
-        toolArgs: finalArgs,
-        originalPayload: toolCallData,
-      });
+      return this.transformToolResult(
+        result,
+        {
+          toolName,
+          toolArgs: finalArgs,
+          originalPayload: toolCallData,
+        },
+        signal,
+      );
     } catch (error) {
       signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -193,10 +198,7 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return this.transformToolResult(result, {
-        toolName,
-        toolArgs,
-      });
+      return this.transformToolResult(result, { toolName, toolArgs }, signal);
     } catch (error) {
       signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -216,12 +218,19 @@ export class MCPProvider implements ApiProvider {
   private async transformToolResult(
     result: Awaited<ReturnType<MCPClient['callTool']>>,
     context: MCPTransformResponseContext,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const transformedResponse = await (await this.transformResponse)(
-      result.raw ?? result,
-      result.content,
-      context,
-    );
+    // A transform may be responsible for removing sensitive output. Never publish
+    // a partial response or its tool arguments when the caller cancels this wait.
+    const pending = this.transformResponse.then((transform) => {
+      signal?.throwIfAborted();
+      return transform(result.raw ?? result, result.content, context);
+    });
+    const transformedResponse = await waitForPromiseWithAbort(pending, signal).catch((error) => {
+      signal?.throwIfAborted();
+      throw error;
+    });
+    signal?.throwIfAborted();
 
     return {
       ...transformedResponse,
