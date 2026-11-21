@@ -273,7 +273,7 @@ export async function renderPrompt(
         if (javascriptOutput.error) {
           throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
         }
-        if (!javascriptOutput.output) {
+        if (typeof javascriptOutput.output !== 'string') {
           throw new Error(
             `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
           );
@@ -288,7 +288,7 @@ export async function renderPrompt(
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
-        if (!pythonScriptOutput.output) {
+        if (pythonScriptOutput.output == null) {
           throw new Error(`Python script ${filePath} did not return any output`);
         }
         invariant(
@@ -385,7 +385,7 @@ export async function renderPrompt(
       if (javascriptOutput.error) {
         throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
       }
-      if (!javascriptOutput.output) {
+      if (typeof javascriptOutput.output !== 'string') {
         throw new Error(
           `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
         );
@@ -515,7 +515,7 @@ export async function renderPrompt(
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, vars, nunjucks), null, 2);
   } catch {
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
@@ -711,20 +711,16 @@ function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prom
   // A prompt function that was neither restored nor returned by the hook means the
   // prompt will render its raw source as text — the original #9653 symptom. Surface
   // why, so users get a breadcrumb instead of a silent behavior change.
-  const labelsWithFunction = new Set<string>();
   const returnedLabels = new Set<string>();
   for (const prompt of restored) {
     if (prompt?.label != null) {
       returnedLabels.add(prompt.label);
       if (typeof prompt.function === 'function') {
-        labelsWithFunction.add(prompt.label);
+        originalsByLabel.delete(prompt.label);
       }
     }
   }
   for (const [label, original] of originalsByLabel) {
-    if (labelsWithFunction.has(label)) {
-      continue;
-    }
     if (original === null) {
       if (returnedLabels.has(label)) {
         logger.warn(

@@ -1,3 +1,5 @@
+import { appendMetricSuffix } from './assertions';
+
 import type { TestCase } from '../../types/index';
 
 export function addMischievousUser(
@@ -14,10 +16,7 @@ export function addMischievousUser(
         ...config,
       },
     },
-    assert: testCase.assert?.map((assertion) => ({
-      ...assertion,
-      metric: assertion.metric ? `${assertion.metric}/MischievousUser` : assertion.metric,
-    })),
+    assert: appendMetricSuffix(testCase, 'MischievousUser'),
     metadata: {
       ...testCase.metadata,
       strategyId: 'mischievous-user',

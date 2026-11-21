@@ -3,7 +3,7 @@ import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { isAbortError } from '../../util/fetch/errors';
+import { getAbortError, isAbortError } from '../../util/fetch/errors';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import {
@@ -20,16 +20,6 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
-
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
 
 export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;
@@ -243,10 +233,10 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       if (config.temperature !== undefined) {
         formData.append('temperature', config.temperature.toString());
       }
-      if (this.modelName === 'whisper-1' && config.timestamp_granularities) {
-        for (const granularity of config.timestamp_granularities) {
-          formData.append('timestamp_granularities[]', granularity);
-        }
+      const timestampGranularities =
+        this.modelName === 'whisper-1' ? config.timestamp_granularities : undefined;
+      for (const granularity of timestampGranularities || []) {
+        formData.append('timestamp_granularities[]', granularity);
       }
       const isDiarizationModel = this.modelName.includes('diarize');
       const chunkingStrategy =
@@ -401,6 +391,20 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           language: data.language,
           ...(Array.isArray(data.languages) ? { languages: data.languages } : {}),
           segments: data.segments?.length || 0,
+          ...(timestampGranularities?.includes('word') && Array.isArray(data.words)
+            ? { words: data.words }
+            : {}),
+          ...(timestampGranularities?.includes('segment') && Array.isArray(data.segments)
+            ? {
+                segmentTimestamps: data.segments.map(
+                  ({ start, end, text }: { start: number; end: number; text: string }) => ({
+                    start,
+                    end,
+                    text,
+                  }),
+                ),
+              }
+            : {}),
           ...(avgLogprob === undefined ? {} : { avgLogprob }),
           ...(avgCompressionRatio === undefined ? {} : { avgCompressionRatio }),
           ...(avgNoSpeechProb === undefined ? {} : { avgNoSpeechProb }),

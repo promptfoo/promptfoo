@@ -1,13 +1,12 @@
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
 import { storeBlob } from '../../blobs';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { resolveProviderEnv } from '../env';
 import { sanitizeVideoSourceUri } from '../video/utils';
 import {
   determineGoogleVertexMode,
@@ -78,33 +77,6 @@ function getVertexApiHost(location: string): string {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Generate a cache key for video generation based on input parameters.
- * This is used for display purposes and deduplication hints.
- */
-export function generateVideoCacheKey(
-  prompt: string,
-  model: string,
-  aspectRatio: string,
-  resolution: string,
-  durationSeconds: number,
-  imageData?: string,
-  negativePrompt?: string,
-): string {
-  const hashInput = JSON.stringify({
-    prompt,
-    model,
-    aspectRatio,
-    resolution,
-    durationSeconds,
-    imageData: imageData || null,
-    negativePrompt: negativePrompt || null,
-  });
-
-  const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-}
 
 export function validateAspectRatio(ratio: string): { valid: boolean; message?: string } {
   if (!['16:9', '9:16'].includes(ratio)) {
@@ -369,12 +341,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions = this.config): string {
     return (
       config.region ||
-      this.env?.VERTEX_REGION ||
-      this.env?.GOOGLE_CLOUD_LOCATION ||
-      this.env?.GOOGLE_LOCATION ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
-      getEnvString('GOOGLE_LOCATION') ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value ||
       DEFAULT_LOCATION
     );
   }
@@ -427,7 +395,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async getAiStudioHeaders(config: GoogleVideoOptions): Promise<Record<string, string>> {
     const apiKey = this.getApiKey(config);
-    if (!apiKey) {
+    if (!apiKey && config.apiKeyRequired !== false) {
       throw new Error(
         'Google API key is not set. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.',
       );
@@ -435,7 +403,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     return {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
     };
   }
 
@@ -445,7 +413,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private loadImageData(
     imagePath: string,
     config: Pick<GoogleVideoOptions, 'basePath'> = this.config,
-  ): { data?: string; error?: string } {
+  ): { image: { bytesBase64Encoded: string; mimeType: string } } | { error: string } {
+    let bytesBase64Encoded = imagePath;
     if (imagePath.startsWith('file://')) {
       const filePath = path.resolve(
         config.basePath || process.cwd(),
@@ -454,9 +423,11 @@ export class GoogleVideoProvider implements ApiProvider {
       if (!fs.existsSync(filePath)) {
         return { error: `Image file not found: ${filePath}` };
       }
-      return { data: fs.readFileSync(filePath).toString('base64') };
+      bytesBase64Encoded = fs.readFileSync(filePath).toString('base64');
     }
-    return { data: imagePath };
+    // Veo accepts JPEG and PNG input. Preserve the existing PNG default.
+    const mimeType = bytesBase64Encoded.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+    return { image: { bytesBase64Encoded, mimeType } };
   }
 
   private loadVideoData(
@@ -524,6 +495,52 @@ export class GoogleVideoProvider implements ApiProvider {
     return undefined;
   }
 
+  private addImageInputs(
+    instance: Record<string, unknown>,
+    config: GoogleVideoOptions,
+    mediaBasePaths: GoogleVideoMediaBasePaths,
+  ): { error: string } | undefined {
+    if (config.image) {
+      const result = this.loadImageData(config.image, {
+        basePath: mediaBasePaths.image,
+      });
+      if ('error' in result) {
+        return result;
+      }
+      instance.image = result.image;
+    }
+
+    const lastFrame = config.lastFrame || config.lastImage;
+    if (lastFrame) {
+      const result = this.loadImageData(lastFrame, {
+        basePath: mediaBasePaths.lastFrame,
+      });
+      if ('error' in result) {
+        return result;
+      }
+      instance.lastFrame = result.image;
+    }
+
+    if (config.referenceImages && config.referenceImages.length > 0) {
+      const refs = [];
+      for (const ref of config.referenceImages.slice(0, 3)) {
+        const imagePath = typeof ref === 'string' ? ref : ref.image;
+        const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
+
+        const result = this.loadImageData(imagePath, {
+          basePath: mediaBasePaths.referenceImages,
+        });
+        if ('error' in result) {
+          return result;
+        }
+        refs.push({ image: result.image, referenceType });
+      }
+      instance.referenceImages = refs;
+    }
+
+    return undefined;
+  }
+
   private buildVertexRequestBody(
     prompt: string,
     config: GoogleVideoOptions,
@@ -559,51 +576,9 @@ export class GoogleVideoProvider implements ApiProvider {
     }
     addOptionalVideoParameter(parameters, 'storageUri', config.storageUri);
 
-    if (config.image) {
-      const { data: imageData, error } = this.loadImageData(config.image, {
-        basePath: mediaBasePaths.image,
-      });
-      if (error) {
-        return { error };
-      }
-      instance.image = {
-        bytesBase64Encoded: imageData,
-        mimeType: 'image/png',
-      };
-    }
-
-    const lastFrame = config.lastFrame || config.lastImage;
-    if (lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(lastFrame, {
-        basePath: mediaBasePaths.lastFrame,
-      });
-      if (error) {
-        return { error };
-      }
-      instance.lastFrame = {
-        bytesBase64Encoded: lastFrameData,
-        mimeType: 'image/png',
-      };
-    }
-
-    if (config.referenceImages && config.referenceImages.length > 0) {
-      const refs = [];
-      for (const ref of config.referenceImages.slice(0, 3)) {
-        const imagePath = typeof ref === 'string' ? ref : ref.image;
-        const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
-
-        const { data: imageData, error } = this.loadImageData(imagePath, {
-          basePath: mediaBasePaths.referenceImages,
-        });
-        if (error) {
-          return { error };
-        }
-        refs.push({
-          image: { bytesBase64Encoded: imageData, mimeType: 'image/png' },
-          referenceType,
-        });
-      }
-      instance.referenceImages = refs;
+    const imageError = this.addImageInputs(instance, config, mediaBasePaths);
+    if (imageError) {
+      return imageError;
     }
 
     const sourceVideoError = this.addVertexSourceVideo(
@@ -655,53 +630,9 @@ export class GoogleVideoProvider implements ApiProvider {
       parameters.seed = config.seed;
     }
 
-    if (config.image) {
-      const { data: imageData, error } = this.loadImageData(config.image, {
-        basePath: mediaBasePaths.image,
-      });
-      if (error) {
-        return { error };
-      }
-      instance.image = {
-        mimeType: 'image/png',
-        bytesBase64Encoded: imageData,
-      };
-    }
-
-    const lastFrame = config.lastFrame || config.lastImage;
-    if (lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(lastFrame, {
-        basePath: mediaBasePaths.lastFrame,
-      });
-      if (error) {
-        return { error };
-      }
-      instance.lastFrame = {
-        mimeType: 'image/png',
-        bytesBase64Encoded: lastFrameData,
-      };
-    }
-
-    if (config.referenceImages && config.referenceImages.length > 0) {
-      const refs = [];
-      for (const ref of config.referenceImages.slice(0, 3)) {
-        const imagePath = typeof ref === 'string' ? ref : ref.image;
-        const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
-        const { data: imageData, error } = this.loadImageData(imagePath, {
-          basePath: mediaBasePaths.referenceImages,
-        });
-        if (error) {
-          return { error };
-        }
-        refs.push({
-          image: {
-            mimeType: 'image/png',
-            bytesBase64Encoded: imageData,
-          },
-          referenceType,
-        });
-      }
-      instance.referenceImages = refs;
+    const imageError = this.addImageInputs(instance, config, mediaBasePaths);
+    if (imageError) {
+      return imageError;
     }
 
     const sourceVideo = config.sourceVideo || config.extendVideoId;
@@ -1142,11 +1073,12 @@ export class GoogleVideoProvider implements ApiProvider {
         vertexai: true,
         projectId,
       };
-    } else if (!this.getApiKey(effectiveConfig)) {
+    } else if (!this.getApiKey(effectiveConfig) && effectiveConfig.apiKeyRequired !== false) {
       const missingApiKeyError =
         'Google Veo video generation via Google AI Studio requires an API key. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.';
 
-      if (effectiveConfig.vertexai === false) {
+      const useVertexEnv = resolveProviderEnv(this.env, ['GOOGLE_GENAI_USE_VERTEXAI'])?.value;
+      if (effectiveConfig.vertexai === false || useVertexEnv === 'false' || useVertexEnv === '0') {
         return { error: missingApiKeyError };
       }
 
