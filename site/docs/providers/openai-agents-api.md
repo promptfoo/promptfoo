@@ -113,6 +113,7 @@ providers:
 | `pollIntervalMs`                                   | Delay between status checks in milliseconds                                                                                                                         | `1000`                                               |
 | `usageTimeoutMs`                                   | Deadline for polling final usage after the turn completes. Set to `0` to skip polling.                                                                              | `15000`                                              |
 | `cleanupTimeoutMs`                                 | Deadline for cancelling unfinished work and deleting the session                                                                                                    | `60000`                                              |
+| `artifactPaths`                                    | Collect digests for up to eight exact output paths published by the root turn. See [Published artifacts](#published-artifacts).                                     | None                                                 |
 | `retainSession`                                    | Keep successful sessions for later inspection or artifact download                                                                                                  | `false`                                              |
 | `maxRetries`                                       | Retries for status reads, turn cancellation, and session deletion after network errors, HTTP 429, and HTTP 500, 502, 503, or 504; session creation is never retried | `4`                                                  |
 | `apiKey`, `apiKeyEnvar`                            | OpenAI project API key or environment variable name                                                                                                                 | `OPENAI_API_KEY`                                     |
@@ -140,6 +141,14 @@ Use `response.metadata.turnId` for the root turn and `response.metadata.toolCall
 
 For an absence check across agents, require an array and verify that `subagentToolCallsUnavailable` is absent before checking for the forbidden tool. The provider can return a completed answer when a child history is unreadable.
 
+### Published artifacts
+
+For a file deliverable, ask the agent to write to a known path under `/workspace/outputs/` in an `openai_hosted` environment. Add the same path to the provider’s `config.artifactPaths` list. Promptfoo looks up each published file by its path and the completed root turn ID, downloads its bytes using the session’s credentials, and computes a SHA-256 digest before session cleanup. The digest can be graded after the session is deleted. [OpenAI’s files and artifacts guide](https://developers.openai.com/api/docs/guides/agents-api/environments/files)
+
+To select a different file in each row, set `artifactPaths: ['{{outputPath}}']` and give each test an `outputPath` variable. Before starting the session, Promptfoo checks that the rendered list contains at most eight unique file paths under `/workspace/outputs/`.
+
+Each entry in `response.metadata.artifacts` has a `path` and `status`. An `available` entry includes `sha256` and `sizeBytes`. A `missing` entry means the listing establishes that the root turn did not publish that path. An `unavailable` entry means the file could not be verified. Examples include a listing with a duplicate artifact ID or an entry with ambiguous session or turn ownership. Promptfoo reads up to 1 MiB per file and allows 10 seconds for all artifact reads combined, within the overall request deadline.
+
 ### Usage and cost
 
 The provider polls for session usage after the root turn completes. `usageTimeoutMs` bounds this wait, including in-flight usage reads, within the overall request deadline. A single-agent run can use root-turn usage after a short grace period. If subagents are enabled or observed, the provider allows the full window for session totals before falling back to root-turn usage.
@@ -164,6 +173,6 @@ Request debug logs contain the method, endpoint, and status. The provider redact
 
 - Client-side function callbacks and self-hosted executors are not supported. A session requesting client-side actions returns an error; use hosted tools or remote MCP servers.
 - This provider polls saved state and items; it does not expose live streaming events or resume existing sessions.
-- Hosted artifacts are not downloaded automatically. Retain a successful session if you need its files.
+- Promptfoo saves artifact digests in the eval result. To keep the file contents, set `retainSession: true`, download the files, and delete the session.
 
 See the [OpenAI quickstart](https://developers.openai.com/api/docs/guides/agents-api/quickstart) for API prerequisites and the [session guide](https://developers.openai.com/api/docs/guides/agents-api/sessions) for lifecycle details.
