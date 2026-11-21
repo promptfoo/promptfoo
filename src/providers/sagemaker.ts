@@ -4,7 +4,6 @@ import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import crypto from 'crypto';
 
-import { LRUCache } from 'lru-cache';
 import { z } from 'zod';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -13,6 +12,7 @@ import { getCacheOperationScope } from '../util/cacheOperationScope';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import { resolveProviderEnv } from './env';
+import { getOpaqueCredentialCacheNamespace } from './opaqueCredentialCache';
 import { shouldBustProviderCache, withResponseCacheMetadata } from './shared';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import type {
@@ -34,10 +34,6 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
-
-// Credential fingerprints stay in memory. Only independent UUIDs reach the response cache.
-const fingerprintKey = crypto.randomBytes(32);
-const cacheScopes = new LRUCache<string, string>({ max: 256 });
 
 function serializeCacheResult(result: ProviderResponse | ProviderEmbeddingResponse) {
   // Transformations may remove private input shared by several requests with the same payload.
@@ -1049,18 +1045,15 @@ abstract class SageMakerGenericProvider {
     if (expires && !(Date.parse(expires) > Date.now())) {
       return undefined;
     }
-    const fingerprint = crypto
-      .createHmac('sha256', fingerprintKey)
-      .update(
-        JSON.stringify([identity, origin, endpoint.useFipsEndpoint, endpoint.useDualstackEndpoint]),
-      )
-      .digest('hex');
-    let scope = cacheScopes.get(fingerprint);
-    if (!scope) {
-      scope = crypto.randomUUID();
-      cacheScopes.set(fingerprint, scope);
-    }
-    return scope;
+    return getOpaqueCredentialCacheNamespace(
+      JSON.stringify([
+        'sagemaker',
+        identity,
+        origin,
+        endpoint.useFipsEndpoint,
+        endpoint.useDualstackEndpoint,
+      ]),
+    );
   }
 
   protected runtimeCacheKey(
