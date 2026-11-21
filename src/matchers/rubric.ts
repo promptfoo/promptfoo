@@ -885,6 +885,7 @@ export async function runJsonGradingPrompt({
   vars,
   images,
   audio,
+  parseResult,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -898,13 +899,22 @@ export async function runJsonGradingPrompt({
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
+  parseResult?: (
+    parsed: unknown,
+  ) =>
+    | Pick<
+        GradingResult,
+        'pass' | 'score' | 'reason' | 'componentResults' | 'namedScores' | 'namedScoreWeights'
+      >
+    | string;
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
 
   const defaultProviders = await getDefaultProviders();
-  const defaultProvider =
-    defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
+  const defaultProvider = parseResult
+    ? defaultProviders.gradingProvider
+    : defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
@@ -916,7 +926,7 @@ export async function runJsonGradingPrompt({
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
-  const resp = await callProviderWithContext(
+  const response = await callProviderWithContext(
     finalProvider,
     providerPrompt,
     label,
@@ -924,31 +934,63 @@ export async function runJsonGradingPrompt({
     providerCallContext,
     providerPromptConfig,
   );
+  const resp =
+    parseResult && !response.cached
+      ? {
+          ...response,
+          tokenUsage: {
+            ...response.tokenUsage,
+            numRequests: response.tokenUsage?.numRequests || 1,
+          },
+        }
+      : response;
   if (resp.error || !resp.output) {
+    const error = parseResult
+      ? `${label} provider returned an error or no output`
+      : resp.error || 'No output';
     if (throwOnError) {
-      throw new Error(resp.error || 'No output');
+      throw new Error(error);
     }
-    return graderFailureFromResponse(resp.error || 'No output', resp);
-  }
-  const { parsed, failure } = parseJsonGradingResponse(label, resp);
-  if (!parsed) {
-    return failure as Omit<GradingResult, 'assertion'>;
+    return graderFailureFromResponse(error, resp);
   }
 
-  const threshold =
-    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-
-  const verdict = deriveVerdictFromGrader(parsed, threshold);
-  if (!verdict) {
-    return graderFailureFromResponse(
-      'Grader response contained neither a pass verdict nor a finite numeric score',
-      resp,
-    );
+  let verdict;
+  let completionDetails = resp.tokenUsage?.completionDetails;
+  if (parseResult) {
+    let output: unknown = resp.output;
+    if (typeof output === 'string') {
+      try {
+        output = JSON.parse(output.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1'));
+      } catch {
+        return graderFailureFromResponse('Batched llm-rubric response must be valid JSON', resp);
+      }
+    }
+    verdict = parseResult(output);
+    if (typeof verdict === 'string') {
+      return graderFailureFromResponse(verdict, resp);
+    }
+  } else {
+    const { parsed, failure } = parseJsonGradingResponse(label, resp);
+    if (!parsed) {
+      return failure as Omit<GradingResult, 'assertion'>;
+    }
+    const threshold =
+      typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+    const scalar = deriveVerdictFromGrader(parsed, threshold);
+    if (!scalar) {
+      return graderFailureFromResponse(
+        'Grader response contained neither a pass verdict nor a finite numeric score',
+        resp,
+      );
+    }
+    verdict = {
+      ...scalar,
+      reason:
+        parsed.reason ||
+        (scalar.pass ? 'Grading passed' : `Score ${scalar.score} below threshold ${threshold}`),
+    };
+    completionDetails ??= parsed.tokensUsed?.completionDetails;
   }
-  const { pass, score } = verdict;
-
-  const reason =
-    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
 
   let responseMetadata: Record<string, unknown> = {};
   if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
@@ -957,16 +999,18 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    rubricComponents: _untrustedRubricComponents,
+    ...trustedResponseMetadata
+  } = responseMetadata;
 
   return {
     assertion,
-    pass,
-    score,
-    reason,
+    ...verdict,
     tokensUsed: normalizeMatcherTokenUsage({
       ...resp.tokenUsage,
-      completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
+      completionDetails,
     }),
     metadata: {
       ...trustedResponseMetadata,

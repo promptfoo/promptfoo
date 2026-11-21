@@ -338,7 +338,13 @@ export class AssertionsResult {
 
     // Flatten nested component results, and copy the assertion into the child results.
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
-      if (result.componentResults) {
+      // Rubric criteria describe one configured assertion. Keep them nested so
+      // verdict counters use the parent result, including after negation.
+      const isRubricBatch =
+        (result.assertion?.type === 'llm-rubric' || result.assertion?.type === 'not-llm-rubric') &&
+        result.assertion.rubricComponents === true &&
+        result.metadata?.rubricComponents === true;
+      if (result.componentResults && !isRubricBatch) {
         return [
           result,
           ...result.componentResults.map((subResult) => ({

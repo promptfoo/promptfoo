@@ -119,6 +119,47 @@ describe('matchesLlmRubric', () => {
     cliState.selectedProviderConfigs = undefined;
   });
 
+  it.each([
+    { first: Number.MAX_VALUE, second: Number.MAX_VALUE, fractionalScore: 0.5, expected: 0.25 },
+    { first: Number.MIN_VALUE, second: Number.MIN_VALUE, fractionalScore: 0.5, expected: 0.25 },
+    { first: 9, second: 1, fractionalScore: 1, expected: 0.9 },
+  ])(
+    'compares the weighted average of $first:$second accurately at threshold $expected',
+    async ({ first, second, fractionalScore, expected }) => {
+      const components = [
+        { metric: 'first', value: 'First criterion', weight: first },
+        { metric: 'second', value: 'Second criterion', weight: second },
+      ];
+      const callApi = vi.spyOn(Grader, 'callApi').mockResolvedValue({
+        output: JSON.stringify({
+          components: [
+            { metric: 'second', pass: false, score: 0, reason: 'Absent' },
+            { metric: 'first', pass: true, score: fractionalScore, reason: 'Partial' },
+          ],
+        }),
+      });
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        rubricComponents: true,
+        threshold: expected,
+      };
+      const result = await matchesLlmRubric(
+        { components },
+        'output',
+        { provider: Grader },
+        {},
+        assertion,
+      );
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        pass: true,
+        score: expected,
+        namedScores: { first: fractionalScore, second: 0 },
+        namedScoreWeights: { first, second },
+      });
+    },
+  );
+
   it('should pass when the grading provider returns a passing result', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
