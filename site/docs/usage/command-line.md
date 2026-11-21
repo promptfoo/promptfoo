@@ -835,9 +835,9 @@ This command will generate test cases for a specific config and write them to a 
 promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
 ```
 
-The persona and test-case counts must be positive whole numbers within JavaScript's
-safe integer range. Invalid counts and output filenames are rejected before dataset
-generation starts. Output files must end in `.csv` or `.yaml`.
+Use positive whole numbers for `--numPersonas` and `--numTestCasesPerPersona`.
+Their product must be 1,000 or less. Output files must end in `.csv` or `.yaml`.
+Promptfoo checks both counts and the output filename before loading the provider.
 
 ## `promptfoo generate assertions`
 
@@ -863,9 +863,9 @@ When brainstorming assertions:
 | `--provider <provider>`     | Provider to use for generating assertions                       | default grader       |
 | `--no-cache`                | Do not read or write results to disk cache                      | false                |
 
-`--numAssertions` must be a positive whole number within JavaScript's safe integer
-range. Invalid counts and output filenames are rejected before assertion generation
-starts. Output files must end in `.yaml`.
+`--numAssertions` must be a whole number from 1 to 1,000. Output files must
+end in `.yaml`. Promptfoo checks the count and output filename before loading the
+provider.
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
