@@ -44,6 +44,7 @@ These rules apply to `coding-agent:trace-redaction` and `harness:artifact-redact
 
 - Configure inline synthetic values or receipt files. Receipt files must be regular UTF-8 text files under the working directory or the system temporary directory, from 16 bytes to 64 KiB. Public artifact paths are visible to generation providers.
 - Trust your configuration, target, and setup hooks. Local `beforeAll` and `beforeEach` hooks can initialize or change receipt locations. The verifier captures receipt values before the target runs.
+- The trusted target receives the rendered task as written, including any synthetic values you put in it. Promptfoo masks known verifier fields, receipt paths and aliases in the surrounding test, prompt configuration and variables before direct and adaptive calls. A stateful target can receive its own session ID on later turns.
 - Output transforms and privacy-assertion transforms fail verification. Every response must be fresh and inspectable. Best-of-N is excluded because the selected answer cannot account for discarded responses.
 - During private evaluations Promptfoo disables normal logging and the response cache. It omits new trace contexts for private rows and withholds historical spans whose ownership cannot be verified.
 - Promptfoo disables replay for protected evaluations, even when a provider catalog is available. The MCP evaluation tool also hides prompt labels, provider IDs and filter text.
