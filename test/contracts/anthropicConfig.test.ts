@@ -27,6 +27,10 @@ const shared = {
   cost: 1,
   inputCost: 2,
   outputCost: 3,
+  openTelemetry: {
+    propagation: false,
+    traces: { contentMode: 'metadata_only', maxContentBytes: 100 },
+  },
 };
 const commonInvalid: unknown[] = [
   null,
@@ -36,10 +40,14 @@ const commonInvalid: unknown[] = [
   { apiKeyRequired: 'false' },
   { headers: { Authorization: 1 } },
   { inputCost: '1' },
+  { openTelemetry: { traces: { contentMode: 'all' } } },
+  { openTelemetry: { tracerProvider: {} } },
   { unknown: true },
   { model: 'ignored-model' },
 ];
 const validMessages = [
+  { openTelemetry: false },
+  { openTelemetry: { traces: true } },
   { max_tool_calls: 1 },
   { max_tool_calls: 8 },
   { tools: [{ type: 'web_search_20260209' }, { type: 'web_fetch_20260209' }] },

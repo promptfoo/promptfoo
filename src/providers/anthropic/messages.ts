@@ -1,6 +1,4 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { defaultTextMapSetter, context as otelContext, type Span } from '@opentelemetry/api';
-import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   getCache,
   getCacheClearGeneration,
@@ -33,11 +31,7 @@ import {
   CLAUDE_CODE_X_APP,
   isCredentialExpired,
 } from './claudeCodeAuth';
-import {
-  AnthropicGenericProvider,
-  hashAnthropicCacheValue,
-  TRACE_CONTEXT_HEADERS,
-} from './generic';
+import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
@@ -62,6 +56,7 @@ import {
   resolveClaudeSamplingParams,
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { Span } from '@opentelemetry/api';
 
 import type {
   CallApiContextParams,
@@ -79,15 +74,11 @@ const MAX_PAUSE_TURN_RESUMES = 5;
 
 type AnthropicMessageStream = {
   finalMessage(): Promise<Anthropic.Messages.Message>;
-  request_id?: string | null;
   on?(
     event: 'streamEvent',
     listener: (event: Anthropic.Messages.MessageStreamEvent) => void,
   ): unknown;
 };
-
-/** A message with the `request-id` header the SDK attaches to the messages it parses. */
-type MessageWithRequestId = Anthropic.Messages.Message & { _request_id?: string | null };
 
 async function finalMessageWithStreamedStopDetails(
   stream: AnthropicMessageStream,
@@ -101,40 +92,17 @@ async function finalMessageWithStreamedStopDetails(
   });
 
   const finalMessage = await stream.finalMessage();
-  const message =
-    finalMessage.stop_details == null && streamedStopDetails != null
-      ? { ...finalMessage, stop_details: streamedStopDetails }
-      : finalMessage;
-  // The SDK attaches `_request_id` to parsed messages only. Like the SDK, keep it out of
-  // serialization so cached responses never carry a stale request ID.
-  if (stream.request_id && (message as MessageWithRequestId)._request_id == null) {
-    Object.defineProperty(message, '_request_id', {
-      value: stream.request_id,
-      enumerable: false,
-    });
-  }
-  return message;
-}
-
-// The Claude API reads W3C trace context. Writing only that, rather than whatever the
-// application's registered propagator writes, keeps baggage off every host.
-const traceContextPropagator = new W3CTraceContextPropagator();
-
-/**
- * The active span's W3C trace context, for a request the SDK sends without a span of its own.
- * Trace context that the config sets is left alone.
- */
-function getTraceContextHeaders(headers: Record<string, string>): Record<string, string> {
-  if (Object.keys(headers).some((name) => TRACE_CONTEXT_HEADERS.has(name.toLowerCase()))) {
-    return {};
-  }
-  const carrier: Record<string, string> = {};
-  traceContextPropagator.inject(otelContext.active(), carrier, defaultTextMapSetter);
-  return carrier;
+  return finalMessage.stop_details == null && streamedStopDetails != null
+    ? { ...finalMessage, stop_details: streamedStopDetails }
+    : finalMessage;
 }
 
 /** The request parameters as sent, which can differ from the config (defaults, dropped params). */
-function setRequestSpanAttributes(span: Span, params: Anthropic.Messages.MessageCreateParams) {
+function setRequestSpanAttributes(
+  span: Span,
+  params: Anthropic.Messages.MessageCreateParams &
+    Pick<AnthropicMessageOptions, 'temperature' | 'top_p' | 'top_k'>,
+) {
   span.setAttribute(GenAIAttributes.REQUEST_MAX_TOKENS, params.max_tokens);
   for (const [attribute, value] of [
     [GenAIAttributes.REQUEST_TEMPERATURE, params.temperature],
@@ -147,18 +115,11 @@ function setRequestSpanAttributes(span: Span, params: Anthropic.Messages.Message
   }
 }
 
-/**
- * Identify the response on the span. `anthropic.request.id` is the `request-id` header, which
- * Anthropic support asks for and which the Claude API's own spans carry too.
- */
-function setResponseSpanAttributes(span: Span, message: MessageWithRequestId) {
+function setResponseSpanAttributes(span: Span, message: Anthropic.Messages.Message) {
   span.setAttribute(GenAIAttributes.RESPONSE_ID, message.id);
   span.setAttribute(GenAIAttributes.RESPONSE_MODEL, message.model);
   if (message.stop_reason) {
     span.setAttribute('anthropic.message.stop_reason', message.stop_reason);
-  }
-  if (message._request_id) {
-    span.setAttribute('anthropic.request.id', message._request_id);
   }
 }
 
@@ -458,24 +419,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   /** Resume paused server-tool turns, retaining each request for usage and cost. */
   private async sendMessage(
     params: Anthropic.Messages.MessageCreateParams,
-    headers: Record<string, string>,
+    requestOptions: Anthropic.RequestOptions,
     shouldStream: boolean,
     responses: Anthropic.Messages.Message[],
-    signal?: AbortSignal,
   ): Promise<Anthropic.Messages.Message> {
-    const client = this.clientForHeaders(headers);
-    const requestOptions = {
-      ...(Object.keys(headers).length > 0 && { headers }),
-      ...(signal && { signal }),
-    };
+    const { signal } = requestOptions;
     const send = async (requestParams: Anthropic.Messages.MessageCreateParams) => {
       signal?.throwIfAborted();
       requestParams = withTurnContainer(requestParams, responses);
       const message = shouldStream
         ? await finalMessageWithStreamedStopDetails(
-            await client.messages.stream(requestParams, requestOptions),
+            await this.anthropic.messages.stream(requestParams, requestOptions),
           )
-        : ((await client.messages.create(
+        : ((await this.anthropic.messages.create(
             requestParams,
             requestOptions,
           )) as Anthropic.Messages.Message);
@@ -524,21 +480,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   private async resolveMcpToolUse({
     config,
-    headers,
+    requestOptions,
     initialResponse,
     params,
     responses,
     shouldStream,
-    signal,
   }: {
     config: AnthropicMessageOptions;
-    headers: Record<string, string>;
+    requestOptions: Anthropic.RequestOptions;
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     /** Every API call made so far, for usage and cost. */
     responses: Anthropic.Messages.Message[];
     shouldStream: boolean;
-    signal?: AbortSignal;
   }): Promise<{
     error?: string;
     response: Anthropic.Messages.Message;
@@ -577,7 +531,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let executedMcpToolCalls = 0;
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
-      signal?.throwIfAborted();
+      requestOptions.signal?.throwIfAborted();
       const responseToolUses = response.content.filter(
         (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
       );
@@ -633,10 +587,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       response = await this.sendMessage(
         getMcpContinuationParams(params, messages),
-        headers,
+        requestOptions,
         shouldStream,
         responses,
-        signal,
       );
     }
 
@@ -809,8 +762,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      (span) =>
-        this.withoutApplicationBaggage(() => this.callApiInternal(prompt, span, context, options)),
+      (span) => this.callApiInternal(prompt, span, context, options),
       resultExtractor,
     );
   }
@@ -1230,21 +1182,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // A traced call sends its span's context, so Claude API tracing places the API's spans in the
-    // eval's trace. Kept out of `headers`, which key the response cache.
-    const requestHeaders =
-      context?.traceparent && this.propagatesTraceContext
-        ? { ...headers, ...getTraceContextHeaders(headers) }
-        : headers;
     const responses: Anthropic.Messages.Message[] = [];
     try {
       const signal = options?.abortSignal;
+      const requestOptions = {
+        ...(Object.keys(headers).length > 0 && { headers }),
+        ...(signal && { signal }),
+        ...this.traceRequestOptions(span, !!context?.traceparent),
+      };
       const initialMessage = await this.sendMessage(
         params,
-        requestHeaders,
+        requestOptions,
         shouldStream,
         responses,
-        signal,
       );
       signal?.throwIfAborted();
 
@@ -1254,12 +1204,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         toolCalls,
       } = await this.resolveMcpToolUse({
         config,
-        headers: requestHeaders,
+        requestOptions,
         initialResponse: initialMessage,
         params,
         responses,
         shouldStream,
-        signal,
       });
       const cost = this.calculateMessageCosts(config, responses);
       setResponseSpanAttributes(span, responses[responses.length - 1]);
@@ -1326,9 +1275,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
       );
       let error = `API call error: ${err instanceof Error ? err.message : String(err)}`;
-      if (err instanceof APIError && err.requestID) {
-        span.setAttribute('anthropic.request.id', err.requestID);
-      }
       if (err instanceof APIError && err.error) {
         const errorDetails = err.error as { error: { message: string; type: string } };
         error = `API call error: ${errorDetails.error.message}, status ${err.status}, type ${errorDetails.error.type}`;

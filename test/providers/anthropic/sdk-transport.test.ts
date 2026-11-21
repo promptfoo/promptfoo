@@ -17,7 +17,6 @@ import { registerTracerProvider } from '../../../src/tracing/tracerProvider';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
-import type { CloudflareGatewayConfig } from '../../../src/providers/cloudflare-gateway';
 import type { EnvOverrides } from '../../../src/types/env';
 import type { CallApiContextParams } from '../../../src/types/index';
 
@@ -25,6 +24,7 @@ const servers: Server[] = [];
 
 type ServerOptions = {
   status?: 200 | 401;
+  failStreamAt?: number;
   /** One stop reason per response, so a `pause_turn` first response makes the turn resume. */
   stopReasons?: string[];
 };
@@ -67,7 +67,11 @@ function streamPayload(stopReason: string) {
   return events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('');
 }
 
-async function createMessagesServer({ status = 200, stopReasons = ['end_turn'] }: ServerOptions) {
+async function createMessagesServer({
+  status = 200,
+  failStreamAt,
+  stopReasons = ['end_turn'],
+}: ServerOptions) {
   const requests: {
     method: string | undefined;
     url: string | undefined;
@@ -75,6 +79,7 @@ async function createMessagesServer({ status = 200, stopReasons = ['end_turn'] }
     traceparent: string | undefined;
     tracestate: string | undefined;
     baggage: string | undefined;
+    proxySecret: string | undefined;
     body: any;
   }[] = [];
   const server = createServer(async (request, response) => {
@@ -90,6 +95,7 @@ async function createMessagesServer({ status = 200, stopReasons = ['end_turn'] }
       traceparent: request.headers.traceparent as string | undefined,
       tracestate: request.headers.tracestate as string | undefined,
       baggage: request.headers.baggage as string | undefined,
+      proxySecret: request.headers['x-proxy-secret'] as string | undefined,
       body,
     });
     const requestId = `req_local_${requests.length}`;
@@ -108,11 +114,25 @@ async function createMessagesServer({ status = 200, stopReasons = ['end_turn'] }
     const stopReason = stopReasons[Math.min(requests.length, stopReasons.length) - 1];
     if (body.stream) {
       response.writeHead(200, { 'content-type': 'text/event-stream', 'request-id': requestId });
-      response.end(streamPayload(stopReason));
+      response.end(
+        failStreamAt === requests.length
+          ? 'event: ping\ndata: {"type":"ping"}\n\n'
+          : streamPayload(stopReason),
+      );
       return;
     }
     response.writeHead(200, { 'content-type': 'application/json', 'request-id': requestId });
-    response.end(JSON.stringify(messagePayload(stopReason)));
+    const payload = messagePayload(stopReason);
+    response.end(
+      JSON.stringify(
+        stopReason === 'tool_use'
+          ? {
+              ...payload,
+              content: [{ type: 'tool_use', id: 'toolu_1', name: 'lookup', input: {} }],
+            }
+          : payload,
+      ),
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   servers.push(server);
@@ -133,6 +153,20 @@ afterEach(async () => {
         }),
     ),
   );
+});
+
+it('sends no trace context before a tracer provider is registered', async () => {
+  const { requests, baseUrl } = await createMessagesServer({});
+  const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+    config: { apiKey: 'local-qa-key', apiBaseUrl: baseUrl },
+  });
+  const result = await provider.callApi('ping', {
+    prompt: { raw: 'ping', label: 'ping' },
+    vars: {},
+    traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+  });
+  expect(result.output).toBe('pong');
+  expect(requests).toMatchObject([{ traceparent: undefined, tracestate: undefined }]);
 });
 
 describe('Anthropic Messages SDK transport', () => {
@@ -295,6 +329,23 @@ describe('Anthropic Messages SDK transport', () => {
     expect(requests[0].traceparent).toBe(traceparentOf(chatSpan!.spanContext()));
   });
 
+  it.each([1, 2])(
+    'records the request ID even when stream %i fails after headers',
+    async (failStreamAt) => {
+      const { chatSpan, result } = await callProvider(
+        { stream: true },
+        { stopReasons: ['pause_turn', 'end_turn'], failStreamAt },
+      );
+      expect(chatSpan?.attributes['anthropic.request.id']).toBe(`req_local_${failStreamAt}`);
+      if (failStreamAt === 1) {
+        expect(result.error).toBeDefined();
+        expect(chatSpan?.status.code).toBe(SpanStatusCode.ERROR);
+      } else {
+        expect(result.output).toBe('pong');
+      }
+    },
+  );
+
   it('sends the trace context with every request of a resumed turn', async () => {
     const { chatSpan, requests, spans } = await callProvider(
       {},
@@ -409,6 +460,28 @@ describe('Anthropic Messages SDK transport', () => {
     expect(requests[0].baggage).toBeUndefined();
   });
 
+  it('preserves application baggage for MCP callbacks between SDK requests', async () => {
+    const { baseUrl, requests } = await createMessagesServer({
+      stopReasons: ['tool_use', 'end_turn'],
+    });
+    const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+      config: { apiKey: 'local-qa-key', apiBaseUrl: baseUrl, openTelemetry: true },
+    });
+    let email: string | undefined;
+    Object.assign(provider, {
+      mcpClient: {
+        getAllTools: () => [{ name: 'lookup', inputSchema: { type: 'object' } }],
+        callTool: async () => {
+          email = propagation.getActiveBaggage()?.getEntry('user.email')?.value;
+          return { content: [{ type: 'text', text: 'ok' }] };
+        },
+      },
+    });
+    await insideApplicationSpan((ctx) => provider.callApi('ping', ctx));
+    expect(email).toBe('alice@example.com');
+    expect(requests.map((request) => request.baggage)).toEqual([undefined, undefined]);
+  });
+
   it.each([
     { source: 'headers', config: { headers: { baggage: 'tenant=acme' } }, processEnv: {} },
     {
@@ -471,21 +544,36 @@ describe('Anthropic Messages SDK transport', () => {
           gatewayId: 'gateway',
           apiKey: 'local-qa-key',
           openTelemetry: true,
-        } as CloudflareGatewayConfig,
+        },
         env: {
           ANTHROPIC_CUSTOM_HEADERS:
             'baggage: tenant=private\ntraceparent: 00-11111111111111111111111111111111-2222222222222222-01',
         },
       });
       await insideApplicationSpan((callContext) => gateway.callApi('ping', callContext));
+      const restore = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: private' });
+      try {
+        await gateway.callApi('ping', {
+          ...tracedCall,
+          prompt: {
+            ...tracedCall.prompt,
+            config: { headers: { traceparent: tracedCall.traceparent } },
+          },
+        });
+      } finally {
+        restore();
+      }
     } finally {
       fetchSpy.mockRestore();
     }
     await tracerProvider.forceFlush();
 
-    expect(gatewayUrls).toEqual([
-      'https://gateway.ai.cloudflare.com/v1/account/gateway/anthropic/v1/messages',
-    ]);
+    const url = 'https://gateway.ai.cloudflare.com/v1/account/gateway/anthropic/v1/messages';
+    expect(gatewayUrls).toEqual([url, url]);
+    expect(requests[1]).toMatchObject({
+      traceparent: tracedCall.traceparent,
+      proxySecret: undefined,
+    });
     // The suppressed trace context leaves the SDK to send its own.
     expect(requests[0].traceparent).toBe(
       traceparentOf(sdkSpanOf(exporter.getFinishedSpans())!.spanContext()),
@@ -562,13 +650,38 @@ describe('Anthropic Messages SDK transport', () => {
     },
   );
 
+  it.each([true, undefined])(
+    'injects when prompt headers replace a configured trace (SDK: %s)',
+    async (openTelemetry) => {
+      const { requests, chatSpan, spans } = await callProvider(
+        { openTelemetry, headers: { traceparent: tracedCall.traceparent! } },
+        {
+          callContext: {
+            ...tracedCall,
+            prompt: { ...tracedCall.prompt, config: { headers: { 'x-other': 'x' } } },
+          },
+        },
+      );
+      const span = openTelemetry ? sdkSpanOf(spans) : chatSpan;
+      expect(requests[0].traceparent).toBe(traceparentOf(span!.spanContext()));
+    },
+  );
+
   it('sends the trace context of the default Anthropic rubric grader', async () => {
     const { baseUrl, requests } = await createMessagesServer({});
     const grader = new AnthropicLlmRubricProvider('claude-sonnet-4-6', {
       config: { apiKey: 'local-qa-key', apiBaseUrl: baseUrl },
     });
 
-    await grader.callApi('Grade this output', tracedCall);
+    await grader.callApi('Grade this output', {
+      ...tracedCall,
+      prompt: {
+        ...tracedCall.prompt,
+        config: { tools: [], headers: { 'x-proxy-secret': 'private' } },
+      },
+    });
+    expect(requests[0].body.tools[0].name).toBe('grade_output');
+    expect(requests[0].proxySecret).toBeUndefined();
     await tracerProvider.forceFlush();
 
     const chatSpan = exporter

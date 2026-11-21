@@ -32,7 +32,9 @@ const CLOUDFLARE_GATEWAY_BASE_URL = 'https://gateway.ai.cloudflare.com/v1';
 /**
  * Configuration for Cloudflare AI Gateway providers
  */
-export interface CloudflareGatewayConfig extends OpenAiCompletionOptions {
+export interface CloudflareGatewayConfig
+  extends OpenAiCompletionOptions,
+    Pick<AnthropicMessageOptions, 'top_k' | 'openTelemetry'> {
   /** Cloudflare account ID */
   accountId?: string;
   /** Environment variable name for account ID (default: CLOUDFLARE_ACCOUNT_ID) */
@@ -376,11 +378,7 @@ function getAnthropicPassthroughConfig(config?: CloudflareGatewayConfig): Anthro
     return {};
   }
 
-  const { apiKey, max_tokens, temperature, top_p, cost } = config;
-  const { top_k, openTelemetry } = config as Pick<
-    AnthropicMessageOptions,
-    'top_k' | 'openTelemetry'
-  >;
+  const { apiKey, max_tokens, temperature, top_p, top_k, cost, openTelemetry } = config;
 
   return {
     ...(apiKey !== undefined && { apiKey }),

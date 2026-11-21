@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { context as otelContext, propagation } from '@opentelemetry/api';
+import { context as otelContext, propagation, type Span } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { type EnvVarKey, getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
 import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
@@ -13,7 +14,7 @@ import {
   isCredentialExpired,
   loadClaudeCodeCredential,
 } from './claudeCodeAuth';
-import type { ClientOptions } from '@anthropic-ai/sdk';
+import type { ClientOptions, OpenTelemetryOptions } from '@anthropic-ai/sdk';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../../types/env';
@@ -24,7 +25,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
-import type { AnthropicBaseOptions, AnthropicOpenTelemetryOptions } from './types';
+import type { AnthropicBaseOptions } from './types';
 
 function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
   return (
@@ -110,36 +111,10 @@ function parseAnthropicCustomHeaders(value: string | undefined): Record<string, 
   return headers;
 }
 
-/** The W3C trace context headers, which the Claude API reads. */
-export const TRACE_CONTEXT_HEADERS = new Set(['traceparent', 'tracestate']);
-
-function hasHeader(headers: Record<string, unknown> | undefined, names: Set<string>): boolean {
-  return Object.keys(headers ?? {}).some((name) => names.has(name.toLowerCase()));
-}
-
-/**
- * Whether the client's default headers carry W3C trace context, merged as the SDK merges them: the
- * process's `ANTHROPIC_CUSTOM_HEADERS` first, then `defaultHeaders`, where `null` drops a header.
- */
-function defaultHeadersSetTraceContext(defaultHeaders: ClientOptions['defaultHeaders']): boolean {
-  const names = new Set<string>();
-  for (const [name, value] of Object.entries({
-    ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
-    ...(defaultHeaders as Record<string, string | null | undefined> | undefined),
-  })) {
-    if (value === null) {
-      names.delete(name.toLowerCase());
-    } else if (typeof value === 'string') {
-      names.add(name.toLowerCase());
-    }
-  }
-  return [...TRACE_CONTEXT_HEADERS].some((name) => names.has(name));
-}
+const traceContextPropagator = new W3CTraceContextPropagator();
 
 /** A config value as `true`, `false`, an options object, or unset; templated booleans are strings. */
-function normalizeOpenTelemetryOption(
-  option: unknown,
-): boolean | AnthropicOpenTelemetryOptions | undefined {
+function normalizeOpenTelemetryOption(option: unknown): boolean | OpenTelemetryOptions | undefined {
   if (typeof option === 'string') {
     const value = option.trim().toLowerCase();
     return value === 'true' ? true : value === 'false' ? false : undefined;
@@ -148,45 +123,19 @@ function normalizeOpenTelemetryOption(
     return option;
   }
   return typeof option === 'object' && option !== null && !Array.isArray(option)
-    ? (option as AnthropicOpenTelemetryOptions)
+    ? (option as OpenTelemetryOptions)
     : undefined;
 }
 
-/**
- * The SDK's `openTelemetry` client option for a provider's `openTelemetry` config, and whether
- * promptfoo sends trace context itself. Promptfoo records its own span for every call, so the
- * SDK's spans, which would repeat it, stay off unless the config asks for them. The SDK sends
- * trace context only from spans of its own, so promptfoo sends its span's while the SDK's are
- * off. The SDK's `ANTHROPIC_OPEN_TELEMETRY*` variables are read through promptfoo's environment
- * layers, like other provider settings, and `ANTHROPIC_OPEN_TELEMETRY_PROPAGATION=false` stops
- * trace context unless an options object sets `propagation`.
- */
-function resolveOpenTelemetry(
-  option: unknown,
-  env: EnvOverrides | undefined,
-  configuresTraceContext: boolean,
-): {
-  client: ClientOptions['openTelemetry'];
-  propagatesTraceContext: boolean;
-  sdkPropagatesTraceContext: boolean;
-} {
+// SDK spans are opt-in. Handle propagation separately in request middleware,
+// after client defaults and prompt headers have been merged.
+function resolveOpenTelemetry(option: unknown, env?: EnvOverrides) {
   const read = (key: EnvVarKey) =>
     (getProviderEnvString(env, key) ?? getEnvString(key))?.trim().toLowerCase();
-  const propagation = read('ANTHROPIC_OPEN_TELEMETRY_PROPAGATION') !== 'false';
-  const value = normalizeOpenTelemetryOption(option);
-  if (value === undefined || value === false) {
-    return {
-      client: false,
-      propagatesTraceContext: value === undefined && propagation && !configuresTraceContext,
-      sdkPropagatesTraceContext: false,
-    };
-  }
-
-  let client: Exclude<ClientOptions['openTelemetry'], false | undefined>;
+  let value = normalizeOpenTelemetryOption(option);
   if (value === true) {
     const maxContentBytes = read('ANTHROPIC_OPEN_TELEMETRY_TRACES_MAX_CONTENT_BYTES');
-    client = {
-      propagation,
+    value = {
       traces: {
         enabled: read('ANTHROPIC_OPEN_TELEMETRY') !== 'false',
         contentMode:
@@ -198,21 +147,12 @@ function resolveOpenTelemetry(
           : {}),
       },
     };
-  } else {
-    client = { ...value, propagation: value.propagation ?? propagation };
-  }
-  const { traces } = client;
-  // A null `traces`, which YAML gives for a key with no value, is unset to the SDK.
-  const spans = traces !== false && (typeof traces !== 'object' || traces?.enabled !== false);
-  // The SDK replaces trace context headers with its own span's; the config's win, as they do
-  // when promptfoo sends trace context, and the SDK still records its spans.
-  if (spans && configuresTraceContext) {
-    client = { ...client, propagation: false };
   }
   return {
-    client,
-    propagatesTraceContext: !spans && client.propagation !== false && !configuresTraceContext,
-    sdkPropagatesTraceContext: spans && client.propagation !== false,
+    client: value ? { ...value, propagation: false } : (false as const),
+    propagate:
+      value !== false &&
+      (value?.propagation ?? read('ANTHROPIC_OPEN_TELEMETRY_PROPAGATION') !== 'false'),
   };
 }
 
@@ -350,12 +290,7 @@ export class AnthropicGenericProvider implements ApiProvider {
   claudeCodeCredential?: ClaudeCodeOAuthCredential;
   anthropic: Anthropic;
   label?: string;
-  /** Whether requests of a traced call carry promptfoo's span context (see `openTelemetry`). */
-  protected readonly propagatesTraceContext: boolean;
-  /** Whether the SDK sends its own span's trace context (see `withoutApplicationBaggage`). */
-  private readonly sdkPropagatesTraceContext: boolean;
-  /** `anthropic` without trace context propagation (see `clientForHeaders`). */
-  private anthropicWithoutPropagation?: Anthropic;
+  private readonly propagateTrace: boolean;
   private readonly clientHasCustomHeaders: boolean;
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<
@@ -445,28 +380,19 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
-    const clientOptions = this.buildAnthropicClientOptions({
-      apiKey: this.apiKey ?? null,
-      authToken: authToken ?? null,
-      baseURL: this.getApiBaseUrl(),
-      ...(Object.keys(clientDefaultHeaders).length > 0
-        ? { defaultHeaders: clientDefaultHeaders }
-        : {}),
-    });
-    // Trace context that the config sets, in `headers` or in custom headers that reach this host
-    // (read after a subclass isolates them), is sent as set.
-    const openTelemetry = resolveOpenTelemetry(
-      this.config.openTelemetry,
-      this.env,
-      hasHeader(this.config.headers, TRACE_CONTEXT_HEADERS) ||
-        defaultHeadersSetTraceContext(clientOptions.defaultHeaders),
+    const telemetry = resolveOpenTelemetry(this.config.openTelemetry, this.env);
+    this.propagateTrace = telemetry.propagate;
+    this.anthropic = new PromptfooAnthropicClient(
+      this.buildAnthropicClientOptions({
+        apiKey: this.apiKey ?? null,
+        authToken: authToken ?? null,
+        baseURL: this.getApiBaseUrl(),
+        openTelemetry: telemetry.client,
+        ...(Object.keys(clientDefaultHeaders).length > 0
+          ? { defaultHeaders: clientDefaultHeaders }
+          : {}),
+      }),
     );
-    this.propagatesTraceContext = openTelemetry.propagatesTraceContext;
-    this.sdkPropagatesTraceContext = openTelemetry.sdkPropagatesTraceContext;
-    this.anthropic = new PromptfooAnthropicClient({
-      ...clientOptions,
-      openTelemetry: openTelemetry.client,
-    });
     this.id = id ? () => id : this.id;
   }
 
@@ -482,30 +408,42 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   /**
-   * Runs SDK calls without the application's baggage while the SDK sends trace context: it writes
-   * it with the application's registered propagator, which would also send the application's
-   * baggage, and the Claude API reads only W3C trace context. Headers that the config sets,
-   * `baggage` included, go out as configured.
+   * SDK middleware runs in the SDK span when enabled, otherwise in promptfoo's.
+   * This keeps explicit headers intact without cloning the client and rereading
+   * process credentials. Request IDs arrive before stream consumption or errors.
    */
-  protected withoutApplicationBaggage<T>(call: () => T): T {
-    return this.sdkPropagatesTraceContext
-      ? otelContext.with(propagation.deleteBaggage(otelContext.active()), call)
-      : call();
-  }
-
-  /**
-   * The client for a request with `headers`. While the SDK sends trace context, a request whose
-   * headers set it, such as from a prompt's `config.headers`, goes through a copy of the client
-   * that does not, so its headers go out as set and the SDK still records its spans.
-   */
-  protected clientForHeaders(headers: Record<string, string>): Anthropic {
-    if (!this.sdkPropagatesTraceContext || !hasHeader(headers, TRACE_CONTEXT_HEADERS)) {
-      return this.anthropic;
+  protected traceRequestOptions(
+    span?: Span,
+    traced = false,
+  ): Pick<Anthropic.RequestOptions, 'middleware'> {
+    const sdkSpans = this.anthropic.openTelemetry?.traces.enabled;
+    const inject = this.propagateTrace && (sdkSpans || traced);
+    if (!inject && !span?.isRecording()) {
+      return {};
     }
-    this.anthropicWithoutPropagation ??= this.anthropic.withOptions({
-      openTelemetry: { ...this.anthropic.openTelemetry, propagation: false },
-    });
-    return this.anthropicWithoutPropagation;
+    return {
+      middleware: [
+        async (request, next) => {
+          const { headers } = request;
+          let active = otelContext.active();
+          if (inject && !headers.has('traceparent') && !headers.has('tracestate')) {
+            if (sdkSpans) {
+              active = propagation.deleteBaggage(active);
+            }
+            const propagator = sdkSpans ? propagation : traceContextPropagator;
+            propagator.inject(active, headers, {
+              set: (carrier, key, value) => carrier.set(key, value),
+            });
+          }
+          const response = await otelContext.with(active, () => next(request));
+          const requestId = response.headers.get('request-id');
+          if (requestId) {
+            span?.setAttribute('anthropic.request.id', requestId);
+          }
+          return response;
+        },
+      ],
+    };
   }
 
   id(): string {

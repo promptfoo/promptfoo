@@ -74,8 +74,12 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // The context carries the grader's trace context, which Claude API tracing needs.
-    const result = await super.callApi(prompt, context, options);
+    // Keep the grader's own tool and header configuration while linking its trace.
+    const graderContext = context && {
+      ...context,
+      prompt: { ...context.prompt, config: undefined },
+    };
+    const result = await super.callApi(prompt, graderContext, options);
     if (typeof result.output !== 'string') {
       return {
         error: `Anthropic LLM rubric grader - malformed non-string output\n\n${JSON.stringify(result.output)}`,
@@ -111,6 +115,9 @@ export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
     ...env,
     ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY ?? getEnvString('ANTHROPIC_API_KEY'),
     ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL ?? getEnvString('ANTHROPIC_BASE_URL'),
+    ANTHROPIC_OPEN_TELEMETRY_PROPAGATION:
+      env?.ANTHROPIC_OPEN_TELEMETRY_PROPAGATION ??
+      getEnvString('ANTHROPIC_OPEN_TELEMETRY_PROPAGATION'),
     ANTHROPIC_CUSTOM_HEADERS:
       env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS'),
   };
