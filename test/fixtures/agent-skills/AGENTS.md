@@ -54,8 +54,7 @@ for config in $(find test/fixtures/agent-skills -name promptfooconfig.yaml -o -n
 done
 ```
 
-For the live eligibility eval, use the preparation and run commands at the top
-of `redteam-eligibility/promptfooconfig.yaml`. Preparation copies only synthetic
-repositories and the real bundle to a temporary workspace, keeping expected
-answers outside the evaluated agent's working directory. Inspect exported
-results as well as the exit code; model access is required.
+The optional live eligibility eval uses the Claude Agent SDK with
+`ANTHROPIC_API_KEY`. Follow the command in `redteam-eligibility/promptfooconfig.yaml`.
+Keep the model's tools limited to bundled skills. The fixture supplies source
+text from a fixed file list and compares citations against those files locally.
