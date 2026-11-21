@@ -248,6 +248,30 @@ const EvaluateTestSuiteCreator = () => {
     event.target.value = '';
   };
 
+  const replaceConfiguration = () => {
+    if (!pendingImport) {
+      return;
+    }
+    const previous = useStore.getState().config;
+    try {
+      setConfig(pendingImport);
+    } catch {
+      // Zustand updates memory before writing storage. A failed write leaves
+      // the old storage entry intact. Restore the exact in-memory config too.
+      try {
+        useStore.setState({ config: previous });
+      } catch {
+        // Storage may reject the rollback write after memory has been restored.
+      }
+      showToast('Could not save the configuration. Check browser storage and try again.', 'error');
+      return;
+    }
+    setPendingImport(null);
+    setHasUnsavedYaml(false);
+    setResetKey((k) => k + 1);
+    showToast('Configuration loaded successfully', 'success');
+  };
+
   return (
     <PageContainer>
       <Tabs
@@ -772,19 +796,7 @@ const EvaluateTestSuiteCreator = () => {
             <Button variant="outline" onClick={() => setPendingImport(null)}>
               Cancel
             </Button>
-            <Button
-              onClick={() => {
-                if (pendingImport) {
-                  setConfig(pendingImport);
-                  setPendingImport(null);
-                  setHasUnsavedYaml(false);
-                  setResetKey((k) => k + 1);
-                  showToast('Configuration loaded successfully', 'success');
-                }
-              }}
-            >
-              Replace configuration
-            </Button>
+            <Button onClick={replaceConfiguration}>Replace configuration</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -252,4 +252,4 @@ High-failure categories under low reasoning:
 
 Want the full red team report? Contact us at inquiries@promptfoo.dev.
 
-Questions? Find us on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
+Questions? Find us on [Discord](https://discord.gg/gHPS9jjfbs) or [GitHub](https://github.com/promptfoo/promptfoo).
