@@ -338,6 +338,42 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)(
+    'preserves literal operands without ending authentication masking in %s',
+    async (format) => {
+      const cmd = ['curl', '--data', '&&', '-u', 'bot:opaque/value', 'https://host'];
+      const { attributes, payload } = await exportCustomData(
+        { cmd, nested: JSON.stringify(cmd) },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque');
+      expect(attributes.cmd).toEqual(
+        wireStrings('curl', '--data', '&&', '-u', '<redacted>', 'https://host'),
+      );
+      expect(attributes.command).toBe('curl --data && -u <redacted> https://host');
+    },
+  );
+
+  it.each(formats)('uses environment rules only in environment maps in %s', async (format) => {
+    const env = { DBPWD: 'opaque', VENDOR_CERTKEY: 'opaque', KEY: 'opaque', MAX_TOKENS: '128' };
+    const { attributes, payload } = await exportCustomData(
+      {
+        env,
+        nested: JSON.stringify({ environment: env }),
+        'process.env.DBPWD': 'opaque',
+        'environmentVariables._DBPWD': 'opaque',
+        environment: [{ name: 'APP_ENCRYPTIONKEY', value: 'opaque' }],
+        envVars: ['DBPWD=opaque', 'REGION=west'],
+        key: 'item',
+      },
+      format,
+    );
+    expect(JSON.stringify(payload)).not.toContain('opaque');
+    expect(JSON.parse(attributes.env as string).MAX_TOKENS).toBe('128');
+    expect(attributes.envVars).toEqual(wireStrings('<redacted>', 'REGION=west'));
+    expect(attributes.key).toBe('item');
+  });
+
   it.each(formats)('preserves unrelated command options after curl in %s', async (format) => {
     const cmd = 'curl https://example.test && rg curl -u src ; git push -u origin main'.split(' ');
     const { attributes, payload } = await exportCustomData(

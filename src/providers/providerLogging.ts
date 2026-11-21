@@ -1,5 +1,6 @@
 import {
   isCredentialHeader,
+  isSecretEnvVarName,
   normalizeFieldName,
   REDACTED,
   SECRET_FIELD_NAMES,
@@ -27,20 +28,31 @@ export function sanitizeProviderObject(value: unknown, context: string): unknown
   return sanitizeObject(value, { context });
 }
 
+export function isEnvironmentAttribute(key: string): boolean {
+  return /env(?:iron(?:ment)?)?(?:[._-]?(?:vars|variables))?$/i.test(key);
+}
+
 /** Classify credential fields in provider traces while preserving usage and other descriptive metadata. */
-export function isCredentialAttributeKey(key: string): boolean {
+export function isCredentialAttributeKey(key: string, env = false): boolean {
   if (key.includes('\\')) {
     const decoded = key.replace(/(?<!\\)\\+(?:u([\da-f]{4})|[bfnrt])/gi, (_, hex?: string) =>
       hex ? String.fromCharCode(Number.parseInt(hex, 16)) : ' ',
     );
-    if (decoded !== key && isCredentialName(decoded)) {
+    if (decoded !== key && isCredentialName(decoded, env)) {
       return true;
     }
   }
-  return isCredentialName(key);
+  return isCredentialName(key, env);
 }
 
-function isCredentialName(key: string): boolean {
+function isCredentialName(key: string, env = false): boolean {
+  const dot = key.lastIndexOf('.');
+  if (
+    (env || (dot >= 0 && isEnvironmentAttribute(key.slice(0, dot)))) &&
+    isSecretEnvVarName(key.slice(dot + 1))
+  ) {
+    return true;
+  }
   // Java/Maven system properties and Gradle project properties attach a short
   // option to the name. Preserve standalone spellings such as -Password.
   const property = /^-[DP]\w/.test(key);

@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { isCredentialAttributeKey } from '../providerLogging';
+import { isCredentialAttributeKey, isEnvironmentAttribute } from '../providerLogging';
 import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
 
@@ -561,7 +561,7 @@ function commandToString(value: unknown): string | undefined {
   return String(value).trim() || undefined;
 }
 
-type AttributeContext = 'headers' | 'curl' | 'operands' | undefined;
+type AttributeContext = 'env' | 'headers' | 'curl' | 'operands' | undefined;
 
 function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext): string {
   if (typeof value !== 'string') {
@@ -594,6 +594,9 @@ function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext)
 
   if (context && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
     return '<redacted>'; // A truncated header or argument list can still contain credentials.
+  }
+  if (context === 'env' && isCredentialProperty(value, true)) {
+    return '<redacted>';
   }
   return sanitizeCredentialText(value, true, context);
 }
@@ -839,9 +842,9 @@ function classifyExecutable(word: string, arg = unquoteShellWord(word)) {
 
 const PROPERTY_OPTIONS = new Set(['-D', '-P', '--define', '--project-prop', '--system-prop']);
 
-function isCredentialProperty(assignment: string) {
+function isCredentialProperty(assignment: string, env = false) {
   const field = /^\s*([^\s=]+)=/.exec(assignment)?.[1];
-  return field !== undefined && isCredentialAttributeKey(field);
+  return field !== undefined && isCredentialAttributeKey(field, env);
 }
 
 function credentialOption(arg: string, curl: boolean, property: boolean): string | undefined {
@@ -873,13 +876,32 @@ function credentialOption(arg: string, curl: boolean, property: boolean): string
   return undefined;
 }
 
-function argumentRedactor(context?: AttributeContext) {
+// A command array may represent a shell chain. Recognize the conventional
+// switch from a request URL to a file command. Other argv separators can be
+// literal option operands, so keep curl authentication masking active.
+function startsFileCommand(argv: unknown[], index: number) {
+  const previous = argv[index - 1];
+  const next = argv[index + 1];
+  return (
+    typeof previous === 'string' &&
+    /^https?:\/\//i.test(previous) &&
+    typeof next === 'string' &&
+    (next === 'git' || FILE_COMMAND.test(next))
+  );
+}
+
+function argumentRedactor(context?: AttributeContext, argv?: unknown[]) {
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
   let maskNext = false;
   let property = false;
-  return (word: unknown) => {
-    if (typeof word === 'string' && /^[;&|\r\n]+$/.test(word)) {
+  return (word: unknown, index = 0) => {
+    if (
+      typeof word === 'string' &&
+      /^[;&|\r\n]+$/.test(word) &&
+      (!argv ||
+        (!maskNext && mode !== 'expanded' && (mode !== 'curl' || startsFileCommand(argv, index))))
+    ) {
       mode = 'start';
       maskNext = false;
       property = false;
@@ -1007,6 +1029,9 @@ function sanitizeAttributeByKey(
 }
 
 function attributeContext(key: string, source?: Record<string, unknown>): AttributeContext {
+  if (isEnvironmentAttribute(key)) {
+    return 'env';
+  }
   if (/headers?$/i.test(key)) {
     return 'headers';
   }
@@ -1036,15 +1061,19 @@ function attributeContext(key: string, source?: Record<string, unknown>): Attrib
 function isCredentialPairValue(
   source: Record<string, unknown> | unknown[],
   key: string,
-  headerPairs: boolean,
+  context: AttributeContext,
 ) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
     if (typeof option !== 'string') {
       return false;
     }
-    if (headerPairs && Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)) {
-      return isCredentialAttributeKey(option);
+    if (
+      (context === 'headers' || context === 'env') &&
+      Number(key) % 2 === 1 &&
+      /^[A-Za-z_][\w.-]*$/.test(option)
+    ) {
+      return isCredentialAttributeKey(option, context === 'env');
     }
     return /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) && isCredentialAttributeKey(option);
   }
@@ -1052,7 +1081,9 @@ function isCredentialPairValue(
     key.toLowerCase() === 'value' &&
     Object.entries(source).some(
       ([field, name]) =>
-        /^(name|key)$/i.test(field) && typeof name === 'string' && isCredentialAttributeKey(name),
+        /^(name|key)$/i.test(field) &&
+        typeof name === 'string' &&
+        isCredentialAttributeKey(name, context === 'env'),
     )
   );
 }
@@ -1154,15 +1185,15 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     const array = Array.isArray(source);
     charge(array ? source.length : 0);
     const target = array ? new Array<unknown>(source.length) : {};
-    const headers = array && context === 'headers';
-    const redactArgument = array ? argumentRedactor(context) : undefined;
+    const inherited = array && (context === 'headers' || context === 'env') ? context : undefined;
+    const redactArgument = array ? argumentRedactor(context, source) : undefined;
     for (const [key, value] of structuredAttributeEntries(source)) {
       charge(1, key.length + (typeof value === 'string' ? value.length : 0));
-      const entry = redactArgument?.(value) ?? value;
-      const nested = headers ? 'headers' : attributeContext(key, array ? undefined : source);
+      const entry = redactArgument?.(value, Number(key)) ?? value;
+      const nested = inherited ?? attributeContext(key, array ? undefined : source);
       const sensitive =
-        isCredentialAttributeKey(key) ||
-        isCredentialPairValue(source, key, headers) ||
+        isCredentialAttributeKey(key, context === 'env') ||
+        isCredentialPairValue(source, key, context) ||
         isPrivateJwkParameter(source, key);
       Object.defineProperty(target, sanitizeSerializedAttribute(key), {
         configurable: true,
