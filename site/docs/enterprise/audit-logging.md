@@ -1,6 +1,6 @@
 ---
 title: Audit Logging
-description: Investigate administrative changes in Promptfoo Enterprise with audit logs. Filter by actor, action, target, and date in the UI or API and page through results.
+description: Investigate administrative changes in Promptfoo Enterprise. Filter audit logs by actor, action, target type, and date, then inspect resource IDs with the API.
 sidebar_label: Audit Logging
 keywords: [audit, logging, security, compliance, enterprise, forensics, admin operations]
 ---
@@ -168,14 +168,12 @@ Audit logs are available in the UI and API to organization administrators. Resul
 
 1. Open the profile menu, select **Organization Settings**, then **Audit Logs**.
 2. Set **Start Date** and **End Date** around the event you are investigating. These fields use your browser's local time.
-3. Optionally enter an **Actor ID** and select **Action** and **Target**, then click **Apply Filters**. For example, choose **User Login** and **User** to investigate an account's sign-ins. Actor ID is the user's ID, not their email address.
-4. Review **Date**, **Action**, **Actor**, **Actor Email**, and **Description**. Use pagination for more results; **Clear Filters** resets the investigation.
+3. Optionally enter the user's **Actor ID** and select an **Action** and **Target**. For sign-ins, choose **User Login** and **User**, then click **Apply Filters**.
+4. Review **Date**, **Action**, **Actor**, **Actor Email**, and **Description**. Page through the results or click **Clear Filters** to start over.
 
-All supplied filters must match. **Target** selects a resource type, not a particular resource ID. Use the API response's `targetId` to identify the affected resource and `metadata` for event-specific details.
+All filters must match. **Target** filters by resource type. To identify a specific resource, check `targetId` in the [API response](#example-api-response). The optional `metadata` field contains event details.
 
-[![Audit logs filtered by actor, User Login action, User target, and a bounded date window](/img/enterprise-docs/audit-log-filters.png)](pathname:///img/enterprise-docs/audit-log-filters.png)
-
-An account sign-in investigation using synthetic users and audit events.
+[![Synthetic audit logs filtered by actor, User Login action, User target, and date](/img/enterprise-docs/audit-log-filters.png)](pathname:///img/enterprise-docs/audit-log-filters.png)
 
 ### API Endpoint
 
@@ -195,20 +193,15 @@ GET /api/v1/audit-logs
 
 Use ISO 8601 timestamps with an explicit timezone, such as `2026-10-09T00:00:00Z`. Unparseable date strings are ignored, so verify both bounds before relying on the result. Invalid action or target values return HTTP 400.
 
-See **List audit logs**, `AuditAction`, `AuditTarget`, and `AuditLogQueryParams` in the [API reference](/docs/api-reference/). On-prem installations serve their release's schema at `/static/openapi.json`; prefer that copy when it differs from the public reference.
+See **List audit logs**, `AuditAction`, `AuditTarget`, and `AuditLogQueryParams` in the [API reference](/docs/api-reference/). For on-prem installations, check your release's schema at `/static/openapi.json`.
 
 ### Authentication
 
-Audit log access requires:
-
-- Valid authentication token
-- Organization administrator privileges
-
-Team-scoped API tokens cannot read organization audit logs, even when their owner is an administrator. Use an administrator session in the UI or an organization-wide API token belonging to an organization administrator.
+Use an organization administrator's session in the UI or their organization-wide API token. Team-scoped tokens cannot read audit logs.
 
 ### Example API Request
 
-Supply `PROMPTFOO_API_KEY` through your secret manager, replace the API hostname and actor ID, and choose the investigation's UTC time window:
+Supply `PROMPTFOO_API_KEY` through your secret manager. Replace the hostname, actor ID, and UTC time window for your investigation.
 
 ```bash
 curl --fail-with-body --get \
@@ -223,7 +216,7 @@ curl --fail-with-body --get \
   --data-urlencode "offset=0"
 ```
 
-`total` counts all matching entries; `logs` contains only the requested page. Keep the same filters and increase `offset` by `limit` to retrieve subsequent pages.
+The response includes the current page in `logs` and the number of matching entries in `total`. To fetch the next page, keep the filters and increase `offset` by `limit`.
 
 ### Example API Response
 
@@ -263,8 +256,8 @@ Audit logs in promptfoo can help meet various compliance requirements:
 
 If you experience issues accessing audit logs:
 
-1. Verify you are in the intended organization and have organization administrator privileges; a team-scoped token is insufficient.
-2. Check that your API token is valid and has not expired
+1. Verify you are in the intended organization and have organization administrator privileges.
+2. Check that your token is valid and organization-wide.
 3. Check the date window, actor ID, and lowercase action/target values. Remove filters one at a time if the result is empty.
 
 For additional support, contact the promptfoo support team with details about your specific use case and any error messages received.
