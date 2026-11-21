@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from 'node:util';
+
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +14,12 @@ import {
 
 import type { Prompt } from '../../src/types/prompts';
 
+// Render tables as on an 80-column terminal (TERMINAL_MAX_WIDTH is columns - 10).
+const TERMINAL_COLUMNS = 80;
+vi.mock('../../src/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/constants')>()),
+  TERMINAL_MAX_WIDTH: 70,
+}));
 vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
 vi.mock('../../src/util/database');
@@ -194,6 +202,35 @@ describe('show command', () => {
 });
 
 describe('handlers', () => {
+  // Eval IDs are `eval-<3 random chars>-<ISO timestamp>`, and the database helpers
+  // return evals newest first. Sorting by ID would order rows by the random chars.
+  const newestFirstEvalIds = [
+    'eval-abc-2026-01-03T00:00:00',
+    'eval-zzz-2026-01-02T00:00:00',
+    'eval-AAA-2026-01-01T00:00:00',
+  ];
+
+  function getLoggedTable() {
+    const table = vi
+      .mocked(logger.info)
+      .mock.calls.map(([message]) => String(message))
+      .find((message) => message.includes('Eval ID'));
+    expect(table).toBeDefined();
+    return table as string;
+  }
+
+  function expectFullIdsInOrder(table: string, ids: string[]) {
+    const positions = ids.map((evalId) => table.indexOf(evalId));
+    expect(positions).not.toContain(-1);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  }
+
+  function expectWithinTerminalWidth(table: string) {
+    for (const line of stripVTControlCharacters(table).split('\n')) {
+      expect(line.length).toBeLessThanOrEqual(TERMINAL_COLUMNS);
+    }
+  }
+
   beforeEach(() => {
     vi.resetAllMocks();
     process.exitCode = undefined;
@@ -207,6 +244,24 @@ describe('handlers', () => {
       await handlePrompt(promptId);
 
       expect(logger.error).toHaveBeenCalledWith(`Prompt with ID ${promptId} not found.`);
+    });
+
+    it('should list full eval IDs, newest first, within the terminal width', async () => {
+      vi.mocked(getPromptFromHash).mockResolvedValue({
+        id: 'prompt-hash',
+        prompt: { raw: 'test', label: 'Test Prompt' },
+        evals: newestFirstEvalIds.map((evalId) => ({
+          id: evalId,
+          datasetId: 'dataset-hash',
+          metrics: undefined,
+        })),
+      } as any);
+
+      await handlePrompt('prompt-hash');
+
+      const table = getLoggedTable();
+      expectFullIdsInOrder(table, newestFirstEvalIds);
+      expectWithinTerminalWidth(table);
     });
   });
 
@@ -229,6 +284,27 @@ describe('handlers', () => {
       await handleDataset(datasetId);
 
       expect(logger.error).toHaveBeenCalledWith(`Dataset with ID ${datasetId} not found.`);
+    });
+
+    it('should list full eval IDs, newest first, within the terminal width', async () => {
+      vi.mocked(getDatasetFromHash).mockResolvedValue({
+        id: 'dataset-hash',
+        prompts: newestFirstEvalIds.map((evalId, index) => ({
+          id: `prompt-hash-${index}`,
+          evalId,
+          prompt: { raw: `prompt ${index}`, label: `Prompt ${index}`, metrics: undefined },
+        })),
+        recentEvalDate: new Date(),
+        recentEvalId: newestFirstEvalIds[0],
+        count: newestFirstEvalIds.length,
+        testCases: [],
+      } as any);
+
+      await handleDataset('dataset-hash');
+
+      const table = getLoggedTable();
+      expectFullIdsInOrder(table, newestFirstEvalIds);
+      expectWithinTerminalWidth(table);
     });
   });
 });
