@@ -77,6 +77,14 @@ describe('createTransformResponse', () => {
     expect(result.output).toBe('value');
   });
 
+  it('should not invoke a parenthesized expression containing a nested arrow callback', async () => {
+    const parser = await createTransformResponse(
+      '({\n  output: json.items.map((item) => item.name),\n})',
+    );
+    const result = parser({ items: [{ name: 'a' }, { name: 'b' }] }, '');
+    expect(result.output).toEqual(['a', 'b']);
+  });
+
   it('should pass context parameter to parser', async () => {
     const parser = await createTransformResponse(
       '(json, text, context) => ({ output: json.data, status: context.response.status })',
@@ -185,6 +193,14 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest(source);
     const result = await transform('hello', {} as any);
     expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it('should not invoke a parenthesized expression containing a nested arrow callback', async () => {
+    const transform = await createTransformRequest(
+      '({\n  text: prompt,\n  items: vars.items.map((item) => item.toUpperCase()),\n})',
+    );
+    const result = await transform('hello', { items: ['a', 'b'] } as any);
+    expect(result).toEqual({ text: 'hello', items: ['A', 'B'] });
   });
 
   it('should handle simple expression without return', async () => {
