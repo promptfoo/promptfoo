@@ -639,7 +639,7 @@ describeEvaluator('evaluator runtime ports', () => {
         { providers: [mockApiProvider], prompts: [toPrompt('original')], tests: [{}] },
         evaluation,
         { restorePromptColumns: true, generateSuggestions: true },
-        createInMemoryRuntime(store),
+        { ...createInMemoryRuntime(store), selectPrompt: promptYesNo },
       );
       expect(generatePrompts).toHaveBeenCalledWith('original', 1, undefined);
       expect(evaluation.prompts.map((prompt) => prompt.raw)).toEqual(['original', 'generated']);
