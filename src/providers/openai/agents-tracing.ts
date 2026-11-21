@@ -1130,7 +1130,11 @@ function sanitizeStructuredAttributeValue(
       (target as unknown[]).length = source.length;
     }
     for (const [key, entry] of structuredAttributeEntries(source)) {
-      if (--budget.remaining < 0) {
+      if (
+        --budget.remaining < 0 ||
+        key.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
+        (typeof entry === 'string' && entry.length > MAX_STRUCTURED_ATTRIBUTE_BYTES)
+      ) {
         return '<redacted>';
       }
 
