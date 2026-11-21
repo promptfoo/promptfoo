@@ -10,7 +10,7 @@ keywords: [guardrails, adaptive guardrails, llm security, prompt filtering, red 
 
 ## What are Adaptive Guardrails?
 
-Adaptive guardrails close the loop between red teaming and production defense by automatically turning identified vulnerabilities into context-aware filters that intercept adversarial prompts before they reach LLM endpoints.
+Adaptive guardrails generate filtering policies from red team findings. Your application can use these policies to check requests before calling an LLM.
 
 :::note
 
@@ -20,7 +20,7 @@ This page describes Promptfoo Enterprise's runtime enforcement product. To test 
 
 ## What Makes Them Adaptive?
 
-Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application, like key features, target use case, and user personas, to strengthen defenses. As new vulnerabilities are discovered, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules and creating a living defense layer that grows stronger with each test cycle.
+Each guardrail is tied to a red team target and uses its application context and findings to generate policies. Regenerate the guardrail after a scan to incorporate new findings. Manual policies are preserved.
 
 ## How It Works
 
@@ -32,8 +32,8 @@ Each guardrail is tied to a specific red teaming target, allowing us to leverage
 
 1. Red team tests generate attacks to test the AI application in risk areas configured via red team plugins and custom policies in Promptfoo
 2. Vulnerabilities are discovered which are recorded for use in defenses
-3. Guardrail policies are created or updated to ensure vulnerabilities are addressed
-4. We block new attacks using the updated policies based on captured vulnerabilities
+3. Generate or regenerate guardrail policies from the findings
+4. Apply those policies to incoming requests and review any missed attacks or false positives
 
 As you run more tests and discover new vulnerabilities, regenerating the guardrail automatically incorporates these findings while preserving your manual policy additions.
 
@@ -132,9 +132,7 @@ Gate the model call on the aggregate `action`: `allow`, `log`, `warn`, `block`, 
 
 ### Parallel Execution
 
-The great thing about guardrails is that you can choose when you want to run them. If you want to ensure that no malicious input ever hits your target, you'd want to run your guardrail as a check before you ever send the request to your AI app. But if you want to minimize your Time to First Token (TTFT), you could run the query to your model, as well as the guardrail at the same time.
-
-This approach prioritizes UX by ensuring non-malicious queries see zero added latency. However, it incurs the cost of the LLM call even for adversarial prompts that are ultimately blocked.
+Run the guardrail before the model call if blocked requests must not reach the model. Running both in parallel can reduce time to first token (TTFT), but the model receives the input and incurs cost even if the guardrail blocks it. If you run them in parallel, withhold the model response until the guardrail decision is available.
 
 <div style={{ textAlign: 'center' }}> 
  <img src="/img/docs/guardrails-speed-comparison.jpg" alt="guardrails speed comparison" style={{ width: '75%' }} /> 
@@ -233,7 +231,7 @@ If new vulnerabilities aren't reflected in your guardrail:
 
 ### Can I use adaptive guardrails without red team data?
 
-Yes. You can create a guardrail with only manual policies and no red team scan results. However, the real power of adaptive guardrails comes from automatically generating policies from your red team findings. Manual-only guardrails are useful as a starting point or for custom business rules.
+Yes. You can create a guardrail with only manual policies and no red team scan results. Manual-only guardrails are useful as a starting point or for custom business rules.
 
 ### How often should I regenerate policies?
 
