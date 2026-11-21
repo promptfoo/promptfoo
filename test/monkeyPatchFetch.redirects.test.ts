@@ -1,4 +1,4 @@
-import { MockAgent } from 'undici';
+import { getGlobalDispatcher, MockAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
@@ -126,8 +126,11 @@ describe('Cloud authentication across redirects', () => {
         .intercept({ path: '/cache-start', method: 'GET' })
         .reply(302, '', { headers: { location: 'https://other.example.test/landing' } });
       echoHeaders('https://other.example.test');
-      const dispatch = vi.spyOn(agent, 'dispatch');
-      const options = { headers: { [headerName]: credential }, dispatcher: agent };
+      // Explicit request dispatchers bypass the cache.
+      const dispatch = vi
+        .spyOn(getGlobalDispatcher(), 'dispatch')
+        .mockImplementation(agent.dispatch.bind(agent));
+      const options = { headers: { [headerName]: credential } };
 
       const result = await fetchWithCache(`${origin}/cache-start`, options, 5000, 'json', {
         cacheKey: `cloud-auth-await-${change}`,
