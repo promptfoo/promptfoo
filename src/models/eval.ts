@@ -207,6 +207,30 @@ export function combineFilterConditions(
 }
 
 export class EvalQueries {
+  static async getSavedOutput(evalId: string, resultId: string) {
+    const db = await getDb();
+    // Match both identifiers before loading the response. Avoid hydrating the full
+    // eval configuration, test case, or saved assertions for a literal check.
+    const row = await db
+      .select({
+        response: evalResultsTable.response,
+        config: sql`json_object('env', json_extract(${evalsTable.config}, '$.env'))`.mapWith(
+          evalsTable.config,
+        ),
+      })
+      .from(evalResultsTable)
+      .innerJoin(evalsTable, eq(evalsTable.id, evalResultsTable.evalId))
+      .where(and(eq(evalResultsTable.id, resultId), eq(evalResultsTable.evalId, evalId)))
+      .get();
+    if (!row) {
+      return undefined;
+    }
+    return getStripFlags(row.config?.env ?? undefined).shouldStripResponseOutput ||
+      row.response?.error
+      ? null
+      : (row.response?.output ?? null);
+  }
+
   static async getVarsFromEvals(evals: Eval[]) {
     const db = await getDb();
 

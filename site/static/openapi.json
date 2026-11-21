@@ -2098,6 +2098,153 @@
         }
       }
     },
+    "/api/eval/{evalId}/results/{id}/check": {
+      "post": {
+        "operationId": "checkSavedOutput",
+        "tags": ["Eval"],
+        "summary": "Preview one deterministic check on a saved output",
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "evalId",
+            "in": "path"
+          },
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "description": "JSON request body",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "assertion": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "contains",
+                              "icontains",
+                              "not-contains",
+                              "not-icontains",
+                              "starts-with"
+                            ]
+                          },
+                          "value": { "type": "string", "maxLength": 10000 }
+                        },
+                        "required": ["type", "value"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": { "type": "string", "enum": ["equals"] },
+                          "value": { "type": "string", "maxLength": 10000 }
+                        },
+                        "required": ["type", "value"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": { "type": "string", "enum": ["is-json", "not-is-json"] }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["assertion"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pass": { "type": "boolean" },
+                    "score": { "type": "number" },
+                    "reason": { "type": "string" }
+                  },
+                  "required": ["pass", "score", "reason"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Result or evaluation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/eval/{evalId}/results/{id}/rating": {
       "post": {
         "operationId": "submitEvalResultRating",

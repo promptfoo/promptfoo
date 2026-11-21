@@ -609,6 +609,24 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'post',
+    path: '/api/eval/{evalId}/results/{id}/check',
+    operationId: 'checkSavedOutput',
+    tags: ['Eval'],
+    summary: 'Preview one deterministic check on a saved output',
+    request: {
+      params: EvalSchemas.CheckOutput.Params,
+      body: jsonBody(EvalSchemas.CheckOutput.Request),
+    },
+    responses: {
+      200: jsonResponse(EvalSchemas.CheckOutput.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Result or evaluation not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'post',
     path: '/api/eval/{evalId}/results/{id}/rating',
     operationId: 'submitEvalResultRating',
     tags: ['Eval'],

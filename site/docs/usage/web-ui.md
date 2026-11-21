@@ -144,3 +144,9 @@ Viewer state syncs to the URL—bookmark or share filtered views:
 ```text
 /eval/abc123?filterMode=failures&search=timeout
 ```
+
+### Check a saved output
+
+In a local evaluation, choose **Check saved output** in an output cell's actions. Preview a text equality, substring, prefix, or JSON-validity check without calling the model again. The dialog shows the check's pass/fail result, score, and reason. Saved assertions, scores, ratings, and table metrics remain unchanged.
+
+Text values are literal; files, packages, templates, and model or code graders are unsupported. The action is unavailable in hosted views and while comparing evaluations. To apply new assertions to an evaluation, add them to its configuration and run it again.
