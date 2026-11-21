@@ -517,6 +517,40 @@ describe('init command', () => {
         );
       });
 
+      it('downloads the maintained Python assertions example for the removed Hermeneutic name', async () => {
+        const filename = 'promptfooconfig-external.yaml';
+        const fileUrl = `https://example.com/${filename}`;
+        const config = 'description: Python assertions';
+        mockFetchWithProxy
+          .mockResolvedValueOnce(
+            createMockResponse({
+              json: () =>
+                Promise.resolve([{ type: 'file', name: filename, download_url: fileUrl }]),
+            }),
+          )
+          .mockResolvedValueOnce(createMockResponse({ text: () => Promise.resolve(config) }));
+        vi.mocked(fs.readdir).mockResolvedValue([]);
+
+        expect(await init.handleExampleDownload('.', 'integration-hermeneutic')).toBe(
+          'eval-python-assert',
+        );
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+        expect(new URL(mockFetchWithProxy.mock.calls[0][0].toString()).pathname).toBe(
+          '/repos/promptfoo/promptfoo/contents/examples/eval-python-assert',
+        );
+        expect(mockFetchWithProxy).toHaveBeenNthCalledWith(2, fileUrl);
+        expect(fs.writeFile).toHaveBeenCalledWith(
+          path.join('eval-python-assert', filename),
+          config,
+        );
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining(
+            "The Hermeneutic integration was removed. Use the maintained Python assertion example for custom output checks. Downloading 'eval-python-assert' instead.",
+          ),
+        );
+        expect(confirm).not.toHaveBeenCalled();
+      });
+
       it('should download using the resolved alias name', async () => {
         mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
         vi.mocked(confirm).mockResolvedValue(false);
@@ -615,7 +649,7 @@ describe('init command', () => {
         },
       );
 
-      it('should reset to default refs when retrying after legacy example failure', async () => {
+      it('uses the selected catalog name and default refs after a legacy example fails', async () => {
         const mockLegacyFailure = createMockResponse({
           ok: false,
           status: 404,
@@ -626,7 +660,7 @@ describe('init command', () => {
           status: 200,
           json: () =>
             Promise.resolve({
-              tree: [{ path: 'examples/provider-http/basic/promptfooconfig.yaml', type: 'blob' }],
+              tree: [{ path: 'examples/http-provider/promptfooconfig.yaml', type: 'blob' }],
             }),
         });
         const mockDefaultRefFailure = createMockResponse({
@@ -646,17 +680,33 @@ describe('init command', () => {
           .mockResolvedValueOnce(mockMainRefSuccess);
 
         vi.mocked(confirm).mockResolvedValue(true);
-        vi.mocked(select).mockResolvedValue('provider-http/basic');
+        // Explicit --example http-provider resolves an alias, but catalog choices are literal.
+        vi.mocked(select).mockResolvedValue('http-provider');
         vi.spyOn(fs, 'readdir').mockResolvedValue([]);
 
-        await init.handleExampleDownload('.', 'assistant-cli');
+        await expect(init.handleExampleDownload('.', 'assistant-cli')).resolves.toBe(
+          'http-provider',
+        );
 
         expect(mockFetchWithProxy.mock.calls[2][0]).toContain(
-          '/contents/examples/provider-http/basic?ref=',
+          '/contents/examples/http-provider?ref=',
         );
         expect(mockFetchWithProxy.mock.calls[3][0]).toContain(
-          '/contents/examples/provider-http/basic?ref=main',
+          '/contents/examples/http-provider?ref=main',
         );
+      });
+
+      it('propagates an instruction failure after downloading without prompting for a retry', async () => {
+        mockFetchWithProxy.mockResolvedValue(createMockResponse({ json: async () => [] }));
+        vi.mocked(logger.info)
+          .mockImplementationOnce(() => {}) // Download success message
+          .mockImplementationOnce(() => {
+            throw new Error('Cannot display instructions');
+          });
+        await expect(init.handleExampleDownload('.', 'config-js')).rejects.toThrow(
+          'Cannot display instructions',
+        );
+        expect(confirm).not.toHaveBeenCalled();
       });
 
       it('should provide docs URL when selected subdirectory example has no local readme', async () => {

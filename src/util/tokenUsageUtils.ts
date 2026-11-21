@@ -10,12 +10,18 @@ import {
  * Safely extract token usage carried by a thrown value.
  */
 export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+  try {
+    if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+      return undefined;
+    }
+
+    const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+    return parsedTokenUsage.success && Object.keys(parsedTokenUsage.data).length > 0
+      ? parsedTokenUsage.data
+      : undefined;
+  } catch {
     return undefined;
   }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 /**
@@ -302,11 +308,17 @@ export function accumulateGradingResponseTokenUsage(
       reportedTotal <= cachedTokens);
 
   const reportedIncurredUsage = response.tokenUsage?.incurredTokenUsage ?? response.tokenUsage;
+  // Preflight failures report only numRequests: 0, or an explicit incurred
+  // ledger. A normalized empty usage record can follow an actual API request.
   const failedWithoutRequest =
     Boolean(response.error) &&
     reportedIncurredUsage?.numRequests === 0 &&
-    (reportedIncurredUsage.total ??
-      (reportedIncurredUsage.prompt ?? 0) + (reportedIncurredUsage.completion ?? 0)) === 0;
+    (response.tokenUsage?.incurredTokenUsage !== undefined ||
+      Object.keys(reportedIncurredUsage).length === 1) &&
+    !reportedIncurredUsage.total &&
+    !reportedIncurredUsage.prompt &&
+    !reportedIncurredUsage.completion &&
+    !Object.values(reportedIncurredUsage.completionDetails ?? {}).some(Boolean);
   const noIncurredUsage = cachedResponse || failedWithoutRequest;
 
   const logicalUsage = {
@@ -530,7 +542,9 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   } = parsed.data;
   const hasUsage =
     Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+    Object.values(generationUsage.completionDetails ?? {}).some(
+      (value) => typeof value === 'number' && value !== 0,
+    );
   if (!hasUsage) {
     return false;
   }

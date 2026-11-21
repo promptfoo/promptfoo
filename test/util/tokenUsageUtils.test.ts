@@ -37,6 +37,29 @@ describe('tokenUsageUtils', () => {
       expect(
         getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: null })),
       ).toBeUndefined();
+      expect(getErrorTokenUsage({ tokenUsage: { usage: 10 } })).toBeUndefined();
+    });
+
+    it('does not replace the original provider error when token usage access throws', () => {
+      const error = Object.defineProperty(new Error('original failure'), 'tokenUsage', {
+        get() {
+          throw new Error('usage getter failed');
+        },
+      });
+
+      expect(getErrorTokenUsage(error)).toBeUndefined();
+      expect(
+        getErrorTokenUsage(
+          new Proxy(
+            {},
+            {
+              has() {
+                throw new Error('usage proxy failed');
+              },
+            },
+          ),
+        ),
+      ).toBeUndefined();
     });
   });
 
@@ -749,6 +772,15 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('counts an attempted request that returned a normalized empty usage record', () => {
+      const target = createEmptyTokenUsage();
+      accumulateGradingResponseTokenUsage(target, {
+        error: 'API request failed',
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      expect((target.incurredTokenUsage ?? target).assertions?.numRequests).toBe(1);
+    });
+
     it.each([false, undefined])('preserves zero-request failures when cached is %s', (cached) => {
       const target = createEmptyTokenUsage();
       const response = {
@@ -848,6 +880,14 @@ describe('tokenUsageUtils', () => {
   });
 
   describe('accumulateGenerationTokenUsage', () => {
+    it('does not report usage when completion details contain only undefined values', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(
+        accumulateGenerationTokenUsage(target, { completionDetails: { reasoning: undefined } }),
+      ).toBe(false);
+      expect(target.total).toBe(0);
+    });
     it('keeps generation usage separate from target tokens and request counts', () => {
       const target = createEmptyTokenUsage();
       target.numRequests = 2;

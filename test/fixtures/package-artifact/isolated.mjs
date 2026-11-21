@@ -157,18 +157,7 @@ async function terminateTree(pid) {
 }
 
 async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) {
-  const child = spawn(
-    process.execPath,
-    [fileURLToPath(import.meta.url), '--fixture-child', fixturePath, stateDir, ...args],
-    {
-      cwd: path.dirname(fixturePath),
-      env: { ...isolatedEnv(stateDir), ...(typeof env === 'function' ? env(stateDir) : env) },
-      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-      detached: process.platform !== 'win32',
-    },
-  );
-  child.stdout.pipe(process.stdout);
-  child.stderr.pipe(process.stderr);
+  let child;
   let failure;
   let termination;
   let timer;
@@ -176,6 +165,42 @@ async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) 
   let stop;
   try {
     await new Promise((resolve, reject) => {
+      stop = (error) => {
+        if (termination) {
+          return;
+        }
+        failure = error;
+        termination = terminateTree(child.pid).catch((error) => {
+          // If the OS refuses both attempts, do not unlink a database that may still
+          // be open. Report the PID and retain state for diagnosis instead of hiding it.
+          // Settle first: the best-effort kill can synchronously emit an error event.
+          reject(error);
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            /* Best effort direct-child fallback. */
+          }
+          child.stdout.destroy();
+          child.stderr.destroy();
+          child.unref();
+        });
+      };
+      // Children can start running before spawn returns; own cancellation before that gap.
+      for (const signal of ['SIGINT', 'SIGTERM']) {
+        process.on(signal, onSignal);
+      }
+      child = spawn(
+        process.execPath,
+        [fileURLToPath(import.meta.url), '--fixture-child', fixturePath, stateDir, ...args],
+        {
+          cwd: path.dirname(fixturePath),
+          env: { ...isolatedEnv(stateDir), ...(typeof env === 'function' ? env(stateDir) : env) },
+          stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+          detached: process.platform !== 'win32',
+        },
+      );
+      child.stdout.pipe(process.stdout);
+      child.stderr.pipe(process.stderr);
       child.once('error', (error) => (child.pid ? stop(error) : reject(error)));
       child.once('exit', (code, signal) => {
         if (!termination) {
@@ -200,26 +225,6 @@ async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) 
           resolve();
         }
       });
-      stop = (error) => {
-        if (termination) {
-          return;
-        }
-        failure = error;
-        termination = terminateTree(child.pid).catch((error) => {
-          // If the OS refuses both attempts, do not unlink a database that may still
-          // be open. Report the PID and retain state for diagnosis instead of hiding it.
-          // Settle first: the best-effort kill can synchronously emit an error event.
-          reject(error);
-          try {
-            child.kill('SIGKILL');
-          } catch {
-            /* Best effort direct-child fallback. */
-          }
-          child.stdout.destroy();
-          child.stderr.destroy();
-          child.unref();
-        });
-      };
       child.on('message', (message) => {
         if (message?.type === 'fixture-complete' && Number.isInteger(message.code)) {
           stop(
@@ -229,9 +234,6 @@ async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) 
           );
         }
       });
-      for (const signal of ['SIGINT', 'SIGTERM']) {
-        process.on(signal, onSignal);
-      }
       timer = setTimeout(
         () => stop(new Error(`Installed ${label} check timed out after ${timeoutMs}ms`)),
         timeoutMs,
