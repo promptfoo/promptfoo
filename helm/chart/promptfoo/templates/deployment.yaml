@@ -6,16 +6,10 @@ metadata:
     {{- include "promptfoo.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
-  {{- /*
-  The data volume is ReadWriteOnce, so the old pod must go before the new one is created.
-  Recreate is not used because switching the strategy type fails under server-side apply
-  for existing releases.
-  */}}
+  # Wait for the old SQLite writer to exit. Clear legacy rolling update settings on upgrade.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       {{- include "promptfoo.selectorLabels" . | nindent 6 }}

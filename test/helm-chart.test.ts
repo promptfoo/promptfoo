@@ -1,41 +1,24 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { devNull, tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import type { AddressInfo } from 'node:net';
 
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
-const CHART_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'helm',
-  'chart',
-  'promptfoo',
-);
+const CHART_DIR = path.resolve(import.meta.dirname, '../helm/chart/promptfoo');
+const templateArgs = ['template', 'my-promptfoo', CHART_DIR];
 
 // Nothing else in CI renders the chart. GitHub's Linux runners ship Helm, so the suite must
 // run there. Elsewhere it is skipped when Helm is not installed.
 const hasHelm = spawnSync('helm', ['version', '--short'], { encoding: 'utf8' }).status === 0;
 const mustRender = process.env.GITHUB_ACTIONS === 'true' && process.platform === 'linux';
 
-type EnvEntry = { name: string; value?: string; valueFrom?: unknown };
-type Container = {
-  image: string;
-  imagePullPolicy: string;
-  ports: { name: string; containerPort: number; protocol: string }[];
-  livenessProbe: { httpGet: { path: string; port: string } };
-  readinessProbe: { httpGet: { path: string; port: string } };
-  resources: Record<string, unknown>;
-  securityContext: Record<string, unknown>;
-  env: EnvEntry[];
-  envFrom?: unknown[];
-};
-type PodSpec = {
-  containers: Container[];
-  securityContext: Record<string, unknown>;
-  nodeSelector?: Record<string, string>;
-  imagePullSecrets?: unknown[];
-};
+type PodSpec = Record<string, unknown> & { containers: Record<string, unknown>[] };
 type Resource = {
   kind: string;
   metadata: { name: string; annotations?: Record<string, string> };
@@ -47,9 +30,13 @@ function helm(...args: string[]) {
 }
 
 function render(...args: string[]): Resource[] {
-  const result = helm('template', 'my-promptfoo', CHART_DIR, ...args);
+  const result = helm(...templateArgs, ...args);
   expect(result.status, result.stderr).toBe(0);
-  return (yaml.loadAll(result.stdout) as (Resource | null)[]).filter(
+  return parseResources(result.stdout);
+}
+
+function parseResources(manifest: string): Resource[] {
+  return (yaml.loadAll(manifest) as (Resource | null)[]).filter(
     (resource): resource is Resource => resource !== null,
   );
 }
@@ -96,6 +83,20 @@ describe('Helm chart', () => {
       expect(pod.imagePullSecrets).toBeUndefined();
       // The image is published for amd64 and arm64.
       expect(pod.nodeSelector).toBeUndefined();
+      expect(pod).toHaveProperty(
+        'affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms',
+        [
+          {
+            matchExpressions: [
+              { key: 'kubernetes.io/os', operator: 'In', values: ['linux'] },
+              { key: 'kubernetes.io/arch', operator: 'In', values: ['amd64', 'arm64'] },
+            ],
+          },
+        ],
+      );
+      expect(podSpec(render('--set', 'affinity.nodeAffinity=null'))).not.toHaveProperty(
+        'affinity.nodeAffinity',
+      );
       // The server idles near 256Mi, so a default limit below that is an immediate OOM kill.
       expect(server.resources).toEqual({});
       expect(server.ports).toEqual([{ name: 'http', containerPort: 3000, protocol: 'TCP' }]);
@@ -115,8 +116,8 @@ describe('Helm chart', () => {
       ]);
       // The old pod has to release the ReadWriteOnce volume before the new one starts.
       expect(only(resources, 'Deployment').spec.strategy).toEqual({
-        type: 'RollingUpdate',
-        rollingUpdate: { maxSurge: 0, maxUnavailable: 1 },
+        type: 'Recreate',
+        rollingUpdate: null,
       });
       // No storage class: the cluster default applies.
       expect(only(resources, 'PersistentVolumeClaim').spec).toEqual({
@@ -140,7 +141,7 @@ describe('Helm chart', () => {
       const resources = render('--set', 'service.port=80');
       const servicePorts = only(resources, 'Service').spec.ports as Record<string, unknown>[];
 
-      expect(podSpec(resources).containers[0].ports[0].containerPort).toBe(3000);
+      expect(podSpec(resources).containers[0].ports).toMatchObject([{ containerPort: 3000 }]);
       expect(servicePorts[0]).toMatchObject({ port: 80, targetPort: 'http' });
     });
 
@@ -205,6 +206,105 @@ describe('Helm chart', () => {
         ],
         tls: [{ secretName: 'pf-tls', hosts: ['pf.example.com'] }],
       });
+    });
+
+    it('requires a migration decision for legacy domainName values during offline rendering', () => {
+      const args = [...templateArgs, '--set', 'domainName=legacy.example.com'];
+      expect(helm(...args).stderr).toContain('ingress.enabled=false');
+      expect(helm(...args, '--set-string', 'ingress.enabled=false').stderr).toContain(
+        'must be a boolean',
+      );
+      expect(helm(...args, '--set', 'ingress.enabled=false').status).toBe(0);
+    });
+
+    it('consults the existing Ingress and PVC during a server-side upgrade preview', async () => {
+      // Helm 4 also discovers the resource kinds in the rendered chart.
+      const groups = ['apps', 'networking.k8s.io'].map((name) => {
+        const version = { groupVersion: `${name}/v1`, version: 'v1' };
+        return { name, versions: [version], preferredVersion: version };
+      });
+      const resources = (groupVersion: string, ...kinds: string[]) => ({
+        groupVersion,
+        resources: kinds.map((kind) => ({
+          kind,
+          name: kind === 'Ingress' ? 'ingresses' : `${kind.toLowerCase()}s`,
+          namespaced: true,
+        })),
+      });
+      const ingressPath = '/apis/networking.k8s.io/v1/namespaces/default/ingresses/my-promptfoo';
+      const claim = {
+        apiVersion: 'v1',
+        kind: 'PersistentVolumeClaim',
+        metadata: {
+          name: 'promptfoo',
+          managedFields: [{ fieldsV1: { 'f:spec': { 'f:storageClassName': {} } } }],
+        },
+        spec: { storageClassName: 'legacy-class' },
+      };
+      const api: Record<string, unknown> = {
+        '/version': { major: '1', minor: '34', gitVersion: 'v1.34.0' },
+        '/api': { versions: ['v1'] },
+        '/apis': { groups },
+        '/api/v1': resources('v1', 'PersistentVolumeClaim', 'ServiceAccount', 'Service', 'Pod'),
+        '/apis/apps/v1': resources('apps/v1', 'Deployment'),
+        '/apis/networking.k8s.io/v1': resources('networking.k8s.io/v1', 'Ingress'),
+        '/api/v1/namespaces/default/persistentvolumeclaims/promptfoo': claim,
+        [ingressPath]: {
+          apiVersion: 'networking.k8s.io/v1',
+          kind: 'Ingress',
+          metadata: {
+            name: 'my-promptfoo',
+            annotations: { 'meta.helm.sh/release-name': 'my-promptfoo' },
+          },
+        },
+      };
+      const server = createServer((req, res) => {
+        const body = req.method === 'GET' && api[req.url!.split('?')[0]];
+        res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(body || {}));
+      });
+      const home = mkdtempSync(path.join(tmpdir(), 'helm-test-'));
+      try {
+        server.listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const preview = async (...args: string[]) => {
+          const { stdout } = await promisify(execFile)(
+            'helm',
+            [
+              ...templateArgs,
+              '--is-upgrade',
+              '--dry-run=server',
+              '--disable-openapi-validation',
+              '--kube-apiserver',
+              origin,
+              '--kubeconfig',
+              devNull,
+              ...args,
+            ],
+            { env: { PATH: process.env.PATH, HOME: home, USERPROFILE: home }, timeout: 10_000 },
+          );
+          return parseResources(stdout);
+        };
+        await expect(preview()).rejects.toThrow('ingress.enabled=false');
+        const migrated = await preview('--set', 'ingress.enabled=false');
+        expect(migrated.some((item) => item.kind === 'Ingress')).toBe(false);
+        expect(only(migrated, 'PersistentVolumeClaim').spec.storageClassName).toBe('legacy-class');
+        expect(only(migrated, 'Deployment').spec.strategy).toEqual({
+          type: 'Recreate',
+          rollingUpdate: null,
+        });
+
+        delete api[ingressPath];
+        claim.metadata.managedFields = [];
+        expect(only(await preview(), 'PersistentVolumeClaim').spec).not.toHaveProperty(
+          'storageClassName',
+        );
+      } finally {
+        server.close();
+        server.closeAllConnections();
+        rmSync(home, { force: true, recursive: true });
+      }
     });
 
     it('sets a storage class only when one is given', () => {

@@ -47,7 +47,10 @@ service:
   port: 3000
 
 ingress:
-  enabled: false
+  # Unset keeps a new install private. To migrate a 0.1.0 domainName Ingress,
+  # configure hosts, className, annotations and tls, then set true. Set false to remove it.
+  # Offline rendering cannot detect existing routes, so make this choice before an upgrade.
+  enabled: null
   className: ''
   annotations: {}
   hosts:
@@ -116,4 +119,15 @@ nodeSelector: {}
 
 tolerations: []
 
-affinity: {}
+# Set affinity.nodeAffinity to null if your custom image supports other platforms.
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/os
+              operator: In
+              values: [linux]
+            - key: kubernetes.io/arch
+              operator: In
+              values: [amd64, arm64]
