@@ -1498,6 +1498,37 @@ describe('suite environment loading', () => {
     },
   );
 
+  it('replays relative row providers from their own config even when default vars come later', async () => {
+    const first = writeConfig('replay-root', {});
+    const provider = 'python:provider.py';
+    const second = writeConfig('replay-providers', {
+      defaultTest: { provider },
+      tests: [{ provider }],
+      scenarios: [{ config: [{}], tests: [{ provider: { id: provider } }] }],
+    });
+    const third = writeConfig('replay-vars', { defaultTest: { vars: 'file://vars.yaml' } });
+    fs.writeFileSync(path.join(path.dirname(third), 'vars.yaml'), 'source: third');
+
+    const initial = await resolveConfigs({ config: [first, second, third] }, {});
+    const exported = sanitizeConfigForOutput(initial.config, { shouldStripMetadata: true });
+    const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(exported)));
+    for (const { testSuite } of [initial, replay]) {
+      expect(testSuite.defaultTest).toMatchObject({ vars: { source: 'third' } });
+      for (const row of [
+        testSuite.defaultTest,
+        testSuite.tests?.[0],
+        testSuite.scenarios?.[0].tests[0],
+      ]) {
+        expect(row).toMatchObject({
+          provider: {
+            scriptPath: 'provider.py',
+            options: { config: { basePath: path.dirname(second) } },
+          },
+        });
+      }
+    }
+  });
+
   it('loads and watches scenario vars dependencies in the declaring config directory', async () => {
     const first = writeConfig('first-scenario', {
       scenarios: [{ config: [{}], tests: [{ vars: { source: 'inline' } }] }],

@@ -53,6 +53,7 @@ import {
   readTestConfig,
   readTestConfigs,
   readTests,
+  setTestProviderBasePath,
 } from '../testCaseReader';
 import {
   type PromptReferenceSource,
@@ -559,13 +560,22 @@ type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
 async function readTestSources(
   sources: TestSource[],
   env: TestSuite['env'],
-  loadProviders = true,
+  replayBasePath?: string,
 ): Promise<TestCase[]> {
-  const read = loadProviders ? readTests : readTestConfigs;
+  const read = replayBasePath === undefined ? readTests : readTestConfigs;
   const tests: TestCase[] = [];
   for (const source of sources) {
     try {
-      tests.push(...(await read(source.tests, source.basePath, env)));
+      const rows = await read(source.tests, source.basePath, env);
+      if (replayBasePath && source.basePath && path.resolve(source.basePath) !== replayBasePath) {
+        for (const row of rows) {
+          // A nested tests file may have already supplied a more specific origin.
+          if (!row.metadata?.__promptfoo?.providerBasePath) {
+            setTestProviderBasePath(row, source.basePath);
+          }
+        }
+      }
+      tests.push(...rows);
     } catch (error) {
       throw new ConfigResolutionError(
         `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
@@ -583,6 +593,7 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
   scenarioBasePaths: string[];
   watchSources: TestSource[];
   defaultTestBasePath?: string;
+  defaultProviderBasePath?: string;
 }> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
@@ -848,6 +859,7 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
   }
 
   let defaultTestBasePath: string | undefined;
+  let defaultProviderBasePath: string | undefined;
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
@@ -864,6 +876,7 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
       if (typeof curr.defaultTest === 'string') {
         const reference = makeTestAbsolute(basePath, curr.defaultTest) as string;
         defaultTestBasePath = basePath;
+        defaultProviderBasePath = basePath;
         return reference;
       }
       // If prev is already a string (file reference), keep it
@@ -880,6 +893,9 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
           ? (makeTestAbsolute(basePath, curr.defaultTest) as TestCaseWithVarsFile)
           : {};
       const prevObj = typeof prev === 'object' ? prev : {};
+      if (currDefaultTest.provider !== undefined) {
+        defaultProviderBasePath = basePath;
+      }
       const previousVars = prevObj.vars;
       const currentVars = currDefaultTest.vars;
       const fileVars = typeof currentVars === 'string' || Array.isArray(currentVars);
@@ -936,6 +952,7 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
   return {
     config: combinedConfig,
     defaultTestBasePath,
+    defaultProviderBasePath,
     scenarioBasePaths,
     watchSources,
     promptBasePaths: (Array.isArray(prompts) ? prompts : Object.keys(prompts)).map(
@@ -1181,8 +1198,17 @@ async function resolveLoadedConfig(
   config.defaultTest = processedDefaultTest
     ? await readTestConfig(processedDefaultTest, defaultTestBasePath, true, runtimeEnv)
     : undefined;
+  // Defaults merge field by field. The provider and vars may come from different configs.
+  const providerBasePath = path.resolve(prepared?.defaultProviderBasePath ?? defaultTestBasePath);
+  if (
+    config.defaultTest &&
+    providerBasePath !== basePath &&
+    !config.defaultTest.metadata?.__promptfoo?.providerBasePath
+  ) {
+    setTestProviderBasePath(config.defaultTest, providerBasePath);
+  }
   const parsedDefaultTest = config.defaultTest
-    ? await readTest(clone(config.defaultTest), defaultTestBasePath, true, runtimeEnv)
+    ? await readTest(clone(config.defaultTest), providerBasePath, true, runtimeEnv)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -1247,7 +1273,7 @@ async function resolveLoadedConfig(
       ? prepared.testSources
       : [{ tests: config.tests || [], basePath: cmdObj.tests ? '' : basePath }],
     runtimeEnv,
-    false,
+    basePath,
   );
   config.tests = testConfigs.map((test) =>
     clone(isApiProvider(test.provider) ? { ...test, provider: undefined } : test),
@@ -1286,7 +1312,7 @@ async function resolveLoadedConfig(
         scenario.tests = await readTestSources(
           [{ tests: scenario.tests, basePath: scenarioBasePath }],
           runtimeEnv,
-          false,
+          basePath,
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');

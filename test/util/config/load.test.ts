@@ -146,9 +146,7 @@ vi.mock('../../../src/util/file', async () => {
 vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
   const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
   return {
-    isRemoteTestsReference: (
-      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
-    ).isRemoteTestsReference,
+    ...(await importOriginal<typeof import('../../../src/util/testCaseReader')>()),
     readTest: vi.fn(async (test) => test),
     readTestConfig: vi.fn(async (test) => test),
     readTests: readRows,

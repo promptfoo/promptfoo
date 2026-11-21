@@ -510,6 +510,21 @@ function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
   return value;
 }
 
+// Provider construction is deferred until after parsing. Save the declaring
+// directory on local replayable rows without rewriting bare provider IDs.
+export function setTestProviderBasePath(test: TestCaseWithVarsFile, directory: string): void {
+  if (isRemoteTestCase(test)) {
+    return;
+  }
+  const id = typeof test.provider === 'string' ? test.provider : test.provider?.id;
+  if (typeof id === 'string') {
+    test.metadata = {
+      ...test.metadata,
+      __promptfoo: { ...test.metadata?.__promptfoo, providerBasePath: path.resolve(directory) },
+    };
+  }
+}
+
 async function readTestWithEnv(
   test: string | TestCaseWithVarsFile,
   basePath: string,
@@ -535,22 +550,8 @@ async function readTestWithEnv(
     testCase = await loadTestWithVars(test, sourceBasePath);
   }
 
-  const providerId =
-    typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
-  // Provider construction is deferred until after parsing. Keep the source directory
-  // in replayable rows without rewriting bare provider IDs.
-  if (
-    effectiveBasePath !== basePath &&
-    typeof providerId === 'string' &&
-    !isApiProvider(testCase.provider)
-  ) {
-    testCase.metadata = {
-      ...testCase.metadata,
-      __promptfoo: {
-        ...testCase.metadata?.__promptfoo,
-        providerBasePath: path.resolve(effectiveBasePath),
-      },
-    };
+  if (effectiveBasePath !== basePath) {
+    setTestProviderBasePath(testCase, effectiveBasePath);
   }
   if (typeof testCase.metadata?.__promptfoo?.providerBasePath === 'string') {
     effectiveBasePath = testCase.metadata.__promptfoo.providerBasePath;
