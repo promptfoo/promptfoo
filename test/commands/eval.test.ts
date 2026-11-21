@@ -89,6 +89,7 @@ vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   trackRetryResults: vi.fn((_evalId: string, ids: string[]) => ({
     prepare: vi.fn(),
+    validate: vi.fn(),
     saved: vi.fn(),
     replacedIds: () => ids.slice(0, 1),
   })),

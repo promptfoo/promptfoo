@@ -154,20 +154,24 @@ function retryTestIdentity(testCase: AtomicTestCase) {
 
 export function trackRetryResults(evalId: string, errorIds: string[]) {
   const captured = new Set(errorIds);
-  const cells = new Map<string, { ids: string[]; identity: unknown }>();
   const replaced = new Set<string>();
-  const identity = (test: AtomicTestCase, provider: Parameters<typeof sanitizeProvider>[0]) => {
+  const providerIdentity = (provider: Parameters<typeof sanitizeProvider>[0]) => {
     const { id, label, config = {} } = sanitizeProvider(provider);
     // Config loading injects a working directory that older rows did not store.
     const { basePath: _basePath, ...settings } = config;
-    return { test: retryTestIdentity(test), id, label: label || id, settings };
+    return { id, label: label || id, settings };
   };
+  const identity = (test: AtomicTestCase, provider: Parameters<typeof sanitizeProvider>[0]) => ({
+    test: retryTestIdentity(test),
+    provider: providerIdentity(provider),
+  });
+  const cells = new Map<string, { ids: string[]; identity: ReturnType<typeof identity> }>();
   const mismatch = () =>
     new ConfigResolutionError(
       'Cannot retry because a saved test or provider changed position or content. Existing ERROR results were preserved. Start a new evaluation.',
     );
   return {
-    async prepare(steps: RunEvalOptions[]) {
+    async prepare(steps: RunEvalOptions[], hasExtensions: boolean) {
       const db = await getDb();
       const rows = await db
         .select({
@@ -206,11 +210,22 @@ export function trackRetryResults(evalId: string, errorIds: string[]) {
         if (!cell) {
           return false;
         }
-        if (!isDeepStrictEqual(cell.identity, identity(step.test, step.provider))) {
+        // Saved tests include beforeEach edits. Check the provider up front
+        // and compare the edited test before dispatch when hooks are present.
+        if (
+          !isDeepStrictEqual(cell.identity.provider, providerIdentity(step.provider)) ||
+          (!hasExtensions && !isDeepStrictEqual(cell.identity.test, retryTestIdentity(step.test)))
+        ) {
           throw mismatch();
         }
         return true;
       });
+    },
+    validate(step: RunEvalOptions) {
+      const cell = cells.get(getResultIndexKey(step));
+      if (!isDeepStrictEqual(cell?.identity, identity(step.test, step.provider))) {
+        throw mismatch();
+      }
     },
     saved(row: Pick<EvaluateResult, 'provider' | 'testCase' | 'testIdx' | 'promptIdx'>) {
       const cell = cells.get(getResultIndexKey(row));

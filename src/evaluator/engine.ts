@@ -2449,6 +2449,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (testSuite.extensions?.length) {
+      this.options.retryResults?.validate(evalStep);
+    }
 
     const rows = await runEvalInternal(
       {
@@ -3913,7 +3916,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite,
       tests,
     });
-    const retrySteps = await options.retryResults?.prepare(runEvalOptions);
+    const retrySteps = await options.retryResults?.prepare(
+      runEvalOptions,
+      Boolean(testSuite.extensions?.length),
+    );
     await this.store.appendPrompts(prompts);
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     if (cliState.resume && this.store.persisted) {

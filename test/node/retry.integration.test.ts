@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { eq } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
 import { evalResultsTable } from '../../src/database/tables';
@@ -148,15 +148,25 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
-    it.each(['reordered', 'omitted', 'extra', 'different provider'])(
+    it.each(['reordered', 'omitted', 'extra', 'different provider', 'stable hook', 'changed hook'])(
       'protects %s saved errors on retry',
       async (change) => {
         const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
         const tests = ['one', 'two'].map((name) => ({ vars: { name } }));
+        const hooked = change.endsWith('hook');
+        const extension = path.join(os.tmpdir(), `retry-${randomUUID()}.cjs`);
+        if (hooked) {
+          fs.writeFileSync(
+            extension,
+            "exports.beforeEach = ({test}) => ({test: {...test, description: 'updated'}});",
+          );
+          onTestFinished(() => fs.unlinkSync(extension));
+        }
         const record = await Eval.create(
           {
             prompts: [prompt.raw],
             providers: ['echo'],
+            extensions: hooked ? [`file://${extension}:beforeEach`] : [],
             tests:
               change === 'reordered'
                 ? [...tests].reverse()
@@ -176,7 +186,7 @@ describe('retry command', () => {
             promptIdx: 0,
             testIdx,
             prompt,
-            testCase,
+            testCase: change === 'stable hook' ? { ...testCase, description: 'updated' } : testCase,
             provider:
               change === 'different provider'
                 ? { id: 'echo', config: { url: 'https://example.org' } }
@@ -188,7 +198,11 @@ describe('retry command', () => {
             namedScores: {},
           })),
         );
-        if (change === 'reordered' || change === 'different provider') {
+        if (
+          change === 'reordered' ||
+          change === 'different provider' ||
+          change === 'changed hook'
+        ) {
           await expect(retryCommand(record.id, {})).rejects.toThrow('saved test or provider');
           expect(new Set(await getErrorResultIds(record.id))).toEqual(new Set(ids));
         } else {
