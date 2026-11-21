@@ -57,8 +57,10 @@ const reviewRunGates = vi.hoisted(() => ({
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: () => ({ data: { status: 'connected' }, isLoading: false }),
 }));
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: () => ({ checkEmailStatus: reviewRunGates.checkEmailStatus }),
+vi.mock('@app/utils/emailVerification', () => ({
+  checkEmailStatus: reviewRunGates.checkEmailStatus,
+  saveEmail: vi.fn(),
+  clearEmail: vi.fn(),
 }));
 vi.mock('@app/hooks/useEvalHistoryRefresh', () => ({
   useEvalHistoryRefresh: () => ({ signalEvalCompleted: reviewRunGates.signalEvalCompleted }),
@@ -73,7 +75,6 @@ vi.mock('@app/stores/redteamJobStore', () => ({
 }));
 
 // Mock child components to isolate the page component
-vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Targets/TargetTypeSelection', () => ({
   default: () => <div>TargetTypeSelection</div>,
 }));
@@ -782,6 +783,45 @@ redteam:
         </MemoryRouter>,
       );
     };
+
+    it.each([
+      ['openai:responses:gpt-6.2-astra', 'openai'],
+      ['openai:codex-sdk:gpt-6.2-sol', 'openai'],
+      ['litellm:openai/gpt-6.2-sol', 'litellm'],
+      ['openrouter:openai/gpt-6.2-astra', 'openrouter'],
+      ['vercel:openai/gpt-6.2-sol', 'vercel'],
+      ['bedrock:responses:openai.gpt-6.2-sol', 'bedrock'],
+      ['azure:responses:my-astra-deployment', 'azure'],
+      ['azureopenai:chat:my-sol-deployment', 'azure'],
+    ])('round-trips the model target %s through YAML import and Run Now', async (id, type) => {
+      const user = userEvent.setup();
+      const setup = render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [JSON.stringify({ targets: [id], redteam: { purpose: 'Answer questions' } })],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+      await waitFor(() => expect(useRedTeamConfig.getState().config.target.id).toBe(id));
+      expect(useRedTeamConfig.getState().providerType).toBe(type);
+      const exported = loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config));
+      expect(exported).toMatchObject({ targets: [{ id }] });
+      setup.unmount();
+
+      await mountActualReview();
+      await user.click(screen.getByRole('button', { name: 'Run Now' }));
+      await waitFor(() =>
+        expect(reviewRunGates.setJob).toHaveBeenCalledWith('imported-target-job'),
+      );
+      const run = mockedCallApi.mock.calls.find(([url]) => url === '/redteam/run');
+      expect(JSON.parse(String(run?.[1]?.body))).toMatchObject({ config: { targets: [{ id }] } });
+    });
 
     it.each([
       { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
