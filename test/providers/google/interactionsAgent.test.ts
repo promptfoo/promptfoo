@@ -68,6 +68,8 @@ describe('GoogleInteractionsAgentProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // Polling, deadlines, and backoff run on a controlled clock.
+    vi.useFakeTimers();
     restoreEnv = mockProcessEnv({
       GOOGLE_API_KEY: undefined,
       GEMINI_API_KEY: undefined,
@@ -80,9 +82,28 @@ describe('GoogleInteractionsAgentProvider', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     restoreEnv();
     vi.restoreAllMocks();
   });
+
+  /** Runs a provider call to completion, advancing the fake clock through every wait. */
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    const outcome = promise.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.runAllTimersAsync();
+    const result = await outcome;
+    if ('error' in result) {
+      throw result.error;
+    }
+    return result.value;
+  }
+
+  function getCount() {
+    return mockFetch.mock.calls.filter(([, init]) => init?.method === 'GET').length;
+  }
 
   function requestAt(index: number) {
     const [url, init] = mockFetch.mock.calls[index];
@@ -169,7 +190,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
     const create = requestAt(0);
@@ -224,7 +245,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key' },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toContain('TPU v1');
@@ -258,7 +279,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', pollIntervalMs: 1, agentConfig: { max_total_tokens: 30000 } },
     });
 
-    const result = await provider.callApi('Reply with OK');
+    const result = await settle(provider.callApi('Reply with OK'));
 
     expect(requestAt(0).body).toEqual({
       agent: ANTIGRAVITY,
@@ -295,7 +316,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', environment: 'env-existing' },
     });
 
-    const result = await provider.callApi('Continue');
+    const result = await settle(provider.callApi('Continue'));
 
     expect(requestAt(0).body.environment).toBe('env-existing');
     // Gemini 4 Hydrogen: 40k uncached x $1.50/1M + 60k cached x $0.075/1M + 1k x $7.50/1M.
@@ -319,7 +340,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', pollIntervalMs: 1 },
     });
 
-    const result = await provider.callApi('Hello');
+    const result = await settle(provider.callApi('Hello'));
 
     // Gemini 4 Hydrogen Flex: $0.75/1M input, $3.75/1M output.
     expect(result.cost).toBeCloseTo(10_000 * 0.75e-6 + 1_000 * 3.75e-6, 12);
@@ -338,7 +359,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key' },
     });
 
-    const result = await provider.callApi('Hello');
+    const result = await settle(provider.callApi('Hello'));
 
     expect(result.output).toBe('Done');
     expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 100 });
@@ -351,7 +372,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', inputCost: 2e-6, outputCost: 10e-6 },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     // Input includes tool-use tokens; output includes thinking tokens.
     expect(result.cost).toBeCloseTo(230_000 * 2e-6 + 60_000 * 10e-6, 10);
@@ -372,7 +393,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', pollIntervalMs: 1 },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toBe(
       'Gemini agent interaction interaction-failed ended with status failed: Research could not be completed',
@@ -400,7 +421,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', pollIntervalMs: 1 },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toBe(
       'Gemini agent interaction interaction-error ended with status failed: Maximum research time exceeded',
@@ -413,14 +434,18 @@ describe('GoogleInteractionsAgentProvider', () => {
       jsonResponse({ id: 'interaction-slow', status: 'in_progress' }),
     );
     const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 5, maxPollTimeMs: 40 },
+      config: { apiKey: 'test-key', pollIntervalMs: 10_000, maxPollTimeMs: 60_000 },
     });
+    const startedAt = Date.now();
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toContain(
-      'Gemini agent interaction interaction-slow did not finish within 40ms (last status: in_progress)',
+      'Gemini agent interaction interaction-slow did not finish within 60000ms (last status: in_progress)',
     );
+    // One status check every 10 s, the last one at the deadline.
+    expect(getCount()).toBe(6);
+    expect(Date.now() - startedAt).toBe(60_000);
     expect(result.error).toContain(`GET ${ENDPOINT}/interaction-slow`);
     expect(result.metadata).toMatchObject({
       interactionId: 'interaction-slow',
@@ -446,7 +471,7 @@ describe('GoogleInteractionsAgentProvider', () => {
     });
 
     await expect(
-      provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal }),
+      settle(provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal })),
     ).rejects.toMatchObject({ name: 'AbortError' });
 
     const cancel = mockFetch.mock.calls.find(([url]) => String(url).endsWith('/cancel'));
@@ -473,19 +498,19 @@ describe('GoogleInteractionsAgentProvider', () => {
     });
 
     const call = provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal });
-    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     // Google may already have the request, so the create is not tied to the caller's signal.
     expect(requestAt(0).init?.signal).toBeUndefined();
     controller.abort();
     await expect(call).rejects.toMatchObject({ name: 'AbortError' });
 
     releaseCreate(jsonResponse({ id: 'interaction-late', status: 'in_progress' }));
-    await vi.waitFor(() =>
-      expect(mockFetch).toHaveBeenCalledWith(
-        `${ENDPOINT}/interaction-late/cancel`,
-        expect.objectContaining({ method: 'POST' }),
-        expect.any(Number),
-      ),
+    await vi.runAllTimersAsync();
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${ENDPOINT}/interaction-late/cancel`,
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
     );
     expect(postCount()).toBe(1);
   });
@@ -509,7 +534,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key' },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.error).toContain('Gemini agent request failed: Error: Request timed out');
@@ -523,7 +548,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       {
         status: 429,
         statusText: 'Too Many Requests',
-        headers: { 'Content-Type': 'application/json', 'retry-after': '0' },
+        headers: { 'Content-Type': 'application/json', 'retry-after': '2' },
       },
     );
   }
@@ -535,11 +560,13 @@ describe('GoogleInteractionsAgentProvider', () => {
     const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
       config: { apiKey: 'test-key' },
     });
+    const startedAt = Date.now();
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.output).toContain('TPU v1');
     expect(postCount()).toBe(2);
+    expect(Date.now() - startedAt).toBe(2_000);
   });
 
   it('reports a persistent 429 after bounded create retries', async () => {
@@ -548,7 +575,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key' },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toBe('Gemini agent API error: Quota exceeded for agent requests');
     expect(result.metadata).toMatchObject({
@@ -573,11 +600,14 @@ describe('GoogleInteractionsAgentProvider', () => {
     });
 
     try {
-      const result = await registry.execute(
+      const call = registry.execute(
         provider,
         () => provider.callApi('Research TPUs'),
         createProviderRateLimitOptions(),
       );
+      // Long enough for every scheduler retry backoff if the call were replayed.
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      const result = await call;
       expect(result.error).toBeDefined();
       expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
     } finally {
@@ -596,7 +626,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', pollIntervalMs: 1 },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toBeUndefined();
     expect(result.output).toContain('TPU v1');
@@ -612,14 +642,17 @@ describe('GoogleInteractionsAgentProvider', () => {
     }
     mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
     const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1 },
+      config: { apiKey: 'test-key', pollIntervalMs: 10_000 },
     });
+    const startedAt = Date.now();
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.output).toContain('TPU v1');
     expect(mockFetch).toHaveBeenCalledTimes(8);
     expect(postCount()).toBe(1);
+    // 10 s, then 20 s, 40 s, and 60 s (the cap) for each later failed check.
+    expect(Date.now() - startedAt).toBe(10_000 + 20_000 + 40_000 + 4 * 60_000);
   });
 
   it('reports the last status-check failure when polling never recovers', async () => {
@@ -629,14 +662,16 @@ describe('GoogleInteractionsAgentProvider', () => {
         jsonResponse({ error: { message: 'backend unavailable' } }, 503, 'Unavailable'),
       );
     const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
-      config: { apiKey: 'test-key', pollIntervalMs: 1, maxPollTimeMs: 30 },
+      config: { apiKey: 'test-key', pollIntervalMs: 10_000, maxPollTimeMs: 120_000 },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toContain(
-      'Gemini agent interaction interaction-down did not finish within 30ms (last status: in_progress; last status check failed: backend unavailable)',
+      'Gemini agent interaction interaction-down did not finish within 120000ms (last status: in_progress; last status check failed: backend unavailable)',
     );
+    // 10 s, 20 s, 40 s, then the remaining 50 s up to the deadline.
+    expect(getCount()).toBe(4);
     expect(postCount()).toBe(1);
   });
 
@@ -648,7 +683,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', pollIntervalMs: 1 },
     });
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result.error).toBe(
@@ -670,7 +705,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key' },
     });
 
-    const result = await provider.callApi('Summarize');
+    const result = await settle(provider.callApi('Summarize'));
 
     expect(result.output).toBe('Partial summary');
     expect(result.metadata).toMatchObject({ status: 'incomplete', environmentId: 'env-1' });
@@ -682,7 +717,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       config: { apiKey: 'test-key', environment: 'remote' },
     });
 
-    const result = await provider.callApi('Analyze');
+    const result = await settle(provider.callApi('Analyze'));
 
     expect(result.error).toBe(
       'Gemini agent interaction ag-action requires client action, which Promptfoo does not support for managed agents',
@@ -711,14 +746,16 @@ describe('GoogleInteractionsAgentProvider', () => {
       },
     });
 
-    await provider.callApi('Plan the research', {
-      prompt: {
-        raw: 'Plan the research',
-        label: 'p',
-        config: { passthrough: { service_tier: 'flex' } },
-      },
-      vars: {},
-    });
+    await settle(
+      provider.callApi('Plan the research', {
+        prompt: {
+          raw: 'Plan the research',
+          label: 'p',
+          config: { passthrough: { service_tier: 'flex' } },
+        },
+        vars: {},
+      }),
+    );
 
     expect(requestAt(0).body).toEqual({
       agent: DEEP_RESEARCH,
@@ -769,7 +806,7 @@ describe('GoogleInteractionsAgentProvider', () => {
   it('requires a Gemini API key', async () => {
     const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH);
 
-    const result = await provider.callApi('Research TPUs');
+    const result = await settle(provider.callApi('Research TPUs'));
 
     expect(result.error).toContain('Gemini managed agents require an API key.');
     expect(mockFetch).not.toHaveBeenCalled();
@@ -781,7 +818,7 @@ describe('GoogleInteractionsAgentProvider', () => {
       env: { GEMINI_API_KEY: 'env-key' },
     });
 
-    await provider.callApi('Research TPUs');
+    await settle(provider.callApi('Research TPUs'));
 
     expect(requestAt(0).headers['x-goog-api-key']).toBe('env-key');
   });
