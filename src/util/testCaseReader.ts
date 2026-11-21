@@ -199,6 +199,16 @@ function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExten
   return undefined;
 }
 
+// A literal generator filename can contain '#'. Prefer an existing workbook so
+// selecting a sheet never runs a sibling script of the same name.
+function testWorkbookPath(reference: string): string | undefined {
+  const workbook = getExcelWorkbookPath(reference);
+  const script = stripFunctionSuffix(reference);
+  return workbook && isJavascriptFile(script) && !fs.existsSync(workbook) && fs.existsSync(script)
+    ? undefined
+    : workbook;
+}
+
 async function readLocalStandaloneTestsFile(
   varsPath: string,
   basePath: string,
@@ -207,17 +217,17 @@ async function readLocalStandaloneTestsFile(
   const { resolvedVarsPath, pathWithoutFunction, maybeFunctionName, fileExtension } =
     getStandaloneTestsFileMetadata(varsPath, basePath);
 
+  if (testWorkbookPath(pathWithoutFunction)) {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
+  }
   if (isJavascriptFile(pathWithoutFunction)) {
     telemetry.record('feature_used', {
       feature: 'js tests file',
     });
     return readJavascriptTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
-  }
-  if (getExcelWorkbookPath(pathWithoutFunction)) {
-    telemetry.record('feature_used', {
-      feature: 'xlsx tests file - local',
-    });
-    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
   }
   if (fileExtension === 'py') {
     telemetry.record('feature_used', {
@@ -757,6 +767,9 @@ export async function readTestConfigs(
 }
 
 function usesStandaloneWorkbookLoader(source: string, basePath: string): boolean {
+  if (isRemoteTestsReference(source)) {
+    return false;
+  }
   const workbookPath = getExcelWorkbookPath(source);
   // A sheet name can contain glob characters. Expand only bare workbook globs.
   return (
@@ -787,14 +800,14 @@ async function readTestsWithEnv(
 
   if (typeof tests === 'string') {
     const source = renderEnvOnlyInObject(tests);
-    if (source.startsWith('az://')) {
+    const withoutScheme = source.replace(/^file:\/\//, '');
+    if (source.startsWith('az://') || usesStandaloneWorkbookLoader(withoutScheme, basePath)) {
       return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
     if (source.endsWith('yaml') || source.endsWith('yml')) {
       return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
-    const withoutScheme = source.replace(/^file:\/\//, '');
     if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
       // Preserve standalone parsing for literal files, including names with glob characters.
       return loadStandalone(source);
@@ -811,7 +824,7 @@ async function readTestsWithEnv(
     return loadStandalone(tests.path, tests.config);
   }
   if (!Array.isArray(tests)) {
-    if (tests !== undefined && tests !== null) {
+    if (tests != null) {
       logger.warn(dedent`
         Warning: Unsupported 'tests' format in promptfooconfig.yaml.
         Expected: string, string[], or TestCase[], but received: ${typeof tests}
@@ -931,7 +944,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
       { windowsPathsNoEscape: true },
     );
     if (matches.length > 0) {
-      return matches.map((match) => getExcelWorkbookPath(match) ?? match);
+      return matches.map((match) => testWorkbookPath(match) ?? match);
     }
     // No matches: fall through, since the reference may be a literal filename that
     // happens to contain a glob metacharacter.
@@ -939,7 +952,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   // A concrete path. Only strip a `:functionName` suffix for script references, so that
   // a vars file whose name legally contains a colon is still watched in full.
-  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
+  const withoutSheet = testWorkbookPath(resolved) ?? resolved;
   const withoutFunction = stripFunctionSuffix(withoutSheet);
   const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
   return [isScript ? withoutFunction : withoutSheet];

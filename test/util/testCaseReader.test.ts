@@ -22,6 +22,7 @@ import {
   readTest,
   readTestFiles,
   readTests,
+  resolveTestsWatchPaths,
 } from '../../src/util/testCaseReader';
 import { createMockProvider } from '../factories/provider';
 
@@ -1693,6 +1694,32 @@ describe('readTests', () => {
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
   });
+
+  it('loads a literal generator with a workbook-like name only if the workbook is absent', async () => {
+    const reference = 'file://cases.xlsx#results.js';
+    vi.mocked(fs.existsSync).mockImplementation((name) => String(name).endsWith('results.js'));
+    vi.mocked(importModule).mockResolvedValue(() => [{ vars: { source: 'generator' } }]);
+    expect(await readTests(reference)).toMatchObject([{ vars: { source: 'generator' } }]);
+    expect(resolveTestsWatchPaths(reference)).toEqual([path.resolve('cases.xlsx#results.js')]);
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue([{ source: 'sheet' }]);
+    expect(await readTests(reference)).toMatchObject([{ vars: { source: 'sheet' } }]);
+    expect(resolveTestsWatchPaths(reference)).toEqual([path.resolve('cases.xlsx')]);
+    expect(importModule).toHaveBeenCalledOnce();
+  });
+
+  it.each(['checks.yaml', 'results.js'])(
+    'reads worksheet %s as part of the workbook',
+    async (sheet) => {
+      const reference = `file://cases.xlsx#${sheet}`;
+      mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue([{ selected: sheet }]);
+
+      for (const tests of [reference, [reference], [{ path: reference }]]) {
+        expect(await readTests(tests)).toMatchObject([{ vars: { selected: sheet } }]);
+      }
+    },
+  );
 
   it('should handle xlsx sheet names containing dots in array format', async () => {
     const mockData = [{ name: 'decimal-sheet', value: 'result' }];
