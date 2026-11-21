@@ -22,6 +22,7 @@ export const AzureSharedConfigInputSchema = z.strictObject({
 });
 
 const AzureModelFields = z.strictObject({
+  ...OpenAiChatConfigInputSchema.pick({ cost: true, inputCost: true, outputCost: true }).shape,
   modelName: z.string().optional(),
   isReasoningModel: z.boolean().optional(),
   o1: z
@@ -45,6 +46,9 @@ const ChatFields = OpenAiChatConfigInputSchema.pick({
   stop: true,
   seed: true,
   reasoning_effort: true,
+  verbosity: true,
+  prompt_cache_key: true,
+  prompt_cache_options: true,
   functionToolCallbacks: true,
   passthrough: true,
   mcp: true,
@@ -70,6 +74,8 @@ export const AzureResponsesConfigInputSchema = AzureSharedConfigInputSchema.exte
       temperature: true,
       top_p: true,
       reasoning_effort: true,
+      prompt_cache_key: true,
+      prompt_cache_options: true,
       passthrough: true,
       omitDefaults: true,
       tools: true,

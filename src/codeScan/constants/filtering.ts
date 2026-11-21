@@ -44,6 +44,8 @@ export const DENYLIST_PATTERNS = [
 export const MAX_BLOB_SIZE_BYTES = 500 * 1024; // 500 KB
 export const MAX_PATCH_SIZE_BYTES = 200 * 1024; // 200 KB
 
-export function isInDenylist(filePath: string): boolean {
-  return DENYLIST_PATTERNS.some((pattern) => minimatch(filePath, pattern));
+export function isInDenylist(filePath: string, includeDotfiles = false): boolean {
+  return DENYLIST_PATTERNS.some((pattern) =>
+    minimatch(filePath, pattern, { dot: includeDotfiles }),
+  );
 }
