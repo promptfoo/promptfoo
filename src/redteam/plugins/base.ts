@@ -22,7 +22,7 @@ import {
   isBasicRefusal,
   isEmptyResponse,
 } from '../util';
-import { getPromptOutputFormatter } from './multiInputFormat';
+import { getPromptOutputFormatter, type PromptOutputFormatter } from './multiInputFormat';
 
 import type {
   ApiProvider,
@@ -103,6 +103,7 @@ export abstract class RedteamPluginBase {
    * @param delayMs - The delay in milliseconds between plugin API calls.
    * @param templateGetter - A function that returns a promise of a template string.
    * @param checkMessageLength - Validates generated user messages. Pass null for tool content.
+   * @param formatter - Pairs the requested output format with its parser.
    * @returns A promise that resolves to an array of TestCase objects.
    */
   async generateTests(
@@ -110,6 +111,7 @@ export abstract class RedteamPluginBase {
     delayMs: number = 0,
     templateGetter: () => Promise<string> = this.getTemplate.bind(this),
     checkMessageLength: typeof getGeneratedPromptOverLimit | null = getGeneratedPromptOverLimit,
+    formatter: PromptOutputFormatter = getPromptOutputFormatter(this.config),
   ): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
@@ -143,7 +145,7 @@ export abstract class RedteamPluginBase {
         legitimateTask: this.config.legitimateTask,
         n: currentBatchSize,
         examples: this.config.examples,
-        outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
+        outputFormat: formatter.instruction(this.config),
         hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
       });
 
@@ -203,7 +205,6 @@ export abstract class RedteamPluginBase {
       }
 
       // Use formatter to parse output
-      const formatter = getPromptOutputFormatter(this.config);
       const parsedPrompts = formatter.parse(generatedPrompts, this.config);
       const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
       const rejectedPromptLengths: number[] = [];

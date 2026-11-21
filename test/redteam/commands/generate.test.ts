@@ -848,7 +848,7 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should pass entities from redteam config to synthesize', async () => {
+  it('passes entities and the scan-wide message limit from redteam config to synthesize', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -858,6 +858,7 @@ describe('doGenerateRedteam', () => {
       config: {
         redteam: {
           entities: ['Company X', 'John Doe', 'Product Y'],
+          maxCharsPerMessage: 100,
           plugins: ['harmful:hate' as unknown as RedteamPluginObject],
           strategies: [],
         },
@@ -898,6 +899,7 @@ describe('doGenerateRedteam', () => {
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
         entities: ['Company X', 'John Doe', 'Product Y'],
+        maxCharsPerMessage: 100,
         plugins: expect.any(Array),
         prompts: ['Test prompt'],
         strategies: expect.any(Array),

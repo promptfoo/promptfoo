@@ -71,9 +71,8 @@ function HeroStrategyCard({
   isRemoteGenerationDisabled,
   isConfigured,
 }: HeroStrategyCardProps) {
-  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
-    strategyId: strategy.id,
-  });
+  const { handleTestCaseGeneration, previewDisabledReason, isGenerating, isCurrentStrategy } =
+    useStrategyTestGeneration({ strategyId: strategy.id });
 
   const requiresConfig = isSelected && !isConfigured;
 
@@ -159,10 +158,10 @@ function HeroStrategyCard({
       <div className="relative z-10 mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={isDisabled || isGenerating || requiresConfig}
+          disabled={isDisabled || isGenerating || requiresConfig || Boolean(previewDisabledReason)}
           isGenerating={isGenerating && isCurrentStrategy}
           size="small"
-          tooltipTitle={tooltipTitle}
+          tooltipTitle={previewDisabledReason ?? tooltipTitle}
         />
 
         {hasSettingsButton && (

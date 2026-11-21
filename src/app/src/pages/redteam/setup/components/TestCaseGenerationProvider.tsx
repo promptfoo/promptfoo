@@ -20,7 +20,11 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
-import { getStrategyPreviewPlugins } from '../utils/plugins';
+import {
+  canPreviewPluginWithStrategy,
+  getStrategyPreviewPlugins,
+  INCOMPATIBLE_PREVIEW_MESSAGE,
+} from '../utils/plugins';
 import { withAgentOutcomeMessageLimit } from './AgentOutcomeConfig';
 import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
@@ -462,7 +466,9 @@ export const TestCaseGenerationProvider: React.FC<{
             ...targetPlugin,
             config: withAgentOutcomeMessageLimit(
               targetPlugin.id,
-              targetPlugin.config,
+              isAgentOutcomePlugin(targetPlugin.id) && redTeamConfig.target?.inputs
+                ? { ...targetPlugin.config, inputs: redTeamConfig.target.inputs }
+                : targetPlugin.config,
               redTeamConfig.maxCharsPerMessage,
             ),
           },
@@ -496,6 +502,7 @@ export const TestCaseGenerationProvider: React.FC<{
       redTeamConfig.language,
       redTeamConfig.provider,
       redTeamConfig.maxCharsPerMessage,
+      redTeamConfig.target?.inputs,
       recordEvent,
     ],
   );
@@ -550,9 +557,13 @@ export const TestCaseGenerationProvider: React.FC<{
       testExecutionAbortController.current?.abort();
       resetState();
 
-      if (targetConfigError) {
-        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
-        onError?.(new Error(targetConfigError));
+      const compatible =
+        canPreviewPluginWithStrategy(plugin.id, strategy.id) &&
+        getStrategyPreviewPlugins(redTeamConfig.plugins, strategy.id).length > 0;
+      const previewError = targetConfigError || (!compatible && INCOMPATIBLE_PREVIEW_MESSAGE);
+      if (previewError) {
+        toast.showToast(previewError, 'error', ERROR_MSG_DURATION);
+        onError?.(new Error(previewError));
         return;
       }
 
@@ -589,7 +600,7 @@ export const TestCaseGenerationProvider: React.FC<{
       // Open dialog to show test case generation results
       setIsDialogOpen(true);
     },
-    [shouldEvaluateAgainstTarget, resetState, targetConfigError, toast],
+    [shouldEvaluateAgainstTarget, redTeamConfig.plugins, resetState, targetConfigError, toast],
   );
 
   const handleCloseDialog = useCallback(() => {
