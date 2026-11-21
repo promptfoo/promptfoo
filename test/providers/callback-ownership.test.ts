@@ -10,13 +10,15 @@ afterEach(() => {
 describe.each(['google:live:gemini-3.8-live', 'openai:assistant:asst_test'])(
   '%s callback ownership through the public loader',
   (providerId) => {
+    const config = { apiKey: 'test-key', apiBaseUrl: 'https://gateway.example/v1' };
+
     it.each(['toString', 'constructor', '__proto__'])(
       'retains the explicitly configured %s callback',
       async (name) => {
         const callback = vi.fn(() => 'configured result');
         const callbacks = Object.fromEntries([[name, callback]]);
         const provider = await loadApiProvider(providerId, {
-          options: { config: { apiKey: 'test-key', functionToolCallbacks: callbacks } },
+          options: { config: { ...config, functionToolCallbacks: callbacks } },
         });
         const loaded = (provider.config as NonNullable<ProviderOptions['config']>)
           .functionToolCallbacks;
@@ -34,7 +36,7 @@ describe.each(['google:live:gemini-3.8-live', 'openai:assistant:asst_test'])(
         Object.defineProperty({}, 'inherited', { enumerable: true, get: getter }),
       );
       const provider = await loadApiProvider(providerId, {
-        options: { config: { apiKey: 'test-key', functionToolCallbacks: callbacks } },
+        options: { config: { ...config, functionToolCallbacks: callbacks } },
       });
       const loaded = (provider.config as NonNullable<ProviderOptions['config']>)
         .functionToolCallbacks;
