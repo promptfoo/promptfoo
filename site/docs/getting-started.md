@@ -10,7 +10,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-This guide will walk you through creating a working eval that tests prompts across multiple models and opens a web view for comparing outputs.
+Create an eval that tests prompts across models, then compare their outputs in the web viewer.
 
 After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 

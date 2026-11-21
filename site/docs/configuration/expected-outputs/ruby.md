@@ -1,7 +1,7 @@
 ---
 sidebar_position: 52
 sidebar_label: Ruby
-description: Create advanced Ruby validation scripts with complex logic, external APIs, and custom libraries for sophisticated output grading
+description: Write Ruby assertions to grade LLM outputs using custom logic, external APIs, or Ruby libraries. Configure scripts and return pass/fail results or scores.
 ---
 
 # Ruby assertions

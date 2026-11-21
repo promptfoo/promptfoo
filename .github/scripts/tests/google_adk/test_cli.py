@@ -16,6 +16,9 @@ from pathlib import Path
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from trace_cli_assertions import assert_remote_trace_result
+
 ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE = ROOT / "examples/integration-google-adk"
 TRIP_NOTE_SUMMARY = "Cloudy with drizzle. Bring an umbrella."
@@ -393,60 +396,42 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 row,
                                 capture_content,
                             )
-                        if failure:
+                        if failure == "api-error":
                             self.assertNotEqual(process.returncode, 0, log)
                             self.assertFalse(row["success"], row)
-                            self.assertLess(row["score"], 1, row)
-                            self.assertEqual(data["stats"]["successes"], 0)
-                            if failure == "api-error":
-                                self.assertEqual(row["score"], 0, row)
-                                self.assertIn(
-                                    "ADK fixture rejected request", row["error"]
-                                )
-                                self.assertEqual(data["stats"]["errors"], 1)
-                            else:
-                                self.assertFalse(row["response"].get("error"), row)
-                                self.assertEqual(data["stats"]["failures"], 1)
-                                self.assertEqual(data["stats"]["errors"], 0)
-                                components = row["gradingResult"]["componentResults"]
-                                failed_types = {
-                                    item["assertion"]["type"]
-                                    for item in components
-                                    if not item["pass"]
-                                }
-                                self.assertIn(
-                                    "trajectory:tool-args-match", failed_types
-                                )
-                                if failure == "no-content":
-                                    for item in components:
-                                        self.assertEqual(
-                                            item["pass"],
-                                            item["assertion"]["type"]
-                                            != "trajectory:tool-args-match",
-                                            item,
-                                        )
-                            print(f"ADK {backend} {name}: {failure} rejected")
+                            self.assertEqual(row["score"], 0, row)
+                            self.assertIn("ADK fixture rejected request", row["error"])
+                            self.assertEqual(data["stats"]["errors"], 1)
                             continue
-                        self.assertEqual(
-                            process.returncode, 0, f"{log}\n{row['gradingResult']}"
-                        )
-                        self.assertEqual(data["stats"]["successes"], 1)
-                        self.assertEqual(data["stats"]["failures"], 0)
+                        self.assertEqual(process.returncode, 100, log)
+                        self.assertEqual(data["stats"]["successes"], 0)
                         self.assertEqual(data["stats"]["errors"], 0)
-                        self.assertTrue(row["success"], row)
-                        self.assertFalse(row.get("error"), row)
-                        self.assertEqual(row["score"], 1, row)
-                        components = row["gradingResult"]["componentResults"]
-                        self.assertTrue(components, row)
-                        self.assertTrue(
-                            all(item["pass"] for item in components), components
+                        self.assertEqual(data["stats"]["failures"], 1)
+                        configured = config["tests"][0]["assert"]
+                        workflow = name == "promptfooconfig.workflow.yaml"
+                        tool_args = {3} if workflow else {7, 8}
+                        failed = set()
+                        if failure == "no-content":
+                            failed = tool_args
+                        elif failure == "wrong-tool-args":
+                            # The fixture always substitutes New York. The conversation
+                            # also persists that city and its artifact name into state.
+                            failed = tool_args if workflow else tool_args | {0, 1, 2}
+                        assert_remote_trace_result(
+                            self,
+                            row,
+                            configured,
+                            incomplete={7 if workflow else 13},
+                            failed=failed,
                         )
+                        if failure:
+                            continue
                         payload = json.loads(row["response"]["output"])
                         self.assertTrue(payload["final_answer"], payload)
                         self.assertGreater(payload["event_count"], 0)
                         print(
-                            f"ADK {backend} {name}: success=true score=1 errors=0; "
-                            f"{len(components)} output/state/artifact/trace assertions passed"
+                            f"ADK {backend} {name}: observed checks passed; "
+                            "absence of error spans requires a complete trace"
                         )
                 self.assertGreaterEqual(
                     len(requests), 2 if failure == "api-error" else 8

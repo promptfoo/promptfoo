@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
-import { getTraceStore } from '../../src/tracing/store';
+import { getTraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
 import type {
@@ -162,6 +162,300 @@ describe('trace assertions', () => {
     expect(explicit.pass).toBe(true);
   });
 
+  it.each([
+    { type: 'trace-span-count', value: { pattern: '*', min: 4, max: 4 } },
+    { type: 'trace-error-spans', value: { max_count: 0 } },
+    createSpanCountAssertion(
+      'context.trace.spans.length === 4 && context.trace.spans.some(span => span.spanId === "target")',
+    ),
+  ] satisfies Assertion[])(
+    'uses the captured span IDs for direct and replayed $type assertions',
+    async (assertion) => {
+      const internalSpans = [
+        {
+          spanId: 'grader-grandchild',
+          parentSpanId: 'grader-child',
+          name: 'tool execution',
+          startTime: 1800,
+          endTime: 1900,
+          statusCode: 2,
+        },
+        {
+          spanId: 'grader-child',
+          parentSpanId: 'grader',
+          name: 'model generation',
+          startTime: 1700,
+          endTime: 2000,
+        },
+        {
+          spanId: 'eval-root',
+          name: 'promptfoo.test_case',
+          startTime: 900,
+          endTime: 2100,
+          statusCode: 2,
+          attributes: { 'promptfoo.span.role': 'test_case' },
+        },
+        {
+          spanId: 'grader',
+          name: 'grader javascript',
+          startTime: 1700,
+          endTime: 2000,
+          statusCode: 2,
+          attributes: { 'promptfoo.span.role': 'grader' },
+        },
+      ];
+      const targetSpans = [
+        ...mockTraceData.spans,
+        {
+          spanId: 'roleless',
+          parentSpanId: 'eval-root',
+          name: 'promptfoo.test_case',
+          startTime: 1000,
+          endTime: 1500,
+        },
+        {
+          spanId: 'target',
+          name: 'grader target',
+          startTime: 1100,
+          endTime: 1400,
+          attributes: { 'promptfoo.span.role': 'grader' },
+        },
+      ];
+      const traceData: TraceData = {
+        ...mockTraceData,
+        metadata: {
+          promptfooTraceEvidence: 'complete',
+          promptfooTraceSpanIds: targetSpans.map((span) => span.spanId),
+        },
+        spans: [...targetSpans, ...internalSpans],
+      };
+      const direct = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+        traceData,
+      });
+      expect(direct.pass).toBe(true);
+      mockTraceStore.getTrace.mockResolvedValue(JSON.parse(JSON.stringify(traceData)));
+      const replay = await runAssertions({
+        test: { assert: [assertion] },
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+      });
+      expect(replay.pass).toBe(true);
+      expect(traceData.spans).toEqual([...targetSpans, ...internalSpans]);
+    },
+  );
+
+  it.each([[], 'span-1', [null], ['missing'], ['span-1', 'missing']])(
+    'does not certify an invalid or incomplete saved capture %j',
+    async (capturedIds) => {
+      const traceData = {
+        ...mockTraceData,
+        metadata: { promptfooTraceEvidence: 'complete', promptfooTraceSpanIds: capturedIds },
+      };
+      const absence = { type: 'trace-span-count', value: { pattern: 'missing', max: 0 } } as const;
+      const direct = await runAssertion({
+        assertion: absence,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+        traceData,
+      });
+      expect(direct.pass).toBe(false);
+      mockTraceStore.getTrace.mockResolvedValue(JSON.parse(JSON.stringify(traceData)));
+      const replay = await runAssertions({
+        test: { assert: [absence] },
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+      });
+      expect(replay.pass).toBe(false);
+    },
+  );
+
+  it('admits late partial target descendants while excluding grader tools', async () => {
+    const traceData: TraceData = {
+      ...mockTraceData,
+      metadata: {
+        promptfooTraceEvidence: 'partial',
+        promptfooTraceSpanIds: ['target', 'open-child'],
+      },
+      spans: [
+        { spanId: 'target', parentSpanId: 'root', name: 'target.call', startTime: 1 },
+        { spanId: 'root', name: 'promptfoo.test_case', startTime: 0 },
+        { spanId: 'grader', parentSpanId: 'root', name: 'grader', startTime: 2 },
+        {
+          spanId: 'grader-tool',
+          parentSpanId: 'grader',
+          name: 'execute_tool grader',
+          startTime: 3,
+        },
+      ],
+    };
+    const assertion = {
+      type: 'trace-span-count',
+      value: { pattern: 'execute_tool *', min: 1 },
+    } as const;
+    mockTraceStore.getTrace.mockResolvedValue(traceData);
+    const options = {
+      traceId: traceData.traceId,
+      providerResponse: mockProviderResponse,
+      test: { assert: [assertion] },
+    };
+    expect((await runAssertions(options)).pass).toBe(false);
+    traceData.spans.push(
+      { spanId: 'open-child', parentSpanId: 'target', name: 'active target child', startTime: 1 },
+      {
+        spanId: 'late-tool',
+        parentSpanId: 'open-child',
+        name: 'execute_tool target',
+        startTime: 2,
+        attributes: { 'promptfoo.span.role': 'grader' },
+      },
+    );
+    expect((await runAssertions(options)).pass).toBe(true);
+    const absence = await runAssertions({
+      ...options,
+      test: { assert: [{ type: 'trace-span-count', value: { pattern: 'missing', max: 0 } }] },
+    });
+    expect(absence.pass).toBe(false);
+    expect(traceData.spans).toHaveLength(6);
+  });
+
+  it.each(['complete', 'partial', 'external'] as const)(
+    'withholds %s evidence when a selected target span loses attributes',
+    async (evidence) => {
+      const traceData: TraceData = {
+        ...mockTraceData,
+        metadata:
+          evidence === 'external'
+            ? {}
+            : {
+                promptfooTraceEvidence: evidence,
+                promptfooTraceSpanIds:
+                  evidence === 'complete' ? ['target', 'late-child'] : ['target'],
+              },
+        spans: [
+          { spanId: 'target', parentSpanId: 'root', name: 'target.call', startTime: 1 },
+          {
+            spanId: 'late-child',
+            parentSpanId: 'target',
+            name: 'execute_tool',
+            startTime: 2,
+            attributes: {
+              'tool.arguments': 'safe_probe',
+              [UNRELIABLE_SPAN_ATTRIBUTE]: true,
+            },
+          },
+        ],
+      };
+      const assertion = { type: 'trajectory:tool-used', value: 'safe_probe' } as const;
+      const direct = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+        traceData,
+      });
+      expect(direct.pass).toBe(false);
+      const unmarked = structuredClone(traceData);
+      delete unmarked.spans[1].attributes![UNRELIABLE_SPAN_ATTRIBUTE];
+      expect(
+        (
+          await runAssertion({
+            assertion,
+            test: mockTest,
+            providerResponse: mockProviderResponse,
+            traceId: unmarked.traceId,
+            traceData: unmarked,
+          })
+        ).pass,
+      ).toBe(true);
+      mockTraceStore.getTrace.mockResolvedValue(JSON.parse(JSON.stringify(traceData)));
+      const replay = await runAssertions({
+        test: { assert: [assertion, createSpanCountAssertion('context.trace === undefined')] },
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+      });
+      expect(replay.componentResults?.map((result) => result.pass)).toEqual([false, true]);
+    },
+  );
+
+  it.each(['complete', 'partial'])(
+    'keeps %s target evidence usable when only an excluded grader loses attributes',
+    async (evidence) => {
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        metadata: { promptfooTraceEvidence: evidence, promptfooTraceSpanIds: ['target'] },
+        spans: [
+          {
+            spanId: 'target',
+            parentSpanId: 'root',
+            name: 'execute_tool target',
+            startTime: 1,
+            attributes: { 'tool.name': 'target', [UNRELIABLE_SPAN_ATTRIBUTE]: false },
+          },
+          {
+            spanId: 'grader',
+            parentSpanId: 'root',
+            name: 'execute_tool grader',
+            startTime: 2,
+            attributes: { 'tool.name': 'grader', [UNRELIABLE_SPAN_ATTRIBUTE]: true },
+          },
+        ],
+      });
+      const result = await runAssertions({
+        traceId: mockTraceData.traceId,
+        providerResponse: mockProviderResponse,
+        test: { assert: [{ type: 'trajectory:tool-used', value: 'target' }] },
+      });
+      expect(result.pass).toBe(true);
+    },
+  );
+
+  it('keeps an empty partial local scope from accepting later grader evidence', async () => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      metadata: { promptfooTraceEvidence: 'partial', promptfooTraceSpanIds: [] },
+    });
+    const result = await runAssertions({
+      traceId: mockTraceData.traceId,
+      providerResponse: mockProviderResponse,
+      test: { assert: [{ type: 'trace-span-count', value: { pattern: '*', min: 1 } }] },
+    });
+    expect(result.pass).toBe(false);
+  });
+
+  it('keeps target-supplied role attributes in traces without a local capture snapshot', async () => {
+    const traceData: TraceData = {
+      ...mockTraceData,
+      spans: mockTraceData.spans.map((span, index) => ({
+        ...span,
+        attributes: { 'promptfoo.span.role': index === 0 ? 'test_case' : 'grader' },
+      })),
+    };
+    const assertion = {
+      type: 'trace-span-count',
+      value: { pattern: '*', min: 2, max: 2 },
+    } as const;
+    const direct = await runAssertion({
+      assertion,
+      test: mockTest,
+      providerResponse: mockProviderResponse,
+      traceId: traceData.traceId,
+      traceData,
+    });
+    expect(direct.pass).toBe(true);
+    mockTraceStore.getTrace.mockResolvedValue(traceData);
+    const replay = await runAssertions({
+      test: { assert: [assertion] },
+      providerResponse: mockProviderResponse,
+      traceId: traceData.traceId,
+    });
+    expect(replay.pass).toBe(true);
+  });
+
   describe('regrading saved trace evidence', () => {
     const positive = { type: 'trace-span-count', value: { pattern: '*', min: 1 } } as const;
     const absence = { type: 'trace-span-count', value: { pattern: 'missing', max: 0 } } as const;
@@ -230,7 +524,7 @@ describe('trace assertions', () => {
       });
       expect(result).toMatchObject({
         pass: false,
-        reason: expect.stringContaining('Local trace export did not complete'),
+        reason: expect.stringContaining('Trace evidence is unavailable or unreliable'),
       });
       expect(mockTraceStore.getTrace).toHaveBeenCalledOnce();
     });
@@ -271,6 +565,8 @@ describe('trace assertions', () => {
       { type: 'trace-span-duration', value: { pattern: '*', max: 600 } },
       { type: 'trajectory:step-count', value: { max: 1 } },
       { type: 'trajectory:tool-used', value: { name: 'search', min: 0 } },
+      { type: 'trajectory:tool-used', value: '' },
+      { type: 'not-trajectory:tool-used', value: '' },
       { type: 'not-trajectory:tool-used', value: 'missing' },
       { type: 'trajectory:tool-sequence', value: { steps: ['search'], mode: 'exact' } },
       { type: 'trajectory:goal-success', value: 'Find orders' },
@@ -310,18 +606,54 @@ describe('trace assertions', () => {
     expect(grades.at(-1)?.pass).toBe(true);
   });
 
-  it('preserves validation errors on positive partial-trace assertions', async () => {
-    await expect(
-      runAssertion({
-        assertion: { type: 'trajectory:tool-args-match', value: { name: 'search' } },
-        test: mockTest,
-        providerResponse: mockProviderResponse,
-        traceId: mockTraceData.traceId,
-        traceData: mockTraceData,
-        traceIncomplete: true,
-      }),
-    ).rejects.toThrow('must include an args or arguments property');
-  });
+  it.each([
+    ['trajectory:tool-used', true],
+    ['trajectory:tool-used', false],
+    ['not-trajectory:tool-used', true],
+    ['not-trajectory:tool-used', false],
+  ] as const)(
+    'preserves empty-tool validation for %s with traceIncomplete=%s',
+    async (type, traceIncomplete) => {
+      await expect(
+        runAssertion({
+          assertion: { type, value: [] },
+          test: mockTest,
+          providerResponse: mockProviderResponse,
+          traceData: mockTraceData,
+          traceIncomplete,
+        }),
+      ).rejects.toThrow('trajectory:tool-used assertion requires at least one expected tool');
+    },
+  );
+
+  it.each<{ assertion: Assertion; error: string }>([
+    {
+      assertion: { type: 'trajectory:tool-args-match', value: { name: 'search' } },
+      error: 'must include an args or arguments property',
+    },
+    {
+      assertion: { type: 'not-trajectory:tool-args-match', value: { name: 'search' } },
+      error: 'must include an args or arguments property',
+    },
+    {
+      assertion: { type: 'trajectory:tool-sequence', value: { steps: ['search'], mode: 'excat' } },
+      error: 'mode must be "in_order" or "exact"',
+    },
+  ])(
+    'preserves validation errors on partial traces for $assertion.type',
+    async ({ assertion, error }) => {
+      await expect(
+        runAssertion({
+          assertion,
+          test: mockTest,
+          providerResponse: mockProviderResponse,
+          traceId: mockTraceData.traceId,
+          traceData: mockTraceData,
+          traceIncomplete: true,
+        }),
+      ).rejects.toThrow(error);
+    },
+  );
 
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([
