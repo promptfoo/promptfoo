@@ -53,7 +53,10 @@ function isMultiInputTemplate(raw: string, inputs: ApiProvider['inputs'], vars: 
   return (
     entries.length > 0 &&
     (!inputs || entries.length === Object.keys(inputs).length) &&
-    entries.every(([key, value]) => Object.hasOwn(inputs ?? vars, key) && value === `{{${key}}}`)
+    entries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(inputs ?? vars, key) && value === `{{${key}}}`,
+    )
   );
 }
 
@@ -88,7 +91,7 @@ export function getAgentOutcomePrompt(
     // The engine retains the original template when adding a task prefix or suffix.
     const template = prompt.template ?? raw;
     if (isMultiInputTemplate(template, inputs, vars) && raw.includes(template)) {
-      raw = raw.replaceAll(template, `{{${MULTI_INPUT_VAR}}}`);
+      raw = raw.split(template).join(`{{${MULTI_INPUT_VAR}}}`);
     } else if (template !== raw && isMultiInputTemplate(raw, inputs, vars)) {
       raw = `{{${MULTI_INPUT_VAR}}}`;
     }
