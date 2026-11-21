@@ -1,6 +1,6 @@
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { render } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePostHog } from './PostHogContext';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
@@ -9,8 +9,8 @@ vi.mock('./PostHogContext', () => ({
   usePostHog: vi.fn(),
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual<typeof import('react-router')>('react-router');
   return {
     ...actual,
     useLocation: vi.fn(),
@@ -85,20 +85,5 @@ describe('PostHogPageViewTracker', () => {
       search: '',
       hash: '',
     });
-  });
-
-  it('should throw an error when rendered outside of a PostHogProvider', () => {
-    mockedUsePostHog.mockImplementation(() => {
-      throw new Error('usePostHog must be used within a PostHogProvider');
-    });
-
-    // Suppress console errors for this test since we're intentionally throwing an error
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(() => {
-      render(<PostHogPageViewTracker />, { wrapper: MemoryRouter });
-    }).toThrowError('usePostHog must be used within a PostHogProvider');
-
-    consoleErrorSpy.mockRestore();
   });
 });

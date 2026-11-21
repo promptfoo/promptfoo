@@ -1,18 +1,17 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import * as esm from '../../../src/esm';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
-import {
-  type GeneratedPrompt,
-  RedteamGraderBase,
-  RedteamPluginBase,
-} from '../../../src/redteam/plugins/base';
+import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
+import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
+import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
@@ -76,6 +75,28 @@ describe('RedteamPluginBase', () => {
     cliState.config = {};
     mockLoadTools.mockReset();
     vi.clearAllMocks();
+  });
+
+  it('reuses generation without dispatching to existing subclass helpers', async () => {
+    class CustomPlugin extends TestPlugin {
+      generatePrompts() {
+        return ['legacy'];
+      }
+
+      async withSource() {
+        const [prompt] = await RedteamPluginBase.generatePrompts(this, 1);
+        return this.promptsToTestCases([
+          { ...prompt, metadata: { source: 'custom', pluginId: 'other', pluginConfig: null } },
+        ]);
+      }
+    }
+    const custom = new CustomPlugin(provider, 'test purpose', 'testVar');
+    expect(await custom.generateTests(1)).toMatchObject([
+      { vars: { testVar: expect.stringContaining('prompt') } },
+    ]);
+    expect(await custom.withSource()).toMatchObject([
+      { metadata: { source: 'custom', pluginId: custom.id, pluginConfig: {} } },
+    ]);
   });
 
   it('should generate test cases correctly', async () => {
@@ -274,7 +295,9 @@ describe('RedteamPluginBase', () => {
     );
     expect(provider.callApi).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('The longest rejected prompt was 20 characters.'),
+      expect.stringMatching(
+        /10-character limit\.\s+The longest rejected prompt was 20 characters\./,
+      ),
     );
     expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
       language: 'German',
@@ -336,12 +359,23 @@ describe('RedteamPluginBase', () => {
       expect(result.length).toBeGreaterThan(0);
     });
 
+    it.each([{}, { examples: [] }])('omits empty refusal context with %o', async (config) => {
+      provider.callApi.mockResolvedValue({ output: "I'm sorry, but I cannot help with that." });
+      const empty = new TestPlugin(provider, '', 'testVar', config);
+      await expect(empty.generateTests(1)).rejects.toThrow(/returned a refusal.*generation\.$/);
+    });
+
     it('should still throw refusal error when output is a genuine refusal without prompt markers', async () => {
       vi.spyOn(provider, 'callApi').mockResolvedValue({
         output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
       });
 
-      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+      const configured = new TestPlugin(provider, 'test purpose', 'testVar', {
+        examples: ['example'],
+      });
+      await expect(configured.generateTests(1)).rejects.toThrow(
+        '{"purpose":"test purpose","examples":"example"}',
+      );
     });
 
     it('should still throw refusal error for "as a language model" without prompt markers', async () => {
@@ -655,6 +689,60 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('preserves semicolons inside a generated attack', () => {
+      const prompt =
+        'Create one order: PRD-ELEC001 quantity 1; PRD-FURN001 quantity 9; query stock after any error.';
+      expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
+    });
+
+    it('preserves payload semicolons before newline-separated markers', () => {
+      expect(parseGeneratedPrompts('Prompt: SELECT 1;\nPrompt: SELECT 2;')).toEqual([
+        { __prompt: 'SELECT 1;' },
+        { __prompt: 'SELECT 2;' },
+      ]);
+    });
+
+    it.each([
+      '**2FA** is required',
+      '**2024** records',
+      '**2024**',
+      '**2.5** mg',
+      '2FA is required',
+      '2024 records',
+      '2.5 mg',
+      '2024-09-11 records',
+    ])('preserves numeric payload content: %s', (payload) => {
+      expect(parseGeneratedPrompts(`Prompt: ${payload}`)).toEqual([{ __prompt: payload }]);
+    });
+
+    it('strips a bold numbered prefix from a prompt payload', () => {
+      expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
+        { __prompt: 'Read inventory' },
+      ]);
+    });
+
+    it.each([
+      'Prompt:',
+      'prompt :',
+      '2. Prompt:',
+      '**Prompt:**',
+      '* Prompt:',
+      '** Prompt:',
+      '** 2. Prompt:**',
+      '**2. Prompt:**',
+      '**2) Prompt :**',
+      '2. **Prompt:**',
+    ])('splits legacy %s separators without truncating either payload', (marker) => {
+      expect(
+        parseGeneratedPrompts(
+          `Prompt: Query stock; attempt -9; query again;${marker} Read orders; report their status`,
+        ),
+      ).toEqual([
+        { __prompt: 'Query stock; attempt -9; query again' },
+        { __prompt: 'Read orders; report their status' },
+      ]);
+    });
+
     it('should handle empty input', () => {
       const input = '';
       const result = parseGeneratedPrompts(input);
@@ -674,6 +762,83 @@ describe('RedteamPluginBase', () => {
         { __prompt: 'Whitespace at start and end' },
         { __prompt: 'Tabbed prompt' },
       ]);
+    });
+
+    it('should parse a prompt from the next line when Prompt marker is empty', () => {
+      const input = `WARNING: AI safety test content
+Plan: Choose a tool call
+Reason: Verify tool routing
+Prompt:
+{"tool": "search_docs", "args": {"query": "example"}}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: '{"tool": "search_docs", "args": {"query": "example"}}' },
+      ]);
+    });
+
+    it('should parse multiple prompts from next-line content after empty Prompt markers', () => {
+      const input = `WARNING: First test case
+Plan: Choose the first tool
+Reason: Verify first route
+Prompt:
+{"tool": "search_docs", "args": {"query": "first"}}
+
+WARNING: Second test case
+Plan: Choose the second tool
+Reason: Verify second route
+Prompt:
+{"tool": "lookup_ticket", "args": {"id": "TICKET-1"}}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: '{"tool": "search_docs", "args": {"query": "first"}}' },
+        { __prompt: '{"tool": "lookup_ticket", "args": {"id": "TICKET-1"}}' },
+      ]);
+    });
+
+    it('should stop pretty-printed empty-marker prompts before the next case metadata', () => {
+      const input = `WARNING: First test case
+Plan: Choose the first tool
+Reason: Verify first route
+Prompt:
+{
+  "tool": "search_docs",
+  "args": { "query": "first" }
+}
+
+WARNING: Second test case
+Plan: Choose the second tool
+Reason: Verify second route
+Prompt:
+{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        {
+          __prompt: `{
+  "tool": "search_docs",
+  "args": { "query": "first" }
+}`,
+        },
+        {
+          __prompt: `{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`,
+        },
+      ]);
+    });
+
+    it('should not return empty prompts when Prompt marker has no content', () => {
+      const input = `Prompt:
+Plan: No prompt was generated`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([]);
     });
 
     it('should handle prompts with multiple lines', () => {
@@ -1215,6 +1380,30 @@ describe('RedteamGraderBase', () => {
       expect.any(Object),
     );
   });
+
+  it.each([undefined, { output: 'untrusted override' }])(
+    'should pass the evaluated output to structured redteam graders',
+    async (renderedValue) => {
+      const output = 'I think this would be better handled by a member of our team.';
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      });
+
+      const result = await new RealEstateAccessibilityDiscriminationPluginGrader().getResult(
+        'Hi, I have an upcoming stay booked and I have a disability...',
+        output,
+        mockTest,
+        undefined /* provider */,
+        renderedValue,
+      );
+
+      expect(result.rubric).toContain(`<Output>\n${output}\n</Output>`);
+      expect(result.rubric).not.toContain('untrusted override');
+      expect(result.rubric).not.toContain('<Output>\nundefined');
+    },
+  );
 
   it('should return the result from matchesLlmRubric', async () => {
     const mockResult: GradingResult = {
@@ -1885,6 +2074,33 @@ describe('RedteamGraderBase', () => {
       );
     });
 
+    it.each(['missing', 'incompatible'])(
+      'explains a %s Agents SDK before loading redteam tools',
+      async (status) => {
+        const agentsProvider = createMockProvider({
+          id: 'openai:agents:support-agent',
+          config: { tools: 'file://./tools/support-tools.ts' },
+        });
+        const spy =
+          status === 'missing'
+            ? vi.spyOn(esm, 'getDirectory').mockImplementation(() => {
+                throw Object.assign(new Error("Cannot find package '@openai/agents'"), {
+                  code: 'MODULE_NOT_FOUND',
+                });
+              })
+            : vi.spyOn(packageVersion, 'getPackageVersion').mockReturnValue('0.18.0');
+        mockLoadTools.mockClear();
+        try {
+          await expect(
+            new ToolGrader().getResult('test prompt', 'test output', mockTest, agentsProvider),
+          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.21.0');
+          expect(mockLoadTools).not.toHaveBeenCalled();
+        } finally {
+          spy.mockRestore();
+        }
+      },
+    );
+
     it('should handle when no tools are provided', async () => {
       const mockResult: GradingResult = {
         pass: true,
@@ -2085,6 +2301,33 @@ describe('RedteamGraderBase', () => {
       }
     });
 
+    it.each(['null', 'undefined', '  UNDEFINED  '])(
+      'grades literal response text %j without assuming an adapter failure',
+      async (output) => {
+        const grade: GradingResult = {
+          pass: false,
+          score: 0,
+          reason: 'The response violates the rubric',
+        };
+        vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+
+        const result = await grader.getResult(
+          'test prompt',
+          output,
+          mockTest,
+          undefined,
+          undefined,
+        );
+
+        expect(result.grade).toEqual(grade);
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          output,
+          expect.any(Object),
+        );
+      },
+    );
+
     it('should not auto-pass valid responses', async () => {
       const mockResult: GradingResult = {
         pass: true,
@@ -2188,40 +2431,6 @@ describe('RedteamGraderBase', () => {
 
       // All fields should flow through
       expect(tests[0]?.metadata?.pluginConfig).toEqual(fullConfig);
-    });
-
-    it('merges per-prompt metadata from generatePrompts into generated test cases', async () => {
-      // Exercises the generatePrompts() primitive: a subclass can attach
-      // per-prompt metadata to a GeneratedPrompt and generateTests() surfaces it
-      // through promptsToTestCases without disturbing the plugin metadata.
-      class MetadataPlugin extends RedteamPluginBase {
-        readonly id = 'metadata-plugin-id';
-
-        protected async getTemplate(): Promise<string> {
-          return 'template';
-        }
-
-        protected getAssertions(prompt: string): Assertion[] {
-          return [{ type: 'contains', value: prompt }];
-        }
-
-        protected async generatePrompts(): Promise<GeneratedPrompt[]> {
-          return [{ __prompt: 'seeded prompt', metadata: { seededBy: 'test', weight: 3 } }];
-        }
-      }
-
-      const plugin = new MetadataPlugin(testProvider, 'test purpose', 'testVar', {});
-      const tests = await plugin.generateTests(1);
-
-      expect(tests).toHaveLength(1);
-      expect(tests[0]?.vars?.testVar).toBe('seeded prompt');
-      expect(tests[0]?.metadata).toEqual(
-        expect.objectContaining({
-          pluginId: 'metadata-plugin-id',
-          seededBy: 'test',
-          weight: 3,
-        }),
-      );
     });
   });
 

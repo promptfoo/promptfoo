@@ -1,3 +1,4 @@
+import { normalizeRedteamConfigForPreview } from '@promptfoo/presentation/redteamConfig';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
@@ -61,10 +62,11 @@ export function isStrategyConfigured(strategyId: string, strategy: RedteamStrate
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+  'arabic-presentation-forms': 1,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,
-  basic: 1,
+  basic: 0, // The base cases are counted separately below.
   'best-of-n': 1,
   camelcase: 1,
   citation: 1,
@@ -79,6 +81,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'indirect-web-pwn': 3,
   jailbreak: 10,
   'jailbreak:composite': 5,
+  'jailbreak:goblin': 10,
   'jailbreak:hydra': 10,
   'jailbreak:likert': 1,
   'jailbreak:meta': 10,
@@ -100,26 +103,45 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 };
 
 export function getEstimatedProbes(config: Config) {
-  const numTests = config.numTests ?? 5;
-  const baseProbes = numTests * config.plugins.length;
+  const { numTests, plugins, strategies, language } = normalizeRedteamConfigForPreview(config);
+  const pluginCounts = new Map<string, number>();
+  for (const entry of plugins) {
+    const plugin = typeof entry === 'string' ? { id: entry } : entry;
+    const severity = 'severity' in plugin ? plugin.severity : undefined;
+    // Match config deduplication: the last count wins for the same options and severity.
+    const key = `${plugin.id}:${JSON.stringify(plugin.config)}:${severity || ''}`;
+    const pluginNumTests =
+      typeof entry === 'object' && 'numTests' in entry ? entry.numTests : undefined;
+    // Imported lists are preserved during export, including blank entries. Match
+    // runtime's top-level count; the browser cannot resolve external file lists.
+    const intent = plugin.config?.intent;
+    const intentCount = Array.isArray(intent) ? intent.length : intent ? 1 : 0;
+    const count = plugin.id === 'intent' ? intentCount : pluginNumTests || numTests;
+    const pluginLanguage = plugin.config?.language ?? language;
+    const numLanguages = Array.isArray(pluginLanguage) ? pluginLanguage.length : 1;
+    pluginCounts.set(key, count * numLanguages);
+  }
+  const baseProbes = Array.from(pluginCounts.values()).reduce((total, count) => total + count, 0);
 
   // Calculate total multiplier for all active strategies
-  const strategyMultiplier = config.strategies.reduce((total, strategy) => {
+  const strategyMultiplier = strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
+    return strategyId === 'retry' ? total : total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
-  // Get number of languages from global language config
-  const numLanguages = Array.isArray(config.language)
-    ? config.language.length
-    : config.language
-      ? 1
-      : 1;
-
-  const strategyProbes = strategyMultiplier * baseProbes;
-
-  return (baseProbes + strategyProbes) * numLanguages;
+  const basicStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'basic');
+  const includeBasicTests =
+    typeof basicStrategy === 'object' ? (basicStrategy.config?.enabled ?? true) : true;
+  const basicProbes = includeBasicTests ? baseProbes : 0;
+  // Runtime applies retry to the enabled base cases before adding other strategies.
+  const retryStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'retry');
+  const retryProbes = retryStrategy
+    ? typeof retryStrategy === 'object' && typeof retryStrategy.config?.numTests === 'number'
+      ? retryStrategy.config.numTests
+      : basicProbes
+    : 0;
+  return basicProbes + retryProbes + baseProbes * strategyMultiplier;
 }
 
 export function getEstimatedDuration(config: Config): string {

@@ -14,8 +14,7 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": "./"
+    "types": ["node"]
   },
   "include": [
     "*.ts",
@@ -25,8 +24,8 @@
     "src/",
     "test/",
     "scripts/",
-    "site/src/utils/markdown.ts",
     "./package.json",
+    "site/static/openapi.json",
     "src/**/*.json",
     "test/**/*.json",
     "src/types/globals.d.ts",

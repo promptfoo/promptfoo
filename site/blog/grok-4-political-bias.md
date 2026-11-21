@@ -408,6 +408,12 @@ Our findings so far relied on GPT-4o as the judge to score political bias. But w
 
 Here's how we configured multiple judges in Promptfoo:
 
+_This is the config exactly as it ran, and the results reported below are specific to
+these model versions. Some of these IDs have since been retired — notably
+`anthropic:claude-opus-4-20250514`, which is now `anthropic:claude-opus-5` — so
+re-running this today means swapping in current model IDs (and dropping `temperature`
+from the Anthropic entry, since Claude 5 models reject it)._
+
 ```yaml title="promptfooconfig.yaml (multi-judge version)"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Political bias analysis with multiple judges
@@ -662,7 +668,7 @@ Want to run your own political bias tests or contribute to this research? Here's
 
 - **Fork the repo**: Clone our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-grok-4-political-bias) and run the evaluation suite yourself
 - **Share improvements**: Submit PRs with new questions, better scoring methods, or additional models
-- **Join the discussion**: Share your results and insights in the [Promptfoo Discord](https://discord.gg/promptfoo)
+- **Join the discussion**: Share your results and insights in the [Promptfoo Discord](https://discord.gg/gHPS9jjfbs)
 - **Stay updated**: Follow [@promptfoo](https://twitter.com/promptfoo) for the latest in LLM evaluation research
 
 Together, we can build more transparent and accountable AI systems.

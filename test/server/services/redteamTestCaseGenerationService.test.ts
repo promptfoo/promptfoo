@@ -136,6 +136,16 @@ describe('redteamTestCaseGenerationService', () => {
       await expectTaskRequest(fetchWithRetries, 'hydra-decision');
     });
 
+    it('should call fetchWithRetries with correct parameters for Goblin strategy', async () => {
+      const fetchWithRetries = mockRemoteGeneration({
+        result: { prompt: 'test prompt' },
+      });
+
+      await generatePromptForStrategy('jailbreak:goblin');
+
+      await expectTaskRequest(fetchWithRetries, 'goblin-decision');
+    });
+
     it('should call fetchWithRetries with correct parameters for Mischievous User strategy', async () => {
       const fetchWithRetries = mockRemoteGeneration({
         result: 'test prompt',

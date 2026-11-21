@@ -11,7 +11,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import * as yaml from 'js-yaml';
-import type { UnifiedConfig } from '@promptfoo/types';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
@@ -54,20 +54,17 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     try {
       // Remove the schema comment for parsing if it exists
       const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
-      const parsedConfig = loadYaml(contentForParsing) as Record<string, unknown>;
+      const validation = validateYamlConfigDraft(loadYaml(contentForParsing));
 
-      if (parsedConfig && typeof parsedConfig === 'object') {
-        // Simply update the config with the parsed YAML
-        // The store will handle the mapping
-        updateConfig(parsedConfig as Partial<UnifiedConfig>);
+      if (validation.success) {
+        updateConfig(validation.config);
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');
         return true;
       } else {
-        const errorMsg = 'Invalid YAML configuration';
-        setParseError(errorMsg);
-        showToast(errorMsg, 'error');
+        setParseError(validation.error);
+        showToast(validation.error, 'error');
         return false;
       }
     } catch (err) {

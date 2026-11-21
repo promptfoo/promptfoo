@@ -1,12 +1,21 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache } from '../../src/cache';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
+import { createEmbeddingResult } from '../factories/literalFixtures';
 
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {
@@ -20,14 +29,47 @@ describe('matchesAnswerRelevance', () => {
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
-      embedding: [1, 0, 0],
-      tokenUsage: { total: 5, prompt: 2, completion: 3 },
-    });
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue(
+      createEmbeddingResult(1, 0),
+    );
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    { tracing: false, cancellation: true },
+    { tracing: true, cancellation: false },
+    { tracing: true, cancellation: true },
+  ])('forwards embedding call context: %j', async ({ tracing, cancellation }) => {
+    const abortSignal = cancellation ? new AbortController().signal : undefined;
+    const tracedContext = tracing
+      ? {
+          prompt: { raw: 'fixture', label: 'embedding' },
+          vars: {},
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        }
+      : undefined;
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async (_options, invoke) => invoke(tracedContext),
+    );
+    await withProviderCallExecutionContext({ abortSignal }, () =>
+      withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => tracedContext?.traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => matchesAnswerRelevance('input', 'output', 0.5),
+      ),
+    );
+    const calls = vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mock.calls;
+    expect(calls).toHaveLength(4);
+    for (const [, context, options] of calls) {
+      expect(context).toBe(tracedContext);
+      expect(options).toEqual(abortSignal ? { abortSignal } : undefined);
+    }
   });
 
   it('should pass when the relevance score is above the threshold', async () => {
@@ -45,10 +87,7 @@ describe('matchesAnswerRelevance', () => {
 
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
-      return Promise.resolve({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
+      return Promise.resolve(createEmbeddingResult(1, 0));
     });
 
     await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({
@@ -81,6 +120,37 @@ describe('matchesAnswerRelevance', () => {
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
   });
 
+  it('records both text and embedding providers beneath the grading trace', async () => {
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async ({ callContext }, invoke) => invoke(callContext),
+    );
+
+    await withProviderCallTracingContext(
+      {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_options, invoke) => invoke(),
+        withProviderSpan: providerSpan,
+      },
+      () => matchesAnswerRelevance('input', 'output', 0.5),
+    );
+
+    expect(providerSpan.mock.calls.map(([options]) => options.promptLabel)).toEqual([
+      'answer-relevance',
+      'answer-relevance',
+      'answer-relevance',
+      'answer-relevance.embedding',
+      'answer-relevance.embedding',
+      'answer-relevance.embedding',
+      'answer-relevance.embedding',
+    ]);
+    expect(providerSpan.mock.calls.every(([options]) => options.role === 'grader')).toBe(true);
+    expect(
+      providerSpan.mock.calls
+        .filter(([options]) => options.promptLabel === 'answer-relevance.embedding')
+        .every(([options]) => options.operationName === 'embeddings'),
+    ).toBe(true);
+  });
+
   it('should fail when the relevance score is below the threshold', async () => {
     const input = 'Input text';
     const output = 'Different output';
@@ -97,10 +167,7 @@ describe('matchesAnswerRelevance', () => {
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation((text) => {
       if (text.includes('Input text')) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('Different output')) {
         return Promise.resolve({
           embedding: [0, 1, 0],
@@ -140,6 +207,36 @@ describe('matchesAnswerRelevance', () => {
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
+  });
+
+  it('tags a grading provider error as a grader error so inverse assertions cannot pass it', async () => {
+    // Without the graderError tag, applyRagInverse() cannot tell an infrastructure
+    // failure apart from a genuine low score, and `not-answer-relevance` would flip
+    // a grading outage into a silent pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('grading provider exploded');
+    expect(result.metadata).toMatchObject({ graderError: true });
+  });
+
+  it('tags an embedding provider error as a grader error', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      error: 'embedding provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata).toMatchObject({ graderError: true });
   });
 
   it('tracks token usage for successful calls', async () => {
@@ -183,10 +280,7 @@ describe('matchesAnswerRelevance', () => {
     // Mock embeddings with varying similarities
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === input) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('capital') && text.includes('France')) {
         // Similar questions get high similarity
         return Promise.resolve({
@@ -212,4 +306,42 @@ describe('matchesAnswerRelevance', () => {
     expect(result.metadata?.threshold).toBe(0.7);
     expect(result.pass).toBe(true);
   });
+
+  it.each([false, true])(
+    'caches three independent samples (deterministic: %s)',
+    async (deterministic) => {
+      const cacheKey = randomUUID();
+      const questions = deterministic
+        ? Array.from({ length: 3 }, () => 'How long do refunds take?')
+        : [
+            'How long do refunds take?',
+            'What is the capital of France?',
+            'Which planet is the largest?',
+          ];
+      let generated = 0;
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
+        const cache = getCache();
+        const key = `${cacheKey}:${prompt}`;
+        const cached = await cache.get<string>(key);
+        if (cached) {
+          return { output: cached, cached: true };
+        }
+        const question = questions[generated++];
+        await cache.set(key, question);
+        return { output: question };
+      });
+
+      for (let run = 0; run < 2; run++) {
+        const result = await matchesAnswerRelevance(
+          'How long do refunds take?',
+          'Refunds are processed within 5 business days.',
+          0.5,
+        );
+        expect(generated).toBe(3);
+        expect(
+          result.metadata?.generatedQuestions.map(({ question }: { question: string }) => question),
+        ).toEqual(questions);
+      }
+    },
+  );
 });

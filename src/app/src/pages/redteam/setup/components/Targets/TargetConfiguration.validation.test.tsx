@@ -1,0 +1,192 @@
+import { useState } from 'react';
+
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import TargetConfiguration from './TargetConfiguration';
+
+const state = vi.hoisted(() => ({
+  target: {
+    id: 'openinterpreter',
+    label: 'Coding target',
+    config: { sandbox_mode: 'danger-full-access' },
+  },
+  targetConfigError: null as string | null,
+  targetConfigDraft: null as string | null,
+}));
+const updateConfig = vi.hoisted(() =>
+  vi.fn((section: string, value: typeof state.target) => {
+    if (section === 'target') {
+      state.target = value;
+    }
+  }),
+);
+const setTargetConfigError = vi.hoisted(() =>
+  vi.fn((error: string | null) => {
+    state.targetConfigError = error;
+  }),
+);
+const setTargetConfigDraft = vi.hoisted(() =>
+  vi.fn((draft: string | null) => {
+    state.targetConfigDraft = draft;
+  }),
+);
+const clearTargetConfigValidation = vi.hoisted(() =>
+  vi.fn(() => {
+    state.targetConfigError = null;
+    state.targetConfigDraft = null;
+    return true;
+  }),
+);
+const onNext = vi.fn();
+
+vi.mock('../../hooks/useRedTeamConfig', () => ({
+  DEFAULT_HTTP_TARGET: { id: 'http', config: { url: '' } },
+  useRedTeamConfig: () => ({
+    config: { target: state.target, extensions: [], prompts: [] },
+    providerType: 'openinterpreter',
+    updateConfig,
+  }),
+}));
+vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({
+    targetConfigError: state.targetConfigError,
+    targetConfigDraft: state.targetConfigDraft,
+    setTargetConfigError,
+    setTargetConfigDraft,
+    clearTargetConfigValidation,
+  }),
+}));
+vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));
+vi.mock('../Prompts', () => ({ default: () => null }));
+vi.mock('./CommonConfigurationOptions', () => ({ default: () => null }));
+vi.mock('react-simple-code-editor', () => ({
+  default: ({ value, onValueChange }: any) => (
+    <textarea
+      data-testid="code-editor"
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    />
+  ),
+}));
+
+function Harness() {
+  const [showConfig, setShowConfig] = useState(true);
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setShowConfig(false)}>
+        Review tab
+      </button>
+      <button type="button" onClick={() => setShowConfig(true)}>
+        Target tab
+      </button>
+      {showConfig ? (
+        <TargetConfiguration onNext={onNext} onBack={vi.fn()} />
+      ) : (
+        <output data-testid="review-state">
+          {JSON.stringify({ config: state.target.config, error: state.targetConfigError })}
+        </output>
+      )}
+    </TooltipProvider>
+  );
+}
+
+const replaceText = async (
+  user: ReturnType<typeof userEvent.setup>,
+  element: HTMLElement,
+  value: string,
+) => {
+  await user.click(element);
+  await user.keyboard('{Control>}a{/Control}');
+  await user.paste(value);
+};
+
+describe('TargetConfiguration custom configuration validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.target = {
+      id: 'openinterpreter',
+      label: 'Coding target',
+      config: { sandbox_mode: 'danger-full-access' },
+    };
+    state.targetConfigError = null;
+    state.targetConfigDraft = null;
+  });
+
+  it.each([
+    ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
+    ['non-object JSON', '[]', 'Configuration must be a JSON object'],
+  ])('keeps %s blocked after navigating directly to Review', async (_case, value, error) => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await replaceText(user, screen.getByTestId('code-editor'), value);
+
+    expect(screen.getAllByText(error).length).toBeGreaterThan(0);
+    expect(setTargetConfigError).toHaveBeenLastCalledWith(error);
+    expect(state.targetConfigDraft).toBe(value);
+    const footerNext = within(screen.getByTestId('page-navigation')).getByRole('button', {
+      name: /Next/i,
+    });
+    expect(footerNext).toBeDisabled();
+    await user.click(footerNext);
+    expect(onNext).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Review tab' }));
+    expect(screen.getByTestId('review-state')).toHaveTextContent(error);
+    expect(screen.getByTestId('review-state')).toHaveTextContent('danger-full-access');
+  });
+
+  it('clears the durable validation error after the configuration is corrected', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only",}');
+    expect(setTargetConfigError).toHaveBeenLastCalledWith('Invalid JSON configuration');
+    expect(state.targetConfigDraft).toBe('{"sandbox_mode":"read-only",}');
+
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only"}');
+
+    expect(clearTargetConfigValidation).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        id: 'openinterpreter',
+        label: 'Coding target',
+        config: { sandbox_mode: 'read-only' },
+      }),
+      false,
+    );
+    expect(state.targetConfigDraft).toBeNull();
+    const footerNext = within(screen.getByTestId('page-navigation')).getByRole('button', {
+      name: /Next/i,
+    });
+    expect(footerNext).toBeEnabled();
+    await user.click(footerNext);
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(state.target.config).toEqual({ sandbox_mode: 'read-only' });
+  });
+
+  it('retains the malformed draft and validation guard after leaving and remounting the target tab', async () => {
+    const user = userEvent.setup();
+    const malformedConfig = '{"sandbox_mode":"read-only",}';
+    render(<Harness />);
+
+    await replaceText(user, screen.getByTestId('code-editor'), malformedConfig);
+    expect(state.target.config).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(state.targetConfigError).toBe('Invalid JSON configuration');
+    expect(state.targetConfigDraft).toBe(malformedConfig);
+
+    await user.click(screen.getByRole('button', { name: 'Review tab' }));
+    await user.click(screen.getByRole('button', { name: 'Target tab' }));
+
+    const remountedEditor = screen.getByTestId('code-editor');
+    expect(remountedEditor).toHaveValue(malformedConfig);
+
+    await replaceText(user, remountedEditor, `${malformedConfig} `);
+    expect(state.target.config).toEqual({ sandbox_mode: 'danger-full-access' });
+    expect(state.targetConfigError).toBe('Invalid JSON configuration');
+    expect(
+      within(screen.getByTestId('page-navigation')).getByRole('button', { name: /Next/i }),
+    ).toBeDisabled();
+  });
+});

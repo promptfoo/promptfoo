@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: GPT-5.6 limited-preview Responses API comparison
+description: GPT-5.6 Responses API comparison
 prompts:
   - |
     Solve this planning problem and explain the tradeoffs clearly:

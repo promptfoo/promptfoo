@@ -15,16 +15,6 @@ import { safeResolve } from './util/pathUtils';
 export type WrapperType = 'python' | 'ruby' | 'golang';
 
 /**
- * Mapping of wrapper types to their subdirectory names.
- * These correspond to the directory structure under src/ and dist/src/.
- */
-const WRAPPER_SUBDIRS: Record<WrapperType, string> = {
-  python: 'python',
-  ruby: 'ruby',
-  golang: 'golang',
-};
-
-/**
  * Cache for wrapper directory paths to avoid repeated path construction.
  */
 const wrapperDirCache: Partial<Record<WrapperType, string>> = {};
@@ -62,7 +52,7 @@ export function getWrapperDir(type: WrapperType): string {
   }
 
   const baseDir = getDirectory();
-  const result = path.join(baseDir, WRAPPER_SUBDIRS[type]);
+  const result = path.join(baseDir, type);
   wrapperDirCache[type] = result;
 
   logger.debug(`Resolved ${type} wrapper directory: ${result}`);
@@ -145,13 +135,12 @@ declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
 
 let tsxLoaderPromise: Promise<unknown> | undefined;
 
-async function ensureTypescriptLoader(modulePath: string): Promise<void> {
+export async function ensureTypescriptLoader(modulePath: string): Promise<void> {
   if (!/\.[cm]?ts$/.test(modulePath)) {
     return;
   }
 
   if (!tsxLoaderPromise) {
-    logger.debug('TypeScript module detected, registering tsx loader');
     // Use the same loader entrypoint as `NODE_OPTIONS=--import tsx` so package-less
     // providers can resolve extensionless transitive TypeScript imports.
     // @ts-ignore: tsx's loader entrypoint does not publish declaration files.
@@ -240,7 +229,11 @@ export function getDirectory(): string {
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
  */
-export async function importModule(modulePath: string, functionName?: string) {
+export async function importModule(
+  modulePath: string,
+  functionName?: string,
+  options?: { cacheCjsFallback?: boolean },
+) {
   const loadPath = await normalizeModuleExtension(modulePath);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
@@ -273,6 +266,8 @@ export async function importModule(modulePath: string, functionName?: string) {
     // Note: createRequire() doesn't work for .js files in "type": "module" packages
     // because Node.js still treats them as ESM based on package.json.
     // We use Node's vm module to execute the code with proper CJS globals.
+    // Intentionally limited to ".js": ".cjs" is already handled by Node as CJS and ".mjs"
+    // is always ESM, so this fallback only applies to ambiguous ".js" in ESM packages.
     if (loadPath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
         `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
@@ -280,14 +275,16 @@ export async function importModule(modulePath: string, functionName?: string) {
 
       try {
         const resolvedPath = safeResolve(loadPath);
-        const mod = loadCjsModule(resolvedPath);
+        const mod = loadCjsModule(resolvedPath, options?.cacheCjsFallback);
         logger.debug(
           `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
         );
 
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
-          return mod[functionName];
+          return options?.cacheCjsFallback
+            ? Promise.resolve(mod).then((value) => value[functionName])
+            : mod[functionName];
         }
         return mod;
       } catch (cjsErr) {
@@ -297,41 +294,40 @@ export async function importModule(modulePath: string, functionName?: string) {
         logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
 
         // Create a combined error that includes both failure reasons
-        const combinedError = new Error(
-          `Failed to load module ${modulePath}:\n` +
-            `  ESM import error: ${errorMessage}\n` +
-            `  CJS fallback error: ${cjsErrorMessage}\n` +
-            `To fix this, either:\n` +
-            `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
-            `  2. Convert to ESM syntax (import/export)\n` +
-            `  3. Ensure the file has valid JavaScript syntax`,
+        const combinedError = Object.assign(
+          new Error(
+            `Failed to load module ${modulePath}:\n` +
+              `  ESM import error: ${errorMessage}\n` +
+              `  CJS fallback error: ${cjsErrorMessage}\n` +
+              `To fix this, either:\n` +
+              `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
+              `  2. Convert to ESM syntax (import/export)\n` +
+              `  3. Ensure the file has valid JavaScript syntax`,
+          ),
+          { cause: { esmError: err, cjsError: cjsErr } },
         );
-
-        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
-        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
     }
 
-    // Log stack trace for debugging
-    const e = err as Error;
-    if (e.stack) {
-      logger.debug(e.stack);
-    }
-
-    // Normalize ERR_MODULE_NOT_FOUND to ENOENT when the file itself doesn't exist
-    // (vs a dependency inside the file being missing).
-    // This provides clearer error messages for users when their files don't exist.
-    const nodeError = err as NodeJS.ErrnoException;
+    // Normalize ERR_MODULE_NOT_FOUND to ENOENT only when the entry module itself is the
+    // unresolved target (vs a dependency imported by it), so nested import failures keep
+    // their original diagnostics. Comparing against the reported target rather than
+    // re-stat'ing the path also avoids mistaking EACCES for absence.
+    //
+    // Prefer Node's target URL: quotes in a path make the text diagnostic ambiguous.
+    // Vite can report either a filesystem path or file URL in its message.
+    const nodeError = err as NodeJS.ErrnoException & { url?: string };
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(loadPath);
-      try {
-        await fsPromises.access(resolvedModulePath);
-        // File exists - the error is about a missing dependency, log and preserve original error
-        logger.error(`ESM import failed: ${err}`);
-      } catch {
-        // File doesn't exist - normalize to ENOENT for clearer error message
-        // Don't log as error - this is expected during config file discovery
+      const missingTarget =
+        nodeError.url ??
+        nodeError.message.match(/^Cannot find module (['"])(.*?)\1(?: imported from|$)/)?.[2];
+      if (
+        missingTarget === resolvedModulePath ||
+        missingTarget === pathToFileURL(resolvedModulePath).href
+      ) {
+        // Expected during config discovery: normalize before logging any error or stack.
         const enoentError = new Error(
           `ENOENT: no such file or directory, open '${resolvedModulePath}'`,
         ) as NodeJS.ErrnoException;
@@ -339,11 +335,14 @@ export async function importModule(modulePath: string, functionName?: string) {
         enoentError.path = resolvedModulePath;
         throw enoentError;
       }
-    } else {
-      // For all other errors (not file-not-found), log as error
-      logger.error(`ESM import failed: ${err}`);
     }
 
+    // Preserve diagnostics for missing dependencies and other real import failures.
+    const e = err as Error;
+    if (e.stack) {
+      logger.debug(e.stack);
+    }
+    logger.error(`ESM import failed: ${err}`);
     throw err;
   }
 }
@@ -364,6 +363,21 @@ export function isCjsInEsmError(message: string): boolean {
   return cjsPatterns.some((pattern) => message.includes(pattern));
 }
 
+// Default config discovery preserves successful executable module instances.
+// Other fallback callers keep their existing uncached behavior.
+const cjsFallbackModules = new Map<string, unknown>();
+
+export function clearCjsModuleCache(entry?: { path: string; exports: unknown }): void {
+  if (!entry) {
+    cjsFallbackModules.clear();
+    return;
+  }
+  const modulePath = safeResolve(entry.path);
+  if (cjsFallbackModules.get(modulePath) === entry.exports) {
+    cjsFallbackModules.delete(modulePath);
+  }
+}
+
 /**
  * Loads a CommonJS module by executing it in a vm context with proper CJS globals.
  * This bypasses Node.js's module type detection which is based on package.json "type" field.
@@ -375,7 +389,11 @@ export function isCjsInEsmError(message: string): boolean {
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: This is actually loading a user space module that can be anything
-function loadCjsModule(modulePath: string): any {
+function loadCjsModule(modulePath: string, cache = false): any {
+  if (cache && cjsFallbackModules.has(modulePath)) {
+    return cjsFallbackModules.get(modulePath);
+  }
+
   const code = fs.readFileSync(modulePath, 'utf-8');
   const dirname = path.dirname(modulePath);
   const filename = modulePath;
@@ -499,5 +517,24 @@ function loadCjsModule(modulePath: string): any {
   // Execute the code in the context
   vm.runInContext(code, context, { filename: modulePath });
 
+  if (cache) {
+    // Assimilate promises and thenables while deduplicating in-flight initialization.
+    const pending = Promise.resolve(moduleObj.exports).then(
+      (value) => {
+        if (cjsFallbackModules.get(modulePath) === pending) {
+          cjsFallbackModules.set(modulePath, value);
+        }
+        return value;
+      },
+      (error) => {
+        if (cjsFallbackModules.get(modulePath) === pending) {
+          cjsFallbackModules.delete(modulePath);
+        }
+        throw error;
+      },
+    );
+    cjsFallbackModules.set(modulePath, pending);
+    return pending;
+  }
   return moduleObj.exports;
 }

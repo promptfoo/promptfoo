@@ -2,22 +2,28 @@
 description: 'Anthropic memory tool'
 
 prompts:
-  - 'Return exactly: MEMORY_TOOL_AVAILABLE'
+  - '{{task}}'
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      temperature: 0
-      max_tokens: 64
+      max_tokens: 2048
       tools:
+        # Promptfoo returns the requested operation without executing a memory handler.
         - type: memory_20250818
           name: memory
           allowed_callers:
             - direct
       tool_choice:
-        type: none
+        type: auto
 
 tests:
-  - assert:
+  - vars:
+      task: 'Check your memory directory for anything you already know about this user before answering: what are their formatting preferences?'
+    assert:
       - type: contains
-        value: MEMORY_TOOL_AVAILABLE
+        value: '"name":"memory"'
+      - type: contains
+        value: 'tool_use'
+      - type: contains
+        value: '"command":"view"'

@@ -248,6 +248,39 @@ describe('BLEU score calculation', () => {
     );
   });
 
+  it('should still reject invalid weights for an empty candidate', () => {
+    const references = ['some reference'];
+    expect(() => calculateBleuScore('', references, [1, -1, 0.5, 0.5])).toThrow(
+      'Weights must be non-negative',
+    );
+    expect(() => calculateBleuScore('', references, [0.5, 0.5, 0.5, 0.5])).toThrow(
+      'Weights must sum to 1',
+    );
+  });
+
+  it('should reject non-finite and non-numeric weights before scoring', () => {
+    const references = ['some reference'];
+    const invalidWeights: unknown[][] = [
+      [Number.NaN, 0, 0, 1],
+      [Number.POSITIVE_INFINITY, 0, 0, 0],
+      [Number.NEGATIVE_INFINITY, 1, 0, 0],
+      ['1', 0, 0, 0],
+      [true, 0, 0, 0],
+      [null, 0, 0, 1],
+      [undefined, 0, 0, 1],
+    ];
+    const sparseWeights = new Array<number>(4);
+    sparseWeights[0] = 1;
+
+    for (const weights of [...invalidWeights, sparseWeights]) {
+      for (const candidate of ['', 'a b c d']) {
+        expect(() => calculateBleuScore(candidate, references, weights as number[])).toThrow(
+          'Weights must be finite numbers',
+        );
+      }
+    }
+  });
+
   it('should throw error for invalid weights', () => {
     const references = ['The cat sat on the mat.'];
     const weightsNotSummingToOne = [0.5, 0.5, 0.5, 0.5];
@@ -272,6 +305,17 @@ describe('BLEU score calculation', () => {
 
     const score = calculateBleuScore(candidate, references);
     expect(score).toBeGreaterThan(0.999);
+  });
+
+  it.each([[['']], [['   ']], [['', '\n\t']]])(
+    'scores 0 when every reference is blank (%j)',
+    (refs) => {
+      expect(calculateBleuScore('the cat sat on the mat', refs)).toBe(0);
+    },
+  );
+
+  it('ignores a blank reference when picking the brevity-penalty length', () => {
+    expect(calculateBleuScore('hello', ['', 'hello world'])).toBeCloseTo(Math.exp(-1));
   });
 });
 
@@ -425,5 +469,16 @@ describe('handleBleuScore', () => {
     } as AssertionParams);
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
+  });
+
+  it('should not let a blank reference lift a short output past the threshold', () => {
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', threshold: 0.9 },
+      renderedValue: ['', 'hello world'],
+      outputString: 'hello',
+      inverse: false,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(Math.exp(-1));
   });
 });

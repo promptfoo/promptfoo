@@ -163,14 +163,14 @@ Test across multiple configurations or models in parallel:
 strategy:
   matrix:
     gpt:
-      MODEL: 'gpt-5.1'
+      PROVIDER: 'openai:gpt-5.1'
     claude:
-      MODEL: 'claude-sonnet-4-5-20250929'
+      PROVIDER: 'anthropic:claude-sonnet-5'
 
 steps:
   - script: |
-      npx promptfoo eval --providers.0.config.model=$(MODEL)
-    displayName: 'Test with $(MODEL)'
+      npx promptfoo eval --providers "$(PROVIDER)"
+    displayName: 'Test with $(PROVIDER)'
     env:
       OPENAI_API_KEY: $(OPENAI_API_KEY)
       ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)
@@ -183,6 +183,6 @@ If you encounter issues with your Azure Pipelines integration:
 - **Check logs**: Review detailed logs in Azure DevOps to identify errors
 - **Verify API keys**: Ensure your API keys are correctly set as pipeline variables
 - **Permissions**: Make sure the pipeline has access to read your configuration files
-- **Node.js version**: Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`
+- **Node.js version**: Promptfoo requires Node.js `>=22.22.0`
 
 If you're getting timeouts during evaluations, you may need to adjust the pipeline timeout settings or consider using a [self-hosted agent](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/agents) for better stability with long-running evaluations.

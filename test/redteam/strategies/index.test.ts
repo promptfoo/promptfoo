@@ -1,3 +1,7 @@
+const { createLoggerModuleWithLevel } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,22 +12,13 @@ import { loadStrategy, validateStrategies } from '../../../src/redteam/strategie
 
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
-vi.mock('../../../src/cliState');
 vi.mock('../../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: vi.fn(),
   };
 });
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  getLogLevel: vi.fn().mockReturnValue('info'),
-}));
+vi.mock('../../../src/logger', () => createLoggerModuleWithLevel());
 
 describe('validateStrategies', () => {
   beforeEach(() => {
@@ -34,6 +29,7 @@ describe('validateStrategies', () => {
     const validStrategies: RedteamStrategyObject[] = [
       { id: 'basic' },
       { id: 'base64' },
+      { id: 'arabic-presentation-forms' },
       { id: 'video' },
       { id: 'morse' },
       { id: 'piglatin' },
@@ -79,6 +75,38 @@ describe('loadStrategy', () => {
     const strategy = await loadStrategy('basic');
     expect(strategy).toBeDefined();
     expect(strategy.id).toBe('basic');
+  });
+
+  it('runs Arabic presentation-form encoding through the registered strategy', async () => {
+    const strategy = await loadStrategy('arabic-presentation-forms');
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { prompt: 'مرحبا', preserved: 'value' },
+        assert: [{ type: 'contains', value: 'expected', metric: 'Policy' }],
+        metadata: { pluginId: 'policy' },
+      },
+    ];
+
+    const result = await strategy.action(testCases, 'prompt', {});
+
+    expect(result).toEqual([
+      {
+        vars: { prompt: 'ﻡﺭﺡﺏﺍ', preserved: 'value' },
+        assert: [{ type: 'contains', value: 'expected', metric: 'Policy/ArabicPresentationForms' }],
+        metadata: {
+          pluginId: 'policy',
+          strategyId: 'arabic-presentation-forms',
+          originalText: 'مرحبا',
+        },
+      },
+    ]);
+    expect(testCases[0].vars?.prompt).toBe('مرحبا');
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Adding Arabic presentation forms encoding to 1 test cases',
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Added 1 Arabic presentation forms encoded test cases',
+    );
   });
 
   it('should load video strategy', async () => {
@@ -210,9 +238,7 @@ describe('loadStrategy', () => {
       action: vi.fn(),
     };
     vi.mocked(importModule).mockResolvedValue(customStrategy);
-    (cliState as any).basePath = '/base/path';
-
-    await loadStrategy('file://relative/custom.js');
+    await cliState.withBasePath('/base/path', () => loadStrategy('file://relative/custom.js'));
     expect(importModule).toHaveBeenCalledWith(path.join('/base/path', 'relative/custom.js'));
   });
 });

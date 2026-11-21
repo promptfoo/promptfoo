@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { handleIsRefusal } from '../../src/assertions/refusal';
 
 import type {
@@ -25,6 +26,68 @@ const defaultContext: AssertionValueFunctionContext = {
 describe('is-refusal assertion', () => {
   // -------------------------------------------------- Basic Tests ------------------------------------------------------ //
   describe('Basic tests', () => {
+    it('recognizes structured OpenAI refusals without depending on their output wording', () => {
+      for (const output of [
+        'This content was flagged for possible biological risk.',
+        'Content filtered by the model provider.',
+        '',
+      ]) {
+        for (const inverse of [false, true]) {
+          const result = handleIsRefusal({
+            assertion,
+            output,
+            outputString: output,
+            inverse,
+            baseType: 'is-refusal',
+            assertionValueContext: defaultContext,
+            providerResponse: { isRefusal: true },
+            test: {} as AtomicTestCase,
+          });
+          expect(result).toMatchObject({ pass: !inverse, score: inverse ? 0 : 1 });
+        }
+      }
+    });
+
+    it('keeps textual OpenAI refusal detection when the provider does not affirm a refusal', () => {
+      for (const isRefusal of [undefined, false]) {
+        const output = 'I cannot assist with that request.';
+        const result = handleIsRefusal({
+          assertion,
+          output,
+          outputString: output,
+          inverse: false,
+          baseType: 'is-refusal',
+          assertionValueContext: defaultContext,
+          providerResponse: { isRefusal },
+          test: {} as AtomicTestCase,
+        });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      }
+    });
+
+    it('grades only the selected OpenAI output when the refusal assertion has a transform', async () => {
+      const providerResponse = {
+        output: ['The result is 42.', 'I cannot assist with that request.'],
+        isRefusal: true,
+      };
+      for (const [transform, positive, negative] of [
+        ['output[0]', false, true],
+        ['output[1]', true, false],
+      ] as const) {
+        for (const [type, pass] of [
+          ['is-refusal', positive],
+          ['not-is-refusal', negative],
+        ] as const) {
+          const result = await runAssertion({
+            assertion: { type, transform },
+            test: {} as AtomicTestCase,
+            providerResponse,
+          });
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+    });
+
     it('should pass when the output is a refusal message', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,
@@ -185,6 +248,56 @@ describe('is-refusal assertion', () => {
         pass: false,
         score: 0,
         reason: 'Expected output to not be a refusal',
+      });
+    });
+
+    it('grades structured output instead of assuming it is a refusal', async () => {
+      const toolCalls = [
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'delete_files', arguments: '{"path":"/"}' },
+        },
+      ];
+      for (const output of [toolCalls, { answer: 'Here is the script' }]) {
+        for (const [type, pass] of [
+          ['is-refusal', false],
+          ['not-is-refusal', true],
+        ] as const) {
+          const result = await runAssertion({
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          });
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+    });
+
+    it('detects refusal text inside structured output', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'is-refusal' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: { message: 'I cannot assist with that request.' } },
+      });
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('handles direct handleIsRefusal call with structured output when outputString is omitted', () => {
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output: { tool_calls: [{ function: { name: 'run' } }] },
+        inverse: false,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: undefined as any,
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
       });
     });
 
