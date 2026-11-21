@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { writeOutput } from '../../src/util/index';
 import { createTempDir, removeTempDir } from './utils';
 
@@ -234,6 +235,106 @@ describe('JSONL output with proper line endings', () => {
 
     expect(fs.lstatSync(tempFilePath).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
+  });
+
+  it('resolves dot-dot after following an intermediate symlink during a rewrite', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const pivotPath = path.join(tempDir, 'pivot');
+    const physicalTarget = path.join(tempDir, 'real', 'nested', 'result.jsonl');
+    const lexicalBlocker = path.join(tempDir, 'nested');
+    fs.mkdirSync(path.dirname(physicalTarget), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, 'real', 'inner'), { recursive: true });
+    fs.writeFileSync(lexicalBlocker, 'keep this file');
+    fs.symlinkSync(path.join('real', 'inner'), pivotPath);
+    fs.symlinkSync(['pivot', '..', 'nested', 'result.jsonl'].join(path.sep), tempFilePath);
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
+
+    await writeOutput(tempFilePath, mockEval, null);
+
+    expect(fs.lstatSync(tempFilePath).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(physicalTarget, 'utf8')).toContain('"output":"replacement"');
+    expect(fs.readFileSync(lexicalBlocker, 'utf8')).toBe('keep this file');
+  });
+
+  it('rewrites an existing output through a symlink before dot-dot', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const pivotPath = path.join(tempDir, 'pivot');
+    const outputPath = `${tempDir}${path.sep}${['pivot', '..', 'nested', 'result.jsonl'].join(path.sep)}`;
+    const physicalTarget = path.join(tempDir, 'real', 'nested', 'result.jsonl');
+    const lexicalBlocker = path.join(tempDir, 'nested');
+    fs.mkdirSync(path.dirname(physicalTarget), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, 'real', 'inner'), { recursive: true });
+    fs.writeFileSync(physicalTarget, '{"status":"existing"}\n');
+    fs.writeFileSync(lexicalBlocker, 'keep this file');
+    fs.symlinkSync(path.join('real', 'inner'), pivotPath);
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
+
+    await writeOutput(outputPath, mockEval, null);
+
+    expect(fs.readFileSync(physicalTarget, 'utf8')).toContain('"output":"replacement"');
+    expect(fs.readFileSync(lexicalBlocker, 'utf8')).toBe('keep this file');
+  });
+
+  it('creates parents behind a dangling directory symlink during a rewrite', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const directoryLink = path.join(tempDir, 'linked-dir');
+    const outputPath = path.join(directoryLink, 'result.jsonl');
+    const targetPath = path.join(tempDir, 'missing-parent', 'nested', 'result.jsonl');
+    fs.symlinkSync(
+      path.relative(path.dirname(directoryLink), path.dirname(targetPath)),
+      directoryLink,
+    );
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+      yield [{ testIdx: 0, success: true, score: 1.0, output: 'replacement' }];
+    });
+
+    await writeOutput(outputPath, mockEval, null);
+
+    expect(fs.lstatSync(directoryLink).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
+  });
+
+  it('streams and rewrites relative paths from a writable child directory', async () => {
+    const cwd = process.cwd();
+    const child = path.join(tempDir, 'inside');
+    // POSIX permits relative access from the cwd even if an ancestor stops
+    // granting search permission. Windows lacks this directory mode.
+    const restrictParent = process.platform !== 'win32';
+    fs.mkdirSync(child);
+    process.chdir(child);
+    try {
+      if (restrictParent) {
+        fs.chmodSync(tempDir, 0);
+      }
+      fs.writeFileSync('out.jsonl', '');
+      const writer = new JsonlFileWriter('out.jsonl');
+      await writer.write({ row: 1 });
+      await writer.close();
+      expect(JSON.parse(fs.readFileSync('out.jsonl', 'utf8'))).toEqual({ row: 1 });
+      mockEval.fetchResultsBatched.mockImplementation(async function* () {
+        yield [{ testIdx: 0, success: true }];
+      });
+      await writeOutput('nested/final.jsonl', mockEval, null);
+      expect(fs.existsSync('nested/final.jsonl')).toBe(true);
+    } finally {
+      if (restrictParent) {
+        fs.chmodSync(tempDir, 0o700);
+      }
+      process.chdir(cwd);
+    }
   });
 
   it('should rewrite an artifact with a long valid basename', async () => {
