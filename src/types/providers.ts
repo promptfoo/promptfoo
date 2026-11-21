@@ -116,6 +116,8 @@ export interface CallApiContextParams {
 }
 
 export interface CallApiOptionsParams {
+  /** @internal Prevent catalog HTTP credentials from following redirects or raw target overrides. */
+  protectCatalogCredentials?: boolean;
   includeLogProbs?: boolean;
   /**
    * Signal that can be used to abort the request
@@ -137,6 +139,8 @@ export interface ProviderCleanupContext {
 }
 
 export interface ApiProvider extends MinimalApiProvider {
+  /** A provider with a shared session that requires serialized execution. */
+  requiresSerialExecution?: boolean;
   callApi: CallApiFunction;
   callClassificationApi?: (
     prompt: string,

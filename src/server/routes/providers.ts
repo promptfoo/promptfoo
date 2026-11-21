@@ -12,8 +12,12 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import {
+  getAvailableProviders,
+  getPublicProviderCatalog,
+  hasCustomProviderConfig,
+} from '../../util/config/uiProviders';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -43,6 +47,23 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
     );
   } catch (error) {
     sendError(res, 500, 'Failed to load provider config status', error);
+  }
+});
+
+// An existing catalog stays restricted even when all entries are invalid or empty.
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    res.json(
+      ProviderSchemas.Catalog.Response.parse({
+        success: true,
+        data: {
+          providers: getPublicProviderCatalog(),
+          hasCustomConfig: hasCustomProviderConfig(),
+        },
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to load providers', error);
   }
 });
 
