@@ -76,7 +76,7 @@ export class GolangProvider implements ApiProvider {
     abortSignal?.throwIfAborted();
     if (this.functionName && !['CallApi', 'call_api'].includes(this.functionName)) {
       throw new Error(
-        `Go providers must export a function named 'CallApi'. Unsupported function '${this.functionName}'.`,
+        `Go providers must export a function named 'CallApi'. The configuration requested '${this.functionName}'.`,
       );
     }
     const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));

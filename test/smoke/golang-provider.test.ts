@@ -8,6 +8,7 @@ import { expect, it } from 'vitest';
 
 const repoRoot = path.resolve(__dirname, '../..');
 
+// Cold builds compile the standard library before running the four providers.
 it('runs Go providers with named function types and existing wrapper paths', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-go-smoke-'));
   const cases = ['named-type', 'wrapper-file', 'wrapper-module', 'legacy'];
@@ -75,6 +76,7 @@ func callApi(prompt string, options map[string]interface{}, ctx map[string]inter
           ...process.env,
           GOPROXY: 'off',
           GOSUMDB: 'off',
+          GOTOOLCHAIN: 'local',
           PROMPTFOO_CONFIG_DIR: path.join(tempDir, 'state'),
           PROMPTFOO_DISABLE_TELEMETRY: 'true',
           PROMPTFOO_DISABLE_UPDATE: 'true',
@@ -94,4 +96,4 @@ func callApi(prompt string, options map[string]interface{}, ctx map[string]inter
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
-});
+}, 90_000);
