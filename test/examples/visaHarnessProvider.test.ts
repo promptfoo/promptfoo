@@ -79,6 +79,7 @@ describe('VVAH example provider', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -122,10 +123,15 @@ describe('VVAH example provider', () => {
 
   it('stages exact source, resolves config paths, returns ranked findings and usage, and cleans up', async () => {
     const basePath = path.resolve('operator config');
-    const api = provider({
-      basePath,
-      command: './venv/bin/vvaharness',
-      harnessConfig: './profile.yaml',
+    vi.stubEnv('OPENAI_API_KEY', 'host-key');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'host-alternate');
+    const api: ApiProvider = new VisaHarnessProvider({
+      config: { basePath, command: './venv/bin/vvaharness', harnessConfig: './profile.yaml' },
+      env: {
+        OPENAI_API_KEY: 'selected-key',
+        ANTHROPIC_API_KEY: '',
+        VVAHARNESS_STATE_DIR: 'shared',
+      },
     });
     const resultPromise = api.callApi(prompt);
     await started;
@@ -145,7 +151,12 @@ describe('VVAH example provider', () => {
       path.join(basePath, 'profile.yaml'),
     ]);
     expect(spawnOptions.shell).toBe(false);
-    expect(spawnOptions.env?.VVAHARNESS_STATE_DIR).toBe(path.join(cwd, 'state'));
+    expect(spawnOptions.env).toMatchObject({
+      OPENAI_API_KEY: 'selected-key',
+      ANTHROPIC_API_KEY: '',
+      VVAHARNESS_STATE_DIR: path.join(cwd, 'state'),
+    });
+    expect(JSON.stringify(api)).not.toContain('selected-key');
     expect(await readFile(path.join(cwd, 'repo', 'src', 'app.py'), 'utf8')).toBe(
       'print("fixture")',
     );
