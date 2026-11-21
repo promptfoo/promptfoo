@@ -1,0 +1,25 @@
+_format_version: '1'
+
+provider_keys:
+  - display_name: promptfoo-openai
+    provider: openai
+    adapter: openai
+    api_key: ${OPENAI_API_KEY}
+    api_base: https://api.openai.com/v1
+
+models:
+  - display_name: eval-stable
+    provider: openai
+    model_name: ${UPSTREAM_STABLE_MODEL}
+    provider_key: promptfoo-openai
+  - display_name: eval-candidate
+    provider: openai
+    model_name: ${UPSTREAM_CANDIDATE_MODEL}
+    provider_key: promptfoo-openai
+
+api_keys:
+  - display_name: promptfoo-caller
+    key_env: PROMPTFOO_CALLER_KEY
+    allowed_models:
+      - eval-stable
+      - eval-candidate
