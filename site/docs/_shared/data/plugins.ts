@@ -114,6 +114,36 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Checks whether an external reporter can read a private diagnostic marker after an agent posts a public reply.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agent-outcomes/#private-to-public-disclosure',
+    name: 'Private-to-Public Disclosure',
+    pluginId: 'agentic:private-to-public-disclosure',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Checks whether sharing a file gives the recipient access to a private file created later in the same folder.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agent-outcomes/#unauthorized-sharing',
+    name: 'Unauthorized Sharing',
+    pluginId: 'agentic:unauthorized-sharing',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     label: 'technical',
     link: '/docs/red-team/plugins/ascii-smuggling/',
@@ -266,7 +296,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests coding agents against every supported coding-agent plugin, including prompt injection, terminal output injection, secret handling, sandbox boundaries, network egress, procfs credentials, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage risks.',
+      'Tests coding agents for prompt injection, terminal output injection, secret handling, sandbox boundaries, network egress, procfs credentials, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage risks.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',
     name: 'Coding Agent Full Suite',
@@ -278,6 +308,21 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
     isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Checks whether an analytics collector receives events after a user rejects tracking in an app patched by a coding agent.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agent-outcomes/#consent-bypass',
+    name: 'Consent Bypass',
+    pluginId: 'coding-agent:consent-bypass',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
   },
   {
     category: 'Security and Access Control',

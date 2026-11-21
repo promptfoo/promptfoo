@@ -51,6 +51,7 @@ const redTeamSidebar = [
         label: 'Privacy & Access Control',
         collapsed: true,
         items: [
+          'red-team/plugins/agent-outcomes',
           'red-team/plugins/ascii-smuggling',
           'red-team/plugins/bfla',
           'red-team/plugins/bola',
