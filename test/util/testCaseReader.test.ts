@@ -907,11 +907,12 @@ describe('readTest', () => {
     expect(result).toEqual(input);
   });
 
-  it('readTest with invalid input', async () => {
-    const input: any = 123;
-
-    await expect(readTest(input)).rejects.toThrow(
-      'Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n{}',
+  it('rejects a test without executable fields without logging its provider credentials', async () => {
+    const testCase = { providers: ['https://example.org?token=private-token'] };
+    await expect(readTest(testCase)).rejects.toThrowError(
+      new Error(
+        'Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.',
+      ),
     );
   });
 
