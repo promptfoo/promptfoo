@@ -12,7 +12,7 @@ import {
   WARNING_THRESHOLD,
 } from './adaptiveConcurrency';
 import { sleepWithAbort, throwIfAborted } from './cancellation';
-import { parseRateLimitHeaders } from './headerParser';
+import { MAX_RESET_HEADER_WAIT_MS, parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 import { isRateLimitError, type RateLimitExecuteOptions } from './types';
@@ -375,6 +375,16 @@ export class ProviderRateLimitState extends EventEmitter {
         existingResetAt !== null && existingResetAt > Date.now()
           ? Math.max(existingResetAt, selectedResetAt)
           : selectedResetAt;
+    } else if (isRateLimited && parsed.retryAfterMs !== undefined) {
+      // A rate limit's Retry-After is the server's answer to when a retry can
+      // succeed, so it takes precedence over the limit reset headers.
+      parsed.resetAt = Date.now() + parsed.retryAfterMs;
+    } else if (parsed.resetAt !== undefined) {
+      // A successful response describes its quota with the limit reset headers,
+      // even when a proxy adds Retry-After. A reset header can describe a much
+      // longer window (Groq's per-day request limit) than the one that ran out,
+      // so it holds the queue no longer than the default wait.
+      parsed.resetAt = Math.min(parsed.resetAt, Date.now() + MAX_RESET_HEADER_WAIT_MS);
     }
 
     // Emit ratelimit:learned only once per provider when we first see limit headers

@@ -1375,13 +1375,25 @@ describe('handleRateLimit', () => {
   it('should handle OpenAI reset headers with compound durations', async () => {
     const response = createMockResponse({
       headers: new Headers({
+        'x-ratelimit-reset-requests': '0m45.5s',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 45500ms'));
+  });
+
+  it('caps a reset header wait at the 60s default', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
         'x-ratelimit-reset-requests': '1m30s',
       }),
     });
 
     await handleRateLimit(response);
 
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 90000ms'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 60000ms'));
   });
 
   it('should handle standard rate limit reset headers', async () => {
@@ -1507,17 +1519,112 @@ describe('computeRateLimitWaitMs', () => {
     expect(computeRateLimitWaitMs(response)).toBe(expected);
   });
 
-  it('prefers OpenAI reset headers when present', () => {
+  it('prefers Retry-After over OpenAI reset headers', () => {
     const response = createMockResponse({
       headers: new Headers({
         'x-ratelimit-reset-requests': '3s',
-        'Retry-After': '60',
+        'Retry-After': '2',
       }),
+    });
+    expect(computeRateLimitWaitMs(response)).toBe(2_000);
+  });
+
+  it('uses OpenAI reset headers when Retry-After is absent', () => {
+    const response = createMockResponse({
+      headers: new Headers({ 'x-ratelimit-reset-requests': '3s' }),
     });
     const wait = computeRateLimitWaitMs(response);
     // resolves close to 3000ms; allow a few ms of clock drift
     expect(wait).toBeGreaterThanOrEqual(2_900);
     expect(wait).toBeLessThanOrEqual(3_100);
+  });
+
+  describe('Groq header shapes', () => {
+    // Captured from Groq on 2026-11-20: `-requests` headers describe the per-day
+    // request limit and `-tokens` headers the per-minute token limit.
+    const dayWindow = {
+      'x-ratelimit-limit-requests': '1000',
+      'x-ratelimit-remaining-requests': '970',
+      'x-ratelimit-reset-requests': '43m12s',
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-20T08:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('waits for Retry-After on a requests-per-minute 429, not the per-day reset', () => {
+      const response = createMockResponse({
+        status: 429,
+        headers: new Headers({ ...dayWindow, 'retry-after': '20' }),
+      });
+      expect(computeRateLimitWaitMs(response)).toBe(20_000);
+    });
+
+    it('waits for Retry-After on a tokens-per-minute 429', () => {
+      const response = createMockResponse({
+        status: 429,
+        headers: new Headers({
+          ...dayWindow,
+          'retry-after': '11',
+          'x-ratelimit-limit-tokens': '8000',
+          'x-ratelimit-remaining-tokens': '498',
+          'x-ratelimit-reset-tokens': '56.265s',
+        }),
+      });
+      expect(computeRateLimitWaitMs(response)).toBe(11_000);
+    });
+
+    it('uses the token reset when tokens are exhausted and Retry-After is absent', () => {
+      const response = createMockResponse({
+        status: 429,
+        headers: new Headers({
+          ...dayWindow,
+          'x-ratelimit-remaining-tokens': '0',
+          'x-ratelimit-reset-tokens': '7.66s',
+        }),
+      });
+      expect(computeRateLimitWaitMs(response)).toBe(7_660);
+    });
+
+    it('caps the wait when only the per-day reset is reported', () => {
+      const response = createMockResponse({ status: 429, headers: new Headers(dayWindow) });
+      expect(computeRateLimitWaitMs(response)).toBe(60_000);
+    });
+  });
+
+  it.each([
+    ['X-RateLimit-Reset', '30', 30_000],
+    ['X-RateLimit-Reset', '1800000030', 31_000],
+    ['X-RateLimit-Reset', '1800000030000', 30_000],
+    ['RateLimit-Reset', '500ms', 500],
+    ['anthropic-ratelimit-tokens-reset', new Date(1800000030000).toISOString(), 30_000],
+  ] as const)('uses the shared reset parser for %s=%s', (name, value, expected) => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+    try {
+      const response = createMockResponse({ headers: new Headers({ [name]: value }) });
+      expect(computeRateLimitWaitMs(response)).toBe(expected);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('caps an X-RateLimit-Reset timestamp an hour away', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-11-20T08:00:00Z'));
+      const resetSeconds = Math.floor(Date.now() / 1000) + 3600;
+      const response = createMockResponse({
+        headers: new Headers({ 'X-RateLimit-Reset': String(resetSeconds) }),
+      });
+      expect(computeRateLimitWaitMs(response)).toBe(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('falls back to Retry-After when a reset header is non-finite', () => {

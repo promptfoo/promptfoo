@@ -260,6 +260,103 @@ describe('parseRateLimitHeaders', () => {
     });
   });
 
+  describe('Reset of the exhausted limit', () => {
+    // Header shapes captured from Groq on 2026-11-20. Groq's `-requests` headers
+    // describe the per-day request limit and its `-tokens` headers the per-minute
+    // token limit; OpenAI uses the same names for two per-minute limits.
+    const groqDayWindow = {
+      'x-ratelimit-limit-requests': '1000',
+      'x-ratelimit-remaining-requests': '970',
+      'x-ratelimit-reset-requests': '43m12s',
+    };
+
+    it('reports Retry-After and the token reset for a Groq per-minute 429, not the per-day reset', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        ...groqDayWindow,
+        'retry-after': '11',
+        'x-ratelimit-limit-tokens': '8000',
+        'x-ratelimit-remaining-tokens': '498',
+        'x-ratelimit-reset-tokens': '56.265s',
+      });
+
+      expect(result.retryAfterMs).toBe(11_000);
+      expect(result.resetAt).toBe(now + 56_265);
+    });
+
+    it('uses the token reset when only the token limit is exhausted', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        ...groqDayWindow,
+        'x-ratelimit-limit-tokens': '8000',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-tokens': '7.66s',
+      });
+
+      expect(result.resetAt).toBe(now + 7_660);
+    });
+
+    it('uses the request reset when only the request limit is exhausted', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-remaining-tokens': '39000',
+        'x-ratelimit-reset-tokens': '6ms',
+      });
+
+      expect(result.resetAt).toBe(now + 1_000);
+    });
+
+    it('waits for the later reset when both limits are exhausted', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '2s',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-tokens': '9s',
+      });
+
+      expect(result.resetAt).toBe(now + 9_000);
+    });
+
+    it('uses the earliest reset when no limit is known to be exhausted', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      // A token-limited 429 can leave fewer tokens than the request needs.
+      const result = parseRateLimitHeaders({
+        ...groqDayWindow,
+        'x-ratelimit-remaining-tokens': '498',
+        'x-ratelimit-reset-tokens': '56.265s',
+      });
+
+      expect(result.resetAt).toBe(now + 56_265);
+    });
+
+    it('applies the same rules to Anthropic reset headers', () => {
+      const now = Date.parse('2026-11-20T08:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        'anthropic-ratelimit-requests-remaining': '40',
+        'anthropic-ratelimit-requests-reset': '2026-11-20T08:00:50Z',
+        'anthropic-ratelimit-tokens-remaining': '0',
+        'anthropic-ratelimit-tokens-reset': '2026-11-20T08:00:05Z',
+      });
+
+      expect(result.resetAt).toBe(now + 5_000);
+    });
+  });
+
   describe('Retry-After handling', () => {
     it('should parse retry-after-ms header', () => {
       const now = Date.now();
@@ -301,7 +398,8 @@ describe('parseRateLimitHeaders', () => {
 
       const result = parseRateLimitHeaders(headers);
 
-      // resetAt should be from x-ratelimit-reset, not retry-after
+      // resetAt describes the quota window; callers that know the response was
+      // rate limited give retryAfterMs precedence.
       expect(result.resetAt).toBe(futureTime);
       expect(result.retryAfterMs).toBe(30000);
     });
