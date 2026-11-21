@@ -49,11 +49,7 @@ async function openDialog() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(useTelemetry).mockReturnValue({
-    recordEvent,
-    identifyUser: vi.fn(),
-    isInitialized: true,
-  });
+  vi.mocked(useTelemetry).mockReturnValue({ recordEvent });
   vi.spyOn(window, 'open').mockImplementation(openWindow);
   mockConfig();
 });
