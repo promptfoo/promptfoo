@@ -41,6 +41,14 @@ describe('POST /api/eval/replay provider boundary', () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
 
+  function mockCloudProvider(config: object) {
+    vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+    vi.spyOn(cloudConfig, 'getAuthHeaders').mockReturnValue({ Authorization: 'Bearer fixture' });
+    return vi
+      .spyOn(fetchUtils, 'fetchWithProxy')
+      .mockImplementation(async () => Response.json({ config }));
+  }
+
   function storedConfig(providers: unknown, basePath?: string, columnProviders?: string[]) {
     vi.mocked(Eval.findById).mockResolvedValue({
       getPrompts: () =>
@@ -300,21 +308,12 @@ describe('POST /api/eval/replay provider boundary', () => {
   it.each([false, true])(
     'replays a saved cloud target with local overrides: %s',
     async (localOverride) => {
-      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
-      vi.spyOn(cloudConfig, 'getAuthHeaders').mockReturnValue({ Authorization: 'Bearer fixture' });
-      const cloudFetch = vi.spyOn(fetchUtils, 'fetchWithProxy').mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            config: {
-              id: 'echo',
-              label: 'Cloud target',
-              prompts: ['original'],
-              transform: 'output + " cloud"',
-            },
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
-      );
+      const cloudFetch = mockCloudProvider({
+        id: 'echo',
+        label: 'Cloud target',
+        prompts: ['original'],
+        transform: 'output + " cloud"',
+      });
       const provider = localOverride
         ? {
             'promptfoo://provider/target': {
@@ -344,6 +343,29 @@ describe('POST /api/eval/replay provider boundary', () => {
     },
   );
 
+  it.each(['https://local.invalid', ''])(
+    'matches the effective cloud HTTP URL with override %j',
+    async (url) => {
+      const id = 'https://fallback.invalid';
+      const original = 'https://original.invalid';
+      mockCloudProvider({ id, label: 'Remote label', config: { url: original, body: {} } });
+      storedConfig([{ id: 'promptfoo://provider/target', label: '', config: { url } }], undefined, [
+        url || id,
+        original,
+        'Remote label',
+      ]);
+      evaluate.mockImplementationOnce(async (suite) => {
+        const [loaded] = await loadApiProviders(suite.providers);
+        expect(loaded.label || loaded.id()).toBe(url || id);
+        return { toEvaluateSummary: async () => ({ results: [] }) } as unknown as Eval;
+      });
+      expect((await replay(0, 0)).status).toBe(200);
+      expect((await replay(0, 1)).status).toBe(400);
+      expect((await replay(0, 2)).status).toBe(400);
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('skips an unavailable cloud target only for an identifiable, unrelated column', async () => {
     vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
     const missing = 'promptfoo://provider/unavailable';
@@ -367,16 +389,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   });
 
   it('rejects a cloud Codex Security target before evaluation', async () => {
-    vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
-    vi.spyOn(cloudConfig, 'getAuthHeaders').mockReturnValue({ Authorization: 'Bearer fixture' });
-    vi.spyOn(fetchUtils, 'fetchWithProxy').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          config: { id: 'openai:codex-security', label: 'Saved scanner' },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
+    mockCloudProvider({ id: 'openai:codex-security', label: 'Saved scanner' });
     storedConfig(['promptfoo://provider/scanner'], undefined, ['Saved scanner']);
     const response = await replay(0, 0);
     expect(response.status).toBe(400);

@@ -689,7 +689,7 @@ async function matchReplayTarget(
   if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
     try {
       const id = getCloudDatabaseId(ref.loadProviderPath);
-      const options = 'loadOptions' in ref ? ref.loadOptions : {};
+      const options: ProviderOptions = 'loadOptions' in ref ? ref.loadOptions : {};
       cloud = { id, options, provider: await getProviderFromCloud(id, options) };
     } catch (error) {
       // A known collision or an unindexed request must never fall back to a different target.
@@ -700,13 +700,19 @@ async function matchReplayTarget(
     }
   }
 
-  const target = cloud ? normalizeProviderRef(cloud.provider) : ref;
+  const target = cloud
+    ? normalizeProviderRef({
+        ...cloud.provider,
+        label: cloud.options.label ?? cloud.provider.label,
+        config: { ...cloud.provider.config, ...cloud.options.config },
+      })
+    : ref;
   // HttpProvider.id() returns the effective URL, even when an alias names another URL.
   const identity =
     'loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)
       ? target.loadOptions.config?.url || target.loadProviderPath
       : target.id;
-  if (column && column !== (ref.label || target.label || identity)) {
+  if (column && column !== (target.label || identity)) {
     return;
   }
   return { target, cloud };
