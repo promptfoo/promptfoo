@@ -11,6 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import AssertsForm from './AssertsForm';
+import { hasInvalidToolSet, toolSetMessage } from './assertionValueValidation';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
 
@@ -27,6 +28,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
   const [assertsFormKey, setAssertsFormKey] = useState(0);
+  const invalid = hasInvalidToolSet({ assert: asserts });
 
   React.useEffect(() => {
     if (initialValues) {
@@ -99,16 +101,21 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
           />
         </div>
 
+        {invalid && (
+          <p role="alert" className="text-sm text-destructive">
+            {toolSetMessage}
+          </p>
+        )}
         <DialogFooter data-testid="test-case-dialog-footer" className="shrink-0 gap-2 sm:gap-0">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
           {!initialValues && (
-            <Button variant="secondary" onClick={() => handleAdd(false)}>
+            <Button variant="secondary" disabled={invalid} onClick={() => handleAdd(false)}>
               Add Another
             </Button>
           )}
-          <Button onClick={() => handleAdd(true)}>
+          <Button disabled={invalid} onClick={() => handleAdd(true)}>
             {initialValues ? 'Update Test Case' : 'Add Test Case'}
           </Button>
         </DialogFooter>

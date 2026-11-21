@@ -1,5 +1,9 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  assertionRequiresTrace,
+  hasTraceAwareAssertions,
+  runAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -535,7 +539,7 @@ async function callProviderForRunEval({
   } finally {
     if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
       try {
-        await collectExternalTraceAfterProviderCall({
+        const collected = await collectExternalTraceAfterProviderCall({
           abortSignal,
           providerFailed,
           response,
@@ -543,6 +547,16 @@ async function callProviderForRunEval({
           testSuite,
           traceContext,
         });
+        if (
+          !collected &&
+          !response?.error &&
+          response?.output != null &&
+          test.assert?.some(assertionRequiresTrace)
+        ) {
+          // Local spans alone would make missing external evidence look like an empty trace.
+          response.error =
+            'Required external trace is unavailable. Check the trace provider and retry without caching.';
+        }
       } catch (error) {
         // Trace collection must not discard a target response that completed
         // before CLI pause. Real caller/deadline cancellation still propagates.
@@ -572,17 +586,17 @@ async function collectExternalTraceAfterProviderCall({
   test: AtomicTestCase;
   testSuite?: TestSuite;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
-}): Promise<void> {
+}): Promise<boolean> {
   const traceId = getTraceId(traceContext);
   if (!traceId || abortSignal?.aborted) {
-    return;
+    return false;
   }
 
   if (response?.cached) {
     logger.debug(
       `[Evaluator] Skipping external trace fetch for cached response traceId=${traceId}`,
     );
-    return;
+    return false;
   }
 
   const tracingConfig = testSuite?.tracing;
@@ -615,14 +629,16 @@ async function collectExternalTraceAfterProviderCall({
     } else {
       logger.debug(`[Evaluator] No external traces found for traceId=${traceId}`);
     }
+    return Boolean(trace);
   } catch (error) {
     if (abortSignal?.aborted) {
       if (!providerFailed) {
         throw error;
       }
-      return;
+      return false;
     }
     logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
+    return false;
   }
 }
 

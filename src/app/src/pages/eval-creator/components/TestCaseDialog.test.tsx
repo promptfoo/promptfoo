@@ -51,6 +51,14 @@ describe('TestCaseForm', () => {
     expect(addAnotherButton).toBeInTheDocument();
   });
 
+  it('prevents saving a malformed tool set and explains the required value', () => {
+    renderComponent({
+      initialValues: { assert: [{ type: 'not-trajectory:tool-set', value: [1] }] },
+    });
+    expect(screen.getByRole('button', { name: 'Update Test Case' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('array of tool names');
+  });
+
   it('should render with the title "Edit Test Case" and show only the "Update Test Case" button when initialValues is provided and open is true', () => {
     const initialValues = {
       description: 'Test description',

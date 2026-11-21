@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { UnifiedConfigSchema } from '../src/types';
+import { ToolSetInputSchema, toolSetTypes } from '../src/contracts/validators/trajectoryToolSet';
+import { AssertionSchema, UnifiedConfigSchema } from '../src/types';
 import { CONFIG_PROVIDER_INPUT_KEYS } from '../src/types/configAliases';
 import { TRANSFORM_KEYS } from '../src/util/transform';
 import { StringOrFunctionSchema } from '../src/validators/shared';
@@ -39,6 +40,12 @@ const schemaContent = z.toJSONSchema(UnifiedConfigSchema, {
   unrepresentable: 'any',
   reused: 'ref',
   override: ({ zodSchema, jsonSchema }) => {
+    if (zodSchema === AssertionSchema) {
+      const { anyOf } = z.toJSONSchema(ToolSetInputSchema, { target: 'draft-07' });
+      jsonSchema.if = { required: ['type'], properties: { type: { enum: toolSetTypes } } };
+      // biome-ignore lint/suspicious/noThenProperty: JSON Schema uses "then" for conditional validation.
+      jsonSchema.then = { required: ['value'], properties: { value: { anyOf } } };
+    }
     // Config files can only represent string transforms. Preserve runtime support for function
     // transforms in the Zod schema, but keep generated JSON Schema string-only for editor/Ajv use.
     if (zodSchema === StringOrFunctionSchema) {

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { isToolSet, toolSetError } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -65,6 +66,8 @@ const assertTypes: AssertionType[] = [
   'trajectory:goal-success',
   'trajectory:tool-args-match',
   'trajectory:tool-used',
+  'trajectory:tool-set',
+  'not-trajectory:tool-set',
   'trajectory:tool-sequence',
   'trajectory:step-count',
 
@@ -122,17 +125,36 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
+function parseArrayValue(value: Assertion['value']): Assertion['value'] {
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Keep incomplete JSON visible so validation can explain the error.
+    }
+  }
+  return value;
+}
+
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
+  const [arrayText, setArrayText] = useState<(string | undefined)[]>(
+    () => initialValues?.map(() => undefined) ?? [],
+  );
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
     setAsserts(newAsserts);
+    setArrayText((values) => [...values, undefined]);
     onAdd(newAsserts);
   };
 
   const handleRemoveAssert = (indexToRemove: number) => {
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
+    setArrayText((values) => values.filter((_, index) => index !== indexToRemove));
     setAsserts(newAsserts);
     onAdd(newAsserts);
   };
@@ -174,7 +196,16 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   value={assert.type}
                   onValueChange={(newValue) => {
                     const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
+                      i === index
+                        ? {
+                            ...a,
+                            type: newValue as AssertionType,
+                            value: isToolSet(newValue) ? parseArrayValue(a.value) : a.value,
+                          }
+                        : a,
+                    );
+                    setArrayText((values) =>
+                      values.map((value, i) => (i === index ? undefined : value)),
                     );
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
@@ -200,16 +231,38 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   </Label>
                   <Textarea
                     id={`assert-value-${index}`}
-                    placeholder="Enter expected value or criteria..."
+                    aria-invalid={Boolean(toolSetError(assert))}
+                    placeholder={
+                      isToolSet(assert.type)
+                        ? '["search", "summarize"]'
+                        : 'Enter expected value or criteria...'
+                    }
                     value={
-                      typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : ''
+                      isToolSet(assert.type) ||
+                      Array.isArray(assert.value) ||
+                      arrayText[index] !== undefined
+                        ? (arrayText[index] ??
+                          (typeof assert.value === 'string'
+                            ? assert.value
+                            : (JSON.stringify(assert.value, null, 2) ?? '')))
+                        : typeof assert.value === 'string'
+                          ? assert.value
+                          : typeof assert.value === 'number'
+                            ? String(assert.value)
+                            : ''
                     }
                     onChange={(e) => {
-                      const newValue = e.target.value;
+                      const text = e.target.value;
+                      const editsArray =
+                        isToolSet(assert.type) ||
+                        Array.isArray(assert.value) ||
+                        arrayText[index] !== undefined;
+                      if (editsArray) {
+                        setArrayText((values) =>
+                          values.map((value, i) => (i === index ? text : value)),
+                        );
+                      }
+                      const newValue = editsArray ? parseArrayValue(text) : text;
                       const newAsserts = asserts.map((a, i) =>
                         i === index ? { ...a, value: newValue } : a,
                       );

@@ -10,6 +10,7 @@ import {
 import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
+import { toolSetError, toolSetMessage } from '../contracts/validators/trajectoryToolSet';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
 import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
@@ -734,6 +735,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'trajectory:tool-args-match',
   'trajectory:step-count',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:tool-used',
   'trace-error-spans',
   'trace-span-count',
@@ -788,13 +790,17 @@ export const AssertionSetSchema = z.object({
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z.object({
-  // Type of assertion
-  type: AssertionTypeSchema,
+const TypedAssertionValue = z
+  .object({
+    type: AssertionTypeSchema,
+    value: z.custom<AssertionValue>().optional(),
+  })
+  .refine((assertion) => !toolSetError(assertion), {
+    path: ['value'],
+    message: toolSetMessage,
+  });
 
-  // The expected value, if applicable
-  value: z.custom<AssertionValue>().optional(),
-
+export const AssertionSchema = TypedAssertionValue.safeExtend({
   // An external mapping of arbitrary strings to values that is passed
   // to the assertion for custom asserts
   config: z.record(z.string(), z.any()).optional(),

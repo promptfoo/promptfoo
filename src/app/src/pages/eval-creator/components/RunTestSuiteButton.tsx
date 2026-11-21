@@ -9,6 +9,7 @@ import { normalizeLocalProviders } from '@app/pages/redteam/setup/components/Tar
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useLocation, useNavigate } from 'react-router';
+import { hasInvalidToolSet, toolSetMessage } from './assertionValueValidation';
 import {
   countTests,
   normalizePrompts,
@@ -65,9 +66,12 @@ const RunTestSuiteButton = () => {
   const normalizedPrompts = normalizePrompts(prompts);
   const jobPrompts = normalizePromptsForJob(prompts);
   const testCount = countTests(tests);
+  const invalid =
+    hasInvalidToolSet(defaultTest) || (Array.isArray(tests) && tests.some(hasInvalidToolSet));
 
   const isDisabled =
     isRunning ||
+    invalid ||
     normalizedProviders.length === 0 ||
     normalizedPrompts.length === 0 ||
     testCount === 0;
@@ -208,10 +212,10 @@ const RunTestSuiteButton = () => {
           'Run Eval'
         )}
       </Button>
-      {runError && (
+      {(invalid || runError) && (
         <Alert variant="destructive">
           <AlertContent>
-            <AlertDescription>{runError}</AlertDescription>
+            <AlertDescription>{invalid ? toolSetMessage : runError}</AlertDescription>
           </AlertContent>
         </Alert>
       )}

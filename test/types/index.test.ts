@@ -59,17 +59,10 @@ describe('AssertionSchema', () => {
   });
 
   it('should validate all base assertion types', () => {
-    const baseTypes = BaseAssertionTypesSchema.options;
-
-    baseTypes.forEach((type) => {
-      const assertion = {
-        type,
-        value: 'test value',
-      };
-
-      const result = AssertionSchema.safeParse(assertion);
-      expect(result.success).toBe(true);
-    });
+    for (const type of BaseAssertionTypesSchema.options) {
+      const value = type === 'trajectory:tool-set' ? ['lookup'] : 'test value';
+      expect(AssertionSchema.safeParse({ type, value }).success, type).toBe(true);
+    }
   });
 
   it('should validate "not-" prefixed assertion types', () => {

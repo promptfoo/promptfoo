@@ -25,6 +25,62 @@ describe('AssertsForm', () => {
     initialValues = [];
   });
 
+  it.each(['trajectory:tool-set', 'not-trajectory:tool-set'] as const)(
+    'edits %s JSON without moving the caret or changing scalar text',
+    async (type) => {
+      const user = userEvent.setup();
+      renderComponent(<AssertsForm onAdd={onAdd} initialValues={[{ type, value: ['old'] }]} />);
+      const input = screen.getByRole('textbox', { name: 'Value' }) as HTMLTextAreaElement;
+      await user.click(input);
+      const word = input.value.indexOf('old');
+      input.setSelectionRange(word, word + 3);
+      await user.keyboard('new');
+      expect(input.value).toBe('[\n  "new"\n]');
+      expect(input.selectionStart).toBe(word + 3);
+      expect(onAdd).toHaveBeenLastCalledWith([{ type, value: ['new'] }]);
+      await user.clear(input);
+      await user.paste('[]');
+      expect(onAdd).toHaveBeenLastCalledWith([{ type, value: [] }]);
+      await user.clear(input);
+      await user.paste('1.0');
+      expect(input).toHaveValue('1.0');
+      expect(onAdd).toHaveBeenLastCalledWith([{ type, value: '1.0' }]);
+    },
+  );
+
+  it('parses an existing array only when selecting the new tool-set type', async () => {
+    const user = userEvent.setup();
+    renderComponent(
+      <AssertsForm onAdd={onAdd} initialValues={[{ type: 'equals', value: '["lookup"]' }]} />,
+    );
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(screen.getByRole('option', { name: 'trajectory:tool-set' }));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:tool-set', value: ['lookup'] }]);
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(screen.getByRole('option', { name: 'trajectory:tool-used' }));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:tool-used', value: ['lookup'] }]);
+    const input = screen.getByRole('textbox', { name: 'Value' });
+    expect(input).toHaveValue(JSON.stringify(['lookup'], null, 2));
+    await user.clear(input);
+    await user.paste('["lookup", "summarize"]');
+    expect(input).toHaveValue('["lookup", "summarize"]');
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'trajectory:tool-used', value: ['lookup', 'summarize'] },
+    ]);
+  });
+
+  it.each(['similar', 'bleu', 'equals'] as const)(
+    'preserves existing %s scalar input',
+    async (type) => {
+      const user = userEvent.setup();
+      renderComponent(<AssertsForm onAdd={onAdd} initialValues={[{ type, value: '' }]} />);
+      const input = screen.getByRole('textbox', { name: 'Value' });
+      await user.type(input, '1.0');
+      expect(input).toHaveValue('1.0');
+      expect(onAdd).toHaveBeenLastCalledWith([{ type, value: '1.0' }]);
+    },
+  );
+
   it('should render all assertions from initialValues as rows with the correct type and value fields populated', () => {
     initialValues = [
       { type: 'equals', value: 'expected output' },
