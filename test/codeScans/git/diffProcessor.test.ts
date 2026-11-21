@@ -35,7 +35,7 @@ describe('processDiff', () => {
       .mockResolvedValueOnce({ stdout: numstat })
       .mockResolvedValueOnce({ stdout: blobSizes });
 
-    const result = await processDiff('/repo', 'base', 'head');
+    const { files: result } = await processDiff('/repo', 'base', 'head');
 
     expect(result).toHaveLength(extensions.length);
     expect(result).toEqual(

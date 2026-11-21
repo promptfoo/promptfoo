@@ -3,7 +3,7 @@
  *
  * Focused pipeline for processing git diffs:
  * 1. Discover changed files
- * 2. Filter denylist (early exit)
+ * 2. Filter denylist
  * 3. Collect blob sizes and filter large files
  * 4. Determine text/binary status
  * 5. Generate per-file patches
@@ -69,12 +69,17 @@ function parseNumstat(numstatOutput: string): Map<string, NumstatEntry> {
   return map;
 }
 
+interface ProcessedDiff {
+  files: FileRecord[];
+  totalFiles: number;
+}
+
 async function discoverChangedFiles(
   repoPath: string,
   base: string,
   compare: string,
   fullScan: boolean,
-): Promise<FileRecord[]> {
+): Promise<ProcessedDiff> {
   const range = `${base}...${compare}`;
   // Scope to this checkout directory but retain repository-relative paths for GitHub comments.
   const scope = fullScan
@@ -107,7 +112,7 @@ async function discoverChangedFiles(
   const numstatMap = parseNumstat(numstat);
 
   // Merge the data
-  return rawFiles.map((file) => {
+  const files = rawFiles.map((file) => {
     const stats = numstatMap.get(file.path);
     return {
       path: file.path,
@@ -118,6 +123,8 @@ async function discoverChangedFiles(
       linesRemoved: stats?.linesRemoved,
     };
   });
+  // Numstat also counts in-scope paths excluded before blob inspection.
+  return { files, totalFiles: Math.max(files.length, numstatMap.size) };
 }
 
 function filterDenylist(files: FileRecord[]): FileRecord[] {
@@ -399,7 +406,7 @@ export async function processDiff(
   base: string,
   compare: string = 'HEAD',
   fullScan = false,
-): Promise<FileRecord[]> {
+): Promise<ProcessedDiff> {
   try {
     if (fullScan) {
       // Pin the two revisions across discovery, blob inspection and patch generation.
@@ -417,41 +424,17 @@ export async function processDiff(
         ),
       );
     }
-    // Step 1: Discover changed files
-    let files = await discoverChangedFiles(repoPath, base, compare, fullScan);
-
-    if (files.length === 0) {
-      return files;
-    }
-
-    // Step 2: Filter denylist (early exit)
-    files = filterDenylist(files);
-
-    // Check for remaining files
-    if (!files.some((file) => !file.skipReason)) {
-      return fullScan ? [] : files;
-    }
-
-    // Step 3: Collect blob sizes and filter large files
-    const sizeMap = await collectBlobSizes(repoPath, files, fullScan);
-    files = attachBlobSizesAndFilter(files, sizeMap);
-
-    // Check for remaining files
-    if (!files.some((file) => !file.skipReason)) {
-      return fullScan ? [] : files;
-    }
-
-    // Step 4: Determine text/binary status
-    files = await determineTextStatus(repoPath, files, fullScan);
-
-    // Check for remaining files
-    if (!files.some((file) => !file.skipReason)) {
-      return fullScan ? [] : files;
-    }
-
-    // Step 5: Generate per-file patches
-    const patches = await generatePatches(repoPath, base, compare, files, fullScan);
-    return fullScan ? patches.filter((file) => !file.skipReason && file.patch) : patches;
+    const { files, totalFiles } = await discoverChangedFiles(repoPath, base, compare, fullScan);
+    const allowed = filterDenylist(files);
+    const sizeMap = await collectBlobSizes(repoPath, allowed, fullScan);
+    const sized = attachBlobSizesAndFilter(allowed, sizeMap);
+    const text = await determineTextStatus(repoPath, sized, fullScan);
+    const patches = await generatePatches(repoPath, base, compare, text, fullScan);
+    // Full scans may disclose the number of exclusions, never the excluded records.
+    return {
+      totalFiles,
+      files: fullScan ? patches.filter((file) => !file.skipReason && file.patch) : patches,
+    };
   } catch (error) {
     if (fullScan) {
       throw new DiffProcessorError('Failed to process the full-scan diff');

@@ -62,6 +62,8 @@ promptfoo code-scans run [repo-path] [options]
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
+| `--min-severity <level>`          | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                    | `medium`                                             |
+| `--minimum-severity <level>`      | Alias for `--min-severity`; `--min-severity` takes precedence                                       | None                                                 |
 | `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                |
 | `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                               |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
@@ -135,7 +137,7 @@ guidance: |
 # guidanceFile: ./scan-guidance.md
 
 # Optional: Promptfoo API host URL
-# apiHost: https://api.promptfoo.dev
+# apiHost: https://api.promptfoo.app
 ```
 
 ## Custom Guidance
@@ -202,14 +204,15 @@ When using `--json`, the scan outputs a JSON object to stdout with the following
 
 ### Response Object
 
-| Field            | Type        | Description                                                                                                       |
-| ---------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `success`        | `boolean`   | Whether the scan completed successfully                                                                           |
-| `review`         | `string`    | Overall review summary of the scan                                                                                |
-| `comments`       | `Comment[]` | Array of findings (see below)                                                                                     |
-| `commentsPosted` | `boolean`   | Whether comments were posted to a PR                                                                              |
-| `skipReason`     | `string`    | Set when the scan was intentionally skipped (e.g. fork PR awaiting maintainer approval); `comments` will be empty |
-| `error`          | `string`    | Error message if the scan failed                                                                                  |
+| Field            | Type        | Description                                                                                                                                  |
+| ---------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `success`        | `boolean`   | Whether the scan completed successfully                                                                                                      |
+| `review`         | `string`    | Overall review summary of the scan                                                                                                           |
+| `comments`       | `Comment[]` | Array of findings (see below)                                                                                                                |
+| `commentsPosted` | `boolean`   | Whether comments were posted to a PR                                                                                                         |
+| `skipReason`     | `string`    | Why the scan was skipped or incomplete (e.g. fork PR awaiting maintainer approval)                                                           |
+| `skippedFiles`   | `number`    | Number of changed files omitted from the scan; `0` confirms none were skipped. Older CLIs may omit this field, leaving completeness unknown. |
+| `error`          | `string`    | Error message if the scan failed                                                                                                             |
 
 ### Comment Object
 
