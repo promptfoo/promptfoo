@@ -252,6 +252,12 @@ describe('langfuseTraces', () => {
           { type: 'function_call', name: 'weather', arguments: '{}' },
         ],
       },
+      {
+        role: 'assistant',
+        content: null,
+        refusal: 'Checking weather is unavailable.',
+        tool_calls: [{ function: { name: 'weather', arguments: '{}' } }],
+      },
     ])('preserves text and tool calls from mixed stored outputs', async (output) => {
       mockTraceList.mockResolvedValueOnce({
         data: [{ id: 'mixed', timestamp: '2026-01-01T00:00:00Z', input: 'Weather?', output }],

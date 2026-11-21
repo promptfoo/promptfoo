@@ -123,10 +123,8 @@ function extractTextBlocks(content: unknown[]): unknown {
 }
 
 function extractAssistantOutput(message: Record<string, unknown>): unknown {
-  const { content, refusal, tool_calls, function_call } = message;
-  if (typeof refusal === 'string' && refusal) {
-    return refusal;
-  }
+  const { refusal, tool_calls, function_call } = message;
+  const content = typeof refusal === 'string' && refusal ? refusal : message.content;
   const calls = Array.isArray(tool_calls) && tool_calls.length > 0 ? tool_calls : function_call;
   if (content == null) {
     return calls ?? undefined;
