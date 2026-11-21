@@ -78,7 +78,7 @@ Layer supports one orchestrating attack strategy. Put `jailbreak:hydra`, `jailbr
 
 The configuration validator and layer editor enforce the following rules.
 
-- Use registered strategy IDs or JavaScript or TypeScript modules. A layer cannot include another layer.
+- Use registered strategy IDs or JavaScript or TypeScript modules. A layer cannot include another layer, a collection, or the top-level settings `default`, `basic`, and `multilingual`.
 - Use at most one agentic strategy or provider wrapper. Steps before it apply once to the initial goal.
 - Place `mischievous-user`, `authoritative-markup-injection`, or a media transform (`audio`, `image`, or `video`) last.
 - Use `indirect-web-pwn` at most once, after any agentic strategy. It requires Promptfoo Cloud and a target that can fetch public URLs. It cannot run alongside `custom`, named `custom:*` strategies, `best-of-n`, `authoritative-markup-injection`, or `mischievous-user`.

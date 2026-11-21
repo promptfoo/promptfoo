@@ -1372,6 +1372,7 @@ describe('StrategyConfigDialog', () => {
       expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
       await userEvent.click(screen.getByRole('combobox'));
       expect(screen.queryByRole('option', { name: 'audio' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'multilingual' })).not.toBeInTheDocument();
       expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
     });
 

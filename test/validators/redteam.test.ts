@@ -776,6 +776,10 @@ describe('redteam validators', () => {
     describe('integration with actual use cases', () => {
       it.each(
         [
+          ['basic', 'base64'],
+          ['default'],
+          ['multilingual'],
+          ['other-encodings'],
           ['layer'],
           ['mischievous-user', 'jailbreak:hydra'],
           ['mischievous-user', 'audio'],
