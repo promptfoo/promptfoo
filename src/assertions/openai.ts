@@ -1,8 +1,7 @@
-import { validateFunctionCall } from '../providers/openai/util';
 import { loadOpenAiToolDefinitions } from '../providers/openai/prepare';
+import { validateFunctionCall } from '../providers/openai/util';
 import { toolCallErrorVerdict, toolCallVerdict } from './functionToolCall';
 
-import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleIsValidOpenAiToolsCall = async ({
@@ -57,7 +56,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     );
   }
 
-  let tools: unknown = (provider as OpenAiChatCompletionProvider).config?.tools;
+  let tools: unknown = provider?.config?.tools;
   try {
     if (tools) {
       tools = await loadOpenAiToolDefinitions(tools, test.vars ?? {});
