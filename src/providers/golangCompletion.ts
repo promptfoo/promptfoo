@@ -105,9 +105,8 @@ export class GolangProvider implements ApiProvider {
 
       const args =
         apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
-      logger.debug(
-        `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
+
+      logger.debug(`Running Golang script ${absPath} with scriptPath ${this.scriptPath}`);
       const functionName = this.functionName || apiType;
 
       let tempDir: string | undefined;
