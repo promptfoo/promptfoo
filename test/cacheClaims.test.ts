@@ -2,9 +2,8 @@ import { fork } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 
-import { createClient } from '@libsql/client/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha256 } from '../src/util/createHash';
 import { mockProcessEnv, removeTempDir } from './util/utils';
@@ -15,16 +14,11 @@ describe('persistent cache claims', () => {
 
   async function holdClaimLock() {
     await cache.claimBackgroundUsageOnce('initialize');
-    const client = createClient({
-      url: pathToFileURL(path.join(cachePath, 'claims/claims.db')).href,
-      concurrency: 1,
-    });
-    const transaction = await client.transaction('write');
-    return async () => {
-      try {
-        await transaction.rollback();
-      } finally {
-        client.close();
+    const db = new DatabaseSync(path.join(cachePath, 'claims/claims.db'));
+    db.exec('BEGIN IMMEDIATE');
+    return () => {
+      if (db.isOpen) {
+        db.close();
       }
     };
   }
@@ -120,50 +114,25 @@ describe('persistent cache claims', () => {
   it.each(['cancellation', 'deadline'])(
     'rolls back a claim interrupted by %s before commit',
     async (reason) => {
-      const sqlite = await import('@libsql/client/node');
-      const create = sqlite.createClient;
       const controller = new AbortController();
       vi.useFakeTimers({ toFake: ['Date'] });
       const deadline = Date.now() + 5000;
-      const interruptInsert = (connection: Pick<ReturnType<typeof create>, 'execute'>) => {
-        const execute = connection.execute.bind(connection);
-        vi.spyOn(connection, 'execute').mockImplementation(async (...args) => {
-          const result = await execute(...args);
-          const statement: unknown = args[0];
-          const sql =
-            typeof statement === 'string' ? statement : (statement as { sql: string }).sql;
-          if (sql.startsWith('INSERT')) {
-            if (reason === 'cancellation') {
-              controller.abort();
-            } else {
-              vi.setSystemTime(deadline);
-            }
-          }
-          return result;
-        });
-      };
-      vi.doMock('@libsql/client/node', () => ({
-        ...sqlite,
-        createClient: (config: Parameters<typeof create>[0]) => {
-          const client = create(config);
-          interruptInsert(client);
-          const transaction = client.transaction.bind(client);
-          vi.spyOn(client, 'transaction').mockImplementation(async (...args) => {
-            const result = await transaction(...args);
-            interruptInsert(result);
-            return result;
-          });
-          return client;
-        },
-      }));
-      try {
-        await expect(
-          cache.claimBackgroundUsageOnce('interrupted', { signal: controller.signal, deadline }),
-        ).rejects.toThrow('Failed to persist a one-time cache claim');
-      } finally {
-        vi.doUnmock('@libsql/client/node');
-        vi.useRealTimers();
-      }
+      const prepare = DatabaseSync.prototype.prepare;
+      vi.spyOn(DatabaseSync.prototype, 'prepare').mockImplementationOnce(function (
+        this: DatabaseSync,
+        sql,
+      ) {
+        if (reason === 'cancellation') {
+          controller.abort();
+        } else {
+          vi.setSystemTime(deadline);
+        }
+        return prepare.call(this, sql);
+      });
+      await expect(
+        cache.claimBackgroundUsageOnce('interrupted', { signal: controller.signal, deadline }),
+      ).rejects.toThrow('Failed to persist a one-time cache claim');
+      vi.useRealTimers();
       expect(await cache.claimBackgroundUsageOnce('interrupted')).toBe(true);
       expect(await cache.claimBackgroundUsageOnce('interrupted')).toBe(false);
     },
@@ -179,19 +148,22 @@ describe('persistent cache claims', () => {
     expect(await cache.claimBackgroundUsageOnce('committed')).toBe(false);
   });
 
-  it('retries a busy database probe before creating the claim client', async () => {
-    const sqlite = await import('@libsql/client/node');
-    const open = vi.fn(sqlite.createClient).mockImplementationOnce(() => {
-      throw Object.assign(new Error('Database is busy'), { code: 'SQLITE_BUSY' });
-    });
+  it('retries an extended busy code while opening the database', async () => {
+    const open = vi
+      .fn(function (...args: ConstructorParameters<typeof DatabaseSync>) {
+        return new DatabaseSync(...args);
+      })
+      .mockImplementationOnce(function () {
+        throw Object.assign(new Error('Database is busy'), { errcode: 261 });
+      });
     const retry = vi.spyOn(await import('../src/util/time'), 'sleep').mockResolvedValue(undefined);
-    vi.doMock('@libsql/client/node', () => ({ ...sqlite, createClient: open }));
+    vi.doMock('node:sqlite', () => ({ DatabaseSync: open }));
     try {
       expect(await cache.claimBackgroundUsageOnce('startup')).toBe(true);
       expect(open).toHaveBeenCalledTimes(2);
       expect(retry).toHaveBeenCalledOnce();
     } finally {
-      vi.doUnmock('@libsql/client/node');
+      vi.doUnmock('node:sqlite');
       retry.mockRestore();
     }
     expect(await cache.claimBackgroundUsageOnce('startup')).toBe(false);
@@ -200,9 +172,8 @@ describe('persistent cache claims', () => {
   it.each(['deadline', 'cancellation'])(
     'stops retrying database initialization after %s',
     async (reason) => {
-      const sqlite = await import('@libsql/client/node');
-      const open = vi.fn(() => {
-        throw Object.assign(new Error('Database is busy'), { code: 'SQLITE_BUSY' });
+      const open = vi.fn(function () {
+        throw Object.assign(new Error('Database is locked'), { errcode: 6 });
       });
       const controller = new AbortController();
       vi.useFakeTimers({ toFake: ['Date'] });
@@ -218,7 +189,7 @@ describe('persistent cache claims', () => {
             controller.signal.throwIfAborted();
           }
         });
-      vi.doMock('@libsql/client/node', () => ({ ...sqlite, createClient: open }));
+      vi.doMock('node:sqlite', () => ({ DatabaseSync: open }));
       try {
         await expect(
           cache.claimBackgroundUsageOnce('startup-interrupted', {
@@ -234,7 +205,7 @@ describe('persistent cache claims', () => {
         expect(open).toHaveBeenCalledOnce();
         expect(retry).toHaveBeenCalledOnce();
       } finally {
-        vi.doUnmock('@libsql/client/node');
+        vi.doUnmock('node:sqlite');
         retry.mockRestore();
         vi.useRealTimers();
       }
@@ -259,7 +230,7 @@ describe('persistent cache claims', () => {
     } finally {
       retry.mockRestore();
       vi.useRealTimers();
-      await release();
+      release();
     }
     expect(await cache.claimBackgroundUsageOnce('locked')).toBe(true);
     expect(await cache.claimBackgroundUsageOnce('locked')).toBe(false);
@@ -283,18 +254,16 @@ describe('persistent cache claims', () => {
       expect(retry).toHaveBeenCalledOnce();
     } finally {
       retry.mockRestore();
-      await release();
+      release();
     }
     expect(await cache.claimBackgroundUsageOnce('cancelled')).toBe(true);
   });
 
   it('retries a lock that is released within the deadline', async () => {
     const release = await holdClaimLock();
-    let releasePromise: Promise<void> | undefined;
-    const retry = vi.spyOn(await import('../src/util/time'), 'sleep').mockImplementationOnce(() => {
-      releasePromise = release();
-      return releasePromise;
-    });
+    const retry = vi
+      .spyOn(await import('../src/util/time'), 'sleep')
+      .mockImplementationOnce(async () => release());
     try {
       expect(
         await cache.claimBackgroundUsageOnce('contended', { deadline: Date.now() + 2000 }),
@@ -303,7 +272,7 @@ describe('persistent cache claims', () => {
       expect(await cache.claimBackgroundUsageOnce('contended')).toBe(false);
     } finally {
       retry.mockRestore();
-      await (releasePromise ?? release());
+      release();
     }
   });
 

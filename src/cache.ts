@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
-import { pathToFileURL } from 'node:url';
 import fs from 'fs';
 import path from 'path';
 
@@ -678,56 +677,39 @@ export async function claimBackgroundUsageOnce(
     if (fs.existsSync(path.join(claimsPath, hash))) {
       return false;
     }
-    let client: import('@libsql/client/node').Client | undefined;
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
       const databasePath = path.join(claimsPath, 'claims.db');
-      // Avoid opening a directory through the native driver, which can retain a Windows handle.
-      if (fs.statSync(databasePath, { throwIfNoEntry: false })?.isDirectory()) {
-        throw new Error('Cache claims database path is a directory');
-      }
-      const { createClient } = await import('@libsql/client/node');
+      // The native driver must release prepared statements before Windows can remove the index.
+      const { DatabaseSync } = await import('node:sqlite');
       while (true) {
         checkDeadline();
         try {
-          if (!client) {
-            client = createClient({
-              url: pathToFileURL(databasePath).href,
-              concurrency: 1,
-              timeout: 0,
-            });
-            // Native busy waits block cancellation; retry asynchronously instead.
-            await client.execute('PRAGMA busy_timeout = 0');
-          }
-          checkDeadline();
-          await client.execute(
-            'CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID',
-          );
-          checkDeadline();
-          const transaction = await client.transaction('write');
+          const db = new DatabaseSync(databasePath, { timeout: 0 });
           try {
+            db.exec('BEGIN IMMEDIATE');
+            db.exec('CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID');
             checkDeadline();
-            const result = await transaction.execute({
-              sql: 'INSERT OR IGNORE INTO claims (key) VALUES (?)',
-              args: [Buffer.from(hash, 'hex')],
-            });
+            const { changes } = db
+              .prepare('INSERT OR IGNORE INTO claims (key) VALUES (?)')
+              .run(Buffer.from(hash, 'hex'));
             checkDeadline();
-            if (result.rowsAffected === 1) {
+            if (changes === 1) {
               options.onCommit?.();
             }
-            await transaction.commit();
-            return result.rowsAffected === 1;
+            db.exec('COMMIT');
+            return changes === 1;
           } finally {
-            transaction.close();
+            // Closing also rolls back an interrupted transaction.
+            db.close();
           }
         } catch (error) {
-          const code = (error as { code?: string }).code;
-          if (!code?.startsWith('SQLITE_BUSY') && !code?.startsWith('SQLITE_LOCKED')) {
+          // Extended SQLite result codes carry the primary code in the low byte.
+          const code = ((error as { errcode?: number }).errcode ?? 0) & 0xff;
+          if (code !== 5 /* SQLITE_BUSY */ && code !== 6 /* SQLITE_LOCKED */) {
             throw error;
           }
-          // Retrying initialization also covers the driver's initial database probe.
-          client?.close();
-          client = undefined;
+          // Wait asynchronously so cancellation can interrupt a contended write.
           checkDeadline();
           const delay = Math.min(25, deadline - Date.now());
           if (options.signal) {
@@ -742,8 +724,6 @@ export async function claimBackgroundUsageOnce(
       // The app compiles this module with ES2020, before ErrorOptions was added.
       (wrapped as Error & { cause?: unknown }).cause = error;
       throw wrapped;
-    } finally {
-      client?.close();
     }
   }
   const claimed = claimCacheKeyOnce(cacheKey);
