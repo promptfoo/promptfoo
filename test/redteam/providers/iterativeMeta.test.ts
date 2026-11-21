@@ -1136,7 +1136,7 @@ describe('RedteamIterativeMetaProvider', () => {
         });
 
         expect(result.error).toMatch(
-          /requires (a valid multi-input JSON object|every attackable multi-input field as text)/,
+          /requires (a valid multi-input JSON object|all declared multi-input fields|a declared multi-input text field)$/,
         );
         expect(result.metadata.redteamHistory).toHaveLength(0);
         expect(mockGetTargetResponse).not.toHaveBeenCalled();
