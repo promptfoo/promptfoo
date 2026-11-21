@@ -44,7 +44,7 @@ prompts:
 
 ### With Working Directory
 
-`working_dir` selects the process directory. All tools stay disabled. To evaluate a known file, pass its content explicitly.
+`working_dir` selects the process directory. All tools stay disabled. To evaluate a known source file, save a plain-text copy as `sample.txt` and pass its content explicitly. Promptfoo executes `.py` variables as Python loaders.
 
 ```yaml
 providers:
@@ -55,7 +55,7 @@ prompts:
   - 'Summarize this Python function: {{source}}'
 tests:
   - vars:
-      source: file://sample.py
+      source: file://sample.txt
 ```
 
 ### With Side Effects
