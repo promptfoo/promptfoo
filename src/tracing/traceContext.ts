@@ -2,6 +2,7 @@ import logger from '../logger';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import {
   type FetchTraceOptions,
+  IncompleteTraceError,
   type TraceProviderConfig,
   TraceProviderError,
 } from './providers/types';
@@ -460,6 +461,9 @@ async function fetchFromExternalProvider(
     } catch (error) {
       if (abortSignal?.aborted) {
         throw createTraceAbortError(abortSignal);
+      }
+      if (error instanceof IncompleteTraceError) {
+        throw error;
       }
       logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
       if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {

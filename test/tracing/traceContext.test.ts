@@ -19,7 +19,7 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
   getTraceStore: mocks.getTraceStore,
 }));
 
-import { TraceProviderError } from '../../src/tracing/providers/types';
+import { IncompleteTraceError, TraceProviderError } from '../../src/tracing/providers/types';
 import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
@@ -411,6 +411,17 @@ describe('fetchTraceContext', () => {
       await fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 3 }),
     ).toBeNull();
     expect(fetchTrace).toHaveBeenCalledOnce();
+  });
+
+  it('propagates incomplete snapshots to multi-turn callers without retrying', async () => {
+    const error = new IncompleteTraceError('Incomplete snapshot');
+    const fetchTrace = vi.fn().mockRejectedValue(error);
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+    await expect(fetchTraceContext('trace-1', { providerConfig, queryDelay: 0 })).rejects.toBe(
+      error,
+    );
+    expect(fetchTrace).toHaveBeenCalledOnce();
+    expect(mocks.addSpans).not.toHaveBeenCalled();
   });
 
   it('returns null when spans cannot be persisted', async () => {

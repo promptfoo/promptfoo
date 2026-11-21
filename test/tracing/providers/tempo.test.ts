@@ -200,13 +200,41 @@ describe('TempoProvider', () => {
     spans.push({ ...spans[0] });
     mockedFetch.mockResolvedValueOnce(response(data));
     expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
-    spans.push({ ...spans[0], spanId: 'ffffffffffffffff' });
+    spans.push({ ...spans[0], name: '', spanId: 'ffffffffffffffff' });
     mockedFetch.mockResolvedValueOnce(response(data));
     await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
       name: 'TraceProviderError',
       retryable: false,
       message: 'Tempo trace exceeds the maximum span count',
     });
+  });
+
+  it('rejects nonzero numeric counters that round to zero in JSON', async () => {
+    const data = structuredClone(traceResponse);
+    Object.assign(data.batches[0].resource, { droppedAttributesCount: 'underflow' });
+    mockedFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(data).replace('"underflow"', '1e-400')),
+    );
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('dropped telemetry');
+  });
+
+  it('ignores dropped telemetry that belongs entirely to another trace', async () => {
+    const [batch] = structuredClone(traceResponse.batches);
+    const [scope] = batch.scopeSpans;
+    const unrelated = { ...scope.spans[0], traceId: 'f'.repeat(32), droppedEventsCount: 1 };
+    const foreignScope = { scope: { droppedAttributesCount: 1 }, spans: [unrelated] };
+    scope.spans.push(unrelated);
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          { resource: { droppedAttributesCount: 1 }, scopeSpans: [foreignScope] },
+          { ...batch, scopeSpans: [foreignScope, scope] },
+        ],
+      }),
+    );
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(2);
   });
 
   it('fetches and normalizes OpenTelemetry trace spans', async () => {
