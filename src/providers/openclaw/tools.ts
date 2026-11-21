@@ -44,6 +44,52 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     return `openclaw:tools:${this.toolName}`;
   }
 
+  get hasSharedSession(): boolean {
+    return Boolean(
+      this.openclawConfig.session_key ||
+        Object.entries(this.openclawConfig.headers ?? {}).some(
+          ([name, value]) => name.toLowerCase() === 'x-openclaw-session-key' && Boolean(value),
+        ),
+    );
+  }
+
+  getEvaluationInputs() {
+    if (
+      Object.keys(this.openclawConfig.headers ?? {}).length ||
+      Object.keys(this.openclawConfig.ws_headers ?? {}).length
+    ) {
+      throw new Error(
+        'Bayes@N does not support OpenClaw custom headers without declared input identity',
+      );
+    }
+    const {
+      account_id,
+      backend_model,
+      model_override,
+      thinking_level,
+      extra_system_prompt,
+      action,
+      dry_run,
+      message_channel,
+    } = this.openclawConfig;
+    return {
+      config: {
+        gatewayUrl: this.gatewayUrl,
+        timeoutMs: this.timeoutMs,
+        tool: this.toolName,
+        account_id,
+        backend_model,
+        model_override,
+        thinking_level,
+        extra_system_prompt,
+        action,
+        dry_run,
+        message_channel,
+      },
+      hasSharedSession: this.hasSharedSession,
+    };
+  }
+
   toString(): string {
     return `[OpenClaw Tool Provider ${this.toolName}]`;
   }

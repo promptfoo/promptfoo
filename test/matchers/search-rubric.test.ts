@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { calculateRepeatStability } from '../../src/util/eval/repeatStability';
+import { createEvaluateResult } from '../factories/eval';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
@@ -56,6 +58,39 @@ describe('matchesSearchRubric', () => {
       llmRubricProvider: null,
       gradingProvider: null,
     });
+  });
+
+  it.each([
+    { output: '{"pass":true,"score":1,"reason":"correct"}' },
+    { output: 'invalid verdict' },
+    { error: 'search unavailable' },
+  ])('preserves native search cache evidence for Bayes@N: %j', async (response) => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValue({ ...response, cached: true });
+    const grade = await matchesSearchRubric('Correct facts', 'answer', {});
+    expect(grade.metadata?.cachedResponse).toBe(true);
+    const summary = calculateRepeatStability(
+      [
+        createEvaluateResult({
+          provider: { id: 'target' },
+          promptIdx: 0,
+          repeatGroupId: 'question',
+          repeatIndex: 0,
+          success: grade.pass,
+          failureReason: grade.pass ? 0 : 1,
+          gradingResult: grade,
+        }),
+      ],
+      {
+        version: 1,
+        groups: [
+          { repeatGroupId: 'question', promptIdx: 0, provider: { id: 'target' }, repetitions: 1 },
+        ],
+      },
+    );
+    expect(summary?.cachedResults).toBe(1);
+    expect(summary?.bayesAtN?.[0].unavailableReason).toBeTruthy();
+    expect(summary?.bayesAtN?.[0].mean).toBeUndefined();
   });
 
   it('resolves string grading providers before checking web search capability', async () => {

@@ -13,6 +13,7 @@ export {
 export { setupEnv } from './env';
 // File operations
 export {
+  getNunjucksEngineForFilePath,
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -21,6 +22,7 @@ export {
   readOutput,
   setLoadedFileMimeTypes,
 } from './file';
+export { parseFileUrl } from './functions/loadFunction';
 // Output operations
 export {
   createOutputMetadata,

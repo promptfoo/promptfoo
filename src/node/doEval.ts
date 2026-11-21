@@ -479,6 +479,16 @@ async function doEvalWithEnv(
           logForCli: () => logger.error(message),
         });
       }
+      if (
+        resumeEval.config.evaluateOptions?.bayesAtN ||
+        resumeEval.runtimeOptions?.bayesAtN ||
+        resumeEval.config.metadata?.bayesAtNPlan !== undefined
+      ) {
+        return failEvalRun(
+          'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+          isCliInvocation,
+        );
+      }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
       ({
@@ -505,6 +515,17 @@ async function doEvalWithEnv(
         return failEvalRun(message, isCliInvocation, {
           logForCli: () => logger.error(message),
         });
+      }
+
+      if (
+        latestEval.config.evaluateOptions?.bayesAtN ||
+        latestEval.runtimeOptions?.bayesAtN ||
+        latestEval.config.metadata?.bayesAtNPlan !== undefined
+      ) {
+        return failEvalRun(
+          'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+          isCliInvocation,
+        );
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
@@ -627,18 +648,24 @@ async function doEvalWithEnv(
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
       repeat =
-        Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
-          ? (persisted.repeat as number)
-          : 1;
+        persisted.bayesAtN && persisted.repeat !== undefined
+          ? persisted.repeat
+          : Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
+            ? (persisted.repeat as number)
+            : 1;
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
       delay = (persisted.delay as number | undefined) ?? 0;
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
-      const iterations =
-        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
-      repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+      const iterations = cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat;
+      repeat =
+        evaluateOptions.bayesAtN && iterations !== undefined
+          ? iterations
+          : iterations !== undefined && Number.isSafeInteger(iterations) && iterations > 0
+            ? iterations
+            : 1;
       cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
       maxConcurrency =
         cmdObj.maxConcurrency ??
@@ -794,6 +821,9 @@ async function doEvalWithEnv(
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      bayesAtN: resumeEval
+        ? (resumeRuntimeOptions?.bayesAtN ?? config.evaluateOptions?.bayesAtN)
+        : safeEvaluateOptions.bayesAtN,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false

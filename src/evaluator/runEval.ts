@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { LRUCache } from 'lru-cache';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
@@ -5,9 +9,20 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
-import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
+import {
+  collectFileMetadata,
+  copyPromptVars,
+  getPromptVarMimeTypes,
+  hashBayesAtNFileReference,
+  renderBayesAtNRubricFileReference,
+  renderPrompt,
+} from '../evaluatorHelpers';
 import logger from '../logger';
-import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
+import {
+  type AgentWorkspace,
+  createAgentWorkspaceForConfig,
+  getCopyWorkingDirMode,
+} from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
@@ -48,6 +63,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
+import { copyBayesAtNInput, hasBayesAtNSharedSession, hashBayesAtNInputs } from './bayesAtN';
 import type winston from 'winston';
 
 import type {
@@ -241,6 +257,244 @@ interface RenderedRunEvalPrompt {
   renderedJson: unknown;
   renderedPrompt: string;
   setup: RunEvalSetup;
+}
+
+interface PreparedBayesAtNQuestion {
+  inputHash: string;
+  state: RunEvalState;
+  rendered: RenderedRunEvalPrompt;
+}
+
+export interface PreparedBayesAtNInput {
+  sourceHash: string;
+  question: PreparedBayesAtNQuestion;
+}
+
+function copyPreparedBayesAtNQuestion(
+  prepared: PreparedBayesAtNQuestion,
+): PreparedBayesAtNQuestion {
+  const vars = copyPromptVars(prepared.state.vars, copyBayesAtNInput);
+  return {
+    ...prepared,
+    state: {
+      ...prepared.state,
+      vars,
+      promptForRender: copyBayesAtNInput(prepared.state.promptForRender),
+      fileMetadata: structuredClone(prepared.state.fileMetadata),
+      setup: {
+        ...prepared.state.setup,
+        provider: { ...prepared.state.setup.provider },
+        vars,
+        prompt: copyBayesAtNInput(prepared.state.setup.prompt),
+      },
+    },
+    rendered: {
+      ...prepared.rendered,
+      renderedJson: copyBayesAtNInput(prepared.rendered.renderedJson),
+      setup: {
+        ...prepared.rendered.setup,
+        provider: { ...prepared.rendered.setup.provider },
+        vars,
+        prompt: copyBayesAtNInput(prepared.rendered.setup.prompt),
+      },
+    },
+  };
+}
+
+export const bayesAtNFunctionSources = new WeakMap<Function, string>();
+
+function hasFileMode(value: unknown, seen = new Set<object>()): boolean {
+  if (typeof value === 'string') {
+    return value.startsWith('file://');
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  if ('type' in value && value.type === 'path') {
+    return true;
+  }
+  return Object.values(value).some((item) => hasFileMode(item, seen));
+}
+
+function hashRunEvalInputs(
+  step: Pick<RunEvalOptions, 'prompt' | 'provider' | 'test' | 'nunjucksFilters'>,
+  nativeContext?: Pick<CallApiContextParams, 'prompt' | 'vars' | 'test' | 'evaluationId'> & {
+    renderedPrompt: string;
+  },
+) {
+  const nativeConfigs = new Map<object, unknown>();
+  return hashBayesAtNInputs(step, {
+    fileHash: hashBayesAtNFileReference,
+    functionSource: (fn) => bayesAtNFunctionSources.get(fn),
+    rubricFileReference: renderBayesAtNRubricFileReference,
+    providerConfig: (provider) => nativeConfigs.get(provider),
+    providerFiles: nativeContext
+      ? (provider, target) => {
+          const declaration =
+            typeof provider === 'string'
+              ? provider
+              : provider && typeof provider === 'object' && 'id' in provider
+                ? provider.id
+                : undefined;
+          if (
+            typeof declaration === 'string' &&
+            declaration.startsWith('file://') &&
+            /\.(?:json|ya?ml)$/.test(declaration)
+          ) {
+            throw new Error(
+              'Bayes@N requires loaded grading providers for config-file references to validate native inputs',
+            );
+          }
+          const inputProvider = provider as ApiProvider | undefined;
+          if (!inputProvider || typeof inputProvider !== 'object') {
+            return [];
+          }
+          const context = {
+            prompt: target ? nativeContext.prompt : { ...step.prompt, config: undefined },
+            vars: target ? nativeContext.vars : (step.test.vars ?? {}),
+            evaluationId: nativeContext.evaluationId,
+            isGrading: !target,
+            test: target ? nativeContext.test : undefined,
+            filters: step.nunjucksFilters,
+            renderedPrompt: target ? nativeContext.renderedPrompt : undefined,
+          };
+          if (target) {
+            const config = { ...inputProvider.config, ...context.prompt.config };
+            if (getCopyWorkingDirMode(config.copy_working_dir)) {
+              throw new Error(
+                'Bayes@N does not support copy_working_dir because workspace files can change between trials',
+              );
+            }
+          }
+          const native = inputProvider.getEvaluationInputs?.(context);
+          if (native?.hasSharedSession) {
+            throw new Error('Bayes@N does not support shared provider sessions');
+          }
+          if (native?.config !== undefined) {
+            nativeConfigs.set(inputProvider, native.config);
+          }
+          if (
+            !native &&
+            (Object.getPrototypeOf(inputProvider) !== Object.prototype ||
+              !isApiProvider(inputProvider))
+          ) {
+            if (
+              Object.getPrototypeOf(inputProvider) !== Object.prototype &&
+              !('config' in inputProvider)
+            ) {
+              throw new Error(
+                'Bayes@N requires getEvaluationInputs for providers with private inputs',
+              );
+            }
+            const promptConfig = { ...context.prompt.config };
+            for (const key of [
+              'provider',
+              'transform',
+              'postprocess',
+              'transformVars',
+              'rubricPrompt',
+            ]) {
+              delete promptConfig[key];
+            }
+            if (
+              !inputProvider.getInputFilePaths &&
+              (hasFileMode(inputProvider.config) || hasFileMode(promptConfig))
+            ) {
+              throw new Error(
+                'Bayes@N requires declared native file inputs for this provider configuration',
+              );
+            }
+          }
+          return (native?.filePaths ?? inputProvider.getInputFilePaths?.(context) ?? []).map(
+            (filePath) => {
+              invariant(path.isAbsolute(filePath), 'Provider input file paths must be absolute');
+              const hash = createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+              return [filePath, hash];
+            },
+          );
+        }
+      : undefined,
+    mimeTypes: getPromptVarMimeTypes(step.test.vars ?? {}),
+  });
+}
+
+function getStepRuntimeVars(step: RunEvalOptions): EvalRuntimeVars {
+  return getEvalRuntimeVars({
+    evalId: step.evalId,
+    promptIndex: step.promptIdx,
+    repeatIndex: step.repeatIndex,
+    testIndex: step.testIdx,
+  });
+}
+
+export async function prepareBayesAtNInput(
+  step: RunEvalOptions,
+  testSuite: TestSuite,
+  checkAbort: () => void,
+): Promise<PreparedBayesAtNInput> {
+  const sourceHash = hashRunEvalInputs(step);
+  step.test = copyBayesAtNInput(step.test);
+  step.prompt = copyBayesAtNInput(step.prompt);
+  const state = createRunEvalState({ ...step, promptIndex: step.promptIdx });
+  const runtimeVars = getStepRuntimeVars(step);
+  Object.assign(state.vars, runtimeVars);
+  const rendered = await renderRunEvalPrompt({
+    filters: step.nunjucksFilters,
+    isRedteam: false,
+    provider: step.provider,
+    promptForRender: state.promptForRender,
+    test: step.test,
+    testSuite,
+    vars: state.vars,
+  });
+  checkAbort();
+  if (hasBayesAtNSharedSession({ ...step, prompt: rendered.setup.prompt })) {
+    throw new Error('Bayes@N does not support shared provider sessions');
+  }
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete state.vars[key];
+  }
+  const inputHash = hashPreparedBayesAtNQuestion(step, state, rendered);
+  return { sourceHash, question: { inputHash, state, rendered } };
+}
+
+function hashPreparedBayesAtNQuestion(
+  step: RunEvalOptions,
+  state: RunEvalState,
+  rendered: RenderedRunEvalPrompt,
+): string {
+  return hashRunEvalInputs(
+    {
+      ...step,
+      prompt: { ...state.promptForRender, ...rendered.setup.prompt },
+      test: { ...step.test, vars: state.vars },
+    },
+    {
+      prompt: { ...state.promptForRender, config: rendered.setup.prompt.config },
+      renderedPrompt: rendered.renderedPrompt,
+      vars: { ...state.vars, ...getStepRuntimeVars(step) },
+      test: step.test,
+      evaluationId: step.evalId,
+    },
+  );
+}
+
+export function verifyBayesAtNInput(
+  evalStep: RunEvalOptions,
+  bayesAtNInput: PreparedBayesAtNInput,
+): void {
+  const { sourceHash, question } = bayesAtNInput;
+  if (hasBayesAtNSharedSession({ ...evalStep, prompt: question.rendered.setup.prompt })) {
+    throw new Error('Bayes@N does not support shared provider sessions');
+  }
+  if (
+    hashPreparedBayesAtNQuestion(evalStep, question.state, question.rendered) !==
+      question.inputHash ||
+    hashRunEvalInputs(evalStep) !== sourceHash
+  ) {
+    throw new Error('Bayes@N requires unchanged question and grading inputs after beforeEach');
+  }
 }
 
 interface ProviderCallResult {
@@ -1325,7 +1579,9 @@ export async function runEvalInternal(
     providerCallQueue,
     rateLimitRegistry,
   }: RunEvalOptions,
-  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> & {
+    bayesAtNInput?: PreparedBayesAtNInput;
+  } = {
     abortSignal,
   },
 ): Promise<EvaluateResult[]> {
@@ -1335,7 +1591,10 @@ export async function runEvalInternal(
     `Provider delay should be set for ${provider.label}`,
   );
 
-  const state = createRunEvalState({ provider, prompt, promptIndex, test });
+  const bayesAtNInput = orchestrationOptions.bayesAtNInput
+    ? copyPreparedBayesAtNQuestion(orchestrationOptions.bayesAtNInput.question)
+    : undefined;
+  const state = bayesAtNInput?.state ?? createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
     conversationKey: state.conversationKey,
@@ -1362,15 +1621,17 @@ export async function runEvalInternal(
   let workspace: AgentWorkspace | undefined;
 
   try {
-    const rendered = await renderRunEvalPrompt({
-      filters,
-      isRedteam,
-      provider,
-      promptForRender: state.promptForRender,
-      test,
-      testSuite,
-      vars: state.vars,
-    });
+    const rendered =
+      bayesAtNInput?.rendered ??
+      (await renderRunEvalPrompt({
+        filters,
+        isRedteam,
+        provider,
+        promptForRender: state.promptForRender,
+        test,
+        testSuite,
+        vars: state.vars,
+      }));
     setup = rendered.setup;
     if (!test.providerOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;

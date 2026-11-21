@@ -79,6 +79,22 @@ export class SlackProvider implements ApiProvider {
     return this.options.id || 'slack';
   }
 
+  getEvaluationInputs() {
+    const config = this.options.config!;
+    return {
+      config: {
+        channel: config.channel,
+        responseStrategy: config.responseStrategy || 'first',
+        waitForUser: config.waitForUser,
+        timeout: config.timeout || 60000,
+        includeThread: config.includeThread,
+        formatMessage: config.formatMessage,
+        threadTs: config.threadTs,
+      },
+      hasSharedSession: Boolean(config.threadTs),
+    };
+  }
+
   async callApi(
     prompt: string,
     _context?: CallApiContextParams,

@@ -7,6 +7,8 @@ import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../../src/scheduler/providerCallExecutionContext';
+import { calculateRepeatStability } from '../../src/util/eval/repeatStability';
+import { createEvaluateResult } from '../factories/eval';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -47,6 +49,39 @@ describe('matchesModeration', () => {
 
   beforeEach(() => {
     setTestEnv();
+  });
+
+  it.each([
+    { flags: [] },
+    { flags: [{ code: 'violence', description: 'violent content', confidence: 0.9 }] },
+    { error: 'moderation unavailable' },
+  ])('preserves native moderation cache evidence for Bayes@N: %j', async (response) => {
+    const provider = new OpenAiModerationProvider('omni-moderation-latest');
+    vi.spyOn(provider, 'callModerationApi').mockResolvedValue({ ...response, cached: true });
+    const grade = await matchesModeration(createConversationInput(), { provider });
+    expect(grade.metadata?.cachedResponse).toBe(true);
+    const summary = calculateRepeatStability(
+      [
+        createEvaluateResult({
+          provider: { id: 'target' },
+          promptIdx: 0,
+          repeatGroupId: 'question',
+          repeatIndex: 0,
+          success: grade.pass,
+          failureReason: grade.pass ? 0 : 1,
+          gradingResult: grade,
+        }),
+      ],
+      {
+        version: 1,
+        groups: [
+          { repeatGroupId: 'question', promptIdx: 0, provider: { id: 'target' }, repetitions: 1 },
+        ],
+      },
+    );
+    expect(summary?.cachedResults).toBe(1);
+    expect(summary?.bayesAtN?.[0].unavailableReason).toBeTruthy();
+    expect(summary?.bayesAtN?.[0].mean).toBeUndefined();
   });
 
   afterEach(() => {

@@ -58,6 +58,7 @@ export async function matchesModeration(
   const tokenUsageResult = resp.tokenUsage
     ? { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }
     : {};
+  const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
   if (resp.error) {
     // A provider/transport error is not evidence about the content. Tag it as a
     // grader failure so inverse-aware callers (`not-moderation`) propagate it
@@ -67,7 +68,7 @@ export async function matchesModeration(
       score: 0,
       reason: `Moderation API error: ${resp.error}`,
       ...tokenUsageResult,
-      metadata: { graderError: true },
+      metadata: { ...cacheMetadata.metadata, graderError: true },
     };
   }
 
@@ -78,6 +79,7 @@ export async function matchesModeration(
       score: 1,
       reason: 'No moderation flags detected',
       ...tokenUsageResult,
+      ...cacheMetadata,
     };
   }
   const filteredFlags =
@@ -90,6 +92,7 @@ export async function matchesModeration(
         .map((flag) => flag.description)
         .join(', ')}`,
       ...tokenUsageResult,
+      ...cacheMetadata,
     };
   }
 
@@ -98,5 +101,6 @@ export async function matchesModeration(
     score: 1,
     reason: 'No relevant moderation flags detected',
     ...tokenUsageResult,
+    ...cacheMetadata,
   };
 }
