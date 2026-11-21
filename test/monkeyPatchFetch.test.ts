@@ -17,12 +17,12 @@ vi.mock('../src/logger', () => ({
 vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getRequestConfig: vi.fn(),
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
     getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
-    clearCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -44,6 +44,18 @@ describe('monkeyPatchFetch', () => {
   });
 
   beforeEach(() => {
+    vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => {
+      const authHeaderName = cloudConfig.getAuthHeaderName();
+      const token = cloudConfig.getApiKey();
+      return {
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
+        apiHost: cloudConfig.getApiHost(),
+        authHeaderName,
+        headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
+        teamId: cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId()),
+      };
+    });
     vi.mocked(cloudConfig.getApiHost).mockReturnValue(CLOUD_API_HOST);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
     vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
@@ -231,7 +243,7 @@ describe('monkeyPatchFetch', () => {
 
     const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
     expect(new Headers(requestInit.headers).has('x-promptfoo-team-id')).toBe(false);
-    expect(cloudConfig.getCurrentTeamId).not.toHaveBeenCalled();
+    expect(cloudConfig.getRequestConfig).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -345,7 +357,7 @@ describe('monkeyPatchFetch', () => {
 
     const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
     expect(request.headers.get('authorization')).toBe('Bearer caller-token');
-    expect(requestInit.headers).toBeUndefined();
+    expect(new Headers(requestInit.headers).get('authorization')).toBe('Bearer caller-token');
   });
 
   it('should not override Authorization supplied with a Headers instance', async () => {
@@ -375,6 +387,42 @@ describe('monkeyPatchFetch', () => {
     const headers = new Headers(requestInit.headers);
     expect(headers.get('authorization')).toBe('Bearer saved-token');
     expect(headers.get('x-custom-header')).toBe('custom-value');
+  });
+
+  it('keeps captured credentials and team through asynchronous compression', async () => {
+    mockOriginalFetch.mockResolvedValue(createMockResponse({ ok: true, status: 200 }));
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      apiHost: CLOUD_API_HOST,
+      authHeaderName: 'X-Old-Account',
+      headers: { 'X-Old-Account': 'Bearer old' },
+      teamId: 'old-team',
+    });
+    const pending = monkeyPatchFetch(`${CLOUD_API_HOST}/api/v1/task`, {
+      method: 'POST',
+      body: 'ordinary request',
+      compress: true,
+    });
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      apiHost: CLOUD_API_HOST,
+      authHeaderName: 'X-New-Account',
+      headers: { 'X-New-Account': 'Bearer new' },
+      teamId: 'new-team',
+    });
+    await pending;
+    const options = mockOriginalFetch.mock.calls[0][1];
+    const headers = new Headers(options.headers);
+    expect(headers.get('x-old-account')).toBe('Bearer old');
+    expect(headers.get('x-new-account')).toBeNull();
+    expect(headers.get('x-promptfoo-team-id')).toBe('old-team');
+    expect(cloudConfig.getRequestConfig).toHaveBeenCalledOnce();
+    expect(options).not.toHaveProperty('cloudAuthHeaderName');
+    expect(options).not.toHaveProperty('skipCloudAuthInjection');
+    expect(options).not.toHaveProperty('restrictCloudAuthRedirects');
+    expect(options).not.toHaveProperty('compress');
   });
 
   it('should preserve Headers-instance headers when compressing', async () => {

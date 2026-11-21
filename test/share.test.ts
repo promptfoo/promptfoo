@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../src/blobs/shareUpload';
@@ -15,7 +15,12 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import {
+  checkCloudPermissions,
+  getOrgContext,
+  makeRequest,
+  resolveCloudTeam,
+} from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
@@ -66,6 +71,7 @@ vi.mock('../src/globalConfig/cloud', () => {
   const cloudConfig = {
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
+    getRequestConfig: vi.fn(),
     getApiKey: vi.fn(),
     getCurrentTeamId: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
@@ -100,6 +106,7 @@ vi.mock('../src/globalConfig/accounts', () => ({
 
 vi.mock('../src/util/cloud', () => ({
   makeRequest: vi.fn(),
+  resolveCloudTeam: vi.fn(),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   getOrgContext: vi.fn().mockResolvedValue(null),
 }));
@@ -157,6 +164,34 @@ describe('stripAuthFromUrl', () => {
     const input = 'http://user:pass@192.168.1.1:8080/path';
     const expected = 'http://192.168.1.1:8080/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
+  });
+});
+
+beforeEach(() => {
+  vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => ({
+    apiHost: cloudConfig.getApiHost(),
+    appUrl: cloudConfig.getAppUrl(),
+    sessionId: createHash('sha256')
+      .update(
+        JSON.stringify([
+          cloudConfig.isEnabled(),
+          cloudConfig.getApiHost(),
+          cloudConfig.getAuthHeaders(),
+        ]),
+      )
+      .digest('hex'),
+    authHeaderName: 'Authorization',
+    headers: cloudConfig.isEnabled()
+      ? (cloudConfig.getAuthHeaders() ?? { Authorization: 'Bearer mock-api-key' })
+      : undefined,
+    teamId: cloudConfig.getCurrentTeamId(),
+  }));
+  vi.mocked(resolveCloudTeam).mockImplementation(async (config) => {
+    const id =
+      config?.metadata?.configId && config.metadata.teamId
+        ? config.metadata.teamId
+        : cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId());
+    return id ? { id } : undefined;
   });
 });
 
@@ -388,7 +423,12 @@ describe('model audit sharing', () => {
     const result = await hasModelAuditBeenShared(mockAudit);
 
     expect(result).toBe(true);
-    expect(makeRequest).toHaveBeenCalledWith('model-audits/scan-123?teamId=team-456', 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      'model-audits/scan-123?teamId=team-456',
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 });
 
@@ -472,13 +512,117 @@ describe('createShareableUrl', () => {
         json: () => Promise.resolve({}),
       });
 
+    const cloudTeam = { id: 'provider-team' };
+    vi.mocked(resolveCloudTeam).mockResolvedValue(cloudTeam);
     await createShareableUrl(mockEval as Eval);
 
+    expect(checkCloudPermissions).toHaveBeenCalledWith(
+      mockEval.config,
+      cloudTeam,
+      cloudConfig.getRequestConfig(),
+    );
+    expect(getOrgContext).toHaveBeenCalledWith(cloudTeam);
     const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(requestBody.config.metadata).toMatchObject({
       configId: 'org-scoped-template',
       teamId: 'provider-team',
     });
+  });
+
+  it('replaces standalone metadata with the resolved default when no current team is saved', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+    vi.mocked(resolveCloudTeam).mockResolvedValue({ id: 'default-team' });
+    const mockEval = buildMockEval();
+    mockEval.config = { metadata: { teamId: 'ignored-team', description: 'preserved' } };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'remote-id' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+    await createShareableUrl(mockEval as Eval);
+
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).config.metadata).toEqual({
+      description: 'preserved',
+      teamId: 'default-team',
+    });
+    expect(mockEval.config.metadata?.teamId).toBe('ignored-team');
+  });
+
+  it('does not upload with standalone metadata when no accessible team exists', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+    vi.mocked(resolveCloudTeam).mockRejectedValue(new Error('No accessible teams'));
+    const mockEval = buildMockEval();
+    mockEval.config = { metadata: { teamId: 'ignored-team' } };
+
+    await expect(createShareableUrl(mockEval as Eval)).rejects.toThrow('No accessible teams');
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps share upload host and credentials from one request snapshot', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      apiHost: 'https://first.example.com',
+      appUrl: 'https://app.example.com',
+      sessionId: 'first-session',
+      authHeaderName: 'X-First-Auth',
+      headers: { 'X-First-Auth': 'Bearer first-key' },
+      teamId: 'first-team',
+    });
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://second.example.com');
+    vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({ Authorization: 'Bearer second-key' });
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'remote-id' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+    await createShareableUrl(buildMockEval() as Eval, { cloudTeam: { id: 'first-team' } });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://first.example.com/api/v1/results',
+      expect.objectContaining({
+        headers: { 'Content-Type': 'application/json', 'X-First-Auth': 'Bearer first-key' },
+      }),
+    );
+    for (const [url, options] of mockFetch.mock.calls) {
+      expect(url).toContain('https://first.example.com/');
+      expect(options.headers).not.toHaveProperty('Authorization');
+      expect(options.skipCloudAuthInjection).toBe(true);
+    }
+  });
+
+  it('uses one supplied destination for deduplication, preflight, upload, and display', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('active-a');
+    const cloudTeam = { id: 'runtime-b', name: 'Runtime B', organizationId: 'org-1' };
+    const mockEval = buildMockEval() as Eval;
+    vi.mocked(makeRequest).mockResolvedValue({ ok: false } as Response);
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'remote-id' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+    await hasEvalBeenShared(mockEval, cloudTeam);
+    await createShareableUrl(mockEval, { cloudTeam });
+
+    expect(resolveCloudTeam).not.toHaveBeenCalled();
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=runtime-b'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
+    expect(checkCloudPermissions).toHaveBeenCalledWith(
+      mockEval.config,
+      cloudTeam,
+      cloudConfig.getRequestConfig(),
+    );
+    expect(getOrgContext).toHaveBeenCalledWith(cloudTeam);
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).config.metadata.teamId).toBe('runtime-b');
   });
 
   it('uses the current CLI team when runtime metadata is absent', async () => {
@@ -757,6 +901,7 @@ describe('createShareableUrl', () => {
         promptIdx: 2,
         remoteEvalId: 'manual-share-id',
         testIdx: 1,
+        requestConfig: cloudConfig.getRequestConfig(),
       });
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
@@ -1776,7 +1921,12 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
     // Verify teamId is passed in the request URL
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=team-456'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 
   it('checks the runtime team for a server-issued unified config', async () => {
@@ -1795,8 +1945,18 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
 
     expect(result).toBe(true);
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=runtime-team'), 'GET');
-    expect(makeRequest).not.toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=runtime-team'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
+    expect(makeRequest).not.toHaveBeenCalledWith(
+      expect.stringContaining('teamId=team-456'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 
   it('ignores unverified metadata team context', async () => {
@@ -1814,10 +1974,17 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
 
     expect(result).toBe(true);
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=team-456'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
     expect(makeRequest).not.toHaveBeenCalledWith(
       expect.stringContaining('teamId=unverified-team'),
       'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
     );
   });
 
@@ -1846,6 +2013,11 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
     // Verify request is made without teamId
-    expect(makeRequest).toHaveBeenCalledWith(expect.not.stringContaining('teamId='), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.not.stringContaining('teamId='),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 });

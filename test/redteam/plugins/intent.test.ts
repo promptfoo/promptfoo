@@ -1,11 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+} from '../../../src/redteam/remoteGeneration';
 import { createMockProvider } from '../../factories/provider';
 
 import type { AtomicTestCase, TestCase } from '../../../src/types/index';
@@ -17,19 +21,13 @@ vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/cache', () => ({
-  fetchWithCache: vi.fn().mockResolvedValue({
-    data: { intent: 'Access unauthorized customer data' },
-    status: 200,
-    statusText: 'OK',
-    cached: false,
-  }),
-}));
+vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
+vi.mock('../../../src/util/cloud', () => ({ ensureCloudTeamContext: vi.fn() }));
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.com'),
-  neverGenerateRemote: vi.fn().mockReturnValue(false),
-  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
+  getRemoteGenerationUrl: vi.fn(),
+  neverGenerateRemote: vi.fn(),
+  getRemoteGenerationHeaders: vi.fn(),
 }));
 
 vi.mock('../../../src/database', async (importOriginal) => {
@@ -63,11 +61,24 @@ vi.mock('glob', async (importOriginal) => {
 
 vi.mock('libsql');
 
+afterEach(() => vi.resetAllMocks());
+
 describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { intent: 'Access unauthorized customer data' },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('http://test.com');
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    }));
   });
 
   it('should initialize with a single string intent and extract intent goal', async () => {

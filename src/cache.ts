@@ -12,14 +12,7 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
-import {
-  getCloudAuthHeaderName,
-  getCloudBearerToken,
-  getCloudTaskTeamId,
-  getRequestUrlString,
-  PROMPTFOO_TEAM_ID_HEADER,
-  preserveCloudAuthRedirects,
-} from './util/fetch/monkeyPatchFetch';
+import { getRequestUrlString, prepareCloudRequest } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
@@ -332,7 +325,12 @@ type InflightFetchResponse = {
 
 const inflightFetchResponses = new Map<string, InflightFetchResponse>();
 const claimedCacheKeys = new Set<string>();
-const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
+const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set([
+  'cloudAuthHeaderName',
+  'skipCloudAuthInjection',
+  'method',
+  'signal',
+]);
 const IGNORED_FETCH_CACHE_HEADERS = new Set(['traceparent', 'tracestate']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
@@ -449,34 +447,9 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
   }
 }
 
-export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
-  const headers = new Headers(getFetchWithProxyHeaders(url, options));
-
-  // Mirror monkeyPatchFetch so the cache key reflects the auth header that will
-  // actually be sent: fold in the cloud bearer token for cloud-bound requests, under
-  // whatever header name is configured, without overriding a caller-supplied header.
-  const cloudAuth = getCloudBearerToken(url);
-  // Whenever a cloud credential resolves for this request, its header name is
-  // sensitive and must be fingerprinted below — whether this function injects it
-  // (headers.set) or a caller already set it explicitly beforehand (e.g.
-  // resolveGuardrailsApi via cloudConfig.getAuthHeaders()). A custom header name
-  // and/or a short on-prem token can both evade the generic
-  // isSecretField/looksLikeSecret heuristics used for ordinary headers, so this
-  // must not depend on whether headers.set() actually ran here. Lowercased once
-  // at capture because Headers.entries() below always yields lowercase names.
-  let cloudAuthHeaderNameForFingerprint: string | undefined;
-  if (cloudAuth) {
-    const cloudAuthHeaderName = getCloudAuthHeaderName();
-    cloudAuthHeaderNameForFingerprint = cloudAuthHeaderName.toLowerCase();
-    if (!headers.has(cloudAuthHeaderName)) {
-      headers.set(cloudAuthHeaderName, cloudAuth);
-    }
-  }
-
-  const cloudTaskTeamId = getCloudTaskTeamId(url);
-  if (cloudTaskTeamId && !headers.has(PROMPTFOO_TEAM_ID_HEADER)) {
-    headers.set(PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
-  }
+export function getHeadersForCacheKey(url: RequestInfo, options: FetchOptions) {
+  const prepared = prepareCloudRequest(url, options);
+  const headers = new Headers(getFetchWithProxyHeaders(url, prepared));
 
   return Array.from(headers.entries())
     .filter(([name]) => !IGNORED_FETCH_CACHE_HEADERS.has(name))
@@ -486,7 +459,7 @@ export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
     })
     .map(([name, value]) => [
       name,
-      name === cloudAuthHeaderNameForFingerprint
+      name === prepared.cloudAuthHeaderName || /^Bearer\s/i.test(value)
         ? fingerprintFetchCacheSecret(value)
         : getStringForFetchCacheKey(value, name),
     ]);
@@ -931,7 +904,7 @@ export async function fetchWithCache<T = unknown>(
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
   // Forward a Request-owned signal too, while retaining an explicit override.
-  const fetchOptions = preserveCloudAuthRedirects(
+  const fetchOptions = prepareCloudRequest(
     url,
     signal === options.signal ? options : { ...options, signal },
   );

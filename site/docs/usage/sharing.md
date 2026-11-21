@@ -107,9 +107,13 @@ promptfoo eval --share
 
 Get your API token from the "CLI Login Information" section in your account settings. For Enterprise users, you can also use [Service Accounts](/docs/enterprise/service-accounts.md) for CI/CD integration.
 
+A saved Cloud key, API URL, or auth header takes precedence over its environment variable. For an Enterprise deployment with a custom API URL, use `promptfoo auth login --api-key <key> --host <api-url>`; login also discovers the app URL for shared links.
+
 ## Advanced: Self-Hosted Sharing
 
 For users with self-hosted instances:
+
+Clear any saved Cloud login with `promptfoo auth logout` and unset `PROMPTFOO_API_KEY` before using these settings. An enabled Cloud login takes precedence over the self-hosted upload URL.
 
 ```sh
 # Configure sharing to your server
