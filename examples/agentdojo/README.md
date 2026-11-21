@@ -27,6 +27,8 @@ you can inspect a trace before spending on a benchmark run. Remove
 `max_user_tasks` and `max_injection_tasks` from `promptfooconfig.yaml` when
 you are ready to run the full 560-row workspace suite.
 
+Task limits must be positive integers. Omitting a limit selects every task in that category. The example enforces `max_output_tokens` on custom and registered OpenAI models. Other registered providers use their own defaults and reject this setting.
+
 AgentDojo 0.1.35 requires Python 3.10 or newer.
 
 ## Configuration
@@ -116,12 +118,7 @@ tracing:
       port: 4318
 ```
 
-To forward traces to an external collector, set:
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
-export OTEL_SERVICE_NAME="promptfoo-agentdojo-provider"
-```
+The checked-in provider sends spans to Promptfoo on port 4318. Keep this receiver for the `trace` assertion. Sending the span exclusively to an external collector makes it unavailable to local assertions. A configured `otel_endpoint` overrides the environment and uses only explicit `otel_headers`. OTLP export timeouts use milliseconds.
 
 ## Example Results
 

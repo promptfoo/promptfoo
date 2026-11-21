@@ -14,6 +14,7 @@ providers:
       attack: important_instructions
       force_rerun: true
       request_timeout: 120
+      otel_endpoint: http://localhost:4318
       max_output_tokens: 4096
       temperature: 0
 

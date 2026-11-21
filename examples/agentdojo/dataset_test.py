@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Tests for AgentDojo dataset generation."""
 
 import unittest
@@ -9,6 +8,15 @@ import dataset
 
 
 class DatasetTests(unittest.TestCase):
+    def test_rejects_invalid_limits_before_loading_suite(self):
+        for key in ("max_user_tasks", "max_injection_tasks"):
+            for value in (0, -1, 1.5, True):
+                with (
+                    self.subTest(key=key, value=value),
+                    self.assertRaisesRegex(ValueError, key),
+                ):
+                    dataset.generate_tests({key: value})
+
     def test_generate_tests_limits_smoke_slice_and_keeps_descriptions(self):
         suite = SimpleNamespace(
             user_tasks={

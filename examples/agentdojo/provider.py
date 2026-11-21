@@ -20,7 +20,6 @@ import logging
 import os
 import re
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Sequence
@@ -38,7 +37,7 @@ from agentdojo.types import (
     ChatUserMessage,
     text_content_block_from_string,
 )
-from openai._types import NOT_GIVEN
+from openai import NOT_GIVEN
 
 logger = logging.getLogger(__name__)
 
@@ -74,20 +73,19 @@ def _accumulate_tokens(usage):
     Handles both Chat Completions API (prompt_tokens, completion_tokens) and
     Responses API (input_tokens, output_tokens) formats.
     """
-    global _token_usage
-    if usage:
-        # Chat Completions API format
-        prompt = getattr(usage, "prompt_tokens", 0) or 0
-        completion = getattr(usage, "completion_tokens", 0) or 0
-        # Responses API format
-        if not prompt:
-            prompt = getattr(usage, "input_tokens", 0) or 0
-        if not completion:
-            completion = getattr(usage, "output_tokens", 0) or 0
-
-        _token_usage["prompt"] += prompt
-        _token_usage["completion"] += completion
-        _token_usage["total"] += getattr(usage, "total_tokens", 0) or 0
+    if not usage:
+        return
+    prompt = (
+        getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", 0) or 0
+    )
+    completion = (
+        getattr(usage, "completion_tokens", None)
+        or getattr(usage, "output_tokens", 0)
+        or 0
+    )
+    _token_usage["prompt"] += prompt
+    _token_usage["completion"] += completion
+    _token_usage["total"] += getattr(usage, "total_tokens", None) or prompt + completion
 
 
 def _format_custom_model_name(model: str) -> str:
@@ -118,16 +116,6 @@ def _run_logdir(
     return base_logdir / slug
 
 
-def _is_registered_agentdojo_model(model: str) -> bool:
-    from agentdojo.agent_pipeline.agent_pipeline import ModelsEnum
-
-    try:
-        ModelsEnum(model)
-        return True
-    except ValueError:
-        return False
-
-
 def _registered_model_provider(model: str) -> str | None:
     from agentdojo.agent_pipeline.agent_pipeline import ModelsEnum
     from agentdojo.models import MODEL_PROVIDERS
@@ -153,11 +141,12 @@ def _otel_endpoint(config: dict) -> str:
 
 def _otel_headers(config: dict) -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
-    raw_headers = (
-        config.get("otel_headers")
-        or os.getenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS")
-        or os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
-    )
+    raw_headers = config.get("otel_headers")
+    # Never send environment credentials to a configured receiver.
+    if "otel_headers" not in config and not config.get("otel_endpoint"):
+        raw_headers = os.getenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS") or os.getenv(
+            "OTEL_EXPORTER_OTLP_HEADERS"
+        )
     if isinstance(raw_headers, dict):
         headers.update({str(key): str(value) for key, value in raw_headers.items()})
         return headers
@@ -287,11 +276,21 @@ class OtlpJsonSpan:
             headers=self.headers,
             method="POST",
         )
-        timeout = float(os.getenv("OTEL_EXPORTER_OTLP_TIMEOUT", "5"))
         try:
+            timeout = (
+                float(
+                    os.getenv("OTEL_EXPORTER_OTLP_TRACES_TIMEOUT")
+                    or os.getenv("OTEL_EXPORTER_OTLP_TIMEOUT", "5000")
+                )
+                / 1000
+            )
+            if not 0 < timeout < float("inf"):
+                raise ValueError(
+                    "OTLP timeout must be a positive duration in milliseconds"
+                )
             with urllib.request.urlopen(request, timeout=timeout):
                 pass
-        except (OSError, TimeoutError, urllib.error.URLError) as e:
+        except (OSError, ValueError, OverflowError) as e:
             logger.warning(f"Failed to export OTLP JSON span: {e}")
 
 
@@ -356,40 +355,6 @@ class OpenAIResponsesLLM(BasePipelineElement):
             return tool_call.get(key)
         return getattr(tool_call, key, None)
 
-    def _message_to_openai(self, message: ChatMessage) -> dict[str, Any]:
-        role = message["role"]
-        content = self._content_to_text(message.get("content"))
-
-        if role == "system":
-            return {"role": "developer", "content": content}
-        if role == "user":
-            return {"role": "user", "content": content}
-        if role == "tool":
-            return {
-                "role": "tool",
-                "content": message.get("error") or content,
-                "tool_call_id": message.get("tool_call_id"),
-            }
-        if role != "assistant":
-            return {"role": role, "content": content}
-
-        converted: dict[str, Any] = {"role": "assistant", "content": content}
-        if message.get("tool_calls"):
-            converted["tool_calls"] = [
-                {
-                    "id": self._tool_call_value(tool_call, "id"),
-                    "type": "function",
-                    "function": {
-                        "name": self._tool_call_value(tool_call, "function"),
-                        "arguments": json.dumps(
-                            self._tool_call_value(tool_call, "args") or {}
-                        ),
-                    },
-                }
-                for tool_call in message["tool_calls"]
-            ]
-        return converted
-
     def _tool_to_openai(self, func) -> dict[str, Any]:
         return {
             "type": "function",
@@ -399,43 +364,49 @@ class OpenAIResponsesLLM(BasePipelineElement):
             "strict": False,
         }
 
-    @staticmethod
-    def _responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        input_items = []
+    def _responses_input(self, messages: Sequence[ChatMessage], turns: dict) -> list:
+        items = []
         for message in messages:
             role = message["role"]
-            content = message.get("content") or ""
-            if role in {"developer", "user"}:
-                input_items.append(
-                    {"type": "message", "role": role, "content": content}
-                )
-            elif role == "assistant":
-                input_items.append(
-                    {"type": "message", "role": "assistant", "content": content}
-                )
-                for tool_call in message.get("tool_calls") or []:
-                    input_items.append(
-                        {
-                            "type": "function_call",
-                            "call_id": tool_call["id"],
-                            "name": tool_call["function"]["name"],
-                            "arguments": tool_call["function"]["arguments"],
-                        }
-                    )
-            elif role == "tool":
-                input_items.append(
+            content = self._content_to_text(message.get("content")) or ""
+            if role == "tool":
+                items.append(
                     {
                         "type": "function_call_output",
-                        "call_id": message.get("tool_call_id"),
-                        "output": content,
+                        "call_id": message["tool_call_id"],
+                        "output": message.get("error") or content,
                     }
                 )
-        return input_items
+                continue
+            calls = message.get("tool_calls") or []
+            if calls and (turn := turns.get(self._tool_call_value(calls[0], "id"))):
+                items.extend(turn)
+                continue
+            if content or not calls:
+                items.append(
+                    {
+                        "type": "message",
+                        "role": "developer" if role == "system" else role,
+                        "content": content,
+                    }
+                )
+            for call in calls:
+                items.append(
+                    {
+                        "type": "function_call",
+                        "call_id": self._tool_call_value(call, "id"),
+                        "name": self._tool_call_value(call, "function"),
+                        "arguments": json.dumps(
+                            self._tool_call_value(call, "args") or {}
+                        ),
+                    }
+                )
+        return items
 
-    def _call_responses_api(self, messages, tools, tool_choice=NOT_GIVEN):
+    def _call_responses_api(self, messages, tools, tool_choice=NOT_GIVEN, turns=None):
         response = self.client.responses.create(
             model=self.model,
-            input=self._responses_input(messages),
+            input=self._responses_input(messages, turns or {}),
             tools=tools if tools else NOT_GIVEN,
             tool_choice=tool_choice,
             max_output_tokens=self.max_output_tokens,
@@ -448,7 +419,9 @@ class OpenAIResponsesLLM(BasePipelineElement):
         for item in response.output:
             if item.type == "message":
                 text_content += "".join(
-                    block.text for block in item.content if block.type == "output_text"
+                    block.text if block.type == "output_text" else block.refusal
+                    for block in item.content
+                    if block.type in {"output_text", "refusal"}
                 )
             elif item.type == "function_call":
                 tool_calls.append(
@@ -458,6 +431,10 @@ class OpenAIResponsesLLM(BasePipelineElement):
                         "arguments": item.arguments,
                     }
                 )
+        if turns is not None and tool_calls:
+            # Replay the original ordered response items, including reasoning. Keep
+            # them out of AgentDojo's public messages and the cached model instance.
+            turns[tool_calls[0]["id"]] = response.output
         return text_content, tool_calls
 
     def query(
@@ -474,9 +451,12 @@ class OpenAIResponsesLLM(BasePipelineElement):
             messages = []
         if extra_args is None:
             extra_args = {}
-        openai_messages = [self._message_to_openai(message) for message in messages]
+        turns = dict(extra_args.get("openai_tool_turns", {}))
         tools = [self._tool_to_openai(func) for func in runtime.functions.values()]
-        text_content, tool_calls = self._call_responses_api(openai_messages, tools)
+        text_content, tool_calls = self._call_responses_api(
+            messages, tools, turns=turns
+        )
+        extra_args = {**extra_args, "openai_tool_turns": turns if tool_calls else {}}
 
         assistant_tool_calls = [
             FunctionCall(
@@ -523,12 +503,9 @@ class OpenAIResponsesToolFilter(BasePipelineElement):
             role="user", content=[text_content_block_from_string(self.prompt)]
         )
         prompt_messages = [*messages, filter_prompt]
-        openai_messages = [
-            self.llm._message_to_openai(message) for message in prompt_messages
-        ]
         tools = [self.llm._tool_to_openai(func) for func in runtime.functions.values()]
         text_content, _ = self.llm._call_responses_api(
-            openai_messages,
+            prompt_messages,
             tools,
             tool_choice="none",
         )
@@ -658,9 +635,10 @@ def _get_pipeline(
 
     key = f"{model}:{defense}:{request_timeout}:{max_output_tokens}:{temperature}"
     if key not in _pipeline_cache:
-        if _is_registered_agentdojo_model(model):
+        registered_provider = _registered_model_provider(model)
+        if registered_provider:
             llm: str | BasePipelineElement = model
-            if _registered_model_provider(model) == "openai":
+            if registered_provider == "openai":
                 import openai
                 from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
 
@@ -669,6 +647,16 @@ def _get_pipeline(
                     if request_timeout
                     else openai.OpenAI()
                 )
+                # AgentDojo 0.1.35 does not expose the Chat Completions budget.
+                # Both its model and tool filter use this dedicated client.
+                create = client.chat.completions.create
+
+                def bounded_completion(**kwargs):
+                    response = create(max_completion_tokens=max_output_tokens, **kwargs)
+                    _accumulate_tokens(response.usage)
+                    return response
+
+                client.chat.completions.create = bounded_completion
                 llm = OpenAILLM(client, model)
                 llm.name = model
             config = PipelineConfig(
@@ -893,6 +881,15 @@ def _settings(options: dict, context: dict) -> ProviderSettings:
     if temperature is not None:
         temperature = float(temperature)
 
+    max_output_tokens = config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+    if type(max_output_tokens) is not int or max_output_tokens < 1:
+        raise ValueError("max_output_tokens must be a positive integer")
+    if "max_output_tokens" in config and _registered_model_provider(model) not in (
+        None,
+        "openai",
+    ):
+        raise ValueError("max_output_tokens is supported only for OpenAI models")
+
     return ProviderSettings(
         suite_name=vars_.get("suite", config.get("suite", "workspace")),
         model=model,
@@ -902,9 +899,7 @@ def _settings(options: dict, context: dict) -> ProviderSettings:
         injection_task_id=vars_.get("injection_task_id"),
         version=vars_.get("version", config.get("version", "v1.2.2")),
         request_timeout=request_timeout,
-        max_output_tokens=int(
-            config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
-        ),
+        max_output_tokens=max_output_tokens,
         temperature=temperature,
         force_rerun=bool(config.get("force_rerun", True)),
         logdir=_resolve_logdir(config, model, defense, attack_name),
@@ -1155,5 +1150,5 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
             }
 
     except Exception as e:
-        logger.exception(f"AgentDojo provider error: {e}")
+        logger.exception("AgentDojo provider error")
         return _error_response(settings, e)

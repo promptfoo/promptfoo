@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Generate Promptfoo dataset from AgentDojo task combinations.
 
@@ -44,7 +43,7 @@ def generate_tests(config: dict | None = None) -> list[dict]:
     max_injection_tasks = config.get("max_injection_tasks")
     attack_name = config.get("attack")
 
-    return _generate_dataset(
+    return generate_dataset(
         suite_name, version, max_user_tasks, max_injection_tasks, attack_name
     )
 
@@ -58,7 +57,7 @@ def _is_dos_attack_name(attack_name: str | None) -> bool:
     )
 
 
-def _generate_dataset(
+def generate_dataset(
     suite_name: str,
     version: str = "v1.2.2",
     max_user_tasks: int | None = None,
@@ -66,18 +65,20 @@ def _generate_dataset(
     attack_name: str | None = None,
 ) -> list[dict]:
     """Generate dataset rows for a suite."""
+    for name, limit in (
+        ("max_user_tasks", max_user_tasks),
+        ("max_injection_tasks", max_injection_tasks),
+    ):
+        if limit is not None and (type(limit) is not int or limit <= 0):
+            raise ValueError(f"{name} must be a positive integer")
+
     # Import here to allow running --help without agentdojo installed
     from agentdojo.task_suite import get_suite
 
     suite = get_suite(version, suite_name)
 
-    user_task_ids = list(suite.user_tasks.keys())
-    injection_task_ids = list(suite.injection_tasks.keys())
-
-    if max_user_tasks:
-        user_task_ids = user_task_ids[:max_user_tasks]
-    if max_injection_tasks:
-        injection_task_ids = injection_task_ids[:max_injection_tasks]
+    user_task_ids = list(suite.user_tasks)[:max_user_tasks]
+    injection_task_ids = list(suite.injection_tasks)[:max_injection_tasks]
     if _is_dos_attack_name(attack_name):
         injection_task_ids = injection_task_ids[:1]
 
@@ -104,19 +105,6 @@ def _generate_dataset(
             )
 
     return rows
-
-
-def generate_dataset(
-    suite_name: str,
-    version: str = "v1.2.2",
-    max_user_tasks: int | None = None,
-    max_injection_tasks: int | None = None,
-    attack_name: str | None = None,
-) -> list[dict]:
-    """Public alias for CLI compatibility."""
-    return _generate_dataset(
-        suite_name, version, max_user_tasks, max_injection_tasks, attack_name
-    )
 
 
 def get_all_suites(version: str = "v1.2.2") -> list[str]:
@@ -207,14 +195,13 @@ def main():
             )
             all_rows.extend(rows)
             print(f"Generated {len(rows)} test cases for {suite}")
-        except Exception as e:
+        except (ImportError, KeyError, ValueError) as e:
             print(f"Error processing suite {suite}: {e}")
             sys.exit(1)
 
     # Write output
     with open(args.output, "w") as f:
-        for row in all_rows:
-            f.write(json.dumps(row) + "\n")
+        f.writelines(json.dumps(row) + "\n" for row in all_rows)
 
     print(f"\nTotal: {len(all_rows)} test cases written to {args.output}")
 

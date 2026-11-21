@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 """Focused tests for the AgentDojo Promptfoo provider."""
 
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import provider
 from agentdojo.agent_pipeline import PipelineConfig
@@ -57,14 +57,49 @@ class TokenUsageTests(unittest.TestCase):
 
     def test_responses_token_usage_is_reported(self):
         provider._reset_token_usage()
-        provider._accumulate_tokens(
-            SimpleNamespace(input_tokens=7, output_tokens=3, total_tokens=10)
-        )
+        provider._accumulate_tokens(SimpleNamespace(input_tokens=7, output_tokens=3))
 
         self.assertEqual(
             provider._token_usage_payload(),
             {"prompt": 7, "completion": 3, "total": 10},
         )
+
+    def test_registered_chat_request_enforces_budget_and_accounts_usage(self):
+        create = Mock(
+            return_value=SimpleNamespace(usage=SimpleNamespace(total_tokens=10))
+        )
+        client = Mock()
+        client.chat.completions.create = create
+        with (
+            patch.dict(provider._pipeline_cache, clear=True),
+            patch("openai.OpenAI", return_value=client),
+        ):
+            provider._get_pipeline("gpt-4o-2024-05-13", None, max_output_tokens=16)
+            client.chat.completions.create(messages=[])
+        create.assert_called_once_with(messages=[], max_completion_tokens=16)
+        self.assertEqual(provider._token_usage_payload()["total"], 10)
+
+
+class TraceSettingsTests(unittest.TestCase):
+    def test_local_receiver_uses_timeout_in_seconds_without_exporter_credentials(self):
+        context = {"traceparent": "00-" + "1" * 32 + "-" + "2" * 16 + "-01"}
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "OTEL_EXPORTER_OTLP_TIMEOUT": "1500",
+                    "OTEL_EXPORTER_OTLP_HEADERS": "authorization=fixture",
+                },
+                clear=True,
+            ),
+            patch("urllib.request.urlopen") as export,
+            provider._start_span(
+                {"otel_endpoint": "http://localhost:4318"}, context, "sample", {}
+            ),
+        ):
+            pass
+        self.assertEqual(export.call_args.kwargs["timeout"], 1.5)
+        self.assertFalse(export.call_args.args[0].has_header("Authorization"))
 
 
 class ResponsesRequestTests(unittest.TestCase):
@@ -87,6 +122,39 @@ class ResponsesRequestTests(unittest.TestCase):
         )
 
         self.assertEqual(llm._tool_to_openai(func)["strict"], False)
+
+    def test_tool_turn_replays_ordered_items_without_logging_reasoning(self):
+        items = [
+            SimpleNamespace(type="reasoning", id="r1"),
+            SimpleNamespace(
+                type="function_call", call_id="c1", name="lookup", arguments="{}"
+            ),
+        ]
+        refusal = SimpleNamespace(type="refusal", refusal="I cannot answer.")
+        client = Mock()
+        client.responses.create.side_effect = [
+            SimpleNamespace(output=items, usage=None),
+            SimpleNamespace(
+                output=[SimpleNamespace(type="message", content=[refusal])], usage=None
+            ),
+        ]
+        llm = provider.OpenAIResponsesLLM(client, "example", "example", 16)
+        runtime = SimpleNamespace(functions={})
+        _, _, env, messages, args = llm.query("Sample", runtime)
+        self.assertNotIn("reasoning", str(messages))
+        tool = {"role": "tool", "tool_call_id": "c1", "content": "ready"}
+        _, _, _, messages, args = llm.query(
+            "Sample", runtime, env, [*messages, tool], args
+        )
+        self.assertEqual(
+            client.responses.create.call_args.kwargs["input"],
+            [
+                *items,
+                {"type": "function_call_output", "call_id": "c1", "output": "ready"},
+            ],
+        )
+        self.assertEqual(messages[-1]["content"][0]["content"], "I cannot answer.")
+        self.assertFalse(args["openai_tool_turns"])
 
     def test_responses_calls_use_configured_temperature(self):
         class Responses:
