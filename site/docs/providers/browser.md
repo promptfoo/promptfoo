@@ -484,7 +484,7 @@ steps:
 
 ### Best Practices for Rate Limiting
 
-Implementing proper rate limiting is crucial to avoid detection and server overload:
+Add delays between browser actions to reduce request load:
 
 ```yaml
 providers:

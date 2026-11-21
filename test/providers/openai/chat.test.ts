@@ -308,6 +308,45 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
+      ['openai.gpt-6.2-astra', 'bedrock-mantle.us-east-1.api.aws', 0.05797],
+      ['global.openai.gpt-6.2-sol', 'bedrock-runtime.us-east-1.amazonaws.com', 0.013175],
+      ['us.openai.gpt-6.2-sol', 'bedrock-runtime.us-east-1.amazonaws.com', 0.0144925],
+      [
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.2-sol',
+        'bedrock-runtime.us-east-1.amazonaws.com',
+        0.013175,
+      ],
+      [
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/global.openai.gpt-6.2-sol',
+        'bedrock-runtime.us-east-1.amazonaws.com',
+        undefined,
+      ],
+      ['openai.gpt-6.2-astra', 'bedrock-mantle.us-east-1.api.aws.example.com', undefined],
+      ['global.openai.gpt-6.2-sol', 'bedrock-mantle.us-east-1.api.aws', undefined],
+    ] as const)('bills the effective Bedrock route for %s on %s', async (model, host, expected) => {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
+          choices: [{ message: { content: 'Ready.' } }],
+          usage: {
+            prompt_tokens: 2000,
+            completion_tokens: 1000,
+            prompt_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+          },
+        }),
+      );
+      const provider = new OpenAiChatCompletionProvider(model, {
+        config: { apiBaseUrl: `https://${host}/openai/v1` },
+      });
+      const response = await provider.callApi('Hello');
+      expect(response.output).toBe('Ready.');
+      if (expected === undefined) {
+        expect(response.cost).toBeUndefined();
+      } else {
+        expect(response.cost).toBeCloseTo(expected, 10);
+      }
+    });
+
+    it.each([
       { reported: 'ultrafast', cost: 0.018 },
       { reported: undefined, cost: 0.018 },
       { reported: 'default', cost: 0.003 },
