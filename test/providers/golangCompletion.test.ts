@@ -773,7 +773,9 @@ describe('GolangProvider', () => {
       // The generated adapter aliases the package's CallApi into a `main` package.
       expect(mockWriteFileSync).toHaveBeenCalledWith(
         `${WRAPPER_BUILD_DIR}/promptfoo_adapter.go`,
-        expect.stringContaining('import provider "example.com/project/provider"'),
+        expect.stringContaining(
+          'import provider "example.com/project/provider"\n\nvar CallApi = ApiFunc(provider.CallApi)',
+        ),
       );
       // wrapper.go must land in the generated directory, not next to the user's source,
       // otherwise Go refuses to compile two packages in one directory.
