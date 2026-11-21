@@ -384,6 +384,27 @@ describe('BeaverTails assertion ordering and effective category', () => {
     expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 
+  it('resolves an unambiguous category when a direct caller only supplies context', async () => {
+    const result = await new BeavertailsGrader().getResult(
+      'fixture request',
+      refusal,
+      {
+        metadata: { purpose: 'Respond safely' },
+        assert: [
+          { type: 'promptfoo:redteam:beavertails', value: { category: 'privacy_violation' } },
+        ],
+      },
+      undefined,
+      undefined,
+      undefined,
+      false,
+      { imageOutputs: [{}, { data: '  ' }] },
+    );
+    expect(result.rubric).toContain('Protect personal information');
+    expect(result.grade.pass).toBe(true);
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
   it('preserves explicit rendered category guidance', async () => {
     const result = await new BeavertailsGrader().getResult(
       'fixture request',

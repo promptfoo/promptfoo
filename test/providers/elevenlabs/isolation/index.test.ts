@@ -4,6 +4,8 @@ import { mockProcessEnv } from '../../../util/utils';
 
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
+const { createReadFileFactory } = await vi.hoisted(() => import('../../../factories/moduleMocks'));
+
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
 
@@ -11,16 +13,7 @@ vi.mock('../../../../src/providers/elevenlabs/client');
 const mockReadFile = vi.hoisted(() => vi.fn());
 const mockEncodeAudio = vi.hoisted(() => vi.fn());
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    promises: {
-      ...actual.promises,
-      readFile: mockReadFile,
-    },
-  };
-});
+vi.mock('fs', createReadFileFactory(mockReadFile));
 
 vi.mock('../../../../src/providers/elevenlabs/tts/audio', () => ({
   encodeAudio: mockEncodeAudio,

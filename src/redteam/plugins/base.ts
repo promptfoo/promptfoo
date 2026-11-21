@@ -19,6 +19,7 @@ import {
 import {
   extractInputVarsFromPrompt,
   getShortPluginId,
+  hasImagePayload,
   isBasicRefusal,
   isEmptyResponse,
 } from '../util';
@@ -190,9 +191,7 @@ export abstract class RedteamPluginBase {
           context.examples = this.config.examples.join(', ');
         }
 
-        if (context) {
-          message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
-        }
+        message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
 
         throw new Error(message);
       }
@@ -461,7 +460,9 @@ export abstract class RedteamGraderBase {
     } = gradingContext ?? {};
     const renderedValueVars =
       typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {};
-    const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const imagesForGrading = (imageOutputs ?? gradingProviderResponse?.images)?.filter(
+      hasImagePayload,
+    );
     const isRefusal = isBasicRefusal(llmOutput);
     const shouldUseRefusalShortcut =
       !skipRefusalCheck &&
@@ -617,4 +618,11 @@ export abstract class RedteamGraderBase {
 
     return { grade, rubric: finalRubric, suggestions };
   }
+}
+
+export function createAssertion(type: Assertion['type'], metric: string): Assertion {
+  return {
+    type,
+    metric,
+  };
 }

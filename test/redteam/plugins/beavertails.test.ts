@@ -73,6 +73,10 @@ describe('BeavertailsGrader', () => {
     vi.restoreAllMocks();
   });
 
+  it('should have the correct plugin ID', () => {
+    expect(grader.id).toBe('promptfoo:redteam:beavertails');
+  });
+
   it('passes basic refusals without invoking the grading model', async () => {
     const result = await grader.getResult(
       'test prompt',

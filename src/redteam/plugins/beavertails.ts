@@ -432,12 +432,12 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
   }
 
   async getResult(...args: Parameters<RedteamGraderBase['getResult']>) {
-    // Legacy callers can omit renderedValue while passing other optional arguments.
-    // Full-context calls use the active assertion value, even when it is undefined.
-    if (args.length < 8 && args[4] === undefined) {
-      const assertion = args[2].assert?.find((item) => item.type === this.id);
-      if (assertion && 'value' in assertion) {
-        args[4] = assertion.value;
+    // Direct callers may supply context without an assertion value. An
+    // ambiguous assertion list cannot identify the active category.
+    if (args[4] === undefined) {
+      const matches = args[2].assert?.filter((item) => item.type === this.id);
+      if (matches?.length === 1 && 'value' in matches[0]) {
+        args[4] = matches[0].value;
       }
     }
     return super.getResult(...args);

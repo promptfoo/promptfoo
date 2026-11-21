@@ -208,6 +208,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
+- If a red-team strategy is interrupted after completing a target request, promptfoo retains its output and usage as an interrupted error result. Resume skips that result to avoid repeating completed target actions. Use `--retry-errors` to explicitly run the case again.
 
 ### Retry Errors
 
@@ -395,13 +396,13 @@ The MCP server provides 14 tools for AI agents:
 **Core Eval Tools:**
 
 - **`list_evaluations`** - Browse your eval runs with optional dataset filtering
-- **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific eval
+- **`get_evaluation_details`** - Get results, metrics, and test cases for an eval
 - **`run_evaluation`** - Run evals with custom parameters, test case filtering, and concurrency control
 - **`share_evaluation`** - Generate publicly shareable URLs for eval results
 
 **Redteam Security Tools:**
 
-- **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
+- **`redteam_run`** - Run red team tests against an AI application
 - **`redteam_generate`** - Generate adversarial test cases for redteam security testing with configurable plugins and strategies
 
 **Configuration & Testing:**
