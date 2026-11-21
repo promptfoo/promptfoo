@@ -1,7 +1,7 @@
 ---
 title: Install Promptfoo
-description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
-keywords: [install, installation, npm, npx, homebrew, windows, setup, promptfoo]
+description: Learn how to install promptfoo using npm, npx, Homebrew, or pip. Set up promptfoo for command-line usage or as a library in your project.
+keywords: [install, installation, npm, npx, pip, homebrew, windows, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -11,7 +11,7 @@ import TabItem from '@theme/TabItem';
 
 # Installation
 
-Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), [Homebrew](https://brew.sh) (Mac, Linux), or [pip](https://pypi.org/project/promptfoo/).
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
@@ -29,19 +29,19 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
     brew install promptfoo
     ```
   </TabItem>
+  <TabItem value="pip" label="pip">
+    ```bash
+    python -m pip install promptfoo
+    ```
+
+    The [Python wrapper](https://github.com/promptfoo/promptfoo-python) runs the npm CLI. It requires Python 3.10 or newer, Node.js 22.22.0 or newer, and npm and npx on your `PATH`.
+
+  </TabItem>
 </Tabs>
 
 :::note
 npm and npx require [Node.js](https://nodejs.org/en/download) `>=22.22.0`.
 :::
-
-For Python-managed environments, install the official [pip wrapper](https://pypi.org/project/promptfoo/):
-
-```bash
-python -m pip install promptfoo
-```
-
-The wrapper requires Python `3.10` or newer, Node.js `22.22.0` or newer, and npm/npx on your `PATH`. It runs the official npm CLI. See the [Python wrapper documentation](https://github.com/promptfoo/promptfoo-python) for version pinning and Python environment setup.
 
 ## Node.js runtime support
 
@@ -147,6 +147,14 @@ If you installed promptfoo with more than one method (for example, both npm and 
     ```bash
     brew uninstall promptfoo
     ```
+  </TabItem>
+  <TabItem value="pip" label="pip">
+    Run this in the same Python environment you used to install the wrapper.
+
+    ```bash
+    python -m pip uninstall promptfoo
+    ```
+
   </TabItem>
 </Tabs>
 

@@ -1,13 +1,12 @@
 export interface Strategy {
   category: string;
-  categoryLink?: string;
   strategy: string;
   displayName: string;
   description: string;
   longDescription: string;
   cost: string;
   asrIncrease: string;
-  link?: string;
+  link: string;
   recommended?: boolean;
   isRemote?: boolean;
 }
@@ -267,6 +266,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/hex/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'arabic-presentation-forms',
+    displayName: 'Arabic Presentation Forms',
+    description: 'Unicode compatibility characters',
+    longDescription:
+      'Tests detection and handling of Arabic text encoded with isolated Unicode presentation forms',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/arabic-presentation-forms/',
   },
   {
     category: 'Static (Single-Turn)',

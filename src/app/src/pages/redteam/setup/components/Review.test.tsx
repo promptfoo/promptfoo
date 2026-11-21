@@ -1,10 +1,13 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
+import {
+  checkEmailStatus as checkEmailStatusApi,
+  clearEmail,
+  saveEmail,
+} from '@app/utils/emailVerification';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,26 +17,18 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
 const renderWithProviders = (ui: React.ReactElement) => {
-  const result = render(
-    <EvalHistoryProvider>
-      <TooltipProvider delayDuration={0}>{ui}</TooltipProvider>
-    </EvalHistoryProvider>,
-  );
+  const result = render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
   rerenderWithProviders = (newUi: React.ReactElement) => {
-    result.rerender(
-      <EvalHistoryProvider>
-        <TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>
-      </EvalHistoryProvider>,
-    );
+    result.rerender(<TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>);
   };
   return result;
 };
 
 // Mock the dependencies
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: vi.fn(() => ({
-    checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-  })),
+vi.mock('@app/utils/emailVerification', () => ({
+  checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+  saveEmail: vi.fn(),
+  clearEmail: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -203,11 +198,12 @@ const mockGetUnifiedConfig = vi.hoisted(() =>
     strategies: [],
   }),
 );
-vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
+vi.mock('@promptfoo/presentation/redteamConfig', () => ({
   getUnifiedConfig: mockGetUnifiedConfig,
 }));
 
-vi.mock('../utils/yamlHelpers', () => ({
+vi.mock('../utils/yamlHelpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/yamlHelpers')>()),
   generateOrderedYaml: vi.fn().mockReturnValue('description: Test config\nplugins: []'),
 }));
 
@@ -269,6 +265,11 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetUnifiedConfig.mockReset().mockReturnValue({
+      description: 'Test config',
+      plugins: [],
+      strategies: [],
+    });
     timers = useTestTimers();
 
     // Reset the mock to return a connected state by default
@@ -307,6 +308,56 @@ describe('Review Component', () => {
   afterEach(() => {
     restoreTestTimers({ runPending: true });
   });
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'normalizes %s local Review requests using the actual unified config conversion',
+    async (type) => {
+      const target = {
+        id: 'openai:chat',
+        label: 'Local target',
+        config: {
+          type,
+          model: 'tenant/model:Q4',
+          apiBaseUrl: 'https://local.example.test/v1',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          useDefaultApiKey: '{{ env.LOCAL_SOURCE }}',
+          stop: ['<end>'],
+        },
+      };
+
+      restoreTestTimers();
+      const user = userEvent.setup();
+      const { getUnifiedConfig } = await vi.importActual<
+        typeof import('@promptfoo/presentation/redteamConfig')
+      >('@promptfoo/presentation/redteamConfig');
+      mockGetUnifiedConfig.mockImplementation(getUnifiedConfig);
+      const config = { ...defaultConfig, target, prompts: ['Hello'] };
+      const original = JSON.parse(JSON.stringify(config));
+      mockUseRedTeamConfig.mockReturnValue({
+        config,
+        updateConfig: mockUpdateConfig,
+        targetConfigError: null,
+        targetConfigDraft: null,
+      });
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.anything()));
+      const request = vi.mocked(callApi).mock.calls.find(([path]) => path === '/redteam/run')![1]!;
+      const submitted = JSON.parse(request.body as string).config;
+      expect(submitted.targets).toEqual([
+        { ...target, config: { ...target.config, apiKeyRequired: false, useDefaultApiKey: false } },
+      ]);
+      expect(submitted.prompts).toEqual(['Hello']);
+      expect(config).toEqual(original);
+    },
+  );
 
   describe('Component Integration', () => {
     it('renders all main sections including Advanced Configuration accordion', () => {
@@ -695,7 +746,7 @@ Application Details:
           }
           return { canProceed: true };
         });
-        vi.mocked(useEmailVerification).mockReturnValue({ checkEmailStatus } as any);
+        vi.mocked(checkEmailStatusApi, { partial: true }).mockImplementation(checkEmailStatus);
         vi.mocked(useRedteamJobStore).mockReturnValue({
           jobId: null,
           setJob: mockSetJob,
@@ -790,9 +841,7 @@ Application Details:
       const preflightPromise = new Promise<void>((resolve) => {
         releasePreflight = resolve;
       });
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
@@ -857,9 +906,7 @@ Application Details:
       const preflightPromise = new Promise<void>((resolve) => {
         releasePreflight = resolve;
       });
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
@@ -936,11 +983,9 @@ Application Details:
         .fn()
         .mockResolvedValueOnce({ canProceed: false, needsEmail: true })
         .mockResolvedValue({ canProceed: true });
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus,
-        saveEmail: vi.fn().mockResolvedValue({}),
-        clearEmail: vi.fn(),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockImplementation(checkEmailStatus as any);
+      vi.mocked(saveEmail).mockResolvedValue({});
+      vi.mocked(clearEmail).mockReset();
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
@@ -999,9 +1044,7 @@ Application Details:
         targetConfigDraft: null as string | null,
       };
       mockUseRedTeamConfig.mockImplementation(() => latestState);
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
@@ -1390,6 +1433,38 @@ Application Details:
       });
     });
 
+    it('sends per-plugin settings through the real serializer when running', async () => {
+      const { getUnifiedConfig } = await vi.importActual<
+        typeof import('@promptfoo/presentation/redteamConfig')
+      >('@promptfoo/presentation/redteamConfig');
+      mockGetUnifiedConfig.mockImplementationOnce(getUnifiedConfig);
+      const config = {
+        ...defaultConfig,
+        prompts: ['{{prompt}}'],
+        plugins: [{ id: 'bola', numTests: 17, severity: 'critical', config: {} }],
+        strategies: ['basic'],
+      };
+      mockUseRedTeamConfig.mockReturnValue({ config, updateConfig: mockUpdateConfig });
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await userEvent
+        .setup({ delay: null })
+        .click(screen.getByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.any(Object)));
+      const request = vi.mocked(callApi).mock.calls.find(([url]) => url === '/redteam/run')!;
+      const payload = JSON.parse(request[1]!.body as string);
+      expect(payload.config.redteam.plugins).toEqual([
+        { id: 'bola', numTests: 17, severity: 'critical' },
+      ]);
+      expect(payload.config.redteam.numTests).toBe(10);
+    });
+
     it('should disable button when isRunning is true regardless of API status', async () => {
       const user = userEvent.setup({ delay: null });
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1399,9 +1474,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
@@ -1436,9 +1509,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
@@ -1469,9 +1540,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
@@ -1503,9 +1572,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
@@ -1545,9 +1612,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
@@ -1974,9 +2039,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
@@ -2032,9 +2095,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
 
       renderWithProviders(
         <Review
