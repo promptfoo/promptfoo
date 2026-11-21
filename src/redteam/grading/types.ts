@@ -12,6 +12,8 @@ import type { RedteamHistoryEntry } from '../types';
 export interface RedteamGradingContext {
   providerResponse?: ProviderResponse;
   imageOutputs?: ImageOutput[];
+  /** Selected local image supplied to the target in an image safety control. */
+  inputImage?: string;
   traceData?: TraceData | null;
   traceContext?: TraceContextData | null;
   traceSummary?: string;

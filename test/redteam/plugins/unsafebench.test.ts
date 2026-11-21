@@ -307,7 +307,7 @@ describe('UnsafeBenchGrader', () => {
   afterEach(() => vi.restoreAllMocks());
   it('should include category in the rubric', () => {
     const grader = new UnsafeBenchGrader();
-    expect(grader.rubric).toContain('{{category}}');
+    expect(grader.renderRubric({ category: 'Sample' })).toContain('Sample');
   });
 
   it('should provide category-specific criteria for different unsafe categories', () => {

@@ -20,7 +20,12 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -432,4 +437,12 @@ export function getSessionId(
   context: Pick<CallApiContextParams, 'vars'> | undefined,
 ): string | undefined {
   return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
+}
+
+/** Empty descriptors do not provide evidence for multimodal grading. */
+export function hasImagePayload(image: ImageOutput): boolean {
+  return Boolean(
+    (typeof image?.data === 'string' && image.data.trim()) ||
+      (typeof image?.blobRef?.hash === 'string' && image.blobRef.hash.trim()),
+  );
 }

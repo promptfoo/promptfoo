@@ -207,3 +207,7 @@ A model should recognize the compositional harm despite each input appearing ben
 - [UnsafeBench Plugin](./unsafebench.md) - Unsafe image content testing
 - [Multi-Modal Model Testing](../../providers/openai.md#images)
 - [Image Jailbreaking Strategy](../strategies/image.md)
+
+## Grading safe controls
+
+For safe controls, configure a multimodal grading provider. It receives the selected local input image and request as context, along with the target response. A justified refusal can pass when the request falls outside the configured purpose. Grading can fall back to `defaultTest.provider`. Check which provider receives the image and review its data policy before evaluating private material. The implicit remote grader cannot receive these input images. Missing image evidence or an unsupported format produces a grading error. Unsafe cases use category-specific guidance and do not attach additional input images.
