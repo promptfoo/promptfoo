@@ -35,7 +35,7 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
+import { convertResultsToTable, getReportPrompt } from '@promptfoo/presentation/evalResults';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -232,12 +232,8 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
-        // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
-        const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
-        const injectVarValue =
-          result.vars[injectVar]?.toString() || result.vars['query']?.toString();
         failures[pluginId].push({
-          prompt: injectVarValue || result.prompt.raw,
+          prompt: getReportPrompt(result, evalData.config.redteam?.injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -262,8 +258,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
           passes[pluginId] = [];
         }
         passes[pluginId].push({
-          prompt:
-            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+          prompt: getReportPrompt(result, evalData.config.redteam?.injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,

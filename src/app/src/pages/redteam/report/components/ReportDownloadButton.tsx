@@ -12,6 +12,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { getReportPrompt } from '@promptfoo/presentation/evalResults';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
@@ -53,11 +54,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
-        Prompt:
-          result.vars.query?.toString() ||
-          result.vars.prompt?.toString() ||
-          result.prompt.raw ||
-          '',
+        Prompt: getReportPrompt(result, evalData.config?.redteam?.injectVar),
         Response: result.response?.output || '',
         Pass:
           result.gradingResult?.pass === true

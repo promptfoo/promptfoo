@@ -4,6 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { DropdownMenuItem, DropdownMenuItemIcon } from '@app/components/ui/dropdown-menu';
+import { getExecutedPrompt, promptText } from '@promptfoo/presentation/evalResults';
 import invariant from '@promptfoo/util/invariant';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import * as yaml from 'js-yaml';
@@ -280,12 +281,21 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     }
 
     const varName = config.redteam.injectVar || 'prompt';
+    const varIndex = table.head.vars.indexOf(varName);
     const payloads = table.body
-      .map((row) => {
-        const vars = row.test.vars as Record<string, unknown>;
-        return String(vars?.[varName] || '');
+      .flatMap((row) => {
+        const seed = varIndex >= 0 ? row.vars[varIndex] : row.test.vars?.[varName];
+        if (!seed || seed === '[prompt stripped]') {
+          return [];
+        }
+        // Persisted tables keep seeds in row.vars and executed prompts on individual outputs.
+        const outputs = row.outputs.filter(Boolean);
+        const fallback = promptText(seed);
+        return outputs.length
+          ? outputs.map((output) => getExecutedPrompt(output) || fallback)
+          : [fallback];
       })
-      .filter(Boolean)
+      .filter((input) => input && input !== '[prompt stripped]')
       .map((input) => {
         const jsonEscaped = JSON.stringify(input).slice(1, -1); // Remove surrounding quotes
         return encodeURIComponent(jsonEscaped);

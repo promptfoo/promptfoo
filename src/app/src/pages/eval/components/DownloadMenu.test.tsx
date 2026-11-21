@@ -1,5 +1,6 @@
 import { mockBrowserProperty, mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import { screen } from '@testing-library/dom';
 import { act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -410,6 +411,90 @@ describe('DownloadMenu', () => {
     expect(await readDownloadedBlob()).toBe('first%5Cnline\nquote%20%5C%22%20plus%20%26');
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
   });
+
+  it.each(['prompt', 'customInput'])(
+    'exports the projected %s attack to Burp without changing its stored seed',
+    async (injectVar) => {
+      const attack = 'final, "quoted"\nattack / 日本語';
+      const resultsFile = {
+        version: 4,
+        prompts: mockTable.head.prompts,
+        vars: ['sessionId', injectVar],
+        results: {
+          results: [0, 1].map((testIdx) => ({
+            testIdx,
+            promptIdx: 0,
+            promptId: 'prompt1',
+            vars: { [injectVar]: 'original seed' },
+            testCase: { vars: { [injectVar]: 'original seed' } },
+            prompt: { raw: 'rendered seed' },
+            response: { output: 'answer', prompt: attack },
+            success: true,
+          })),
+        },
+      } as unknown as Parameters<typeof convertResultsToTable>[0];
+      const original = structuredClone(resultsFile);
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: convertResultsToTable(resultsFile),
+        config: { redteam: { injectVar } },
+        evalId: mockEvalId,
+      });
+
+      renderDownloadDialog();
+      await userEvent.click(screen.getByText('Burp Payloads'));
+      const content = await readDownloadedBlob();
+      expect(content).toBe(encodeURIComponent(JSON.stringify(attack).slice(1, -1)));
+      expect(resultsFile).toEqual(original);
+    },
+  );
+
+  it('uses each populated output or its original custom variable in persisted exports', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { prompts: mockTable.head.prompts, vars: ['customInput'] },
+        body: [
+          {
+            test: { vars: { customInput: 'seed' } },
+            vars: ['seed'],
+            outputs: [
+              { response: { prompt: 'first' } },
+              null,
+              { metadata: { redteamFinalPrompt: 'second' } },
+              { response: { output: 'answer' } },
+              { response: { prompt: '[prompt stripped]' } },
+            ],
+          },
+        ],
+      },
+      config: { redteam: { injectVar: 'customInput' } },
+      evalId: mockEvalId,
+    });
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Burp Payloads'));
+    expect(await readDownloadedBlob()).toBe('first\nsecond\nseed');
+  });
+
+  it.each([
+    { headers: [], values: [], expected: 'legacy%20seed' },
+    { headers: ['prompt'], values: [''], expected: '' },
+    { headers: ['prompt'], values: ['[prompt stripped]'], expected: '' },
+  ])(
+    'preserves legacy and empty projected Burp variables: $headers',
+    async ({ headers, values, expected }) => {
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: {
+          head: { prompts: mockTable.head.prompts, vars: headers },
+          body: [{ test: { vars: { prompt: 'legacy seed' } }, vars: values, outputs: [] }],
+        },
+        config: { redteam: {} },
+        evalId: mockEvalId,
+      });
+      renderDownloadDialog();
+      await userEvent.click(screen.getByText('Burp Payloads'));
+      const content = await readDownloadedBlob();
+      expect(content).toBe(expected);
+    },
+  );
 
   it('properly categorizes download options into sections', async () => {
     renderDownloadDialog();
