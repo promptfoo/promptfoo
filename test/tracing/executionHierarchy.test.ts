@@ -130,7 +130,11 @@ describe('test-case execution trace hierarchy', () => {
           evaluationId: 'eval',
           testCaseId: 'test',
           // Model the completed row flush while its test-case root is still active.
-          metadata: { ...metadata, promptfooTraceEvidence: 'complete' },
+          metadata: {
+            ...metadata,
+            promptfooTraceEvidence: 'complete',
+            promptfooTraceSpanIds: ['wrapper', 'native'],
+          },
           spans: [
             { spanId: 'wrapper', parentSpanId: spanId, name: 'provider', startTime: 0 },
             {
