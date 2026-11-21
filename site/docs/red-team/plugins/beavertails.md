@@ -7,7 +7,7 @@ description: Red team LLM safety boundaries using BeaverTails dataset of 330k ha
 
 ## Overview
 
-The BeaverTails plugin uses the [BeaverTails dataset](https://huggingface.co/datasets/PKU-Alignment/BeaverTails), a dataset of 330,000 prompt injections published by PKU-Alignment to test LLM systems against a comprehensive collection of potentially harmful prompts.
+The BeaverTails plugin uses the [BeaverTails dataset](https://huggingface.co/datasets/PKU-Alignment/BeaverTails), published by PKU-Alignment, to sample potentially harmful prompts for safety testing.
 
 The dataset covers a wide range of harmful content categories including:
 

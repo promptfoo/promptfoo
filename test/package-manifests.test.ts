@@ -201,6 +201,7 @@ const KNOWN_BAD_RELEASES = new Map([
   // Also covers GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, and GHSA-rmxm-3fg6-px4f.
   ['@hono/node-server', '<2.1.6'], // GHSA-jpvv-r467-5p4w, GHSA-7v5p-43qr-wch5, GHSA-qv5m-9pm6-hqp3
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
+  ['@modelcontextprotocol/server-filesystem', '<2.3.0 || >=2025.1.14 <=2026.8.31'], // GHSA-p9cv-8g75-4xcg, GHSA-7m4x-rv66-mxhh
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['body-parser', '<1.20.9 || >=2.0.0 <2.4.0'], // GHSA-27r3-jxmh-p828
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
@@ -220,8 +221,10 @@ const KNOWN_BAD_RELEASES = new Map([
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
+  ['minimatch', '>=11.0.0 <=11.0.7'], // GHSA-cf2h-pxjq-68xw, GHSA-hqmv-qgp3-jx75
+  ['parse5', '>=8.0.0 <8.1.1'], // Parser and serializer security fixes released in 8.1.1.
   ['postcss-selector-parser', '<6.1.5 || >=7.0.0 <7.1.6'], // GHSA-rj75-hqrm-r3gf
-  ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
+  ['serialize-javascript', '<7.1.3'], // GHSA-gfhx-hw2g-v5hg, GHSA-m5mm-p8h7-m29v
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
   ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
   ['smol-toml', '<=1.8.0'], // GHSA-r4xh-jqrq-34v2
@@ -229,7 +232,9 @@ const KNOWN_BAD_RELEASES = new Map([
     'storybook',
     '>=8.0.0 <8.6.19 || >=9.0.0 <9.1.21 || >=10.0.0 <10.6.2 || >=11.0.0-alpha.0 <11.0.0-alpha.6',
   ], // GHSA-f2ph-cmg5-wxc8
-  ['undici', '<7.30.1 || >=8.0.0 <8.10.2'], // 7.30.1 security fixes and GHSA-3xpg-4rpp-hhhm
+  // GHSA-mqg3-3v4r-cm32, GHSA-7xg3-fphp-28hg, GHSA-5rm8-gv32-r954,
+  // GHSA-9v6h-8rgp-m69f, GHSA-3g9m-rv3r-w5w2, GHSA-r4pc-4jcp-7pqc, GHSA-3xpg-4rpp-hhhm.
+  ['undici', '<7.30.2 || >=8.0.0 <8.12.4'],
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
 

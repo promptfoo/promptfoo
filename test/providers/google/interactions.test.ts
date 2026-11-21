@@ -4880,6 +4880,115 @@ describe('GoogleInteractionsProvider', () => {
       expect(result.output).toBe('Cloudy.');
     });
 
+    it.each([
+      { name: 'undeclared', args: {} },
+      { name: 'get_time', args: {} },
+      { name: 'get_weather', args: { private_value: 'sensitive input' } },
+      { name: 'get_weather', args: '{"city":"Rome"}' },
+      { name: undefined, args: {} },
+    ])('rejects an unsafe batch before invoking any callback (%j)', async ({ name, args }) => {
+      const response = functionCallResponse();
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...response,
+        data: {
+          ...response.data,
+          steps: [...response.data.steps, { type: 'function_call', name, arguments: args }],
+        },
+      } as any);
+      const callback = vi.fn();
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [weatherTool],
+          passthrough: { tools: [{ type: 'function', name: 'get_time' }] },
+          toolConfig: {
+            functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['get_weather'] },
+          },
+          functionToolCallbacks: {
+            get_weather: callback,
+            get_time: callback,
+            undeclared: callback,
+          },
+        },
+      });
+      const result = await provider.callApi('Weather?');
+      expect(result.error).toContain('rejected a function call');
+      expect(JSON.stringify(result)).not.toContain('sensitive input');
+      expect(result.tokenUsage?.numRequests).toBe(1);
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledOnce();
+    });
+
+    it('uses the effective native choice when authorizing callbacks', async () => {
+      const callback = vi.fn();
+      mockFetchWithCache.mockResolvedValueOnce(functionCallResponse() as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      const result = await provider.callApi('Weather?', {
+        vars: {},
+        prompt: {
+          raw: '',
+          label: '',
+          config: { passthrough: { generation_config: { tool_choice: 'none' } } },
+        },
+      });
+      expect(result.error).toContain('rejected a function call');
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it.each(['openai', 'native'])(
+      'validates %s tools against their actual schema',
+      async (format) => {
+        const fn = {
+          name: 'get_weather',
+          parameters: {
+            type: 'object',
+            properties: { city: { type: 'string' } },
+            required: ['city'],
+          },
+        };
+        const tool =
+          format === 'openai' ? { type: 'function', function: fn } : { type: 'function', ...fn };
+        const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+          config: { apiKey: 'test-key', tools: [tool] as any },
+        });
+        mockFetchWithCache.mockResolvedValueOnce(functionCallResponse() as any);
+        const result = await provider.callApi('Weather?');
+        expect(() => provider.validateFunctionToolCall(result.output)).not.toThrow();
+        expect(() =>
+          provider.validateFunctionToolCall([{ functionCall: { name: fn.name, args: {} } }]),
+        ).toThrow('does not match schema');
+      },
+    );
+
+    it('stops before tool execution when cancelled during the request', async () => {
+      const callback = vi.fn();
+      const controller = new AbortController();
+      mockFetchWithCache.mockImplementationOnce(async () => {
+        controller.abort('cancelled');
+        return functionCallResponse() as any;
+      });
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          timeoutMs: 200,
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      await expect(
+        provider.callApi('Weather?', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockFetchWithCache.mock.calls[0][1]?.signal).toBe(controller.signal);
+      expect(mockFetchWithCache.mock.calls[0][2]).toBe(200);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('returns every pending call when any call has no callback', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
@@ -4919,14 +5028,24 @@ describe('GoogleInteractionsProvider', () => {
 
     it('does not repeat echoed history across three unstored requests', async () => {
       const userInput = { type: 'user_input', content: [{ type: 'text', text: 'Plan a trip.' }] };
-      const call1 = { type: 'function_call', id: 'call-1', name: 'get_weather', arguments: {} };
+      const call1 = {
+        type: 'function_call',
+        id: 'call-1',
+        name: 'get_weather',
+        arguments: { city: 'Rome' },
+      };
       const result1 = {
         type: 'function_result',
         call_id: 'call-1',
         name: 'get_weather',
         result: [{ type: 'text', text: 'r1' }],
       };
-      const call2 = { type: 'function_call', id: 'call-2', name: 'get_weather', arguments: {} };
+      const call2 = {
+        type: 'function_call',
+        id: 'call-2',
+        name: 'get_weather',
+        arguments: { city: 'Rome' },
+      };
       mockFetchWithCache
         .mockResolvedValueOnce({
           data: { status: 'requires_action', steps: [call1] },

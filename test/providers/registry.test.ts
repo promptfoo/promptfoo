@@ -934,6 +934,8 @@ describe('Provider Registry', () => {
         'gpt-6.1',
         'gpt-6.1-sol',
         'gpt-6.1-sol-2026-09-29',
+        'gpt-6.2-astra',
+        'gpt-6.2-sol',
         'gpt-7-mini',
       ])('defaults bare %s to Responses', async (model) => {
         const provider = await registry.create(`openai:${model}`);
@@ -950,6 +952,8 @@ describe('Provider Registry', () => {
         'gpt-6-sol',
         'gpt-6-luna',
         'gpt-6.1-sol',
+        'gpt-6.2-astra',
+        'gpt-6.2-sol',
         'gpt-7-mini',
       ])('honors the explicit Chat endpoint for %s', async (model) => {
         const provider = await registry.create(`openai:chat:${model}`);
@@ -2698,6 +2702,38 @@ describe('Provider Registry', () => {
       options: bareOptions,
     };
 
+    it.each([
+      'google:decisions:gemini-decision-1',
+      'google:gemini-decision-1',
+      'palm:decisions:gemini-decision-1',
+      'palm:gemini-decision-1',
+    ])('routes %s through the Gemini Decisions API', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      const { GoogleDecisionsProvider } = await import('../../src/providers/google/decisions');
+      const provider = await factory.create(providerPath, bareOptions, bareContext);
+      expect(provider).toBeInstanceOf(GoogleDecisionsProvider);
+      expect(provider.id()).toBe(providerPath);
+
+      const custom = await factory.create(providerPath, { id: 'decision-eval' }, bareContext);
+      expect(custom.id()).toBe('decision-eval');
+    });
+
+    it.each([
+      'google:decisions',
+      'palm:decisions:',
+      'google:decisions:gemini-3.8-flash',
+      'google:chat:gemini-decision-1',
+      'palm:embedding:gemini-decision-1',
+      'vertex:decisions:gemini-decision-1',
+      'vertex:gemini-decision-1',
+      'vertex:live:gemini-decision-1',
+    ])('rejects an unsupported Gemini Decisions route %s', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      await expect(factory.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        /(?:google|palm):decisions:gemini-decision-1/,
+      );
+    });
+
     it('rejects a Vertex Live route without a model', async () => {
       const factory = (await getProviderFactories('vertex:live:')).find((f) =>
         f.test('vertex:live:'),
@@ -3178,6 +3214,8 @@ describe('Provider Registry', () => {
 
     it.each([
       'google:interactions:',
+      'google:interactions',
+      'palm:interactions',
       'vertex:interactions:gemini-3.8-flash',
       'vertex:interactions:gemini-4-argon',
       'vertex:interactions:gemini-4-hydrogen',

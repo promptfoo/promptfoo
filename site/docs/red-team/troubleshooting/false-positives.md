@@ -5,9 +5,7 @@ description: Red team false positive detection by enhancing grader context and s
 
 # Preventing False Positives
 
-False positives occur when a test case is marked as passing when it should have been marked as failing or vice versa. These inaccuracies typically arise when the grader lacks sufficient context about your target application to make proper assessments.
-
-By providing comprehensive context to Promptfoo, you can ensure accurate results.
+A false positive is a reported vulnerability that is not actually a violation. A false negative is a violation the grader misses. Both can occur when the grader lacks context about the target application. Providing its intended behavior and reviewing disputed results can reduce grading errors.
 
 ## Understanding How the Grader Makes Decisions
 
@@ -25,7 +23,7 @@ Scores range from 0 to 1 and help guide the judge in agentic cases to distinguis
 
 The accuracy of grading directly depends on how thoroughly you define your application's behavior. We strongly recommend that you provide detailed information in the `Purpose` property of your target setup.
 
-Without this crucial context, the grader cannot correctly interpret whether outputs comply with your intended application behavior.
+Without this context, the grader may misinterpret whether an output violates the intended behavior.
 
 #### Example of Well-Defined Purpose (Leading to Accurate Results)
 

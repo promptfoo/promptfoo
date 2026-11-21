@@ -4,14 +4,14 @@ import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { executeProviderFunctionCallback } from '../functionCallbackUtils';
-import { getRequestTimeoutMs, throwIfAborted } from '../shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
+  getNativeGeminiApiKey,
   loadFile,
   loadGoogleTools,
   mergeGoogleCompletionOptions,
@@ -19,6 +19,7 @@ import {
   parseConfigSystemInstruction,
   resolveGoogleToolConfig,
   validateFunctionCall,
+  validateGoogleFunctionCalls,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -28,13 +29,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type {
-  CompletionOptions,
-  FunctionDeclaration,
-  GoogleProviderConfig,
-  Schema,
-  Tool,
-} from './types';
+import type { CompletionOptions, FunctionDeclaration, GoogleProviderConfig, Tool } from './types';
 
 type InteractionContent = {
   type?: string;
@@ -814,6 +809,18 @@ function toInteractionTools(tools: Tool[]): Record<string, unknown>[] {
   });
 }
 
+function interactionFunctions(tools: unknown[]): FunctionDeclaration[] {
+  return tools.flatMap((tool) => {
+    if (!tool || typeof tool !== 'object' || !('type' in tool) || tool.type !== 'function') {
+      return [];
+    }
+    const fn = ('function' in tool ? tool.function : tool) as FunctionDeclaration | undefined;
+    return typeof fn?.name === 'string' && fn.name.trim()
+      ? [{ name: fn.name, parameters: fn.parameters }]
+      : [];
+  });
+}
+
 /** Map a Gemini function-calling policy onto Interactions `tool_choice`. NONE is handled separately. */
 function getInteractionToolChoice(config: CompletionOptions, includeAuto: boolean): unknown {
   const { mode, allowedFunctionNames } =
@@ -835,6 +842,25 @@ function getInteractionToolChoice(config: CompletionOptions, includeAuto: boolea
 }
 
 type InteractionFunctionCall = { id?: string; name: string; arguments?: unknown };
+
+function isAllowedInteractionCall(name: string, choice: unknown): boolean {
+  if (choice === undefined) {
+    return true;
+  }
+  let mode: unknown = choice;
+  if (choice && typeof choice === 'object' && Object.keys(choice).length === 1) {
+    if ('allowed_tools' in choice) {
+      const allowed = choice.allowed_tools as { mode?: unknown; tools?: unknown } | undefined;
+      if (!Array.isArray(allowed?.tools) || !allowed.tools.includes(name)) {
+        return false;
+      }
+      mode = allowed.mode ?? 'auto';
+    } else if ('mode' in choice) {
+      mode = choice.mode;
+    }
+  }
+  return typeof mode === 'string' && ['auto', 'any', 'validated'].includes(mode.toLowerCase());
+}
 
 /** Steps the model produced after the latest user input or function result. */
 function getLatestTurnSteps(data: InteractionResponse): InteractionStep[] {
@@ -1052,23 +1078,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
   /** Validate function calls against `config.tools` and native `passthrough.tools` functions. */
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
-    const configured = loadFile(this.config.tools, vars) as Tool[] | undefined;
-    const passthroughTools: unknown = this.config.passthrough?.tools;
-    const declarations = [
-      ...(Array.isArray(configured) ? configured : []).flatMap(
-        (tool) => tool.functionDeclarations ?? [],
+    const configured = loadFile(this.config.tools, vars);
+    const declarations = interactionFunctions([
+      ...toInteractionTools(
+        Array.isArray(configured) ? configured : configured ? [configured] : [],
       ),
-      ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]).filter(
-        (tool): tool is FunctionDeclaration =>
-          tool?.type === 'function' && typeof tool.name === 'string',
-      ),
-    ].map(({ name, parameters, parametersJsonSchema, parameters_json_schema }) => ({
-      name,
-      // Interactions takes JSON Schema as-is, so prefer it when a declaration provides one.
-      parameters: (parametersJsonSchema ?? parameters_json_schema ?? parameters) as
-        | Schema
-        | undefined,
-    }));
+      ...[this.config.passthrough?.tools].flat(),
+    ]);
     validateFunctionCall(output, [{ functionDeclarations: declarations }], vars);
   }
 
@@ -1077,6 +1093,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    throwIfAborted(signal);
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleInteractionsRequestConfig(this.config, promptConfig);
     if (this.modelName === 'gemini-omni-1.1-flash') {
@@ -1178,7 +1196,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
       try {
         requestTools = [
           ...(hasConfigTools
-            ? toInteractionTools(await loadGoogleTools(interactionConfigTools, context?.vars))
+            ? toInteractionTools(
+                await loadGoogleTools(interactionConfigTools, context?.vars, {
+                  abortSignal: signal,
+                }),
+              )
             : []),
           ...(interactionTools === undefined
             ? []
@@ -1187,6 +1209,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
               : [interactionTools]),
         ];
       } catch (err) {
+        throwIfAborted(signal);
         return { error: err instanceof Error ? err.message : String(err) };
       }
     }
@@ -1271,13 +1294,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         };
       }
     } else {
-      const rawApiKey = resolveProviderApiKey({ apiKey: config.apiKey }, this.env, [
-        'GOOGLE_API_KEY',
-        'GEMINI_API_KEY',
-        'PALM_API_KEY',
-        'GOOGLE_GENERATIVE_AI_API_KEY',
-      ]);
-      apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
+      apiKey = getNativeGeminiApiKey({ apiKey: config.apiKey }, this.env);
       if (!apiKey) {
         return {
           error:
@@ -1555,6 +1572,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
     const pollTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
     const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
+    const declarations = interactionFunctions(requestTools);
     const rounds: Array<{ data: InteractionResponse; cached: boolean }> = [];
     const toolCalls: Array<{ name: string; args: unknown; result: string }> = [];
     const callbackBasePath =
@@ -1625,7 +1643,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let turnSteps: InteractionStep[];
     let pendingCalls: InteractionFunctionCall[];
     while (true) {
-      const result = await this.sendInteraction(endpoint, headers, roundBody, pollTimeoutMs);
+      throwIfAborted(signal);
+      const result = await this.sendInteraction(
+        endpoint,
+        headers,
+        roundBody,
+        pollTimeoutMs,
+        signal,
+      );
+      throwIfAborted(signal);
       if ('error' in result) {
         return rounds.length > 0
           ? { ...result, ...summarizeRounds(), ...toolCallMetadata() }
@@ -1649,9 +1675,38 @@ export class GoogleInteractionsProvider implements ApiProvider {
         );
         break;
       }
-      throwIfAborted(options?.abortSignal);
+      // Validate the entire batch before a callback can have local effects.
+      try {
+        if (
+          pendingCalls.length !== turnSteps.filter((step) => step.type === 'function_call').length
+        ) {
+          throw new Error();
+        }
+        const calls = pendingCalls.map(({ name, arguments: args = {} }) => {
+          if (
+            !isAllowedInteractionCall(name, generationConfig.tool_choice) ||
+            declarations.filter((fn) => fn.name === name).length !== 1 ||
+            !args ||
+            typeof args !== 'object' ||
+            Array.isArray(args)
+          ) {
+            throw new Error();
+          }
+          return { name, args };
+        });
+        validateGoogleFunctionCalls(calls, declarations);
+      } catch {
+        // Validation errors include model arguments and schema contents.
+        return {
+          error:
+            'Gemini Interactions rejected a function call. Check the declared tools, tool choice and argument schemas.',
+          ...summarizeRounds(),
+          ...toolCallMetadata(),
+        };
+      }
       const functionResults: Record<string, unknown>[] = [];
       for (const call of pendingCalls) {
+        throwIfAborted(signal);
         let output: string;
         try {
           output = await executeProviderFunctionCallback({
@@ -1875,6 +1930,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     headers: Record<string, string>,
     body: Record<string, unknown>,
     pollTimeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<{ data: InteractionResponse; cached: boolean } | { error: string; raw?: unknown }> {
     let data: InteractionResponse;
     let cached: boolean;
@@ -1892,8 +1948,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
-        } as RequestInit,
-        getRequestTimeoutMs(),
+          ...(signal && { signal }),
+        },
+        pollTimeoutMs,
         'json',
         // Interactions API credentials must not be persisted, even as a stable cache fingerprint.
         true,
@@ -1916,6 +1973,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const pollStartedAt = Date.now();
     let pollCount = 0;
     while (data.status === 'in_progress' && data.id) {
+      throwIfAborted(signal);
       const elapsed = Date.now() - pollStartedAt;
       if (elapsed >= pollTimeoutMs) {
         return {
@@ -1924,7 +1982,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         };
       }
       if (pollCount > 0) {
-        await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
+        await waitForPromiseWithAbort(sleep(Math.min(1_000, pollTimeoutMs - elapsed)), signal);
       }
       try {
         ({
@@ -1933,7 +1991,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           statusText: httpStatusText,
         } = (await fetchWithCache(
           `${endpoint}/${encodeURIComponent(data.id)}`,
-          { method: 'GET', headers } as RequestInit,
+          { method: 'GET', headers, ...(signal && { signal }) },
           Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
           'json',
           true,

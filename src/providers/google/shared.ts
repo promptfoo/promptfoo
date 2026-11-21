@@ -171,6 +171,8 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     },
     vertexRegionalPremium: 1.1,
   },
+  // Gemini Decisions bills only input tokens, including the questions.
+  ...modelsWithCost(['gemini-decision-1'], { input: 0.1 / 1e6, output: 0 }),
 
   // Fairwind allowlisted Vertex model; the Flash introductory discount does not apply.
   {
