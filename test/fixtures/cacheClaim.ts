@@ -8,6 +8,6 @@ process.once('message', async () => {
     process.send?.({ error: String(error) });
     process.exitCode = 1;
   } finally {
-    process.disconnect();
+    process.disconnect?.();
   }
 });
