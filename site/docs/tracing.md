@@ -9,6 +9,8 @@ Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did beh
 
 Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
+Trace and trajectory assertions are not supported with [`--lock` or `--verify`](/docs/usage/command-line/#tamper-evident-eval-gates), because that lock format does not commit trace interpretation settings. They remain available in ordinary evals.
+
 ![traces in promptfoo](/img/docs/trace.png)
 
 ## Overview

@@ -1508,6 +1508,7 @@ function createRunEvalOption({
     abortSignal: providerAbortSignal,
     evalId,
     rateLimitRegistry,
+    lockIntegrity: options.lockIntegrity,
   };
 }
 
@@ -2455,7 +2456,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        isolateProviderContext: this.options.isolateProviderContext,
+      },
     );
     onRowsReady?.();
     return rows;
