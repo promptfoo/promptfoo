@@ -180,7 +180,7 @@ describe('bundle shopping', () => {
   it('does not add sold-out bundles', async () => {
     const user = userEvent.setup();
     renderCatalog(null, { ...bundle, state: { type: 'SOLD_OUT' } });
-    await user.click(await screen.findByRole('button', { name: 'View Sticker Pack' }));
+    await user.click(await screen.findByRole('button', { name: 'View Sticker Pack (Sold Out)' }));
     expect(screen.getByRole('button', { name: 'Out of Stock' })).toBeDisabled();
     expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method)).toBe(true);
   });
