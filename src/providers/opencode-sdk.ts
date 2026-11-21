@@ -560,6 +560,10 @@ interface OpenCodePromptError {
   assistant?: boolean;
 }
 
+function failedStatus(status: unknown): boolean {
+  return typeof status === 'number' && (status < 200 || status >= 300);
+}
+
 /**
  * The generated SDK resolves HTTP failures as `{ error, response }` instead of throwing, and a
  * completed prompt reports model-provider failures on the assistant message rather than its parts.
@@ -570,7 +574,7 @@ function getOpenCodePromptError(
   if (response && typeof response === 'object' && ('error' in response || 'response' in response)) {
     const { error, response: transport } = response;
     const status = transport?.status;
-    if (error != null || (typeof status === 'number' && (status < 200 || status >= 300))) {
+    if (error != null || failedStatus(status)) {
       return { error, status, headers: transport?.headers };
     }
   }
@@ -1204,8 +1208,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private sessions = new Map<string, OpenCodeSessionHandle>(); // cacheKey -> session, oldest first
   private readonly sessionsForCleanup = new Set<OpenCodeSessionHandle>();
   private sessionQueues = new Map<string, Promise<void>>();
-  private activeRemoteCalls = 0;
-  private readonly remoteSessionCreations = new Set<Promise<void>>();
+  private readonly remoteWork = new Set<Promise<unknown>>();
   private readonly remoteSessionAborts = new Set<() => Promise<void>>();
   private readonly processTermination = new AbortController();
   private processShutdown?: Promise<void>;
@@ -1315,12 +1318,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.processTermination.abort();
       const shutdown = Promise.allSettled([
         this.shutdown(),
-        this.waitForRemoteSessionCreations(),
+        this.waitForRemoteWork(),
         ...remoteAborts,
       ])
         .then(async () => {
           this.remoteSessionAborts.clear();
-          this.remoteSessionCreations.clear();
+          this.remoteWork.clear();
           if (this.server || this.pendingTempDirs.size) {
             await this.shutdown();
           }
@@ -1335,14 +1338,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return this.processShutdown;
   }
 
-  private async waitForRemoteSessionCreations(): Promise<void> {
-    if (!this.remoteSessionCreations.size) {
+  // Direct calls can outlive registry shutdown, and SDK creation can outlive
+  // a cancelled call. Wait for both under the same process-exit deadline.
+  private trackRemoteWork<T>(work: Promise<T>): Promise<T> {
+    this.remoteWork.add(work);
+    return work.finally(() => {
+      this.remoteWork.delete(work);
+      if (!this.remoteWork.size) {
+        this.updateRegistry();
+      }
+    });
+  }
+
+  private async waitForRemoteWork(): Promise<void> {
+    if (!this.remoteWork.size) {
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
-        Promise.allSettled([...this.remoteSessionCreations]),
+        Promise.allSettled([...this.remoteWork]),
         new Promise<void>((resolve) => {
           timer = setTimeout(resolve, SESSION_ABORT_TIMEOUT_MS);
         }),
@@ -1366,7 +1381,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private updateRegistry(): void {
     if (
       !this.processTermination.signal.aborted &&
-      (this.server || this.pendingTempDirs.size || this.activeRemoteCalls > 0)
+      (this.server || this.pendingTempDirs.size || this.remoteWork.size > 0)
     ) {
       providerRegistry.register(this);
     } else {
@@ -1875,11 +1890,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
         : client.session.delete({ ...parameters, signal })
       : client.session.delete(parameters));
     const envelope = asRecord(result);
+    const transport = asRecord(envelope?.response);
     if (
       result === false ||
       envelope?.data === false ||
-      envelope?.error ||
-      asRecord(envelope?.response)?.ok === false
+      envelope?.error != null ||
+      transport?.ok === false ||
+      failedStatus(transport?.status)
     ) {
       throw envelope?.error ?? new Error('OpenCode session deletion failed');
     }
@@ -1914,11 +1931,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<void> {
     try {
       if (this.processTermination.signal.aborted) {
-        await this.deleteCancelledSession(session, client);
+        if (!(await this.deleteCancelledSession(session, client))) {
+          this.sessionsForCleanup.add(session);
+        }
       } else {
         await this.deleteSession(session, client);
       }
     } catch (error) {
+      this.sessionsForCleanup.add(session);
       logger.debug(`Failed to delete non-persistent session ${session.id}`, {
         error: this.formatCallError(error, config),
       });
@@ -2210,13 +2230,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!processSignal) {
       return created;
     }
-    const settled = created.then(
-      () => {},
-      () => {},
-    );
-    this.remoteSessionCreations.add(settled);
-    void settled.then(() => this.remoteSessionCreations.delete(settled));
-    return this.waitForRequest(created, processSignal);
+    return this.waitForRequest(this.trackRemoteWork(created), processSignal);
   }
 
   private buildPromptBody(config: OpenCodeSDKConfig, prompt: string): Record<string, unknown> {
@@ -2642,14 +2656,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (this.processTermination.signal.aborted) {
       return { error: 'OpenCode SDK call aborted before it started' };
     }
-    const { config, inIsolatedWorkspace, isTempDir, workingDir } = this.prepareCall(context);
+    const prepared = this.prepareCall(context);
     // A running server can still report credentials from an earlier call.
-    this.rememberCredentials(config);
-    const remote = Boolean(config.baseUrl);
-    if (remote) {
-      this.activeRemoteCalls++;
-      providerRegistry.register(this);
+    this.rememberCredentials(prepared.config);
+    if (!prepared.config.baseUrl) {
+      return this.executeCall(prepared, prompt, context, callOptions);
     }
+    providerRegistry.register(this);
+    return this.trackRemoteWork(this.executeCall(prepared, prompt, context, callOptions));
+  }
+
+  private async executeCall(
+    { config, inIsolatedWorkspace, isTempDir, workingDir }: OpenCodePreparedCall,
+    prompt: string,
+    context?: CallApiContextParams,
+    callOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const remote = Boolean(config.baseUrl);
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let sessionClient: OpenCodeClient | undefined;
     let abortListener: (() => void) | undefined;
@@ -2819,9 +2842,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
       // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
         await this.removeTempDir(workingDir);
-      }
-      if (remote && --this.activeRemoteCalls === 0) {
-        this.updateRegistry();
       }
     }
   }

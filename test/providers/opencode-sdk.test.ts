@@ -2783,6 +2783,40 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it('waits for active remote deletion after a fast abort and retries a failed status', async () => {
+      const registry = isolateProcessRegistry();
+      const started = createDeferred<void>();
+      const deleting = createDeferred<void>();
+      const deletion = createDeferred<{ response: { status: number } }>();
+      mockSessionPrompt.mockImplementation((_parameters, options) => {
+        started.resolve();
+        return new Promise((_, reject) =>
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          }),
+        );
+      });
+      mockSessionAbort.mockResolvedValue({ data: true });
+      mockSessionDelete.mockImplementationOnce(() => {
+        deleting.resolve();
+        return deletion.promise;
+      });
+      const provider = new OpenCodeSDKProvider({ config: { baseUrl: 'http://remote.test' } });
+      const call = provider.callApi('pending');
+      await started.promise;
+      const completed = vi.fn();
+      const shutdown = registry.shutdownForProcess().then(completed);
+      await deleting.promise;
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(completed).not.toHaveBeenCalled();
+      deletion.resolve({ response: { status: 503 } });
+      await shutdown;
+      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+      expect(mockSessionDelete).toHaveBeenCalledOnce();
+      await provider.cleanup();
+      expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+    });
+
     it.each(['v1', 'v2'] as const)(
       'bounds unacknowledged %s process cancellation with a fresh transport',
       async (apiVersion) => {
