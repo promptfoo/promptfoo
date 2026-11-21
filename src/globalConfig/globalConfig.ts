@@ -11,74 +11,85 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { GlobalConfig } from '../configTypes';
 
+const CONFIG_FILE_MODE = 0o600;
+
 export function writeGlobalConfig(config: GlobalConfig): void {
-  let configPath = path.join(getConfigDirectoryPath(true), 'promptfoo.yaml');
-  // Replace the backing file, preserving relative, chained, and dangling config links.
-  for (
-    let links = 0;
-    fs.lstatSync(configPath, { throwIfNoEntry: false })?.isSymbolicLink();
-    links++
-  ) {
-    if (links === 40) {
-      throw new Error('Cannot write global config: too many symbolic links');
-    }
-    const target = fs.readlinkSync(configPath);
-    // Keep target components intact: a directory symlink followed by '..' must be
-    // traversed by the filesystem, not collapsed by path.resolve or path.join.
-    configPath = path.isAbsolute(target)
-      ? target
-      : `${fs.realpathSync(path.dirname(configPath))}${path.sep}${target}`;
+  const file = path.join(getConfigDirectoryPath(true), 'promptfoo.yaml');
+  const contents = yaml.dump(config);
+  if (process.platform === 'win32' || !config.cloud?.apiKey) {
+    fs.writeFileSync(file, contents, { mode: CONFIG_FILE_MODE });
+    return;
   }
-  const temporaryPath = `${configPath}.${crypto.randomUUID()}.tmp`;
-  const mode = fs.existsSync(configPath) ? fs.statSync(configPath).mode & 0o777 : 0o600;
+
+  // Replace the file so a reader holding an old, permissive inode cannot read a new key.
+  const existing = fs.statSync(file, { throwIfNoEntry: false });
+  if (!existing && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new Error('Create the global config symlink target before saving credentials.');
+  }
+  const target = existing ? fs.realpathSync(file) : file;
+  if (existing) {
+    if (!existing.isFile()) {
+      throw new Error('The global config must be a regular file to save credentials.');
+    }
+    fs.accessSync(target, fs.constants.W_OK);
+  }
+  const temporary = path.join(path.dirname(target), `.promptfoo-${crypto.randomUUID()}.tmp`);
+  const fd = fs.openSync(
+    temporary,
+    'wx',
+    existing ? existing.mode & CONFIG_FILE_MODE : CONFIG_FILE_MODE,
+  );
   try {
-    fs.writeFileSync(temporaryPath, yaml.dump(config), { mode, flag: 'wx' });
-    // Preserve existing permissions even when the process umask is more restrictive.
-    fs.chmodSync(temporaryPath, mode);
-    fs.renameSync(temporaryPath, configPath);
-  } finally {
-    fs.rmSync(temporaryPath, { force: true });
-  }
-}
-
-/** Read the latest config and persist only the caller's changes in one replacement. */
-export function updateGlobalConfig(update: (config: GlobalConfig) => void): void {
-  const config = readGlobalConfig();
-  update(config);
-  writeGlobalConfig(config);
-}
-
-/** Email verification belongs to the saved address, not to the installation. */
-export function updateAccountEmail(config: GlobalConfig, email?: string): void {
-  const account = (config.account ??= {});
-  if (email) {
-    if (account.email !== email) {
-      account.emailValidated = false;
-      account.emailNeedsValidation = true;
+    try {
+      if (existing && existing.uid !== process.geteuid?.()) {
+        fs.fchownSync(fd, existing.uid, existing.gid);
+      }
+      fs.writeFileSync(fd, contents);
+    } finally {
+      fs.closeSync(fd);
     }
-    account.email = email;
-  } else {
-    delete account.email;
-    delete account.emailValidated;
-    delete account.emailNeedsValidation;
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
   }
 }
 
 export function readGlobalConfig(): GlobalConfig {
-  const configDir = getConfigDirectoryPath();
-  const configFilePath = path.join(configDir, 'promptfoo.yaml');
-  let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
+  const configFilePath = path.join(getConfigDirectoryPath(), 'promptfoo.yaml');
+  let globalConfig: GlobalConfig = {};
   if (fs.existsSync(configFilePath)) {
-    globalConfig = (loadYaml(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
-    if (!globalConfig?.id) {
-      globalConfig = { ...globalConfig, id: crypto.randomUUID() };
-      writeGlobalConfig(globalConfig);
+    const fd = fs.openSync(configFilePath, 'r');
+    try {
+      globalConfig = (loadYaml(fs.readFileSync(fd, 'utf-8')) as GlobalConfig) || {};
+      if (process.platform !== 'win32' && globalConfig.cloud?.apiKey) {
+        restrictLegacyConfig(fd);
+      }
+    } finally {
+      fs.closeSync(fd);
     }
-  } else {
-    writeGlobalConfig(globalConfig);
   }
 
+  if (!globalConfig.id) {
+    globalConfig = { ...globalConfig, id: crypto.randomUUID() };
+    writeGlobalConfig(globalConfig);
+  }
   return globalConfig;
+}
+
+function restrictLegacyConfig(fd: number): void {
+  const { mode } = fs.fstatSync(fd);
+  if ((mode & 0o077) !== 0) {
+    try {
+      fs.fchmodSync(fd, mode & CONFIG_FILE_MODE);
+    } catch (error) {
+      // Permissions on operator-managed read-only configs must be set by the operator.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EROFS' && code !== 'EPERM' && code !== 'EACCES') {
+        throw error;
+      }
+    }
+  }
 }
 
 /**

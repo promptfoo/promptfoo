@@ -151,7 +151,9 @@ describe('PromptfooModelProvider', () => {
       text: () => Promise.resolve('Internal server error'),
     });
 
-    await expect(provider.callApi('test')).rejects.toThrow('PromptfooModel task API error: 500');
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'PromptfooModel task API error: HTTP 500',
+    );
   });
 
   it('should handle invalid API responses', async () => {

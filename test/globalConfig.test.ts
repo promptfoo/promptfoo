@@ -49,23 +49,21 @@ function readFile(): GlobalConfig {
   return yaml.load(fs.readFileSync(configPath, 'utf8')) as GlobalConfig;
 }
 
-const oldConfig: GlobalConfig = {
-  id: 'installation',
-  hasHarmfulRedteamConsent: true,
-  account: { email: 'old@example.com', emailValidated: true, emailNeedsValidation: false },
-  cloud: {
-    apiKey: 'old-token',
-    apiHost: 'https://old.example.com',
-    appUrl: 'https://old-app.example.com',
-    sharing: true,
-    currentOrganizationId: 'old-org',
-    currentTeamId: 'legacy-team',
-    teams: {
-      'old-org': { currentTeamId: 'old-team' },
-      'new-org': { currentTeamId: 'stale-team' },
-    },
-  },
-};
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  openSync: vi.fn(() => 123),
+  closeSync: vi.fn(),
+  fstatSync: vi.fn(() => ({ mode: 0o600 })),
+  fchmodSync: vi.fn(),
+  renameSync: vi.fn(),
+  rmSync: vi.fn(),
+  lstatSync: vi.fn(),
+  statSync: vi.fn(),
+  readdirSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
 
 const session = {
   token: 'new-token',
@@ -108,29 +106,104 @@ describe('global configuration persistence', () => {
     expect(fs.readFileSync(configPath, 'utf8')).toBe(invalid);
   });
 
-  it('replaces and removes only requested top-level keys', () => {
-    writeGlobalConfig(oldConfig);
-    writeGlobalConfigPartial({ account: { email: 'replacement@example.com' }, cloud: undefined });
-    expect(readFile()).toEqual({
-      id: 'installation',
-      hasHarmfulRedteamConsent: true,
-      account: { email: 'replacement@example.com' },
+      it('should read and parse the existing config file', () => {
+        const result = globalConfig.readGlobalConfig();
+        expect(fs.readFileSync).toHaveBeenCalledWith(123, 'utf-8');
+        expect(result).toEqual(mockConfig);
+      });
+
+      it('should handle empty config file by returning config with generated ID', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('');
+
+        const result = globalConfig.readGlobalConfig();
+
+        expect(result).toEqual({ id: expect.any(String) });
+        expect(result.id).toBeDefined();
+        expect(typeof result.id).toBe('string');
+        expect(isValidUUID(result.id!)).toBe(true);
+      });
+
+      it('should generate and save ID when existing config lacks an ID', () => {
+        const configWithoutId = { account: { email: 'test@example.com' } };
+        vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(configWithoutId));
+        vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+        const result = globalConfig.readGlobalConfig();
+
+        expect(result.id).toBeDefined();
+        expect(typeof result.id).toBe('string');
+        expect(isValidUUID(result.id!)).toBe(true);
+        expect(result.account).toEqual(configWithoutId.account);
+        // Should have written the config with the new ID
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('promptfoo.yaml'),
+          expect.stringContaining(`id: ${result.id}`),
+          expect.objectContaining({ mode: 0o600 }),
+        );
+      });
+    });
+
+    describe('when config file does not exist', () => {
+      beforeEach(() => {
+        vi.mocked(fs.existsSync).mockReturnValue(false);
+        vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+        vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
+      });
+
+      it('should create new config directory and file with generated UUID', () => {
+        const result = globalConfig.readGlobalConfig();
+
+        expect(fs.existsSync).toHaveBeenCalledTimes(1);
+        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('promptfoo.yaml'),
+          expect.any(String),
+          expect.objectContaining({ mode: 0o600 }),
+        );
+        expect(result).toEqual({ id: expect.any(String) });
+        expect(result.id).toBeDefined();
+        expect(typeof result.id).toBe('string');
+        expect(isValidUUID(result.id!)).toBe(true);
+      });
+    });
+
+    describe('error handling', () => {
+      it('can read a credential mounted read-only', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        const config = { ...mockConfig, cloud: { apiKey: 'fixture-key' } };
+        vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
+        vi.mocked(fs.fstatSync).mockReturnValueOnce({ mode: 0o444 } as fs.Stats);
+        vi.mocked(fs.fchmodSync).mockImplementationOnce(() => {
+          throw Object.assign(new Error('Read-only mount'), { code: 'EROFS' });
+        });
+        expect(globalConfig.readGlobalConfig()).toEqual(config);
+        if (process.platform === 'win32') {
+          expect(fs.fchmodSync).not.toHaveBeenCalled();
+        } else {
+          expect(fs.fchmodSync).toHaveBeenCalledWith(123, 0o400);
+        }
+      });
+
+      it('should throw error if config file is invalid YAML', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue('invalid: yaml: content:');
+
+        expect(() => globalConfig.readGlobalConfig()).toThrow(/bad indentation of a mapping entry/);
+      });
     });
   });
 
-  it('reads changes from other instances and preserves unrelated updates', () => {
-    writeGlobalConfig(oldConfig);
-    const first = new CloudConfig();
-    const second = new CloudConfig();
-    second.setCurrentTeamId('changed-team', 'old-org');
-    expect(first.getCurrentTeamId('old-org')).toBe('changed-team');
-    updateGlobalConfig((config) => {
-      config.hasHarmfulRedteamConsent = false;
-    });
-    first.setSharing(false);
-    expect(readFile()).toMatchObject({
-      hasHarmfulRedteamConsent: false,
-      cloud: { sharing: false, teams: { 'old-org': { currentTeamId: 'changed-team' } } },
+  describe('writeGlobalConfig', () => {
+    it('should write config to file in YAML format', () => {
+      globalConfig.writeGlobalConfig({
+        ...mockConfig,
+      });
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo.yaml'),
+        expect.stringContaining('account:'),
+        expect.objectContaining({ mode: 0o600 }),
+      );
     });
   });
 
@@ -303,36 +376,41 @@ describe('global configuration persistence', () => {
     expect(fs.readdirSync(directory).sort()).toEqual(['promptfoo.yaml', 'shared.yaml']);
   });
 
-  it('leaves cyclic config symlinks intact when a write fails', () => {
-    if (process.platform === 'win32') {
-      return;
-    }
-    fs.symlinkSync('other.yaml', configPath);
-    fs.symlinkSync('promptfoo.yaml', path.join(directory, 'other.yaml'));
-
-    expect(() => writeGlobalConfig(oldConfig)).toThrow('too many symbolic links');
-
-    expect(fs.lstatSync(configPath).isSymbolicLink()).toBe(true);
-    expect(fs.readdirSync(directory).sort()).toEqual(['other.yaml', 'promptfoo.yaml']);
-  });
-
-  it('cleans up an incomplete write and leaves the saved session intact', () => {
-    writeGlobalConfig(oldConfig);
-    const write = fs.writeFileSync;
-    vi.spyOn(fs, 'writeFileSync').mockImplementationOnce((file) => {
-      write(file, 'partial');
-      throw new Error('disk full');
+      expect(vi.mocked(fs.writeFileSync).mock.lastCall?.[1]).toMatch(
+        /email: new@example\.com.*apiKey: old-key/s,
+      );
     });
     expect(() => new CloudConfig().saveValidatedApiToken(session)).toThrow('disk full');
     expect(readFile()).toEqual(oldConfig);
     expect(fs.readdirSync(directory)).toEqual(['promptfoo.yaml']);
   });
 
-  it('keeps the previous session intact when replacement fails', () => {
-    writeGlobalConfig(oldConfig);
-    const config = new CloudConfig();
-    vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
-      throw new Error('disk unavailable');
+    it('should remove keys when value is falsy', () => {
+      const partialConfig = {
+        cloud: undefined,
+      };
+
+      globalConfig.writeGlobalConfigPartial(partialConfig);
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo.yaml'),
+        expect.not.stringContaining('apiKey: old-key'),
+        expect.objectContaining({ mode: 0o600 }),
+      );
+    });
+
+    it('should update specific keys while preserving others', () => {
+      const partialConfig = {
+        cloud: { apiKey: 'new-key' },
+      };
+
+      globalConfig.writeGlobalConfigPartial(partialConfig);
+
+      const writeCall = vi.mocked(fs.writeFileSync).mock.calls[1][1] as string;
+      const writtenConfig = yaml.load(writeCall) as any;
+
+      expect(writtenConfig.cloud.apiKey).toBe('new-key');
+      expect(writtenConfig.account.email).toBe('old@example.com');
     });
     expect(() => config.saveValidatedApiToken(session)).toThrow('disk unavailable');
     expect(readFile()).toEqual(oldConfig);

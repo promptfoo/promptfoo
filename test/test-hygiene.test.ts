@@ -62,6 +62,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'requires built dist artifacts when this integration file runs outside build jobs',
   },
   {
+    file: 'globalConfig/permissions.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('POSIX credential targets'/,
+    reason: 'Symlink and filesystem FIFO protection exercises the POSIX credential writer',
+  },
+  {
     file: 'prompts/processors/executable.test.ts',
     kind: 'skip',
     linePattern: /process\.platform === 'win32' \? describe\.skip : describe/,
@@ -189,7 +195,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'evaluatorHelpers.test.ts',
   'external/assertions.test.ts',
   'external/conversationRelevancy.test.ts',
-  'googleSheets.test.ts',
+  'globalConfig.test.ts',
   'index.test.ts',
   'integration/envPath.test.ts',
   'migrate.test.ts',

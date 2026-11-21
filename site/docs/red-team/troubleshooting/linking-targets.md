@@ -5,7 +5,7 @@ description: Link local custom providers to cloud targets in Promptfoo Cloud usi
 
 # Linking Local Targets to Cloud
 
-When using custom providers (Python, JavaScript, HTTP), link your local configuration to a cloud target using `linkedTargetId`. This consolidates findings from multiple eval runs into one dashboard, allowing you to track performance and vulnerabilities over time and view comprehensive reporting.
+When using custom providers (Python, JavaScript, HTTP), link your local configuration to a cloud target using `linkedTargetId`. This groups findings from multiple eval runs under the same target in the dashboard.
 
 ## How to Link Targets
 
