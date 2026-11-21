@@ -4,10 +4,11 @@ import cliState from '../../src/cliState';
 import { providersCommand } from '../../src/commands/providers';
 import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
-import { getDefaultProviders } from '../../src/providers/defaults';
+import { inspectDefaultProviders } from '../../src/providers/defaults';
 
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 vi.mock('../../src/logger', () => ({ default: { info: vi.fn(), error: vi.fn() } }));
-vi.mock('../../src/providers/defaults', () => ({ getDefaultProviders: vi.fn() }));
+vi.mock('../../src/providers/defaults', () => ({ inspectDefaultProviders: vi.fn() }));
 
 describe('providers command', () => {
   const originalExitCode = process.exitCode;
@@ -20,7 +21,7 @@ describe('providers command', () => {
     process.exitCode = undefined;
     program = new Command();
     providersCommand(program, { env: { ANTHROPIC_API_KEY: 'configured-key' } });
-    vi.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(inspectDefaultProviders).mockResolvedValue({
       embeddingProvider: provider,
       gradingJsonProvider: provider,
       gradingProvider: provider,
@@ -38,7 +39,7 @@ describe('providers command', () => {
   it('shows the resolved slots without printing config or making model calls', async () => {
     await program.parseAsync(['node', 'test', 'providers']);
 
-    expect(getDefaultProviders).toHaveBeenCalledExactlyOnceWith({
+    expect(inspectDefaultProviders).toHaveBeenCalledExactlyOnceWith({
       ANTHROPIC_API_KEY: 'configured-key',
     });
     const output = vi.mocked(logger.info).mock.calls.flat().join('\n');
@@ -60,8 +61,8 @@ describe('providers command', () => {
   });
 
   it('includes optional assignments and omits absent slots', async () => {
-    const defaults = await getDefaultProviders();
-    vi.mocked(getDefaultProviders).mockResolvedValue({
+    const defaults = await inspectDefaultProviders();
+    vi.mocked(inspectDefaultProviders).mockResolvedValue({
       ...defaults,
       llmRubricProvider: { ...provider, id: () => 'test:rubric' },
       webSearchProvider: undefined,
@@ -75,8 +76,8 @@ describe('providers command', () => {
   });
 
   it('scopes config environment overrides to provider resolution', async () => {
-    const defaults = await getDefaultProviders();
-    vi.mocked(getDefaultProviders).mockImplementation(async () => {
+    const defaults = await inspectDefaultProviders();
+    vi.mocked(inspectDefaultProviders).mockImplementation(async () => {
       expect(getEnvString('ANTHROPIC_API_KEY')).toBe('configured-key');
       return defaults;
     });
@@ -88,7 +89,7 @@ describe('providers command', () => {
 
   it('reports resolution errors and exits unsuccessfully', async () => {
     const error = new Error('Unavailable provider defaults');
-    vi.mocked(getDefaultProviders).mockRejectedValue(error);
+    vi.mocked(inspectDefaultProviders).mockRejectedValue(error);
 
     await program.parseAsync(['node', 'test', 'providers']);
 

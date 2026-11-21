@@ -598,6 +598,7 @@ function buildCodexRateLimitResponse(
   };
 }
 
+export const DEFAULT_CODEX_SDK_ID = 'openai:codex-sdk';
 export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.170.0';
 
 export function resolveCodexSdkPackage(): string | null {
@@ -702,7 +703,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   env?: EnvOverrides;
   apiKey?: string;
 
-  private providerId = 'openai:codex-sdk';
+  private providerId = DEFAULT_CODEX_SDK_ID;
   private codexSdk?: { module: any; entryPoint: string };
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();

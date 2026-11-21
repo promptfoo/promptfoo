@@ -11,6 +11,7 @@ import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import {
   CODEX_SDK_VERSION_RANGE,
+  DEFAULT_CODEX_SDK_ID,
   OpenAICodexSDKProvider,
   resolveCodexSdkPackage,
 } from './codex-sdk';
@@ -44,24 +45,24 @@ const CODEX_GRADING_OUTPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-type CodexDefaultProviders = Pick<
-  DefaultProviders,
-  | 'gradingJsonProvider'
-  | 'gradingProvider'
-  | 'llmRubricProvider'
-  | 'suggestionsProvider'
-  | 'synthesizeProvider'
-  | 'webSearchProvider'
->;
+function codexAssignments<T>(gradingProvider: T, gradingJsonProvider: T, webSearchProvider: T) {
+  return {
+    gradingJsonProvider,
+    gradingProvider,
+    llmRubricProvider: gradingJsonProvider,
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+    webSearchProvider,
+  };
+}
 
-type CodexDefaultProviderBundle = {
-  gradingJsonProvider: OpenAICodexSDKProvider;
-  gradingProvider: OpenAICodexSDKProvider;
-  llmRubricProvider: OpenAICodexSDKProvider;
-  suggestionsProvider: OpenAICodexSDKProvider;
-  synthesizeProvider: OpenAICodexSDKProvider;
-  webSearchProvider: OpenAICodexSDKProvider;
-};
+type CodexDefaultProviderBundle = ReturnType<typeof codexAssignments<OpenAICodexSDKProvider>>;
+type CodexDefaultProviders = Pick<DefaultProviders, keyof CodexDefaultProviderBundle>;
+
+export function inspectCodexDefaultProviders() {
+  const descriptor = { id: () => DEFAULT_CODEX_SDK_ID };
+  return codexAssignments(descriptor, descriptor, descriptor);
+}
 
 // Bundle lifecycle (FSM). State transitions live in
 // requestCodexDefaultProviderBundleShutdown / scheduleCodexDefaultProviderBundleShutdown
@@ -403,13 +404,8 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
   const providers: ManagedCodexDefaultProviderBundle = {
     activeCalls: 0,
     cancelled: false,
-    gradingJsonProvider,
-    gradingProvider,
-    llmRubricProvider: gradingJsonProvider,
     shutdownRequested: false,
-    suggestionsProvider: gradingProvider,
-    synthesizeProvider: gradingProvider,
-    webSearchProvider,
+    ...codexAssignments(gradingProvider, gradingJsonProvider, webSearchProvider),
   };
   trackCodexDefaultProviderUsage(providers);
   return cacheCodexDefaultProviders(cacheKey, providers);
