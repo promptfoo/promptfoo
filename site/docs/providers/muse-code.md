@@ -1,6 +1,6 @@
 ---
 title: Muse Code
-description: Evaluate Meta's Muse Code CLI with workspace files, native agent tools, model and permission controls, session reuse, and structured execution events.
+description: Evaluate Meta's Muse Code CLI with workspace files, native agent tools, model and permission controls, and session reuse.
 sidebar_position: 42
 ---
 
@@ -8,15 +8,13 @@ sidebar_position: 42
 
 The `muse-code` provider runs [Meta's Muse Code](https://dev.meta.ai/docs/muse-code) coding agent through `muse exec --json`. It evaluates the installed agent, including its file tools and project context. For direct model requests, use the [Meta Model API provider](./meta.md).
 
-Requires Muse Code 1.0.2 or later. Install and authenticate before running an eval. On macOS or Linux:
+Install Muse Code 1.0.2 or later on macOS or Linux using the [official guide](https://dev.meta.ai/docs/muse-code). Check your installed version before running an eval.
 
 ```bash
-curl -fsSL https://dev.meta.ai/install.sh | sh
 muse --version
-export META_API_KEY="your-api-key"
 ```
 
-An existing Muse Code login also works. `config.apiKey` takes precedence over `config.env.META_API_KEY`, provider environment overrides, and the process's `META_API_KEY`. Without an explicit key, Muse Code resolves its stored credentials. Muse Code uses `META_API_KEY`; the direct Meta Model API provider uses `MODEL_API_KEY`.
+Sign in with Muse Code or set `META_API_KEY` in the environment of the Promptfoo process. Custom endpoints, inline keys, child `env` and suite or provider overrides for `META_API_KEY` and `MUSE_CLI_PATH` are rejected. The direct Meta Model API provider uses `MODEL_API_KEY`.
 
 ## Quick start
 
@@ -52,43 +50,40 @@ Use `muse-code:<model>` or `config.model` to select a model, for example `muse-c
 
 ## Configuration
 
-| Option                        | Type    | Description                                                                                                     |
-| ----------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `apiKey`                      | string  | Meta API key. Omit to use environment credentials or an existing Muse Code login.                               |
-| `muse_path`                   | string  | Path to the installed executable. Defaults to `MUSE_CLI_PATH`, then `muse` on `PATH`.                           |
-| `working_dir`                 | string  | Workspace, resolved relative to the config file. Defaults to a new temporary directory for each call.           |
-| `model`                       | string  | Model ID. Omit to use Muse Code's default.                                                                      |
-| `base_url`                    | string  | Custom provider endpoint, passed as `--base-url`. Must not contain credentials; use `apiKey` or `META_API_KEY`. |
-| `reasoning_effort`            | string  | `minimal`, `low`, `medium`, `high`, `xhigh`, or `ultra`. Omit to use Muse Code's default.                       |
-| `approval_mode`               | string  | `untrusted`, `on-request`, or `never`. Omit to keep Muse Code's approval policy.                                |
-| `approval_judge`              | boolean | Enable or disable Muse Code's automatic approval judge.                                                         |
-| `sandbox_network`             | string  | `proxy-only`, `restricted`, or `enabled`. Omit to keep Muse Code's network policy.                              |
-| `disable_shell`               | boolean | Disable shell execution.                                                                                        |
-| `disable_write`               | boolean | Disable writes by non-shell file tools. Combine with `disable_shell` for a read-only workspace eval.            |
-| `disable_web_tools`           | boolean | Disable Muse Code's web tools.                                                                                  |
-| `disable_sandbox`             | boolean | Disable native sandboxing and file-tool confinement. Omit to keep Muse Code's sandbox policy.                   |
-| `trust_workspace`             | boolean | Load project rules, skills, and hooks for this run. Does not disable the sandbox.                               |
-| `no_foreign_personal_context` | boolean | Exclude personal rules and skills imported from other coding agents.                                            |
-| `session_id`                  | string  | Resume a UUID returned earlier by the same provider instance. Requires `working_dir` and retained session logs. |
-| `no_session_log`              | boolean | Disable Muse's retained session state. Defaults to true for new sessions and false with `session_id`.           |
-| `max_model_steps`             | number  | Positive limit on the model steps in a run.                                                                     |
-| `timeout_ms`                  | number  | Process timeout in milliseconds. Defaults to `300000` (5 minutes).                                              |
-| `max_output_bytes`            | number  | Combined stdout/stderr limit. Defaults to 10 MiB. Exceeding it stops the run with an error.                     |
-| `env`                         | object  | Additional environment variables for the child process.                                                         |
+| Option                        | Type    | Description                                                                                                              |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `muse_path`                   | string  | Path to the installed executable. Defaults to `MUSE_CLI_PATH`, then `muse` on `PATH`.                                    |
+| `working_dir`                 | string  | Workspace, resolved relative to the config file. Defaults to a new temporary directory for each call.                    |
+| `model`                       | string  | Model ID. Omit to use Muse Code's default.                                                                               |
+| `reasoning_effort`            | string  | `minimal`, `low`, `medium`, `high`, `xhigh`, or `ultra`. Omit to use Muse Code's default.                                |
+| `approval_mode`               | string  | `untrusted`, `on-request`, or `never`. Omit to keep Muse Code's approval policy.                                         |
+| `approval_judge`              | boolean | Enable or disable Muse Code's automatic approval judge.                                                                  |
+| `sandbox_network`             | string  | `proxy-only`, `restricted`, or `enabled`. Defaults to `restricted`.                                                      |
+| `disable_shell`               | boolean | Disable shell execution. Defaults to `true`.                                                                             |
+| `disable_write`               | boolean | Disable writes by non-shell file tools. Combine with `disable_shell` for a read-only workspace eval. Defaults to `true`. |
+| `disable_web_tools`           | boolean | Disable Muse Code's web tools. Defaults to `true`.                                                                       |
+| `disable_sandbox`             | boolean | Disable native sandboxing and file-tool confinement. Omit to keep Muse Code's sandbox policy.                            |
+| `trust_workspace`             | boolean | Load project rules, skills, and hooks for this run. Does not disable the sandbox.                                        |
+| `no_foreign_personal_context` | boolean | Exclude personal rules and skills imported from other coding agents. Defaults to `true`.                                 |
+| `session_id`                  | string  | Resume a UUID returned earlier by the same provider instance. Requires `working_dir` and retained session logs.          |
+| `no_session_log`              | boolean | Disable Muse's retained session state. Defaults to true for new sessions and false with `session_id`.                    |
+| `max_model_steps`             | number  | Positive limit on the model steps in a run.                                                                              |
+| `timeout_ms`                  | number  | Process timeout in milliseconds. Defaults to `300000` (5 minutes).                                                       |
+| `max_output_bytes`            | number  | Combined stdout/stderr limit. Defaults to 10 MiB. Exceeding it stops the run with an error.                              |
 
-Prompt-level configuration overrides provider-level configuration. String values can use test variables such as `model: '{{model}}'` or `reasoning_effort: '{{effort}}'`. Constrained values are validated after rendering.
+Only `model`, `reasoning_effort` and `session_id` accept prompt-level overrides and simple test variable references such as `model: '{{model}}'`. Promptfoo validates their values after rendering. Executable, permission and workspace options belong in trusted provider configuration.
 
 ## Workspaces and permissions
 
-Muse Code can edit files and run commands. Promptfoo inherits its native sandbox and approval policy unless you override them in provider configuration. Review your Muse settings before running an eval. With an explicit `working_dir`, workspace changes persist after the eval. Without one, Promptfoo creates and removes a temporary workspace for each call.
+Promptfoo disables shell execution, file writes, web tools and foreign personal context by default. It restricts sandbox networking and keeps Muse Code's sandbox and approval policy. Run trusted projects and review your installed CLI's settings, including MCP tools. See Meta's [permissions guide](https://dev.meta.ai/docs/muse-code/permissions).
 
-Set `evaluateOptions.maxConcurrency: 1` for calls that can modify the same workspace; overlapping calls are rejected before Muse starts.
+Changes in an explicit `working_dir` persist. Set `evaluateOptions.maxConcurrency: 1` when enabling shell, writes or project hooks. Promptfoo rejects overlapping mutating calls on the same workspace. Without `working_dir`, each call gets a temporary directory.
 
-For read-only evals, set both `disable_shell: true` and `disable_write: true`. Shell sandbox network settings do not disable web or MCP tools. See Meta's [permissions guide](https://dev.meta.ai/docs/muse-code/permissions) for the boundaries of each option.
+When you use Muse Code as an `agent-rubric` grader, it can inspect a live workspace copy created by the evaluator. Other per-test workspace paths are rejected.
 
-Promptfoo always enables `--user-input-auto-resolve`, which cancels clarification questions in headless mode. This does not grant tool approval. A run that still needs human approval may remain pending until `timeout_ms`; configure `approval_mode: never` when you explicitly want unattended tool execution within the native sandbox.
+The headless CLI cancels clarification questions. Tools requiring human approval may wait until `timeout_ms`.
 
-The child receives a small environment containing OS paths, locale, XDG directories, proxy/certificate settings, and Muse credentials. Other process environment variables are not inherited automatically; pass required values through `config.env`. Promptfoo resolves the Muse executable before starting it in the workspace, using absolute `PATH` entries outside the workspace, config directory, current directory, and containing Git repositories. This also checks resolved symlink targets. Set `muse_path` to explicitly select a trusted executable or wrapper, including a local installation inside one of those directories. The Muse launcher is started with automatic updates disabled so an eval uses the installed binary.
+The child receives the process key, selected OS, locale, certificate and login paths, and a filtered `PATH`. Executables and search directories must be outside the workspace, config directory, current directory and their Git repositories. This also applies to explicitly configured executables and symlink targets. A trusted absolute search directory is required. Automatic CLI updates are disabled.
 
 ## Sessions and results
 
@@ -102,23 +97,9 @@ Promptfoo removes its temporary prompt files and terminates the CLI, including i
 
 If output pipes remain open after termination, Promptfoo closes them after a one-second cleanup grace period and returns an error.
 
-The response contains:
+The response includes the final `output`, `sessionId` and `metadata.runId`. Promptfoo omits the raw journal and process stderr. It redacts the current process key and keys used in earlier turns before tracing and returning the response. Muse Code manages its own stored credentials.
 
-- `output`: the current run's final assistant text.
-- `sessionId` and `metadata.runId`: native identifiers for the session and run.
-- `raw`: the parsed Muse Code JSONL journal, when the child received no explicit credentials.
-
-Promptfoo redacts known credential values before tracing, saving, or sharing results.
-This covers the child environment, credentials in URLs, and credentials from earlier
-turns of a resumed session. Raw journal data is omitted whenever credentials are
-present or prompt/output stripping is enabled.
-
-Saved configs preserve simple variable references, including `trim` and `urlencode`
-filters, and credential-file paths. Literal credentials and template fallbacks are
-redacted. Keep credentials out of `base_url`, which is passed in process arguments;
-use `apiKey`, `META_API_KEY`, or an existing Muse Code login.
-
-Nonzero exits, failed or cancelled terminal events, malformed JSONL, and missing completion events produce provider errors. Intermediate output and subagent completions do not count as a completed root run. An agent completing successfully does not prove its answer or code is correct; use assertions and project tests to check the result.
+Nonzero exits, failed or cancelled runs, malformed JSONL and missing completion events are errors. Only the current root run can provide the final answer. Use assertions and project tests to check it.
 
 Tracing records the provider call. Token usage, costs, and individual tool spans are not currently normalized from Muse Code's journal.
 

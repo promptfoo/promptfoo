@@ -332,8 +332,8 @@ fresh sessions without retained logs by default. Explicit session reuse requires
 a stable workspace and serial calls. Cancellation, timeouts, and output limits
 stop the process and clean up temporary files.
 
-Results include final root-run text and session/run IDs. Raw journals are omitted
-when the child receives credentials or prompt/output stripping is enabled. Missing
+Results include final root-run text and session/run IDs. Journals and stderr stay
+out of responses. The agent uses a stored login or the process key. Missing
 completion events and runtime failures are errors. Response caching and retries are
 disabled. Tracing covers the provider call; token usage, costs, and individual tool
 spans are not yet normalized. See `site/docs/providers/muse-code.md` and
