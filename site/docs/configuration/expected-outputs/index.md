@@ -231,6 +231,8 @@ In this example, the `equals` assertion is twice as important as the `contains` 
 
 If the LLM output is `Goodbye world`, the `equals` assertion fails but the `contains` assertion passes, and the final score is 0.33 (1/3).
 
+An assertion with `weight: 0` records its score without failing the test: the measured score still lands in `namedScores` for reporting, but the assertion never makes the test case fail. This holds for redteam assertions too, which is how you keep an attack grade as a measurement instead of a failing result.
+
 ### Setting a score requirement
 
 Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions is greater than or equal to the threshold value. This can override individual assertion verdicts. Omit the test-level threshold to require every nonzero-weight assertion to pass.
