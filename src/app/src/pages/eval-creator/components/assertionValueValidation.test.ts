@@ -341,6 +341,34 @@ describe('structured value assertions', () => {
 });
 
 describe('required string assertions', () => {
+  it.each(['javascript', 'not-javascript', 'python', 'not-python', 'ruby', 'not-ruby'] as const)(
+    'accepts script files with optional call-site values for %s',
+    (type) => {
+      for (const value of [undefined, '', 10, ['expected', 5], { expected: '{{ expected }}' }]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, script: 'file://checks/assert.js', value })),
+        ).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(['', './checks/assert.js', 'https://example.com/assert.js'])(
+    'rejects an invalid script reference %j even when an inline value exists',
+    (script) => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'javascript', script, value: 'true' })),
+      ).toMatch(/script file reference starting with file:\/\//);
+    },
+  );
+
+  it('rejects script files on unsupported assertion types', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'contains', script: 'file://checks/assert.js', value: 'expected' }),
+      ),
+    ).toMatch(/only supported for JavaScript, Python, and Ruby/);
+  });
+
   it('points the user at the right field for select-best, webhook, finish-reason, and friends', () => {
     expect(getRunnableAssertionValueError(make({ type: 'select-best', value: '' }))).toMatch(
       /criteria for selecting/,
