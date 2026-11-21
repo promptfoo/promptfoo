@@ -190,9 +190,8 @@ export function evalCommand(
         if (command.getOptionValueSource('cache') !== 'cli') {
           delete optsWithAliases.cache;
         }
-        // A fresh eval with an explicit config gets its write default from that config.
+        // Resolve the write default from the active config on each fresh run, including watch reruns.
         if (
-          optsWithAliases.config?.length &&
           !optsWithAliases.resume &&
           !optsWithAliases.retryErrors &&
           command.getOptionValueSource('write') !== 'cli'

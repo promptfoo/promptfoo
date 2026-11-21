@@ -1299,9 +1299,10 @@ describe('evaluateOptions behavior', () => {
       { configuredWrite: false, args: [], expectedWrite: false },
       { configuredWrite: true, args: ['--no-write'], expectedWrite: false },
       { configuredWrite: undefined, args: [], expectedWrite: true },
+      { startupWrite: false, configuredWrite: undefined, args: [], expectedWrite: true },
     ])(
       'honors write settings from the selected eval config (%j)',
-      async ({ configuredWrite, args, expectedWrite }) => {
+      async ({ startupWrite, configuredWrite, args, expectedWrite }) => {
         const config = writeTempConfig(tmpDir, 'selected-write.yaml', {
           prompts: ['Hello'],
           providers: ['echo'],
@@ -1310,7 +1311,7 @@ describe('evaluateOptions behavior', () => {
         const create = vi.spyOn(Eval, 'create').mockResolvedValue(new Eval({}));
         try {
           const program = new Command();
-          evalCommand(program, {}, undefined);
+          evalCommand(program, { commandLineOptions: { write: startupWrite } }, undefined);
           await program.parseAsync(['eval', '-c', config, '--no-table', ...args], { from: 'user' });
 
           expect(evaluateMock).toHaveBeenCalledOnce();
