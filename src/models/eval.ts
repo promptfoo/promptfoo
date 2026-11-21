@@ -14,7 +14,7 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { AGENT_OUTCOME_PLUGINS, PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
@@ -1811,6 +1811,36 @@ export default class Eval {
   }
 }
 
+// Prompt metrics combine attacks and controls. Seek candidate reports through the
+// plugin ID index, then aggregate final verdicts by eval ID, including mixed-plugin scans.
+async function getAgentReportRates(evalIds: string[]): Promise<Map<string, number | undefined>> {
+  const db = await getDb();
+  const isOutcome = sql`json_extract(metadata, '$.pluginId') IN (${sql.join([...AGENT_OUTCOME_PLUGINS], sql`, `)})`;
+  const isAttack = sql`
+    failure_reason != ${ResultFailureReason.ERROR}
+    AND CASE WHEN ${isOutcome} THEN
+      COALESCE(json_extract(test_case, '$.metadata.agentOutcome.variant'), 'attack') NOT IN ('control', 'authorized')
+    ELSE 1 END
+  `;
+  const rows = await db.all<{ eval_id: string; attempts: number; failures: number }>(sql`
+    SELECT eval_id,
+      COUNT(*) FILTER (WHERE ${isAttack}) AS attempts,
+      COUNT(*) FILTER (WHERE success = 0 AND ${isAttack}) AS failures
+    FROM eval_results
+    WHERE eval_id IN (
+      SELECT eval_id FROM eval_results
+      WHERE ${isOutcome} AND eval_id IN (SELECT value FROM json_each(${JSON.stringify(evalIds)}))
+    )
+    GROUP BY eval_id
+  `);
+  return new Map(
+    rows.map(({ eval_id, attempts, failures }) => [
+      eval_id,
+      attempts ? calculateAttackSuccessRate(attempts, failures) : undefined,
+    ]),
+  );
+}
+
 /**
  * Queries summaries of all evals, optionally for a given dataset.
  *
@@ -1858,12 +1888,11 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
-  /**
-   * Deserialize the evals. A few things to note:
-   *
-   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
-   * that's written to the evals table.
-   */
+  const agentReportRates =
+    type === 'redteam' && results.length > 0
+      ? await getAgentReportRates(results.map((result) => result.evalId))
+      : undefined;
+
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
@@ -1889,6 +1918,8 @@ export async function getEvalSummaries(
 
     // Test count * prompt count
     const testRunCount = testCount * (result.prompts?.length ?? 0);
+    const rateFromPromptMetrics =
+      type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined;
 
     // Construct an array of providers
     const deserializedProviders = [];
@@ -1944,8 +1975,9 @@ export async function getEvalSummaries(
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
-      attackSuccessRate:
-        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
+      attackSuccessRate: agentReportRates?.has(result.evalId)
+        ? agentReportRates.get(result.evalId)
+        : rateFromPromptMetrics,
     };
   });
 }

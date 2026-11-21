@@ -28,14 +28,17 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
-  it('saves the attack source and separate tool input for an indirect test', async () => {
+  it('validates the indirect task against the scan limit and preserves the local limit', async () => {
     const user = userEvent.setup();
     const plugin = 'agentic:private-to-public-disclosure';
+    mockUseRedTeamConfig.mockReturnValue({
+      config: { ...defaultRedTeamConfig, maxCharsPerMessage: 8 },
+    });
     render(
       <PluginConfigDialog
         open
         plugin={plugin}
-        config={{}}
+        config={{ maxCharsPerMessage: 100 }}
         onClose={mockOnClose}
         onSave={mockOnSave}
       />,
@@ -48,13 +51,17 @@ describe('PluginConfigDialog - OSS', () => {
     );
     expect(screen.queryByText('Grading Guidance (Optional)')).toBeNull();
     await user.click(screen.getByRole('radio', { name: 'Indirect via tool' }));
-    await user.type(screen.getByLabelText(/User task for indirect tests/), 'Triage ticket 84');
+    const task = screen.getByLabelText(/User task for indirect tests/);
+    expect(task).toHaveAccessibleDescription(/8 characters/);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.type(task, 'Triage.');
     await user.type(screen.getByLabelText('Variable for third-party content'), 'ticket');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(mockOnSave).toHaveBeenCalledWith(plugin, {
       mode: 'indirect',
-      legitimateTask: 'Triage ticket 84',
+      maxCharsPerMessage: 100,
+      legitimateTask: 'Triage.',
       indirectInjectionVar: 'ticket',
     });
   });
