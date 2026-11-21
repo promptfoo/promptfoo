@@ -39,11 +39,7 @@ export async function prepareGeminiRequest(
     },
   );
 
-  // A prompt can disable calling with a different alias from the provider default.
-  const promptPolicy = promptConfig && resolveGoogleToolConfig(promptConfig);
-  const { toolConfig, toolsDisabled } = promptPolicy?.toolConfig?.functionCallingConfig?.mode
-    ? promptPolicy
-    : resolveGoogleToolConfig(config);
+  const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
   const allTools = await getTools({
     skipExecutableToolFiles: toolsDisabled,
   });

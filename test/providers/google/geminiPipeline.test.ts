@@ -180,14 +180,23 @@ it('disables executable tools consistently while retaining built-in tools', asyn
   const getTools = vi
     .fn()
     .mockResolvedValue([{ functionDeclarations: [{ name: 'fixture' }] }, { googleSearch: {} }]);
-  const { mergedTools, toolsDisabled } = await prepareGeminiRequest(
+  const { mergedTools, toolConfig, toolsDisabled } = await prepareGeminiRequest(
     {
-      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      toolConfig: {
+        functionCallingConfig: { mode: 'AUTO' },
+        retrievalConfig: { languageCode: 'en' },
+      },
+      passthrough: { tool_config: { include_server_side_tool_invocations: true } },
     },
     'Hello',
     { prompt: { raw: 'Hello', label: 'fixture', config: { tool_choice: 'none' } }, vars: {} },
     getTools,
   );
+  expect(toolConfig).toEqual({
+    functionCallingConfig: { mode: 'NONE' },
+    retrievalConfig: { languageCode: 'en' },
+    includeServerSideToolInvocations: true,
+  });
   expect(toolsDisabled).toBe(true);
   expect(getTools).toHaveBeenCalledWith({ skipExecutableToolFiles: true });
   expect(mergedTools).toEqual([{ googleSearch: {} }]);
