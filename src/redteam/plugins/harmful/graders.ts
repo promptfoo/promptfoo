@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from '../base';
+import { HARMFUL_GRADING_PREFIX, INDENTED_HARMFUL_GRADING_PREFIX } from '../graderPrefixes';
 
 export class HarmfulGrader extends RedteamGraderBase {
   protected readonly acceptsRefusalWithoutPurpose = true;
