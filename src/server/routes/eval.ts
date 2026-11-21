@@ -7,7 +7,7 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
-import { resolveProviderConfigs } from '../../providers/index';
+import { getNamedOpenAiTextId, resolveProviderConfigs } from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
 import {
   getCloudDatabaseId,
@@ -663,6 +663,9 @@ function prepareReplayCandidate<T>(provider: T) {
   if (TEMPLATE_MARKER.test(path)) {
     options = replayEcho(path, options);
     path = 'echo';
+  } else if (ref.kind === 'named' && !isCloudProvider(path)) {
+    // A bare string has no saved prompt filters. Wrapping it would override the native ID.
+    return provider;
   } else if (options?.label && TEMPLATE_MARKER.test(options.label)) {
     const key = replayEnvKey(options.label);
     const label = options.env && Object.hasOwn(options.env, key) ? options.env[key] : undefined;
@@ -707,11 +710,13 @@ async function matchReplayTarget(
         config: { ...cloud.provider.config, ...cloud.options.config },
       })
     : ref;
-  // HttpProvider.id() returns the effective URL, even when an alias names another URL.
-  const identity =
-    'loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)
-      ? target.loadOptions.config?.url || target.loadProviderPath
-      : target.id;
+  let identity = target.id;
+  if (target.kind === 'named') {
+    identity = getNamedOpenAiTextId(target.id) ?? target.id;
+  } else if ('loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)) {
+    // HttpProvider.id() returns the effective URL, even when an alias names another URL.
+    identity = target.loadOptions.config?.url || target.loadProviderPath;
+  }
   if (column && column !== (target.label || identity)) {
     return;
   }

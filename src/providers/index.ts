@@ -570,3 +570,5 @@ export function getProviderIds(providerPaths: ProvidersConfig): string[] {
   }
   throw new Error('Invalid providers list');
 }
+
+export { getNamedOpenAiTextId } from './registry';

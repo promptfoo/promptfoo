@@ -101,7 +101,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     },
   );
 
-  it.each(['echo', 'openai:chat:example-model', 'openai:codex-security-other'])(
+  it.each(['echo', 'openai:gpt-4.1', 'openai:codex-security-other'])(
     'preserves an ordinary selected provider in a mixed evaluation: %j',
     async (provider) => {
       storedConfig(['openai:codex-security', provider]);
@@ -110,7 +110,7 @@ describe('POST /api/eval/replay provider boundary', () => {
       expect(response.body.output).toBe('replayed');
       expect(evaluate).toHaveBeenCalledWith(
         expect.objectContaining({
-          providers: [{ id: provider, prompts: ['Replay'] }],
+          providers: [provider],
           prompts: [{ raw: 'edited prompt', label: 'Replay' }],
           tests: [{ vars: { name: 'example' } }],
         }),
@@ -119,6 +119,25 @@ describe('POST /api/eval/replay provider boundary', () => {
     },
   );
 
+  it.each(['openai:chat:gpt-4.1', 'openai:responses:gpt-4.1', 'openai:chat', 'openai:responses'])(
+    'preserves the native column ID and endpoint for %s',
+    async (provider) => {
+      const [named, explicit] = await loadApiProviders([provider, { id: provider }]);
+      expect(named.id()).not.toBe(explicit.id());
+      storedConfig([provider, { id: provider }], undefined, [named.id(), explicit.id()]);
+      expect((await replay(0, 0)).status).toBe(200);
+      expect(evaluate.mock.calls[0][0].providers).toEqual([provider]);
+      expect((await replay(0, 1)).status).toBe(200);
+      expect(evaluate.mock.calls[1][0].providers).toEqual([{ id: provider, prompts: ['Replay'] }]);
+    },
+  );
+
+  it('rejects overlapping named OpenAI endpoints and shorthand IDs', async () => {
+    storedConfig(['openai:responses:gpt-4.1', 'openai:gpt-4.1'], undefined, ['openai:gpt-4.1']);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it.each([0, 1, 7])('selects by prompt column independently of test row %s', async (testIndex) => {
     storedConfig(['openai:codex-security', 'echo'], undefined, [
       'openai:codex-security',
@@ -126,7 +145,7 @@ describe('POST /api/eval/replay provider boundary', () => {
       'echo',
     ]);
     expect((await replay(testIndex, 2)).status).toBe(200);
-    expect(evaluate.mock.calls[0][0].providers).toEqual([{ id: 'echo', prompts: ['Replay'] }]);
+    expect(evaluate.mock.calls[0][0].providers).toEqual(['echo']);
     expect((await replay(testIndex, 1)).status).toBe(400);
   });
 
@@ -371,7 +390,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     const missing = 'promptfoo://provider/unavailable';
     storedConfig(['echo', missing], undefined, ['echo', 'Cloud target']);
     expect((await replay(0, 0)).status).toBe(200);
-    expect(evaluate.mock.calls[0][0].providers).toEqual([{ id: 'echo', prompts: ['Replay'] }]);
+    expect(evaluate.mock.calls[0][0].providers).toEqual(['echo']);
     expect((await replay(0, 1)).status).toBe(400);
 
     storedConfig(['echo', { id: missing, label: 'echo' }]);

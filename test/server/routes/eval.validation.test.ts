@@ -299,7 +299,7 @@ describe('Eval Routes - Zod Validation', () => {
     it.each([
       {
         providers: 'echo',
-        expected: [{ id: 'echo', prompts: ['Replay'] }],
+        expected: ['echo'],
       },
       {
         providers: [

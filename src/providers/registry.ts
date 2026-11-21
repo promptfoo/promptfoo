@@ -129,6 +129,14 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-6-sol';
+
+/** String selectors have no ID override. Both endpoints display the model in saved columns. */
+export function getNamedOpenAiTextId(path: string) {
+  const match = /^openai:(?:chat|responses)(?::(.*))?$/.exec(path);
+  return match ? `openai:${match[1] || DEFAULT_OPENAI_TEXT_MODEL}` : undefined;
+}
+
 const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
 
 /** Aliases read together by these providers must keep their original scope priority. */
@@ -1273,7 +1281,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-6-sol',
+          modelName || configuredModel || DEFAULT_OPENAI_TEXT_MODEL,
           providerOptions,
         );
       }
@@ -1303,7 +1311,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-6-sol',
+          modelName || configuredModel || DEFAULT_OPENAI_TEXT_MODEL,
           providerOptions,
         );
       }
