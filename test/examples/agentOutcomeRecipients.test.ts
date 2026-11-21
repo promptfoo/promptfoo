@@ -118,6 +118,14 @@ describe('inherited release access', () => {
       expect.objectContaining({ id, principal: 'Pat', status: 200, readback: future.marker }),
     );
     expect(reads).toContainEqual(
+      expect.objectContaining({
+        id,
+        principal: 'support-bot',
+        status: 200,
+        readback: future.marker,
+      }),
+    );
+    expect(reads).toContainEqual(
       expect.objectContaining({ id, principal: 'unrelated-reviewer', status: 403, readback: null }),
     );
     expect(reads).toContainEqual(

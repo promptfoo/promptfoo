@@ -969,6 +969,8 @@ export function createServerOpenApiRegistry() {
     operationId: 'generateRedteamTest',
     tags: ['Redteam'],
     summary: 'Generate one or more redteam test cases',
+    description:
+      'For indirect agent outcome tests, each preview returns the legitimate user task in prompt and the third-party content in artifact.',
     request: {
       body: jsonBody(OpenApiTestCaseGenerationRequestSchema),
     },

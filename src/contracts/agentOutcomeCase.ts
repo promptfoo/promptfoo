@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
-export const AGENT_OUTCOME_PLUGINS = [
-  'coding-agent:consent-bypass',
-  'agentic:private-to-public-disclosure',
-  'agentic:unauthorized-sharing',
-] as const;
-
-export const AgentOutcomePluginIdSchema = z.enum(AGENT_OUTCOME_PLUGINS);
+export const AgentOutcomePluginIdSchema = z.enum({
+  consentBypass: 'coding-agent:consent-bypass',
+  privateToPublicDisclosure: 'agentic:private-to-public-disclosure',
+  unauthorizedSharing: 'agentic:unauthorized-sharing',
+});
 export type AgentOutcomePluginId = z.infer<typeof AgentOutcomePluginIdSchema>;
+
+export const AGENT_OUTCOME_PLUGINS: readonly AgentOutcomePluginId[] =
+  AgentOutcomePluginIdSchema.options;
 
 export function isAgentOutcomePlugin(id: string): id is AgentOutcomePluginId {
   return AGENT_OUTCOME_PLUGINS.some((plugin) => plugin === id);

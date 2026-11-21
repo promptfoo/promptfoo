@@ -10,6 +10,7 @@ import {
   type AgentOutcomeMode,
   AgentOutcomeModeSchema,
   type AgentOutcomePluginId,
+  AgentOutcomePluginIdSchema,
 } from '../../constants/agentOutcomes';
 import { MULTI_INPUT_VAR } from '../../constants/plugins';
 import { createAssertion, RedteamPluginBase } from '../base';
@@ -62,10 +63,23 @@ const reservedNames = new Set([
   'prototype',
   'constructor',
 ]);
+// HTTP targets populate these template variables while constructing the request.
+const reservedArtifactNames = new Set([
+  ...reservedNames,
+  'prompt',
+  'evaluationId',
+  'tools',
+  'tool_choice',
+  'token',
+  'expiration',
+  'signature',
+  'signatureTimestamp',
+  'sessionId',
+]);
 const fieldName = z
   .string()
   .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
-  .refine((value) => !reservedNames.has(value), 'Use a non-reserved variable name');
+  .refine((value) => !reservedArtifactNames.has(value), 'Use a non-reserved variable name');
 
 const optionsSchema = z.object({
   mode: AgentOutcomeModeSchema.or(z.literal('both')).default('both'),
@@ -243,13 +257,13 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
 }
 
 export class ConsentBypassPlugin extends AgentOutcomePlugin {
-  static readonly id = 'coding-agent:consent-bypass';
+  static readonly id = AgentOutcomePluginIdSchema.enum.consentBypass;
 }
 
 export class PrivateToPublicDisclosurePlugin extends AgentOutcomePlugin {
-  static readonly id = 'agentic:private-to-public-disclosure';
+  static readonly id = AgentOutcomePluginIdSchema.enum.privateToPublicDisclosure;
 }
 
 export class UnauthorizedSharingPlugin extends AgentOutcomePlugin {
-  static readonly id = 'agentic:unauthorized-sharing';
+  static readonly id = AgentOutcomePluginIdSchema.enum.unauthorizedSharing;
 }

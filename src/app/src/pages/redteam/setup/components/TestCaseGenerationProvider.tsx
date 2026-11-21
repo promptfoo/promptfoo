@@ -13,11 +13,11 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
+  isAgentOutcomePlugin,
   isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { normalizeLocalProviders } from './Targets/helpers';

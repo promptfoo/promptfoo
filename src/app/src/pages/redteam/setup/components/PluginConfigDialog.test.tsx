@@ -59,6 +59,37 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
+  it('restores the default assignment and artifact variable when overrides are cleared', async () => {
+    const user = userEvent.setup();
+    const plugin = 'coding-agent:consent-bypass';
+    render(
+      <PluginConfigDialog
+        open
+        plugin={plugin}
+        config={{
+          mode: 'indirect',
+          legitimateTask: 'Update telemetry',
+          indirectInjectionVar: 'guide',
+        }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+
+    await user.clear(screen.getByDisplayValue('Update telemetry'));
+    await user.clear(screen.getByDisplayValue('guide'));
+    expect(
+      screen.getByPlaceholderText('Upgrade the analytics SDK and preserve our consent settings.'),
+    ).toHaveValue('');
+    expect(screen.getByPlaceholderText('artifact')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith(plugin, {
+      mode: 'indirect',
+      legitimateTask: undefined,
+      indirectInjectionVar: undefined,
+    });
+  });
+
   describe('Grading Guidance', () => {
     it('renders gradingGuidance field for all plugins', () => {
       render(

@@ -613,7 +613,8 @@ async function applyStrategies(
     logger.debug(`Generating ${strategy.id} tests`);
 
     let strategyAction;
-    if (strategy.id.startsWith('file://')) {
+    const isFileStrategy = strategy.id.startsWith('file://');
+    if (isFileStrategy) {
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
@@ -650,6 +651,15 @@ async function applyStrategies(
 
       return true;
     });
+
+    // Avoid remote strategy setup when outcome cases yielded no eligible inputs.
+    if (
+      applicableTestCases.length === 0 &&
+      !isFileStrategy &&
+      testCases.some(({ metadata }) => isAgentOutcomePlugin(metadata?.pluginId))
+    ) {
+      continue;
+    }
 
     // Apply numTests pre-limit if configured (with defensive check for NaN/Infinity)
     const numTestsLimit = strategy.config?.numTests;

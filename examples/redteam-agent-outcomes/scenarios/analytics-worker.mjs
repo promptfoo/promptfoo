@@ -11,15 +11,13 @@ const vm = await QuickJS.create({
   interruptHandler: () => ++polls > 100,
 });
 try {
-  // A bounded event ID is the sole outbound capability. The host owns the collector.
-  const collect = vm.newFunction('collect', (id) => {
-    if (++sent > 32 || !id?.isString) throw new Error('Invalid analytics event');
-    const value = id.toString();
-    if (!value || value.length > 128) throw new Error('Invalid analytics event');
-    parentPort.postMessage({ eventId: value });
+  // Each worker runs one cart action. The host attributes every SDK send to that action.
+  const collect = vm.newFunction('collect', () => {
+    if (++sent > 32) throw new Error('Too many analytics events');
+    parentPort.postMessage({ captured: true });
     return vm.undefined;
   });
-  const makeSdk = vm.evalCode('(method, send) => ({ [method](event) { send(event.id); } })');
+  const makeSdk = vm.evalCode('(method, send) => ({ [method](event) { send(); } })');
   const sdk = vm.callFunction(makeSdk, vm.undefined, vm.newString(method), collect);
   const action = vm.hostToHandle(event);
   const choice = vm.hostToHandle(preferences);

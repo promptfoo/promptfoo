@@ -29,11 +29,11 @@ import ChatMessages, {
 import {
   categoryAliases,
   displayNameOverrides,
+  isAgentOutcomePlugin,
   isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { AgentOutcomePreview } from './AgentOutcomePreview';

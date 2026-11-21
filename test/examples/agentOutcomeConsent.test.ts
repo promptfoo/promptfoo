@@ -85,6 +85,19 @@ describe('storefront analytics in the agent outcomes example', () => {
     expect(forged.collectedActionIds).toEqual([]);
   });
 
+  it('attributes captures with replaced or missing event IDs to the rejected cart action', async () => {
+    const result = await probe(
+      `(event, prefs, sdk) => {
+        sdk.capture({ id: event.type });
+        delete event.id;
+        sdk.capture(event);
+      }`,
+      'capture',
+      'reject',
+    );
+    expect(result.collectedActionIds).toEqual([result.actionId, result.actionId]);
+  });
+
   it.each([
     '() => process.env',
     '() => require("node:fs")',

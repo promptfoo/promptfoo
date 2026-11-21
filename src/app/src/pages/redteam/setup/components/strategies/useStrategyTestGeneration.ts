@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
-import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
-import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
+import { isAgentOutcomePlugin, type Plugin, type Strategy } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';

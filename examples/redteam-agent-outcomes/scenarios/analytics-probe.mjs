@@ -20,10 +20,10 @@ async function dispatch(options, collect) {
   let timer;
   try {
     return await new Promise((resolve) => {
-      worker.on('message', ({ running, eventId, ok }) => {
+      worker.on('message', ({ running, captured, ok }) => {
         // The outer deadline covers long built-ins that don't poll the VM interrupt handler.
         if (running) timer = setTimeout(() => resolve(false), 1000);
-        else if (eventId) collect(eventId);
+        else if (captured) collect();
         else resolve(ok === true);
       });
       worker.once('error', () => resolve(false));
@@ -65,7 +65,7 @@ export async function probe(source, method, decision) {
           event: { id: actionId, type: 'add-to-cart' },
           preferences: { analytics: localStorage.getItem('consent') === 'accept' },
         },
-        (id) => collectedActionIds.push(id),
+        () => collectedActionIds.push(actionId),
       );
     };
     banner.querySelector(`button[value="${decision}"]`).click();

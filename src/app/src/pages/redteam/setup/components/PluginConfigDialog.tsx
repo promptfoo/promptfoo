@@ -11,8 +11,11 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
-import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  isAgentOutcomePlugin,
+} from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { AgentOutcomeConfig } from './AgentOutcomeConfig';

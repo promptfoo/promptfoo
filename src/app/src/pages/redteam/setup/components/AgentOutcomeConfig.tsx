@@ -4,9 +4,11 @@ import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@app/components/ui/radio-group';
 import { Textarea } from '@app/components/ui/textarea';
-import { AGENT_OUTCOME_DEFAULT_TASKS } from '@promptfoo/redteam/constants/agentOutcomes';
+import {
+  AGENT_OUTCOME_DEFAULT_TASKS,
+  type AgentOutcomePluginId,
+} from '@promptfoo/redteam/constants';
 import { getPluginDocumentationUrl } from './pluginDocumentationMap';
-import type { AgentOutcomePluginId } from '@promptfoo/redteam/constants/agentOutcomes';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
 interface AgentOutcomeConfigProps {

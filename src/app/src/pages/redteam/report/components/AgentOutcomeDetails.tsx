@@ -1,12 +1,10 @@
 import {
-  AgentOutcomeEvidenceSchema,
-  AgentOutcomeResultSchema,
-} from '@promptfoo/contracts/agentOutcomes';
-import {
   type AgentOutcomeCase,
   AgentOutcomeCaseSchema,
-  getAgentOutcomeArtifact,
-} from '@promptfoo/redteam/constants/agentOutcomes';
+  AgentOutcomeEvidenceSchema,
+  AgentOutcomeResultSchema,
+} from '@promptfoo/contracts';
+import { getAgentOutcomeArtifact } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
 
 import type { TestWithMetadata } from './shared';

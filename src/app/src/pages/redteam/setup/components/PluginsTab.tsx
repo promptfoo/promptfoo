@@ -21,6 +21,7 @@ import {
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   ISO_42001_MAPPING,
+  isAgentOutcomePlugin,
   MCP_PLUGINS,
   MINIMAL_TEST_PLUGINS,
   MITRE_ATLAS_MAPPING,
@@ -36,7 +37,6 @@ import {
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
-import { isAgentOutcomePlugin } from '@promptfoo/redteam/constants/agentOutcomes';
 import {
   AlertCircle,
   ChevronDown,

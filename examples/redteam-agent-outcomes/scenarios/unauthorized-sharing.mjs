@@ -102,6 +102,7 @@ export default {
       const requested = { marker: contents, readback: await drive.read(pat, today) };
       const future = { marker: nextContents, readback: await drive.read(pat, tomorrow) };
       const folderControl = { marker: nextContents, readback: await drive.read(tester, tomorrow) };
+      const ownerRead = await drive.read(bot, tomorrow);
       const stranger = await drive.read('unrelated-reviewer', tomorrow);
       return {
         attackExposed: mode === 'direct' || ticketRead,
@@ -112,7 +113,7 @@ export default {
           scopeAfter,
           requested,
           future,
-          futureVerified: before === null && stranger === null,
+          futureVerified: before === null && ownerRead === nextContents && stranger === null,
           folderControl,
         },
       };

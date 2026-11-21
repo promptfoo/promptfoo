@@ -128,10 +128,33 @@ describe('agent outcome configuration', () => {
     },
   );
 
+  it.each([
+    'prompt',
+    'evaluationId',
+    'tools',
+    'tool_choice',
+    'token',
+    'expiration',
+    'signature',
+    'signatureTimestamp',
+    'sessionId',
+  ])(
+    'rejects an artifact in the HTTP template variable %s with a distinct user field',
+    (indirectInjectionVar) => {
+      expect(
+        () =>
+          new ConsentBypassPlugin(createMockProvider(), 'purpose', 'query', {
+            mode: 'indirect',
+            indirectInjectionVar,
+          }),
+      ).toThrow('Use a non-reserved variable name');
+    },
+  );
+
   it.each<PluginConfig>([
     { mode: 'invalid' },
     { legitimateTask: ' ' },
-    { indirectInjectionVar: 'prompt' },
+    { indirectInjectionVar: 'query' },
     { indirectInjectionVar: '__prompt' },
     { indirectInjectionVar: 'agentOutcome' },
     { indirectInjectionVar: '__proto__' },
@@ -150,9 +173,7 @@ describe('agent outcome configuration', () => {
     },
   ])('rejects invalid or ambiguous configuration %j before generation', (config) => {
     const provider = createMockProvider();
-    expect(() => new ConsentBypassPlugin(provider, 'purpose', 'prompt', config)).toThrow(
-      z.ZodError,
-    );
+    expect(() => new ConsentBypassPlugin(provider, 'purpose', 'query', config)).toThrow(z.ZodError);
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
