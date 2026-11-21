@@ -2448,43 +2448,32 @@ describe('OpenRouter', () => {
         });
       });
 
-      it('should prioritize tool calls over content+reasoning even when showThinking is true', async () => {
-        // Using the default provider which has showThinking enabled by default
-        const mockToolCall = {
-          id: 'call_qwen_thinking_enabled',
-          type: 'function',
-          function: {
-            name: 'search_database',
-            arguments: '{"query": "user data"}',
-          },
-        };
-
-        const mockResponse = {
-          choices: [
-            {
-              message: {
-                // All three fields present
-                content: 'I will search the database for user data.',
-                reasoning:
-                  'The user wants to find information in the database. I should call the search function.',
-                tool_calls: [mockToolCall],
+      it('keeps tool calls when content is valid JSON and thinking is enabled', async () => {
+        const toolCalls = [
+          { id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } },
+        ];
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          Response.json({
+            choices: [
+              { message: { content: '{}', reasoning: 'Use lookup', tool_calls: toolCalls } },
+            ],
+            usage: { total_tokens: 80, prompt_tokens: 40, completion_tokens: 40 },
+          }),
+        );
+        const result = await provider.callApi('Search', {
+          vars: {},
+          prompt: {
+            raw: 'Search',
+            label: 'Search',
+            config: {
+              response_format: {
+                type: 'json_schema',
+                json_schema: { name: 'value', schema: { type: 'object' } },
               },
             },
-          ],
-          usage: { total_tokens: 80, prompt_tokens: 40, completion_tokens: 40 },
-        };
-
-        const response = new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
         });
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
-
-        const result = await provider.callApi('Search for user data');
-
-        // Tool calls should always take priority, regardless of showThinking setting
-        expect(result.output).toEqual([mockToolCall]);
+        expect(result.output).toEqual(toolCalls);
         expect(result.tokenUsage).toEqual({
           total: 80,
           prompt: 40,

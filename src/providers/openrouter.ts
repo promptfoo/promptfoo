@@ -500,15 +500,9 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       // Fallback to reasoning if no content and showThinking is enabled
       output = message.reasoning;
     }
-    // Handle structured output
-    if (isOpenAiJsonSchemaFormat(body.response_format)) {
-      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
-      const jsonCandidate =
-        typeof message?.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
+    // Parse only text. Structured tool calls take precedence over JSON in content.
+    if (typeof output === 'string' && isOpenAiJsonSchemaFormat(body.response_format)) {
+      const jsonCandidate = message.content ?? output;
       if (jsonCandidate) {
         try {
           output = JSON.parse(jsonCandidate);

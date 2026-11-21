@@ -1949,7 +1949,7 @@ describe('OpenAI Provider', () => {
           const data = {
             choices: [{ message: { content: 'Visible answer', [field]: 'Reasoning summary' } }],
           };
-          mockFetchWithCache.mockResolvedValue({ data, cached, status: 200, statusText: 'OK' });
+          mockFetchWithCache.mockResolvedValue(createMockFetchResponse(data, { cached }));
           for (const showThinking of [false, true]) {
             const provider = new OpenAiChatCompletionProvider('fixture-model', {
               config: { showThinking: !showThinking },
@@ -1978,12 +1978,7 @@ describe('OpenAI Provider', () => {
             { message: { content, reasoning: 'Reasoning summary', tool_calls: toolCalls } },
           ],
         };
-        mockFetchWithCache.mockResolvedValue({
-          data,
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValue(createMockFetchResponse(data));
         const provider = new OpenAiChatCompletionProvider('fixture-model');
         const result = await provider.callApi('Hello');
         expect(result.output).toEqual(content === null ? toolCalls : data.choices[0].message);
@@ -1994,14 +1989,11 @@ describe('OpenAI Provider', () => {
       'preserves reasoning-only content %s with empty tool calls',
       async (content) => {
         for (const showThinking of [false, true]) {
-          mockFetchWithCache.mockResolvedValue({
-            data: {
+          mockFetchWithCache.mockResolvedValue(
+            createMockFetchResponse({
               choices: [{ message: { content, reasoning: 'Reasoning summary', tool_calls: [] } }],
-            },
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
+            }),
+          );
           const provider = new OpenAiChatCompletionProvider('fixture-model', {
             config: { showThinking },
           });
@@ -2014,12 +2006,11 @@ describe('OpenAI Provider', () => {
     );
 
     it('preserves a reasoning-only response with null content', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: { choices: [{ message: { content: null, reasoning: 'Reasoning summary' } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [{ message: { content: null, reasoning: 'Reasoning summary' } }],
+        }),
+      );
       const provider = new OpenAiChatCompletionProvider('fixture-model');
       expect((await provider.callApi('Hello')).output).toBeNull();
     });
@@ -2035,6 +2026,7 @@ describe('OpenAI Provider', () => {
               content: 'First',
               reasoning: 'First reasoning',
               reasoning_content: 'First details',
+              reasoning_details: [{ type: 'reasoning.text', text: 'First trace' }],
               tool_calls: toolCalls,
             },
           },
@@ -2043,12 +2035,13 @@ describe('OpenAI Provider', () => {
               content: 'Second',
               reasoning: 'Second reasoning',
               reasoning_content: 'Second details',
+              reasoning_details: [{ type: 'reasoning.text', text: 'Second trace' }],
             },
           },
         ],
       };
       const original = structuredClone(data);
-      mockFetchWithCache.mockResolvedValue({ data, cached: true, status: 200, statusText: 'OK' });
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(data, { cached: true }));
       const provider = new OpenAiChatCompletionProvider('fixture-model', {
         config: { showThinking: false },
       });
