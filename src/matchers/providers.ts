@@ -185,6 +185,8 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   );
 }
 
+const warnedAboutGeneratorSlotGrading = new WeakSet<object>();
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -263,9 +265,19 @@ export async function getGradingProvider(
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
       if (finalProvider) {
-        logger.debug('[Grading] Using provider from defaultTest fallback', {
-          providerId: finalProvider.id(),
-        });
+        const scope = cliState.envScope ?? defaultTestObj;
+        if (
+          type === 'text' &&
+          cfg === defaultTestObj?.provider &&
+          scope &&
+          !warnedAboutGeneratorSlotGrading.has(scope)
+        ) {
+          warnedAboutGeneratorSlotGrading.add(scope);
+          logger.warn(
+            '[Grading] Using defaultTest.provider as the grader. This can grade outputs from the same provider. ' +
+              'To choose a different grader, set --grader, defaultTest.options.provider, or an assertion-level provider.',
+          );
+        }
       }
     } else {
       finalProvider = defaultProvider;
