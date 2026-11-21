@@ -30,6 +30,34 @@ describe('matchesSelectBest', () => {
     expect(result.filter((item) => item.pass)).toHaveLength(1);
   });
 
+  it.each([
+    ['Text 0 is too long and text 1 is vague, so the best fit is 2.', 'ambiguous', null],
+    ['Text 1 repeats the question; text 2 answers it. Best: 2', 'final answer', 2],
+    ['Comparing all 3 texts, I choose 1.', 'valid in-range', 1],
+    ['Text 2 is best for the 2025 criteria (confidence 0.9)', 'numeric noise', 2],
+    ['Text 2 is best for 1 reason.', 'incidental count', 2],
+    ['Text 0 is best? No, text 1 wins.', 'conflicting references', null],
+    ['Answer: 2', 'explicit answer', 2],
+  ])('does not misgrade reasoning prose: %s (%s)', async (reply, _case, expected) => {
+    const result = await matchesSelectBest('choose the best output', ['A', 'B', 'C'], {
+      provider: createSelectBestProvider(reply),
+    });
+    if (expected === null) {
+      expect(result.every(({ pass }) => !pass)).toBe(true);
+      expect(result[0].reason).toMatch(/Ambiguous select-best verdict/);
+    } else {
+      expect(result.filter(({ pass }) => pass)).toHaveLength(1);
+      expect(result[expected].pass).toBe(true);
+    }
+  });
+
+  it.each(['-1', '0.5', 'unknown'])('rejects an invalid final answer %s', async (answer) => {
+    const provider = createSelectBestProvider(`Text 0 is weak. Answer: ${answer}`);
+    const results = await matchesSelectBest('choose', ['A', 'B'], { provider });
+    expect(results.every((result) => !result.pass)).toBe(true);
+    expect(results[0].reason).toMatch(/Invalid select-best verdict/);
+  });
+
   it('should return independent failure results for invalid verdicts', async () => {
     const provider = createSelectBestProvider('no verdict');
     const grading: GradingConfig = { provider };

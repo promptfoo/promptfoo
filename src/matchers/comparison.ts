@@ -70,8 +70,29 @@ export async function matchesSelectBest(
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
 
-  const firstIntegerMatch = resp.output.trim().match(/\d+/);
-  const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
+  const reply = resp.output.trim();
+  // Prefer an explicit final answer to incidental indexes in the grader's reasoning.
+  const markedAnswer = reply.match(/(?:^|[\n;.])\s*(?:answer|best|winner)\s*:\s*(\d+)\.?\s*$/i);
+  if (!markedAnswer && /(?:^|[\n;.])\s*(?:answer|best|winner)\s*:[^\n]*$/i.test(reply)) {
+    return failureResults(() => 'Invalid select-best verdict: final answer must be an index');
+  }
+  // A count in “Text 2 is best for 1 reason” does not identify a candidate.
+  // Ignore numbers embedded in words, dates, decimals, negative numbers and versions.
+  const numbers = [
+    ...reply.matchAll(
+      /(?<![\p{L}\p{N}.,-])\d+(?![\p{L}\p{N}]|[.,]\d|\s+(?:reasons?|texts?|outputs?|candidates?)\b)/giu,
+    ),
+  ].map(([value]) => Number.parseInt(value, 10));
+  const candidateIndexes = [...new Set(numbers.filter((number) => number < outputs.length))];
+  if (!markedAnswer && candidateIndexes.length > 1) {
+    return failureResults(
+      () =>
+        `Ambiguous select-best verdict: multiple candidate indexes ${candidateIndexes.join(', ')}`,
+    );
+  }
+  const verdict = markedAnswer
+    ? Number.parseInt(markedAnswer[1], 10)
+    : (candidateIndexes[0] ?? numbers[0] ?? Number.NaN);
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return failureResults(() => `Invalid select-best verdict: ${verdict}`);
