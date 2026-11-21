@@ -62,7 +62,7 @@ tests:
     // highlight-end
 ```
 
-In this configuration, we're using the `llm-rubric` assertion type to ensure that the LLM does not claim to know real-time information. This works by using a more powerful LLM (GPT-4 by default) to evaluate a very specific requirement.
+The `llm-rubric` assertion asks a grading model to check whether the output claims to know real-time information. See [grading providers](/docs/configuration/expected-outputs/model-graded/llm-rubric) for defaults and overrides.
 
 `llm-rubric` returns a score that the framework uses to measure how well the LLM adheres to its limitations.
 

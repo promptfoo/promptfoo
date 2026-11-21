@@ -13,6 +13,7 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Typography from '@mui/material/Typography';
+import { BundleModal } from './BundleModal';
 import { useCartContext } from './CartProvider';
 import {
   formatPrice,
@@ -24,8 +25,14 @@ import {
 
 import type { FourthwallAttributeValue } from './types';
 
-export function ProductModal() {
-  const { selectedProduct, closeProductModal, addToCart, isLoading } = useCartContext();
+function SingleProductModal() {
+  const {
+    selectedProduct: catalogItem,
+    closeProductModal,
+    addToCart,
+    isLoading,
+  } = useCartContext();
+  const selectedProduct = catalogItem?.type === 'PRODUCT' ? catalogItem : null;
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('');
@@ -153,7 +160,7 @@ export function ProductModal() {
       await addToCart(selectedVariantId, 1);
       closeProductModal();
     } catch {
-      // Error is handled by the cart context
+      // Keep the product modal open when adding fails.
     } finally {
       setIsAdding(false);
     }
@@ -210,10 +217,10 @@ export function ProductModal() {
       slotProps={{
         paper: {
           sx: {
-            width: { xs: '100vw', sm: '90vw' },
+            width: { xs: '100%', sm: '90vw' },
             maxWidth: { xs: '100vw', sm: '1000px' },
-            height: { xs: '100vh', sm: '85vh' },
-            maxHeight: { xs: '100vh', sm: '800px' },
+            height: { xs: '100%', sm: '85vh' },
+            maxHeight: { xs: '100dvh', sm: '800px' },
             m: 0,
             borderRadius: { xs: 0, sm: '8px' },
             overflow: 'hidden',
@@ -232,6 +239,8 @@ export function ProductModal() {
           justifyContent: 'space-between',
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
+          pt: { xs: 'max(12px, env(safe-area-inset-top))', sm: 1.5 },
+          pr: { xs: 'max(12px, env(safe-area-inset-right))', sm: 2 },
           backgroundColor: 'var(--ifm-color-primary-darker)',
           color: 'var(--ifm-button-color, #fff)',
           flexShrink: 0,
@@ -258,6 +267,8 @@ export function ProductModal() {
           onClick={closeProductModal}
           size="small"
           sx={{
+            minWidth: { xs: 44, sm: 0 },
+            minHeight: { xs: 44, sm: 0 },
             color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
               backgroundColor: 'rgba(255, 255, 255, 0.15)',
@@ -275,7 +286,7 @@ export function ProductModal() {
           display: 'flex',
           flexDirection: { xs: 'column', md: 'row' },
           flex: 1,
-          overflow: 'hidden',
+          overflowY: { xs: 'auto', md: 'hidden' },
           backgroundColor: 'var(--ifm-background-color, #ffffff)',
         }}
       >
@@ -293,6 +304,7 @@ export function ProductModal() {
             justifyContent: 'center',
             minHeight: { xs: '250px', sm: '300px', md: 'auto' },
             maxHeight: { xs: '40vh', md: 'none' },
+            overflow: 'hidden',
             // Improve touch scrolling
             touchAction: 'pan-y pinch-zoom',
             cursor: hasMultipleImages ? 'grab' : 'default',
@@ -377,11 +389,11 @@ export function ProductModal() {
         {/* Product details */}
         <Box
           sx={{
-            flex: { xs: '1 1 auto', md: '1 1 40%' },
+            flex: { xs: '0 0 auto', md: '1 1 40%' },
             p: { xs: 2, sm: 3 },
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'auto',
+            overflow: { xs: 'visible', md: 'auto' },
             WebkitOverflowScrolling: 'touch',
           }}
         >
@@ -507,5 +519,14 @@ export function ProductModal() {
         </Box>
       </Box>
     </Dialog>
+  );
+}
+
+export function ProductModal() {
+  const { selectedProduct } = useCartContext();
+  return selectedProduct?.type === 'BUNDLE' ? (
+    <BundleModal key={selectedProduct.id} bundle={selectedProduct} />
+  ) : (
+    <SingleProductModal />
   );
 }

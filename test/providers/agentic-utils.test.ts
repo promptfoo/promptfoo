@@ -96,7 +96,6 @@ describe('agentic-utils', () => {
       mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -115,7 +114,6 @@ describe('agentic-utils', () => {
 
     it('should return undefined when shouldReadCache is false', async () => {
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: false, // bustCache scenario
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -130,7 +128,6 @@ describe('agentic-utils', () => {
 
     it('should return undefined when cache is not available', async () => {
       const cacheResult: CacheCheckResult = {
-        shouldCache: false,
         shouldReadCache: false,
         shouldWriteCache: false,
         cache: undefined,
@@ -144,7 +141,6 @@ describe('agentic-utils', () => {
 
     it('should return undefined when cache key is not available', async () => {
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -161,7 +157,6 @@ describe('agentic-utils', () => {
       mockCache.get = vi.fn().mockResolvedValue(null);
 
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -178,7 +173,6 @@ describe('agentic-utils', () => {
       mockCache.get = vi.fn().mockRejectedValue(new Error('Cache error'));
 
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -204,7 +198,6 @@ describe('agentic-utils', () => {
       mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -231,7 +224,6 @@ describe('agentic-utils', () => {
       };
 
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: mockCache as any,
@@ -249,7 +241,6 @@ describe('agentic-utils', () => {
       };
 
       const cacheResult: CacheCheckResult = {
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: false,
         cache: mockCache as any,
@@ -271,7 +262,6 @@ describe('agentic-utils', () => {
         { prompt: 'test prompt' },
       );
 
-      expect(result.shouldCache).toBe(false);
       expect(result.shouldReadCache).toBe(false);
       expect(result.shouldWriteCache).toBe(false);
       expect(result.cache).toBeUndefined();
@@ -286,7 +276,6 @@ describe('agentic-utils', () => {
         { prompt: 'test prompt' },
       );
 
-      expect(result.shouldCache).toBe(true);
       expect(result.shouldReadCache).toBe(true);
       expect(result.shouldWriteCache).toBe(true);
       expect(result.cache).toBeDefined();
@@ -302,7 +291,6 @@ describe('agentic-utils', () => {
         { prompt: 'test prompt' },
       );
 
-      expect(result.shouldCache).toBe(true);
       expect(result.shouldReadCache).toBe(false);
       expect(result.shouldWriteCache).toBe(true);
     });
@@ -315,7 +303,6 @@ describe('agentic-utils', () => {
         { prompt: 'test prompt' },
       );
 
-      expect(result.shouldCache).toBe(false);
       expect(result.shouldReadCache).toBe(false);
       expect(result.shouldWriteCache).toBe(false);
     });
@@ -328,7 +315,6 @@ describe('agentic-utils', () => {
         { prompt: 'test prompt' },
       );
 
-      expect(result.shouldCache).toBe(true);
       expect(result.shouldReadCache).toBe(true);
       expect(result.shouldWriteCache).toBe(true);
     });

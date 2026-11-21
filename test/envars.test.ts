@@ -14,12 +14,14 @@ import {
   getEnvString,
   getMaxEvalTimeMs,
   getProcessEnv,
+  getProviderEnvString,
   isCI,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
 
 import type { EnvVarKey } from '../src/envars';
+import type { EnvOverrides } from '../src/types/env';
 
 describe('envars', () => {
   const originalEnv = { ...process.env };
@@ -51,6 +53,31 @@ describe('envars', () => {
     // Symmetric teardown: leave the singleton "unregistered" rather than pointing
     // at a closure owned by this test file.
     setEnvOverridesProvider(undefined);
+  });
+
+  it.each([undefined, '', 0, false, null])(
+    'reads only own provider override values: %s',
+    (value) => {
+      mockProcessEnv({ CUSTOM_KEY: 'ambient' });
+      const key = 'CUSTOM_KEY' as EnvVarKey;
+      const env = { CUSTOM_KEY: value } as unknown as EnvOverrides;
+      expect(getProviderEnvString(env, key)).toBe(value === undefined ? undefined : String(value));
+      expect(getProviderEnvString(Object.create({ CUSTOM_KEY: value }), key)).toBeUndefined();
+      expect(getProviderEnvString(undefined, key)).toBeUndefined();
+    },
+  );
+
+  it('retains explicit values when the registered provider layer fails', () => {
+    setEnvOverridesProvider(
+      () => {
+        throw new Error('provider unavailable');
+      },
+      { providerLayer: true },
+    );
+    expect(getProviderEnvString({ OPENAI_API_KEY: 'explicit-key' }, 'OPENAI_API_KEY')).toBe(
+      'explicit-key',
+    );
+    expect(getProviderEnvString(undefined, 'OPENAI_API_KEY')).toBeUndefined();
   });
 
   describe('getEnvar', () => {
@@ -184,6 +211,7 @@ describe('envars', () => {
 
       expect(getEnvOverrides()).toBe(suite);
       expect(getEnvOverrides('file')).toBe(file);
+      expect(getEnvString('CONTRACT_PARENT' as EnvVarKey)).toBe('suite');
       const inherited = getProcessEnv();
       expect(inherited).toMatchObject({
         CONTRACT_PARENT: 'file',
@@ -534,6 +562,7 @@ describe('envars', () => {
       'TRAVIS',
       'CIRCLECI',
       'JENKINS',
+      'JENKINS_URL',
       'GITLAB_CI',
       'APPVEYOR',
       'CODEBUILD_BUILD_ID',
@@ -568,6 +597,16 @@ describe('envars', () => {
     it('should return true if any CI environment variable is set to true', () => {
       mockProcessEnv({ GITHUB_ACTIONS: 'true' });
       mockProcessEnv({ TRAVIS: 'false' });
+      expect(isCI()).toBe(true);
+    });
+
+    it.each([
+      ['CODEBUILD_BUILD_ID', 'fixture-project:12345678-1234-1234-1234-123456789abc'],
+      ['BITBUCKET_COMMIT', '0123456789abcdef0123456789abcdef01234567'],
+      ['TEAMCITY_VERSION', '2026.1.2'],
+      ['JENKINS_URL', 'https://jenkins.example.invalid/'],
+    ])('recognizes the documented %s identifier', (key, value) => {
+      mockProcessEnv({ [key]: value });
       expect(isCI()).toBe(true);
     });
 

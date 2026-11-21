@@ -8,8 +8,21 @@ import {
   createPerplexityProvider,
   PerplexityProvider,
 } from '../../src/providers/perplexity';
+import { createApiKeyOptions } from '../factories/literalFixtures';
 
 import type { AssertionParams } from '../../src/types';
+
+const createProviderSearchOptions = () => ({
+  search_domain_filter: ['provider.example'],
+  web_search_options: {
+    search_context_size: 'high' as const,
+  },
+});
+
+const createClearedSearchOptions = () => ({
+  search_domain_filter: null,
+  web_search_options: null,
+});
 
 describe('Perplexity Provider', () => {
   beforeEach(() => {
@@ -220,12 +233,7 @@ describe('Perplexity Provider', () => {
 
     it('preserves null search options from prompt passthrough over inherited values', async () => {
       const provider = new PerplexityProvider('sonar-pro', {
-        config: {
-          search_domain_filter: ['provider.example'],
-          web_search_options: {
-            search_context_size: 'high',
-          },
-        },
+        config: createProviderSearchOptions(),
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt', {
@@ -233,10 +241,7 @@ describe('Perplexity Provider', () => {
           raw: 'Test prompt',
           label: 'Test prompt',
           config: {
-            passthrough: {
-              search_domain_filter: null,
-              web_search_options: null,
-            },
+            passthrough: createClearedSearchOptions(),
           },
         },
         vars: {},
@@ -270,10 +275,7 @@ describe('Perplexity Provider', () => {
     it('preserves direct prompt null search options over inherited provider passthrough', async () => {
       const provider = new PerplexityProvider('sonar-pro', {
         config: {
-          passthrough: {
-            search_domain_filter: ['provider.example'],
-            web_search_options: { search_context_size: 'high' },
-          },
+          passthrough: createProviderSearchOptions(),
         },
       });
 
@@ -281,10 +283,7 @@ describe('Perplexity Provider', () => {
         prompt: {
           raw: 'Test prompt',
           label: 'Test prompt',
-          config: {
-            search_domain_filter: null,
-            web_search_options: null,
-          },
+          config: createClearedSearchOptions(),
         },
         vars: {},
       });
@@ -343,7 +342,7 @@ describe('Perplexity Provider', () => {
       }
 
       function provider(model = 'sonar-pro') {
-        return new PerplexityProvider(model, { config: { apiKey: 'test-key' } });
+        return new PerplexityProvider(model, createApiKeyOptions());
       }
 
       it('uses the reported total including non-token charges', async () => {
@@ -370,6 +369,8 @@ describe('Perplexity Provider', () => {
           expect.any(Number),
           'json',
           undefined,
+          undefined,
+          expect.any(Function),
           undefined,
         );
       });
@@ -524,9 +525,7 @@ describe('Perplexity Provider', () => {
       );
 
       try {
-        const provider = new PerplexityProvider('sonar-pro', {
-          config: { apiKey: 'test-key' },
-        });
+        const provider = new PerplexityProvider('sonar-pro', createApiKeyOptions());
         const first = await provider.callApi('Test prompt');
         const second = await provider.callApi('Test prompt');
 
@@ -581,9 +580,7 @@ describe('Perplexity Provider', () => {
         ),
       );
 
-      const provider = new PerplexityProvider('sonar-pro', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new PerplexityProvider('sonar-pro', createApiKeyOptions());
       const result = await provider.callApi('Test prompt');
 
       expect(result).toMatchObject({ output: 'Fresh output', cached: false });
