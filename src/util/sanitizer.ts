@@ -1374,6 +1374,14 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
+    if (key === '__proto__') {
+      Object.defineProperty(sanitized, key, {
+        value: undefined,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
