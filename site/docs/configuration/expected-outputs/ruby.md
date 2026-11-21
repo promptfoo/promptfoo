@@ -310,7 +310,7 @@ To override the Ruby binary, set the `PROMPTFOO_RUBY` environment variable. You 
 
 ## Negation
 
-Use `not-ruby` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+Use `not-ruby` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted. If the script returns a `{pass, score, reason}` object, a custom `reason` is kept when inversion turns a pass into a fail (empty reasons and the default `Assertion passed` text fall back to `Ruby code returned true/false`):
 
 ```yaml
 assert:
