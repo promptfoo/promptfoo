@@ -794,6 +794,7 @@ describe('sanitizeMcpToolData', () => {
       'jdbc:postgresql://alice:private-fixture@db',
       'dbPwd=private-fixture',
       'sent password = private-fixture',
+      'run --env=API_KEY=private-fixture',
       'user=alice&value=private-fixture',
       { client_assertion: 'private-fixture' },
       { name: 'jwt', value: 'private-fixture' },

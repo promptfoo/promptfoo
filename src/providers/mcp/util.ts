@@ -64,7 +64,7 @@ function hasOpaqueAssignment(text: string): boolean {
   if (/(?:^|[?&#;])\s*[^\s=?&#;]+=/.test(text)) {
     return true;
   }
-  for (const [, label] of text.matchAll(/(?:^|\s)([^\s=]+)\s*=/g)) {
+  for (const [, label] of text.matchAll(/(?:^|[\s=])([^\s=]+)\s*(?==)/g)) {
     if (isCredentialContainer(label, true)) {
       return true;
     }
