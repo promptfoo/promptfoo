@@ -1,18 +1,12 @@
 import readline from 'readline';
 
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
 
 vi.mock('readline');
 
-vi.mock('../../src/util/readline', () => ({
-  createReadlineInterface: vi.fn(),
-  promptUser: vi.fn(),
-  promptYesNo: vi.fn(),
-}));
-
 describe('readline utils', () => {
-  let mockInterface: any;
+  let mockInterface: { question: Mock; close: Mock; on: Mock };
 
   beforeEach(() => {
     mockInterface = {
@@ -20,11 +14,9 @@ describe('readline utils', () => {
       close: vi.fn(),
       on: vi.fn(),
     };
-
-    vi.mocked(readline.createInterface).mockReturnValue(mockInterface);
-    vi.mocked(createReadlineInterface).mockReturnValue(mockInterface);
-    vi.mocked(promptUser).mockReset();
-    vi.mocked(promptYesNo).mockReset();
+    vi.mocked(readline.createInterface).mockReturnValue(
+      mockInterface as unknown as readline.Interface,
+    );
   });
 
   afterEach(() => {
@@ -37,97 +29,84 @@ describe('readline utils', () => {
 
   describe('createReadlineInterface', () => {
     it('should create readline interface with stdin/stdout', () => {
-      const result = createReadlineInterface();
-
-      expect(createReadlineInterface).toHaveBeenCalledWith();
-      expect(result).toBe(mockInterface);
+      expect(createReadlineInterface()).toBe(mockInterface);
+      expect(readline.createInterface).toHaveBeenCalledWith({
+        input: process.stdin,
+        output: process.stdout,
+      });
     });
   });
 
   describe('promptUser', () => {
     it('should resolve with user answer', async () => {
-      const question = 'Test question?';
-      const answer = 'Test answer';
-
-      vi.mocked(promptUser).mockResolvedValue(answer);
-
-      const result = await promptUser(question);
-      expect(result).toBe(answer);
-      expect(promptUser).toHaveBeenCalledWith(question);
+      mockInterface.question.mockImplementation((_, callback) => callback('Test answer'));
+      await expect(promptUser('Test question?')).resolves.toBe('Test answer');
+      expect(mockInterface.question).toHaveBeenCalledWith('Test question?', expect.any(Function));
+      expect(mockInterface.close).toHaveBeenCalledExactlyOnceWith();
     });
 
     it('should reject on error', async () => {
       const error = new Error('Test error');
-
-      vi.mocked(promptUser).mockRejectedValue(error);
-
-      await expect(promptUser('Test question?')).rejects.toThrow(error);
+      const answer = promptUser('Test question?');
+      mockInterface.on.mock.calls[0][1](error);
+      await expect(answer).rejects.toBe(error);
+      expect(mockInterface.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(mockInterface.close).toHaveBeenCalledExactlyOnceWith();
     });
 
     it('should reject if readline creation fails', async () => {
       const error = new Error('Creation failed');
-
-      vi.mocked(promptUser).mockRejectedValue(error);
-
-      await expect(promptUser('Test question?')).rejects.toThrow(error);
+      vi.mocked(readline.createInterface).mockImplementation(() => {
+        throw error;
+      });
+      await expect(promptUser('Test question?')).rejects.toBe(error);
+      expect(mockInterface.close).not.toHaveBeenCalled();
     });
   });
 
   describe('promptYesNo', () => {
-    it('should return true for "y" with default no', async () => {
-      vi.mocked(promptYesNo).mockResolvedValue(true);
-
-      const result = await promptYesNo('Test question?', false);
-      expect(result).toBe(true);
-      expect(promptYesNo).toHaveBeenCalledWith('Test question?', false);
-    });
-
-    it('should return false for "n" with default yes', async () => {
-      vi.mocked(promptYesNo).mockResolvedValue(false);
-
-      const result = await promptYesNo('Test question?', true);
-      expect(result).toBe(false);
-      expect(promptYesNo).toHaveBeenCalledWith('Test question?', true);
-    });
-
-    it('should return default value for empty response', async () => {
-      vi.mocked(promptYesNo).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-
-      await expect(promptYesNo('Test question?', true)).resolves.toBe(true);
-      await expect(promptYesNo('Test question?', false)).resolves.toBe(false);
-    });
-
-    it('should handle different case inputs', async () => {
-      vi.mocked(promptYesNo).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-
-      await expect(promptYesNo('Test question?')).resolves.toBe(true);
-      await expect(promptYesNo('Test question?', true)).resolves.toBe(false);
-    });
-
-    it('should append correct suffix based on default value', async () => {
-      vi.mocked(promptYesNo).mockResolvedValue(true);
-
-      await promptYesNo('Test question?', true);
-      expect(promptYesNo).toHaveBeenCalledWith('Test question?', true);
-
-      await promptYesNo('Test question?', false);
-      expect(promptYesNo).toHaveBeenCalledWith('Test question?', false);
-    });
-
-    it('should return true for non-n input with defaultYes true', async () => {
-      vi.mocked(promptYesNo).mockResolvedValue(true);
-
-      const result = await promptYesNo('Test question?', true);
-      expect(result).toBe(true);
-      expect(promptYesNo).toHaveBeenCalledWith('Test question?', true);
-    });
-
-    it('should return false for input not starting with y with defaultYes false', async () => {
-      vi.mocked(promptYesNo).mockResolvedValue(false);
-
-      const result = await promptYesNo('Test question?', false);
-      expect(result).toBe(false);
-      expect(promptYesNo).toHaveBeenCalledWith('Test question?', false);
+    it.each([
+      ['should return true for "y" with default no', [['y', false, true, '(y/N): ']]],
+      ['should return false for "n" with default yes', [['n', true, false, '(Y/n): ']]],
+      [
+        'should return default value for empty response',
+        [
+          ['', true, true, '(Y/n): '],
+          ['', false, false, '(y/N): '],
+        ],
+      ],
+      [
+        'should handle different case inputs',
+        [
+          ['  YeS  ', undefined, true, '(y/N): '],
+          ['  nO  ', true, false, '(Y/n): '],
+        ],
+      ],
+      [
+        'should append correct suffix based on default value',
+        [
+          ['y', true, true, '(Y/n): '],
+          ['y', false, true, '(y/N): '],
+        ],
+      ],
+      [
+        'should return true for non-n input with defaultYes true',
+        [['maybe', true, true, '(Y/n): ']],
+      ],
+      [
+        'should return false for input not starting with y with defaultYes false',
+        [['maybe', false, false, '(y/N): ']],
+      ],
+    ] as const)('%s', async (_, cases) => {
+      for (const [answer, defaultYes, expected, suffix] of cases) {
+        mockInterface.question.mockImplementation((_, callback) => callback(answer));
+        await expect(promptYesNo('Test question?', defaultYes)).resolves.toBe(expected);
+        expect(mockInterface.question).toHaveBeenLastCalledWith(
+          `Test question? ${suffix}`,
+          expect.any(Function),
+        );
+      }
+      expect(mockInterface.close).toHaveBeenCalledTimes(cases.length);
     });
   });
 });

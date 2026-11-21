@@ -1,0 +1,93 @@
+name: Python example dependencies
+
+on:
+  pull_request:
+    paths:
+      - 'examples/**/requirements*.txt'
+      - 'examples/**/pyproject.toml'
+      - '.github/workflows/python-example-dependencies.yml'
+      - '.github/scripts/python_example_manifests.py'
+      - '.github/scripts/test_python_example_manifests.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changed-manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.manifests.outputs.matrix }}
+      any: ${{ steps.manifests.outputs.any }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Test manifest selection
+        run: python3 -m unittest discover -s .github/scripts -p test_python_example_manifests.py -v
+      - name: Find changed Python manifests
+        id: manifests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/python_example_manifests.py
+
+  install:
+    needs: changed-manifests
+    if: needs.changed-manifests.outputs.any == 'true'
+    name: Install ${{ matrix.manifest }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.changed-manifests.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install in a clean environment and check dependencies
+        env:
+          MANIFEST: ${{ matrix.manifest }}
+        run: |
+          python -m venv "$RUNNER_TEMP/example-venv"
+          "$RUNNER_TEMP/example-venv/bin/python" - <<'PY'
+          import importlib.metadata
+          import os
+          import pathlib
+          import subprocess
+          import sys
+          import tomllib
+
+          manifest = pathlib.Path(os.environ['MANIFEST']).resolve()
+          command = [sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check']
+          if manifest.parent.name == 'eval-bert-score':
+              # BERTScore needs CPU inference; do not download CUDA libraries in CI.
+              subprocess.run(
+                  command + ['--index-url', 'https://download.pytorch.org/whl/cpu', 'torch'],
+                  check=True,
+              )
+              # Fail on incompatible requirements instead of replacing CPU Torch from PyPI.
+              constraints = pathlib.Path(os.environ['RUNNER_TEMP']) / 'bert-score-constraints.txt'
+              constraints.write_text('torch==' + importlib.metadata.version('torch') + '\n')
+              command += ['--constraint', str(constraints)]
+          if manifest.name == 'pyproject.toml':
+              project = tomllib.loads(manifest.read_text())['project']
+              extras = ','.join(project.get('optional-dependencies', {}))
+              command += ['.[' + extras + ']' if extras else '.']
+          else:
+              command += ['-r', str(manifest)]
+          subprocess.run(command, cwd=manifest.parent, check=True)
+          subprocess.run([sys.executable, '-m', 'pip', 'check'], check=True)
+          PY

@@ -2,8 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { calculateMoonshotCost, createMoonshotProvider } from '../../src/providers/moonshot';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+
+const createMaxReasoningConfig = () => ({
+  config: { reasoning_effort: 'max' as const },
+});
+
+const createCustomPricingConfig = () => ({
+  config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
+});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -215,11 +224,7 @@ describe('MoonshotProvider sampling-param handling', () => {
   });
 
   it('forwards an explicit reasoning_effort for kimi-k3 models', async () => {
-    const provider = asChat(
-      createMoonshotProvider('moonshot:kimi-k3', {
-        config: { reasoning_effort: 'max' },
-      }),
-    );
+    const provider = asChat(createMoonshotProvider('moonshot:kimi-k3', createMaxReasoningConfig()));
     const { body } = await provider.getOpenAiBody('Hello');
     // The OpenAI base only sends reasoning_effort for its own reasoning models,
     // so the Moonshot provider re-attaches it for kimi-k3 requests.
@@ -274,19 +279,13 @@ describe('MoonshotProvider sampling-param handling', () => {
   });
 
   it('fails fast when reasoning_effort is configured on a non-K3 model', async () => {
-    const k2 = asChat(
-      createMoonshotProvider('moonshot:kimi-k2.6', {
-        config: { reasoning_effort: 'max' },
-      }),
-    );
+    const k2 = asChat(createMoonshotProvider('moonshot:kimi-k2.6', createMaxReasoningConfig()));
     await expect(k2.getOpenAiBody('Hello')).rejects.toThrow(
       /kimi-k2\.6 does not support reasoning_effort/,
     );
 
     const v1 = asChat(
-      createMoonshotProvider('moonshot:moonshot-v1-8k', {
-        config: { reasoning_effort: 'max' },
-      }),
+      createMoonshotProvider('moonshot:moonshot-v1-8k', createMaxReasoningConfig()),
     );
     await expect(v1.getOpenAiBody('Hello')).rejects.toThrow(/does not support reasoning_effort/);
   });
@@ -352,26 +351,19 @@ describe('calculateMoonshotCost', () => {
 });
 
 describe('MoonshotProvider callApi cost', () => {
-  const okResponse = {
-    data: {
-      choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
-      usage: {
-        total_tokens: 15,
-        prompt_tokens: 10,
-        completion_tokens: 5,
-        prompt_tokens_details: { cached_tokens: 4 },
-      },
+  const okResponse = createMockFetchResponse({
+    choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+    usage: {
+      total_tokens: 15,
+      prompt_tokens: 10,
+      completion_tokens: 5,
+      prompt_tokens_details: { cached_tokens: 4 },
     },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  });
 
   it('fills in cost from user-supplied rates (incl. cached tokens)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-      config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
-    });
+    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', createCustomPricingConfig());
     const result = await provider.callApi('Say hi');
     expect(result.cost).toBe(
       calculateMoonshotCost({ inputCost: 0.000002, outputCost: 0.000004 }, 10, 5, 4),
@@ -379,20 +371,15 @@ describe('MoonshotProvider callApi cost', () => {
   });
 
   it('reads cached tokens from the documented top-level usage.cached_tokens field', async () => {
-    const moonshotShapedResponse = {
-      data: {
-        choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
-        usage: {
-          total_tokens: 15,
-          prompt_tokens: 10,
-          completion_tokens: 5,
-          cached_tokens: 4,
-        },
+    const moonshotShapedResponse = createMockFetchResponse({
+      choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+      usage: {
+        total_tokens: 15,
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        cached_tokens: 4,
       },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    });
     vi.mocked(fetchWithCache).mockResolvedValueOnce(moonshotShapedResponse as any);
     const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
       config: {
@@ -411,9 +398,7 @@ describe('MoonshotProvider callApi cost', () => {
 
   it('honours prompt-level cost overrides', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-      config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
-    });
+    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', createCustomPricingConfig());
     const result = await provider.callApi('Say hi', {
       prompt: { raw: 'Say hi', label: 'test', config: { inputCost: 0.00002 } },
       vars: {},
@@ -434,9 +419,7 @@ describe('MoonshotProvider callApi cost', () => {
 
   it('leaves cost undefined for promptfoo cache hits even when pricing is configured', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({ ...okResponse, cached: true } as any);
-    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-      config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
-    });
+    const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', createCustomPricingConfig());
     const result = await provider.callApi('Say hi');
     expect(result.cached).toBe(true);
     expect(result.cost).toBeUndefined();

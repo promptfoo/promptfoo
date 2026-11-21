@@ -33,12 +33,6 @@ declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
  * calling getDirectory() at module load time can cause issues with mock setup.
  */
 let currentDir: string | undefined;
-function getCurrentDir(): string {
-  if (!currentDir) {
-    currentDir = getDirectory();
-  }
-  return currentDir;
-}
 
 /**
  * Options for runDbMigrations.
@@ -53,7 +47,7 @@ export type RunDbMigrationsOptions = {
 };
 
 function resolveMigrationsFolder(): string {
-  const dir = getCurrentDir();
+  const dir = (currentDir ||= getDirectory());
   if (dir.includes('dist/src')) {
     // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
     // Navigate to project root and find drizzle folder in dist
@@ -79,7 +73,21 @@ export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Pro
     const migrationsFolder = resolveMigrationsFolder();
 
     logger.debug(`Running database migrations from: ${migrationsFolder}`);
-    await migrate(db, { migrationsFolder });
+    try {
+      await migrate(db, { migrationsFolder });
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        error.name !== 'LibsqlBatchError' ||
+        !('code' in error) ||
+        error.code !== 'SQLITE_ERROR'
+      ) {
+        throw error;
+      }
+      // Another process can commit after Drizzle reads the journal. The failed batch
+      // rolled back, so read the journal again and apply only the remaining migrations.
+      await migrate(db, { migrationsFolder });
+    }
     logger.debug('Database migrations completed');
   } catch (error) {
     const libsqlBindingTarget = getLibsqlBindingTarget(error);

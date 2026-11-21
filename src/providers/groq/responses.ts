@@ -1,10 +1,14 @@
 import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
-import { groqSupportsTemperature, isGroqReasoningModel } from './util';
+import { serializeProvider } from '../serialization';
+import {
+  assertGroqResponsesServiceTier,
+  getGroqProviderOptions,
+  groqSupportsTemperature,
+  isGroqReasoningModel,
+} from './util';
 
 import type { GroqResponsesProviderOptions } from './types';
-
-const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 
 /**
  * Groq Responses API Provider
@@ -35,6 +39,10 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
 
+  protected override isReasoningCapabilityModel(modelName: string): boolean {
+    return isGroqReasoningModel(modelName) || super.isReasoningCapabilityModel(modelName);
+  }
+
   protected supportsTemperature(): boolean {
     // Groq's reasoning models support temperature, unlike OpenAI's o1 models
     if (groqSupportsTemperature(this.modelName)) {
@@ -43,15 +51,20 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
     return super.supportsTemperature();
   }
 
+  protected override supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return groqSupportsTemperature(modelName)
+      ? true
+      : super.supportsTemperatureForCapabilityModel(modelName);
+  }
+
   constructor(modelName: string, providerOptions: GroqResponsesProviderOptions) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
-      },
-    });
+    super(modelName, getGroqProviderOptions(providerOptions));
+  }
+
+  override async getOpenAiBody(...args: Parameters<OpenAiResponsesProvider['getOpenAiBody']>) {
+    const result = await super.getOpenAiBody(...args);
+    assertGroqResponsesServiceTier(result.body.service_tier);
+    return result;
   }
 
   id(): string {
@@ -63,13 +76,6 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'groq:responses',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'groq:responses', () => this.apiKey);
   }
 }

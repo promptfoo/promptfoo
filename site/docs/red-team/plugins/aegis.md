@@ -31,7 +31,7 @@ The plugin:
 
 - Fetches test cases from NVIDIA's professionally annotated dataset
 - Samples from multiple interaction formats (user prompts, multi-turn conversations)
-- Tests model responses against the comprehensive 13-category safety taxonomy
+- Tests model responses against the 13-category safety taxonomy
 - Evaluates both clear violations and edge cases marked as "Needs Caution"
 
 ## Quick Start
