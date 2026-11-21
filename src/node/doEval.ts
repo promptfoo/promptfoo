@@ -809,13 +809,14 @@ async function doEvalWithEnv(
       cache,
     };
 
-    if (!resumeEval && cmdObj.grader) {
+    const grader = cmdObj.grader ?? (isCliInvocation ? commandLineOptions?.grader : undefined);
+    if (!resumeEval && grader) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = cmdObj.grader;
+      testSuite.defaultTest.options.provider = grader;
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
         // Normalize string shorthand to object
