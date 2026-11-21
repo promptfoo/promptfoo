@@ -95,6 +95,27 @@ export function getProviderDelay(provider?: ApiProvider): number | undefined {
   return provider.delay ?? (scopedDelay?.provider === provider ? scopedDelay.delay : undefined);
 }
 
+/** Apply provider-owned pacing after a cache miss. */
+export async function paceProviderCall(
+  provider: Pick<ApiProvider, 'delay'>,
+  original?: ApiProvider,
+  signal?: AbortSignal,
+): Promise<void> {
+  const context = getProviderCallExecutionContext();
+  // The evaluator paces calls to its target. Self-grading has no outer pacing step.
+  const delay =
+    original === provider && context?.rateLimitProvider
+      ? provider.delay
+      : (getProviderDelay(original) ?? provider.delay);
+  if (delay && delay > 0) {
+    await sleepWithAbort(delay, signal);
+    const invocation = context?.providerDelay;
+    if (invocation?.state && invocation.provider === original) {
+      invocation.state.handled = true;
+    }
+  }
+}
+
 export function withProviderCallExecutionContext<T>(
   context: ProviderCallExecutionContext,
   fn: () => Promise<T>,

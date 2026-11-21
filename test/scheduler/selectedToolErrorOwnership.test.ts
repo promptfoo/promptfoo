@@ -8,6 +8,7 @@ import { withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -42,7 +43,6 @@ describe('selected tool error through the actual iterative scheduler boundary', 
     vi.setSystemTime(new Date('2026-09-10T21:15:00.000Z'));
     registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
     redteamProviderManager.clearProvider();
-    redteamProviderManager.setRateLimitRegistry(registry);
   });
 
   afterEach(async () => {
@@ -55,7 +55,6 @@ describe('selected tool error through the actual iterative scheduler boundary', 
     await Promise.allSettled(pending.splice(0));
     await setImmediate();
     redteamProviderManager.clearProvider();
-    redteamProviderManager.setRateLimitRegistry(undefined);
     registry.dispose();
     for (const provider of providers.splice(0)) {
       await provider.cleanup?.();
@@ -219,15 +218,17 @@ describe('selected tool error through the actual iterative scheduler boundary', 
       });
       function start(strategy: ApiProvider, target: ApiProvider, controller: AbortController) {
         const wrapped = wrapProviderWithRateLimiting(strategy, registry);
-        const outcome = withCacheEnabled(false, () =>
-          wrapped.callApi(
-            '',
-            {
-              prompt: { raw: '{{attack}}', label: 'selected error fixture' },
-              vars: { attack: 'Produce a harmless greeting' },
-              originalProvider: wrapProviderWithRateLimiting(target, registry),
-            },
-            { abortSignal: controller.signal },
+        const outcome = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+          withCacheEnabled(false, () =>
+            wrapped.callApi(
+              '',
+              {
+                prompt: { raw: '{{attack}}', label: 'selected error fixture' },
+                vars: { attack: 'Produce a harmless greeting' },
+                originalProvider: wrapProviderWithRateLimiting(target, registry),
+              },
+              { abortSignal: controller.signal },
+            ),
           ),
         ).then(
           (value: ProviderResponse) => ({ value, error: undefined }),

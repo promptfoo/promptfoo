@@ -5,11 +5,9 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import {
   getProviderCallAbortSignal,
-  getProviderCallExecutionContext,
-  getProviderDelay,
+  paceProviderCall,
 } from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
-import { sleep, sleepWithAbort } from '../util/time';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import { resolveProviderEnv } from './env';
@@ -140,20 +138,6 @@ abstract class SageMakerGenericProvider {
 
   toString(): string {
     return `[Amazon SageMaker Provider ${this.endpointName}]`;
-  }
-
-  protected getInvocationDelay(original?: ApiProvider) {
-    // The evaluator paces calls to this target. Self-grading has no outer pacing step.
-    return Object.is(original, this) && getProviderCallExecutionContext()?.rateLimitProvider
-      ? this.delay
-      : (getProviderDelay(original) ?? this.delay);
-  }
-
-  protected markDelayHandled(provider?: ApiProvider): void {
-    const invocationDelay = getProviderCallExecutionContext()?.providerDelay;
-    if (invocationDelay?.state && invocationDelay.provider === provider) {
-      invocationDelay.state.handled = true;
-    }
   }
 
   /**
@@ -684,8 +668,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
-    const delayMs = this.getInvocationDelay(context?.originalProvider);
-
     const transformResult = await this.runTransformSafely(
       prompt,
       context,
@@ -757,14 +739,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       }
     }
 
-    // Apply delay if specified and not using cached response
-    if (delayMs && delayMs > 0) {
-      logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
-      );
-      await (abortSignal ? sleepWithAbort(delayMs, abortSignal) : sleep(delayMs));
-      this.markDelayHandled(context?.originalProvider);
-    }
+    await paceProviderCall(this, context?.originalProvider, abortSignal);
 
     // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance(request.region);
@@ -920,8 +895,6 @@ export class SageMakerEmbeddingProvider
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
-    const delayMs = this.getInvocationDelay(context?.originalProvider);
-
     const transformResult = await this.runTransformSafely(
       text,
       context,
@@ -972,14 +945,7 @@ export class SageMakerEmbeddingProvider
       }
     }
 
-    // Apply delay if specified and not using cached response
-    if (delayMs && delayMs > 0) {
-      logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
-      );
-      await (abortSignal ? sleepWithAbort(delayMs, abortSignal) : sleep(delayMs));
-      this.markDelayHandled(context?.originalProvider);
-    }
+    await paceProviderCall(this, context?.originalProvider, abortSignal);
 
     // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance();

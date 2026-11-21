@@ -750,6 +750,34 @@ describe('SageMaker invocation-local pacing', () => {
     mockIsCacheEnabled.mockReset();
   });
 
+  it.each(['completion', 'embedding'])(
+    'preserves the abort reason during %s pacing',
+    async (kind) => {
+      const options = { delay: 50, config: { region: 'us-east-1', modelType: 'openai' as const } };
+      const controller = new AbortController();
+      const call = { abortSignal: controller.signal };
+      const timeout = vi.spyOn(global, 'setTimeout');
+      const pending =
+        kind === 'completion'
+          ? new SageMakerCompletionProvider('offline-endpoint', options).callApi(
+              'hello',
+              undefined,
+              call,
+            )
+          : new SageMakerEmbeddingProvider('offline-endpoint', options).callEmbeddingApi(
+              'hello',
+              undefined,
+              call,
+            );
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(timeout).toHaveBeenCalledWith(expect.any(Function), 50);
+      controller.abort(new Error('Paused'));
+      await expect(pending).rejects.toBe(controller.signal.reason);
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     { kind: 'self', delay: 20, cached: false },
     { kind: 'completion', delay: undefined, cached: false },
