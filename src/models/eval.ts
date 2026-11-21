@@ -103,17 +103,22 @@ export function createEvalId(createdAt: Date = new Date()) {
 
 type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
 
-export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+export async function insertEvalPrompts(
+  tx: EvalRelationDb,
+  evalId: string,
+  prompts: Prompt[],
+  preserveIds = false,
+) {
   for (const prompt of prompts) {
     const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = generateIdFromPrompt(prompt);
+    // Completed imports can share a stripped label but still refer to distinct result columns.
+    const promptId = (preserveIds && prompt.id) || generateIdFromPrompt(prompt);
     await tx
       .insert(promptsTable)
       .values({ id: promptId, prompt: label })
       .onConflictDoNothing()
       .run();
     await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
-    logger.debug(`Inserting prompt ${promptId}`);
   }
 }
 
@@ -568,7 +573,7 @@ export default class Eval {
         })
         .run();
 
-      await insertEvalPrompts(tx, evalId, renderedPrompts);
+      await insertEvalPrompts(tx, evalId, renderedPrompts, Boolean(opts?.completedPrompts));
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
