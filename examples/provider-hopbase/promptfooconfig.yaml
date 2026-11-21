@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare HopBase models side by side
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+# All providers and the grader use one base URL and the `HOPBASE_API_KEY` variable.
+providers:
+  - id: openai:chat:gpt-6.1-sol
+    label: 'GPT-6.1 Sol'
+    config:
+      apiBaseUrl: https://api.hop-base.com/v1
+      apiKeyEnvar: HOPBASE_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      max_completion_tokens: 512
+  - id: openai:chat:glm-5.3
+    label: 'GLM-5.3'
+    config:
+      apiBaseUrl: https://api.hop-base.com/v1
+      apiKeyEnvar: HOPBASE_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      temperature: 0
+      # GLM-5.3 reasons before answering; a small limit can leave the answer empty.
+      max_tokens: 1024
+      showThinking: false
+  - id: anthropic:messages:claude-sonnet-5-5
+    label: 'Claude Sonnet 5.5 (Messages API)'
+    env:
+      ANTHROPIC_CUSTOM_HEADERS: ''
+    config:
+      apiBaseUrl: https://api.hop-base.com
+      apiKeyEnvar: HOPBASE_API_KEY
+      max_tokens: 512
+      # Sonnet 5.5 thinks by default; between_tools skips up-front thinking for a tool-free answer.
+      thinking:
+        type: between_tools
+      showThinking: false
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:gpt-6.1-sol
+      config:
+        apiBaseUrl: https://api.hop-base.com/v1
+        apiKeyEnvar: HOPBASE_API_KEY
+        headers:
+          OpenAI-Organization: ''
+        omitDefaults: true
+        max_completion_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the chemical symbol for gold?
+    assert:
+      - type: regex
+        value: \bAu\b
+  - vars:
+      question: Why does ice float on liquid water?
+    assert:
+      - type: icontains-any
+        value: [less dense, lower density]
+      - type: llm-rubric
+        value: Explains that ice is less dense than liquid water.
