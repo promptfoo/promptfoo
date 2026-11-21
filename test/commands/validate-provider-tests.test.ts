@@ -19,7 +19,10 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
 }));
 vi.mock('../../src/providers/index');
 vi.mock('../../src/node/testProvider');
-vi.mock('../../src/util/cloud');
+vi.mock('../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/cloud')>()),
+  getProviderFromCloud: vi.fn(),
+}));
 vi.mock('../../src/telemetry', () => ({
   default: {
     record: vi.fn(),
@@ -417,6 +420,19 @@ describe('Validate Command Provider Tests', () => {
   });
 
   describe('Testing without config file', () => {
+    it('rejects a command selected by a cloud target during validation', async () => {
+      vi.mocked(getProviderFromCloud).mockResolvedValueOnce({ id: 'exec:fixture' });
+      const providers = await vi.importActual<typeof import('../../src/providers/index')>(
+        '../../src/providers/index',
+      );
+      vi.mocked(loadApiProvider).mockImplementationOnce(providers.loadApiProvider);
+      await doValidateTarget({ target: '11111111-1111-4111-8111-111111111111' }, defaultConfig);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('disabled for cloud configurations'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
     it('should test provider with -t flag when no config file is present', async () => {
       // No config paths provided
       vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
