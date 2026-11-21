@@ -15,25 +15,29 @@ export const handleIsValidOpenAiToolsCall = async ({
   const verdict = (valid: boolean, reason: string) =>
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
-  // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
-
-  // Check for MCP tool results in the output
-  if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
-    // For MCP tools, we validate that the tool call was successful
-    if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
-      const toolName = errorMatch ? errorMatch[1] : 'unknown';
-      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
-      return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
-    }
-
-    // MCP tool call succeeded
-    const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
-    const toolName = resultMatch ? resultMatch[1] : 'unknown';
-    return verdict(true, `MCP tool call succeeded for ${toolName}`);
+  // Only top-level MCP records are text responses. Never inspect arguments
+  // or unrelated metadata, and always validate structured calls below.
+  const text =
+    typeof output === 'string'
+      ? output
+      : output &&
+          typeof output === 'object' &&
+          !Array.isArray(output) &&
+          !('tool_calls' in output) &&
+          'content' in output &&
+          typeof output.content === 'string'
+        ? output.content
+        : '';
+  if (/^[ \t]*MCP Tool Error\b/m.test(text)) {
+    const error = /^[ \t]*MCP Tool Error \(([^()\r\n]+)\): (.+)/m.exec(text);
+    return verdict(
+      false,
+      'MCP tool call failed for ' +
+        (error?.[1] ?? 'unknown') +
+        ': ' +
+        (error?.[2] ?? 'unknown error'),
+    );
   }
-
   // Handle traditional OpenAI function/tool calls
   if (output && typeof output === 'object' && 'tool_calls' in output) {
     output = output.tool_calls as string | object;
@@ -53,7 +57,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   ) {
     return verdict(
       false,
-      `OpenAI did not return a valid-looking tools response: ${JSON.stringify(toolsOutput)}`,
+      'OpenAI did not return a valid-looking tools response. Expected a structured function call.',
     );
   }
 

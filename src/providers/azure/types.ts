@@ -81,7 +81,7 @@ export interface AzureCompletionOptions {
     | {
         name: string;
         description?: string;
-        parameters: any;
+        parameters?: any;
       }[];
   function_call?: 'none' | 'auto' | { name: string };
   tools?:
@@ -92,7 +92,7 @@ export interface AzureCompletionOptions {
         function: {
           name: string;
           description?: string;
-          parameters: any;
+          parameters?: any;
         };
       }[];
   tool_choice?:
