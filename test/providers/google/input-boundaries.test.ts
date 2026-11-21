@@ -483,7 +483,7 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
       { brand: 'mp42', replacement: 'MP4 file' },
       { brand: 'isom', replacement: 'raw MP4' },
     ])(
-      'loads a $replacement $brand register produced by a previous actual runEval',
+      'renders a $replacement $brand register without loading a model-selected file',
       async ({ brand, replacement }) => {
         // A BMFF identification prefix proves request representation, not codec decoding.
         const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
@@ -539,20 +539,12 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
         expect(second[0].response?.error).toBeUndefined();
         expect(second[0].response?.output).toBe('ok');
         const body = requestBody(route);
-        expect(body.contents[0].parts[0].inlineData.mimeType).toBe(
-          currentAudio ? 'audio/mp4' : 'video/mp4',
-        );
+        const expectedPart =
+          replacement === 'raw MP4'
+            ? { inlineData: { mimeType: 'video/mp4', data: encoded } }
+            : { text: storedOutput };
         expect(body).toEqual({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  inlineData: { mimeType: currentAudio ? 'audio/mp4' : 'video/mp4', data: encoded },
-                },
-              ],
-            },
-          ],
+          contents: [{ role: 'user', parts: [expectedPart] }],
           generationConfig: {},
         });
         expect(originalTest.vars).toBe(originalVars);
@@ -560,7 +552,9 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
         expect(options.registers).toBe(registers);
         expect(registers).toEqual({ audio: storedOutput });
         expect(() => readFileSync(oldFile)).toThrow();
-        const expectedVars = currentAudio ? { alias: encoded, audio: encoded } : { audio: encoded };
+        const expectedVars = currentAudio
+          ? { alias: storedOutput, audio: storedOutput }
+          : { audio: storedOutput };
         expect(Object.fromEntries(Object.entries(second[0].vars))).toEqual(expectedVars);
         expect(JSON.parse(JSON.stringify(second[0])).vars).toEqual(expectedVars);
       },

@@ -314,6 +314,7 @@ function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
+  preloaded: ReadonlySet<string> = new Set(),
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
@@ -321,7 +322,7 @@ export function generateVarCombinations(
   for (const key of keys) {
     let values: Array<string | object> = [];
 
-    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+    if (!preloaded.has(key) && typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
@@ -1040,6 +1041,34 @@ function buildScenarioTests(
   return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
 }
 
+function mergeVarsFileProvenance(
+  metadata: AtomicTestCase['metadata'],
+  ...layers: (AtomicTestCase | undefined)[]
+): AtomicTestCase['metadata'] {
+  if (!layers.some((layer) => Array.isArray(layer?.metadata?.__promptfoo?.varsFileKeys))) {
+    return metadata;
+  }
+  const keys = new Set<string>();
+  for (const layer of layers) {
+    const marked = layer?.metadata?.__promptfoo?.varsFileKeys;
+    const loadedKeys = new Set(Array.isArray(marked) ? marked : []);
+    for (const name of Object.keys(layer?.vars ?? {})) {
+      if (loadedKeys.has(name)) {
+        keys.add(name);
+      } else {
+        keys.delete(name);
+      }
+    }
+  }
+  return {
+    ...metadata,
+    __promptfoo: {
+      ...Object.assign({}, ...layers.map((layer) => layer?.metadata?.__promptfoo)),
+      varsFileKeys: [...keys],
+    },
+  };
+}
+
 function mergeScenarioTest(
   testSuite: TestSuite,
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
@@ -1069,7 +1098,7 @@ function mergeScenarioTest(
       ...test.options,
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
-    metadata: mergedMetadata,
+    metadata: mergeVarsFileProvenance(mergedMetadata, defaultTest, data, test),
   } as AtomicTestCase;
 }
 
@@ -1081,6 +1110,11 @@ async function prepareTestVariables(
   const inputTransformDefault = getDefaultTest(testSuite)?.options?.transformVars;
 
   for (const testCase of tests) {
+    testCase.metadata = mergeVarsFileProvenance(
+      testCase.metadata,
+      getDefaultTest(testSuite),
+      testCase,
+    );
     testCase.vars = {
       ...(getDefaultTest(testSuite)?.vars || {}),
       ...testCase?.vars,
@@ -1276,7 +1310,14 @@ function appendRunEvalOptionsForTestCase({
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {});
+      : generateVarCombinations(
+          testCase.vars || {},
+          new Set(
+            Array.isArray(testCase.metadata?.__promptfoo?.varsFileKeys)
+              ? testCase.metadata.__promptfoo.varsFileKeys
+              : [],
+          ),
+        );
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
