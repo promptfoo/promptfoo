@@ -1,70 +1,76 @@
-import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+
+import { getActiveSpanRole, type PromptfooSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import type { Span } from '@opentelemetry/api';
 
 import type { ParsedTrace } from './store';
 
-const HOSTED_TRACE_REQUESTED = 'promptfoo.openai.hosted_trace_requested';
+// A collector may return wrappers long after export, including when the host owns
+// the exporter. Bind each role to one wrapper without retaining completed spans.
+const key = randomBytes(32);
+const HOSTED_REQUEST_ATTRIBUTE = 'promptfoo.openai.hosted_trace_requested';
+export const SPAN_ORIGIN_ATTRIBUTE = 'promptfoo.span.origin';
 
-// An HTTP receiver may also be this process's own SDK export destination.
-// Retain only in-flight batches so a receiver can identify those local wrappers.
-const pendingBatches = new Set<Map<string, ReadableSpan>>();
-
-export function trackLocalOtlpExports(exporter: SpanExporter): SpanExporter {
-  return {
-    export(spans, callback) {
-      const batch = new Map<string, ReadableSpan>();
-      for (const span of spans) {
-        if (
-          span.instrumentationScope.name === PROMPTFOO_TRACER_NAME &&
-          (span.attributes[SPAN_ROLE_ATTRIBUTE] || span.attributes[HOSTED_TRACE_REQUESTED])
-        ) {
-          const { traceId, spanId } = span.spanContext();
-          batch.set(traceId + spanId, span);
-        }
-      }
-      pendingBatches.add(batch);
-      try {
-        exporter.export(spans, (result) => {
-          pendingBatches.delete(batch);
-          callback(result);
-        });
-      } catch (error) {
-        pendingBatches.delete(batch);
-        throw error;
-      }
-    },
-    forceFlush: () => exporter.forceFlush?.() ?? Promise.resolve(),
-    shutdown: () => exporter.shutdown(),
-  };
+function origin(
+  traceId: string,
+  spanId: string,
+  parentId: string | undefined,
+  name: string,
+  role: string | undefined,
+  hosted: boolean,
+) {
+  return createHmac('sha256', key)
+    .update(JSON.stringify([traceId, spanId, parentId || '', name, role, hosted]))
+    .digest();
 }
 
-export function stripExternalSpanOwnership(attributes: Record<string, unknown>): void {
-  // Only the native importer writes this marker directly to the trace store.
-  delete attributes['promptfoo.openai.hosted_trace'];
-  delete attributes[SPAN_ROLE_ATTRIBUTE];
-  delete attributes[HOSTED_TRACE_REQUESTED];
+export function markEvaluatorSpan(
+  span: Span,
+  role: PromptfooSpanRole | undefined,
+  name: string,
+  parentId?: string,
+  hosted = false,
+): void {
+  const { traceId, spanId } = span.spanContext();
+  span.setAttribute(
+    SPAN_ORIGIN_ATTRIBUTE,
+    origin(traceId, spanId, parentId, name, role, hosted).toString('hex'),
+  );
 }
 
-export function setReceivedSpanOwnership({ traceId, span }: ParsedTrace): void {
-  const attributes = span.attributes;
+export function markHostedRequest(span: Span, traceparent: string): void {
+  span.setAttribute(HOSTED_REQUEST_ATTRIBUTE, true);
+  markEvaluatorSpan(span, getActiveSpanRole(), 'invoke_agent', traceparent.split('-')[2], true);
+}
+
+// Verify the original wire tuple. Only remove fields from the destination so
+// a redaction policy can still scrub echoes and withhold the role itself.
+export function setReceivedSpanOwnership(
+  { traceId, span }: ParsedTrace,
+  attributes = span.attributes,
+): void {
   if (!attributes) {
     return;
   }
-  stripExternalSpanOwnership(attributes);
-
-  for (const batch of pendingBatches) {
-    const local = batch.get(traceId + span.spanId);
-    if (
-      local &&
-      local.name === span.name &&
-      local.parentSpanContext?.spanId === span.parentSpanId
-    ) {
-      for (const key of [SPAN_ROLE_ATTRIBUTE, HOSTED_TRACE_REQUESTED]) {
-        if (local.attributes[key] !== undefined) {
-          attributes[key] = local.attributes[key];
-        }
-      }
-      return;
-    }
+  // Only the native importer writes this marker directly to the trace store.
+  delete attributes['promptfoo.openai.hosted_trace'];
+  const hosted = span.attributes?.[HOSTED_REQUEST_ATTRIBUTE] === true;
+  if (!hosted) {
+    delete attributes[HOSTED_REQUEST_ATTRIBUTE];
+  }
+  const role = span.attributes?.[SPAN_ROLE_ATTRIBUTE];
+  const received = span.attributes?.[SPAN_ORIGIN_ATTRIBUTE];
+  delete attributes[SPAN_ORIGIN_ATTRIBUTE];
+  if (
+    (role !== undefined && typeof role !== 'string') ||
+    typeof received !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(received) ||
+    !timingSafeEqual(
+      Buffer.from(received, 'hex'),
+      origin(traceId, span.spanId, span.parentSpanId, span.name, role, hosted),
+    )
+  ) {
+    delete attributes[SPAN_ROLE_ATTRIBUTE];
+    delete attributes[HOSTED_REQUEST_ATTRIBUTE];
   }
 }

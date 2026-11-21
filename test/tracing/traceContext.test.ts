@@ -1,4 +1,10 @@
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { markEvaluatorSpan, SPAN_ORIGIN_ATTRIBUTE } from '../../src/tracing/otlpOwnership';
 
 const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
@@ -304,34 +310,73 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
-  it('keeps externally fetched tool evidence and strips claims of evaluator ownership', async () => {
-    mockExternalTrace([
-      {
-        spanId: 'target',
-        name: 'execute_tool delete_record',
-        statusMessage: 'unknown-owner',
-        startTime: 1,
-        attributes: {
-          'gen_ai.tool.name': 'delete_record',
-          'promptfoo.span.role': 'grader',
-          'promptfoo.openai.hosted_trace': 'unknown-owner',
-          'promptfoo.openai.hosted_trace_requested': true,
-        },
-      },
-    ]);
-
-    const result = await fetchTraceContext('trace-1', {
-      providerConfig,
-      maxRetries: 0,
-      queryDelay: 0,
-      redactAttributes: ['promptfoo.openai.hosted_trace'],
+  it('preserves fetched evaluator roles even after a host-owned exporter shuts down', async () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
-
-    const attributes = { 'gen_ai.tool.name': 'delete_record' };
-    expect(storedSpans[0]).toMatchObject({ statusMessage: '[REDACTED]' });
-    expect(storedSpans[0].attributes).toEqual(attributes);
-    expect(result?.spans[0].attributes).toEqual(attributes);
+    const name = 'grader rubric';
+    const hosted = 'promptfoo.openai.hosted_trace_requested';
+    const span = provider.getTracer('host').startSpan(name, {
+      attributes: { 'promptfoo.span.role': 'grader', [hosted]: true },
+    });
+    markEvaluatorSpan(span, 'grader', name, undefined, true);
+    span.end();
+    await provider.forceFlush();
+    const [exported] = exporter.getFinishedSpans();
+    await provider.shutdown();
+    const { traceId, spanId } = exported.spanContext();
+    const signature = String(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]);
+    mockExternalTrace(
+      [{ spanId, name, statusMessage: signature, startTime: 1, attributes: exported.attributes }],
+      traceId,
+    );
+    await fetchTraceContext(traceId, {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['origin', hosted],
+    });
+    expect(storedSpans[0].attributes).toEqual({
+      'promptfoo.span.role': 'grader',
+      [hosted]: '[REDACTED]',
+    });
+    expect(storedSpans[0].statusMessage).toBe('[REDACTED]');
+    expect(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]).toBe(signature);
   });
+
+  it.each([undefined, 'grader', 'forged-owner'])(
+    'retains a fetched target tool that claims grader and hosted ownership (redaction=%s)',
+    async (redact) => {
+      mockExternalTrace([
+        {
+          spanId: 'target',
+          name: 'execute_tool delete_record',
+          statusMessage: redact ?? 'grader',
+          startTime: 1,
+          attributes: {
+            'gen_ai.tool.name': 'delete_record',
+            'promptfoo.span.role': 'grader',
+            'promptfoo.openai.hosted_trace': 'forged-owner',
+            'promptfoo.openai.hosted_trace_requested': true,
+          },
+        },
+      ]);
+
+      const trace = await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        includeInternalSpans: false,
+        redactAttributes: redact ? ['promptfoo.span.role', 'promptfoo.openai.hosted_trace'] : [],
+      });
+
+      const expected = { 'gen_ai.tool.name': 'delete_record' };
+      expect(storedSpans[0].attributes).toEqual(expected);
+      expect(storedSpans[0].statusMessage).toBe(redact ? '[REDACTED]' : 'grader');
+      expect(trace?.spans.map((span) => span.attributes)).toEqual([expected]);
+    },
+  );
 
   it('redacts configured nested and numeric attribute values before persistence', async () => {
     mockExternalTrace([

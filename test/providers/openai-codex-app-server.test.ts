@@ -1297,6 +1297,7 @@ describe('OpenAICodexAppServerProvider', () => {
       completion: 5,
       total: 15,
       cached: 2,
+      completionDetails: { reasoning: 0 },
     });
     expect(result.cost).toBeCloseTo(0.000191);
     expect(result.metadata?.codexAppServer).toMatchObject({
@@ -2586,7 +2587,15 @@ describe('OpenAICodexAppServerProvider', () => {
       { type: 'mention', name: 'plugin', path: 'plugin://my-plugin' },
     ];
     const text = { type: 'text', text: 'Review these inputs' };
-    expect((await provider.callApi(JSON.stringify([text, ...attachments]))).error).toBeUndefined();
+    const spans = installSpanRecorder();
+    const prompt = JSON.stringify([text, ...attachments]);
+    expect(
+      (await provider.callApi(prompt, { vars: {}, prompt: { raw: prompt, label: prompt } })).error,
+    ).toBeUndefined();
+    const recorded = JSON.stringify(spans);
+    expect(recorded).toContain(text.text);
+    expect(recorded).not.toContain('iVBORw0');
+    expect(recorded).not.toContain('mcp://receipt');
     expect(server.messages().find((msg) => msg.method === 'turn/start').params.input).toEqual([
       { ...text, text_elements: [] },
       ...attachments,
@@ -6179,7 +6188,10 @@ describe('OpenAICodexAppServerProvider', () => {
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
-    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(10);
+    expect(result.tokenUsage?.completionDetails).toEqual({
+      reasoning: 12,
+      cacheCreationInputTokens: 10,
+    });
     expect(result.cost).toBeCloseTo(0.0033, 10);
   });
 

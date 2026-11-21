@@ -17,6 +17,12 @@ describe('EvaluationPanel', () => {
       },
     ];
 
+    function setupCopyFeedback() {
+      // Count the feedback timeouts while jsdom manages its own focus intervals.
+      const timers = useTestTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      return { timers, user: userEvent.setup({ advanceTimers: timers.advanceBy }) };
+    }
+
     async function interact(action: () => Promise<void>) {
       await act(async () => {
         const interaction = action();
@@ -26,8 +32,7 @@ describe('EvaluationPanel', () => {
     }
 
     it('clears pending value and reason feedback timers when unmounted', async () => {
-      const timers = useTestTimers();
-      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+      const { timers, user } = setupCopyFeedback();
       const writeText = vi.fn().mockResolvedValue(undefined);
       mockClipboard({ writeText });
       const { unmount } = render(<EvaluationPanel gradingResults={gradingResults} />, {
@@ -46,8 +51,7 @@ describe('EvaluationPanel', () => {
     });
 
     it('does not schedule feedback after a pending clipboard write resolves on unmount', async () => {
-      const timers = useTestTimers();
-      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+      const { timers, user } = setupCopyFeedback();
       let resolveWrite!: () => void;
       const writeText = vi.fn(
         () =>
@@ -68,9 +72,8 @@ describe('EvaluationPanel', () => {
     });
 
     it('resets the copied indicator after the feedback duration', async () => {
-      const timers = useTestTimers();
-      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
-      mockClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+      const { timers, user } = setupCopyFeedback();
+      mockClipboard();
       render(<EvaluationPanel gradingResults={gradingResults} />);
 
       await interact(() => user.hover(screen.getByText('expected value')));
@@ -401,6 +404,16 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('google_docs/batch_update')).toBeInTheDocument();
     expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
     expect(container.querySelectorAll('.lucide-corner-down-right')).toHaveLength(2);
+  });
+
+  it('shows a zero count for an empty assertion set and a dash for an empty leaf', () => {
+    const leaf = { pass: true, score: 1, reason: 'No children' };
+    const emptySet = { ...leaf, metadata: { assertionSet: { type: 'assert-set' } } };
+    render(<EvaluationPanel gradingResults={[emptySet, leaf]} />);
+
+    const [, setRow, leafRow] = screen.getAllByRole('row');
+    expect(setRow.children[3]).toHaveTextContent('0 nested assertions');
+    expect(leafRow.children[3]).toHaveTextContent(/^-$/);
   });
 
   it('renders sibling rows after nested children when child results are not duplicated at top level', () => {

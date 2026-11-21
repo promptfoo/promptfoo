@@ -15,14 +15,16 @@ For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./
 ```yaml
 providers:
   - openai:codex-app-server
-  - openai:codex-app-server:gpt-6-astra
-  - openai:codex-app-server:gpt-6-sol
+  - openai:codex-app-server:gpt-6.2-astra
+  - openai:codex-app-server:gpt-6.2-sol
   - openai:codex-app-server:gpt-6-luna
   - openai:codex-desktop
-  - openai:codex-desktop:gpt-6-sol
+  - openai:codex-desktop:gpt-6.2-sol
 ```
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
+
+Use [Codex 0.169.1](https://github.com/openai/codex/releases/tag/rust-v0.169.1) or later for a bundled model catalog with GPT-6.2 Astra and Sol. Both support reasoning efforts from `low` through `ultra` in Codex.
 
 For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. For [Sol and Luna](/docs/providers/openai#gpt-6-sol-and-luna), use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) and an account with access. This release bundles the model metadata used to select reasoning levels. Codex `ultra` is available for Sol, but not Luna; it is not a direct Responses API reasoning value.
 
@@ -46,7 +48,7 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                                                                                                       |
 | Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                                                                                                             |
 | JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                                                                                                          |
-| Token usage and estimated cost                  | Yes        | Token usage comes from `thread/tokenUsage/updated`. Models such as GPT-6 Astra, Sol, and Luna have Standard API cost estimates. Missing cache-write counts can understate costs. |
+| Token usage and estimated cost                  | Yes        | Token usage comes from `thread/tokenUsage/updated`. Models such as GPT-6 Astra, Sol, and Luna have Standard API cost estimates. A missing cache-write count leaves cost unknown. |
 | Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                                                                                                       |
 | Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                                                                                                 |
 | Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized.                                                                                 |
@@ -76,26 +78,20 @@ Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible eval
 
 ### Run on Amazon Bedrock
 
-Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+The app server uses the same Bedrock model IDs and AWS credentials as the Codex SDK. Enable model access in your AWS Region and export a Bedrock API key as `AWS_BEARER_TOKEN_BEDROCK`.
 
 ```yaml
 providers:
   - id: openai:codex-app-server
     config:
-      model: openai.gpt-5.6-sol # Bedrock model id (note the openai. prefix)
       model_provider: amazon-bedrock
-      model_reasoning_effort: max
-      sandbox_mode: read-only
-      approval_policy: never
+      model: openai.gpt-6.1-terra
       cli_env:
-        AWS_REGION: us-east-2
-        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
-        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+        AWS_REGION: us-east-1
+        AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (GPT-5.6 Sol: `us-east-1`/`us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
-
-The Codex 0.156.1 Bedrock catalog does not list GPT-6 Sol or Luna. The [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) can evaluate them on AWS, but does not run Codex or its coding tools.
+The Codex SDK guide covers model selection for Mantle and Runtime, AWS profiles, and temporary credentials. [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
 
 ## Basic Usage
 
@@ -112,6 +108,8 @@ prompts:
 ```
 
 The provider returns Codex's final assistant text as `output`. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
+
+When the server reports reasoning output tokens, Promptfoo includes the count in `tokenUsage.completionDetails.reasoning`.
 
 For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
 
@@ -358,7 +356,7 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 
 Supply `image.url` as an inline base64 image data URL. Codex rejects HTTP and HTTPS image URLs at turn start. Use `local_image` or `localImage` for a file on the host when local environment access is enabled.
 
-With `environment_access: false`, a structured prompt can contain text, an inline base64 image data URL, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files. The [receipt comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/comparison) isolates its Codex home and supplies a single receipt reader.
+With `environment_access: false`, a structured prompt can contain text, an inline base64 image data URL, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files.
 
 ## Metadata
 

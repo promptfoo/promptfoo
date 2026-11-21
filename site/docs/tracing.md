@@ -263,6 +263,8 @@ With a hosted Agents API trace and its local provider span, `trace-span-count` w
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
+For a completed local capture, assertions use the spans collected when the target call finishes. Saved-trace grading uses that same capture, including after exporting and importing results. Partial local captures also admit later children of captured target spans, while later evaluator and grader spans remain available in the stored timeline. Span names and target-supplied role attributes do not exclude target spans. Evaluations with the OTLP HTTP receiver enabled remain partial because a local flush cannot confirm that remote exporters have finished; observed positive evidence can pass, but absence, exact counts, and inverse assertions require complete evidence. Dropped attributes make trace evidence unavailable to assertions because they can change how the remaining values are interpreted. With a finite attribute length limit, values at that limit also make evidence unavailable because the SDK does not report whether truncation changed the observed value. The same checks apply to delayed target spans during saved-trace grading, including after export and import. Raw spans remain available in the timeline. External-provider and caller-supplied traces without a local capture keep their full span set.
+
 Before grading a locally traced row, Promptfoo waits up to 30 seconds for queued local spans and SQLite writes. An external OTLP exporter sends batches independently and drains at SDK shutdown. Assertions configured to fetch an external trace still wait for that trace provider. If local export fails or exceeds the grading budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run.
 
 The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` per batch (30,000 ms by default). In SQLite rollback-journal mode, the commit can wait on a lock only for the remaining write budget. Synchronous disk work can still finish after the deadline, and the exporter can report a timeout even when the spans were committed.
@@ -273,7 +275,7 @@ For a custom assertion that requires trace evidence, return a failing grade when
 
 #### Concurrent programmatic evaluations
 
-Concurrent programmatic evaluations can share tracing when their service name, local export setting, collector URL, OTLP headers, and sampling policy match. Set OTLP credentials and sampling variables in the process environment. The SDK cannot apply per-evaluation overrides for these settings. Run evaluations with different settings or file-based OTLP TLS credentials sequentially or in separate processes. Promptfoo rejects incompatible settings before calling providers. If the host application already registered an OpenTelemetry provider, configure the collector on the host. Promptfoo can use a host provider with an inherited process-level `OTEL_EXPORTER_OTLP_ENDPOINT`. Setting `PROMPTFOO_OTEL_ENDPOINT` or overriding the collector for that evaluation requires a separate process.
+Concurrent programmatic evaluations can share tracing when their service name, local export setting, collector URL, OTLP headers, sampling policy, span limits, batch processor settings, and exporter timeout/compression match. Configure these SDK settings in the process environment; evaluation-specific overrides are unsupported. Run evaluations with different settings or file-based OTLP TLS credentials sequentially or in separate processes. Promptfoo rejects incompatible settings before calling providers. If the host application already registered an OpenTelemetry provider, configure the collector on the host. Promptfoo can use a host provider with an inherited process-level `OTEL_EXPORTER_OTLP_ENDPOINT`. Setting `PROMPTFOO_OTEL_ENDPOINT` or overriding the collector for that evaluation requires a separate process.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
@@ -392,10 +394,10 @@ For traces created by an evaluation, Promptfoo stores the evaluation's redaction
 another's results — each trace is redacted with its own policy, not the active receiver's.
 Traces created only when spans arrive at the receiver (no evaluation row) use the
 registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
-startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
-and is not changed by an overlapping evaluation.
+startup defaults, which remain fixed until the receiver stops. Similarly, `acceptFormats`
+configures the active HTTP receiver endpoint and is not changed by an overlapping evaluation.
 
-Target-only trace queries keep application spans that arrive over OTLP HTTP or through an external trace provider, even when the application supplies a grader role. The receiver preserves roles from Promptfoo's own OpenTelemetry exporter when it sends wrapper spans directly to the receiver. Older exports may contain roles supplied by the application. Use a trusted sender or collect a fresh trace when relying on those roles to exclude grader activity.
+Target-only trace queries keep application spans that arrive over OTLP HTTP or through an external trace provider, even when the application supplies a grader role. Promptfoo authenticates evaluator wrappers created in the current process, even when a host application exports them or a collector returns them later. Preserve the wrapper's name, IDs, role and `promptfoo.span.origin` attribute in the collector. Promptfoo removes the origin attribute before local storage. Older exports may contain roles supplied by the application. Use a trusted sender or collect a fresh trace when relying on those roles to exclude grader activity.
 
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
@@ -866,7 +868,7 @@ async function compareModels(prompt, context) {
 
 ## Red Team Tracing
 
-When running [red team tests](/docs/red-team/), tracing provides a powerful capability: **traces from your application's internal operations can be fed back to adversarial attack strategies**, allowing them to craft more sophisticated attacks based on what they observe.
+During [red team tests](/docs/red-team/), attack strategies can use application traces to adapt their next attempt based on observed model calls, tool executions, guardrails, and errors.
 
 This creates a feedback loop where:
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { extractTrajectorySteps } from '../../../src/assertions/trajectoryUtils';
 import cliState from '../../../src/cliState';
 import { normalizeHostedTrace } from '../../../src/providers/openai/agents-api-trace-spans';
+import { sanitizeTraceAttributes } from '../../../src/tracing/sanitizeAttributes';
 
 const traceId = 'b94f3ef2d9574e71a3084b13865d60b8';
 const parentId = '6f3b409971b19c81';
@@ -808,6 +809,41 @@ describe('normalizeHostedTrace', () => {
     expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
   });
 
+  it.each(['q7', 'c6af2a137b918a14a37aa88bb504a998.csv'])(
+    'drops credential-bearing path components and inspection operands (%s)',
+    (component) => {
+      const path = `/workspace/${component}/data.csv`;
+      const raw = JSON.stringify({ path, command: `cat ${path}`, cwd: '/workspace' });
+      const { spans } = normalizeHostedTrace(
+        payload(root, toolWithArgs(raw)),
+        parentId,
+        true,
+        (value) => (value === 'q7' ? '[REDACTED]' : value),
+      );
+      expect(JSON.parse(spans[1].attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
+      expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+      expect(JSON.stringify(spans)).not.toContain(component);
+    },
+  );
+
+  it('keeps approved bounded argument JSON parseable through export and honors alias redactions', () => {
+    const directory = '/folder.v1'.repeat(25);
+    const raw = JSON.stringify({ cwd: directory, path: directory + '/ledger.csv' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(raw.length).toBeGreaterThan(400);
+    const stored = spans[1].attributes!;
+    const exported = sanitizeTraceAttributes(stored);
+    expect(exported['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(exported['tool.arguments']).toBe(raw);
+    const redacted = sanitizeTraceAttributes(stored, { redactAttributes: ['tool.arguments'] });
+    expect(redacted['gen_ai.tool.call.arguments']).toBe('[REDACTED]');
+    const ordinary = sanitizeTraceAttributes({
+      ...stored,
+      'promptfoo.openai.hosted_trace': undefined,
+    });
+    expect(ordinary['tool.arguments']).not.toBe(raw);
+  });
+
   it('applies provider credential redaction to a supported path', () => {
     const path = '/workspace/private-file.csv';
     const raw = JSON.stringify({ path, cwd: '/workspace' });
@@ -1204,6 +1240,8 @@ describe('normalizeHostedTrace', () => {
       it.each([
         ['flag value', ['tool', '--api-key', credential]],
         ['flag assignment', ['tool', `--api-key=${credential}`]],
+        ['URL option', ['tool', `--url=https://user:${credential}@example.test`]],
+        ['URL assignment', ['tool', `ADDRESS=https://example.test?key=${credential}`]],
         ['environment assignment', ['env', `SERVICE_API_KEY=${credential}`, 'tool']],
         ['header flag', ['curl', '-H', `Authorization: Bearer ${credential}`]],
         ['attached header', ['curl', `--header=Authorization: Bearer ${credential}`]],
@@ -1232,7 +1270,10 @@ describe('normalizeHostedTrace', () => {
         const argv = ['cat', '/workspace/ledger.csv', '--format', 'ledger', 'COLOR=ledger'];
         const call = callNamed(
           'lookup_ledger',
-          attribute('gen_ai.tool.call.arguments', JSON.stringify({ cmd: argv })),
+          attribute(
+            'gen_ai.tool.call.arguments',
+            JSON.stringify({ cmd: argv, url: 'https://example.test/ledger' }),
+          ),
         );
         expect(withCarriers(payload(root, call), []).spans[1].name).toBe(
           'execute_tool lookup_ledger',
@@ -1247,6 +1288,19 @@ describe('normalizeHostedTrace', () => {
       });
 
       it.each([
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`user:${credential}`).toString('base64')}`,
+          },
+        },
+        {
+          headers: [
+            [
+              'Proxy-Authorization',
+              `basic ${Buffer.from(`${credential}:word`).toString('base64')}`,
+            ],
+          ],
+        },
         { headers: [['Authorization', `DPoP ${credential}`]] },
         { responseHeaders: [{ Value: `id=${credential}; Path=/; HttpOnly`, Name: 'Set-Cookie' }] },
         { rawHeaders: ['Accept', 'text/plain', 'Cookie', `locale=en; SID=${credential}`] },
@@ -1258,6 +1312,24 @@ describe('normalizeHostedTrace', () => {
           `lookup_${credential}`,
           attribute('tool.arguments', JSON.stringify(args)),
         );
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it.each([
+        `https://user:${credential}@example.test`,
+        'https://kappa%2Dblue-19@example.test',
+        'https://example.test?api%5Fkey=kappa%2Dblue-19',
+        `https://example.test#access_token=${credential}`,
+      ])('withholds identifiers that echo URL credentials in arguments', (url) => {
+        const call = callNamed(
+          `lookup_${credential}`,
+          attribute('tool.arguments', JSON.stringify({ url })),
+        );
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('withholds uninspectable Basic credentials even without a visible echo', () => {
+        const call = callNamed('lookup', attribute('Authorization', 'Basic broken'));
         expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
       });
 

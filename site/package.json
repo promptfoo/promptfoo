@@ -20,6 +20,7 @@
     "typecheck": "tsc",
     "format": "prettier --ignore-path .gitignore -w .",
     "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
@@ -42,6 +43,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/browser-playwright": "^5.0.2",
     "@vitest/coverage-v8": "^5.0.2",
     "ajv": "^8.18.0",
     "canvas-confetti": "^1.9.4",
@@ -49,7 +51,7 @@
     "dedent": "^1.7.2",
     "docusaurus-plugin-image-zoom": "^3.0.1",
     "gray-matter": "^4.0.3",
-    "jsdom": "^29.0.0",
+    "jsdom": "^31.0.0",
     "lucide-react": "^1.0.0",
     "monaco-editor": "0.57.0",
     "motion": "^12.34.3",
@@ -60,7 +62,7 @@
     "satori": "^0.63.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
-    "webpack": "5.112.0"
+    "webpack": "5.112.2"
   },
   "optionalDependencies": {
     "sharp": "^0.35.5"
@@ -81,7 +83,7 @@
     ]
   },
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

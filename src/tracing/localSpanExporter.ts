@@ -1,15 +1,24 @@
+import { TraceFlags } from '@opentelemetry/api';
 import { ExportResultCode, getNumberFromEnv } from '@opentelemetry/core';
 import logger from '../logger';
 import { runWithAbort, sleepWithAbort } from '../util/time';
-import { getTraceStore, type SpanData, type TraceStore } from './store';
+import { SPAN_ORIGIN_ATTRIBUTE } from './otlpOwnership';
+import { getTraceStore, type SpanData, type TraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from './store';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 const MISSING_TRACE_RETRY_DELAY_MS = 50;
+const MAX_CAPTURED_SPAN_IDS = 10_000;
 
 interface TrackedTrace {
   owners: number;
   pending: Set<Promise<void>>;
+  undispatched: number;
+  dispatched: boolean;
+  spanIds: Set<string>;
+  sealed: boolean;
+  overflow: boolean;
+  unreliableAttributes: boolean;
   error?: Error;
 }
 
@@ -29,6 +38,17 @@ function toStoredAttribute(value: unknown): unknown {
   return value;
 }
 
+function reachesAttributeLimit(value: unknown, limit: number): boolean {
+  if (typeof value === 'string' || value instanceof Uint8Array) {
+    return value.length >= limit;
+  }
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    Object.values(value).some((entry) => reachesAttributeLimit(entry, limit))
+  );
+}
+
 /**
  * A span exporter that writes spans to the local TraceStore (SQLite).
  * This allows OTEL spans to be stored locally for analysis in the promptfoo UI.
@@ -38,12 +58,54 @@ export class LocalSpanExporter implements SpanExporter {
   private readonly exportTimeoutMs = getNumberFromEnv('OTEL_BSP_EXPORT_TIMEOUT') ?? 30_000;
   private readonly pendingExports = new Set<Promise<Error | undefined>>();
   private readonly trackedTraces = new Map<string, TrackedTrace>();
+  // Dropped SDK spans can be collected while their row's counter remains incomplete.
+  private readonly pendingSpans = new WeakMap<ReadableSpan, TrackedTrace>();
+
+  constructor(private readonly attributeValueLengthLimit = Infinity) {}
+
+  private hasUnreliableAttributes(span: ReadableSpan): boolean {
+    // Dropped fields can change normalization fallbacks; truncated values can
+    // change tool identities or arguments. Neither supports positive claims.
+    // The SDK has no truncation counter, so exact-limit values also fail closed.
+    return (
+      span.droppedAttributesCount > 0 ||
+      (Number.isFinite(this.attributeValueLengthLimit) &&
+        this.attributeValueLengthLimit > 0 &&
+        Object.entries(span.attributes).some(
+          ([key, value]) =>
+            key !== SPAN_ORIGIN_ATTRIBUTE &&
+            reachesAttributeLimit(value, this.attributeValueLengthLimit),
+        ))
+    );
+  }
+
+  private storedAttributes(span: ReadableSpan): Record<string, unknown> {
+    const attributes = Object.fromEntries(
+      Object.entries({ ...span.resource.attributes, ...span.attributes }).map(([key, value]) => [
+        key,
+        toStoredAttribute(value),
+      ]),
+    );
+    delete attributes[SPAN_ORIGIN_ATTRIBUTE];
+    // Persist with the span even when a delayed child outlives its row tracker.
+    // A caller-provided false value cannot override detected attribute loss.
+    if (this.hasUnreliableAttributes(span)) {
+      attributes[UNRELIABLE_SPAN_ATTRIBUTE] = true;
+    }
+    return attributes;
+  }
 
   /** Remember failed writes from the start of an eval row through its trace assertions. */
   trackTrace(traceId: string): () => void {
     const state = this.trackedTraces.get(traceId) ?? {
       owners: 0,
       pending: new Set<Promise<void>>(),
+      undispatched: 0,
+      dispatched: false,
+      spanIds: new Set<string>(),
+      sealed: false,
+      overflow: false,
+      unreliableAttributes: false,
     };
     this.trackedTraces.set(traceId, state);
     state.owners++;
@@ -56,6 +118,37 @@ export class LocalSpanExporter implements SpanExporter {
     };
   }
 
+  /** Track sampled spans until the processor hands them to this exporter. */
+  trackSpan(span: ReadableSpan): void {
+    const { traceId, spanId, traceFlags } = span.spanContext();
+    const state = this.trackedTraces.get(traceId);
+    if (!state || (traceFlags & TraceFlags.SAMPLED) === 0) {
+      return;
+    }
+    if (!state.sealed || this.pendingSpans.has(span)) {
+      state.unreliableAttributes ||= this.hasUnreliableAttributes(span);
+    }
+    if (!state.sealed && !this.pendingSpans.has(span)) {
+      if (state.spanIds.size < MAX_CAPTURED_SPAN_IDS) {
+        state.spanIds.add(spanId);
+      } else if (!state.spanIds.has(spanId)) {
+        state.overflow = true;
+      }
+      state.undispatched++;
+      this.pendingSpans.set(span, state);
+    }
+  }
+
+  /** Freeze target-call membership before graders add spans to the same trace. */
+  sealTrace(traceId: string): string[] {
+    const state = this.trackedTraces.get(traceId);
+    if (!state) {
+      return [];
+    }
+    state.sealed = true;
+    return [...state.spanIds];
+  }
+
   private trackBatchWrites(
     spans: ReadableSpan[],
     finishGroup: Map<string, (error?: Error) => void>,
@@ -66,6 +159,12 @@ export class LocalSpanExporter implements SpanExporter {
     // Register every group before the first write, including groups a timed-out batch never reaches.
     for (const span of spans) {
       const traceId = span.spanContext().traceId;
+      const trackedSpan = this.pendingSpans.get(span);
+      if (trackedSpan) {
+        trackedSpan.undispatched--;
+        trackedSpan.dispatched = true;
+        this.pendingSpans.delete(span);
+      }
       const state = this.trackedTraces.get(traceId);
       if (!state || finishGroup.has(traceId)) {
         continue;
@@ -134,11 +233,7 @@ export class LocalSpanExporter implements SpanExporter {
           name: span.name,
           startTime: startTimeMs,
           endTime: endTimeMs,
-          attributes: Object.fromEntries(
-            Object.entries({ ...span.resource.attributes, ...span.attributes }).map(
-              ([key, value]) => [key, toStoredAttribute(value)],
-            ),
-          ),
+          attributes: this.storedAttributes(span),
           statusCode: span.status.code,
           statusMessage: span.status.message,
         };
@@ -227,6 +322,25 @@ export class LocalSpanExporter implements SpanExporter {
   shutdown(): Promise<void> {
     logger.debug('[LocalSpanExporter] Shutting down');
     return this.forceFlush();
+  }
+
+  /** Whether every sampled span observed for this row reached local storage. */
+  isComplete(traceId: string): boolean {
+    const state = this.trackedTraces.get(traceId);
+    return !!(
+      state?.dispatched &&
+      state.undispatched === 0 &&
+      state.pending.size === 0 &&
+      !state.overflow &&
+      !state.unreliableAttributes &&
+      !state.error
+    );
+  }
+
+  /** Changed attribute values cannot support even positive evidence claims. */
+  isReliable(traceId: string): boolean {
+    const state = this.trackedTraces.get(traceId);
+    return !!state && !state.unreliableAttributes;
   }
 
   /**
