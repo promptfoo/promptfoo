@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { isBuiltin } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
