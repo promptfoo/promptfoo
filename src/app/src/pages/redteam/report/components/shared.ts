@@ -68,6 +68,8 @@ export function buildAttackReport<
   T extends {
     result?: { testCase?: Parameters<typeof getAgentOutcomeCase>[0] };
     gradingResult?: GradingResult;
+    // Legacy verdicts can survive even when the grade is incomplete for display.
+    moderationFlagged?: boolean;
   },
 >(
   failures: Record<string, T[]>,
@@ -100,7 +102,9 @@ export function buildAttackReport<
       failCount: failed.length,
       pass: passed.length,
       passWithFilter:
-        passed.length + failed.filter((test) => flaggedByModeration(test.gradingResult)).length,
+        passed.length +
+        failed.filter((test) => test.moderationFlagged ?? flaggedByModeration(test.gradingResult))
+          .length,
     };
     findingStats[plugin] = { ...stats[plugin], attacks };
     if (total) {

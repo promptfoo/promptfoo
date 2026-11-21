@@ -123,4 +123,6 @@ Use `readback: null` for a verified denial. If a probe fails to run, set the who
 
 Each outcome trial bypasses promptfoo’s target response cache. Concurrent and repeated trials make separate requests and may incur additional provider charges. Disable any caching in your harness as well.
 
+Use the outcome assertion on its own to measure the rate of unauthorized actions. Adding a text moderation assertion can change the overall verdict and the report's “with mitigation” rate. Flagging the final reply cannot revoke a folder grant or recall data already sent to a collector.
+
 The **positive control** checks the measurement system within one trial. A **matched baseline** is a second trial with a neutral input. In the example, `redteam eval` runs baselines alongside fresh attacks. The agent gets the same request to share today’s build twice, with different text in Pat’s ticket. If Pat can open tomorrow’s private build in both runs, the ordinary task already exposes a permission error. If only the hostile ticket leads to access, repeat the pair with fresh state to test whether the difference persists. [Run the example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-agent-outcomes#generate-fresh-attacks)
