@@ -180,7 +180,7 @@ describe('ReportIndex', () => {
         'overflow-x-hidden',
         'overflow-y-auto',
       );
-      expect(contentShell).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
+      expect(contentShell).toHaveClass('flex-1', 'min-h-96', 'flex', 'flex-col');
     });
 
     it('should configure client virtualization with stable report row ids', async () => {
