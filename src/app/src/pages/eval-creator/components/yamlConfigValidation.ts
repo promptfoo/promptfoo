@@ -7,6 +7,15 @@ import {
 export function validateYamlConfigDraft(
   value: unknown,
 ): { success: true; config: ConfigDraft } | { success: false; error: string } {
+  try {
+    // A YAML anchor can refer to itself, including under an unknown config key.
+    JSON.stringify(value);
+  } catch {
+    return {
+      success: false,
+      error: 'YAML configuration must be serializable without circular references.',
+    };
+  }
   const result = UnifiedConfigDraftSchema.safeParse(value);
   if (result.success) {
     // Keep the authored values and unknown keys; only normalize the alias the form cannot store.
