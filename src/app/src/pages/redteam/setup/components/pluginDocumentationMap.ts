@@ -64,6 +64,16 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   'harmful:radicalization': `${BASE_DOCS_URL}/harmful/`,
   'harmful:self-harm': `${BASE_DOCS_URL}/harmful/`,
   'harmful:sexual-content': `${BASE_DOCS_URL}/harmful/`,
+  'mental-health': `${BASE_DOCS_URL}/mental-health/`,
+  'mental-health:crisis-response': `${BASE_DOCS_URL}/mental-health/#crisis-response`,
+  'mental-health:eating-disorder': `${BASE_DOCS_URL}/mental-health/#eating-disorder`,
+  'mental-health:harmful-coping': `${BASE_DOCS_URL}/mental-health/#harmful-coping`,
+  'mental-health:mania-amplification': `${BASE_DOCS_URL}/mental-health/#mania-amplification`,
+  'mental-health:psychosis-safety': `${BASE_DOCS_URL}/mental-health/#psychosis-safety`,
+  'mental-health:stigmatizing-language': `${BASE_DOCS_URL}/mental-health/#stigmatizing-language`,
+  'mental-health:sycophancy': `${BASE_DOCS_URL}/mental-health/#sycophancy`,
+  'mental-health:therapeutic-boundaries': `${BASE_DOCS_URL}/mental-health/#therapeutic-boundaries`,
+  'mental-health:trauma-informed': `${BASE_DOCS_URL}/mental-health/#trauma-informed`,
 
   // Brand
   competitors: `${BASE_DOCS_URL}/competitors/`,
