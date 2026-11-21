@@ -1817,7 +1817,7 @@ describe('ResultsTable rating actions', () => {
     renderWithProviders(<ResultsTable {...createDefaultProps()} />);
   }
 
-  async function savedRating() {
+  async function savedRating(annotation = false) {
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
         '/eval/123/results/test-output-1/rating',
@@ -1830,12 +1830,17 @@ describe('ResultsTable rating actions', () => {
       ([url]) => url === '/eval/123/results/test-output-1/rating',
     )![1];
     const payload = JSON.parse(request!.body as string) as GradingResult;
-    expect(payload).toEqual(updatedOutput.gradingResult);
+    const expected = { ...updatedOutput.gradingResult };
+    if (annotation) {
+      delete expected.componentResults;
+    }
+    expect(payload).toEqual(expected);
     return { payload, output: updatedOutput };
   }
 
   it.each([
     ['missing grade', undefined],
+    ['legacy assertions', { reason: 'Legacy', componentResults: [{ pass: 'true' }] }],
     ['missing pass and score', { reason: 'Existing reason' }],
     [
       'empty assertions',
@@ -1851,7 +1856,7 @@ describe('ResultsTable rating actions', () => {
     await act(async () => {
       await cell.onRating(undefined, undefined, '!highlight New comment');
     });
-    const { payload, output } = await savedRating();
+    const { payload, output } = await savedRating(true);
     expect(payload).toMatchObject({
       pass: false,
       score: 0.2,
@@ -1859,15 +1864,24 @@ describe('ResultsTable rating actions', () => {
       comment: '!highlight New comment',
     });
     expect(output).toMatchObject({ pass: false, score: 0.2 });
-    if (
-      gradingResult &&
-      'componentResults' in gradingResult &&
-      gradingResult.componentResults.length
-    ) {
-      expect(payload.componentResults).toEqual([automated]);
-    } else {
-      expect(payload).not.toHaveProperty('componentResults');
+    expect(payload).not.toHaveProperty('componentResults');
+    if (gradingResult && 'componentResults' in gradingResult) {
+      expect(output.gradingResult.componentResults).toEqual(gradingResult.componentResults);
     }
+  });
+
+  it('normalizes legacy verdicts when adding a human rating', async () => {
+    const componentResults = [null, { ...automated, pass: 'true' }];
+    renderRatingTable({
+      pass: false,
+      score: 0.2,
+      componentResults: componentResults as unknown as GradingResult['componentResults'],
+    });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
+    const { payload } = await savedRating();
+    expect(payload.componentResults).toHaveLength(2);
+    expect(payload.componentResults?.[0]).toEqual({ ...automated, pass: true });
+    expect(componentResults[1]?.pass).toBe('true');
   });
 
   it('persists a human rating when the existing grade has no component results', async () => {

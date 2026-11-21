@@ -522,7 +522,6 @@ type ManualRatingUpdate = {
   pass: EvaluateTableOutput['pass'];
   score: EvaluateTableOutput['score'];
   componentResults?: NonNullable<GradingResult['componentResults']>;
-  modifiedComponentResults: boolean;
 };
 
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
@@ -844,11 +843,16 @@ function getManualRatingUpdate({
     return {
       pass: finalPass,
       score: finalScore,
-      modifiedComponentResults: false,
     };
   }
 
-  const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
+  const stored = existingOutput.gradingResult?.componentResults;
+  // Legacy counters used truthiness. Normalize retained records only for an explicit rating.
+  const componentResults = Array.isArray(stored)
+    ? stored
+        .filter((result) => result && typeof result === 'object' && !Array.isArray(result))
+        .map((result) => ({ ...result, pass: Boolean(result.pass) }))
+    : [];
   const humanResultIndex = componentResults.findIndex(
     (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
   );
@@ -868,7 +872,6 @@ function getManualRatingUpdate({
       pass: finalPass,
       score: finalScore,
       componentResults,
-      modifiedComponentResults: true,
     };
   }
 
@@ -892,7 +895,6 @@ function getManualRatingUpdate({
     pass: finalPass,
     score: finalScore,
     componentResults,
-    modifiedComponentResults: true,
   };
 }
 
@@ -909,11 +911,8 @@ function buildManualGradingResult({
   score?: number;
   comment?: string;
 }): GradingResult {
-  const { componentResults: _, ...existingGradingResultWithoutComponents } =
-    existingOutput.gradingResult || {};
-
   const gradingResult: GradingResult = {
-    ...existingGradingResultWithoutComponents,
+    ...existingOutput.gradingResult,
     pass: existingOutput.gradingResult?.pass ?? ratingUpdate.pass,
     score: existingOutput.gradingResult?.score ?? ratingUpdate.score,
     reason: existingOutput.gradingResult?.reason ?? 'Manual result',
@@ -938,10 +937,8 @@ function buildManualGradingResult({
     }
   }
 
-  if (ratingUpdate.modifiedComponentResults && ratingUpdate.componentResults) {
+  if (ratingUpdate.componentResults) {
     gradingResult.componentResults = ratingUpdate.componentResults;
-  } else if (existingOutput.gradingResult?.componentResults?.length) {
-    gradingResult.componentResults = existingOutput.gradingResult.componentResults;
   }
 
   return gradingResult;
@@ -1003,7 +1000,7 @@ async function saveManualRating({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...gradingResult }),
+          body: JSON.stringify(gradingResult),
         })
       : await callApi(EVAL_ROUTES.DETAIL(evalId), {
           method: 'PATCH',
@@ -1710,7 +1707,8 @@ function ResultsTable({
             evalId,
             resultId,
             version,
-            gradingResult,
+            // Omitting unchanged components lets the server preserve legacy evidence.
+            gradingResult: { ...gradingResult, componentResults: ratingUpdate.componentResults },
             table: newTable,
           });
         } catch (error) {
