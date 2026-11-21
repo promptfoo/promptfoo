@@ -18,6 +18,10 @@ Example of setting the environment variable:
 export HYPERBOLIC_API_KEY=your_api_key_here
 ```
 
+For audio and image generation, set `config.apiKeyEnvar` to select a different variable.
+An explicit `config.apiKey` takes precedence. If the named variable is absent, promptfoo
+falls back to `HYPERBOLIC_API_KEY`. An empty credential stops the request.
+
 ## Provider Formats
 
 ### Text Generation (LLM)
