@@ -53,7 +53,7 @@ export const handleSimilar = async ({
     // early on the first pass), so when none pass, report the best (highest)
     // score — how close the output got to its closest value — not the worst.
     // matchesSimilarity normalizes score so higher is always better, including
-    // for inverse and euclidean. This matches bleu/gleu/meteor (Math.max).
+    // for inverse and euclidean. This matches gleu/meteor (Math.max).
     let maxScore = inverse ? 0 : Number.NEGATIVE_INFINITY;
     for (const value of renderedValue) {
       const result = await matchesSimilarity(
