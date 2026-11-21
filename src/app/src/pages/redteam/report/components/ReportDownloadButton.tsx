@@ -16,14 +16,14 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { escapeCsvFormula, isCsvEscapingDisabled } from '@promptfoo/util/text';
+import { escapeCsvFormula } from '@promptfoo/util/text';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import {
   getPluginIdFromResult,
   getReportPrompt,
   getStrategyIdFromTest,
 } from '../components/shared';
-import type { EnvOverrides, EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
+import type { EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalId: string;
@@ -76,19 +76,9 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       };
     });
 
-    const env: EnvOverrides | undefined = evalData.config.env;
-    const escapedRows = isCsvEscapingDisabled(env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING)
-      ? rows
-      : rows.map((row) =>
-          Object.fromEntries(
-            Object.entries(row).map(([key, value]) => [
-              key,
-              typeof value === 'string' ? escapeCsvFormula(value) : value,
-            ]),
-          ),
-        );
-
-    return stringify(escapedRows, {
+    // A shared evaluation's author cannot opt out on behalf of the viewer.
+    return stringify(rows, {
+      cast: { string: escapeCsvFormula },
       header: true,
       quoted: true,
       quoted_string: true,

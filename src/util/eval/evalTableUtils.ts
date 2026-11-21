@@ -1,6 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
-import { escapeCsvFormula, isCsvEscapingDisabled } from '../text';
+import { escapeCsvFormula } from '../text';
 
 import type Eval from '../../models/eval';
 import type {
@@ -451,7 +451,10 @@ function escapeCsvRowsForFormulaInjection(
   const configuredValue =
     env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING ??
     process.env.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING;
-  if (isCsvEscapingDisabled(configuredValue)) {
+  const disableEscaping = ['1', 'true', 'yes', 'yup', 'yeppers'].includes(
+    configuredValue?.toLowerCase() ?? '',
+  );
+  if (disableEscaping) {
     return rows;
   }
   return rows.map((row) =>

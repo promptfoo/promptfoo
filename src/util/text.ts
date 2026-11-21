@@ -55,7 +55,3 @@ export function escapeCsvFormula(value: string): string {
     ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
   return isFormulaTrigger ? `'${value}` : value;
 }
-
-export function isCsvEscapingDisabled(value?: string): boolean {
-  return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value?.toLowerCase() ?? '');
-}

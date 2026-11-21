@@ -139,8 +139,7 @@ describe('ReportDownloadButton', () => {
     },
   );
 
-  it.each([undefined, 'true'])('honors CSV escaping opt-out %s', async (disabled) => {
-    const prefix = disabled ? '' : "'";
+  it.each([undefined, 'true'])('escapes CSV with saved opt-out %s', async (disabled) => {
     const pluginId = '=1+1';
     const evalData = {
       ...compactEvalData,
@@ -189,11 +188,11 @@ describe('ReportDownloadButton', () => {
     const row = Object.fromEntries(headers.map((header, index) => [header, values[index]]));
 
     expect(row).toMatchObject({
-      Plugin: prefix + pluginId,
-      'Plugin ID': prefix + pluginId,
-      Strategy: prefix + '@SUM(A1)',
+      Plugin: `'${pluginId}`,
+      'Plugin ID': `'${pluginId}`,
+      Strategy: "'@SUM(A1)",
       Target: '+3.14',
-      Prompt: prefix + '=FINAL_LAYER_ATTACK',
+      Prompt: "'=FINAL_LAYER_ATTACK",
       Response: '-5.25',
       Pass: 'Fail (0)',
       Score: '0',
