@@ -25,3 +25,29 @@ Guidance for AI agents working on GitHub Actions workflows.
 - Pin exact versions for any tooling installed at workflow runtime (e.g., `prettier@3.8.1`, not `prettier@^3.8.1`; `npm install -g npm@11.11.0`, not `@latest`). Semver ranges mean a future compromised patch release can alter published artifacts.
 - Least-privilege every job. `publish-npm` does not need `packages: write`; only Docker jobs pushing to ghcr.io do.
 - **`actions/create-github-app-token` `permission-*` inputs are a subset-request, not a grant.** GitHub returns 422 if you request a permission the App installation was not already granted — even a permission release-please-action appears to use (e.g., `issues: write` for label creation). Before adding `permission-*` inputs, confirm every requested permission is already granted to the App installation in the GitHub App settings; otherwise inherit the installation's granted set by omitting the inputs.
+
+### Reviewing release notes
+
+Review the upgrade instructions, breaking changes, and notable features in the release PR
+preview. For Code Scan Action, also check its bundled CLI version and changes to data
+sent by scans. **All changes** contains the generated inventory. Style Check compares it
+and the overview with Git history since the previous component tag.
+
+To edit the overview or supply a missing PR or commit link, post the complete replacement
+as a PR comment. Start with the marker below and use level-three headings and HTTPS links.
+
+```markdown
+<!-- reviewed-release-notes -->
+
+### Before upgrading
+
+Describe who needs to act and how to update their configuration.
+```
+
+The latest marked comment from a current repository writer survives bot refreshes.
+Editing or deleting it refreshes the preview. The release tag supplies the published
+notes, including those sent to the Action mirror.
+
+After merge, check the source PR for artifact links and the Action mirror's progress.
+Incomplete reports refresh hourly. To recheck a merged PR, run **Release publication
+status** on `main` with its PR number.
