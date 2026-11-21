@@ -796,6 +796,21 @@ describe('evaluator trace integration', () => {
       },
     );
 
+    it('keeps trace metrics optional for zero-weight assertions and sets', async () => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const options = createRunOptions(provider);
+      const trace = { type: 'trace-span-count' as const, value: { min: 1 } };
+      options.test.assert = [
+        { type: 'equals', value: 'Target output' },
+        { ...trace, weight: 0 },
+        { type: 'assert-set', weight: 0, assert: [trace] },
+      ];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+      const [result] = await runEval(options);
+      expect(result.success).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalled();
+    });
+
     it('distinguishes missing external traces from successful fetches', async () => {
       const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
       const provider = createMockProvider({ response: { output: 'Target output' } });
