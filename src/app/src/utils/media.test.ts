@@ -744,6 +744,8 @@ describe('resolveBlobUri security', () => {
     'storageRef:',
     'storageRef:/',
     'storageRef:////',
+    '/api/media/?empty',
+    '/api/blobs/folder/..',
   ])('does not resolve an empty reference %s', (value) => {
     expect(resolveBlobUri(value)).toBeUndefined();
   });

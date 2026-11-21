@@ -115,7 +115,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
     const path = new URL(source.slice(prefix.length), 'https://media.invalid');
     if (
       path.origin === 'https://media.invalid' &&
-      (path.pathname.startsWith('/api/blobs/') || path.pathname.startsWith('/api/media/'))
+      /^\/api\/(?:blobs|media)\/[^/]/.test(path.pathname)
     ) {
       return `${prefix}${path.pathname}${path.search}${path.hash}`;
     }
