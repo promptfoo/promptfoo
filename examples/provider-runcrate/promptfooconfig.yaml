@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Runcrate chat models
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+# Both models run on a single `RUNCRATE_API_KEY`.
+providers:
+  - id: openai:chat:deepseek-ai/DeepSeek-V4.1-Flash
+    label: 'DeepSeek V4.1 Flash'
+    config:
+      apiBaseUrl: https://api.runcrate.ai/v1
+      apiKeyEnvar: RUNCRATE_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      temperature: 0
+      max_tokens: 1024
+      showThinking: false
+  - id: openai:chat:openai/gpt-oss-120b
+    label: 'gpt-oss-120b'
+    config:
+      apiBaseUrl: https://api.runcrate.ai/v1
+      apiKeyEnvar: RUNCRATE_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      temperature: 0
+      max_tokens: 1024
+      showThinking: false
+
+tests:
+  - vars:
+      question: What is the chemical symbol for gold?
+    assert:
+      - type: regex
+        value: '\bAu\b'
+  - vars:
+      question: Compared with liquid water, is ice more dense or less dense? Reply with just "more dense" or "less dense".
+    assert:
+      - type: regex
+        value: '^\s*[Ll]ess dense[.!]?\s*$'
