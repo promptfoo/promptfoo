@@ -141,6 +141,42 @@ describe('MCPProvider', () => {
     }
   });
 
+  it.each(['callApi', 'callTool'])(
+    'withholds %s data when a transform is cancelled',
+    async (method) => {
+      const started = deferred();
+      const release = deferred();
+      const provider = new MCPProvider({
+        config: {
+          enabled: true,
+          defaultArgs: { sessionToken: 'private-default' },
+          transformResponse: async () => {
+            started.resolve();
+            await release.promise;
+            return 'filtered output';
+          },
+        },
+      });
+      mcpClientMock.callTool.mockResolvedValue({ content: 'private result' });
+      const abort = new AbortController();
+      const args = { apiKey: 'private-input' };
+      const result =
+        method === 'callApi'
+          ? provider.callApi(JSON.stringify({ tool: 'ping', args }), undefined, {
+              abortSignal: abort.signal,
+            })
+          : provider.callTool('ping', args, abort.signal);
+
+      await started.promise;
+      abort.abort(new Error('transform cancelled'));
+      try {
+        await expect(result).rejects.toBe(abort.signal.reason);
+      } finally {
+        release.resolve();
+      }
+    },
+  );
+
   it('merges config.defaultArgs into tool calls, with per-call args winning', async () => {
     mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
 

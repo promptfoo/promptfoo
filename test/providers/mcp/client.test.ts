@@ -258,7 +258,7 @@ describe('MCPClient', () => {
       expect(mcpClient.hasInitialized).toBe(false);
     });
 
-    it('closes an unpublished connection and rejects a late handshake', async () => {
+    it.each(['ready', 'blocked'])('cancels a pending handshake when close is %s', async (mode) => {
       let connected!: () => void;
       let started!: () => void;
       const ready = new Promise<void>((resolve) => {
@@ -275,11 +275,17 @@ describe('MCPClient', () => {
       const startup = mcpClient.initialize();
       const rejected = expect(startup).rejects.toThrow();
       await ready;
+      if (mode === 'blocked') {
+        const stuck = () => new Promise<void>(() => {});
+        mockStdioTransport.close.mockImplementationOnce(stuck);
+        mockClient.close.mockImplementationOnce(stuck);
+      }
       await mcpClient.cleanup();
+      await rejected;
       expect(mockStdioTransport.close).toHaveBeenCalledOnce();
       expect(mockClient.close).toHaveBeenCalledOnce();
       connected();
-      await rejected;
+      await Promise.resolve();
       expect(mockClient.listTools).not.toHaveBeenCalled();
       expect(mcpClient.hasInitialized).toBe(false);
     });
