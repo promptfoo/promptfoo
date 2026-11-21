@@ -191,7 +191,7 @@ class RedteamProviderManager {
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
-  private wrapProvider(provider: ApiProvider): ApiProvider {
+  wrapProvider(provider: ApiProvider): ApiProvider {
     if (this.rateLimitRegistry) {
       return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
     }
@@ -358,7 +358,7 @@ class RedteamProviderManager {
       provider: await this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
       source: candidate.source,
       ...(candidate.source === 'cache' && candidate.cachedJsonOnlyProvider
-        ? { cachedJsonOnlyProvider: this.wrapProvider(candidate.cachedJsonOnlyProvider) }
+        ? { cachedJsonOnlyProvider: candidate.cachedJsonOnlyProvider }
         : {}),
       localProviderSpec: candidate.spec,
       persistableId: typeof candidate.spec === 'string' ? candidate.spec : undefined,

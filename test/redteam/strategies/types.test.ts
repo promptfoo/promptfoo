@@ -7,6 +7,7 @@ import {
   getStrategyGenerationProvider,
   withPersistableGenerationProvider,
 } from '../../../src/redteam/strategies/types';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -48,9 +49,16 @@ describe('getStrategyGenerationProvider', () => {
       .mockResolvedValueOnce([secondJsonProvider]);
     const restoreLoader = setRedteamProviderLoader(loader);
 
+    const first = new RateLimitRegistry({ maxConcurrency: 1 });
+    const second = new RateLimitRegistry({ maxConcurrency: 1 });
+    const earlier = vi.spyOn(first, 'execute');
+    const current = vi.spyOn(second, 'execute');
+    firstJsonProvider.callApi.mockResolvedValue({ output: 'Blue' });
     try {
+      redteamProviderManager.setRateLimitRegistry(first);
       await redteamProviderManager.setProvider('first-provider');
       const selection = await redteamProviderManager.getProviderSelection();
+      redteamProviderManager.setRateLimitRegistry(second);
       await redteamProviderManager.setProvider('second-provider');
 
       const result = await getStrategyGenerationProvider({
@@ -60,8 +68,13 @@ describe('getStrategyGenerationProvider', () => {
       });
 
       expect(result.id()).toBe('first-json-provider');
-      expect(result).toBe(firstJsonProvider);
+      expect((await result.callApi('Color?')).output).toBe('Blue');
+      expect(current).toHaveBeenCalledOnce();
+      expect(earlier).not.toHaveBeenCalled();
     } finally {
+      redteamProviderManager.setRateLimitRegistry(undefined);
+      first.dispose();
+      second.dispose();
       redteamProviderManager.clearProvider();
       restoreLoader();
     }
