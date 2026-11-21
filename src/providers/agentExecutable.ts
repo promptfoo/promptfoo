@@ -40,23 +40,25 @@ async function getProjectRoots(workspace: string, basePath?: string): Promise<st
   return [...projectRoots];
 }
 
-// Select the agent and its descendants' search path outside the checkout.
-// Relative and empty PATH entries resolve against the child's untrusted cwd.
-export async function resolveAgentExecutable(
-  command: string,
-  env: NodeJS.ProcessEnv,
-  workspace: string,
-  basePath?: string,
-): Promise<string | undefined> {
+export async function getProjectPathCheck(workspace: string, basePath?: string) {
   const roots = await getProjectRoots(workspace, basePath);
-  const isLocal = (candidate: string) =>
+  return (candidate: string) =>
     roots.some((root) => {
       const relative = path.relative(root, candidate);
       return (
         !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
       );
     });
+}
 
+// Select the agent and its descendants' search path outside the checkout.
+// Relative and empty PATH entries resolve against the child's untrusted cwd.
+export async function resolveAgentExecutable(
+  command: string,
+  env: NodeJS.ProcessEnv,
+  isLocal: (candidate: string) => boolean,
+  basePath?: string,
+): Promise<string | undefined> {
   const trusted = new Set<string>();
   for (const entry of (env.PATH ?? env.Path ?? '').split(path.delimiter)) {
     if (path.isAbsolute(entry) && !isLocal(entry)) {

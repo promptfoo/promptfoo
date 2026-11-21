@@ -9,9 +9,10 @@ import logger from '../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../tracing/genaiTracer';
 import { REDACTED } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
-import { resolveAgentExecutable } from './agentExecutable';
+import { getProjectPathCheck, resolveAgentExecutable } from './agentExecutable';
 import { resolveAgenticWorkingDir } from './agentic-utils';
 import { isAgentWorkspace } from './agentWorkspace';
+import { hasAgentEnvOverride } from './env';
 import { providerRegistry } from './providerRegistry';
 
 import type {
@@ -192,6 +193,10 @@ function redactCredentials(response: ProviderResponse, credentials: Set<string>)
   );
 }
 
+const processSettings = ['META_API_KEY', 'MUSE_AUTH_PATH', 'MUSE_CLI_PATH'];
+const overrideError =
+  'Muse Code does not accept inline credentials or child env. Use a stored login or set META_API_KEY, MUSE_AUTH_PATH and MUSE_CLI_PATH in the process environment.';
+
 // Canonical paths prevent separate provider instances from writing to the same workspace.
 const activeWorkspaces = new Set<string>();
 
@@ -209,12 +214,9 @@ export class MuseCodeProvider implements ApiProvider {
     if (
       options.config?.apiKey !== undefined ||
       options.config?.env !== undefined ||
-      options.env?.META_API_KEY !== undefined ||
-      options.env?.MUSE_CLI_PATH !== undefined
+      hasAgentEnvOverride(processSettings, options.env)
     ) {
-      throw new Error(
-        'Muse Code does not accept inline credentials or child env. Use a stored login or set META_API_KEY and MUSE_CLI_PATH in the process environment.',
-      );
+      throw new Error(overrideError);
     }
     this.config = MuseCodeInputSchema.parse(options.config ?? {});
     for (const key of ['basePath', 'working_dir', 'muse_path'] as const) {
@@ -261,6 +263,9 @@ export class MuseCodeProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     if (options?.abortSignal?.aborted) {
       return { error: 'Muse Code call aborted before it started' };
+    }
+    if (hasAgentEnvOverride(processSettings)) {
+      return { error: overrideError };
     }
     let config: MuseCodeConfig;
     try {
@@ -439,7 +444,8 @@ export class MuseCodeProvider implements ApiProvider {
       await fs.writeFile(promptFile, prompt, { mode: 0o600 });
       signal.throwIfAborted();
       const configuredPath = config.muse_path ?? process.env.MUSE_CLI_PATH ?? 'muse';
-      const command = await resolveAgentExecutable(configuredPath, env, workspace, basePath);
+      const isLocal = await getProjectPathCheck(workspace, basePath);
+      const command = await resolveAgentExecutable(configuredPath, env, isLocal, basePath);
       if (!command) {
         throw new Error(CLI_NOT_FOUND_MESSAGE);
       }

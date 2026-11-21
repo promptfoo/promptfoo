@@ -6,6 +6,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 import { MuseCodeProvider } from '../../src/providers/muse-code';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -277,8 +278,22 @@ describe('MuseCodeProvider', () => {
     { config: { env: { AZURE_CREDENTIALS: '{"clientSecret":"fixture-secret"}' } } },
     { env: { META_API_KEY: 'fixture-secret' } },
     { env: { MUSE_CLI_PATH: 'untrusted' } },
+    { env: { MUSE_AUTH_PATH: '' } },
   ])('rejects inline secrets and env overrides', (options) => {
     expect(() => provider(options)).toThrow('process environment');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to the host login when a call masks a process setting', async () => {
+    vi.stubEnv('META_API_KEY', 'inherited-meta');
+    const instance = provider();
+    const call = () => instance.callApi(prompt);
+    for (const result of [
+      await cliState.withEnvFileOverrides({ MUSE_AUTH_PATH: '' }, call),
+      await cliState.withEnv({ META_API_KEY: '' }, call),
+    ]) {
+      expect(result.error).toContain('process environment');
+    }
     expect(spawn).not.toHaveBeenCalled();
   });
 
