@@ -15,6 +15,7 @@ import {
   getErrorResultIds,
   recalculatePromptMetrics,
   retryCommand,
+  trackRetryResults,
 } from '../../src/node/retry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
@@ -156,6 +157,43 @@ describe('retryCommand', () => {
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
+  });
+
+  it('matches persisted select-best grader settings without discarding account changes', async () => {
+    const env = { OPENAI_ORGANIZATION: 'first', OPENAI_API_KEY: 'synthetic' };
+    const grader = { id: () => 'grader', callApi: async () => ({}), env };
+    const savedGrader = { id: 'grader', env: { ...env, OPENAI_API_KEY: '[REDACTED]' } };
+    const row = {
+      id: 'original',
+      testIdx: 0,
+      promptIdx: 0,
+      provider: { id: 'echo' },
+      test: { assert: [{ type: 'select-best', provider: savedGrader }] },
+      latencyMs: 100,
+    };
+    dbMocks.errorRows.push(row);
+    const step: RunEvalOptions = {
+      ...row,
+      prompt: { label: 'question', raw: 'question' },
+      repeatIndex: 0,
+      delay: 0,
+      isRedteam: false,
+      provider: { id: () => 'echo', callApi: async () => ({}) },
+      test: { assert: [{ type: 'select-best', provider: grader }] },
+    };
+    const plan = () => trackRetryResults('eval-123', [row.id]).prepare([step]);
+    await expect(plan()).resolves.toEqual([step]);
+    env.OPENAI_ORGANIZATION = 'changed';
+    await expect(plan()).rejects.toThrow('saved test or provider');
+    // Old timeout rows used generic serialization, which omitted grader env.
+    Object.assign(row, {
+      error: 'Evaluation timed out after 100ms: deadline',
+      test: { assert: [{ type: 'select-best', provider: { id: 'grader' } }] },
+    });
+    await expect(plan()).resolves.toEqual([step]);
+    await expect(trackRetryResults('eval-123', [row.id], false).prepare([step])).rejects.toThrow(
+      'saved test or provider',
+    );
   });
 
   it('rejects a retry for an evaluation that does not exist', async () => {

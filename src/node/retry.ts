@@ -11,6 +11,7 @@ import {
   sanitizeForDbWithSecrets,
   sanitizeProvider,
   serializeResultProviderRefs,
+  snapshotComparisonTest,
 } from '../evaluator/resultProcessing';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -147,7 +148,10 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
 
 // Match the same public test representation that EvalResult writes, including
 // older rows without the empty containers supplied by the current evaluator.
-function retryTestIdentity(testCase: AtomicTestCase) {
+function retryTestIdentity(input: AtomicTestCase, legacyTimeout = false) {
+  const testCase = legacyTimeout
+    ? { ...input, provider: undefined }
+    : snapshotComparisonTest(input);
   const saved = sanitizeForDbWithSecrets(serializeResultProviderRefs({ testCase }).testCase);
   return { vars: {}, assert: [], options: {}, metadata: {}, ...saved };
 }
@@ -212,18 +216,15 @@ export function trackRetryResults(evalId: string, errorIds: string[], usingSaved
         }
 
         const savedIdentity = (row: (typeof rows)[number]) => {
-          // Step timeouts omit test.provider. Only the saved configuration
-          // can supply the missing override. Never infer it from --config.
-          const restoreOverride =
+          // Timeout rows omit the test override and use generic grader serialization.
+          // Restore missing settings only when replaying the saved configuration and
+          // its timeout projection agrees with everything the old row retained.
+          const timeout =
             usingSavedConfig &&
-            step.test.provider &&
-            !row.test.provider &&
             row.latencyMs &&
-            row.error?.startsWith(`Evaluation timed out after ${row.latencyMs}ms: `);
-          return identity(
-            restoreOverride ? { ...row.test, provider: step.test.provider } : row.test,
-            row.provider,
-          );
+            row.error?.startsWith(`Evaluation timed out after ${row.latencyMs}ms: `) &&
+            isDeepStrictEqual(retryTestIdentity(row.test), retryTestIdentity(step.test, true));
+          return identity(timeout ? step.test : row.test, row.provider);
         };
         const expected = savedIdentity(errors[0]);
         if (
