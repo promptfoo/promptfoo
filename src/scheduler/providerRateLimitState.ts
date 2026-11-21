@@ -199,14 +199,12 @@ export class ProviderRateLimitState extends EventEmitter {
             result.isRefusal === true;
           const headers = options.getHeaders?.(result);
           const isObserverError = isResponseHeadersObserverErrorResponse(result);
-          isRateLimited =
-            options.canRetry?.() !== false &&
-            !isObserverError &&
-            (options.isRateLimited?.(result, undefined) ?? false);
+          // Nested work forbids replay and ambiguous parent quota attribution,
+          // but a terminal 429 still needs to surface as an error.
+          const ownsRetry = options.canRetry?.() !== false;
+          isRateLimited = !isObserverError && (options.isRateLimited?.(result, undefined) ?? false);
           isRetryableResult =
-            options.canRetry?.() !== false &&
-            !isObserverError &&
-            (options.isRetryableResult?.(result) ?? false);
+            ownsRetry && !isObserverError && (options.isRetryableResult?.(result) ?? false);
           retryAfterMs = options.getRetryAfter?.(result, undefined);
 
           // Observer diagnostics may carry another service's headers. Keep the
@@ -214,7 +212,7 @@ export class ProviderRateLimitState extends EventEmitter {
           if (!isObserverError && headers && (headers !== observedHeaders || isRateLimited)) {
             this.updateFromHeaders(headers, isRateLimited);
           }
-          if (isRateLimited) {
+          if (isRateLimited && ownsRetry) {
             this.handleRateLimit(retryAfterMs);
           }
           // Completed calls retain their result and quota even if cancellation arrived

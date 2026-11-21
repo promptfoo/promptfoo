@@ -107,6 +107,53 @@ describe('actual iterative manager child quota ownership', () => {
     return { state, done, controller };
   }
 
+  function runStrategy(provider: ApiProvider, prompt: string) {
+    return runEval({
+      provider,
+      prompt: { raw: prompt, label: prompt },
+      test: {},
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      conversations: {},
+      registers: {},
+      rateLimitRegistry: registry,
+    });
+  }
+
+  it('fails a status-only parent 429 after successful child work without retrying', async () => {
+    const target: ApiProvider = {
+      id: () => 'successful-child',
+      callApi: vi.fn(async () => ({ output: 'ok' })),
+    };
+    const strategy: ApiProvider = {
+      id: () => 'limited-parent',
+      config: { maxRetries: 2 },
+      callApi: vi.fn(async () => {
+        await callTargetProvider(target, 'fixture');
+        return {
+          output: 'Too many requests',
+          metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+        };
+      }),
+    };
+    const [row] = await withCacheEnabled(false, () => runStrategy(strategy, 'fixture'));
+    expect(row).toMatchObject({
+      success: false,
+      score: 0,
+      error: expect.stringMatching(/rate limit/i),
+    });
+    expect(strategy.callApi).toHaveBeenCalledOnce();
+    expect(target.callApi).toHaveBeenCalledOnce();
+    expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
+      retriedRequests: 0,
+      rateLimitHits: 0,
+      failedRequests: 1,
+    });
+  });
+
   it.each(
     (['explicit context', 'native evaluator'] as const).flatMap((entry) =>
       (['response', 'exception'] as const).flatMap((kind) =>
@@ -143,19 +190,7 @@ describe('actual iterative manager child quota ownership', () => {
       };
       const result = (
         entry === 'native evaluator'
-          ? runEval({
-              provider: strategy,
-              prompt: { raw: 'fixture', label: 'nested retries' },
-              test: {},
-              delay: 0,
-              testIdx: 0,
-              promptIdx: 0,
-              repeatIndex: 0,
-              isRedteam: false,
-              conversations: {},
-              registers: {},
-              rateLimitRegistry: registry,
-            })
+          ? runStrategy(strategy, 'fixture')
           : withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
               wrapProviderWithRateLimiting(strategy, registry).callApi('fixture'),
             )
@@ -205,21 +240,10 @@ describe('actual iterative manager child quota ownership', () => {
           prompt === 'nested' ? callTargetProvider(target, prompt) : failure,
         ),
       };
-      const evaluate = (prompt: string) =>
-        runEval({
-          provider: strategy,
-          prompt: { raw: prompt, label: prompt },
-          test: {},
-          delay: 0,
-          testIdx: 0,
-          promptIdx: 0,
-          repeatIndex: 0,
-          isRedteam: false,
-          conversations: {},
-          registers: {},
-          rateLimitRegistry: registry,
-        });
-      const done = Promise.all([evaluate('nested'), evaluate('parent-only')]);
+      const done = Promise.all([
+        runStrategy(strategy, 'nested'),
+        runStrategy(strategy, 'parent-only'),
+      ]);
       await vi.advanceTimersByTimeAsync(10000);
       const rows = await done;
 
