@@ -22,15 +22,25 @@
     - |
       set -eu
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
-      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
-      if find "$PROMPTFOO_OUTPUT_DIR/." -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
-        rm -f "$PROMPTFOO_OUTPUT_DIR/results.json" "$PROMPTFOO_OUTPUT_DIR/results.junit.xml"
-        echo 'PROMPTFOO_OUTPUT_DIR must be empty before running an eval.' >&2
-        exit 1
-      fi
-
-      : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a config file}"
+      cd "${CI_PROJECT_DIR:-.}"
       threshold="$(node -e '
+        const fs = require("node:fs");
+        let dir = ".";
+        for (const segment of process.env.PROMPTFOO_OUTPUT_DIR.split("/")) {
+          dir += "/" + segment;
+          if (!/^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$/.test(segment) ||
+              [".", "..", ".git"].includes(segment.toLowerCase()) ||
+              fs.lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink()) {
+            throw new Error("PROMPTFOO_OUTPUT_DIR must be a relative directory inside the checkout without symlinks.");
+          }
+        }
+        fs.mkdirSync(dir, { recursive: true });
+        if (fs.readdirSync(dir).length) {
+          for (const file of ["results.json", "results.junit.xml"]) {
+            fs.rmSync(dir + "/" + file, {force: true});
+          }
+          throw new Error("PROMPTFOO_OUTPUT_DIR must be empty before running an eval.");
+        }
         const input = process.argv[1];
         const value = Number(input);
         if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(input) || !Number.isFinite(value) || value < 0 || value > 100) {
@@ -39,6 +49,7 @@
         }
         console.log(value);
       ' -- "${PROMPTFOO_PASS_RATE_THRESHOLD:-}")"
+      : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a config file}"
       set -- eval \
         --config "$PROMPTFOO_CONFIG" \
         --no-progress-bar \
