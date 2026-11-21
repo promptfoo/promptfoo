@@ -12,9 +12,18 @@ import { promisify } from 'node:util';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
 
 const version = '2026.11.4';
 const exec = promisify(execFile);
+const content = z.union([
+  z.string(),
+  z.array(z.looseObject({ type: z.literal('text'), text: z.string() })),
+]);
+const message = z.union([
+  z.looseObject({ role: z.enum(['system', 'developer', 'user', 'tool']), content }),
+  z.looseObject({ role: z.literal('assistant'), content: content.nullish() }),
+]);
 
 async function resolveEntry() {
   let directory = process.env.OPENCLAW_PACKAGE_DIR;
@@ -33,20 +42,14 @@ async function resolveEntry() {
 }
 
 // Observe the request actually accepted by the model endpoint. Keep upstream credentials out of the child.
-async function forward(request, response, { endpoint, key, model, observe }) {
+async function forward(request, response, { endpoint, key, observe }, schema) {
   const controller = new AbortController();
   response.once('close', () => controller.abort());
   try {
     let body = '';
     request.setEncoding('utf8');
     for await (const chunk of request) body += chunk;
-    const input = JSON.parse(body);
-    if (
-      input.model !== model ||
-      input.tools?.some((t) => !t.function?.name?.startsWith('fixture__'))
-    ) {
-      throw new Error('Unexpected model or tool inventory');
-    }
+    const { messages } = schema.parse(JSON.parse(body));
     const result = await fetch(endpoint, {
       method: 'POST',
       body,
@@ -54,7 +57,7 @@ async function forward(request, response, { endpoint, key, model, observe }) {
       redirect: 'error',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
     });
-    if (result.ok) observe(input.messages);
+    if (result.ok) observe(messages);
     response.writeHead(result.status, {
       'content-type': result.headers.get('content-type') || 'application/json',
     });
@@ -67,16 +70,30 @@ async function forward(request, response, { endpoint, key, model, observe }) {
 }
 
 // The loopback service and its credentials live only for this trial.
-async function serve(tools, call, inference) {
+export async function serveFixture(tools, call, inference) {
   const route = '/mcp/' + randomUUID();
   const token = randomUUID();
+  const names = Object.keys(tools).map((name) => 'fixture__' + name);
+  const fixtureTool = z.object({
+    type: z.literal('function'),
+    function: z.object({ name: z.enum(names) }),
+  });
+  const schema = z.object({
+    model: z.literal(inference.model),
+    messages: z.array(message).min(1),
+    tools: z.array(fixtureTool).optional(),
+    tool_choice: z.union([z.enum(['none', 'auto', 'required']), fixtureTool]).optional(),
+    functions: z.never().optional(),
+    function_call: z.never().optional(),
+    web_search_options: z.never().optional(),
+  });
   const http = createServer(async (request, response) => {
     if (
       request.method === 'POST' &&
       request.url === '/v1/chat/completions' &&
       request.headers.authorization === 'Bearer ' + token
     ) {
-      return forward(request, response, inference);
+      return forward(request, response, inference, schema);
     }
     if (request.url !== route || request.method !== 'POST') {
       response.writeHead(404).end();
@@ -172,7 +189,7 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
   try {
     await mkdir(workspace);
     base.pathname = base.pathname.replace(/\/+$/, '') + '/chat/completions';
-    service = await serve(tools, call, { endpoint: base, key, model, observe });
+    service = await serveFixture(tools, call, { endpoint: base, key, model, observe });
     await writeFile(
       configFile,
       JSON.stringify(config(service.baseUrl, model, service.toolUrl, seconds)),
