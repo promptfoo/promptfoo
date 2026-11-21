@@ -148,7 +148,15 @@ describe('redteam strategy result grading', () => {
       const result = await handleRedteam({
         assertion: piiAssertion,
         baseType: getAssertionBaseType(piiAssertion),
-        assertionValueContext: { prompt: originalPrompt, vars: {}, test, providerResponse, trace },
+        assertionValueContext: {
+          prompt: originalPrompt,
+          vars: {},
+          test,
+          providerResponse,
+          trace,
+          logProbs: [],
+          provider: undefined,
+        },
         cost: 0,
         inverse: false,
         latencyMs: 0,
