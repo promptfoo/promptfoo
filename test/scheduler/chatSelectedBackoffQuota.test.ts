@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import {
+  createProviderRateLimitOptions,
+  wrapProviderWithRateLimiting,
+} from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -161,6 +164,30 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
     vi.restoreAllMocks();
     restoreEnvironment();
     vi.useRealTimers();
+  });
+
+  it('ignores cached quota without deleting caller-visible headers', () => {
+    const replay = { cached: true, metadata: { headers: exhaustedHeaders } };
+    expect(createProviderRateLimitOptions().getHeaders?.(replay)).toBeUndefined();
+    expect(replay.metadata.headers).toBe(exhaustedHeaders);
+  });
+
+  it('does not restart an expired reset after reading a slow body', async () => {
+    const { wrapped } = await createTarget();
+    const slow = success('A', exhaustedHeaders);
+    const text = slow.text.bind(slow);
+    vi.spyOn(slow, 'text').mockImplementation(() => {
+      vi.setSystemTime(Date.now() + 2500);
+      return text();
+    });
+    const dispatches = staticTransport(slow);
+    const first = start(wrapped, 'A', caller());
+    await first.done;
+    expect(first.state.value).toMatchObject({ output: 'A output' });
+    const second = start(wrapped, 'B', caller());
+    await vi.advanceTimersByTimeAsync(3000);
+    await second.done;
+    expect(dispatches[1].at - dispatches[0].at).toBe(2500);
   });
 
   it('returns successful output without retrying a completed request when quota is exhausted', async () => {

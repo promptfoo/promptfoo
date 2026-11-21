@@ -289,6 +289,13 @@ describe('SlotQueue', () => {
       });
     });
 
+    it('keeps a later active request deadline on a shorter token-only success', () => {
+      const now = Date.now();
+      queue.updateRateLimitState({ remainingRequests: 0, resetAt: now + 2000 });
+      queue.updateRateLimitState({ remainingTokens: 0, resetAt: now + 250 });
+      expect(queue.getResetAt()).toBe(now + 2000);
+    });
+
     it('should update remaining requests and limit', () => {
       const parsed: ParsedRateLimitHeaders = {
         remainingRequests: 100,

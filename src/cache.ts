@@ -22,6 +22,7 @@ import {
 } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
+import { headerReceiptTimes } from './util/fetch/responseHeadersObserver';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
@@ -317,6 +318,7 @@ export type FetchWithCacheResult<T> = {
 type SerializedFetchResponse = string;
 
 type PreparedFetchResponse = {
+  receivedAt: number;
   response: SerializedFetchResponse;
   cacheable: boolean;
 };
@@ -736,7 +738,7 @@ async function fetchAndReadBody(
   isIdempotent: boolean,
   logEnabled: boolean,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
-): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
+): Promise<{ respText: string; resp: Response; receivedAt: number; fetchLatencyMs: number }> {
   const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
   const body = options.body ?? (url instanceof Request ? url.body : null);
   const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
@@ -745,11 +747,11 @@ async function fetchAndReadBody(
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
     const resp = await fetchWithRetries(url, options, timeout, maxRetries, onRateLimitBackoff);
-    const fetchLatencyMs = Date.now() - fetchStart;
+    const receivedAt = Date.now();
 
     try {
       const respText = await readWithResponseDeadline(resp, () => resp.text());
-      return { respText, resp, fetchLatencyMs };
+      return { respText, resp, receivedAt, fetchLatencyMs: receivedAt - fetchStart };
     } catch (err) {
       if (
         !options.signal?.aborted &&
@@ -837,7 +839,7 @@ async function prepareFetchResponse(
   );
   const response = result.resp;
   const responseText = result.respText;
-  const fetchLatencyMs = result.fetchLatencyMs;
+  const { fetchLatencyMs, receivedAt } = result;
   const parsedData = parseFetchResponse(url, response, responseText, format, sanitizeResponse);
   // Capture cacheability before a sanitizer can remove or change an upstream error.
   const responseError =
@@ -859,7 +861,7 @@ async function prepareFetchResponse(
   );
 
   if (!response.ok) {
-    return { response: serializedResponse, cacheable: false };
+    return { receivedAt, response: serializedResponse, cacheable: false };
   }
 
   if (responseError) {
@@ -868,7 +870,7 @@ async function prepareFetchResponse(
         `Not caching ${sanitizeUrlForLogging(getRequestUrlString(url))} because it contains an 'error' key: ${sanitizeResponse ? serializedResponse : responseError}`,
       );
     }
-    return { response: serializedResponse, cacheable: false };
+    return { receivedAt, response: serializedResponse, cacheable: false };
   }
 
   if (logEnabled) {
@@ -876,7 +878,7 @@ async function prepareFetchResponse(
       `Storing ${sanitizeUrlForLogging(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
     );
   }
-  return { response: serializedResponse, cacheable: true };
+  return { receivedAt, response: serializedResponse, cacheable: true };
 }
 
 /**
@@ -1002,7 +1004,7 @@ export async function fetchWithCache<T = unknown>(
       logEnabled,
       notifyRateLimitBackoff,
     );
-    const { respText, resp, fetchLatencyMs } = await (observerFailure
+    const { respText, resp, fetchLatencyMs, receivedAt } = await (observerFailure
       ? Promise.race([response, observerFailure])
       : response);
     const parsedData = parseFetchResponse(url, resp, respText, format, sanitizeResponse);
@@ -1021,6 +1023,9 @@ export async function fetchWithCache<T = unknown>(
       latencyMs: fetchLatencyMs,
       deleteFromCache: async () => {},
     };
+    if (result.headers) {
+      headerReceiptTimes.set(result.headers, receivedAt);
+    }
     onResponsePrepared?.(result);
     return result;
   }
@@ -1107,7 +1112,7 @@ export async function fetchWithCache<T = unknown>(
   try {
     // Transport and body reading already own the signal. Race only this caller's
     // observer failure; an abort race here would discard completed diagnostics.
-    const { response, cacheable } = await (observerFailure
+    const { response, cacheable, receivedAt } = await (observerFailure
       ? Promise.race([inflightResponse.response, observerFailure])
       : inflightResponse.response);
     const result: FetchWithCacheResult<T> = deserializeFetchResponse<T>(
@@ -1122,6 +1127,9 @@ export async function fetchWithCache<T = unknown>(
     }
     // Each consumer owns its observation, including callers sharing the transport.
     // Stored cache hits never represent a fresh completion or a new quota window.
+    if (result.headers) {
+      headerReceiptTimes.set(result.headers, receivedAt);
+    }
     onResponsePrepared?.(result);
     if (cacheable) {
       // Keep publication alive for other callers while this caller can stop waiting.

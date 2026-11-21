@@ -107,7 +107,9 @@ export function createProviderRateLimitOptions(
     // park every queued and subsequent call until that reset instead of
     // letting them fail fast.
     getHeaders: (result: ProviderResponse | undefined) =>
-      result?.metadata?.rateLimitRetryable === false || result?.metadata?.rateLimitKind === 'quota'
+      result?.cached ||
+      result?.metadata?.rateLimitRetryable === false ||
+      result?.metadata?.rateLimitKind === 'quota'
         ? undefined
         : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,

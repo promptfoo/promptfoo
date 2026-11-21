@@ -124,6 +124,7 @@ export class SlotQueue {
    * Update rate limit state from parsed headers.
    */
   updateRateLimitState(parsed: ParsedRateLimitHeaders): void {
+    const activeReset = this.isQuotaExhausted() ? this.resetAt : null;
     if (parsed.remainingRequests !== undefined) {
       this.remainingRequests = parsed.remainingRequests;
     }
@@ -137,7 +138,12 @@ export class SlotQueue {
       this.tokenLimit = parsed.limitTokens;
     }
     if (parsed.resetAt !== undefined) {
-      this.resetAt = parsed.resetAt;
+      // A token-only update cannot shorten an active request limit, or vice
+      // versa. A fresh positive balance can still lift the corresponding limit.
+      this.resetAt =
+        activeReset !== null && (this.remainingRequests === 0 || this.remainingTokens === 0)
+          ? Math.max(activeReset, parsed.resetAt)
+          : parsed.resetAt;
       this.scheduleResetProcessing();
     }
   }
