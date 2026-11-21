@@ -173,8 +173,11 @@ export function redactDiagnosticText(text: string, credentials: Iterable<string>
       continue;
     }
     redacted += source.slice(copied, start) + REDACTED;
-    // Repeatedly escaped quotes have no reliable closing delimiter.
-    if (quote && quote.length > 1) {
+    // Objects, arrays and repeatedly escaped quotes have no reliable simple delimiter.
+    // Withhold the rest of the diagnostic instead of exposing a nested value.
+    const structured =
+      source[start] === '{' || (source[start] === '[' && !source.startsWith(REDACTED, start));
+    if (structured || (quote && quote.length > 1)) {
       return redacted;
     }
     const end =

@@ -4,6 +4,11 @@ export function createAbortError(message: string): Error {
   return error;
 }
 
+interface Turn {
+  /** A remote cancellation can outlive the caller but must finish before the next turn. */
+  releaseAfter?: Promise<unknown>;
+}
+
 // Native Map storage preserves provider serialization fallback output.
 export class AgenticRunQueue extends Map<string, Promise<void>> {
   readonly #abortMessage: string;
@@ -16,16 +21,17 @@ export class AgenticRunQueue extends Map<string, Promise<void>> {
   async run<T>(
     queueKey: string | undefined,
     abortSignal: AbortSignal | undefined,
-    executeTurn: () => Promise<T>,
+    executeTurn: (turn: Turn) => Promise<T>,
   ): Promise<T> {
+    const turn: Turn = {};
     if (!queueKey) {
-      return executeTurn();
+      return executeTurn(turn);
     }
 
     const previousRun = this.get(queueKey) ?? Promise.resolve();
     let releaseCurrentRun: () => void = () => {};
     const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
+      releaseCurrentRun = () => resolve();
     });
     const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
     this.set(queueKey, queuedRun);
@@ -37,9 +43,13 @@ export class AgenticRunQueue extends Map<string, Promise<void>> {
 
     try {
       await this.wait(previousRun, abortSignal);
-      return await executeTurn();
+      return await executeTurn(turn);
     } finally {
-      releaseCurrentRun();
+      if (turn.releaseAfter) {
+        void turn.releaseAfter.then(releaseCurrentRun, releaseCurrentRun);
+      } else {
+        releaseCurrentRun();
+      }
     }
   }
 

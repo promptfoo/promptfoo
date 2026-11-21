@@ -2994,6 +2994,26 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it('keeps the next persisted turn queued until the remote abort completes', async () => {
+      const controller = new AbortController();
+      const prompt = createDeferred<unknown>();
+      const abort = createDeferred<void>();
+      mockSessionPrompt.mockReturnValueOnce(prompt.promise);
+      mockSessionAbort.mockReturnValueOnce(abort.promise);
+      const provider = new OpenCodeSDKProvider(createPersistentSessionOptions());
+      const first = provider.callApi('First', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledOnce());
+      const second = provider.callApi('Second');
+      controller.abort();
+      await expect(first).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(mockSessionAbort).toHaveBeenCalledOnce();
+      expect(mockSessionPrompt).toHaveBeenCalledOnce();
+      abort.resolve();
+      await expect(second).resolves.toMatchObject({ output: 'Test response' });
+      prompt.resolve(createMockPromptResponse([{ type: 'text', text: 'late' }]));
+    });
+
     it('does not call session.abort when no signal is provided', async () => {
       const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
       await provider.callApi('Test prompt');

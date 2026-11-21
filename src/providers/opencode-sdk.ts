@@ -2512,7 +2512,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return cachedResponse;
       }
 
-      if (callOptions?.abortSignal?.aborted) {
+      const abortSignal = callOptions?.abortSignal;
+      if (abortSignal?.aborted) {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
@@ -2520,7 +2521,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const sessionQueueKey = perCallTracing
         ? SERVER_LIFECYCLE_QUEUE_KEY
         : this.getSessionQueueKey(config, workingDir);
-      return await this.sessionQueues.run(sessionQueueKey, callOptions?.abortSignal, async () => {
+      return await this.sessionQueues.run(sessionQueueKey, abortSignal, async (turn) => {
         let ephemeralSession: OpenCodeSessionHandle | undefined;
         let abortListener: (() => void) | undefined;
         try {
@@ -2528,7 +2529,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           this.assertServerWorkspace(config, inIsolatedWorkspace);
           const session = await this.getOrCreateSession(config, workingDir);
           ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
+          if (abortSignal?.aborted) {
             return { error: 'OpenCode SDK call aborted before it started' };
           }
 
@@ -2545,7 +2546,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
           }
 
           // Cancel the transport on both SDK versions and ask v2 to stop the remote session.
-          const abortSignal = callOptions?.abortSignal;
           if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
             const abortParams = this.buildAbortSessionParameters(
               session.sessionId,
@@ -2558,7 +2558,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
             };
             abortListener = () => {
               try {
-                client.session.abort?.(abortParams).catch(logAbortError);
+                turn.releaseAfter = client.session.abort?.(abortParams).catch(logAbortError);
               } catch (error) {
                 logAbortError(error);
               }
@@ -2625,8 +2625,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
           logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
           return providerResponse;
         } finally {
-          if (abortListener && callOptions?.abortSignal) {
-            callOptions.abortSignal.removeEventListener('abort', abortListener);
+          if (abortListener && abortSignal) {
+            abortSignal.removeEventListener('abort', abortListener);
           }
           if (ephemeralSession) {
             try {

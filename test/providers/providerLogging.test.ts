@@ -126,6 +126,9 @@ describe('redactDiagnosticText', () => {
       'token="upstream-1\nupstream-2"; api_key=\'upstream-3\r\nupstream-4\'',
     ],
     ['multiline escaped fields', 'password=\\"upstream-1\nupstream-2\\"'],
+    ['credential arrays', '{"credentials":["upstream-1","upstream-2"]}'],
+    ['nested credential objects', '{"token":{"value":["upstream-1"]}}'],
+    ['incomplete credential objects', 'secret = {name: "upstream-1"'],
     ['partly redacted fields', 'password="' + REDACTED + 'upstream-1"'],
     ['unterminated quoted values', 'Authorization: "Token upstream-1'],
   ])('redacts upstream-only %s', (_label, text) => {
