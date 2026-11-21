@@ -11,20 +11,20 @@ import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader as isKnownCredentialHeader,
   isNonCredentialHeader,
-  isSecretField,
-  looksLikeSecret,
   REDACTED,
   sanitizeObject,
-  sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
 import { runWithAbort, sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
-import { decodeUrlComponent } from '../urlEncoding';
 import {
+  basicCredential,
   decodeBasicCredentials,
   getHostedCredentialArgument,
   getHostedHeaderCredentialParts,
+  getUrlCredentials,
+  isCredentialName,
+  splitUserinfo,
 } from './agents-api-credential-args';
 import { normalizeHostedTrace, UnpublishedTraceParentError } from './agents-api-trace-spans';
 import { calculateOpenAIUsageCost } from './billing';
@@ -136,8 +136,6 @@ const TURN_USAGE_GRACE_MS = 5_000;
 const MIN_CREDENTIAL_LENGTH = 8;
 // A single character is no secret, and redacting it would erase that character from diagnostics.
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
-const CREDENTIAL_NAME =
-  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
 
 async function digestArtifact(response: Response | undefined, expectedSize: number) {
   if (!response?.body || response.redirected) {
@@ -176,10 +174,6 @@ class AgentsApiHttpError extends Error {
     super(message);
     this.name = 'AgentsApiHttpError';
   }
-}
-
-function isCredentialName(name: string): boolean {
-  return isSecretField(name) || CREDENTIAL_NAME.test(name);
 }
 
 function isCredentialHeader(name: string, value: string): boolean {
@@ -231,83 +225,6 @@ function addCredential(credentials: Set<string>, value: unknown, field?: string)
       credentials.add(encodeURIComponent(candidate));
     }
   }
-}
-
-/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
-function decodeUserinfo(url: URL): string | undefined {
-  return url.username || url.password
-    ? `${decodeUrlComponent(url.username)}:${decodeUrlComponent(url.password)}`
-    : undefined;
-}
-
-function basicCredential(userinfo: string): string {
-  return `Basic ${Buffer.from(userinfo).toString('base64')}`;
-}
-
-/**
- * Promptfoo's fetch helper would Base64-encode URL userinfo while it is still percent-encoded, so
- * request URLs omit it and the provider sends a decoded Basic credential instead.
- */
-function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
-  let url: URL;
-  try {
-    url = new URL(apiUrl);
-  } catch {
-    return { url: apiUrl };
-  }
-  const userinfo = decodeUserinfo(url);
-  if (!userinfo) {
-    return { url: apiUrl };
-  }
-  url.username = '';
-  url.password = '';
-  return { url: url.toString(), userinfo };
-}
-
-/**
- * Credential values carried by a URL: userinfo, including the decoded pair and the Basic
- * credential derived from it, and credential-named query parameters. Raw and decoded spellings
- * are both returned for redaction.
- */
-function getUrlCredentials(value: string, includeFragment = true): string[] {
-  const trimmed = value.trim();
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
-    return [];
-  }
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    // A malformed credential-bearing URL can be echoed only as one opaque error value.
-    return sanitizeUrlForLogging(value) === value ? [] : [value];
-  }
-  const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
-  const userinfo = decodeUserinfo(url);
-  if (userinfo) {
-    found.push(userinfo, basicCredential(userinfo));
-  }
-  const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
-  for (const [index, segment] of url.pathname.split('/').entries()) {
-    if (sanitizedSegments[index] === '%5BREDACTED%5D') {
-      found.push(segment, decodeUrlComponent(segment));
-    }
-  }
-  const parameterParts = includeFragment ? [url.search, url.hash] : [url.search];
-  for (const segment of parameterParts.flatMap((part) => part.slice(1).split(/[&;]/))) {
-    const separator = segment.indexOf('=');
-    const [param] = new URLSearchParams(segment);
-    if (
-      separator !== -1 &&
-      param &&
-      (isCredentialName(param[0]) ||
-        looksLikeSecret(param[1]) ||
-        looksLikeSecret(segment.slice(separator + 1)))
-    ) {
-      // A raw `+` decodes to a space; keep both spellings a server might echo.
-      found.push(segment.slice(separator + 1), param[1]);
-    }
-  }
-  return found.filter((credential) => credential.trim().length > 0);
 }
 
 /**

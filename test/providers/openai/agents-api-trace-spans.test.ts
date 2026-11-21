@@ -1176,6 +1176,8 @@ describe('normalizeHostedTrace', () => {
       it.each([
         ['flag value', ['tool', '--api-key', credential]],
         ['flag assignment', ['tool', `--api-key=${credential}`]],
+        ['URL option', ['tool', `--url=https://user:${credential}@example.test`]],
+        ['URL assignment', ['tool', `ADDRESS=https://example.test?key=${credential}`]],
         ['environment assignment', ['env', `SERVICE_API_KEY=${credential}`, 'tool']],
         ['header flag', ['curl', '-H', `Authorization: Bearer ${credential}`]],
         ['attached header', ['curl', `--header=Authorization: Bearer ${credential}`]],
@@ -1204,7 +1206,10 @@ describe('normalizeHostedTrace', () => {
         const argv = ['cat', '/workspace/ledger.csv', '--format', 'ledger', 'COLOR=ledger'];
         const call = callNamed(
           'lookup_ledger',
-          attribute('gen_ai.tool.call.arguments', JSON.stringify({ cmd: argv })),
+          attribute(
+            'gen_ai.tool.call.arguments',
+            JSON.stringify({ cmd: argv, url: 'https://example.test/ledger' }),
+          ),
         );
         expect(withCarriers(payload(root, call), []).spans[1].name).toBe(
           'execute_tool lookup_ledger',
@@ -1242,6 +1247,19 @@ describe('normalizeHostedTrace', () => {
         const call = callNamed(
           `lookup_${credential}`,
           attribute('tool.arguments', JSON.stringify(args)),
+        );
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it.each([
+        `https://user:${credential}@example.test`,
+        'https://kappa%2Dblue-19@example.test',
+        'https://example.test?api%5Fkey=kappa%2Dblue-19',
+        `https://example.test#access_token=${credential}`,
+      ])('withholds identifiers that echo URL credentials in arguments', (url) => {
+        const call = callNamed(
+          `lookup_${credential}`,
+          attribute('tool.arguments', JSON.stringify({ url })),
         );
         expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
       });
