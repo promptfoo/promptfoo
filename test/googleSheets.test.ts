@@ -503,9 +503,12 @@ describe('Google Sheets Integration', () => {
         const eval_ = new Eval({});
         eval_.oldResults = createEvaluateSummaryV2({ table });
         const before = structuredClone(table);
-        request.mockResolvedValue({}).mockResolvedValueOnce({
-          data: { sheets: [{ properties: { sheetId: 98765, title: 'Existing' } }] },
-        });
+        request
+          .mockReset()
+          .mockResolvedValue({})
+          .mockResolvedValueOnce({
+            data: { sheets: [{ properties: { sheetId: 98765, title: 'Existing' } }] },
+          });
         vi.spyOn(Date, 'now').mockReturnValue(1234);
         const restore = mockProcessEnv({
           PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
