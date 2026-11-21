@@ -25,11 +25,11 @@ import type {
   RetrieveCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
 
@@ -75,7 +75,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
   constructor(
     modelName: string,
-    options: { config?: BedrockKnowledgeBaseOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<BedrockKnowledgeBaseOptions>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     if (options.config?.operation !== 'retrieve') {
