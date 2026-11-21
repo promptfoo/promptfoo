@@ -59,6 +59,25 @@ const config: OtelConfig = {
   debug: false,
 };
 
+function pauseNextShutdown() {
+  let finishShutdown!: () => void;
+  const originalShutdown = SDKTracerProvider.prototype.shutdown;
+  let shutdownStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    shutdownStarted = resolve;
+  });
+  vi.spyOn(SDKTracerProvider.prototype, 'shutdown').mockImplementationOnce(async function (
+    this: SDKTracerProvider,
+  ) {
+    shutdownStarted();
+    await new Promise<void>((resolve) => {
+      finishShutdown = resolve;
+    });
+    await originalShutdown.call(this);
+  });
+  return { started, finish: () => finishShutdown() };
+}
+
 function wrapSavedProvider(
   previousProvider: TracerProvider,
   mode: 'direct' | 'eager' | 'lazy' | 'captured',
@@ -110,7 +129,7 @@ describe('real OTEL SDK lifecycle', () => {
 
   it('exports the completed lease while an overlapping lease keeps recording linked spans', async () => {
     const releaseFirst = await acquireOtel(config);
-    const releaseSecond = await acquireOtel({ ...config, serviceName: 'ignored-second-config' });
+    const releaseSecond = await acquireOtel(config);
     const first = trace.getTracer('test').startSpan('first-evaluation');
     const second = trace.getTracer('test').startSpan('second-evaluation');
     first.end();
@@ -637,25 +656,32 @@ describe('real OTEL SDK lifecycle', () => {
     expect(exportedSpans).toHaveLength(0);
   });
 
+  it('honors synchronous host initialization while the last evaluation is shutting down', async () => {
+    const release = await acquireOtel(config);
+    const { started, finish } = pauseNextShutdown();
+    const releasing = release();
+    await started;
+    try {
+      initializeOtel({ ...config, serviceName: 'host' });
+      trace.getTracer('test').startSpan('host-during-shutdown').end();
+    } finally {
+      finish();
+      await releasing;
+    }
+    expect(isOtelInitialized()).toBe(true);
+    trace.getTracer('test').startSpan('host-after-shutdown').end();
+    await shutdownOtel();
+    expect(exportedSpans[1].map((span) => span.name)).toEqual([
+      'host-during-shutdown',
+      'host-after-shutdown',
+    ]);
+  });
+
   it('does not unregister a host provider installed while its own SDK is shutting down', async () => {
     const release = await acquireOtel(config);
     const cached = trace.getTracer('cached-during-shutdown');
     cached.startSpan('before-shutdown').end();
-    let finishShutdown!: () => void;
-    const originalShutdown = SDKTracerProvider.prototype.shutdown;
-    let shutdownStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      shutdownStarted = resolve;
-    });
-    vi.spyOn(SDKTracerProvider.prototype, 'shutdown').mockImplementationOnce(async function (
-      this: SDKTracerProvider,
-    ) {
-      shutdownStarted();
-      await new Promise<void>((resolve) => {
-        finishShutdown = resolve;
-      });
-      await originalShutdown.call(this);
-    });
+    const { started, finish } = pauseNextShutdown();
     const releasing = release();
     await started;
     const inactiveSpan = cached.startSpan('disabled-during-shutdown');
@@ -673,7 +699,7 @@ describe('real OTEL SDK lifecycle', () => {
     const beforeShutdown = cached.startSpan('cached-owned-before-shutdown-completes');
     expect(beforeShutdown.isRecording()).toBe(false);
     beforeShutdown.end();
-    finishShutdown();
+    finish();
     await releasing;
     expect(trace.getTracerProvider()).toBe(hostGlobal);
     const afterShutdown = cached.startSpan('cached-owned-after-shutdown-completes');

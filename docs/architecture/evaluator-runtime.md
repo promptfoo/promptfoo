@@ -68,8 +68,11 @@ failed start.
 The default Node runtime supplies `src/node/tracingLifecycle.ts`. It keeps local
 OTLP receiver acquisition, SDK ownership, flushing, the existing export grace
 period, and receiver release together. SDK leases keep an evaluation-owned
-provider alive until its final evaluation completes. Repeated evaluations can
-register a fresh provider after shutdown. Cached tracers from Promptfoo's lifecycle
+provider alive until its final evaluation completes. Concurrent evaluations using
+that SDK must agree on the OTLP endpoint, local export setting and service name.
+Run evaluations with different export settings separately. When shutdown begins,
+the SDK releases its global registrations so a host can initialize a new SDK
+synchronously while outstanding spans finish exporting. Cached tracers from Promptfoo's lifecycle
 provider follow its managed SDK generations and remain non-recording while no
 managed SDK is active. They retain that provider ownership when an application
 replaces the global provider; they do not migrate to the replacement SDK.

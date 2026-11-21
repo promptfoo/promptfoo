@@ -290,7 +290,7 @@ describe('otelSdk', () => {
 
     it('flushes each lease and retains the first configuration until the last release', async () => {
       const releaseFirst = await acquireOtel(defaultConfig);
-      const releaseSecond = await acquireOtel({ ...defaultConfig, serviceName: 'second-service' });
+      const releaseSecond = await acquireOtel(defaultConfig);
       expect(resourceCalls).toEqual([
         { 'service.name': 'test-service', 'service.version': '1.0.0-test' },
       ]);
@@ -305,6 +305,23 @@ describe('otelSdk', () => {
       expect(mockShutdown).toHaveBeenCalledTimes(1);
       expect(isOtelInitialized()).toBe(false);
     });
+
+    it.each([
+      { endpoint: 'https://private.test' },
+      { serviceName: 'other' },
+      { localExport: false },
+    ])(
+      'rejects incompatible settings before acquiring or adopting the active SDK: %j',
+      async (changes) => {
+        const config = { ...defaultConfig };
+        const release = await acquireOtel(config);
+        Object.assign(config, changes);
+        await expect(acquireOtel(config)).rejects.toThrow('matching OpenTelemetry');
+        expect(() => initializeOtel(config)).toThrow('matching OpenTelemetry');
+        await release();
+        expect(isOtelInitialized()).toBe(false);
+      },
+    );
 
     it('makes concurrent release calls idempotent', async () => {
       const release = await acquireOtel(defaultConfig);
