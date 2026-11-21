@@ -2,11 +2,11 @@ import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
-import { sanitizeObject } from '../../util/sanitizer';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { resolveProviderEnv } from '../env';
 import { executeProviderFunctionCallback } from '../functionCallbackUtils';
+import { sanitizeMcpToolData as sanitizeToolData } from '../mcp/util';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
@@ -725,10 +725,6 @@ function normalizeInteractionCitation(
   }
 
   return [];
-}
-
-function sanitizeToolData<T>(value: T): T {
-  return sanitizeObject(value, { context: 'Gemini tool data', sanitizeUrls: true });
 }
 
 function getInteractionGroundingMetadata(
@@ -1757,9 +1753,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
             ...toolCallMetadata(),
           };
         }
-        toolCalls.push(
-          sanitizeToolData({ name: call.name, args: call.arguments ?? {}, result: output }),
-        );
+        toolCalls.push({
+          name: call.name,
+          args: sanitizeToolData(call.arguments ?? {}),
+          result: sanitizeToolData(output),
+        });
         functionResults.push({
           type: 'function_result',
           ...(call.id === undefined ? {} : { call_id: call.id }),
