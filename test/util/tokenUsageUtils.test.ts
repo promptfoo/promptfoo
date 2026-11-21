@@ -840,6 +840,33 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('attributes nested billed usage only to generation', () => {
+      const target = createEmptyTokenUsage();
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          incurredTokenUsage: {
+            attacker: { prompt: 3, numRequests: 1 },
+            assertions: { total: 2 },
+            generation: { completionDetails: { reasoning: 1 } },
+          },
+        }),
+      ).toBe(true);
+      expect(target.incurredTokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        generation: { total: 5, numRequests: 1, completionDetails: { reasoning: 1 } },
+      });
+    });
+
+    it.each([
+      { total: -1, numRequests: -1 },
+      { total: 10, attacker: { completionDetails: { reasoning: -1 } } },
+    ])('rejects negative billed counters without changing totals', (incurredTokenUsage) => {
+      const target = createEmptyTokenUsage();
+      expect(accumulateGenerationTokenUsage(target, { incurredTokenUsage })).toBe(false);
+      expect(target).toEqual(createEmptyTokenUsage());
+    });
+
     it('retains incurred generation when logical usage is absent', () => {
       const target = createEmptyTokenUsage();
       expect(accumulateGenerationTokenUsage(target, { incurredTokenUsage: { total: 12 } })).toBe(
