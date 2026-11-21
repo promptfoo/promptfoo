@@ -573,7 +573,7 @@ describe('logger', () => {
   });
 
   describe('initializeSourceMapSupport', () => {
-    it('should only call install once across concurrent and repeated invocations', async () => {
+    it('shares concurrent installation, retries failure, and reuses success', async () => {
       // Save and clear LOG_LEVEL to prevent auto-initialization during import
       const originalLogLevel = process.env.LOG_LEVEL;
       mockProcessEnv({ LOG_LEVEL: undefined });
@@ -582,7 +582,9 @@ describe('logger', () => {
         // Reset modules and set up fresh mocks
         vi.resetModules();
 
-        const mockInstall = vi.fn();
+        const mockInstall = vi.fn().mockImplementationOnce(() => {
+          throw new Error('Installation failed');
+        });
         vi.doMock('source-map-support', () => ({
           install: mockInstall,
         }));
@@ -597,10 +599,10 @@ describe('logger', () => {
         ]);
         expect(mockInstall).toHaveBeenCalledTimes(1);
 
-        // A later call should not trigger install again once initialized.
-        mockInstall.mockClear();
         await cleanLogger.initializeSourceMapSupport();
-        expect(mockInstall).not.toHaveBeenCalled();
+        expect(mockInstall).toHaveBeenCalledTimes(2);
+        await cleanLogger.initializeSourceMapSupport();
+        expect(mockInstall).toHaveBeenCalledTimes(2);
       } finally {
         // Restore LOG_LEVEL
         if (originalLogLevel !== undefined) {

@@ -53,14 +53,18 @@ describe('METEOR assertion', () => {
   });
 
   it.each([
-    'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.2.3.',
-    'METEOR requires natural@^8.2.3; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.2.3.',
-  ])('returns an actionable dependency failure: %s', async (message) => {
+    "Cannot find module 'natural'",
+    'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.2.6',
+  ])('should handle a rejected missing-package error: %s', async (message) => {
     mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 
     const result = await runAssertion(params);
 
-    expect(result).toMatchObject({ pass: false, score: 0, reason: message });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe(
+      'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
+    );
     expect(result.assertion).toBe(params.assertion);
   });
 

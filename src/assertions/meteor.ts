@@ -33,19 +33,14 @@ async function ensureNaturalPackage(): Promise<void> {
   const require = nodeModule.createRequire(import.meta.url);
   let metadata: { version: string };
   try {
-    // Resolve at use time so consumer bundlers do not require the optional peer.
-    ({ default: metadata } = await import(
-      /* webpackIgnore: true */
-      pathToFileURL(require.resolve('natural/package.json')).href,
-      { with: { type: 'json' } }
-    ));
-  } catch (error) {
-    if (!isMissingPackageImportError(error, 'natural')) {
-      throw error;
-    }
-    throw Object.assign(
-      new Error(`The "natural" package is required for METEOR assertions. ${NATURAL_INSTALL_HELP}`),
-      { cause: error },
+    // Native ESM imports expose Natural's CommonJS exports under default.
+    const naturalModule = await import('natural');
+    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
+    PorterStemmer = natural.PorterStemmer;
+    WordNet = natural.WordNet;
+  } catch (_err) {
+    throw new Error(
+      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.2.6',
     );
   }
 
