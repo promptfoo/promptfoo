@@ -16,6 +16,7 @@ import { clearCjsModuleCache, ensureTypescriptLoader, importModule } from '../..
 import logger from '../../logger';
 import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
+import { providerRegistry } from '../../providers/providerRegistry';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -1194,6 +1195,7 @@ async function resolveLoadedConfig(
     env: runtimeEnv,
     basePath,
   });
+  providerRegistry.trackTargets(parsedProviders, filteredProviderConfigs);
   const testConfigs = await readTestSources(
     testSources?.length
       ? testSources

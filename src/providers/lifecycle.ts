@@ -83,6 +83,7 @@ export async function withProviderCleanup<T>(operation: () => Promise<T>): Promi
 export function trackProvider<T extends ApiProvider>(provider: T): T {
   const scope = providerScope.getStore();
   if (!scope) {
+    providerRegistry.ownProvider(provider);
     return provider;
   }
   scope.owned.add(provider);

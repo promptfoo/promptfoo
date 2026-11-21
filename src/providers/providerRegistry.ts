@@ -15,6 +15,7 @@ interface IdleCleanupProvider {
 
 interface EvaluationScope {
   active: boolean;
+  borrowed?: WeakSet<object>;
   closed: Promise<void>;
   close: () => void;
   providers: Set<ProviderState>;
@@ -152,36 +153,64 @@ export class ProviderRegistry {
         state.activeCalls--;
         this.activeCalls.delete(finished);
         finish();
-        const cleanup = this.maybeCleanupProvider(state);
-        for (const resource of state.resources) {
-          void this.maybeReleaseResource(
-            resource,
-            resource.resource === provider ? cleanup : undefined,
-          );
-        }
+        this.releaseIfIdle(state);
       }
     });
   }
 
-  /** The CLI owns its loaded targets; the eventual provider call waits for any earlier cleanup. */
+  private releaseIfIdle(state: ProviderState) {
+    const cleanup = this.maybeCleanupProvider(state);
+    for (const resource of state.resources) {
+      void this.maybeReleaseResource(
+        resource,
+        resource.resource === state.provider ? cleanup : undefined,
+      );
+    }
+  }
+
+  /** Enroll freshly constructed targets before reading tests or other fallible setup. */
+  trackTargets(providers: IdleCleanupProvider[], configured: unknown): void {
+    const scope = this.evaluation.getStore();
+    if (!scope) {
+      return;
+    }
+    scope.borrowed ??= new WeakSet();
+    const supplied = new Set<unknown>(Array.isArray(configured) ? configured : [configured]);
+    for (const provider of providers) {
+      if (supplied.has(provider)) {
+        scope.borrowed.add(provider);
+      } else {
+        this.ownProvider(provider);
+      }
+    }
+  }
+
+  ownProvider(provider: IdleCleanupProvider) {
+    const scope = this.evaluation.getStore();
+    if (!scope || scope.borrowed?.has(provider)) {
+      return;
+    }
+    const state = this.getProvider(provider);
+    state.cleanupRequested = true;
+    this.ownedProviders.add(state);
+    if (this.processShuttingDown) {
+      void this.forceProviderCleanup(state);
+    } else if (scope.active) {
+      this.ensureShutdownHandlers();
+      void this.claimProvider(scope, state);
+    } else {
+      // A concurrent load may finish after another setup step failed.
+      this.releaseIfIdle(state);
+    }
+  }
+
+  /** The CLI owns its loaded targets except explicitly supplied instances. */
   async cleanupWhenIdle(
     providers: Iterable<IdleCleanupProvider>,
     signal?: AbortSignal,
   ): Promise<void> {
-    const scope = this.evaluation.getStore();
-    if (!scope?.active) {
-      return;
-    }
     for (const provider of providers) {
-      const state = this.getProvider(provider);
-      state.cleanupRequested = true;
-      this.ownedProviders.add(state);
-      if (this.processShuttingDown) {
-        void this.forceProviderCleanup(state);
-      } else {
-        this.ensureShutdownHandlers();
-        void this.claimProvider(scope, state);
-      }
+      this.ownProvider(provider);
     }
     signal?.throwIfAborted();
   }

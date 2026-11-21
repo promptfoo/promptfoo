@@ -1235,9 +1235,11 @@ async function resolveDefaultTestProvider(
     const { loadApiProvider } = await import('../providers');
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
-    return loadApiProvider(providerId, {
+    const provider = await loadApiProvider(providerId, {
       options: defaultProvider as ProviderOptions,
     });
+    providerRegistry.ownProvider(provider);
+    return provider;
   }
   return defaultProvider;
 }

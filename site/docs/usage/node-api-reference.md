@@ -41,6 +41,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options?: EvaluateOptions)
 
 **Returns:** `Eval` record. Call `toEvaluateSummary()` when you need the serializable results summary.
 
+Promptfoo releases targets and graders created from configuration after their last
+evaluation and active call finish. This includes failed evaluations. Cleanup errors are
+logged. When you supply a provider instance, close it after its last evaluation.
+Resources the provider registers for automatic shutdown keep their own lifecycle.
+
 **Example:**
 
 ```typescript
@@ -98,7 +103,9 @@ interface EvaluateOptions {
 
 ### `loadApiProvider(providerPath, context?)`
 
-Load a single provider instance by path or identifier.
+Load a single provider instance by path or identifier. You own the returned instance and
+should call `await provider.cleanup?.()` when finished. Direct loads remain caller-owned even
+when made from a provider used by an evaluation.
 
 For manually loaded Crescendo and Custom strategies, call
 `await provider.cleanup?.()` after the final call. Their cleanup is terminal and

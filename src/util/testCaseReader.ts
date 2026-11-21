@@ -16,6 +16,7 @@ import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
+import { trackProvider } from '../providers/lifecycle';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { isApiProvider } from '../types/providers';
@@ -558,17 +559,15 @@ async function readTestWithEnv(
     // Inherit the suite environment without turning it into an explicit override
     // of defaults in a provider file. Resolve paths relative to the test case.
     const provider = testCase.provider;
-    if (typeof provider === 'string') {
-      testCase.provider = await cliState.withEnv(env, () =>
-        loadApiProvider(provider, { basePath: effectiveBasePath }),
-      );
-    } else if (typeof provider.id === 'string') {
-      const providerPath = provider.id;
-      testCase.provider = await cliState.withEnv(env, () =>
-        loadApiProvider(providerPath, {
-          options: provider as ProviderOptions,
-          basePath: effectiveBasePath,
-        }),
+    const providerId = typeof provider === 'string' ? provider : provider.id;
+    if (typeof providerId === 'string') {
+      testCase.provider = trackProvider(
+        await cliState.withEnv(env, () =>
+          loadApiProvider(providerId, {
+            basePath: effectiveBasePath,
+            ...(typeof provider === 'string' ? {} : { options: provider as ProviderOptions }),
+          }),
+        ),
       );
     }
   }

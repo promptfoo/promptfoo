@@ -340,6 +340,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
+  providerRegistry.trackTargets(loadedProviders, testSuiteConfig.providers);
   options.abortSignal?.throwIfAborted();
   const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
