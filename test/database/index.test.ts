@@ -876,18 +876,14 @@ describe('database', () => {
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should handle errors when closing database', async () => {
+    it.each([
+      'should handle errors when closing database',
+      'should handle close errors gracefully',
+    ])('%s', async () => {
+      // Force an error by closing twice
       const _db = await getDb();
       await closeDb();
       await closeDb(); // Second close should be handled gracefully
-      expect(logger.error).not.toHaveBeenCalled();
-    });
-
-    it('should handle close errors gracefully', async () => {
-      const _db = await getDb();
-      // Force an error by closing twice
-      await closeDb();
-      await closeDb();
       expect(logger.error).not.toHaveBeenCalled();
     });
   });

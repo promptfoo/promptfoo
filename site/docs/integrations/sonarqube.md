@@ -80,7 +80,7 @@ jobs:
 
 ### 2. Advanced Pipeline Configuration
 
-For enterprise environments, here's a more comprehensive setup with caching, conditional execution, and detailed reporting:
+This configuration adds caching, conditional execution, and reporting:
 
 ```yaml
 name: Advanced SonarQube Integration
