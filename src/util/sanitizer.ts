@@ -809,7 +809,10 @@ export function sanitizeConfigForOutput(
     // Classify live grading maps before serialization removes their provider methods.
     return options.shouldStripPromptText ? stripProviderPromptSelectors(snapshot) : snapshot;
   };
-  const projectTest = <T>(test: T): T => mapTestProviderRefs(test, projectProvider);
+  function projectTest<T>(test: T): T {
+    return mapTestProviderRefs(test, projectProvider);
+  }
+
   outputConfig.providers = projectProvider(outputConfig.providers) as UnifiedConfig['providers'];
   outputConfig.defaultTest = projectTest(outputConfig.defaultTest);
   if (Array.isArray(outputConfig.tests)) {
