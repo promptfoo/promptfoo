@@ -2,11 +2,11 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { z } from 'zod';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
+import { BaseTokenUsageSchema } from '../contracts/shared';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import { isApiProvider, isProviderOptions } from '../types/providers';
-import { assertCheckpointBounds } from '../util/checkpointMetadata';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -17,7 +17,7 @@ import {
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
-import { getErrorTokenUsage } from '../util/tokenUsageUtils';
+import { assertCheckpointBounds } from './checkpointMetadata';
 
 import type { ProviderConfig } from '../providers/shared';
 import type {
@@ -220,6 +220,7 @@ const CHECKPOINT_INPUT_FIELDS = new Set([
 // on a media record. Validate them independently so malformed payload aliases
 // cannot hide in them. Ordinary non-media responses keep their diagnostics.
 const CHECKPOINT_CONTROL_SCHEMAS = {
+  tokenUsage: BaseTokenUsageSchema.refine((usage) => Object.keys(usage).length > 0),
   cached: z.boolean(),
   cost: z.number(),
   incurredCost: z.number(),
@@ -288,7 +289,6 @@ export function projectProviderResponse(
     if (mediaOutput) {
       // Direct media records may contain unknown inline payload aliases. Retain
       // only declared inputs, controls, and independently projected children.
-      const tokenUsage = getErrorTokenUsage(projectedResponse);
       projectedResponse = {
         ...Object.fromEntries(
           Object.entries(projectedResponse).filter(
@@ -301,7 +301,6 @@ export function projectProviderResponse(
             return parsed.success ? [[key, parsed.data]] : [];
           }),
         ),
-        ...(tokenUsage && { tokenUsage }),
         output: '[output stripped]',
       };
     }

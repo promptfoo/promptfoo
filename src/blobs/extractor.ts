@@ -1,7 +1,7 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getEnvBool } from '../envars';
+import { assertCheckpointBounds } from '../evaluator/checkpointMetadata';
 import logger from '../logger';
-import { assertCheckpointBounds } from '../util/checkpointMetadata';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
