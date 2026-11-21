@@ -169,6 +169,8 @@ The Promptfoo server tracks HTTP requests to the `[EXFIL_URL]` placeholder:
 - **Deterministic**: Binary pass/fail based on whether requests were made
 - **Data captured**: Query parameters, request body, headers containing sensitive data
 
+Tracking requires a valid page UUID and eval ID; the generated page URL can supply the eval ID when it is missing from metadata. If tracking identifiers are missing or malformed, grading falls back to analysis of the response rather than treating unavailable tracking as evidence that no exfiltration occurred. In standalone mode, unusable identifiers stop the fetch loop with an error status while retaining the last target response; a valid tracking result that says the page was not fetched still allows further fetch attempts.
+
 ### Indirect Prompt Injection (other plugins)
 
 An LLM grader analyzes the agent's response:

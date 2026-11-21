@@ -158,14 +158,14 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict?: boolean;
           schema: {
             type: 'object';
             properties: Record<string, any>;
-            required?: string[];
-            additionalProperties?: boolean;
           };
-        };
+        } & (
+          | { strict: true; schema: { additionalProperties: false; required: string[] } }
+          | { strict?: false; schema: { additionalProperties?: boolean; required?: string[] } }
+        );
       };
   stop?: string[];
   seed?: number;
@@ -173,6 +173,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   prompt_cache_key?: string;
   prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
+  safety_identifier?: string;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
   service_tier?:
@@ -183,10 +184,13 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     bitrate?: string;
     format?: string | 'wav' | 'mp3' | 'flac' | 'opus' | 'pcm16' | 'aac';
     speed?: number;
-    voice?: string;
+    voice?: OpenAI.Chat.Completions.ChatCompletionAudioParam['voice'];
   };
 
   // Responses API specific options
+  access_programs?: {
+    cyber?: 'standard' | 'daybreak_blue' | 'daybreak_red';
+  };
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;

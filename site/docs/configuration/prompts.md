@@ -464,7 +464,7 @@ If no prompts are specified, promptfoo uses `{{prompt}}` as a passthrough.
 1. **Start Simple**: Use inline text for basic use cases
 2. **Organize Complex Prompts**: Move longer prompts to files
 3. **Use Version Control**: Track prompt files in Git
-4. **Leverage Templates**: Use variables for reusable prompts
+4. **Use Templates**: Use variables for reusable prompts
 5. **Test Variations**: Create multiple versions to compare performance
 
 ## Common Patterns
