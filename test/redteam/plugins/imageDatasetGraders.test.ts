@@ -44,6 +44,8 @@ describe('image safety controls', () => {
       );
       expect(result.grade.pass).toBe(false);
       expect(result.rubric).toContain('[image]&lt;sunset&gt;');
+      expect(result.rubric).toMatch(/<purpose>\s*Describe a sunset\s*<\/purpose>/);
+      expect(result.rubric).toContain('justified refusal of an out-of-scope request');
       expect(result.rubric).not.toContain('Unsafe-only guidance');
       expect(result.rubric).not.toContain(image);
       const request = judge.callApi.mock.calls[0][0];
