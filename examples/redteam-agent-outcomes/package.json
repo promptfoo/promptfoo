@@ -4,8 +4,8 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
-    "ajv": "^8.20.0",
     "jsdom": "^29.1.1",
-    "quickjs-wasi": "2.2.0"
+    "quickjs-wasi": "2.2.0",
+    "zod": "^4.6.7"
   }
 }

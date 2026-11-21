@@ -43,12 +43,7 @@ import {
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import {
-  ConsentBypassPlugin,
-  PrivateToPublicDisclosurePlugin,
-  UnauthorizedSharingPlugin,
-  validateAgentOutcomeConfig,
-} from './agentic/agentOutcome';
+import { agentOutcomePlugins, validateAgentOutcomeConfig } from './agentic/agentOutcome';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -518,16 +513,8 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
-  createPluginFactory(ConsentBypassPlugin, ConsentBypassPlugin.id, validateAgentOutcomeConfig),
-  createPluginFactory(
-    PrivateToPublicDisclosurePlugin,
-    PrivateToPublicDisclosurePlugin.id,
-    validateAgentOutcomeConfig,
-  ),
-  createPluginFactory(
-    UnauthorizedSharingPlugin,
-    UnauthorizedSharingPlugin.id,
-    validateAgentOutcomeConfig,
+  ...agentOutcomePlugins.map((Plugin) =>
+    createPluginFactory(Plugin, Plugin.id, validateAgentOutcomeConfig),
   ),
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
   ...alignedHarmCategories.map((category) =>

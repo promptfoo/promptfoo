@@ -10,9 +10,8 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 const version = '2026.11.4';
 const exec = promisify(execFile);
@@ -68,7 +67,7 @@ async function forward(request, response, { endpoint, key, model, observe }) {
 }
 
 // The loopback service and its credentials live only for this trial.
-async function serve(tools, inference) {
+async function serve(tools, call, inference) {
   const route = '/mcp/' + randomUUID();
   const token = randomUUID();
   const http = createServer(async (request, response) => {
@@ -83,22 +82,12 @@ async function serve(tools, inference) {
       response.writeHead(404).end();
       return;
     }
-    const server = new Server(
-      { name: 'fixture', version: '1.0.0' },
-      { capabilities: { tools: {} } },
-    );
-    server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: Object.entries(tools).map(([name, { description, inputSchema }]) => ({
-        name,
-        description,
-        inputSchema,
-      })),
-    }));
-    server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
-      if (!Object.hasOwn(tools, params.name)) throw new Error('Unknown fixture tool');
-      const result = await tools[params.name].execute(params.arguments ?? {});
-      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-    });
+    const server = new McpServer({ name: 'fixture', version: '1.0.0' });
+    for (const [name, { description, inputSchema }] of Object.entries(tools)) {
+      server.registerTool(name, { description, inputSchema }, async (args) => ({
+        content: [{ type: 'text', text: JSON.stringify(await call(name, args)) }],
+      }));
+    }
     response.once('close', () => void server.close());
     try {
       const transport = new StreamableHTTPServerTransport({
@@ -164,7 +153,7 @@ function config(baseUrl, model, toolUrl, timeoutSeconds) {
   };
 }
 
-export async function runOpenClaw({ prompt, tools, model, signal, record, observe }) {
+export async function runOpenClaw({ prompt, tools, call, model, signal, record, observe }) {
   const base = new URL(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
   const local = ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
   const key = process.env.OPENAI_API_KEY || (local ? 'local-placeholder' : '');
@@ -183,7 +172,7 @@ export async function runOpenClaw({ prompt, tools, model, signal, record, observ
   try {
     await mkdir(workspace);
     base.pathname = base.pathname.replace(/\/+$/, '') + '/chat/completions';
-    service = await serve(tools, { endpoint: base, key, model, observe });
+    service = await serve(tools, call, { endpoint: base, key, model, observe });
     await writeFile(
       configFile,
       JSON.stringify(config(service.baseUrl, model, service.toolUrl, seconds)),

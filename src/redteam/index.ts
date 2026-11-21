@@ -607,6 +607,9 @@ async function applyStrategies(
   strategyResults: Record<string, { requested: number; generated: number }>;
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
+  const hasOutcomeCases = testCases.some(({ metadata }) =>
+    isAgentOutcomePlugin(metadata?.pluginId),
+  );
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
 
   for (const strategy of strategies) {
@@ -653,11 +656,7 @@ async function applyStrategies(
     });
 
     // Avoid remote strategy setup when outcome cases yielded no eligible inputs.
-    if (
-      applicableTestCases.length === 0 &&
-      !isFileStrategy &&
-      testCases.some(({ metadata }) => isAgentOutcomePlugin(metadata?.pluginId))
-    ) {
+    if (hasOutcomeCases && !isFileStrategy && applicableTestCases.length === 0) {
       continue;
     }
 

@@ -1,4 +1,17 @@
-import { type Config } from '../types';
+import { isAgentOutcomePlugin, type Plugin } from '@promptfoo/redteam/constants';
+
+import type { Config } from '../types';
+
+export function getStrategyPreviewPlugins(plugins: Config['plugins'], strategyId?: string) {
+  const basic = strategyId === 'basic' || strategyId === 'default';
+  const candidates = (plugins ?? [])
+    .map((plugin) => ({
+      id: (typeof plugin === 'string' ? plugin : plugin.id) as Plugin,
+      config: typeof plugin === 'string' ? {} : (plugin.config ?? {}),
+    }))
+    .filter(({ id }) => id && (basic || !isAgentOutcomePlugin(id)));
+  return candidates.length ? candidates : [{ id: 'harmful:hate' as const, config: {} }];
+}
 
 /**
  * Counts the number of custom policies defined in the config.

@@ -5,7 +5,6 @@ import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Input } from '@app/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -210,10 +209,6 @@ export default function PluginsTab({
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [presetsExpanded, setPresetsExpanded] = useState(true);
-
-  const {
-    data: { status: apiHealthStatus },
-  } = useApiHealth();
 
   // Check if user has enterprise access (cloud enabled)
   const { data: cloudConfig } = useCloudConfig();
@@ -604,8 +599,6 @@ export default function PluginsTab({
             <div className="mb-6 space-y-2">
               {filteredPlugins.map(({ plugin, category }) => {
                 const pluginDisabled = isPluginDisabled(plugin);
-                const localPreview = isAgentOutcomePlugin(plugin) && hasGenerationProvider;
-                const canPreview = apiHealthStatus === 'connected' || localPreview;
                 const isSelected = selectedPlugins.has(plugin);
                 const requiresConfig = requiresPluginConfig(plugin);
                 const hasConfigError = requiresConfig && isSelected && !isPluginConfigured(plugin);
@@ -675,19 +668,15 @@ export default function PluginsTab({
                     <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
-                        localPreview={localPreview}
+                        localPreview={hasGenerationProvider && isAgentOutcomePlugin(plugin)}
                         disabled={
-                          pluginDisabled ||
-                          !canPreview ||
-                          (generatingTestCase && generatingPlugin === plugin)
+                          pluginDisabled || (generatingTestCase && generatingPlugin === plugin)
                         }
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
                             ? 'This plugin requires remote generation'
-                            : canPreview
-                              ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                              : 'Promptfoo Cloud connection is required for test generation'
+                            : `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                         }
                       />
                       {isSelected && (

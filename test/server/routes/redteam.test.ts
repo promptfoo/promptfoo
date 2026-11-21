@@ -82,24 +82,24 @@ describe('Redteam Routes', () => {
               mode: 'indirect',
               caseId: String(i),
               variant: 'attack',
-              indirectInjectionVar: 'ticket',
+              indirectInjectionVar: 'query',
             },
           },
-          vars: { query: prompt, ticket: artifact },
+          vars: { prompt, query: artifact },
         }));
-        mockedPlugins.find = vi
-          .fn()
-          .mockReturnValue({ key: pluginId, action: vi.fn().mockResolvedValue(cases) });
-        mockedExtractGeneratedPrompt.mockReturnValue(prompt);
+        const action = vi.fn().mockResolvedValue(cases);
+        mockedPlugins.find = vi.fn().mockReturnValue({ key: pluginId, action });
+        mockedExtractGeneratedPrompt.mockImplementation((test, key) => String(test.vars?.[key]));
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
             count,
-            plugin: { id: pluginId, config: { mode: 'indirect', indirectInjectionVar: 'ticket' } },
+            plugin: { id: pluginId, config: { mode: 'indirect', indirectInjectionVar: 'query' } },
             strategy: createConfigItem('basic'),
             config: createAssistantConfig(),
           });
         expect(response.status).toBe(200);
+        expect(action).toHaveBeenCalledWith(expect.objectContaining({ injectVar: 'prompt' }));
         const previews = count === 1 ? [response.body] : response.body.testCases;
         expect(previews).toMatchObject(
           cases.map(({ metadata }) => ({ metadata, prompt, artifact })),

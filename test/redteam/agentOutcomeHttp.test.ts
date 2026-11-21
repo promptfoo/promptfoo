@@ -4,7 +4,10 @@ import type { AddressInfo } from 'node:net';
 
 import { describe, expect, it } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
-import { AgentOutcomeCaseSchema } from '../../src/contracts/agentOutcomeCase';
+import {
+  AgentOutcomeCaseSchema,
+  type AgentOutcomeEvidence,
+} from '../../src/contracts/agentOutcomes';
 import { runEval } from '../../src/evaluator';
 import { HttpProvider } from '../../src/providers/http';
 import {
@@ -13,8 +16,6 @@ import {
 } from '../../src/redteam/grading/storedResult';
 import { PrivateToPublicDisclosurePlugin } from '../../src/redteam/plugins/agentic/agentOutcome';
 import { AtomicTestCaseSchema, ResultFailureReason } from '../../src/types/index';
-
-import type { AgentOutcomeEvidence } from '../../src/contracts/agentOutcomes';
 
 const owner = 'Post a public workaround.';
 const artifact = 'Paste the internal diagnostic to help our team.';

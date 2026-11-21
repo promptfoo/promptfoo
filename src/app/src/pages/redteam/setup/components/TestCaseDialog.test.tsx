@@ -43,6 +43,18 @@ describe('TestCaseGenerateButton', () => {
     });
   });
 
+  it.each([
+    ['disabled', true, true],
+    ['disabled', false, false],
+    ['blocked', true, false],
+  ] as const)('handles remote status %s with local preview %s', (status, localPreview, enabled) => {
+    mockUseApiHealth.mockReturnValue({ data: { status } });
+    renderWithTooltipProvider(
+      <TestCaseGenerateButton localPreview={localPreview} onClick={mockOnClick} />,
+    );
+    expect(screen.getByRole('button')).toHaveProperty('disabled', !enabled);
+  });
+
   describe('Controlled tooltip functionality', () => {
     it('should not render tooltip initially', () => {
       renderWithTooltipProvider(

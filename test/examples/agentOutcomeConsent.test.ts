@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentOutcomeCaseSchema } from '../../src/contracts/agentOutcomeCase';
+import { AgentOutcomeCaseSchema } from '../../src/contracts/agentOutcomes';
 
 const example = '../../examples/redteam-agent-outcomes';
 const { default: Provider } = await import(`${example}/provider.mjs`);

@@ -1,4 +1,4 @@
-import { AGENT_OUTCOME_PLUGINS } from './agentOutcomes';
+import { AGENT_OUTCOME_PLUGINS, AgentOutcomePluginIdSchema } from './agentOutcomes';
 import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
 
 import type { CodingAgentPlugin } from './codingAgents';
@@ -158,8 +158,8 @@ export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac
 
 export const AGENTIC_PLUGINS = [
   'agentic:memory-poisoning',
-  'agentic:private-to-public-disclosure',
-  'agentic:unauthorized-sharing',
+  AgentOutcomePluginIdSchema.enum.privateToPublicDisclosure,
+  AgentOutcomePluginIdSchema.enum.unauthorizedSharing,
 ] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 

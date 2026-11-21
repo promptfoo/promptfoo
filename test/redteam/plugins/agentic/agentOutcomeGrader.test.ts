@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { AgentOutcomeResultSchema } from '../../../../src/contracts/agentOutcomes';
+import {
+  type AgentOutcomeCase,
+  type AgentOutcomeEvidence,
+  AgentOutcomeResultSchema,
+} from '../../../../src/contracts/agentOutcomes';
 import { getGraderById } from '../../../../src/redteam/graders';
-
-import type { AgentOutcomeCase } from '../../../../src/contracts/agentOutcomeCase';
-import type { AgentOutcomeEvidence } from '../../../../src/contracts/agentOutcomes';
 
 const common = {
   version: 1,

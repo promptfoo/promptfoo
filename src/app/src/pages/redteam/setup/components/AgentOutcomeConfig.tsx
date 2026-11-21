@@ -7,6 +7,7 @@ import { Textarea } from '@app/components/ui/textarea';
 import {
   AGENT_OUTCOME_DEFAULT_TASKS,
   type AgentOutcomePluginId,
+  DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR,
 } from '@promptfoo/redteam/constants';
 import { getPluginDocumentationUrl } from './pluginDocumentationMap';
 import type { PluginConfig } from '@promptfoo/redteam/types';
@@ -83,7 +84,7 @@ export function AgentOutcomeConfig({
             <Input
               id={`${id}-var`}
               aria-describedby={`${id}-hint`}
-              placeholder="artifact"
+              placeholder={DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR}
               value={config.indirectInjectionVar ?? ''}
               onChange={(e) =>
                 onChange({ ...config, indirectInjectionVar: e.target.value.trim() || undefined })
