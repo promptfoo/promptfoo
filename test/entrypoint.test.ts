@@ -14,7 +14,7 @@ const manifest = JSON.parse(readFileSync(path.join(rootDirectory, 'package.json'
 };
 const minimumSupportedVersion = minVersion(manifest.engines.node)!;
 const unsupportedVersion = `v${minimumSupportedVersion.major - 1}.0.0`;
-const unsupportedVersions = [unsupportedVersion];
+const unsupportedVersions = [unsupportedVersion, 'v23.0.0', 'v24.14.9', 'v25.0.0'];
 if (minimumSupportedVersion.patch > 0) {
   unsupportedVersions.push(
     `v${minimumSupportedVersion.major}.${minimumSupportedVersion.minor}.${minimumSupportedVersion.patch - 1}`,
@@ -77,15 +77,18 @@ describe('production entrypoint runtime guard', () => {
     },
   );
 
-  it.each([`v${minimumSupportedVersion.version}`, `v${minimumSupportedVersion.version}+build.1`])(
-    'imports the CLI when Node.js %s satisfies the public engine range',
-    (version) => {
-      const result = runEntrypoint(version);
+  it.each([
+    `v${minimumSupportedVersion.version}`,
+    `v${minimumSupportedVersion.version}+build.1`,
+    'v24.15.0',
+    'v26.0.0',
+    'v27.0.0',
+  ])('imports the CLI when Node.js %s satisfies the public engine range', (version) => {
+    const result = runEntrypoint(version);
 
-      expect(result.status, result.error?.message || result.stderr).toBe(0);
-      expect(result.stdout).toBe('cli-imported\n');
-    },
-  );
+    expect(result.status, result.error?.message || result.stderr).toBe(0);
+    expect(result.stdout).toBe('cli-imported\n');
+  });
 
   it.each(['Bun', 'Deno'] as const)('bypasses the Node.js version guard for %s', (runtime) => {
     const result = runEntrypoint(unsupportedVersion, runtime);
