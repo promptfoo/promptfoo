@@ -673,28 +673,12 @@ describe('OpenAI Image Provider Functions', () => {
   });
 
   describe('buildStructuredImageOutputs', () => {
-    it('should omit external URLs from structured outputs', () => {
-      expect(
-        buildStructuredImageOutputs({
-          data: [{ url: 'https://example.com/image.jpg?size=large' }],
-        }),
-      ).toEqual([]);
-    });
-
-    it('should omit external URLs with unknown extensions from structured outputs', () => {
-      expect(
-        buildStructuredImageOutputs({
-          data: [{ url: 'https://example.com/generated-image' }],
-        }),
-      ).toEqual([]);
-    });
-
-    it('should omit protocol-relative external URLs from structured outputs', () => {
-      expect(
-        buildStructuredImageOutputs({
-          data: [{ url: '//attacker.example/image.png' }],
-        }),
-      ).toEqual([]);
+    it.each([
+      'https://example.com/image.jpg?size=large',
+      'https://example.com/generated-image',
+      '//example.com/image.png',
+    ])('refuses non-inline image data: %s', (url) => {
+      expect(buildStructuredImageOutputs({ data: [{ url }] })).toBeUndefined();
     });
   });
 

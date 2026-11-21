@@ -778,7 +778,10 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue(createMockFetchResponse({ data: [{}] }));
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
+        ...createMockFetchResponse({ data: [{}] }),
+        deleteFromCache,
+      });
 
       const result = await provider.callApi('test prompt');
 
