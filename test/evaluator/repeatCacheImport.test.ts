@@ -16,12 +16,15 @@ vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 
 describeEvaluator('repeat cache evidence after imported comparison grading', () => {
   it.each([
-    { targetCached: false, comparisonCached: false, expectedCached: 0 },
-    { targetCached: false, comparisonCached: true, expectedCached: 4 },
-    { targetCached: true, comparisonCached: false, expectedCached: 4 },
+    { targetCached: false, rubricCached: false, comparisonCached: false },
+    { targetCached: false, rubricCached: true, comparisonCached: false },
+    { targetCached: false, rubricCached: false, comparisonCached: true },
+    { targetCached: true, rubricCached: false, comparisonCached: false },
   ])(
-    'updates retained evidence after resume: %j',
-    async ({ targetCached, comparisonCached, expectedCached }) => {
+    'preserves cache evidence from every contributing verdict after resume: %j',
+    async ({ targetCached, rubricCached, comparisonCached }) => {
+      const originalCached = targetCached || rubricCached;
+      const expectedCached = originalCached || comparisonCached ? 4 : 0;
       vi.mocked(mockApiProvider.callApi).mockResolvedValue({
         output: 'Target output',
         cached: targetCached,
@@ -29,13 +32,13 @@ describeEvaluator('repeat cache evidence after imported comparison grading', () 
       const rubricProvider: ApiProvider = {
         id: () => 'local-rubric',
         callApi: vi.fn().mockResolvedValue({
-          output: JSON.stringify({ pass: true, score: 1, reason: 'Cached rubric' }),
-          cached: true,
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Rubric' }),
+          cached: rubricCached,
         }),
       };
       const comparisonProvider: ApiProvider = {
         id: () => 'local-comparison',
-        callApi: vi.fn().mockResolvedValue({ output: '0', cached: true }),
+        callApi: vi.fn().mockResolvedValue({ output: '0', cached: false }),
       };
       const testSuite: TestSuite = {
         providers: [mockApiProvider],
@@ -59,9 +62,12 @@ describeEvaluator('repeat cache evidence after imported comparison grading', () 
       const flags = getStripFlags({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
       const exported = original.results.map((result) => result.toEvaluateResult(flags));
       expect(exported).toHaveLength(4);
-      expect(exported.every((result) => result.repeatCached && result.gradingResult === null)).toBe(
-        true,
-      );
+      expect(
+        exported.every(
+          (result) =>
+            Boolean(result.repeatCached) === originalCached && result.gradingResult === null,
+        ),
+      ).toBe(true);
 
       const imported = await Eval.create({}, testSuite.prompts, {
         id: randomUUID(),
@@ -69,7 +75,7 @@ describeEvaluator('repeat cache evidence after imported comparison grading', () 
       });
       await EvalResult.createManyFromEvaluateResult(exported, imported.id);
       const resumed = (await Eval.findById(imported.id))!;
-      expect((await resumed.getRepeatStability())?.cachedResults).toBe(4);
+      expect((await resumed.getRepeatStability())?.cachedResults).toBe(originalCached ? 4 : 0);
 
       vi.mocked(mockApiProvider.callApi).mockClear();
       vi.mocked(rubricProvider.callApi).mockClear();
@@ -88,7 +94,7 @@ describeEvaluator('repeat cache evidence after imported comparison grading', () 
       expect(summary.results).toHaveLength(4);
       for (const result of summary.results) {
         expect(result.response?.cached).toBe(targetCached);
-        expect(result.repeatCached).toBe(comparisonCached ? true : undefined);
+        expect(result.repeatCached).toBe(originalCached ? true : undefined);
         expect(result.gradingResult?.metadata?.cachedResponse).toBe(
           comparisonCached ? true : undefined,
         );
