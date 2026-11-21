@@ -150,7 +150,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
 
       // Calculate WER if reference text provided
       let werResult: WERResult | undefined;
-      if (this.config.calculateWER && this.config.referenceText) {
+      if (this.config.calculateWER && typeof this.config.referenceText === 'string') {
         werResult = calculateWER(this.config.referenceText, sttResponse.text);
         logger.debug('[ElevenLabs STT] WER calculated', {
           wer: werResult.wer,
@@ -296,8 +296,8 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       .createHash('sha256')
       .update(
         JSON.stringify({
-          // Invalidate full responses cached with stale WER or unknown duration costs.
-          requestVersion: 3,
+          // Invalidate full responses cached before empty-reference WER scoring.
+          requestVersion: 4,
           modelId: this.config.modelId,
           language: this.config.language,
           diarization: this.config.diarization,
