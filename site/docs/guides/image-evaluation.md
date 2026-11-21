@@ -17,7 +17,7 @@ The GPT Image and Gemini image routes shown below return image bytes. For other 
 
 ## Prerequisites
 
-- Node.js 22.22 or later
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - API access to the image and vision-capable grader models in your configuration
 - The relevant provider API key, such as `OPENAI_API_KEY`
 
