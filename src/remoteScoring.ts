@@ -33,7 +33,7 @@ function convertPiResultToGradingResult(
   threshold: number,
 ): GradingResult {
   return {
-    pass: result.total_score > threshold,
+    pass: result.total_score >= threshold,
     score: result.total_score,
     namedScores: result.question_scores,
     reason: 'Pi Scorer',
@@ -48,8 +48,8 @@ export async function doRemoteScoringWithPi(
     const apiKey = getWithPiApiKey();
     if (apiKey) {
       const body = JSON.stringify(payload);
-      logger.debug(`Performing remote scoring with pi: ${body}`);
-      const { data } = await fetchWithCache<WithPiGradingResult>(
+      logger.debug('Requesting Pi score');
+      const { data, status, statusText } = await fetchWithCache<WithPiGradingResult>(
         WITHPI_API_URL,
         {
           method: 'POST',
@@ -61,6 +61,12 @@ export async function doRemoteScoringWithPi(
         },
         getRequestTimeoutMs(),
       );
+      if (status < 200 || status >= 300) {
+        throw new Error(`Pi scoring failed with status ${status}: ${statusText}`);
+      }
+      if (!Number.isFinite(data?.total_score)) {
+        throw new Error('Pi scoring response has no numeric total_score');
+      }
       return convertPiResultToGradingResult(data, passThreshold);
     } else {
       throw new Error(
