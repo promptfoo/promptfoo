@@ -52,7 +52,11 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
-import { CodexCliCompatibilityError, checkCodexCliCompatibility } from './codexCliCompatibility';
+import {
+  CodexCliCleanupError,
+  CodexCliCompatibilityError,
+  checkCodexCliCompatibility,
+} from './codexCliCompatibility';
 import {
   COMMON_OPTIONAL_PROCESS_ENV_KEYS,
   findGitRepositoryRoot,
@@ -2373,6 +2377,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.compatibilityChecks.set(controller, compatibilityCheck);
     try {
       await compatibilityCheck;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'cause' in error &&
+        error.cause instanceof CodexCliCleanupError
+      ) {
+        logger.warn('Codex CLI process-tree cleanup failed', { ...error.cause.cleanup });
+      }
+      throw error;
     } finally {
       this.compatibilityChecks.delete(controller);
     }
