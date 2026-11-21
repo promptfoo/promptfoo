@@ -591,6 +591,17 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(agentProvider.config.agent?.instructions).toBe('Follow {{role}}');
   });
 
+  it('renders variables in JSON-looking config keys', async () => {
+    await provider({ agent: { instructions: '{"{{role}}":"x"}' } }).callApi('hi', {
+      vars: { role: 'researcher' },
+      prompt: { raw: 'hi', label: 'test' },
+    });
+
+    expect(JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string)).toMatchObject({
+      agent: { instructions: '{"researcher":"x"}' },
+    });
+  });
+
   it('sends literal template braces unchanged unless they reference test variables', async () => {
     const setupCommands = [
       { command: "docker inspect -f '{{.State.Running}}' app" },

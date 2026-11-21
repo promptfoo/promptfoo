@@ -381,7 +381,7 @@ function addUsage(left: Usage, right: Usage): Usage {
 
 function referencesVariable(template: string, names: string[]): boolean {
   return names.some((name) => {
-    const reference = analyzeTemplateReference(template, name);
+    const reference = analyzeTemplateReference(template, name, { jsonMode: 'whole' });
     return reference.parsed && reference.referenced;
   });
 }

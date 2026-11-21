@@ -7,6 +7,10 @@ import fs from 'fs/promises';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import {
+  __resetPromptConversationCacheForTests,
+  promptUsesConversationVariable,
+} from '../../src/evaluator/runEval';
 import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -19,6 +23,7 @@ import {
 } from '../../src/types/index';
 import * as fileExtensions from '../../src/util/fileExtensions';
 import { sleep } from '../../src/util/time';
+import { mockProcessEnv } from '../util/utils';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 const createEmptyEvaluationConfig = () => ({
@@ -70,6 +75,40 @@ describe('runEval', () => {
   };
 
   const defaultOptions = createInitialRunOptions();
+
+  it('keys conversation analysis by the JSON rendering mode', () => {
+    const prompt = { raw: '{"{{_conversation|length}}":"x"}' };
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
+    try {
+      __resetPromptConversationCacheForTests();
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+      expect(promptUsesConversationVariable(prompt)).toBe(true);
+    } finally {
+      restoreEnv();
+      __resetPromptConversationCacheForTests();
+    }
+  });
+
+  it('uses the active filter configuration for conversation analysis', () => {
+    const prompt = {
+      raw: "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}",
+    };
+    const filters = { upper: (f: () => string) => f() };
+    try {
+      __resetPromptConversationCacheForTests();
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+      expect(promptUsesConversationVariable(prompt, filters)).toBe(true);
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+
+      __resetPromptConversationCacheForTests();
+      expect(promptUsesConversationVariable(prompt, filters)).toBe(true);
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+    } finally {
+      __resetPromptConversationCacheForTests();
+    }
+  });
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({

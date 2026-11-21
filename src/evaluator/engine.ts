@@ -1828,16 +1828,20 @@ async function filterCompletedResumeSteps(
 
 function adjustConcurrencyForSerialFeatures({
   concurrency,
+  nunjucksFilters,
   prompts,
   providers,
   tests,
 }: {
   concurrency: number;
+  nunjucksFilters: RunEvalOptions['nunjucksFilters'];
   prompts: CompletedPrompt[];
   providers: ApiProvider[];
   tests: AtomicTestCase[];
 }) {
-  const usesConversationVar = prompts.some(promptUsesConversationVariable);
+  const usesConversationVar = prompts.some((prompt) =>
+    promptUsesConversationVariable(prompt, nunjucksFilters),
+  );
   if (concurrency <= 1) {
     return { concurrency, usesConversationVar };
   }
@@ -3924,6 +3928,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
+      nunjucksFilters: testSuite.nunjucksFilters,
       prompts,
       providers: runEvalOptions.map((evalOption) => evalOption.provider),
       tests,

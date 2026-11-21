@@ -65,18 +65,24 @@ const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
 
-export function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
-  const cached = promptUsesConversationVariableCache.get(prompt.raw);
+export function promptUsesConversationVariable(
+  prompt: Pick<Prompt, 'raw'>,
+  nunjucksFilters?: RunEvalOptions['nunjucksFilters'],
+): boolean {
+  const cacheKey = `${getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE') ? 'whole' : 'structured'}:${prompt.raw}`;
+  const cacheable = !nunjucksFilters || Object.keys(nunjucksFilters).length === 0;
+  const cached = cacheable ? promptUsesConversationVariableCache.get(cacheKey) : undefined;
   if (cached !== undefined) {
     return cached;
   }
 
-  const { referenced, parsed } = analyzeTemplateReference(prompt.raw, CONVERSATION_VAR_NAME);
-  // Only cache successfully parsed results. Caching a parse failure would
-  // poison the cache for the lifetime of the process and silently downgrade
-  // future conversation-aware runs to parallel execution.
-  if (parsed) {
-    promptUsesConversationVariableCache.set(prompt.raw, referenced);
+  const { referenced, parsed } = analyzeTemplateReference(prompt.raw, CONVERSATION_VAR_NAME, {
+    nunjucksFilters,
+  });
+  // Only cache successfully parsed results with default filters. Custom filters
+  // can override built-ins and must not share the default semantics cache.
+  if (parsed && cacheable) {
+    promptUsesConversationVariableCache.set(cacheKey, referenced);
   }
   return referenced;
 }
@@ -344,17 +350,19 @@ function omitEvalRuntimeVars(vars: Vars): Vars {
 function attachConversationVar({
   conversations,
   conversationKey,
+  filters,
   prompt,
   test,
   vars,
 }: {
   conversations?: EvalConversations;
   conversationKey: string;
+  filters: RunEvalOptions['nunjucksFilters'];
   prompt: Prompt;
   test: AtomicTestCase;
   vars: Vars;
 }) {
-  const usesConversation = promptUsesConversationVariable(prompt);
+  const usesConversation = promptUsesConversationVariable(prompt, filters);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -1339,6 +1347,7 @@ export async function runEvalInternal(
   attachConversationVar({
     conversations,
     conversationKey: state.conversationKey,
+    filters,
     prompt,
     test,
     vars: state.vars,

@@ -1,0 +1,31 @@
+description: 'Raw-protected var values inside a JSON prompt'
+providers:
+  - echo
+prompts:
+  - '{"text": "{{v}}"}'
+tests:
+  - vars:
+      v: '{% raw %}{{x}}{% endraw %}'
+      x: ignored
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{% endraw %}'
+      - type: not-contains
+        value: endraw
+  - vars:
+      v: '{%- raw %}{{x}}{% endraw %}'
+      x: ignored
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{% endraw %}'
+      - type: not-contains
+        value: endraw
+  - vars:
+      v: "{{ '{{x}}' ~ '{{y}}' }}"
+      x: XVAL
+      y: YVAL
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{{y}}{% endraw %}'
+      - type: not-contains
+        value: XVAL

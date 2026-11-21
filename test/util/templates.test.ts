@@ -5,6 +5,9 @@ import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
+  extractRequiredVariablesFromTemplate,
+  extractUnboundVariablesFromTemplate,
+  extractVariablesFromExpression,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -72,6 +75,33 @@ describe('extractVariablesFromTemplate', () => {
     const template = 'This is a static template without variables.';
     expect(extractVariablesFromTemplate(template)).toEqual([]);
   });
+
+  it('should handle an unterminated if tag without quadratic backtracking', () => {
+    const template = `{% if ${'a'.repeat(64000)}`;
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should handle many unterminated tags in one pass', () => {
+    const template = '{% if bad '.repeat(20000);
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should not rescan rejected filter bodies for every nested opener', () => {
+    const template = '{{x|'.repeat(16000) + '}end}}';
+    const started = performance.now();
+    extractVariablesFromTemplate(template);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
 });
 
 describe('extractVariablesFromTemplates', () => {
@@ -124,6 +154,7 @@ describe('templateReferencesVariable', () => {
     ['filter argument', '{{ input | default(_conversation) }}'],
     ['is test with call arg', '{{ foo is divisibleby(_conversation) }}'],
     ['is test function argument value', '{{ foo is _conversation(_conversation) }}'],
+    ['existence test operand', '{{ _conversation is defined }}'],
     ['bracket index lookup', '{{ obj[_conversation] }}'],
     ['array literal member', '{{ [_conversation, other] }}'],
     ['group expression', '{{ (_conversation) }}'],
@@ -302,6 +333,1117 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+
+  it('preserves macro dependencies through alias assignments', () => {
+    const template =
+      "{% macro m() %}{{ _conversation }}{% endmacro %}{% set saved=m %}{% set m='' %}{{ saved() }}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves a common macro alias when conditional branches join', () => {
+    const template =
+      "{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('x')}}{% if true %}{% set saved=m %}{% else %}{% set saved=m %}{% endif %}{{saved()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('preserves all possible macros when conditional branches diverge', () => {
+    const template =
+      "{% macro a(x=_conversation) %}{{x}}{% endmacro %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{a('x')}}{{b('x')}}{% if enabled %}{% set saved=a %}{% else %}{% set saved=b %}{% endif %}{{saved()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('merges one-sided updates with incoming macro aliases', () => {
+    const template =
+      "{% macro history(x=_conversation) %}{{x}}{% endmacro %}{% macro plain(x='ok') %}{{x}}{% endmacro %}{{history('warmup')}}{% set saved=plain %}{% if enabled %}{% set saved=history %}{% endif %}{{saved()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('carries possible macro declarations through conditional joins', () => {
+    const template =
+      "{% if true %}{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% endif %}{{m()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('carries possible macro candidates through nested conditional summaries', () => {
+    const template =
+      "{% if true %}{% if enabled %}{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% endif %}{% endif %}{{m()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('does not mark a macro definite when its only declaration is unreachable', () => {
+    const value = '{% if false %}{% macro m() %}ok{% endmacro %}{% endif %}{{m()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('m');
+  });
+
+  it('preserves computations in existence-test operands', () => {
+    expect(extractRequiredVariablesFromTemplate('{{ purpose | trim is defined }}')).toEqual([
+      'purpose',
+    ]);
+    expect(extractRequiredVariablesFromTemplate('{{ user is defined }}')).toEqual([]);
+  });
+
+  it('follows macros passed as arguments in required-reference analysis', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro safe() %}ok{% endmacro %}{% macro apply(f) %}{{f()}}{% endmacro %}{{apply(m)}}{{apply(safe)}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('readyok');
+  });
+
+  it('binds supplied macro values while analyzing parameter defaults', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro apply(f, x=f()) %}{{x}}{% endmacro %}{{apply(m)}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
+  it('carries macro candidates selected by a default into the macro body', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro apply(f=m) %}{{f()}}{% endmacro %}{{apply()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
+  it('carries macro candidates selected by a default into later defaults', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro apply(f=m, x=f()) %}{{x}}{% endmacro %}{{apply()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
+  it('preserves macro arguments that shadow the macro name', () => {
+    const value =
+      "{% macro m(m) %}{{m()}}{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{m(h)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('preserves live own-name bindings when calling a saved macro', () => {
+    const value =
+      "{% macro m() %}{{m()}}{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set saved=m %}{% set m=h %}{{saved()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('retains dynamic alternatives alongside resolved conditional macro candidates', () => {
+    const value =
+      "{% macro a() %}ok{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% if enabled %}{% set f=a %}{% else %}{% set f=h|default %}{% endif %}{{f()}}";
+    expect(
+      getNunjucksEngine().renderString(value, { enabled: false, _conversation: 'history' }),
+    ).toBe('warmuphistory');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('does not mix escaped alternatives into a fully resolved macro call', () => {
+    const value =
+      "{% macro h(x=purpose) %}{{x ~ ''}}{% endmacro %}{% macro a() %}ok{% endmacro %}{% set handlers=[h] %}{% if enabled %}{% set f=a %}{% else %}{% set f=a %}{% endif %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { enabled: false })).toBe('ok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['enabled']);
+  });
+
+  it('retains requirements for macro values used by unresolved container calls', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers={run:m} %}{{handlers.run()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+
+    const unused = '{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers={run:m} %}ok';
+    expect(extractRequiredVariablesFromTemplate(unused)).toEqual([]);
+  });
+
+  it.each(["handlers.run('ok')", "handlers.run(x='ok')"])(
+    'applies supplied arguments to escaped macro calls: %s',
+    (call) => {
+      const value = `{% macro m(x=purpose) %}{{x ~ ''}}{% endmacro %}{% set handlers={run:m} %}{{${call} ~ ''}}`;
+      expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+      expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    },
+  );
+
+  it('detects deferred caller use through a macro default', () => {
+    const value =
+      '{% macro wrap(f=caller|default) %}{{f()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('binds a call-block caller before evaluating macro defaults', () => {
+    const value = "{% macro m(x=caller()) %}{{x ~ ''}}{% endmacro %}{% call m() %}ok{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractUnboundVariablesFromTemplate(value)).toEqual([]);
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('does not invent a call-block caller for a plain macro invocation', () => {
+    const value = "{% macro m(x=caller()) %}{{x ~ ''}}{% endmacro %}{{m()}}";
+    expect(() => getNunjucksEngine().renderString(value, {})).toThrow(/caller/);
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('caller');
+  });
+
+  it('does not treat a caller parameter declaration as a caller read', () => {
+    const value =
+      '{% macro wrap(caller) %}ok{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('carries macro-valued caller arguments into callback scopes', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro wrap() %}{{caller(m)}}{% endmacro %}{% call(f) wrap() %}{{f()}}{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
+  it('propagates caller macro arguments in ordinary reference analysis', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(h)}}{% endmacro %}{% call(f) wrap() %}{{f()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it.each(['wrap()', 'wrap(h)'])(
+    'resolves caller arguments from the wrapper invocation: %s',
+    (call) => {
+      const value = `{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{{caller(f)}}{% endmacro %}{{h('warmup')}}{% set f=a %}{% call(g) ${call} %}{{g()}}{% endcall %}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'warmuphistory',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: true,
+        parsed: true,
+      });
+      expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+    },
+  );
+
+  it('resolves caller arguments after wrapper-local assignments', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=a) %}{% set f=h %}{{caller(f)}}{% endmacro %}{{h('warmup')}}{% call(g) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('snapshots caller bindings before subsequent assignments', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{{caller(f)}}{% set f=a %}{% endmacro %}{{h('warmup')}}{% call(g) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('propagates macro arguments from signature-default caller invocations', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap(x=caller(h)) %}{{x}}{% endmacro %}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('recognizes arguments supplied by signature-default caller invocations', () => {
+    const value =
+      "{% macro wrap(x=caller('ok')) %}{{x ~ ''}}{% endmacro %}{% call(x=missing) wrap() %}{{x ~ ''}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('follows a local alias of the caller callback', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{% set cb=caller %}{{cb(f)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('preserves caller identity through a macro parameter', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro relay(cb,f) %}{{cb(f)}}{% endmacro %}{% macro wrap() %}{{relay(caller,h)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it.each(['{{h.call(0)}}', '{{h.apply(0, [])}}'])(
+    'does not count a call/apply receiver as a macro argument: %s',
+    (invocation) => {
+      const value = `{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}${invocation}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'warmuphistory',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: true,
+        parsed: true,
+      });
+    },
+  );
+
+  it.each(['{{h.call(0, "explicit")}}', '{{h.apply(0, ["explicit"])}}'])(
+    'forwards call/apply arguments after the receiver: %s',
+    (invocation) => {
+      const value = `{% macro h(x=_conversation) %}{{x}}{% endmacro %}${invocation}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'explicit',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: false,
+        parsed: true,
+      });
+    },
+  );
+
+  it('leaves a dynamic apply argument list indeterminate', () => {
+    const value = '{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h.apply(0, args)}}';
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history', args: [] })).toBe(
+      'history',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+  });
+
+  it('merges caller snapshots when a forwarded site executes twice', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro relay(cb,f) %}{{cb(f)}}{% endmacro %}{% macro wrap() %}{{relay(caller,h)}}{{relay(caller,a)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistoryplain',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves a caller alias selected by a macro default', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(cb=caller) %}{{cb(h)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('requires an actual callback for a body-only caller read', () => {
+    const value = '{% macro m() %}{{caller()}}{% endmacro %}{{m()}}';
+    expect(() => getNunjucksEngine().renderString(value, {})).toThrow(/caller/);
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('caller');
+  });
+
+  it('propagates switch-case rebindings into the enclosing scope', () => {
+    const value =
+      "{% macro p() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=p %}{% switch true %}{% case true %}{% set f=h %}{% endswitch %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves a caller alias across a conditional join', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{% if true %}{% set cb=caller %}{% endif %}{{cb(f)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('replays callback invocations on memo hits', () => {
+    const value =
+      "{% macro relay(cb) %}{{cb('ok') ~ ''}}{% endmacro %}{% macro wrap() %}{{relay(caller) ~ ''}}{% endmacro %}{% call(x=missing) wrap() %}{{x ~ ''}}{% endcall %}{% call(x=missing) wrap() %}{{x ~ ''}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('okok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('preserves incoming bindings on non-assigning switch alternatives', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=h %}{% switch key %}{% case 1 %}{% set f=a %}{% case 2 %}two{% default %}{% set f=a %}{% endswitch %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { key: 2, _conversation: 'history' })).toBe(
+      'warmuptwohistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('retains callback candidates supplied on only some invocations', () => {
+    const value =
+      "{% macro a() %}ok{% endmacro %}{% macro h(x=purpose|trim) %}{{x}}{% endmacro %}{% macro wrap() %}{{caller('t',h) ~ ''}}{{caller('t') ~ ''}}{% endmacro %}{% call(t,g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('readyok');
+    expect(() => getNunjucksEngine().renderString(value, {})).toThrow(/replace/);
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('tracks caller identity through container lookups', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{% set callbacks={run:caller} %}{{callbacks.run(h)}}{% endmacro %}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('carries nested switch summaries through enclosing branches', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=a %}{% if true %}{% switch true %}{% case true %}{% set f=h %}{% endswitch %}{% endif %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves caller identity in loop-variable bindings', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{% for cb in [caller] %}{{cb(h)}}{% endfor %}{% endmacro %}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('adapts call arguments for expression-valued receivers', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{(h|default).call(0)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves function adapters for loop-bound macro receivers', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [h] %}{{f.call(0)}}{% endfor %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('allows missing direct inputs in inline truthiness conditions', () => {
+    const value = "{{ 'member' if user else 'guest' }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('guest');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ 'member' if user|trim else 'guest' }}"),
+    ).toContain('user');
+  });
+
+  it('preserves unresolved alternatives in loop macro bindings', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [a, h|default] %}{{f()}}{% endfor %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmupplainhistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('recognizes grouped symbols as function-adapter receivers', () => {
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{(h).call(0)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('treats negated inline conditions as undefined-safe', () => {
+    const value = "{{ 'guest' if not user else 'member' }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('guest');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ 'guest' if not user|trim else 'member' }}"),
+    ).toContain('user');
+  });
+
+  it('preserves escaped alternatives across caller argument merges', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmupplainhistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('uses escaped callee candidates for deferred caller propagation', () => {
+    const value =
+      '{% macro a() %}ok{% endmacro %}{% macro h(x=purpose|trim) %}{{x}}{% endmacro %}{% macro wrap() %}{{caller(h)}}{% endmacro %}{% set handlers={run:wrap} %}{% call(g=a) handlers.run() %}{{g()}}{% endcall %}';
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+  });
+
+  it('handles configured overrides of built-in filter names conservatively', () => {
+    const filters = { upper: (f: () => string) => f() };
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}";
+    expect(getNunjucksEngine(filters).renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation', { nunjucksFilters: filters })).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value, filters)).toBeUndefined();
+  });
+
+  it('does not apply built-in default semantics to an overridden default filter', () => {
+    const filters = { default: (f: () => string) => f() };
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|default}}";
+    expect(getNunjucksEngine(filters).renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(extractRequiredVariablesFromTemplate(value, filters)).toBeUndefined();
+  });
+
+  it('tracks an escaped macro through a loop-local custom filter input', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [h] %}{{f|invoke}}{% endfor %}";
+    expect(
+      getNunjucksEngine({ invoke: (f: () => string) => f() }).renderString(value, {
+        _conversation: 'history',
+      }),
+    ).toBe('warmuphistory');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('does not certify a negative when a custom filter can invoke a macro', () => {
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|invoke}}";
+    expect(
+      getNunjucksEngine({ invoke: (f: () => string) => f() }).renderString(value, {
+        _conversation: 'history',
+      }),
+    ).toBe('warmuphistory');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('does not treat a rendered macro result as a macro-valued filter input', () => {
+    const value = "{% macro h(x=purpose) %}{{x ~ ''}}{% endmacro %}{{h('ok')|custom_upper}}";
+    expect(
+      getNunjucksEngine({
+        custom_upper: (text: unknown) => String(text).toUpperCase(),
+      }).renderString(value, {}),
+    ).toBe('OK');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('follows escaped macros behind unresolved named callees', () => {
+    const value =
+      "{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% for f in [m] %}{{f()}}{% endfor %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('does not certify a negative for reentrant macro bindings', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% macro apply(f, again=true) %}{% if again %}{{apply(h,false)}}{% else %}{{f()}}{% endif %}{% endmacro %}{{h('warmup')}}{{apply(p)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it.each(['m | default', 'm | d', "m or ''", "m if m is defined else ''"])(
+    'tracks macro values through undefined-safe operands: %s',
+    (expression) => {
+      const value = `{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers=[${expression}] %}{{handlers[0]()}}`;
+      expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+      expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+
+      const unused = `{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers=[${expression}] %}ok`;
+      expect(extractRequiredVariablesFromTemplate(unused)).toEqual([]);
+    },
+  );
+
+  it.each([
+    '{% if true %}{% set handlers=[h] %}{% endif %}{{handlers[0]()}}',
+    '{% if true %}{% set handlers={run:h} %}{% endif %}{{handlers.run()}}',
+    '{% if true %}{% if true %}{% set handlers=[h] %}{% endif %}{% endif %}{{handlers[0]()}}',
+    '{% set handlers=[h | default] %}{{handlers[0]()}}',
+    '{% if true %}{% set handlers=[h | default] %}{% endif %}{{handlers[0]()}}',
+  ])('preserves escaped macro flow across nested expression scopes: %s', (transfer) => {
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}" + transfer;
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    const required = '{% macro h() %}{{purpose|trim}}{% endmacro %}' + transfer;
+    expect(extractRequiredVariablesFromTemplate(required)).toContain('purpose');
+  });
+
+  it('invalidates macro negatives when an escaped candidate is discovered', () => {
+    const transfer =
+      '{% macro f() %}{% if handlers is defined %}{{handlers[0]()}}{% endif %}{% endmacro %}{{f()}}{% set handlers=[h] %}{{f()}}';
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}" + transfer;
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    const required = '{% macro h() %}{{purpose|trim}}{% endmacro %}' + transfer;
+    expect(extractRequiredVariablesFromTemplate(required)).toContain('purpose');
+  });
+
+  it('does not treat object keys as escaped macro values', () => {
+    const value =
+      "{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers={m:'ok'} %}{{range(1)|length}}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('1');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['range']);
+  });
+
+  it('uses branch-local rebindings for outer macro definitions', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% set b=p %}{% macro a() %}{{b()}}{% endmacro %}{{h('warmup')}}{% if true %}{% set b=h %}{{a()}}{% endif %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('keeps caller parameters out of an outer macro definition frame', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% set b=p %}{% macro a() %}{{b()}}{% endmacro %}{% macro wrap(b) %}{{a()}}{% endmacro %}{{h('warmup')}}{{wrap(h)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmupplain',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: false,
+      parsed: true,
+    });
+  });
+
+  it('retains an outer branch view across an intervening macro frame', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% set b=p %}{% macro a() %}{{b()}}{% endmacro %}{% macro wrap(b) %}{{a()}}{% endmacro %}{{h('warmup')}}{% if true %}{% set b=h %}{{wrap(p)}}{% endif %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it.each(['', "{% set a='' %}"])(
+    'preserves escaped definition frames across conditional joins: %s',
+    (rebind) => {
+      const value = `{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{% set handlers={run:a} %}{{a()}}${rebind}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{handlers.run()}}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'okwarmuphistory',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: true,
+        parsed: true,
+      });
+      expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+      expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+    },
+  );
+
+  it('preserves overlapping output openers in the conservative scan', () => {
+    expect(extractVariablesFromTemplate('{{{missing}}}')).toEqual(['missing']);
+    expect(extractVariablesFromTemplate('{{{{missing}}}}')).toEqual(['missing']);
+  });
+
+  it('keeps null-guarded boolean fallbacks undefined-safe', () => {
+    const value = "{{ user and user.name or 'anonymous' }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('anonymous');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ purpose | trim and user or 'anonymous' }}"),
+    ).toEqual(['purpose']);
+  });
+
+  it('preserves live definition frames across conditional joins', () => {
+    const value =
+      "{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{{a()}}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{a()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'okwarmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('analyzes JSON leaf strings as templates instead of nested structured prompts', () => {
+    const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
+    expect(analyzeTemplateReference(prompt, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('uses whole-template analysis when JSON autoescape is disabled', () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+    try {
+      expect(analyzeTemplateReference('{"{{_conversation|length}}":"x"}', '_conversation')).toEqual(
+        {
+          referenced: true,
+          parsed: true,
+        },
+      );
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('treats default-filter inputs as undefined-safe only in required mode', () => {
+    const value = "{% set greeting = name | default('anonymous') %}{{ greeting ~ '!' }}";
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('name');
+
+    const alias = "{% set greeting = name | d('anonymous') %}{{ greeting ~ '!' }}";
+    expect(extractRequiredVariablesFromTemplate(alias)).toEqual([]);
+
+    const fallback = '{% set greeting = name | default(fallback) %}{{ greeting }}';
+    expect(extractRequiredVariablesFromTemplate(fallback)).toEqual(['fallback']);
+    expect(extractUnboundVariablesFromTemplate(fallback)).toEqual(
+      expect.arrayContaining(['name', 'fallback']),
+    );
+  });
+
+  it('keeps computed default-filter inputs required while allowing direct lookups', () => {
+    expect(
+      extractRequiredVariablesFromTemplate("{{ purpose | trim | default('anonymous') }}"),
+    ).toEqual(['purpose']);
+    expect(extractRequiredVariablesFromTemplate("{{ user.name | default('anonymous') }}")).toEqual(
+      [],
+    );
+    expect(
+      extractRequiredVariablesFromTemplate("{{ names[index] | default('anonymous') }}"),
+    ).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ names[rows[index]].name | default('anonymous') }}"),
+    ).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate(
+        "{{ names[rows[index | trim]].name | default('anonymous') }}",
+      ),
+    ).toEqual(['index']);
+  });
+
+  it('preserves computed operands in logical fallbacks', () => {
+    expect(extractRequiredVariablesFromTemplate('{{ purpose | trim or "anonymous" }}')).toEqual([
+      'purpose',
+    ]);
+    expect(extractRequiredVariablesFromTemplate('{{ user or fallback | trim }}')).toEqual([
+      'fallback',
+    ]);
+    expect(extractRequiredVariablesFromTemplate('{{ user or "anonymous" }}')).toEqual([]);
+  });
+
+  it('defers unused call-block defaults in required mode', () => {
+    const value = '{% macro m() %}ok{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('missing');
+
+    const ordinaryCall = '{% macro m(x) %}ok{% endmacro %}{{m(x=missing)}}';
+    expect(extractRequiredVariablesFromTemplate(ordinaryCall)).toContain('missing');
+
+    const macroBody =
+      '{% macro m() %}{{other}}{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(macroBody)).toEqual(['other']);
+  });
+
+  it('analyzes call-block reads when the callee invokes caller', () => {
+    const value =
+      '{% macro wrap() %}{{caller()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('skips caller defaults overridden by callback arguments', () => {
+    const value =
+      "{% macro m() %}{{ caller('a') ~ '' }}{% endmacro %}{% call(x=missing) m() %}{{ x ~ '!' }}{% endcall %}";
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(getNunjucksEngine().renderString(value, {})).toBe('a!');
+  });
+
+  it('retains computations in existence-guarded inline conditionals', () => {
+    const value = "{{ purpose | trim if enabled is defined else 'anonymous' }}";
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ user.name if user is defined else 'anonymous' }}"),
+    ).toEqual([]);
+  });
+
+  it('retains computations in existence-guarded block conditionals', () => {
+    expect(
+      extractRequiredVariablesFromTemplate('{% if purpose | trim is defined %}ready{% endif %}'),
+    ).toEqual(['purpose']);
+    expect(
+      extractRequiredVariablesFromTemplate('{% if user is defined %}ready{% endif %}'),
+    ).toEqual([]);
+  });
+});
+
+function nestedMacroArgumentVariants(): string {
+  let value = '';
+  for (let index = 16; index >= 0; index--) {
+    const calls = index === 16 ? '' : `{{m${index + 1}()}}{{m${index + 1}('x')}}`;
+    value = `{% macro m${index}(x='') %}${value}${calls}{% endmacro %}`;
+  }
+  return value + "{{m0()}}{{m0('x')}}";
+}
+
+describe('macro analysis work and scope changes', () => {
+  it('computes nested conditional summaries without cubic rescanning', () => {
+    let value = 'ok';
+    for (let index = 0; index < 400; index++) {
+      value = `{% if flag${index} %}${value}{% else %}ok{% endif %}`;
+    }
+
+    const started = performance.now();
+    expect(extractUnboundVariablesFromTemplate(value)).toHaveLength(400);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('analyzes deep undefined-safe lookup chains without recursive rescanning', () => {
+    const value = '{#c#}{{ a' + '.b'.repeat(12000) + " | default('x') }}";
+    const started = performance.now();
+
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('returns indeterminate results instead of overflowing on deep filter chains', () => {
+    const value = '{{ "x"' + ' | trim'.repeat(2000) + ' }}';
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+
+    const referenced = '{{ purpose' + ' | trim'.repeat(2000) + ' }}';
+    expect(analyzeTemplateReference(referenced, 'purpose')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+  });
+
+  it('charges every memoized macro-candidate invocation to the shared budget', () => {
+    const tree = (depth: number): string =>
+      depth === 0
+        ? '{% macro f() %}ok{% endmacro %}'
+        : `{% if enabled %}${tree(depth - 1)}{% else %}${tree(depth - 1)}{% endif %}`;
+    const value = tree(11) + '{{f()}}'.repeat(2048);
+
+    // A memo hit is still a candidate invocation, not free analysis work.
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('charges growing macro-candidate unions to the shared analysis budget', () => {
+    const count = 8000;
+    let value = '{% macro saved() %}ok{% endmacro %}';
+    for (let index = 0; index < count; index++) {
+      value += `{% macro m${index}() %}ok{% endmacro %}`;
+    }
+    for (let index = 0; index < count; index++) {
+      value += `{% if flag${index} %}{% set saved=m${index} %}{% endif %}`;
+    }
+    value += '{{_conversation}}';
+
+    // Budget exhaustion is deterministic; wall-clock timing varies on shared runners.
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('charges incoming-scope lookups to the shared analysis budget', () => {
+    let value = 'ok';
+    for (let index = 0; index < 400; index++) {
+      value = `{% if true %}{% set a${index}=1 %}{% set b${index}=2 %}{% set c${index}=3 %}{% set d${index}=4 %}${value}{% endif %}`;
+    }
+
+    // This shape has no macros. Incoming-scope membership work must become
+    // indeterminate rather than doing cubic synchronous work.
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it.each<[string, (value: string) => boolean | undefined]>([
+    [
+      'single reference',
+      (value: string) => analyzeTemplateReference(value, '_conversation').referenced,
+    ],
+    [
+      'all references',
+      (value: string) => extractUnboundVariablesFromTemplate(value)?.includes('_conversation'),
+    ],
+    [
+      'required references',
+      (value: string) => extractRequiredVariablesFromTemplate(value)?.includes('_conversation'),
+    ],
+  ])('invalidates a cached negative after a macro is rebound: %s', (_name, referencesHistory) => {
+    const value =
+      "{% macro a() %}{{b()}}{% endmacro %}{% macro b() %}x{% endmacro %}{{a()}}{% macro b() %}{{_conversation}}{% endmacro %}{{a()}}{% set b='' %}";
+
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe('xhistory');
+    expect(referencesHistory(value)).toBe(true);
+  });
+
+  it('finds history defaults in a recursive macro call', () => {
+    const value =
+      "{% macro m(x=_conversation) %}{{ m() if x == 'default' else x }}{% endmacro %}{{ m('default') }}";
+
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe('history');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('bounds recursive defaults without certifying a complete analysis', () => {
+    const value = '{% macro m(x=m()) %}{{x}}{% endmacro %}{{m()}}{{_conversation}}';
+
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it.each([
+    ['default', '{% macro m(x=missing) %}body{% endmacro %}ok'],
+    ['body', '{% macro m() %}{{missing}}{% endmacro %}ok'],
+  ])('does not require a dormant macro %s for eager rendering', (_name, value) => {
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('missing');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it.each<[string, (value: string) => boolean]>([
+    ['single reference', (value) => !analyzeTemplateReference(value, '_conversation').parsed],
+    ['all references', (value) => extractUnboundVariablesFromTemplate(value) === undefined],
+    ['required references', (value) => extractRequiredVariablesFromTemplate(value) === undefined],
+  ])('bounds repeated signature scans across call variants: %s', (_name, isIndeterminate) => {
+    const params = Array.from({ length: 512 }, (_value, index) => `p${index}`);
+    const value = `{% macro m(${params.join(',')}) %}body{% endmacro %}${params.map((name) => `{{ m(${name}=0) }}`).join('')}{{_conversation}}`;
+
+    expect(isIndeterminate(value)).toBe(true);
+  });
+
+  it('bounds AST work across nested macro argument variants', () => {
+    type AstNode = { fields?: string[]; typename?: string; [field: string]: unknown };
+    const parser = (nunjucks as unknown as { parser: { parse: (value: string) => unknown } })
+      .parser;
+    const parse = parser.parse.bind(parser);
+    const descriptors: Array<[AstNode, PropertyDescriptor]> = [];
+    let bodyReads = 0;
+    const parseSpy = vi.spyOn(parser, 'parse').mockImplementation((value) => {
+      const ast = parse(value);
+      const pending: unknown[] = [ast];
+      while (pending.length > 0) {
+        const current = pending.pop();
+        if (!current || typeof current !== 'object') {
+          continue;
+        }
+        const node = current as AstNode;
+        for (const field of node.fields ?? []) {
+          const child = node[field];
+          if (node.typename === 'Macro' && field === 'body') {
+            descriptors.push([node, Object.getOwnPropertyDescriptor(node, field)!]);
+            Object.defineProperty(node, field, {
+              configurable: true,
+              get: () => {
+                bodyReads++;
+                return child;
+              },
+            });
+          }
+          pending.push(...(Array.isArray(child) ? child : [child]));
+        }
+      }
+      return ast;
+    });
+    const value = nestedMacroArgumentVariants();
+    try {
+      const references = extractUnboundVariablesFromTemplate(value);
+      // An exhausted analysis may be indeterminate, but must not expand the call tree.
+      expect(references === undefined || references.length === 0).toBe(true);
+      expect(bodyReads).toBeGreaterThanOrEqual(17);
+      expect(bodyReads).toBeLessThan(40000);
+    } finally {
+      for (const [node, descriptor] of descriptors) {
+        Object.defineProperty(node, 'body', descriptor);
+      }
+      parseSpy.mockRestore();
+    }
+  });
+
+  it('keeps exhausted analyses indeterminate rather than dropping later history reads', () => {
+    const value = nestedMacroArgumentVariants() + '{{_conversation}}';
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe('history');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+    expect(analyzeTemplateReference('{{_conversation}}', '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+});
+
+describe('extractVariablesFromExpression', () => {
+  it('parses once and collects only real expression references', () => {
+    const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+      .parser;
+    const parseSpy = vi.spyOn(parser, 'parse');
+    try {
+      const references = extractVariablesFromExpression(
+        "{{ user.name ~ foo | length ~ {'key': bar} ~ 'Hello' ~ true }}",
+      );
+
+      expect(references).toEqual(['user', 'foo', 'bar']);
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it('preserves callee-before-argument reference order through nested calls', () => {
+    expect(extractUnboundVariablesFromTemplate('{{ outer(inner)(later) }}')).toEqual([
+      'outer',
+      'inner',
+      'later',
+    ]);
+  });
+
+  it('excludes callable test names from expression references', () => {
+    expect(extractVariablesFromExpression('{{ n is divisibleby(2) }}')).toEqual(['n']);
+  });
+
+  it('reports parse failure so callers can retain their conservative fallback', () => {
+    expect(extractVariablesFromExpression('{{ broken')).toBeUndefined();
   });
 });
 

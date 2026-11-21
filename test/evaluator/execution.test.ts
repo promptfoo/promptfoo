@@ -282,6 +282,7 @@ describeEvaluator('evaluator execution control', () => {
     rawPrompt: string,
     testCount = 4,
     providerOverrides: Partial<ApiProvider> = {},
+    nunjucksFilters?: TestSuite['nunjucksFilters'],
   ): Promise<ConcurrencyProbe> {
     let activeCalls = 0;
     let maxActiveCalls = 0;
@@ -332,6 +333,7 @@ describeEvaluator('evaluator execution control', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt(rawPrompt)],
       tests,
+      nunjucksFilters,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
@@ -396,6 +398,37 @@ describeEvaluator('evaluator execution control', () => {
       '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
       2,
     );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('forces concurrency to 1 when a configured built-in filter override reads history', async () => {
+    const prompt = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}";
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      prompt,
+      4,
+      {},
+      {
+        upper: (f: () => string) => f(),
+      },
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('keeps JSON string scopes separate when detecting conversation references', async () => {
+    const prompt = JSON.stringify({
+      a: '{% if true %}{% set _conversation=0 %}{% else %}{% set _conversation=0 %}{% endif %}',
+      b: '{{_conversation}}',
+    });
+    const { maxActiveCalls } = await runConcurrencyProbe(prompt, 2);
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('detects conversation references in serialized JSON leaf strings', async () => {
+    const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
+    const { maxActiveCalls } = await runConcurrencyProbe(prompt, 2);
 
     expect(maxActiveCalls).toBe(1);
   });
