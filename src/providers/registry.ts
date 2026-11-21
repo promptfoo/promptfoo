@@ -535,11 +535,7 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('pi:') || providerPath === 'pi',
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       const { PiProvider } = await import('./pi');
 
       const modelPattern = providerPath.slice(3);
@@ -553,9 +549,6 @@ export const providerMap: ProviderFactory[] = [
           ...providerOptions.config,
           ...(modelPattern ? { model: modelPattern } : {}),
         },
-        // loadApiProvider merges any provider-level `env` block into
-        // providerOptions.env; let those overrides win over the suite-level env.
-        env: { ...context.env, ...providerOptions.env },
       });
     },
   },

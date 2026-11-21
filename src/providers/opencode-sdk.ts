@@ -16,7 +16,6 @@ import {
   getCachedResponse,
   initializeAgenticCache,
   resolveAgenticWorkingDir,
-  validateAgenticWorkingDir,
 } from './agentic-utils';
 import { AgenticRunQueue } from './agenticRunQueue';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
@@ -1423,7 +1422,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (config.working_dir) {
       const workingDir =
         resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
-      validateAgenticWorkingDir(workingDir, config.working_dir);
+
+      let stats: fs.Stats;
+      try {
+        stats = fs.statSync(workingDir);
+      } catch (err: any) {
+        throw new Error(
+          `Working directory ${config.working_dir} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
+        );
+      }
+
+      if (!stats.isDirectory()) {
+        throw new Error(
+          `Working directory ${config.working_dir} (resolved to ${workingDir}) is not a directory`,
+        );
+      }
 
       return {
         config,

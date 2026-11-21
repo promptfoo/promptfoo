@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Pi coding agent working_dir with default read-only tools'
+description: 'Pi coding agent working directory with tools disabled'
 
 prompts:
-  - 'Read sample.py in the working directory and name the function it defines, in one sentence.'
+  - 'Name the function defined by this code in one sentence: {{source}}'
 
 providers:
   - id: pi:openai/gpt-5.5
@@ -12,7 +12,8 @@ providers:
       working_dir: .
 
 tests:
-  - vars: {}
+  - vars:
+      source: file://sample.py
     assert:
       - type: icontains
         value: 'greet'

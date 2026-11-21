@@ -1,25 +1,20 @@
 # provider-pi/working-dir (Pi Working Directory)
 
-Asks Pi to read the included `sample.py` with its default read-only tools.
+Include the bundled `sample.py` in the prompt while using this directory as the working directory. All Pi tools stay disabled.
 
 ## Usage
 
-Requires Linux or macOS and Pi 0.99.1 or later. Download this example:
+Use Linux or macOS. Install the Pi CLI in a trusted location outside the project.
 
-```bash
-npx promptfoo@latest init --example provider-pi/working-dir
+```sh
+npm install --global --ignore-scripts @earendil-works/pi-coding-agent@0.99.1
+pi --list-models
 ```
 
-From the downloaded directory, install the Pi CLI and set `OPENAI_API_KEY` in your environment (or configure the matching providers with Pi's `/login` command):
+Set `OPENAI_API_KEY` in the shell that runs Promptfoo. From this example directory, run the eval.
 
-```bash
-npm install --ignore-scripts @earendil-works/pi-coding-agent
+```sh
+npx promptfoo@latest eval
 ```
 
-Run the eval from the downloaded directory:
-
-```bash
-npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o output.json
-```
-
-Use `npx pi --list-models` to check model availability and edit the provider IDs if needed. See the [Pi provider guide](https://www.promptfoo.dev/docs/providers/pi/) for authentication and configuration options.
+See the [Pi provider documentation](https://www.promptfoo.dev/docs/providers/pi/) for configuration and security requirements.

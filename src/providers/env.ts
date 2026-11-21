@@ -31,3 +31,14 @@ export function resolveProviderEnv(
   }
   return undefined;
 }
+
+// A process-only credential or executable must never fall back to the host
+// setting when an invocation clears or replaces it.
+export function hasAgentEnvOverride(
+  names: readonly string[],
+  env?: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return [env, getEnvOverrides('provider'), getEnvOverrides(), getEnvOverrides('file')].some(
+    (layer) => names.some((name) => layer?.[name] !== undefined),
+  );
+}

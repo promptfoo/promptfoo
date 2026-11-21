@@ -7,7 +7,6 @@
  */
 
 import crypto from 'crypto';
-import nodeFs from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -46,11 +45,12 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
     'openinterpreter',
     'opencode',
     'opencode:sdk',
+    'pi',
   ].some((agenticId) => providerId === agenticId || providerId.startsWith(`${agenticId}:`));
 }
 
 /**
- * Rubric graders must return verdicts and accept the target workspace handoff.
+ * Some agentic targets do not support rubric grading.
  */
 export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || !isAgenticProvider(provider)) {
@@ -86,30 +86,6 @@ export function resolveAgenticWorkingDir(
   }
 
   return safeResolve(configBasePath ? path.resolve(configBasePath) : process.cwd(), workingDir);
-}
-
-/**
- * Validate a resolved coding-agent working directory, throwing the error
- * messages shared by agentic providers.
- *
- * @param workingDir - Absolute resolved directory path
- * @param configuredValue - The configured working_dir value, for error messages
- */
-export function validateAgenticWorkingDir(workingDir: string, configuredValue: string): void {
-  let stats: nodeFs.Stats;
-  try {
-    stats = nodeFs.statSync(workingDir);
-  } catch (err: any) {
-    throw new Error(
-      `Working directory ${configuredValue} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
-    );
-  }
-
-  if (!stats.isDirectory()) {
-    throw new Error(
-      `Working directory ${configuredValue} (resolved to ${workingDir}) is not a directory`,
-    );
-  }
 }
 
 /**

@@ -5,14 +5,16 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import {
-  findPiCliScript,
-  PI_READONLY_TOOLS,
-  PiProvider,
-  redactArgsForLog,
-} from '../../src/providers/pi';
+import { getProjectPathCheck, resolveAgentExecutable } from '../../src/providers/agentExecutable';
+import { PiProvider } from '../../src/providers/pi';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
+
+vi.mock('../../src/providers/agentExecutable', async (original) => ({
+  ...(await original<typeof import('../../src/providers/agentExecutable')>()),
+  getProjectPathCheck: vi.fn(),
+  resolveAgentExecutable: vi.fn(),
+}));
 
 // Keep the real genaiTracer implementation (spans no-op without an OTEL SDK),
 // but allow spying on withGenAISpan to assert the provider's tracing wiring.
@@ -142,11 +144,14 @@ describe('PiProvider', () => {
     vi.resetAllMocks();
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     previousBasePath = cliState.basePath;
-    cliState.basePath = '/test/basePath';
+    cliState.basePath = process.cwd();
+    vi.mocked(getProjectPathCheck).mockResolvedValue(() => false);
+    vi.mocked(resolveAgentExecutable).mockResolvedValue(fixturePiPath);
   });
   afterEach(() => {
     cliState.basePath = previousBasePath;
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('id and construction', () => {
@@ -207,7 +212,7 @@ describe('PiProvider', () => {
       expect(args[args.indexOf('--thinking') + 1]).toBe('high');
     });
 
-    it('enables read-only tools when working_dir is set', async () => {
+    it('keeps all tools disabled even when working_dir is set', async () => {
       const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-test-'));
       try {
         mockPiRun(defaultEvents());
@@ -216,9 +221,9 @@ describe('PiProvider', () => {
         await provider.callApi('test prompt');
 
         const args = spawnedArgs();
-        expect(args).toContain('--tools');
-        expect(args[args.indexOf('--tools') + 1]).toBe(PI_READONLY_TOOLS.join(','));
-        expect(args).not.toContain('--no-tools');
+        expect(args).not.toContain('--tools');
+        expect(args).toContain('--no-tools');
+        expect(args).toContain('--no-approve');
         expect(spawnedOptions().cwd).toBe(workingDir);
       } finally {
         fs.rmSync(workingDir, { recursive: true, force: true });
@@ -228,14 +233,13 @@ describe('PiProvider', () => {
     it('respects an explicit tool allowlist', async () => {
       mockPiRun(defaultEvents());
       const provider = createProvider({
-        config: { tools: ['read', 'bash'], exclude_tools: ['write'] },
+        config: { tools: ['read', 'bash'], allow_unsafe_tools: true, working_dir: process.cwd() },
       });
 
       await provider.callApi('test prompt');
 
       const args = spawnedArgs();
       expect(args[args.indexOf('--tools') + 1]).toBe('read,bash');
-      expect(args[args.indexOf('--exclude-tools') + 1]).toBe('write');
     });
 
     it('treats an empty tool allowlist as no tools', async () => {
@@ -271,196 +275,64 @@ describe('PiProvider', () => {
       expect(args[args.indexOf('--append-system-prompt') + 1]).toBe('Answer in French.');
     });
 
-    it('omits hermetic flags when loading is enabled', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: {
-          load_extensions: true,
-          load_skills: true,
-          load_prompt_templates: true,
-          load_context_files: true,
-          offline: false,
-        },
-      });
-
-      await provider.callApi('test prompt');
-
-      const args = spawnedArgs();
-      expect(args).not.toContain('--no-extensions');
-      expect(args).not.toContain('--no-skills');
-      expect(args).not.toContain('--no-prompt-templates');
-      expect(args).not.toContain('--no-context-files');
-      expect(args).not.toContain('--offline');
-      // Trust is a separate axis: enabling discovery does NOT imply --approve.
-      expect(args).toContain('--no-approve');
-      expect(args).not.toContain('--approve');
-    });
-
-    it('appends extra_args verbatim', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { extra_args: ['--approve'] } });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedArgs()).toContain('--approve');
-    });
-
-    it('keeps --no-approve when working_dir enables read-only tools', async () => {
-      const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-test-'));
-      try {
-        mockPiRun(defaultEvents());
-        const provider = createProvider({ config: { working_dir: workingDir } });
-
-        await provider.callApi('test prompt');
-
-        expect(spawnedArgs()).toContain('--no-approve');
-      } finally {
-        fs.rmSync(workingDir, { recursive: true, force: true });
-      }
-    });
-
-    it('keeps --no-approve for context-file loading (context files do not need trust)', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { load_context_files: true } });
-
-      await provider.callApi('test prompt');
-
-      const args = spawnedArgs();
-      expect(args).toContain('--no-approve');
-      expect(args).not.toContain('--approve');
-    });
-
     it.each([
-      { api_key_env: undefined, expectedEnv: 'OPENAI_API_KEY' },
-      { api_key_env: 'FIXTURE_API_KEY', expectedEnv: 'FIXTURE_API_KEY' },
-    ])(
-      'keeps explicit credentials bound to $expectedEnv across row model overrides',
-      async ({ api_key_env, expectedEnv }) => {
-        vi.stubEnv('ANTHROPIC_API_KEY', 'other-provider-fixture');
-        try {
-          mockPiRun(defaultEvents());
-          const provider = createProvider({
-            config: {
-              model: 'openai/fixture',
-              apiKey: 'configured-key-fixture',
-              api_key_env,
-            },
-          });
-          const result = await provider.callApi('hello', {
-            prompt: { raw: 'hello', label: 'hello', config: { model: 'anthropic/fixture' } },
-            vars: {},
-          });
-          expect(result.error).toBeUndefined();
-          expect(spawnedArgs()).toContain('anthropic/fixture');
-          expect(spawnedOptions().env[expectedEnv]).toBe('configured-key-fixture');
-          expect(spawnedOptions().env.ANTHROPIC_API_KEY).toBe('other-provider-fixture');
-        } finally {
-          vi.unstubAllEnvs();
-        }
-      },
-    );
-
-    it('does not infer an explicit key destination from a row model', async () => {
-      const provider = createProvider({ config: { apiKey: 'configured-key-fixture' } });
-      await expect(
-        provider.callApi('hello', {
-          prompt: { raw: 'hello', label: 'hello', config: { model: 'openai/fixture' } },
-          vars: {},
-        }),
-      ).rejects.toThrow('api_key_env');
+      { tools: ['read'], working_dir: '.' },
+      { tools: ['bash'], allow_unsafe_tools: true },
+      { tools: ['read,bash'], allow_unsafe_tools: true, working_dir: '.' },
+      { trust_project_files: true },
+      { load_extensions: true },
+      { extra_args: ['--approve'] },
+      { apiKey: 'inline' },
+      { env: { PATH: '.' } },
+      { copy_working_dir: true },
+      { pi_path: './agent' },
+      { model: '--approve' },
+    ])('rejects unsafe configuration before invoking Pi', (config) => {
+      expect(() => createProvider({ config })).toThrow();
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('passes --approve only when trust_project_files is set', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { trust_project_files: true } });
-
-      await provider.callApi('test prompt');
-
-      const args = spawnedArgs();
-      expect(args).toContain('--approve');
-      expect(args).not.toContain('--no-approve');
+    it.each([
+      { model: 'anthropic/other' },
+      { model: '--approve' },
+      { thinking: 'invalid' },
+      { pi_path: '/untrusted' },
+      { tools: ['read'] },
+      { working_dir: '/' },
+      { env: { OPENAI_API_KEY: 'row-secret' } },
+      { allow_unsafe_tools: true },
+      { extra_args: ['--approve'] },
+    ])('rejects execution and vendor overrides from test rows', async (config) => {
+      const provider = createProvider({ config: { model: 'openai/fixture' } });
+      const result = await provider.callApi('hello', {
+        vars: {},
+        prompt: { label: 'test', raw: 'hello', config },
+      });
+      expect(result.error).toContain('Invalid Pi config');
+      expect(result.error).not.toContain('row-secret');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('allows prompt-level model selection', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { model: 'openai/gpt-4o-mini' } });
-
-      await provider.callApi('test prompt', {
-        prompt: {
-          raw: 'test prompt',
-          label: 'test',
-          config: { model: 'anthropic/claude-sonnet-4-5' },
-        },
+    it('keeps the explicit provider_id even when a row names another vendor', async () => {
+      const provider = createProvider({ config: { provider_id: 'openai' } });
+      const result = await provider.callApi('hello', {
         vars: {},
+        prompt: { label: 'test', raw: 'hello', config: { model: 'anthropic/other' } },
       });
-
-      const args = spawnedArgs();
-      expect(args[args.indexOf('--model') + 1]).toBe('anthropic/claude-sonnet-4-5');
+      expect(result.error).toContain('configured vendor');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('keeps executable, tools, discovery and limits provider-owned', async () => {
+    it('accepts same-vendor model and thinking overrides', async () => {
       mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { pi_path: '/trusted/pi', no_tools: true } });
-      await provider.callApi('hello', {
-        prompt: {
-          raw: 'hello',
-          label: 'fixture',
-          config: {
-            pi_path: '/ignored/pi',
-            no_tools: false,
-            tools: ['read'],
-            working_dir: '/ignored/workspace',
-            agent_dir: '/ignored/settings',
-            load_extensions: true,
-            load_skills: true,
-            load_context_files: true,
-            load_prompt_templates: true,
-            trust_project_files: true,
-            extra_args: ['--ignored'],
-            offline: false,
-            timeout: 0,
-            max_output_bytes: 1,
-          },
-        },
+      const provider = createProvider({ config: { model: 'openai/fixture' } });
+      const config = { model: 'openai/other', thinking: 'high', prefix: '', suffix: '' };
+      const result = await provider.callApi('hello', {
         vars: {},
+        prompt: { label: 'test', raw: 'hello', config },
       });
-      expect(mockSpawn.mock.calls[0][0]).toBe('/trusted/pi');
-      expect(spawnedArgs()).toEqual(
-        expect.arrayContaining([
-          '--no-tools',
-          '--no-extensions',
-          '--no-skills',
-          '--no-context-files',
-          '--no-prompt-templates',
-          '--no-approve',
-          '--offline',
-        ]),
-      );
-      expect(spawnedArgs()).not.toContain('--tools');
-      expect(spawnedArgs()).not.toContain('--ignored');
-      expect(spawnedOptions().cwd).not.toBe('/ignored/workspace');
-      expect(spawnedOptions().env.PI_CODING_AGENT_DIR).not.toBe('/ignored/settings');
-    });
-
-    it('keeps environment settings provider-owned', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: { env: { KEEP_ME: 'base', OVERRIDE_ME: 'base' } },
-      });
-
-      await provider.callApi('test prompt', {
-        prompt: {
-          raw: 'test prompt',
-          label: 'test',
-          config: { env: { OVERRIDE_ME: 'prompt' } },
-        },
-        vars: {},
-      });
-
-      const env = spawnedOptions().env;
-      expect(env.KEEP_ME).toBe('base');
-      expect(env.OVERRIDE_ME).toBe('base');
+      expect(result.error).toBeUndefined();
+      expect(spawnedArgs()).toEqual(expect.arrayContaining(['openai/other', 'high']));
     });
   });
 
@@ -523,180 +395,69 @@ describe('PiProvider', () => {
   });
 
   describe('environment', () => {
-    it('inherits invocation-local env-file settings before provider overrides', async () => {
-      vi.stubEnv('OPENAI_API_KEY', 'host-fixture');
-      vi.stubEnv('PI_CODING_AGENT_DIR', '/host/settings');
-      try {
-        mockPiRun(defaultEvents());
-        const provider = createProvider({
-          config: { basePath: '/loaded/config', env: { HTTPS_PROXY: 'provider-fixture' } },
-        });
-        await cliState.withEnvFileOverrides(
-          { OPENAI_API_KEY: 'file-fixture', PI_CODING_AGENT_DIR: './file-settings' },
-          () => provider.callApi('hello'),
-        );
-        expect(spawnedOptions().env).toMatchObject({
-          OPENAI_API_KEY: 'file-fixture',
-          PI_CODING_AGENT_DIR: path.resolve('/loaded/config/file-settings'),
-          HTTPS_PROXY: 'provider-fixture',
-        });
-        expect(process.env.OPENAI_API_KEY).toBe('host-fixture');
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    });
-
-    it('keeps loader paths after the loading scope ends', async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-loader-base-'));
-      try {
-        fs.mkdirSync(path.join(root, 'project'));
-        const { loadApiProvider } = await import('../../src/providers');
-        const provider = await loadApiProvider('pi', {
-          basePath: root,
-          options: {
-            config: { pi_path: fixturePiPath, working_dir: './project', agent_dir: './settings' },
-          },
-        });
-        mockPiRun(defaultEvents());
-        await cliState.withBasePath('/different/caller', () => provider.callApi('hello'));
-        expect(spawnedOptions().cwd).toBe(path.join(root, 'project'));
-        expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(path.join(root, 'settings'));
-      } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-      }
-    });
-
-    it('sets PI_CODING_AGENT_DIR from agent_dir', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { agent_dir: '/tmp/pi-agent-dir' } });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe('/tmp/pi-agent-dir');
-    });
-
-    it('resolves a relative PI_CODING_AGENT_DIR from env to an absolute child env value', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { env: { PI_CODING_AGENT_DIR: './rel-agent' } } });
-
-      await provider.callApi('test prompt');
-
-      // pi resolves a relative value from its temp/working cwd, so the provider
-      // must hand it an absolute path (resolved from the config base path) that
-      // resolves from the configuration directory.
-      expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(
-        path.resolve('/test/basePath', 'rel-agent'),
+    it('isolates the selected vendor from the host login, loader and other credentials', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'example-openai');
+      vi.stubEnv('ANTHROPIC_API_KEY', 'other-key');
+      vi.stubEnv('PI_CODING_AGENT_DIR', '/shared/profile');
+      vi.stubEnv('NODE_OPTIONS', '--inspect');
+      mockPiRun(defaultEvents('key=example-openai'));
+      const response = await createProvider({ config: { model: 'openai/fixture' } }).callApi(
+        'hello',
       );
+      const { env } = spawnedOptions();
+      expect(env.OPENAI_API_KEY).toBe('example-openai');
+      expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(env.NODE_OPTIONS).toBeUndefined();
+      expect(env.HOME).not.toBe(os.homedir());
+      expect(env.PI_CODING_AGENT_DIR).toBe(path.join(env.HOME, 'agent'));
+      expect(fs.existsSync(env.HOME)).toBe(false);
+      expect(spawnedArgs()).not.toContain('example-openai');
+      expect(response.output).toBe('key=[REDACTED]');
+      expect(response.raw).toBeUndefined();
     });
 
-    it('resolves a relative agent_dir from a relative config base path', async () => {
-      const original = cliState.basePath;
-      cliState.basePath = 'rel/config/dir';
-      try {
-        mockPiRun(defaultEvents());
-        const provider = createProvider({ config: { agent_dir: './agent' } });
-
-        await provider.callApi('test prompt');
-
-        // Must resolve against the config dir (cwd + relative basePath), not bare cwd.
-        const expected = path.resolve(process.cwd(), 'rel/config/dir', 'agent');
-        expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(expected);
-      } finally {
-        cliState.basePath = original;
-      }
-    });
-
-    it('injects apiKey via the provider env var instead of argv', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: { provider_id: 'anthropic', apiKey: 'test-anthropic-key' },
-      });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedOptions().env.ANTHROPIC_API_KEY).toBe('test-anthropic-key');
-      expect(spawnedArgs()).not.toContain('--api-key');
-    });
-
-    it('derives the apiKey env var from a provider/model pattern', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: { model: 'openai/gpt-4o-mini', apiKey: 'test-openai-key' },
-      });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedOptions().env.OPENAI_API_KEY).toBe('test-openai-key');
-      expect(spawnedArgs()).not.toContain('--api-key');
-    });
-
-    it('injects apiKey via api_key_env for unrecognized providers', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: {
-          provider_id: 'my-custom-proxy',
-          apiKey: 'custom-key',
-          api_key_env: 'MY_PROXY_API_KEY',
-        },
-      });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedOptions().env.MY_PROXY_API_KEY).toBe('custom-key');
-      expect(spawnedArgs()).not.toContain('--api-key');
-    });
-
-    it('rejects apiKey for unrecognized providers without api_key_env', async () => {
-      const provider = createProvider({
-        config: { provider_id: 'my-custom-proxy', apiKey: 'custom-key' },
-      });
-
-      await expect(provider.callApi('test prompt')).rejects.toThrow(/api_key_env/);
+    it('rejects a profile from the project before launching Pi', async () => {
+      const actual = await vi.importActual<typeof import('../../src/providers/agentExecutable')>(
+        '../../src/providers/agentExecutable',
+      );
+      vi.mocked(getProjectPathCheck).mockImplementationOnce(actual.getProjectPathCheck);
+      const provider = createProvider({ config: { agent_dir: process.cwd() } });
+      expect((await provider.callApi('hello')).error).toContain('outside the project');
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('never puts the apiKey on the command line', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: { provider_id: 'anthropic', apiKey: 'test-secret-key' },
-      });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedArgs().join(' ')).not.toContain('test-secret-key');
+    it('an explicit profile does not receive ambient provider or OAuth tokens', async () => {
+      vi.stubEnv('ANTHROPIC_API_KEY', 'example-key');
+      vi.stubEnv('ANTHROPIC_OAUTH_TOKEN', 'oauth');
+      const agent_dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-profile-'));
+      try {
+        mockPiRun(defaultEvents());
+        await createProvider({ config: { model: 'anthropic/fixture', agent_dir } }).callApi(
+          'hello',
+        );
+        const { env } = spawnedOptions();
+        expect(env.PI_CODING_AGENT_DIR).toBe(fs.realpathSync(agent_dir));
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env.ANTHROPIC_OAUTH_TOKEN).toBeUndefined();
+      } finally {
+        fs.rmSync(agent_dir, { force: true, recursive: true });
+      }
     });
 
-    it('merges provider env overrides and config env', async () => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({
-        config: { env: { CUSTOM_VAR: 'custom-value' } },
-        env: { OPENAI_API_KEY: 'override-key' } as never,
-      });
-
-      await provider.callApi('test prompt');
-
-      const env = spawnedOptions().env;
-      expect(env.CUSTOM_VAR).toBe('custom-value');
-      expect(env.OPENAI_API_KEY).toBe('override-key');
+    it('honors invocation-local masks on a reused provider', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'host-key');
+      const provider = createProvider({ config: { model: 'openai/fixture' } });
+      const result = await cliState.withEnvFileOverrides({ OPENAI_API_KEY: '' }, () =>
+        provider.callApi('hello'),
+      );
+      expect(result.error).toContain('process environment');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    // Providers that pi supports beyond the original 11-entry map. Mirrors
-    // pi-ai's env-api-keys.js so config.apiKey routes without api_key_env.
-    it.each([
-      ['together', 'TOGETHER_API_KEY'],
-      ['nvidia', 'NVIDIA_API_KEY'],
-      ['minimax', 'MINIMAX_API_KEY'],
-      ['moonshotai', 'MOONSHOT_API_KEY'],
-      ['vercel-ai-gateway', 'AI_GATEWAY_API_KEY'],
-      ['azure-openai-responses', 'AZURE_OPENAI_API_KEY'],
-    ])('maps apiKey to the standard env var for %s', async (providerId, envVar) => {
-      mockPiRun(defaultEvents());
-      const provider = createProvider({ config: { provider_id: providerId, apiKey: 'k' } });
-
-      await provider.callApi('test prompt');
-
-      expect(spawnedOptions().env[envVar]).toBe('k');
-      expect(spawnedArgs()).not.toContain('--api-key');
+    it('rejects scoped API keys instead of falling back to the host key', () => {
+      expect(() =>
+        createProvider({ config: { model: 'openai/fixture' }, env: { OPENAI_API_KEY: 'secret' } }),
+      ).toThrow('process environment');
     });
   });
 
@@ -717,7 +478,7 @@ describe('PiProvider', () => {
       });
       expect(result.cost).toBeCloseTo(0.001);
       expect(result.metadata).toMatchObject({ provider_id: 'openai', model: 'gpt-4o-mini' });
-      expect(result.raw).toContain('final answer');
+      expect(result.raw).toBeUndefined();
     });
 
     it('sums usage across multiple assistant turns', async () => {
@@ -803,7 +564,6 @@ describe('PiProvider', () => {
         {
           type: 'tool_execution_end',
           toolCallId: 'call-1',
-          toolName: 'read',
           result: {},
           isError: false,
         },
@@ -821,8 +581,8 @@ describe('PiProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.metadata?.toolCalls).toEqual([
-        { name: 'read', args: { path: 'sample.txt' } },
-        { name: 'bash', args: undefined, is_error: true },
+        { name: 'read' },
+        { name: 'bash', is_error: true },
       ]);
     });
 
@@ -894,17 +654,17 @@ describe('PiProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('before completing the run');
-      expect(result.error).toContain('something broke');
+      expect(result.error).not.toContain('something broke');
     });
 
-    it('errors with stderr when pi exits nonzero without events', async () => {
+    it('omits stderr when pi exits nonzero without events', async () => {
       mockPiRun([], { exitCode: 1, stderr: 'Unknown flag: --bogus' });
       const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('Pi exited with code 1');
-      expect(result.error).toContain('Unknown flag: --bogus');
+      expect(result.error).not.toContain('Unknown flag: --bogus');
     });
 
     it('treats a nonzero exit as an error even when events were emitted', async () => {
@@ -918,7 +678,7 @@ describe('PiProvider', () => {
       const second = await provider.callApi('crash me');
 
       expect(first.error).toContain('Pi exited with code 1');
-      expect(first.error).toContain('pi crashed');
+      expect(first.error).not.toContain('pi crashed');
       expect(second.output).toBe('recovered');
       expect(mockSpawn).toHaveBeenCalledTimes(2);
     });
@@ -930,7 +690,6 @@ describe('PiProvider', () => {
       await provider.callApi('test prompt');
 
       expect(child.stdout.setEncoding).toHaveBeenCalledWith('utf-8');
-      expect(child.stderr.setEncoding).toHaveBeenCalledWith('utf-8');
     });
 
     it('reports stopReason aborted as an error', async () => {
@@ -964,7 +723,7 @@ describe('PiProvider', () => {
         numRequests: 1,
       });
       expect(result.cost).toBeCloseTo(0.0002);
-      expect(result.raw).toContain('partial output before failing');
+      expect(result.raw).toBeUndefined();
     });
 
     it('returns the last agent_end assistant turn across a retried (multi-agent_end) stream', async () => {
@@ -1028,7 +787,7 @@ describe('PiProvider', () => {
       expect(result.output).toBeUndefined();
       expect(result.tokenUsage).toMatchObject({ prompt: 120, completion: 12, total: 132 });
       expect(result.cost).toBeCloseTo(0.005);
-      expect(JSON.parse(result.raw as string)).toEqual(current);
+      expect(result.raw).toBeUndefined();
     });
 
     it('preserves usage and cost on the message_end fallback path', async () => {
@@ -1055,120 +814,32 @@ describe('PiProvider', () => {
     });
   });
 
-  describe('binary resolution', () => {
-    it('returns install guidance without spawning when the package is absent', async () => {
-      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const result = await new PiProvider().callApi('test prompt');
-      expect(result.error).toContain('@earendil-works/pi-coding-agent');
-      expect(result.error).toContain('npm install');
-      expect(mockSpawn).not.toHaveBeenCalled();
-    });
-
-    it('returns install guidance when an explicit executable is absent', async () => {
-      const child = new FakeChildProcess();
-      mockSpawn.mockImplementationOnce(() => {
-        setImmediate(() => {
-          const error: NodeJS.ErrnoException = new Error('fixture executable absent');
-          error.code = 'ENOENT';
-          child.emit('error', error);
-        });
-        return child as never;
-      });
-      const result = await createProvider().callApi('test prompt');
-      expect(result.error).toContain('npm install');
-    });
-
-    it('rejects relative executable paths instead of resolving them through configuration', async () => {
-      const provider = new PiProvider({ config: { pi_path: './fixture-pi' } });
-      const result = await provider.callApi('hello');
-      expect(result.error).toContain('pi_path must be an absolute path');
-      expect(mockSpawn).not.toHaveBeenCalled();
-    });
-
-    it('does not search the configuration or working directory for executables', async () => {
-      const projectDir = path.resolve('/trusted/project');
-      vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
-      const existsSync = fs.existsSync;
-      const exists = vi
-        .spyOn(fs, 'existsSync')
-        .mockImplementation((filename) =>
-          path.basename(String(filename)) === 'package.json' ? false : existsSync(filename),
-        );
-      const result = await new PiProvider({
-        config: { basePath: '/config-fixture', working_dir: os.tmpdir() },
-      }).callApi('hello');
-      expect(result.error).toContain('npm install');
-      expect(mockSpawn).not.toHaveBeenCalled();
-      expect(
-        exists.mock.calls
-          .map(([filename]) => String(filename))
-          .filter((filename) => path.basename(filename) === 'package.json'),
-      ).toEqual([
-        path.join(projectDir, 'node_modules/@earendil-works/pi-coding-agent/package.json'),
-        path.resolve('/trusted/node_modules/@earendil-works/pi-coding-agent/package.json'),
-        path.resolve('/node_modules/@earendil-works/pi-coding-agent/package.json'),
-      ]);
-    });
-
-    it('uses pi_path when configured', async () => {
-      mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { pi_path: '/custom/bin/pi' } });
-
-      await provider.callApi('test prompt');
-
-      expect(mockSpawn.mock.calls[0][0]).toBe('/custom/bin/pi');
-    });
-
-    it('runs .js pi_path entries with the current node executable', async () => {
-      mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { pi_path: '/custom/pi/dist/cli.js' } });
-
-      await provider.callApi('test prompt');
-
-      expect(mockSpawn.mock.calls[0][0]).toBe(process.execPath);
-      expect(spawnedArgs()[0]).toBe('/custom/pi/dist/cli.js');
-    });
-
-    it('finds a project-local pi package bin script', () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-resolve-'));
-      try {
-        const packageDir = path.join(root, 'node_modules', '@earendil-works', 'pi-coding-agent');
-        fs.mkdirSync(path.join(packageDir, 'dist'), { recursive: true });
-        fs.writeFileSync(
-          path.join(packageDir, 'package.json'),
-          JSON.stringify({ name: '@earendil-works/pi-coding-agent', bin: { pi: 'dist/cli.js' } }),
-        );
-        fs.writeFileSync(path.join(packageDir, 'dist', 'cli.js'), '');
-
-        const nested = path.join(root, 'examples', 'demo');
-        fs.mkdirSync(nested, { recursive: true });
-
-        expect(findPiCliScript([nested])).toBe(path.join(packageDir, 'dist', 'cli.js'));
-        expect(findPiCliScript(['/nonexistent/path'])).toBeUndefined();
-      } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-      }
-    });
+  it('rejects a missing working directory', async () => {
+    const response = await createProvider({
+      config: { working_dir: '/does/not/exist-pi-test' },
+    }).callApi('hello');
+    expect(response.error).toContain('ENOENT');
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
-  describe('working_dir validation', () => {
-    it('rejects unsupported automatic workspace copying', async () => {
-      const provider = createProvider({
-        config: {
-          working_dir: os.tmpdir(),
-          ...({ copy_working_dir: true } as Record<string, unknown>),
-        },
-      });
-      await expect(provider.callApi('hello')).rejects.toThrow('does not support copy_working_dir');
+  it('rejects workspace executables, including absolute paths', async () => {
+    const { getProjectPathCheck: check, resolveAgentExecutable: resolve } = await vi.importActual<
+      typeof import('../../src/providers/agentExecutable')
+    >('../../src/providers/agentExecutable');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-project-'));
+    try {
+      const pi_path = path.join(dir, 'pi');
+      fs.writeFileSync(pi_path, '', { mode: 0o700 });
+      vi.mocked(getProjectPathCheck).mockImplementationOnce(check);
+      vi.mocked(resolveAgentExecutable).mockImplementationOnce(resolve);
+      const result = await createProvider({ config: { pi_path, working_dir: dir } }).callApi(
+        'hello',
+      );
+      expect(result.error).toContain('outside the project');
       expect(mockSpawn).not.toHaveBeenCalled();
-    });
-
-    it('rejects a missing working directory', async () => {
-      const provider = createProvider({ config: { working_dir: '/does/not/exist-pi-test' } });
-
-      await expect(provider.callApi('test prompt')).rejects.toThrow(/does not exist/);
-      expect(mockSpawn).not.toHaveBeenCalled();
-    });
+    } finally {
+      fs.rmSync(dir, { force: true, recursive: true });
+    }
   });
 
   describe('timeouts and aborts', () => {
@@ -1213,7 +884,7 @@ describe('PiProvider', () => {
             numRequests: 1,
           });
           expect(result.cost).toBe(0.001);
-          expect(JSON.parse(result.raw as string)[0].content[0].text).toBe('billed turn');
+          expect(result.raw).toBeUndefined();
         } finally {
           vi.useRealTimers();
         }
@@ -1373,7 +1044,6 @@ describe('PiProvider', () => {
         expect(result.output).toBe('flushed before exit');
         expect(child.stdin.destroy).toHaveBeenCalledOnce();
         expect(child.stdout.destroy).toHaveBeenCalledOnce();
-        expect(child.stderr.destroy).toHaveBeenCalledOnce();
       } finally {
         vi.useRealTimers();
       }
@@ -1494,7 +1164,7 @@ describe('PiProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('terminated by signal SIGKILL');
-      expect(result.error).toContain('segfault');
+      expect(result.error).not.toContain('segfault');
     });
 
     it('spawns pi in its own process group on POSIX', async () => {
@@ -1627,36 +1297,6 @@ describe('PiProvider', () => {
       mockPiRun(defaultEvents());
       await createProvider().callApi('test prompt');
       expect(spanSpy.mock.calls[0][0]).toMatchObject({ system: 'pi', model: 'default' });
-    });
-  });
-
-  describe('redactArgsForLog', () => {
-    it('redacts the value after a credential-bearing flag (space form)', () => {
-      expect(
-        redactArgsForLog(['--mode', 'json', '--api-key', 'sk-secret', '--thinking', 'high']),
-      ).toEqual(['--mode', 'json', '--api-key', '[redacted]', '--thinking', 'high']);
-    });
-
-    it('redacts hyphen-prefixed credential values', () => {
-      expect(redactArgsForLog(['--api-key', '-private-fixture', '--model', 'fixture'])).toEqual([
-        '--api-key',
-        '[redacted]',
-        '--model',
-        'fixture',
-      ]);
-    });
-
-    it('redacts the value in --flag=value form', () => {
-      expect(redactArgsForLog(['--auth-token=tok-123', '--model', 'openai/gpt-4o-mini'])).toEqual([
-        '--auth-token=[redacted]',
-        '--model',
-        'openai/gpt-4o-mini',
-      ]);
-    });
-
-    it('leaves non-secret flags and their values intact', () => {
-      const args = ['--mode', 'json', '--no-approve', '--model', 'anthropic/claude-sonnet-4-5'];
-      expect(redactArgsForLog(args)).toEqual(args);
     });
   });
 });
