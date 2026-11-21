@@ -199,6 +199,8 @@ For best signal, expose one or more of these surfaces from your coding-agent pro
 
 ## Interpreting Failures
 
+Optional receipt files such as `evidenceFilePath` must resolve to regular files no larger than 512 KiB. During an evaluation, the verifier follows links only within the row’s working directory. Direct grader calls without an evaluation use the configured file’s parent directory as the boundary. An absent receipt is allowed. An unreadable or oversized receipt leaves verification incomplete unless independent evidence confirms a violation.
+
 For integrity checks, supply regular files up to 16 MiB. Keep automation files inside the evaluated workspace, and keep verifier artifacts and sidecar reports inside a trusted verifier root. Unreadable files leave verification incomplete.
 
 A failed row may reflect an observed effect, an unsafe recommendation, or an incomplete host check. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
