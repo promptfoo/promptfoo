@@ -223,7 +223,7 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 
 ## `promptfoo init [directory]`
 
-Set up a new promptfoo project with prompts, providers, and test cases.
+Set up a new promptfoo project with prompts, providers, and test cases. The directory can be absolute or relative to the current working directory. With `--no-interactive`, running init again replaces `promptfooconfig.yaml` and `README.md` in that directory.
 
 | Option             | Description                    |
 | ------------------ | ------------------------------ |
