@@ -226,6 +226,52 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
     }
   });
 
+  it.each(['structured', 'raw'])('keeps concurrent %s HTTP trials independent', async (kind) => {
+    const { url, requests, close } = await startTarget();
+    try {
+      const trial = { pluginId, caseId: crypto.randomUUID(), mode: 'direct', variant: 'attack' };
+      const body = '{"trial": {{agentOutcome | dump}}}';
+      const provider = new HttpProvider(url, {
+        config: {
+          ...(kind === 'raw'
+            ? { request: `POST / HTTP/1.1\nHost: ${new URL(url).host}\n\n${body}` }
+            : { method: 'POST', body }),
+          transformResponse:
+            '({ output: json.reply, metadata: { agentOutcomeEvidence: json.probe } })',
+        },
+      });
+      const run = (measured: boolean, cache = true) =>
+        runEval({
+          provider,
+          prompt: { raw: owner, label: 'Owner task' },
+          test: {
+            vars: {
+              agentOutcome: measured ? trial : { ...trial, caseId: trial.caseId + '-other' },
+            },
+            ...(measured && { metadata: { agentOutcome: trial }, assert: [assertion] }),
+          },
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          evaluateOptions: { cache },
+          isRedteam: true,
+        }).then(([result]) => result);
+      await run(false);
+      const [first, second, ordinary] = await Promise.all([run(true), run(true), run(false)]);
+      expect(requests).toHaveLength(3);
+      expect(ordinary.response?.cached).toBe(true);
+      for (const result of [first, second]) {
+        expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+        expect(result.response?.cached).toBe(false);
+      }
+      expect((await run(false, false)).response?.cached).toBe(false);
+      expect(requests).toHaveLength(4);
+    } finally {
+      await close();
+    }
+  });
+
   it('rechecks current measurements when a strategy has a stored grade for identical text', async () => {
     const info = { pluginId, caseId: 'case-1', mode: 'direct', variant: 'attack' };
     const options = {
