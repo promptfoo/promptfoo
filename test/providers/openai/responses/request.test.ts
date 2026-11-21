@@ -623,6 +623,98 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]).not.toHaveProperty('cacheScope');
   });
 
+  it.each([
+    {
+      model: 'gpt-6.2-astra',
+      apiBaseUrl: 'https://api.openai.com/v1',
+      betaHeader: 'other=v1',
+      query: '?beta=true',
+      useOpenAiBeta: true,
+      gradeRootOnly: true,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://gateway.example/v1?tenant=team&beta=true',
+      betaHeader: 'other=v1,responses_multi_agent=v1',
+      query: '?tenant=team&beta=true',
+      useOpenAiBeta: true,
+      gradeRootOnly: true,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://gateway.example/v1?tenant=team',
+      betaHeader: 'other=v1',
+      query: '?tenant=team',
+      useOpenAiBeta: false,
+      gradeRootOnly: false,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://resource.openai.azure.com/openai/v1?api-version=preview',
+      query: '?api-version=preview',
+      useOpenAiBeta: false,
+      gradeRootOnly: true,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://resource.openai.azure.com.example/openai/v1?api-version=preview',
+      query: '?api-version=preview',
+      useOpenAiBeta: false,
+      gradeRootOnly: false,
+    },
+  ])(
+    'uses the Responses multi-agent contract for $apiBaseUrl',
+    async ({ model, apiBaseUrl, betaHeader, query, useOpenAiBeta, gradeRootOnly }) => {
+      const message = (agent: string, phase: string, text: string) => ({
+        type: 'message',
+        role: 'assistant',
+        agent: { agent_name: agent },
+        phase,
+        content: [{ type: 'output_text', text }],
+      });
+      const output = [
+        message('/root', 'commentary', 'Checking the references.'),
+        message('/root/researcher', 'final_answer', 'Child result'),
+        message('/root', 'final_answer', 'Final answer'),
+      ];
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce(createMockFetchResponse({ id: 'resp_agents', status: 'queued' }))
+        .mockResolvedValueOnce(
+          createMockFetchResponse({ id: 'resp_agents', status: 'completed', output }),
+        );
+      const provider = new OpenAiResponsesProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl,
+          background: true,
+          headers: betaHeader ? { 'openai-beta': betaHeader } : undefined,
+          passthrough: { multi_agent: { enabled: true, max_concurrent_subagents: 2 } },
+        },
+      });
+
+      const result = await provider.callApi('Review the references.');
+      const [create, poll] = vi.mocked(cache.fetchWithCache).mock.calls;
+      const basePath = new URL(apiBaseUrl).pathname;
+      expect(new URL(String(create[0])).pathname).toBe(`${basePath}/responses`);
+      expect(new URL(String(poll[0])).pathname).toBe(`${basePath}/responses/resp_agents`);
+      expect(JSON.parse(String(create[1]?.body))).toMatchObject({
+        model,
+        multi_agent: { enabled: true, max_concurrent_subagents: 2 },
+      });
+      for (const call of [create, poll]) {
+        expect(new URL(String(call[0])).search).toBe(query);
+        expect(new Headers(call[1]?.headers).get('openai-beta')).toBe(
+          useOpenAiBeta ? 'other=v1,responses_multi_agent=v1' : (betaHeader ?? null),
+        );
+      }
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        gradeRootOnly ? 'Final answer' : 'Checking the references.\nChild result\nFinal answer',
+      );
+      expect(result.raw.output).toEqual(output);
+    },
+  );
+
   it('should use the effective passthrough model for capabilities and billing', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {

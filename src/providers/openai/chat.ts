@@ -38,7 +38,7 @@ import {
   withGenAISpan,
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
-import { calculateOpenAIUsageCost } from './billing';
+import { calculateOpenAIUsageCost, usesAzureOpenAiBilling } from './billing';
 import {
   applyGpt6RequestRules,
   getGpt6ChatReasoningEffort,
@@ -83,9 +83,8 @@ import type { McpToolCallEntry } from '../mcp/types';
 import type { OpenAiBillingConfig, OpenAiChatConfig, OpenAiRequestBody } from './config';
 import type { ReasoningEffort } from './types';
 
-export type OpenAiChatCompletionCostData = Pick<
-  OpenAI.Chat.Completions.ChatCompletion,
-  'service_tier' | 'usage'
+export type OpenAiChatCompletionCostData = Partial<
+  Pick<OpenAI.Chat.Completions.ChatCompletion, 'created' | 'service_tier' | 'usage'>
 >;
 
 export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_limit' | undefined {
@@ -336,6 +335,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
   config: OpenAiChatConfig;
+  private readonly bridgesGpt62ChatTools: boolean;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private initializationPending = false;
@@ -345,12 +345,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: Pick<ProviderOptions<OpenAiChatConfig>, 'config' | 'id' | 'env'> = {},
+    options: Pick<ProviderOptions<OpenAiChatConfig>, 'config' | 'id' | 'env'> & {
+      bridgesGpt62ChatTools?: boolean;
+    } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown chat model: ${modelName}`);
     }
     super(modelName, options);
+    this.bridgesGpt62ChatTools = options.bridgesGpt62ChatTools ?? false;
     this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
@@ -673,9 +676,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         body.reasoning_effort = gpt6Effort;
       }
     }
-    // OpenRouter can translate Chat tools to the upstream Responses API.
     applyGpt6RequestRules(body, capabilityModelName, 'chat', {
       isOpenRouter: isOpenRouterGpt6,
+      isAzure:
+        isGPT6Model && usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem()),
+      bridgesGpt62ChatTools: this.bridgesGpt62ChatTools,
     });
 
     omitDeprecatedClaudeSamplingParams(body);
@@ -721,6 +726,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
+      createdAt: data.created,
       provider: this.getGenAISystem(),
       region: this.getBillingRegion(),
       regionalProcessing: this.getGenAISystem() === 'bedrock',
