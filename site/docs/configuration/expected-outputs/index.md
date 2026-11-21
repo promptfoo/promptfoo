@@ -191,7 +191,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | Assertion Type                                                                                       | Method                                                                           |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
-| [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
+| [classifier](/docs/configuration/expected-outputs/classifier)                                        | Classify output with test-variable context and preserve provider metadata        |
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |

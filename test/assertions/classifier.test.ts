@@ -61,8 +61,13 @@ describe('handleClassifier', () => {
     });
   });
 
-  it('passes rendered values, thresholds, and test options to the classifier matcher', async () => {
-    const params = createParams();
+  it('passes rendered values, thresholds, test options, and test vars to the classifier matcher', async () => {
+    const params = createParams({
+      test: {
+        options: { provider: 'classification-provider' },
+        vars: { photo: 'file://photo.png' },
+      } as AtomicTestCase,
+    });
 
     await expect(handleClassifier(params)).resolves.toEqual({
       assertion: params.assertion,
@@ -77,7 +82,29 @@ describe('handleClassifier', () => {
       'model output',
       0.7,
       params.test.options,
+      { photo: 'file://photo.png' },
     );
+  });
+
+  it('forwards test vars through the matcher to the grading provider', async () => {
+    const actual = await vi.importActual<typeof import('../../src/matchers/classification')>(
+      '../../src/matchers/classification',
+    );
+    mockedMatchesClassification.mockImplementation(actual.matchesClassification);
+    const callClassificationApi = vi.fn().mockResolvedValue({ classification: { safe: 0.9 } });
+    const provider = {
+      id: () => 'classification-provider',
+      callApi: vi.fn(),
+      callClassificationApi,
+    };
+    const vars = { photo: 'file://photo.png', caption: 'A dented rear bumper' };
+    const params = createParams({
+      test: { options: { provider }, vars } as AtomicTestCase,
+    });
+
+    await expect(handleClassifier(params)).resolves.toMatchObject({ pass: true, score: 0.9 });
+    expect(callClassificationApi).toHaveBeenCalledOnce();
+    expect(callClassificationApi).toHaveBeenCalledWith('model output', undefined, { vars });
   });
 
   it('uses the default threshold and inverts matcher results for inverse assertions', async () => {
@@ -111,6 +138,7 @@ describe('handleClassifier', () => {
       'model output',
       1,
       params.test.options,
+      params.test.vars,
     );
   });
 

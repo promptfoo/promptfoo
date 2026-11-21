@@ -21,6 +21,7 @@ export async function handleClassifier({
     outputString,
     (assertion.threshold as number) ?? 1,
     test.options,
+    test.vars,
   );
 
   if (isGraderFailure(classificationResult)) {
