@@ -151,6 +151,114 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it.each([
+    'trajectory:tool-used',
+    'not-trajectory:tool-used',
+    'trajectory:step-count',
+    'not-trajectory:step-count',
+  ] as const)('blocks invalid %s count bounds before creating an eval job', async (type) => {
+    useStore.getState().updateConfig({
+      providers: ['echo'],
+      prompts: ['Use a tool'],
+      tests: [{ assert: [{ type, value: { pattern: 'search*', min: -1, max: 2 } }] }],
+    });
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    renderWithProvider(<RunTestSuiteButton />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Run Eval' }).click();
+    });
+
+    expect(getCallApiMock()).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/whole numbers, 0 or greater/);
+  });
+
+  it('blocks invalid count bounds in an inherited assertion set', async () => {
+    useStore.getState().updateConfig({
+      providers: ['echo'],
+      prompts: ['Use a tool'],
+      defaultTest: {
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              { type: 'not-trajectory:tool-used', value: { pattern: 'search*', min: 3, max: 2 } },
+            ],
+          },
+        ],
+      },
+      tests: [{}],
+    });
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    renderWithProvider(<RunTestSuiteButton />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Run Eval' }).click();
+    });
+
+    expect(getCallApiMock()).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /Minimum trajectory count cannot exceed maximum/,
+    );
+  });
+
+  it('submits valid zero bounds when invalid default assertions are disabled', async () => {
+    useStore.getState().updateConfig({
+      providers: ['echo'],
+      prompts: ['Use no tools'],
+      defaultTest: {
+        assert: [{ type: 'trajectory:tool-used', value: { pattern: 'search*', min: -1 } }],
+      },
+      tests: [
+        {
+          options: { disableDefaultAsserts: true },
+          assert: [
+            { type: 'trajectory:step-count', value: { max: 0 } },
+            { type: 'trajectory:tool-used', value: { name: 'search', min: 0, max: 0 } },
+          ],
+        },
+      ],
+    });
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    renderWithProvider(<RunTestSuiteButton />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Run Eval' }).click();
+    });
+
+    expect(getCallApiMock()).toHaveBeenCalledWith(
+      '/eval/job',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it.each([
+    { label: 'file', tests: 'file://tests.yaml' },
+    { label: 'file array', tests: ['file://tests.yaml'] },
+    { label: 'generator', tests: { path: 'file://tests.py:generate' } },
+    { label: 'generator array', tests: [{ path: 'file://tests.py:generate' }] },
+  ])('defers unresolved $label tests that may disable default assertions', async ({ tests }) => {
+    useStore.getState().updateConfig({
+      providers: ['echo'],
+      prompts: ['Use a tool'],
+      defaultTest: {
+        assert: [{ type: 'trajectory:tool-used', value: { pattern: 'search*', min: -1 } }],
+      },
+      tests,
+    });
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    renderWithProvider(<RunTestSuiteButton />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Run Eval' }).click();
+    });
+
+    expect(getCallApiMock()).toHaveBeenCalledWith(
+      '/eval/job',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('should be enabled for scalar provider, prompt, and test configs', () => {
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',
