@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { type AnyColumn, and, eq, getTableColumns, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -212,8 +212,28 @@ export default class EvalResult {
     }
 
     const db = await getDb();
+    // A search can match a valid artifact on a row with another malformed artifact.
+    // Decode in JS so that SQLite's JSON depth limit cannot hide a readable provider output.
+    const objectColumn = <T extends AnyColumn>(column: T) =>
+      sql`${column}`.mapWith((raw: string): T['_']['data'] | null => {
+        try {
+          const value = JSON.parse(raw);
+          return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+        } catch {
+          return null;
+        }
+      });
     const results = await db
-      .select()
+      .select({
+        ...getTableColumns(evalResultsTable),
+        testCase: objectColumn(evalResultsTable.testCase),
+        prompt: objectColumn(evalResultsTable.prompt),
+        provider: objectColumn(evalResultsTable.provider),
+        response: objectColumn(evalResultsTable.response),
+        gradingResult: objectColumn(evalResultsTable.gradingResult),
+        namedScores: objectColumn(evalResultsTable.namedScores),
+        metadata: objectColumn(evalResultsTable.metadata),
+      })
       .from(evalResultsTable)
       .where(
         and(
@@ -224,7 +244,28 @@ export default class EvalResult {
         ),
       );
 
-    return results.map((result) => new EvalResult({ ...result, persisted: true }));
+    return results.map((result) => {
+      const { response, gradingResult } = result;
+      if (response && 'images' in response) {
+        response.images = Array.isArray(response.images)
+          ? response.images.filter((image) => image && typeof image === 'object')
+          : undefined;
+      }
+      if (gradingResult?.componentResults) {
+        gradingResult.componentResults = Array.isArray(gradingResult.componentResults)
+          ? gradingResult.componentResults.filter(
+              (component) => component && typeof component === 'object',
+            )
+          : undefined;
+      }
+      return new EvalResult({
+        ...result,
+        testCase: result.testCase ?? {},
+        prompt: typeof result.prompt?.raw === 'string' ? result.prompt : { raw: '', label: '' },
+        provider: result.provider ?? { id: '' },
+        persisted: true,
+      });
+    });
   }
 
   /**
