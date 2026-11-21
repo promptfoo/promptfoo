@@ -64,6 +64,8 @@ interface Session {
 
 interface Turn {
   id: string;
+  created_at?: number;
+  started_at?: number | null;
   subagent_id: string | null;
   status: 'queued' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
   error?: { code?: string; message: string } | null;
@@ -978,6 +980,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
           apiUrl: this.getApiUrl(),
+          createdAt: turn.started_at ?? turn.created_at,
           serviceTier: finished.agent.service_tier ?? this.config.agent?.service_tier,
         });
       }

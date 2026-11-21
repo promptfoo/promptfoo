@@ -398,8 +398,20 @@ describe('ClaudeCodeSDKProvider', () => {
   });
 
   describe('resumed-session accounting', () => {
-    const prior = { ...createMockModelUsage(100, 20, 50, 5), thinkingTokens: 4, costUSD: 0.2 };
-    const current = { ...createMockModelUsage(110, 27, 53, 7), thinkingTokens: 6, costUSD: 0.201 };
+    const prior = {
+      ...createMockModelUsage(100, 20, 50, 5),
+      cacheCreationEphemeral5mInputTokens: 2,
+      cacheCreationEphemeral1hInputTokens: 3,
+      thinkingTokens: 4,
+      costUSD: 0.2,
+    };
+    const current = {
+      ...createMockModelUsage(110, 27, 53, 7),
+      cacheCreationEphemeral5mInputTokens: 4,
+      cacheCreationEphemeral1hInputTokens: 3,
+      thinkingTokens: 6,
+      costUSD: 0.201,
+    };
     const resultMessage = {
       type: 'result',
       subtype: 'success',
@@ -484,7 +496,13 @@ describe('ClaudeCodeSDKProvider', () => {
         usageAccounting: 'query',
         sessionCost: 0.202,
         modelUsage: {
-          sonnet: { inputTokens: 10, outputTokens: 7, contextWindow: 200000 },
+          sonnet: {
+            inputTokens: 10,
+            outputTokens: 7,
+            contextWindow: 200000,
+            cacheCreationEphemeral5mInputTokens: 2,
+            cacheCreationEphemeral1hInputTokens: 0,
+          },
           haiku: { inputTokens: 5, outputTokens: 3 },
         },
         sessionModelUsage: resultMessage.modelUsage,
@@ -930,102 +948,39 @@ describe('ClaudeCodeSDKProvider', () => {
       restoreEnv();
     });
 
-    it.each<{
-      name: string;
-      processKey?: string;
-      config?: ClaudeCodeOptions;
-      env?: EnvOverrides;
-      promptConfig?: ClaudeCodeOptions;
-      expectedKey: string;
-    }>([
-      {
-        name: 'provider config.env without an ambient key',
-        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        expectedKey: 'config-env-key',
+    it.each([
+      // Ambient, provider config, prompt config, provider env, explicit provider, explicit prompt.
+      [undefined, 'config', undefined, undefined, undefined, undefined, 'config'],
+      [undefined, undefined, 'prompt-env', undefined, undefined, undefined, 'prompt-env'],
+      ['ambient', 'config', undefined, undefined, undefined, undefined, 'config'],
+      ['ambient', 'config', 'prompt-env', undefined, undefined, undefined, 'prompt-env'],
+      ['ambient', 'config', 'prompt-env', 'override', undefined, undefined, 'override'],
+      ['ambient', 'config', 'prompt-env', 'override', 'provider', undefined, 'provider'],
+      ['ambient', 'config', 'prompt-env', 'override', 'provider', 'prompt', 'prompt'],
+      ['ambient', '', '', '', 'provider', '', 'provider'],
+    ])(
+      'resolves credential precedence in case %#',
+      async (ambient, configured, perPrompt, override, providerKey, promptKey, expected) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: ambient });
+        mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            apiKey: providerKey,
+            env: configured === undefined ? undefined : { ANTHROPIC_API_KEY: configured },
+          },
+          env: { ANTHROPIC_API_KEY: override },
+        });
+        await provider.callApi('Prompt', {
+          vars: {},
+          prompt: {
+            raw: 'Prompt',
+            label: 'test',
+            config: { apiKey: promptKey, env: { ANTHROPIC_API_KEY: perPrompt } },
+          },
+        });
+        expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe(expected);
       },
-      {
-        name: 'prompt config.env without an ambient key',
-        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
-        expectedKey: 'prompt-env-key',
-      },
-      {
-        name: 'config.env ahead of the ambient key',
-        processKey: 'process-key',
-        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        expectedKey: 'config-env-key',
-      },
-      {
-        name: 'provider config.env when the prompt supplies unrelated environment values',
-        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        promptConfig: { env: { NO_COLOR: '1' } },
-        expectedKey: 'config-env-key',
-      },
-      {
-        name: 'provider config.env ahead of ambient credentials with unrelated prompt environment values',
-        processKey: 'process-key',
-        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        promptConfig: { env: { NO_COLOR: '1' } },
-        expectedKey: 'config-env-key',
-      },
-      {
-        name: 'prompt config.env ahead of provider config.env',
-        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
-        expectedKey: 'prompt-env-key',
-      },
-      {
-        name: 'provider env ahead of config.env and the ambient key',
-        processKey: 'process-key',
-        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        env: { ANTHROPIC_API_KEY: 'provider-env-key' },
-        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
-        expectedKey: 'provider-env-key',
-      },
-      {
-        name: 'explicit provider key ahead of all environment keys',
-        processKey: 'process-key',
-        config: { apiKey: 'provider-key', env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        env: { ANTHROPIC_API_KEY: 'provider-env-key' },
-        promptConfig: { env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
-        expectedKey: 'provider-key',
-      },
-      {
-        name: 'explicit prompt key ahead of the provider key and environment keys',
-        processKey: 'process-key',
-        config: { apiKey: 'provider-key', env: { ANTHROPIC_API_KEY: 'config-env-key' } },
-        env: { ANTHROPIC_API_KEY: 'provider-env-key' },
-        promptConfig: { apiKey: 'prompt-key', env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
-        expectedKey: 'prompt-key',
-      },
-      {
-        name: 'explicit provider key when the prompt key is empty',
-        config: { apiKey: 'provider-key' },
-        promptConfig: { apiKey: '', env: { ANTHROPIC_API_KEY: 'prompt-env-key' } },
-        expectedKey: 'provider-key',
-      },
-      {
-        name: 'explicit provider key ahead of empty environment overrides',
-        processKey: 'process-key',
-        config: { apiKey: 'provider-key', env: { ANTHROPIC_API_KEY: '' } },
-        env: { ANTHROPIC_API_KEY: '' },
-        promptConfig: { env: { ANTHROPIC_API_KEY: '' } },
-        expectedKey: 'provider-key',
-      },
-    ])('uses $name', async ({ processKey, config, env, promptConfig, expectedKey }) => {
-      mockProcessEnv({ ANTHROPIC_API_KEY: processKey });
-      mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
-      const provider = new ClaudeCodeSDKProvider({ config, env });
-
-      const result = await provider.callApi('Prompt', {
-        vars: {},
-        prompt: { raw: 'Prompt', label: 'test', config: promptConfig },
-      });
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Authenticated response');
-      expect(mockQuery).toHaveBeenCalledOnce();
-      expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe(expectedKey);
-    });
+    );
 
     it('layers prompt environment values over provider values without removing undefined entries', async () => {
       mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
@@ -1076,15 +1031,6 @@ describe('ClaudeCodeSDKProvider', () => {
       })) {
         expect(env[key], key).toBe(expected);
       }
-    });
-
-    it('rejects an empty config.env API key before SDK dispatch', async () => {
-      const provider = new ClaudeCodeSDKProvider({
-        config: { env: { ANTHROPIC_API_KEY: '' } },
-      });
-
-      await expect(provider.callApi('Prompt')).rejects.toThrow('Anthropic API key is not set');
-      expect(mockQuery).not.toHaveBeenCalled();
     });
 
     it.each<{
@@ -1333,7 +1279,8 @@ describe('ClaudeCodeSDKProvider', () => {
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
       new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-1' } });
-      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-1' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-2' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-2' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
@@ -6134,6 +6081,28 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
+      it.each(['env', 'apiKey'])(
+        'retires cached responses when %s rotates on the same provider',
+        async (source) => {
+          const env = { ANTHROPIC_API_KEY: 'tenant-a-key' };
+          const provider = new ClaudeCodeSDKProvider({ env });
+          mockQuery
+            .mockReturnValueOnce(createMockResponse('Tenant A'))
+            .mockReturnValueOnce(createMockResponse('Tenant B'));
+          expect((await provider.callApi('Same prompt')).output).toBe('Tenant A');
+          if (source === 'env') {
+            env.ANTHROPIC_API_KEY = 'tenant-b-key';
+          } else {
+            provider.apiKey = 'tenant-b-key';
+          }
+          expect(provider.apiKey).toBe('tenant-b-key');
+          expect((await provider.callApi('Same prompt')).output).toBe('Tenant B');
+          expect(mockQuery.mock.calls[1][0].options.env.ANTHROPIC_API_KEY).toBe('tenant-b-key');
+          expect((await provider.callApi('Same prompt')).cached).toBe(true);
+          expect(mockQuery).toHaveBeenCalledTimes(2);
+        },
+      );
+
       it('isolates cache entries across provider instances even with the same credential', async () => {
         mockQuery
           .mockReturnValueOnce(createMockResponse('First provider'))
@@ -7372,6 +7341,37 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan!.status?.code).toBe(1); // SpanStatusCode.OK
       });
 
+      const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      const nativeChildSpan = { spanId: 'native-claude-span', parentSpanId: 'b7ad6b7169203331' };
+      const readToolTurn = {
+        type: 'assistant' as const,
+        parent_tool_use_id: null,
+        message: createMockBetaMessage([createReadToolUse()]),
+        session_id: 'test-session',
+      };
+
+      function mockStoredSpans(spans: (typeof nativeChildSpan)[]) {
+        const getTrace = vi.fn().mockResolvedValue({ spans });
+        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+          getTrace,
+        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        return getTrace;
+      }
+
+      function callWithLocalTraceReceiver(parent?: string) {
+        cliState.setActiveOtlpReceiver(createOtlpOptions());
+        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+        return cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+          () =>
+            provider.callApi('prompt', {
+              traceparent: parent,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            }),
+        );
+      }
+
       it.each([
         {
           description:
@@ -7423,29 +7423,13 @@ describe('ClaudeCodeSDKProvider', () => {
           expectSyntheticSpans,
         }) => {
           const { emittedSpans } = installTracerSpy();
+          vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(traceparent);
+          mockStoredSpans([nativeChildSpan]);
           mockQuery.mockReturnValue(
             createMockQuery([
-              {
-                type: 'assistant',
-                parent_tool_use_id: null,
-                message: createMockBetaMessage([createReadToolUse()]),
-                session_id: 'test-session',
-              },
+              readToolTurn,
               createReadToolResultMessage(),
-              {
-                type: 'result',
-                subtype: 'success',
-                session_id: 'test-session',
-                uuid: '12345678-1234-1234-1234-123456789abc',
-                result: 'ok',
-                usage: createMockUsage(10, 20),
-                total_cost_usd: 0.001,
-                duration_ms: 500,
-                duration_api_ms: 400,
-                is_error: false,
-                num_turns: 1,
-                permission_denials: [],
-              },
+              (await createMockResponse('ok').next()).value as SDKMessage,
             ]),
           );
 
@@ -7490,10 +7474,78 @@ describe('ClaudeCodeSDKProvider', () => {
         },
       );
 
+      it.each([
+        undefined,
+        'invalid',
+        '00-0af7651916cd43dd8448eb211c80319c',
+        '00-00000000000000000000000000000000-b7ad6b7169203331-01',
+        '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
+        '00-not-a-trace-id-not-a-span-id-01',
+      ])('preserves synthetic spans without a valid traceparent (%s)', async (traceparent) => {
+        const { emittedSpans } = installTracerSpy();
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(undefined);
+        const getTrace = mockStoredSpans([]);
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            readToolTurn,
+            createReadToolResultMessage(),
+            (await createMockResponse('ok').next()).value as SDKMessage,
+          ]),
+        );
+        const result = await callWithLocalTraceReceiver(traceparent);
+
+        expect(mockQuery.mock.calls.at(-1)?.[0].options.env.TRACEPARENT).toBeUndefined();
+        expect(result.output).toBe('ok');
+        expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
+        expect(getTrace).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        { toolCompleted: true, nativeSpansArrived: false },
+        { toolCompleted: false, nativeSpansArrived: false },
+        { toolCompleted: true, nativeSpansArrived: true },
+        { toolCompleted: false, nativeSpansArrived: true },
+      ])(
+        'preserves missing-result evidence without duplicates (completed: $toolCompleted, native: $nativeSpansArrived)',
+        async ({ toolCompleted, nativeSpansArrived }) => {
+          vi.useFakeTimers();
+          try {
+            const { emittedSpans } = installTracerSpy();
+            const getTrace = mockStoredSpans(nativeSpansArrived ? [nativeChildSpan] : []);
+            mockQuery.mockReturnValue(
+              createMockQuery([
+                readToolTurn,
+                ...(toolCompleted ? [createReadToolResultMessage()] : []),
+              ]),
+            );
+            const resultPromise = callWithLocalTraceReceiver(traceparent);
+            await vi.runAllTimersAsync();
+            const result = await resultPromise;
+
+            expect(result.error).toBe("Claude Agent SDK call didn't return a result");
+            expect(emittedSpans.map((span) => span.name)).toEqual(
+              nativeSpansArrived ? [] : ['gen_ai.turn 1', 'tool Read'],
+            );
+            if (!nativeSpansArrived) {
+              expect(emittedSpans[1].attrs['tool.incomplete']).toBe(
+                toolCompleted ? undefined : true,
+              );
+            }
+            expect(getTrace).toHaveBeenCalled();
+          } finally {
+            vi.useRealTimers();
+          }
+        },
+      );
+
       it('waits for native Claude spans before returning a traced response', async () => {
         const { emittedSpans } = installTracerSpy();
         const traceId = '0af7651916cd43dd8448eb211c80319c';
         const parentSpanId = 'b7ad6b7169203331';
+        // An invalid active span should not shadow the valid evaluator context.
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(
+          `00-${traceId}-0000000000000000-01`,
+        );
         const getTrace = vi
           .fn()
           .mockResolvedValueOnce({

@@ -174,7 +174,8 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
   };
 }
 
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./store')>()),
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
@@ -686,10 +687,11 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('250')).toBeInTheDocument();
   });
 
-  it('renders object provider IDs and request/assert metrics in the prompt header', () => {
+  it('renders object provider IDs and total request/assert metrics in a filtered prompt header', () => {
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
         inComparisonMode: false,
+        filteredMetrics: [{ assertPassCount: 0, assertFailCount: 5 }],
         table: {
           body: [
             {
@@ -734,6 +736,21 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('Asserts:')).toBeInTheDocument();
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['zero', { assertPassCount: 0, assertFailCount: 0 }],
+    ['error-only', { testErrorCount: 3 }],
+  ])('omits assertion counts for a prompt with %s metrics', (_name, metrics) => {
+    mockHeaderTable({
+      head: { prompts: [{ provider: 'test-provider', metrics }], vars: [] },
+      body: [],
+    });
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('test-provider')).toBeInTheDocument();
+    expect(screen.queryByText('Asserts:')).not.toBeInTheDocument();
   });
 
   it('keeps the prompt header divider visible above streamed result rows', () => {
@@ -1518,31 +1535,18 @@ describe('ResultsTable Row Navigation', () => {
     verifyDeepLinkPagination,
   );
 
-  it('observes the body table while waiting for a deep-linked row to render', () => {
-    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe');
-    setupDeepLinkedTable('/#details-row-51-prompt-1');
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    expect(observeSpy).toHaveBeenCalledWith(
-      document.getElementById('results-table-container'),
-      expect.objectContaining({
-        childList: true,
-        subtree: true,
-      }),
-    );
-
-    observeSpy.mockRestore();
-  });
-
-  it('scrolls to an already rendered deep-linked row without waiting for a mutation', () => {
-    setupDeepLinkedTable('/?rowId=1');
-    vi.spyOn(MutationObserver.prototype, 'observe').mockImplementation(() => {});
-    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
+  function observeScroll() {
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       callback(0);
       return 1;
     });
+    return vi.spyOn(Element.prototype, 'scrollIntoView');
+  }
+
+  it('scrolls to an already rendered deep-linked row without waiting for a mutation', () => {
+    setupDeepLinkedTable('/?rowId=1');
+    vi.spyOn(MutationObserver.prototype, 'observe').mockImplementation(() => {});
+    const scrollSpy = observeScroll();
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
@@ -1557,11 +1561,7 @@ describe('ResultsTable Row Navigation', () => {
     vi.spyOn(document, 'querySelector').mockImplementation((selector) =>
       selector === '#row-0' && !rowAvailable ? null : querySelector(selector),
     );
-    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0);
-      return 1;
-    });
+    const scrollSpy = observeScroll();
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(scrollSpy).not.toHaveBeenCalled();
 
@@ -1594,11 +1594,7 @@ describe('ResultsTable Row Navigation', () => {
         totalResultsCount: 120,
       }),
     );
-    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0);
-      return 1;
-    });
+    const scrollSpy = observeScroll();
 
     const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(document.getElementById('row-0')).toBeInTheDocument();
@@ -1621,6 +1617,32 @@ describe('ResultsTable Row Navigation', () => {
     );
   });
 
+  it('leaves the reviewer in place after a rating clones the loaded page', async () => {
+    window.history.replaceState({}, '', '/?rowId=1');
+    const rows = [0, 1].map((testIdx) => ({
+      outputs: [{ ...createDeepLinkedOutput(), id: `test-${testIdx}` }],
+      test: {},
+      testIdx,
+      vars: [],
+    }));
+    let table = { body: rows, head: createPromptHead() };
+    const store = createTableStore({
+      table,
+      filteredResultsCount: 2,
+      setTable: (next: typeof table) => {
+        table = next;
+      },
+    });
+    vi.mocked(useTableStore).mockImplementation(() => ({ ...store, table }));
+    const scroll = observeScroll();
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(scroll).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getAllByRole('button', { name: /^Rate$/ })[1]);
+    expect(table.body).not.toBe(rows);
+    rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
+    expect(scroll).toHaveBeenCalledOnce();
+  });
+
   it('cancels a queued row scroll when the table unmounts', () => {
     setupDeepLinkedTable('/?rowId=1');
     vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(42);
@@ -1630,37 +1652,6 @@ describe('ResultsTable Row Navigation', () => {
     unmount();
 
     expect(cancelSpy).toHaveBeenCalledWith(42);
-  });
-
-  it('does not scroll the old page when fetching the deep-linked page fails', () => {
-    window.history.replaceState({}, '', '/?rowId=51');
-    let isFetching = true;
-    const table = {
-      body: [{ outputs: [createDeepLinkedOutput()], test: {}, testIdx: 0, vars: [] }],
-      head: createPromptHead(),
-    };
-    const fetchEvalData = vi.fn();
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        table,
-        isFetching,
-        fetchEvalData,
-        filteredResultsCount: 120,
-        totalResultsCount: 120,
-      }),
-    );
-    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0);
-      return 1;
-    });
-    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    isFetching = false;
-    rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
-
-    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
-    expect(scrollSpy).not.toHaveBeenCalled();
   });
 
   it('keeps stale rows on their loaded page when a manual rating clones the body after a failed fetch', async () => {
@@ -1685,11 +1676,7 @@ describe('ResultsTable Row Navigation', () => {
         totalResultsCount: 120,
       }),
     );
-    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView');
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0);
-      return 1;
-    });
+    const scrollSpy = observeScroll();
     const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
     isFetching = false;
     rerender(<ResultsTable {...defaultProps} zoom={1.1} />);
@@ -2494,6 +2481,57 @@ describe('ResultsTable Pagination', () => {
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
     expect(screen.getByText(/showing/i)).toHaveTextContent('Showing 1 to 100 of 120 results');
+  });
+
+  it('uses the initial request limit when switching from a small eval to a larger one', async () => {
+    let count = 5;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({ table: createEmptyTable(), filteredResultsCount: count, fetchEvalData }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    count = 120;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, pageSize: 50 }),
+    );
+  });
+
+  it('keeps the current page after a rating changes the count, and clamps only when needed', async () => {
+    let count = 220;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table: createEmptyTable(),
+        filteredResultsCount: count,
+        totalResultsCount: 220,
+        fetchEvalData,
+      }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Results per page'));
+    await user.click(screen.getByRole('option', { name: '100' }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+
+    fetchEvalData.mockClear();
+    count = 219;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+    expect(fetchEvalData).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(3);
+    count = 200;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText('Go to page')).toHaveValue(2));
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, pageSize: 100 }),
+    );
   });
 
   it('should render pagination controls when totalResultsCount is greater than 10', () => {

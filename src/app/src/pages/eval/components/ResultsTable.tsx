@@ -57,7 +57,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -75,7 +75,7 @@ import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
-import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { useMetricsGetter, usePromptPassMetrics } from './hooks';
 import {
   getNamedMetricTotals,
   parseEvalOutputPromptHash,
@@ -598,22 +598,15 @@ function renderRequestMetric({
   );
 }
 
-function renderAssertMetric({
-  numAsserts,
-  numGoodAsserts,
-  idx,
-}: {
-  numAsserts: number[];
-  numGoodAsserts: number[];
-  idx: number;
-}): React.ReactNode {
-  if (!numAsserts[idx]) {
+function renderAssertMetric(metrics: PromptMetrics['total']): React.ReactNode {
+  const total = (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
+  if (!total) {
     return null;
   }
 
   return (
     <div>
-      <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
+      <strong>Asserts:</strong> {metrics?.assertPassCount || 0}/{total} passed
     </div>
   );
 }
@@ -1031,8 +1024,6 @@ function renderPromptMetricDetails({
   idx,
   isRedteam,
   showStats,
-  numAsserts,
-  numGoodAsserts,
   testCounts,
 }: {
   metrics: PromptMetrics['total'];
@@ -1040,8 +1031,6 @@ function renderPromptMetricDetails({
   idx: number;
   isRedteam: boolean;
   showStats: boolean;
-  numAsserts: number[];
-  numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
 }): React.ReactNode {
   if (!showStats) {
@@ -1051,7 +1040,7 @@ function renderPromptMetricDetails({
   return (
     <div className="prompt-detail collapse-hidden">
       {renderRequestMetric({ metrics, isRedteam })}
-      {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
+      {renderAssertMetric(metrics)}
       {renderCostMetric({
         metrics,
         filteredMetrics,
@@ -1092,8 +1081,6 @@ function PromptColumnHeader({
   getMetrics,
   showStats,
   isRedteam,
-  numAsserts,
-  numGoodAsserts,
   testCounts,
   passingTestCounts,
   config,
@@ -1111,8 +1098,6 @@ function PromptColumnHeader({
   getMetrics: ReturnType<typeof useMetricsGetter>;
   showStats: boolean;
   isRedteam: boolean;
-  numAsserts: number[];
-  numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
   config: ReturnType<typeof useTableStore.getState>['config'];
@@ -1195,8 +1180,6 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
-        numAsserts,
-        numGoodAsserts,
         testCounts,
       })}
       {filterMode === 'failures' && headPromptCount > 1 && (
@@ -1495,7 +1478,6 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
 }
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
-  originalRowPositionIndex: number;
   outputs: ExtendedEvaluateTableOutput[];
 }
 
@@ -1636,7 +1618,8 @@ function ResultsTable({
     isFetching,
     filters,
   } = useTableStore();
-  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { inComparisonMode, comparisonEvalIds, renderMarkdown, stickyHeader, setStickyHeader } =
+    useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
@@ -1659,7 +1642,9 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: filteredResultsCount > 10 ? 50 : 10,
+    // Eval's initial table request always uses a limit of 50, even when the
+    // previous eval's count is still visible while switching evaluations.
+    pageSize: 50,
   });
 
   // Persist column sizing state to prevent header resize flicker during pagination.
@@ -1667,13 +1652,12 @@ function ResultsTable({
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const tableRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * Reset the pagination state when the filtered results count changes.
-   */
+  // Ratings can change the number of matching rows. Keep the current page and
+  // page size unless that page no longer exists.
   React.useEffect(() => {
-    setPagination({
-      pageIndex: 0,
-      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    setPagination((prev) => {
+      const lastPageIndex = Math.max(0, Math.ceil(filteredResultsCount / prev.pageSize) - 1);
+      return prev.pageIndex > lastPageIndex ? { ...prev, pageIndex: lastPageIndex } : prev;
     });
   }, [filteredResultsCount]);
 
@@ -1738,7 +1722,6 @@ function ResultsTable({
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
-      originalRowPositionIndex: tablePageOffset + rowIndex,
       outputs: row.outputs.map((output, promptIndex) =>
         output == null
           ? null
@@ -1852,26 +1835,7 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
+      .filter(isFilterApplied)
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -1954,27 +1918,7 @@ function ResultsTable({
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      // Only pass the filters that have been applied.
-      // For metadata filters with exists operator, only field is required.
-      // For other metadata operators, both field and value are required.
-      // For metric filters with is_defined operator, only field is required.
-      // For metric filters with comparison operators, both field and value are required.
-      // For non-metadata/non-metric filters, value is required.
-      filters: Object.values(filters.values).filter((filter) => {
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        return Boolean(filter.value);
-      }),
+      filters: Object.values(filters.values).filter(isFilterApplied),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -1989,32 +1933,11 @@ function ResultsTable({
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  const testCounts = useTestCounts();
-  const passingTestCounts = usePassingTestCounts();
-  const passRates = usePassRates();
+  const { testCounts, passingTestCounts, passRates } = usePromptPassMetrics();
   const getMetrics = useMetricsGetter();
-
-  const numAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) => {
-        const { total: metrics } = getMetrics(idx);
-        return (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
-      }),
-    [head.prompts, getMetrics],
-  );
-
-  const numGoodAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) => {
-        const { total: metrics } = getMetrics(idx);
-        return metrics?.assertPassCount || 0;
-      }),
-    [head.prompts, getMetrics],
-  );
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  const { renderMarkdown } = useResultsViewSettingsStore();
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
@@ -2135,8 +2058,6 @@ function ResultsTable({
                 getMetrics={getMetrics}
                 showStats={showStats}
                 isRedteam={isRedteam}
-                numAsserts={numAsserts}
-                numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
                 config={config}
@@ -2207,8 +2128,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    numAsserts,
-    numGoodAsserts,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
@@ -2262,8 +2181,6 @@ function ResultsTable({
     enableColumnResizing: true,
   });
 
-  const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
@@ -2287,8 +2204,6 @@ function ResultsTable({
     if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
       const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
-      let hasScrolled = false;
-
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
 
       const maxPageIndex = pageCount - 1;
@@ -2302,77 +2217,50 @@ function ResultsTable({
         return;
       }
 
-      // Server pagination keeps the previous page's rows visible while loading.
-      if (isFetching) {
+      // A failed or pending page may leave old rows visible with the same local IDs.
+      // Ratings clone the body, so depend only on the loaded range to avoid scrolling again.
+      const localRowIndex = rowIndex - tablePageOffset;
+      if (
+        isFetching ||
+        tablePageOffset !== safeRowPageIndex * pagination.pageSize ||
+        localRowIndex >= body.length
+      ) {
         return;
       }
 
-      let scrollFrame: number | undefined;
+      let frame: number | undefined;
       const scrollToRow = () => {
-        if (hasScrolled) {
-          return;
-        }
-
-        const localRowIndex = rowIndex % pagination.pageSize;
-        // A failed page request leaves old rows in place with the same local DOM IDs.
-        if (tableBody[localRowIndex]?.originalRowPositionIndex !== rowIndex) {
-          return;
-        }
-        const rowElement = document.querySelector(`#row-${localRowIndex}`);
-
-        if (rowElement) {
-          hasScrolled = true;
-
-          scrollFrame = requestAnimationFrame(() => {
-            rowElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'nearest',
-            });
+        const row = document.querySelector(`#row-${localRowIndex}`);
+        if (row) {
+          observer.disconnect();
+          frame = requestAnimationFrame(() => {
+            row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           });
         }
       };
 
-      const tableContainer = document.getElementById('results-table-container') || document.body;
-
-      const observer = new MutationObserver(() => {
-        scrollToRow();
-        if (hasScrolled) {
-          observer.disconnect();
-        }
-      });
-
-      observer.observe(tableContainer, {
+      const observer = new MutationObserver(scrollToRow);
+      observer.observe(document.getElementById('results-table-container') ?? document.body, {
         childList: true,
         subtree: true,
       });
-
       scrollToRow();
-      if (hasScrolled) {
-        observer.disconnect();
-      }
-
-      const timeoutId = setTimeout(() => {
-        if (!hasScrolled) {
-          console.warn('Timeout reached while waiting for row to be rendered');
-          observer.disconnect();
-        }
-      }, 5000);
 
       return () => {
         observer.disconnect();
-        clearTimeout(timeoutId);
-        if (scrollFrame !== undefined) {
-          cancelAnimationFrame(scrollFrame);
+        if (frame !== undefined) {
+          cancelAnimationFrame(frame);
         }
       };
     }
   }, [
     pagination.pageIndex,
     pagination.pageSize,
-    reactTable,
+    evalId,
     filteredResultsCount,
     isFetching,
-    tableBody,
+    tablePageOffset,
+    body.length,
     locationHash,
     debouncedSearchText,
     failureFilter,
@@ -2557,7 +2445,7 @@ function ResultsTable({
           <div className="flex items-center gap-2">
             <span className="whitespace-nowrap">Results per page:</span>
             <Select
-              value={String(pagination.pageSize)}
+              value={String(filteredResultsCount <= 10 ? 10 : pagination.pageSize)}
               onValueChange={(value) => {
                 clearRowDeepLink();
                 setPagination((prev) => ({

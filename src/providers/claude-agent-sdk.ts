@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import { parseTraceParent } from '@opentelemetry/core';
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
@@ -112,6 +114,8 @@ const MODEL_USAGE_COUNTERS = [
   'thinkingTokens',
   'cacheReadInputTokens',
   'cacheCreationInputTokens',
+  'cacheCreationEphemeral5mInputTokens',
+  'cacheCreationEphemeral1hInputTokens',
   'webSearchRequests',
   'costUSD',
 ] as const;
@@ -1406,13 +1410,32 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
   config: ClaudeCodeOptions;
   env?: EnvOverrides;
-  apiKey?: string;
+
+  get apiKey(): string | undefined {
+    return this.getApiKey();
+  }
+
+  set apiKey(apiKey: string | undefined) {
+    this.config = { ...this.config, apiKey };
+  }
 
   // Only SDK and Anthropic are supported for now
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
   private loadedSdk?: Awaited<ReturnType<typeof loadClaudeCodeSDK>>;
-  private readonly credentialCacheScope = crypto.randomUUID();
+  #cacheScope?: { fingerprint: string; id: string };
+
+  // Credentials can appear under arbitrary environment names. Keep the fingerprint
+  // in memory and give each environment a random ID for the persistent cache.
+  private getCacheScope(env: Record<string, string>): string {
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify(env, Object.keys(env).sort()))
+      .digest('hex');
+    if (this.#cacheScope?.fingerprint !== fingerprint) {
+      this.#cacheScope = { fingerprint, id: crypto.randomUUID() };
+    }
+    return this.#cacheScope.id;
+  }
 
   constructor(
     options: {
@@ -1424,7 +1447,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const { config, env, id } = options;
     this.config = config ?? {};
     this.env = env;
-    this.apiKey = this.getApiKey();
     this.providerId = id ?? this.providerId;
 
     if (
@@ -1481,12 +1503,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Preserve provider environment values when a prompt overrides individual keys.
     // Precedence: process.env < provider config.env < prompt config.env < EnvOverrides.
     const env: Record<string, string> = {};
-    for (const source of [getProcessEnv(), this.config.env, config.env, this.env]) {
-      if (!source) {
-        continue;
-      }
-      for (const key of Object.keys(source).sort()) {
-        const value = source[key as keyof typeof source];
+    const inherited = { ...getProcessEnv(), ANTHROPIC_API_KEY: getEnvString('ANTHROPIC_API_KEY') };
+    for (const source of [inherited, this.config.env, config.env, this.env]) {
+      for (const [key, value] of Object.entries(source ?? {})) {
         if (value !== undefined) {
           env[key] = value;
         }
@@ -1547,14 +1566,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Prompt config overrides provider config; explicit keys take precedence over env.
-    const effectiveApiKey =
-      config.apiKey || this.config.apiKey || (env.ANTHROPIC_API_KEY ?? this.apiKey);
+    const effectiveApiKey = config.apiKey || this.config.apiKey || env.ANTHROPIC_API_KEY;
     if (effectiveApiKey) {
       env.ANTHROPIC_API_KEY = effectiveApiKey;
     }
-    // Subprocess environment can contain credentials under arbitrary names and value formats.
-    // Keep it out of persistent key material and scope reuse to this provider instance instead.
-    const credentialCacheScope = this.credentialCacheScope;
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
     if (
@@ -1797,9 +1812,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if (sensitiveMcpBypassesCache) {
       logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: MCP configuration contains secrets');
     }
-    if (credentialCacheScope) {
-      logger.debug('[ClaudeCodeSDKProvider] Scoping cache to in-memory credential identity');
-    }
     if (settingsConfigurationBypassesCache) {
       logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: SDK settings are externally mutable');
     }
@@ -1840,7 +1852,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             {
               prompt,
               cacheKeyQueryOptions,
-              ...(credentialCacheScope ? { credentialCacheScope } : {}),
+              credentialCacheScope: this.getCacheScope(env),
               ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
             },
           );
@@ -2024,33 +2036,25 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           requestBody: prompt,
         },
         async () => {
-          // Propagate trace context to the SDK subprocess so its OTEL spans attach
-          // under our span. Prefer the active span's traceparent; fall back to the
-          // evaluator-supplied one. `getTraceparent()` can return an all-zero trace
-          // id when no OTEL SDK is registered (NonRecordingSpan / INVALID_TRACEID),
-          // which would poison propagation — skip it in that case.
-          const ZERO_TRACE_ID = '00000000000000000000000000000000';
-          const active = getTraceparent();
-          const activeValid = active && !active.includes(ZERO_TRACE_ID) ? active : undefined;
-          const traceparent = activeValid ?? context?.traceparent;
-          // Runtime environment is intentionally excluded from persistent key material and
-          // replaced by the provider-instance scope, so trace propagation cannot affect the key.
-          if (traceparent && !env.TRACEPARENT) {
-            env.TRACEPARENT = traceparent;
+          // Prefer the active span; fall back to the evaluator's parent if the active
+          // context is missing or invalid (including a non-recording span's zero IDs).
+          let traceparent = getTraceparent();
+          let traceContext = traceparent ? parseTraceParent(traceparent) : null;
+          if (!traceContext && context?.traceparent) {
+            traceparent = context.traceparent;
+            traceContext = parseTraceParent(traceparent);
           }
-          // Some SDK telemetry signals (logs in particular) do not inherit
-          // TRACEPARENT into their OTEL context. Encode the trace + parent span
-          // IDs as resource attributes too — promptfoo's OTLP /v1/logs receiver
-          // reads these to link log-derived spans to the evaluation trace.
-          // traceparent format: "version-traceId-spanId-flags".
-          const [, tpTraceId, tpSpanId] = traceparent ? traceparent.split('-') : [];
-          if (tpTraceId && tpSpanId) {
+          if (traceContext && traceparent) {
+            env.TRACEPARENT ||= traceparent;
+            // The OTLP logs receiver uses these attributes for signals that do not
+            // inherit TRACEPARENT in the subprocess.
             env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
               env.OTEL_RESOURCE_ATTRIBUTES,
-              tpTraceId,
-              tpSpanId,
+              traceContext.traceId,
+              traceContext.spanId,
             );
           }
+          const nativeTraceContext = sdkExportsNativeSpans ? traceContext : null;
 
           // Dynamically import the ESM module once and cache it
           const { sdk, version } = (this.loadedSdk ??= await loadClaudeCodeSDK());
@@ -2090,7 +2094,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const toolTurnIndex = new Map<string, number>();
           const deferredSyntheticSpans: Array<() => void> = [];
           const emitOrDeferSyntheticSpan = (emit: () => void): void => {
-            if (sdkExportsNativeSpans) {
+            if (nativeTraceContext) {
               deferredSyntheticSpans.push(emit);
             } else {
               emit();
@@ -2269,16 +2273,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // the main agent's result never arrived).
           const finalMsg = lastMainResultMsg ?? lastResultMsg;
 
-          if (!finalMsg) {
-            return { error: "Claude Agent SDK call didn't return a result" };
-          }
-
-          if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
+          if (nativeTraceContext) {
             let nativeSpansArrived = false;
             try {
               nativeSpansArrived = await waitForNativeTraceExport(
-                tpTraceId,
-                tpSpanId,
+                nativeTraceContext.traceId,
+                nativeTraceContext.spanId,
                 env,
                 callOptions?.abortSignal,
               );
@@ -2296,6 +2296,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 emit();
               }
             }
+          }
+
+          if (!finalMsg) {
+            return { error: "Claude Agent SDK call didn't return a result" };
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -2629,7 +2633,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+    return (
+      this.config.apiKey ||
+      (this.env?.ANTHROPIC_API_KEY ??
+        this.config.env?.ANTHROPIC_API_KEY ??
+        getEnvString('ANTHROPIC_API_KEY'))
+    );
   }
 
   async cleanup(): Promise<void> {
