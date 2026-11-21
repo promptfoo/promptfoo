@@ -123,6 +123,7 @@ async function filterFailingTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  testConfigMap?: WeakMap<TestCase, TestCase>,
 ): Promise<Tests> {
   // Filter for all non-successful results (both assertion failures and errors)
   return filterTestsByResults(
@@ -130,6 +131,7 @@ async function filterFailingTests(
     pathOrId,
     (result) => !result.success,
     extractedTestFilter,
+    testConfigMap,
   );
 }
 
@@ -143,6 +145,7 @@ async function filterFailingOnlyTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  testConfigMap?: WeakMap<TestCase, TestCase>,
 ): Promise<Tests> {
   // Filter for assertion failures only, excluding errors
   return filterTestsByResults(
@@ -150,6 +153,7 @@ async function filterFailingOnlyTests(
     pathOrId,
     (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
     extractedTestFilter,
+    testConfigMap,
   );
 }
 
@@ -163,12 +167,14 @@ async function filterErrorTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  testConfigMap?: WeakMap<TestCase, TestCase>,
 ): Promise<Tests> {
   return filterTestsByResults(
     testSuite,
     pathOrId,
     (result) => result.failureReason === ResultFailureReason.ERROR,
     extractedTestFilter,
+    testConfigMap,
   );
 }
 
@@ -185,10 +191,15 @@ async function filterErrorTests(
  *
  * @param testSuite - The test suite containing all tests
  * @param options - Configuration options for filtering
+ * @param testConfigMap - Optional runtime-test to replayable-config mapping, retained through historical filters
  * @returns A filtered array of tests that match all the specified criteria
  * @throws {Error} If metadata filter format is invalid or if numeric filters contain non-numeric values
  */
-export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
+export async function filterTests(
+  testSuite: TestSuite,
+  options: FilterOptions,
+  testConfigMap?: WeakMap<TestCase, TestCase>,
+): Promise<Tests> {
   let tests = testSuite.tests || [];
   let metadataFilter: TestFilterFn | undefined;
 
@@ -273,11 +284,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       resultFilterTestSuite,
       options.failingOnly,
       metadataFilter,
+      testConfigMap,
     );
     const errorTests = await filterErrorTests(
       resultFilterTestSuite,
       options.errorsOnly,
       metadataFilter,
+      testConfigMap,
     );
 
     // Create a union of both sets, deduplicating by test identity
@@ -294,7 +307,12 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     }
   } else if (options.failing) {
     // --filter-failing includes both failures and errors
-    tests = await filterFailingTests(resultFilterTestSuite, options.failing, metadataFilter);
+    tests = await filterFailingTests(
+      resultFilterTestSuite,
+      options.failing,
+      metadataFilter,
+      testConfigMap,
+    );
     if (tests.length === 0) {
       logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
     }
@@ -304,6 +322,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       resultFilterTestSuite,
       options.failingOnly,
       metadataFilter,
+      testConfigMap,
     );
     if (tests.length === 0) {
       logNoTestsWarning(
@@ -313,7 +332,12 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       );
     }
   } else if (options.errorsOnly) {
-    tests = await filterErrorTests(resultFilterTestSuite, options.errorsOnly, metadataFilter);
+    tests = await filterErrorTests(
+      resultFilterTestSuite,
+      options.errorsOnly,
+      metadataFilter,
+      testConfigMap,
+    );
     if (tests.length === 0) {
       logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
     }

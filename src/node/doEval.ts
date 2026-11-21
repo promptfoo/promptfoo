@@ -55,13 +55,19 @@ import {
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
+import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  getReplacedErrorResultIds,
+  recalculatePromptMetrics,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -70,11 +76,78 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
+  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
+
+/**
+ * Apply initial top-level test filters, retaining replayable raw configs for count/pattern selection.
+ * Mutates the suite and config. Returns whether a persisted selection consumed the top-level range.
+ */
+export async function applyTestFilters(
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  options: FilterOptions,
+): Promise<boolean> {
+  const hasScenarios = Boolean(testSuite.scenarios?.length);
+  const explicitTestCount = testSuite.tests?.length;
+  const hasActiveFilter =
+    options.range !== undefined ||
+    options.failing !== undefined ||
+    options.failingOnly !== undefined ||
+    options.errorsOnly !== undefined ||
+    options.firstN !== undefined ||
+    options.metadata !== undefined ||
+    options.pattern !== undefined ||
+    options.sample !== undefined;
+  const synthesizeDefaultTest =
+    hasActiveFilter && testSuite.scenarios === undefined && !testSuite.tests?.length;
+  const persistSelection = options.firstN !== undefined || options.pattern !== undefined;
+  const consumedTopLevelRange = persistSelection && !hasScenarios;
+  const testConfigMap = persistSelection ? new WeakMap<TestCase, TestCase>() : undefined;
+
+  if (testConfigMap) {
+    const rawTests = Array.isArray(config.tests) ? config.tests : [];
+    for (const [index, test] of (testSuite.tests ?? []).entries()) {
+      const rawTest = rawTests[index];
+      invariant(rawTest && typeof rawTest === 'object', 'Missing replayable test configuration');
+      testConfigMap.set(test, rawTest as TestCase);
+    }
+  }
+  if (synthesizeDefaultTest) {
+    const defaultMetadata =
+      typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
+    testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
+    testConfigMap?.set(testSuite.tests[0], { ...testSuite.tests[0], vars: {} });
+  }
+  testSuite.tests = await filterTests(
+    testSuite,
+    { ...options, range: hasScenarios ? undefined : options.range },
+    testConfigMap,
+  );
+  if (testConfigMap) {
+    config.tests = testSuite.tests.map((test) => {
+      const rawTest = testConfigMap.get(test);
+      invariant(rawTest, 'Filtered test lost its replayable configuration');
+      return rawTest;
+    });
+    if (consumedTopLevelRange && config.evaluateOptions) {
+      config.evaluateOptions = { ...config.evaluateOptions, filterRange: undefined };
+    }
+  }
+  const suppressDefaultTest =
+    testSuite.tests.length === 0 && ((explicitTestCount ?? 0) > 0 || synthesizeDefaultTest);
+  if (!hasScenarios && suppressDefaultTest) {
+    testSuite.scenarios = [];
+    if (persistSelection) {
+      config.scenarios = [];
+    }
+  }
+  return consumedTopLevelRange;
+}
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -540,7 +613,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = await resolveConfigs(cmdObj, defaultConfig, 'Evaluation'));
     }
 
     // Clean up the providers this run loaded once no evaluation is using them.
@@ -678,8 +751,6 @@ async function doEvalWithEnv(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
-    const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
-    const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
       typeof resumeRuntimeOptions?.filterRange === 'string'
@@ -695,45 +766,25 @@ async function doEvalWithEnv(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const filterFirstN = cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN;
+    const filterPattern = cmdObj.filterPattern ?? commandLineOptions?.filterPattern;
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
-    const hasActiveTestFilter =
-      filterRange !== undefined ||
-      cmdObj.filterFailing !== undefined ||
-      cmdObj.filterFailingOnly !== undefined ||
-      cmdObj.filterErrorsOnly !== undefined ||
-      cmdObj.filterFirstN !== undefined ||
-      cmdObj.filterMetadata !== undefined ||
-      cmdObj.filterPattern !== undefined ||
-      filterSample !== undefined;
-    const shouldApplyFiltersToImplicitDefaultTest =
-      hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    let consumedTopLevelRange = false;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
-      if (shouldApplyFiltersToImplicitDefaultTest) {
-        const defaultMetadata =
-          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
-        testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
-      }
-      const filterOptions: FilterOptions = {
+      consumedTopLevelRange = await applyTestFilters(testSuite, config, {
         failing: cmdObj.filterFailing,
         failingOnly: cmdObj.filterFailingOnly,
         errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
+        firstN: filterFirstN,
         metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
-        range: hasScenarios ? undefined : filterRange,
+        pattern: filterPattern,
+        range: filterRange,
         sample: filterSample,
         sampleSeed: filterSampleSeed,
-      };
-      testSuite.tests = await filterTests(testSuite, filterOptions);
-      const shouldSuppressImplicitDefaultTest =
-        testSuite.tests.length === 0 &&
-        ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
-      if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
-        testSuite.scenarios = [];
-      }
+      });
     }
 
     if (
@@ -858,6 +909,7 @@ async function doEvalWithEnv(
 
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
+      ...(consumedTopLevelRange ? { filterRange: undefined } : {}),
       ...(providerFilter ? { providerFilter } : {}),
     };
 
@@ -978,15 +1030,16 @@ async function doEvalWithEnv(
       });
 
       // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+      // Remove only old ERROR rows covered by another persisted result at the same index pair.
       // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
-          await deleteErrorResults(errorResultIds);
+          const replacedErrorIds = await getReplacedErrorResultIds(ret, errorResultIds);
+          await deleteErrorResults(replacedErrorIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+            `Cleaned up ${replacedErrorIds.length} old ERROR results after successful retry`,
           );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
