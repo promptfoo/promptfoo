@@ -36,11 +36,16 @@ export async function matchesClassification(
   );
 
   const scores = Object.values(resp.classification ?? {});
-  if (!resp.classification || scores.length === 0) {
+  // No scores means no verdict, unless the provider confirms that it ran and detected no labels.
+  if (
+    !resp.classification ||
+    (scores.length === 0 && (resp.noLabelsDetected !== true || Boolean(resp.error)))
+  ) {
     const failure = graderFail(
-      resp.classification
-        ? 'No classification scores returned'
-        : resp.error || 'Unknown error fetching classification',
+      resp.error ||
+        (resp.classification
+          ? 'No classification scores returned'
+          : 'Unknown error fetching classification'),
       resp.tokenUsage,
     );
     return {
@@ -49,7 +54,13 @@ export async function matchesClassification(
     };
   }
 
-  const score = expected === undefined ? Math.max(...scores) : resp.classification[expected] || 0;
+  const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
+  const score =
+    expected === undefined
+      ? maxScore
+      : Object.prototype.hasOwnProperty.call(resp.classification, expected)
+        ? resp.classification[expected]
+        : 0;
   const pass = score >= threshold - Number.EPSILON;
   const subject =
     expected === undefined
