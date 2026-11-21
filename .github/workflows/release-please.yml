@@ -337,6 +337,7 @@ jobs:
       attestations: write
     uses: ./.github/workflows/docker.yml
     with:
+      publish_aliases: true
       tag_name: ${{ needs.release-please.outputs.tag_name }}
 
   build-code-scan-action-release:
