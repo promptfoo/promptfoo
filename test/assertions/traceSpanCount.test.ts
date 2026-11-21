@@ -67,6 +67,19 @@ const defaultParams = {
 };
 
 describe('handleTraceSpanCount', () => {
+  it.each([true, false])('rejects contradictory bounds before inversion (%s)', (inverse) => {
+    const value = { pattern: '*', min: 3, max: 2 };
+    expect(() =>
+      handleTraceSpanCount({
+        ...defaultParams,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+        assertion: { type: inverse ? 'not-trace-span-count' : 'trace-span-count', value },
+        renderedValue: value,
+        inverse,
+      }),
+    ).toThrow('minimum must not exceed maximum');
+  });
+
   it('should pass when span count is within max limit', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -343,6 +356,47 @@ describe('handleTraceSpanCount', () => {
 
     expect(() => handleTraceSpanCount(params)).toThrow(
       'trace-span-count assertion must have a value object with pattern property',
+    );
+  });
+});
+
+describe('handleTraceSpanCount inverse (not-trace-span-count)', () => {
+  const traceContext = {
+    ...defaultParams.assertionValueContext,
+    trace: mockTraceData,
+  };
+
+  it('should fail when the underlying span-count check passes', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-span-count', value: { pattern: '*llm*', max: 2 } },
+      renderedValue: { pattern: '*llm*', max: 2 },
+      assertionValueContext: traceContext,
+    };
+
+    const result = handleTraceSpanCount(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe(
+      'Found 2 spans matching pattern "*llm*" (expected at most 2). Matched spans: llm.completion, llm.chat',
+    );
+  });
+
+  it('should pass when the underlying span-count check fails', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-span-count', value: { pattern: '*llm*', max: 1 } },
+      renderedValue: { pattern: '*llm*', max: 1 },
+      assertionValueContext: traceContext,
+    };
+
+    const result = handleTraceSpanCount(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe(
+      'Found 2 spans matching pattern "*llm*", expected at most 1. Matched spans: llm.completion, llm.chat',
     );
   });
 });

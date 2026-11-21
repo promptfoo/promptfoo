@@ -67,6 +67,7 @@ function isErrorSpan(span: TraceSpan): boolean {
 export const handleTraceErrorSpans = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
@@ -99,9 +100,10 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
   if (matchingSpans.length === 0) {
+    const pass = !inverse;
     return {
-      pass: true,
-      score: 1,
+      pass,
+      score: pass ? 1 : 0,
       reason: withTraceAttributeFilterContext(
         `No spans found matching pattern "${pattern}"`,
         attributes,
@@ -151,9 +153,10 @@ export const handleTraceErrorSpans = ({
     }
   }
 
+  const finalPass = inverse ? !pass : pass;
   return {
-    pass,
-    score: pass ? 1 : 0,
+    pass: finalPass,
+    score: finalPass ? 1 : 0,
     reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
