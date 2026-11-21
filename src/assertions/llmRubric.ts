@@ -33,7 +33,7 @@ export const handleLlmRubric = async ({
     test.vars,
     assertion,
     !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio)
-      ? { providerResponse }
+      ? { providerResponse, resolveImageBlob: providerCallContext?.resolveImageBlob }
       : undefined,
     providerCallContext,
   );
