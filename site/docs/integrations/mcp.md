@@ -220,6 +220,49 @@ For detailed information about using MCP with OpenAI's Responses API, see the [O
 
 Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
 
+## MCP Server Contract Drift & Regression Prevention
+
+When evaluating agents that rely on external Model Context Protocol (MCP) servers, tool definitions can change across runs even if prompts, providers, and test assertions remain identical. This issue (tracked under [#11906](https://github.com/promptfoo/promptfoo/issues/11906)) occurs when upstream MCP packages add mandatory parameters, mutate property types, restrict enums, or rename tools.
+
+### Pinning and Detecting Tool Contract Drift
+
+Promptfoo includes contract drift utilities (`src/mcp/contract`) to establish reproducible baselines for MCP servers and detect breaking mutations in CI:
+
+1. **Canonical Schema Normalization:** Recursively sorts object keys and normalizes `required` and `enum` arrays so formatting differences do not trigger false positives.
+2. **Deterministic SHA-256 Fingerprinting:** Computes unique fingerprints for each tool and a composite Merkle root for the server.
+3. **Semantic Difference Classification:**
+   - **`BREAKING`**: Tool removed, tool renamed, required property added, property type modified, or enum values restricted.
+   - **`NON_BREAKING`**: Tool added, optional property added, or enum values expanded.
+   - **`DESCRIPTION_ONLY`**: Tool description changed without schema alterations.
+
+### CI Regression Gate Example
+
+To gate CI evaluations when an upstream MCP server mutates unexpectedly:
+
+```typescript
+import {
+  buildServerContract,
+  loadContractBaseline,
+  runContractDriftGate,
+} from 'promptfoo/mcp/contract';
+
+// 1. Fetch current tools from running MCP server via tools/list
+const currentContract = buildServerContract('weather-server', discoveredTools);
+
+// 2. Load committed baseline snapshot
+const baseline = await loadContractBaseline('weather-server');
+
+if (baseline) {
+  // 3. Evaluate drift against baseline
+  const gateResult = runContractDriftGate(baseline, currentContract);
+
+  if (!gateResult.passed) {
+    console.error(gateResult.reportConsole);
+    process.exit(gateResult.exitCode); // Exit code 1 on breaking changes
+  }
+}
+```
+
 ## Timeout Configuration
 
 MCP tool calls have a default timeout of 60 seconds. For long-running tools, increase the timeout:

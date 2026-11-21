@@ -1,0 +1,18 @@
+description: MCP Tool Evaluation with Contract Drift Guard
+prompts:
+  - 'What is the weather in {{city}}?'
+
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args: ['./example-server.js']
+
+tests:
+  - vars:
+      city: San Francisco
+    assert:
+      - type: is-json

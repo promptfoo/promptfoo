@@ -1,0 +1,27 @@
+{
+  "serverId": "weather-sample-server",
+  "schemaVersion": "1.0.0",
+  "overallFingerprint": "9c1b7a2e8f4d6c3b5a1e7d9f2b8c4a6e1d3f5b7a9c2e4f6a8b1c3d5e7f9a2b4c",
+  "toolCount": 1,
+  "tools": {
+    "get_current_weather": {
+      "name": "get_current_weather",
+      "description": "Retrieve current meteorological data for a given city",
+      "canonicalSchema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City and state, e.g. San Francisco, CA"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["celsius", "fahrenheit"]
+          }
+        },
+        "required": ["location"]
+      },
+      "schemaFingerprint": "a3f5b7c9e1d2f4a6b8c0e2d4f6a8b1c3d5e7f9a2b4c6e8d0f2a4b6c8e0d2f4a6"
+    }
+  }
+}
