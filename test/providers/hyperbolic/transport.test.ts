@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { HyperbolicAudioProvider } from '../../../src/providers/hyperbolic/audio';
 import { HyperbolicImageProvider } from '../../../src/providers/hyperbolic/image';
 import { createDeferred } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
@@ -95,4 +96,44 @@ describe.each([
     });
     expect(await create().callApi('hello')).toEqual({ error: invalidPayloadError });
   });
+});
+
+describe.each([HyperbolicAudioProvider, HyperbolicImageProvider])('%s credentials', (Provider) => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([
+    ['explicit', 'scoped', 'named', 'default', 'explicit'],
+    [undefined, 'scoped', 'named', 'default', 'scoped'],
+    [undefined, undefined, 'named', 'default', 'named'],
+    [undefined, undefined, undefined, 'default', 'default'],
+    [undefined, undefined, undefined, undefined, 'ambient'],
+    ['', 'scoped', 'named', 'default', ''],
+    [undefined, '', 'named', 'default', ''],
+    [undefined, undefined, '', 'default', ''],
+    [undefined, undefined, undefined, '', ''],
+  ])(
+    'resolves key %j, named %j/%j and default %j',
+    async (apiKey, scoped, named, fallback, expected) => {
+      vi.stubEnv('HYPERBOLIC_API_KEY', 'ambient');
+      vi.stubEnv('CUSTOM_HYPERBOLIC_KEY', named);
+      const provider = new Provider('model', {
+        config: { apiKey, apiKeyEnvar: 'CUSTOM_HYPERBOLIC_KEY' },
+        env: { CUSTOM_HYPERBOLIC_KEY: scoped, HYPERBOLIC_API_KEY: fallback },
+      });
+
+      expect(provider.getApiKey()).toBe(expected);
+      if (!expected) {
+        await expect(provider.callApi('hello')).rejects.toThrow('Hyperbolic API key is not set');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+        return;
+      }
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({ audio: 'YXVkaW8=', images: [{ image: 'aW1hZ2U=' }] }),
+      );
+      expect((await provider.callApi('hello')).error).toBeUndefined();
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers).toMatchObject({
+        Authorization: `Bearer ${expected}`,
+      });
+    },
+  );
 });
