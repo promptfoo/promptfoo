@@ -14,7 +14,7 @@ Install Muse Code 1.0.2 or later on macOS or Linux using the [official guide](ht
 muse --version
 ```
 
-Sign in with Muse Code or set `META_API_KEY` in the environment of the Promptfoo process. Custom endpoints, inline keys, child `env` and suite or provider overrides for `META_API_KEY` and `MUSE_CLI_PATH` are rejected. The direct Meta Model API provider uses `MODEL_API_KEY`.
+Sign in with Muse Code or set `META_API_KEY` in the environment of the Promptfoo process. Set `MUSE_AUTH_PATH` and `MUSE_CLI_PATH` in the same process environment if needed. Promptfoo rejects overrides of these three variables in provider or suite configuration and invocation-specific environment files, even when the value is empty. Custom endpoints, inline keys and child `env` are unsupported. The direct Meta Model API provider uses `MODEL_API_KEY`.
 
 ## Quick start
 
