@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import path from 'path';
 
-import { type TransformOptions, transformAsync } from '@babel/core';
+import { type InputOptions, parseAsync, transformFromAstAsync, types } from '@babel/core';
+import { transformAsync as transformWithBabel7 } from '@babel/core-7';
 import { reactCompilerPreset } from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
 
@@ -60,7 +61,8 @@ function getReactCompilerPresetValue(): unknown {
 }
 
 const reactCompilerPresetValue: unknown = getReactCompilerPresetValue();
-const reactCompilerPlugins: TransformOptions['plugins'] | undefined = (() => {
+// Vite resolves each compiler plugin to its module path and options.
+const reactCompilerPlugins = (() => {
   if (!reactCompilerPresetValue || typeof reactCompilerPresetValue !== 'object') {
     return undefined;
   }
@@ -73,7 +75,7 @@ const reactCompilerPlugins: TransformOptions['plugins'] | undefined = (() => {
   try {
     const presetResult = presetCandidate() as { plugins?: unknown } | null | undefined;
     return Array.isArray(presetResult?.plugins)
-      ? (presetResult.plugins as TransformOptions['plugins'])
+      ? (presetResult.plugins as [string, object][])
       : undefined;
   } catch {
     return undefined;
@@ -172,7 +174,7 @@ export function reactCompilerPlugin(): Plugin {
         return null;
       }
 
-      const result = await transformAsync(code, {
+      const options = {
         filename: cleanId,
         babelrc: false,
         configFile: false,
@@ -181,9 +183,27 @@ export function reactCompilerPlugin(): Plugin {
           plugins: ['jsx', 'typescript'],
         },
         plugins: compilerPlugins,
-      });
+      } satisfies InputOptions;
 
-      return result?.code ? { code: result.code, map: result.map } : null;
+      const ast = await parseAsync(code, options);
+      if (!ast) {
+        return null;
+      }
+
+      // React Compiler 1.0 silently skips components with destructured defaults
+      // under Babel 8 (https://github.com/react/react/issues/36868).
+      const needsBabel7 = types.traverseFast(ast, (node) => {
+        if (types.isObjectProperty(node) && types.isAssignmentPattern(node.value)) {
+          return types.traverseFast.stop;
+        }
+      });
+      const result = needsBabel7
+        ? await transformWithBabel7(code, options)
+        : await transformFromAstAsync(ast, code, { ...options, cloneInputAst: false });
+
+      return result?.code
+        ? { code: result.code, map: result.map ? JSON.stringify(result.map) : null }
+        : null;
     },
   };
 }

@@ -3,8 +3,8 @@ import { isCI } from '../envars';
 import { evaluate } from '../evaluator/engine';
 import { PromptSuggestionsRejectedError } from '../evaluator/errors';
 import { CIProgressReporter } from '../progress/ciProgressReporter';
+import { ProgressBarManager } from '../progress/evaluationProgress';
 import { promptYesNo } from '../util/readline';
-import { ProgressBarManager } from './evaluatorProgress';
 import { nodeEvaluatorRuntime } from './evaluatorRuntime';
 
 import type { EvaluatorRuntime } from '../evaluator/runtime';
@@ -21,7 +21,7 @@ export async function evaluateForCli(
 ): Promise<Eval> {
   const runtime: EvaluatorRuntime<Eval, EvalResult> = {
     ...nodeEvaluatorRuntime,
-    selectPrompt: () => promptYesNo('Do you want to test this prompt?', false),
+    selectPrompt: (prompt) => promptYesNo(`${prompt}\nDo you want to test this prompt?`, false),
     createProgressReporters(total) {
       const isWebUI = Boolean(cliState.webUI);
       if (isCI() && !isWebUI) {

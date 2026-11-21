@@ -130,7 +130,10 @@ describe('generated prompt selection', () => {
           generateSuggestions: true,
         }),
       ).resolves.toBeDefined();
-      expect(promptYesNo).toHaveBeenCalledTimes(1);
+      expect(promptYesNo).toHaveBeenCalledWith(
+        'Generated prompt\nDo you want to test this prompt?',
+        false,
+      );
       expect(testSuite.prompts).toHaveLength(2);
       expect(process.exitCode).toBeUndefined();
     } finally {

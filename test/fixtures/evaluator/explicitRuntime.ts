@@ -12,7 +12,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier.includes('node/evaluatorRuntime') ||
-      specifier.includes('node/evaluatorProgress')
+      specifier.includes('progress/evaluationProgress')
     ) {
       throw new Error(`Explicit evaluation imported ${specifier} from ${context.parentURL}`);
     }

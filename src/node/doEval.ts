@@ -49,7 +49,6 @@ import {
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
-import { maybeLoadFromExternalFile } from '../util/file';
 import {
   printBorder,
   setupEnv,
@@ -71,7 +70,6 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
-  Scenario,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -845,17 +843,6 @@ async function doEvalWithEnv(
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-    }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
@@ -1129,26 +1116,11 @@ async function doEvalWithEnv(
       repeatStability,
     });
 
-    // Special case: show cloud signup instructions when user wants to share but can't
-    if (cmdObj.write && wantsToShare && !canShareEval) {
-      logger.info(summaryLines[0]); // Show just the completion message
-      notCloudEnabledShareInstructions();
-      // Skip the guidance lines and show the rest
-      for (let i = 1; i < summaryLines.length; i++) {
-        if (summaryLines[i].includes('View results:')) {
-          // Skip guidance section
-          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
-            i++;
-          }
-          i--; // Back up one so the for loop increment works
-        } else {
-          logger.info(summaryLines[i]);
-        }
-      }
-    } else {
-      // Normal case: show all summary lines
-      for (const line of summaryLines) {
-        logger.info(line);
+    const showShareInstructions = cmdObj.write && wantsToShare && !canShareEval;
+    for (const [index, line] of summaryLines.entries()) {
+      logger.info(line);
+      if (index === 0 && showShareInstructions) {
+        notCloudEnabledShareInstructions();
       }
     }
 

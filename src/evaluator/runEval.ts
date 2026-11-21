@@ -485,7 +485,7 @@ async function callProviderForRunEval({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
-  const startTime = Date.now();
+  const startTime = performance.now();
   let response: ProviderResponse | undefined;
   let providerInvoked = false;
   let providerFailed = false;
@@ -523,7 +523,9 @@ async function callProviderForRunEval({
     sanitizeResponseMetadata(response);
 
     return {
-      latencyMs: Date.now() - startTime,
+      // Results store whole milliseconds. Shared results land in integer columns, and
+      // servers reject fractional values.
+      latencyMs: Math.round(performance.now() - startTime),
       response,
       traceContext,
     };
@@ -769,8 +771,6 @@ async function callActiveProvider({
     }
   }
 
-  logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-  logger.debug(`Provider response cached property explicitly: ${response.cached}`);
   return response;
 }
 
@@ -1434,13 +1434,6 @@ export async function runEvalInternal(
             renderedPrompt: rendered.renderedPrompt,
             response,
           });
-
-          logger.debug('Evaluator response', {
-            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-          });
-          logger.debug(
-            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-          );
 
           await applyProviderDelayIfNeeded(provider, response, abortSignal);
 
