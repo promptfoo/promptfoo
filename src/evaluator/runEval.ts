@@ -523,7 +523,9 @@ async function callProviderForRunEval({
     sanitizeResponseMetadata(response);
 
     return {
-      latencyMs: performance.now() - startTime,
+      // Results store whole milliseconds. Shared results land in integer columns, and
+      // servers reject fractional values.
+      latencyMs: Math.round(performance.now() - startTime),
       response,
       traceContext,
     };
