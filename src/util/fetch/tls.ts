@@ -80,9 +80,9 @@ export async function readFipsCaCertificate(
       throw new Error('Empty CA certificate');
     }
     return ca;
-  } catch (error) {
+  } catch {
     signal.throwIfAborted();
-    throw new Error('Failed to read the configured CA certificate in FIPS mode', { cause: error });
+    throw new Error('Failed to read the configured CA certificate in FIPS mode');
   } finally {
     clearTimeout(timer);
   }
