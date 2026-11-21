@@ -83,6 +83,35 @@ describe('loadApiProvider', () => {
     });
   });
 
+  it('resolves child env bindings before rendering a simulated user provider config', async () => {
+    const wrapper = await loadApiProvider('promptfoo:simulated-user', {
+      env: { OPENAI_ORGANIZATION: 'suite-id', OPENAI_API_KEY: 'suite-key' },
+      options: {
+        config: {
+          userProvider: {
+            id: 'openai:chat:gpt-4.1',
+            env: { OPENAI_API_KEY: '{{env.OPENAI_ORGANIZATION}}' },
+            config: { apiKey: '{{env.OPENAI_API_KEY}}' },
+          },
+        },
+      },
+    });
+    const callApi = vi.fn().mockResolvedValue({ output: '###STOP###' });
+    vi.mocked(OpenAiChatCompletionProvider).mockImplementationOnce(function () {
+      return { id: () => 'child', callApi } as unknown as OpenAiChatCompletionProvider;
+    });
+    await wrapper.callApi('target', {
+      originalProvider: { id: () => 'target', callApi: async () => ({ output: 'target' }) },
+      prompt: { raw: 'target', label: 'test' },
+      vars: {},
+    });
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4.1',
+      expect.objectContaining({ config: expect.objectContaining({ apiKey: 'suite-id' }) }),
+    );
+    expect(callApi).toHaveBeenCalledOnce();
+  });
+
   it('should load file provider from yaml', async () => {
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4.1',

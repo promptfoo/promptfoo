@@ -4,6 +4,22 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockLoadApiProvider = vi.hoisted(() => vi.fn());
+vi.mock('../../src/providers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers')>();
+  return {
+    ...actual,
+    loadApiProvider: mockLoadApiProvider,
+  };
+});
+
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers')>('../../src/providers');
+  mockLoadApiProvider.mockReset();
+  mockLoadApiProvider.mockImplementation(actual.loadApiProvider);
+});
+
 import { clearCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
@@ -150,6 +166,48 @@ describe('evaluator defaultTest merging', () => {
       transform: 'output.toUpperCase()',
     });
     expect(summary.results[0]).toMatchObject({ success: true, score: 1 });
+  });
+
+  it('should load an object defaultTest.provider once and share it across test cases', async () => {
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt {{text}}')],
+      providers: [mockApiProvider],
+      defaultTest: {
+        provider: { id: 'echo' },
+      },
+      tests: [{ vars: { text: 'one' } }, { vars: { text: 'two' } }, { vars: { text: 'three' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(3);
+    const echoLoads = mockLoadApiProvider.mock.calls.filter(
+      ([providerId]) => providerId === 'echo',
+    );
+    expect(echoLoads).toHaveLength(1);
+  });
+  it('resolves a reused default provider config against each evaluation base path', async () => {
+    const provider = { id: 'echo' };
+    const basePaths = ['fixtures/eval-a', 'fixtures/eval-b'];
+    for (const basePath of basePaths) {
+      cliState.basePath = basePath;
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt {{text}}')],
+        providers: [mockApiProvider],
+        defaultTest: { provider },
+        env: { OPENAI_ORGANIZATION: basePath },
+        tests: [{ vars: { text: 'one' } }],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+    }
+    const echoLoads = mockLoadApiProvider.mock.calls.filter(
+      ([providerId]) => providerId === 'echo',
+    );
+    expect(echoLoads.map(([, options]) => options.basePath)).toEqual(basePaths);
+    expect(echoLoads.map(([, options]) => options.env?.OPENAI_ORGANIZATION)).toEqual(basePaths);
   });
 });
 
