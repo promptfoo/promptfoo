@@ -203,7 +203,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
       const callOptions = {
         eventSource: 'cli' as const,
         maxConcurrency: 1,
-        timeoutMs: -1,
+        timeoutMs: 0,
         maxEvalTimeMs: 0,
         showProgressBar: false,
         abortSignal: caller.signal,
@@ -519,7 +519,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
       const pending = doEval(command, config, undefined, {
         eventSource: 'cli',
         maxConcurrency: 1,
-        timeoutMs: -1,
+        timeoutMs: 0,
         maxEvalTimeMs: 0,
         showProgressBar: false,
         abortSignal: caller.signal,
