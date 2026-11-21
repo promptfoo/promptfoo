@@ -1,3 +1,5 @@
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   AGENT_OUTCOME_PLUGINS,
   type categoryAliases,
@@ -29,7 +31,33 @@ export interface TestWithMetadata {
   };
 }
 
-/** The risk drawer includes every graded trial. ASR counts attack trials only. */
+/** All graded trials contribute findings. Attacks supply exploitability metrics. */
+export type FindingStats = Required<TestResultStats> & { attacks?: Required<TestResultStats> };
+
+export function getFindingMetrics(stats: FindingStats, description: string) {
+  const attacks = stats.attacks ?? stats;
+  const successfulAttacks = attacks.total - attacks.pass;
+  const failedTests = stats.total - stats.pass;
+  const failedBaselines = failedTests - successfulAttacks;
+  return {
+    description: failedBaselines
+      ? `${failedBaselines} matched ${failedBaselines === 1 ? 'baseline' : 'baselines'} failed. ${description}`
+      : description,
+    total: stats.total,
+    successfulAttacks,
+    failedTests,
+    passRate: attacks.total ? (attacks.pass / attacks.total) * 100 : 0,
+    passRateWithFilter: attacks.total ? (attacks.passWithFilter / attacks.total) * 100 : 0,
+    attackSuccessRate: attacks.total
+      ? calculateAttackSuccessRate(attacks.total, attacks.failCount)
+      : null,
+  };
+}
+
+export function formatFindingASR(rate: number | null, digits = 2) {
+  return rate === null ? 'N/A' : formatASRForDisplay(rate, digits) + '%';
+}
+
 export function buildAttackReport<
   T extends { result?: { testCase?: Parameters<typeof getAgentOutcomeCase>[0] } },
 >(
@@ -41,6 +69,7 @@ export function buildAttackReport<
   const failuresByPlugin = { ...failures };
   const passesByPlugin = { ...passes };
   const categoryStats = { ...stats };
+  const findingStats: Record<string, FindingStats> = { ...stats };
   const countsAsAttack = (test: T) => {
     const variant = getAgentOutcomeCase(test.result?.testCase)?.variant;
     return !variant || variant === 'attack';
@@ -57,13 +86,15 @@ export function buildAttackReport<
     }
     failuresByPlugin[plugin] = failed;
     passesByPlugin[plugin] = passed;
+    const attacks = {
+      total,
+      failCount: failed.length,
+      pass: passed.length,
+      passWithFilter: passed.length,
+    };
+    findingStats[plugin] = { ...stats[plugin], attacks };
     if (total) {
-      categoryStats[plugin] = {
-        total,
-        failCount: failed.length,
-        pass: passed.length,
-        passWithFilter: passed.length,
-      };
+      categoryStats[plugin] = attacks;
     } else {
       delete categoryStats[plugin];
     }
@@ -83,7 +114,7 @@ export function buildAttackReport<
       }
     }
   }
-  return { categoryStats, strategyStats, failuresByPlugin, passesByPlugin };
+  return { categoryStats, strategyStats, failuresByPlugin, passesByPlugin, findingStats };
 }
 
 export function getStrategyIdFromTest(test: TestWithMetadata): string {

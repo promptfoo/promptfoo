@@ -867,7 +867,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
           <AgentOutcomeCoverage count={outcomeErrors} evalId={evalId} />
           <Overview
-            categoryStats={visibleAttacks.categoryStats}
+            categoryStats={visibleAttacks.findingStats}
             plugins={evalData.config.redteam.plugins || []}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           />
@@ -885,7 +885,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
           />
           <TestSuites
             evalId={evalId}
-            categoryStats={visibleAttacks.categoryStats}
+            categoryStats={visibleAttacks.findingStats}
             plugins={evalData.config.redteam.plugins || []}
             failuresByPlugin={visibleAttacks.failuresByPlugin}
             passesByPlugin={visibleAttacks.passesByPlugin}
