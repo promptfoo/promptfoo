@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { PassThrough } from 'node:stream';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 
 import * as yaml from 'js-yaml';
@@ -12,6 +11,11 @@ import VisaHarnessProvider from '../../examples/visa-vulnerability-agentic-harne
 import { renderPrompt } from '../../src/evaluatorHelpers';
 
 import type { ApiProvider } from '../../src/types/providers';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...fs, rm: vi.fn(fs.rm) };
+});
 
 vi.mock('node:child_process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('node:child_process')>()),
@@ -40,7 +44,7 @@ function manifest() {
 }
 
 describe('VVAH example provider', () => {
-  let child: EventEmitter & { stderr: PassThrough; pid: number; kill: ReturnType<typeof vi.fn> };
+  let child: EventEmitter & { pid: number; kill: ReturnType<typeof vi.fn> };
   let started: Promise<void>;
   let cwd: string;
   let args: string[];
@@ -50,7 +54,6 @@ describe('VVAH example provider', () => {
     vi.mocked(spawn).mockReset();
     vi.spyOn(process, 'kill').mockReturnValue(true);
     child = Object.assign(new EventEmitter(), {
-      stderr: new PassThrough(),
       pid: 12345,
       kill: vi.fn(),
     });
@@ -77,7 +80,6 @@ describe('VVAH example provider', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
-    child.stderr.destroy();
   });
 
   function provider(config: Record<string, unknown> = {}): ApiProvider {
@@ -105,13 +107,17 @@ describe('VVAH example provider', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  async function finish(report: unknown = { findings: [], degraded: false }, run = manifest()) {
+  async function finish(
+    report: unknown = { findings: [], degraded: false },
+    run = manifest(),
+    code = 0,
+  ) {
     await started;
     const reportDir = path.join(cwd, 'repo', 'security-scan');
     await mkdir(reportDir);
     await writeFile(path.join(reportDir, 'findings.json'), JSON.stringify(report));
     await writeFile(path.join(cwd, 'run_manifest_20260911.json'), JSON.stringify(run));
-    child.emit('close', 0);
+    child.emit('close', code);
   }
 
   it('stages exact source, resolves config paths, returns ranked findings and usage, and cleans up', async () => {
@@ -158,8 +164,9 @@ describe('VVAH example provider', () => {
 
   it('preserves an empty successful scan and leaves unknown cost unset', async () => {
     const resultPromise = provider().callApi(prompt);
-    await finish();
+    await finish(undefined, { ...manifest(), errors_by_stage: { s4: 1 } });
     const result = await resultPromise;
+    expect(result.metadata?.errorsByStage).toEqual({ s4: 1 });
     expect(JSON.parse(String(result.output)).findings).toEqual([]);
     expect(result.error).toBeUndefined();
     expect(result.cost).toBeUndefined();
@@ -167,7 +174,6 @@ describe('VVAH example provider', () => {
 
   it.each([
     ['degraded report', { findings: [], degraded: true }, manifest()],
-    ['stage errors', { findings: [] }, { ...manifest(), errors_by_stage: { s4: 1 } }],
     [
       'incomplete stage',
       { findings: [] },
@@ -336,9 +342,9 @@ describe('VVAH example provider', () => {
   it('reports command failures instead of treating them as no findings', async () => {
     const resultPromise = provider().callApi(prompt);
     await started;
-    child.stderr.write('preflight failed');
+    expect(spawnOptions.stdio).toBe('ignore');
     child.emit('close', 2);
-    expect((await resultPromise).error).toContain('code 2: preflight failed');
+    expect((await resultPromise).error).toBe('VVAH exited with code 2');
     await expect(access(cwd)).rejects.toThrow();
   });
 
@@ -348,7 +354,6 @@ describe('VVAH example provider', () => {
     const run = { ...manifest(), exit_code: 1 };
     run.totals.cost_usd = 0.02;
     await writeFile(path.join(cwd, 'run_manifest_failed.json'), JSON.stringify(run));
-    child.stderr.write('model request failed after earlier stages ran');
     child.emit('close', 1);
     expect(await resultPromise).toMatchObject({
       error: expect.stringContaining('code 1'),
@@ -358,14 +363,56 @@ describe('VVAH example provider', () => {
     await expect(access(cwd)).rejects.toThrow();
   });
 
-  it.each([undefined, -1, 0.5, Number.NaN])(
-    'omits token usage for invalid request count %s',
-    async (calls) => {
-      const resultPromise = provider().callApi(prompt);
-      const run = manifest();
-      run.totals.calls = calls as number;
-      await finish({ findings: [] }, run);
-      expect((await resultPromise).tokenUsage).toBeUndefined();
+  it('keeps partial findings, billing and the original error if cleanup fails', async () => {
+    const pending = provider().callApi(prompt);
+    await started;
+    const report = { findings: [{ finding: { cwe: 'CWE-20' } }] };
+    const run = manifest();
+    run.totals.cost_usd = 0.05;
+    run.exit_code = 1;
+    vi.mocked(rm).mockRejectedValueOnce(new Error('busy'));
+    try {
+      await finish(report, run, 1);
+      const result = await pending;
+      expect(result).toMatchObject({
+        output: JSON.stringify(report),
+        cost: 0.05,
+        tokenUsage: { total: 170 },
+      });
+      expect(result.error).toContain('code 1');
+      expect(result.error).toContain('cleanup failed');
+      expect(result.error).toContain(cwd);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { calls: undefined },
+    { calls: -1 },
+    { calls: 0.5 },
+    { calls: Number.NaN },
+    { prompt_tokens: 0.5 },
+    { completion_tokens: -1 },
+    { cache_read_tokens: Number.MAX_SAFE_INTEGER + 1 },
+    { prompt_tokens: Number.MAX_SAFE_INTEGER },
+  ])('omits invalid or overflowing token totals %j', async (counters) => {
+    const pending = provider().callApi(prompt);
+    const run = manifest();
+    Object.assign(run.totals, counters);
+    await finish({ findings: [] }, run);
+    expect((await pending).tokenUsage).toBeUndefined();
+  });
+
+  it.each([null, {}, { finding: null }, { finding: {} }])(
+    'rejects an invalid finding %j',
+    async (entry) => {
+      const pending = provider().callApi(prompt);
+      await finish({ findings: [entry] });
+      const result = await pending;
+      expect(result.error).toContain('invalid finding');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage?.total).toBe(170);
     },
   );
 
@@ -447,7 +494,7 @@ describe('VVAH example provider', () => {
       _args: string[],
       options: SpawnOptions,
     ) => {
-      const process = Object.assign(new EventEmitter(), { stderr: new PassThrough() });
+      const process = new EventEmitter();
       invocations.push({ child: process, cwd: String(options.cwd) });
       if (invocations.length === 2) {
         bothStarted();
