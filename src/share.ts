@@ -28,7 +28,7 @@ import { sanitizeConfigForOutput } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
-import type { Prompt, TestCase } from './types';
+import type { Prompt, TestCaseWithVarsFile } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -200,8 +200,8 @@ function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
 }
 
 function stripProviderOrigin(
-  metadata: NonNullable<TestCase['metadata']>,
-): NonNullable<TestCase['metadata']> {
+  metadata: NonNullable<TestCaseWithVarsFile['metadata']>,
+): NonNullable<TestCaseWithVarsFile['metadata']> {
   if (!metadata.__promptfoo) {
     return metadata;
   }
@@ -210,7 +210,7 @@ function stripProviderOrigin(
 }
 
 // Mutate only the sanitized share copy; local replay paths stay intact.
-function stripTestPaths(test: TestCase): void {
+function stripTestPaths(test: TestCaseWithVarsFile): void {
   if (test.metadata) {
     test.metadata = stripProviderOrigin(test.metadata);
   }

@@ -22,6 +22,7 @@ import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { fileReferenceToPath, isAbsoluteFileReference } from './pathUtils';
 import { renderEnvOnlyInObject } from './render';
 import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
@@ -64,6 +65,29 @@ function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
   return test.metadata?.__promptfoo?.remote === true;
 }
 
+function resolveVarsFiles(reference: string, basePath: string, watch = false): string[] {
+  reference = renderEnvOnlyInObject(reference);
+  const resolved = path.resolve(basePath, fileReferenceToPath(reference));
+  const options = { windowsPathsNoEscape: true, magicalBraces: true };
+  let pattern: string;
+  if (isAbsoluteFileReference(reference)) {
+    if (!hasGlobMagic(reference)) {
+      return [resolved];
+    }
+    // Only raw operators are globs. Escape URL-encoded * ? [ ] ( ) { } before decoding.
+    pattern = fileReferenceToPath(
+      reference.replace(/%(?:2a|3f|5b|5d|28|29|7b|7d)/gi, (code) =>
+        escapeGlob(decodeURIComponent(code), options),
+      ),
+    );
+  } else {
+    const base = path.resolve(basePath);
+    pattern = path.resolve(escapeGlob(base, options), path.relative(base, resolved));
+  }
+  const matches = globSync(pattern, { windowsPathsNoEscape: true });
+  return watch && matches.length === 0 ? [resolved] : matches;
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = cliState.basePath || '',
@@ -74,13 +98,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
-
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
-
-    for (const p of paths) {
+    for (const p of resolveVarsFiles(pathOrGlob, basePath)) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
@@ -492,6 +510,21 @@ function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
   return value;
 }
 
+// Provider construction is deferred until after parsing. Save the declaring
+// directory on local replayable rows without rewriting bare provider IDs.
+export function setTestProviderBasePath(test: TestCaseWithVarsFile, directory: string): void {
+  if (isRemoteTestCase(test)) {
+    return;
+  }
+  const id = typeof test.provider === 'string' ? test.provider : test.provider?.id;
+  if (typeof id === 'string') {
+    test.metadata = {
+      ...test.metadata,
+      __promptfoo: { ...test.metadata?.__promptfoo, providerBasePath: path.resolve(directory) },
+    };
+  }
+}
+
 async function readTestWithEnv(
   test: string | TestCaseWithVarsFile,
   basePath: string,
@@ -517,22 +550,8 @@ async function readTestWithEnv(
     testCase = await loadTestWithVars(test, sourceBasePath);
   }
 
-  const providerId =
-    typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
-  // Provider construction is deferred until after parsing. Keep the source directory
-  // in replayable rows without rewriting bare provider IDs.
-  if (
-    effectiveBasePath !== basePath &&
-    typeof providerId === 'string' &&
-    !isApiProvider(testCase.provider)
-  ) {
-    testCase.metadata = {
-      ...testCase.metadata,
-      __promptfoo: {
-        ...testCase.metadata?.__promptfoo,
-        providerBasePath: path.resolve(effectiveBasePath),
-      },
-    };
+  if (effectiveBasePath !== basePath) {
+    setTestProviderBasePath(testCase, effectiveBasePath);
   }
   if (typeof testCase.metadata?.__promptfoo?.providerBasePath === 'string') {
     effectiveBasePath = testCase.metadata.__promptfoo.providerBasePath;
@@ -955,7 +974,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 function collectNestedFileReferences(
   testsFile: string,
   basePath: string,
-  varsBasePath: string,
+  varsBasePath: string | false,
 ): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
@@ -969,6 +988,10 @@ function collectNestedFileReferences(
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
+    if (varsBasePath === false) {
+      // A vars file can contain nested file references but its keys are data.
+      return collectConfigFileReferences(parsed, basePath);
+    }
     const rows = Array.isArray(parsed) ? parsed : [parsed];
     const varsFiles = rows.flatMap((row) =>
       row && (typeof row.vars === 'string' || Array.isArray(row.vars))
@@ -978,6 +1001,10 @@ function collectNestedFileReferences(
     // Script providers use the row's directory; provider config files and inline
     // vars still use the config directory. Rewrite only the script ID for collection.
     const scopedRows = rows.map((row) => {
+      if (typeof row?.vars === 'string' || Array.isArray(row?.vars)) {
+        // These files were collected above using their source directory.
+        row = { ...row, vars: undefined };
+      }
       const provider = row?.provider;
       const id = typeof provider === 'string' ? provider : provider?.id;
       if (typeof id !== 'string' || !id.startsWith('file://')) {
@@ -1077,12 +1104,17 @@ export function resolveTestsWatchPaths(
     }
     if ('vars' in entry && entry.vars) {
       // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
-      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
-      // readTestFiles(), so they carry no file:// scheme and resolve as written.
+      // `{ vars: 'file://vars/*.yaml' }`. loadTestWithVars() hands both forms to
+      // readTestFiles(), which accepts them with or without the file:// scheme.
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          typeof value === 'string'
+            ? resolveVarsFiles(value, basePath, true).flatMap((file) => [
+                file,
+                ...collectNestedFileReferences(file, basePath, false),
+              ])
+            : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
