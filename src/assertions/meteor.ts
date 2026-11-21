@@ -1,19 +1,38 @@
+import semverSatisfies from 'semver/functions/satisfies.js';
 import invariant from '../util/invariant';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../util/packageImportErrors';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-// Type definitions for natural package (since it's optional)
 type Stemmer = {
   stem(token: string): string;
 };
 type DataRecord = {
   synonyms: string[];
 };
+type WordNetInstance = {
+  lookup(word: string, callback: (results: DataRecord[]) => void): void;
+};
 
-// Lazy load natural package to handle optional dependency
+const naturalRange = '^8.2.6';
+const installHelp = optionalPackageInstallHint(`npm install promptfoo natural@${naturalRange}`);
+
 let PorterStemmer: Stemmer | undefined;
-// biome-ignore lint/suspicious/noExplicitAny: FIXME
-let WordNet: (new () => any) | undefined;
+let WordNet: (new () => WordNetInstance) | undefined;
+
+// Native dynamic import resolves from the deployed bundle. Do not embed the
+// build directory or load the unrelated database clients in Natural's root.
+function loadNatural(
+  path: 'package.json' | 'lib/natural/stemmers/index.js' | 'lib/natural/wordnet/index.js',
+) {
+  const specifier = `natural/${path}`;
+  return path === 'package.json'
+    ? import(/* webpackIgnore: true */ specifier, { with: { type: 'json' } })
+    : import(/* webpackIgnore: true */ specifier);
+}
 
 async function ensureNaturalPackage(): Promise<void> {
   if (PorterStemmer && WordNet) {
@@ -21,15 +40,24 @@ async function ensureNaturalPackage(): Promise<void> {
   }
 
   try {
-    // Native ESM imports expose Natural's CommonJS exports under default.
-    const naturalModule = await import('natural');
-    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
-    PorterStemmer = natural.PorterStemmer;
-    WordNet = natural.WordNet;
-  } catch (_err) {
-    throw new Error(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.2.6',
-    );
+    const {
+      default: { version },
+    } = await loadNatural('package.json');
+    if (!semverSatisfies(version, naturalRange)) {
+      throw new Error(`METEOR requires natural@${naturalRange}; found ${version}. ${installHelp}`);
+    }
+    const [stemmers, wordnet] = await Promise.all([
+      loadNatural('lib/natural/stemmers/index.js'),
+      loadNatural('lib/natural/wordnet/index.js'),
+    ]);
+    // In native ESM the CommonJS module is always available as the default.
+    PorterStemmer = ('default' in stemmers ? stemmers.default : stemmers).PorterStemmer;
+    WordNet = ('default' in wordnet ? wordnet.default : wordnet).WordNet;
+  } catch (error) {
+    if (isMissingPackageImportError(error, 'natural')) {
+      throw new Error(`METEOR requires natural@${naturalRange}. ${installHelp}`);
+    }
+    throw error;
   }
 }
 

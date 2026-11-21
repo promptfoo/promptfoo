@@ -8,8 +8,11 @@ const createUnrelatedTextParams = () => ({
   inverse: false,
 });
 
-vi.mock('natural', () => ({
+vi.mock('natural/lib/natural/stemmers/index.js', () => ({
   PorterStemmer: { stem: (word: string) => word.replace(/s$/, '') },
+}));
+
+vi.mock('natural/lib/natural/wordnet/index.js', () => ({
   WordNet: class {
     lookup(word: string, callback: (records: { synonyms: string[] }[]) => void) {
       const synonyms: Record<string, string[]> = {
