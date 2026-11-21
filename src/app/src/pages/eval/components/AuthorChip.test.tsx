@@ -23,6 +23,7 @@ describe('AuthorChip', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOnEditAuthor.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -73,15 +74,32 @@ describe('AuthorChip', () => {
     expect(mockOnEditAuthor).toHaveBeenCalledWith('new@example.com');
   });
 
-  it('displays error message via toast when onEditAuthor throws an error', async () => {
+  it('keeps the entered author after a failed save so it can be retried', async () => {
     const errorMessage = 'Failed to update author';
     mockOnEditAuthor.mockRejectedValueOnce(new Error(errorMessage));
     renderWithProviders(<AuthorChip {...defaultProps} />);
     await userEvent.click(screen.getByRole('button'));
+    const input = screen.getByPlaceholderText('email@example.com');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'new@example.com');
     await userEvent.click(screen.getByLabelText('Save'));
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith(errorMessage, 'error');
     });
+    expect(input).toHaveValue('new@example.com');
+    await userEvent.click(screen.getByLabelText('Save'));
+    expect(mockOnEditAuthor).toHaveBeenNthCalledWith(2, 'new@example.com');
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('email@example.com')).not.toBeInTheDocument();
+    });
+  });
+
+  it('sends an empty author when the input is cleared', async () => {
+    renderWithProviders(<AuthorChip {...defaultProps} />);
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.clear(screen.getByPlaceholderText('email@example.com'));
+    await userEvent.click(screen.getByLabelText('Save'));
+    expect(mockOnEditAuthor).toHaveBeenCalledWith('');
   });
 
   it('cancels edit when cancel button is clicked', async () => {
