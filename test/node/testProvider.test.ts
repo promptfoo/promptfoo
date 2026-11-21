@@ -214,7 +214,7 @@ describe('testProviderConnectivity', () => {
 
     await expect(
       testProviderConnectivity({ provider, abortSignal: controller.signal }),
-    ).rejects.toThrow('Operation cancelled');
+    ).rejects.toBe(controller.signal.reason);
 
     expect(checkSetup).not.toHaveBeenCalled();
     expect(provider.callApi).not.toHaveBeenCalled();
@@ -235,16 +235,17 @@ describe('testProviderConnectivity', () => {
     );
     const provider = createMockProvider({ checkSetup });
     const pending = testProviderConnectivity({ provider, abortSignal: controller.signal });
-    const rejected = expect(pending).rejects.toThrow('Operation cancelled');
+    const reason = new Error('Caller cancelled setup');
+    const rejected = expect(pending).rejects.toBe(reason);
     await Promise.resolve();
     const signal = checkSetup.mock.calls[0][1]?.abortSignal;
 
-    controller.abort();
+    controller.abort(reason);
     await rejected;
     rejectSetup(new Error('Late local setup failure'));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(signal?.aborted).toBe(true);
+    expect(signal?.reason).toBe(reason);
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
     expect(provider.callApi).not.toHaveBeenCalled();
     expect(mockEvaluate).not.toHaveBeenCalled();
