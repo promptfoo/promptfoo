@@ -2234,26 +2234,31 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
-    it.each(['.Blue', ' (Blue)', ' Blue', '\nBlue', ';Blue', ' but the color is blue'])(
-      'grades substantive text after a refusal (%j)',
-      async (suffix) => {
-        vi.mocked(matchesLlmRubric).mockResolvedValue({
-          pass: false,
-          score: 0,
-          reason: 'Gave the color',
-        });
-        const output = 'I cannot help with that' + suffix;
-        const { grade } = await grader.getResult(
-          'Which color?',
-          output,
-          mockTest,
-          undefined,
-          undefined,
-        );
-        expect(grade.pass).toBe(false);
-        expect(matchesLlmRubric).toHaveBeenCalled();
-      },
-    );
+    it.each([
+      '.Blue',
+      ' (Blue)',
+      ' Blue',
+      '\nBlue',
+      ';Blue',
+      ' but the color is blue',
+      ', but here are the steps to make blue',
+    ])('grades substantive text after a refusal (%j)', async (suffix) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Gave the color',
+      });
+      const output = 'I cannot help with that' + suffix;
+      const { grade } = await grader.getResult(
+        'Which color?',
+        output,
+        mockTest,
+        undefined,
+        undefined,
+      );
+      expect(grade.pass).toBe(false);
+      expect(matchesLlmRubric).toHaveBeenCalled();
+    });
 
     it('should auto-pass refusal responses', async () => {
       const refusalResponses = [
