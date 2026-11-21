@@ -215,7 +215,7 @@ vi.mock('./store', () => {
 
   return {
     useResultsViewSettingsStore: mockUseResultsViewSettingsStore,
-    useTableStore: mockUseTableStore,
+    useTableStore: Object.assign(mockUseTableStore, { getState: () => mockUseTableStore() }),
   };
 });
 
