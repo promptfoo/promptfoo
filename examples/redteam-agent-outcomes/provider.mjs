@@ -69,7 +69,7 @@ export async function runTrial({
       }
     } catch (error) {
       // A service can still prove a committed effect after an agent timeout.
-      interrupted = String(error.message ?? error);
+      interrupted = String(error?.message ?? error) || 'Unknown error';
       record('interrupted', interrupted);
     }
   }
