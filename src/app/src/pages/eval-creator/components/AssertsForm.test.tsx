@@ -51,6 +51,20 @@ describe('AssertsForm', () => {
     expect(valueInputs[2]).toHaveValue(String(1000));
   });
 
+  it('should render boolean JSON schema values instead of an empty textarea', () => {
+    initialValues = [
+      { type: 'is-json', value: false },
+      { type: 'contains-json', value: true },
+    ];
+
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const valueInputs = screen.getAllByRole('textbox', { name: 'Value' });
+
+    expect(valueInputs[0]).toHaveValue('false');
+    expect(valueInputs[1]).toHaveValue('true');
+  });
+
   it('should add a new assertion with type equals and empty value when the Add Assertion button is clicked, and call onAdd with the updated assertions array', async () => {
     const user = userEvent.setup();
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
