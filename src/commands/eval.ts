@@ -91,12 +91,13 @@ export function evalCommand(
     )
     .option('--repeat <number>', 'Number of times to run each test (default: 1)')
     .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
-    .option(
-      '--no-cache',
-      'Do not read or write results to disk cache',
-      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
-    )
+    .option('--no-cache', 'Do not read or write results to disk cache')
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
+    .option(
+      '--safe-mode',
+      'Disable dynamic inline JavaScript execution for transforms and assertions',
+      defaultConfig?.commandLineOptions?.safeMode,
+    )
 
     // Filtering and subset selection
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
@@ -132,7 +133,7 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
+      'Only run tests whose metadata matches key=value. Comma-separated values use OR, and \\, is a literal comma; repeated flags use AND, even for the same key (e.g. --filter-metadata type=unit,integration --filter-metadata env=prod)',
       (value: string, previous: string[] | undefined) => {
         return previous ? [...previous, value] : [value];
       },
@@ -184,6 +185,11 @@ export function evalCommand(
         const optsWithAliases = normalizeTagOption(
           opts as EvalCommandOptions & { tag?: Record<string, string> },
         );
+        // Commander defaults a lone `--no-cache` to `true`. Only an explicit flag should
+        // override the loaded config's `commandLineOptions.cache` / `evaluateOptions.cache`.
+        if (command.getOptionValueSource('cache') !== 'cli') {
+          delete optsWithAliases.cache;
+        }
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`

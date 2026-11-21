@@ -44,7 +44,7 @@ export class EchoProvider implements ApiProvider {
     }
 
     // Create a complete ProviderResponse object
-    const response: ProviderResponse = {
+    return {
       output: input,
       raw: input,
       cost: 0,
@@ -58,7 +58,5 @@ export class EchoProvider implements ApiProvider {
       isRefusal: false,
       metadata: context?.metadata || {},
     };
-
-    return response;
   }
 }

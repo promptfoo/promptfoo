@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
 import type {
@@ -25,6 +26,8 @@ function formatVoyageApiError(status: number, statusText: string, data: any): st
 }
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: any;
   env?: any;
@@ -44,21 +47,22 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) || this.env?.[this.config.apiKeyEnvar as keyof any]
-        : undefined) ||
-      this.env?.VOYAGE_API_KEY ||
-      getEnvString('VOYAGE_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
+        getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ??
+        getProviderEnvString(this.env, 'VOYAGE_API_KEY') ??
+        getEnvString('VOYAGE_API_KEY'))
+    );
   }
 
   getApiUrl(): string {
     return (
       this.config.apiBaseUrl ||
-      this.env?.VOYAGE_API_BASE_URL ||
-      getEnvString('VOYAGE_API_BASE_URL') ||
+      resolveProviderEnv(this.env, ['VOYAGE_API_BASE_URL'])?.value ||
       'https://api.voyageai.com/v1'
     );
   }
@@ -72,7 +76,6 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    options?.abortSignal?.throwIfAborted();
     if (!this.getApiKey()) {
       throw new Error('Voyage API key must be set for similarity comparison');
     }
@@ -99,10 +102,12 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
             ...this.config.headers,
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${err}`);
       throw err;
     }

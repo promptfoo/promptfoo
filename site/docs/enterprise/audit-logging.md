@@ -1,6 +1,6 @@
 ---
 title: Audit Logging
-description: Track administrative operations in promptfoo Enterprise with comprehensive audit logs for security, compliance, and forensic analysis.
+description: Review Promptfoo Enterprise audit logs for changes to users, teams, roles, permissions, and service accounts. See supported events and API query options.
 sidebar_label: Audit Logging
 keywords: [audit, logging, security, compliance, enterprise, forensics, admin operations]
 ---

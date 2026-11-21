@@ -1,4 +1,5 @@
 import { serializeContext } from '../assertions/contextUtils';
+import { withCacheNamespace } from '../cache';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
@@ -13,10 +14,10 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
+  callEmbeddingProvider,
   callGradingProvider,
   callProviderWithContext,
   getAndCheckProvider,
-  isGradingCancellation,
 } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
@@ -73,11 +74,25 @@ export async function matchesAnswerRelevance(
         return graderFail(resp.error || 'No output', tokensUsed);
       }
 
-      invariant(
-        typeof resp.output === 'string',
-        'answer relevancy check produced malformed response',
-      );
-      candidateQuestions.push(resp.output);
+  const candidateQuestions: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    // TODO(ian): Parallelize
+    // Each sample uses its own cache namespace. Otherwise the identical prompt hits the
+    // cache and every question after the first is a copy of it.
+    const resp = await withCacheNamespace(
+      i === 0 ? undefined : `answer-relevance:sample:${i}`,
+      () =>
+        callProviderWithContext(
+          textProvider,
+          promptText,
+          'answer-relevance',
+          { answer: parsedOutput },
+          providerCallContext,
+        ),
+    );
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return graderFail(resp.error || 'No output', tokensUsed);
     }
 
     invariant(
@@ -85,12 +100,31 @@ export async function matchesAnswerRelevance(
       `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
     );
 
-    const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
-    const inputEmbeddingResp = await callGradingProvider(
+  invariant(
+    typeof embeddingProvider.callEmbeddingApi === 'function',
+    `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
+  );
+
+  const inputEmbeddingResp = await callGradingProvider(
+    embeddingProvider,
+    'answer-relevance.embedding',
+    (context) => callEmbeddingProvider(embeddingProvider, input, context),
+    { callContext: providerCallContext, operationName: 'embeddings' },
+  );
+  accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
+  if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
+    return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
+  }
+  const inputEmbedding = inputEmbeddingResp.embedding;
+
+  const similarities: number[] = [];
+  const questionsWithScores: { question: string; similarity: number }[] = [];
+
+  for (const question of candidateQuestions) {
+    const resp = await callGradingProvider(
       embeddingProvider,
       'answer-relevance.embedding',
-      (context, options) =>
-        options || context ? callEmbeddingApi(input, context, options) : callEmbeddingApi(input),
+      (context) => callEmbeddingProvider(embeddingProvider, question, context),
       { callContext: providerCallContext, operationName: 'embeddings' },
     );
     accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);

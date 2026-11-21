@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { isEmptyResponse } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -99,12 +99,7 @@ export class ToolDiscoveryPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'ToolDiscovery',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'ToolDiscovery')];
   }
 }
 

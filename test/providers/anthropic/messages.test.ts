@@ -1,5 +1,6 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCache,
@@ -8,18 +9,131 @@ import {
   getCache,
   withCacheNamespace,
 } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
-import * as util from '../../../src/util/index';
-import { createDeferred, mockProcessEnv } from '../../util/utils';
+import { createMcpServerOptions, createTypeConfig } from '../../factories/literalFixtures';
+import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
 import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
+
+const { createProxyAgentFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
+
+const createSearchToolUse = (query: string) => ({
+  type: 'tool_use' as const,
+  id: 'toolu_search',
+  name: 'search_companies',
+  input: { query },
+});
+
+const createNameSchemaOptions = () => ({
+  config: {
+    output_format: {
+      type: 'json_schema' as const,
+      schema: {
+        type: 'object' as const,
+        properties: {
+          name: { type: 'string' as const },
+        },
+        additionalProperties: false as const,
+      },
+    },
+  },
+});
+
+const createSearchTurn = (
+  id: string = 'toolu_first',
+  query: string = 'clean energy',
+  inputTokens: number = 10,
+  outputTokens: number = 5,
+) => ({
+  content: [
+    {
+      type: 'tool_use' as const,
+      id,
+      name: 'search_companies',
+      input: { query },
+    },
+  ],
+  stop_reason: 'tool_use',
+  usage: { input_tokens: inputTokens, output_tokens: outputTokens, server_tool_use: null },
+});
+
+const createAnswerOutputFormat = () => ({
+  output_format: {
+    type: 'json_schema' as const,
+    schema: { type: 'object' as const, properties: { answer: { type: 'string' as const } } },
+  },
+});
+
+const createRequiredNameOutputFormat = () => ({
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object' as const,
+    properties: {
+      name: { type: 'string' as const },
+    },
+    required: ['name'],
+    additionalProperties: false as const,
+  },
+});
+
+const createStatusOutputFormat = () => ({
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object' as const,
+    properties: { status: { type: 'string' as const } },
+    additionalProperties: false as const,
+  },
+});
+
+const createFinalAnswerText = () => ({
+  type: 'text' as const,
+  text: 'Final answer',
+});
+
+const createAdaptiveThinkingOptions = () => ({
+  config: {
+    thinking: createTypeConfig('adaptive'),
+  },
+});
+
+const createBudgetedThinkingOptions = () => ({
+  config: { thinking: { type: 'enabled' as const, budget_tokens: 5000 }, max_tokens: 10000 },
+});
+
+const createWeatherToolUse = () => ({
+  type: 'tool_use' as const,
+  id: 'toolu_weather',
+  name: 'get_weather',
+  input: { location: 'San Francisco' },
+});
+
+const createUserMetadataOptions = () => ({
+  config: {
+    metadata: { user_id: 'user-123' },
+  },
+});
+
+const createOptionalApiKeyOptions = () => ({
+  config: { apiKeyRequired: false },
+});
+
+const createEnabledThinkingConfig = () => ({
+  type: 'enabled' as const,
+  budget_tokens: 2048,
+});
+
+const createTemperatureEnvOptions = () => ({
+  config: {},
+  env: { ANTHROPIC_TEMPERATURE: '0.3' },
+});
 
 type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
   output_tokens_details?: { thinking_tokens?: number } | null;
@@ -62,15 +176,7 @@ vi.mock('../../../src/providers/anthropic/claudeCodeAuth', async (importOriginal
   };
 });
 
-vi.mock('proxy-agent', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    ProxyAgent: vi.fn().mockImplementation(function () {
-      return {};
-    }),
-  };
-});
+vi.mock('proxy-agent', createProxyAgentFactory());
 
 vi.mock('../../../src/providers/mcp/client', async (importOriginal) => {
   return {
@@ -116,6 +222,27 @@ const anthropicCacheIdentityHash = () =>
 
 const anthropicMessagesCacheKey = (modelName: string, params: unknown) =>
   `anthropic:messages:${modelName}:${anthropicCacheIdentityHash()}:${hashAnthropicCacheValue({ providerId: `anthropic:${modelName}`, providerLabel: `test:${modelName}` })}:${hashAnthropicCacheValue(params)}`;
+
+const createMcpOptions = () => ({
+  config: {
+    mcp: createMcpServerOptions(),
+  },
+});
+
+const createMockWeatherToolResponse = () => ({
+  content: [
+    {
+      type: 'text',
+      text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+    },
+    {
+      type: 'tool_use',
+      id: 'toolu_01A09q90qw90lq917835lq9',
+      name: 'get_weather',
+      input: { location: 'San Francisco, CA', unit: 'celsius' },
+    },
+  ],
+});
 
 describe('AnthropicMessagesProvider', () => {
   let provider: AnthropicMessagesProvider;
@@ -278,20 +405,9 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should use cache by default for ToolUse requests', async () => {
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
-        ],
-      } as Anthropic.Messages.Message);
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(
+        createMockWeatherToolResponse() as Anthropic.Messages.Message,
+      );
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
@@ -341,20 +457,9 @@ describe('AnthropicMessagesProvider', () => {
         type: 'tool',
       };
       provider.config.tool_choice = toolChoice;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
-        ],
-      } as Anthropic.Messages.Message);
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(
+        createMockWeatherToolResponse() as Anthropic.Messages.Message,
+      );
 
       await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
@@ -563,11 +668,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should include metadata in API call when configured', async () => {
-      const provider = createProvider('claude-3-5-sonnet-20241022', {
-        config: {
-          metadata: { user_id: 'user-123' },
-        },
-      });
+      const provider = createProvider('claude-3-5-sonnet-20241022', createUserMetadataOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Test response' }],
@@ -584,11 +685,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should ignore metadata when deriving the cache key', async () => {
-      const provider = createProvider('claude-3-5-sonnet-20241022', {
-        config: {
-          metadata: { user_id: 'user-123' },
-        },
-      });
+      const provider = createProvider('claude-3-5-sonnet-20241022', createUserMetadataOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Test response' }],
@@ -1009,20 +1106,9 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
-        ],
-      } as Anthropic.Messages.Message);
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(
+        createMockWeatherToolResponse() as Anthropic.Messages.Message,
+      );
 
       disableCache();
 
@@ -1137,10 +1223,7 @@ describe('AnthropicMessagesProvider', () => {
     it('should handle thinking configuration', async () => {
       const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2048,
-          },
+          thinking: createEnabledThinkingConfig(),
         },
       });
 
@@ -1151,10 +1234,7 @@ describe('AnthropicMessagesProvider', () => {
             thinking: 'Let me analyze this step by step...',
             signature: 'test-signature',
           },
-          {
-            type: 'text',
-            text: 'Final answer',
-          },
+          createFinalAnswerText(),
         ],
       } as Anthropic.Messages.Message);
 
@@ -1191,10 +1271,7 @@ describe('AnthropicMessagesProvider', () => {
             type: 'redacted_thinking',
             data: 'encrypted-data',
           },
-          {
-            type: 'text',
-            text: 'Final answer',
-          },
+          createFinalAnswerText(),
         ],
       } as Anthropic.Messages.Message);
 
@@ -1281,13 +1358,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle adaptive thinking configuration', async () => {
-      const provider = createProvider('claude-opus-4-6', {
-        config: {
-          thinking: {
-            type: 'adaptive',
-          },
-        },
-      });
+      const provider = createProvider('claude-opus-4-6', createAdaptiveThinkingOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [
@@ -1296,10 +1367,7 @@ describe('AnthropicMessagesProvider', () => {
             thinking: 'Let me think adaptively...',
             signature: 'test-signature',
           },
-          {
-            type: 'text',
-            text: 'Final answer',
-          },
+          createFinalAnswerText(),
         ],
       } as Anthropic.Messages.Message);
 
@@ -1328,13 +1396,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle adaptive thinking without budget_tokens', async () => {
-      const provider = createProvider('claude-opus-4-6', {
-        config: {
-          thinking: {
-            type: 'adaptive',
-          },
-        },
-      });
+      const provider = createProvider('claude-opus-4-6', createAdaptiveThinkingOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [
@@ -1352,10 +1414,7 @@ describe('AnthropicMessagesProvider', () => {
     it('should omit explicit temperature when thinking is enabled', async () => {
       const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2048,
-          },
+          thinking: createEnabledThinkingConfig(),
           temperature: 0.7,
         },
       });
@@ -1513,6 +1572,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('prices the actual response inference geography from workspace defaults', async () => {
+      const provider = createProvider('claude-opus-4-8');
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          inference_geo: 'us',
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(33, 10);
     });
 
     it('should forward cache tokens from cached responses', async () => {
@@ -1715,17 +1795,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('executes MCP tool_use blocks and continues the Anthropic conversation with tool_result', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       mcpMocks.callTool.mockResolvedValueOnce({
         content: 'Found Acme Solar and Gridwise.',
@@ -1734,14 +1804,7 @@ describe('AnthropicMessagesProvider', () => {
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_search',
-              name: 'search_companies',
-              input: { query: 'clean energy' },
-            },
-          ],
+          content: [createSearchToolUse('clean energy')],
           stop_reason: 'tool_use',
           usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
         } as Anthropic.Messages.Message)
@@ -1904,12 +1967,7 @@ describe('AnthropicMessagesProvider', () => {
           thinking: options.adaptive
             ? { type: 'adaptive', display: 'summarized' }
             : { type: 'between_tools' },
-          ...(options.structured && {
-            output_format: {
-              type: 'json_schema',
-              schema: { type: 'object', properties: { answer: { type: 'string' } } },
-            },
-          }),
+          ...(options.structured && createAnswerOutputFormat()),
           mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
         },
       });
@@ -1919,6 +1977,7 @@ describe('AnthropicMessagesProvider', () => {
         role: 'assistant',
         model,
         container: null,
+        diagnostics: null,
         stop_details: null,
         stop_reason: round < 2 ? 'tool_use' : 'end_turn',
         stop_sequence: null,
@@ -1952,6 +2011,7 @@ describe('AnthropicMessagesProvider', () => {
           output_tokens_details: null,
           server_tool_use: null,
           service_tier: null,
+          speed: null,
         },
       }));
       if (options.combined) {
@@ -2000,9 +2060,7 @@ describe('AnthropicMessagesProvider', () => {
     ] as const)(
       'prices each MCP request separately when the final request refuses %s',
       async (category, cost) => {
-        provider = createProvider('claude-opus-5-5', {
-          config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
-        });
+        provider = createProvider('claude-opus-5-5', createMcpOptions());
         mcpMocks.callTool.mockResolvedValueOnce({ content: 'Company details' });
         vi.spyOn(provider.anthropic.messages, 'create')
           .mockResolvedValueOnce({
@@ -2029,17 +2087,7 @@ describe('AnthropicMessagesProvider', () => {
     );
 
     it('sums thinking tokens across MCP continuation rounds', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       mcpMocks.callTool.mockResolvedValueOnce({
         content: 'Found Acme Solar and Gridwise.',
@@ -2047,14 +2095,7 @@ describe('AnthropicMessagesProvider', () => {
 
       vi.spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_search',
-              name: 'search_companies',
-              input: { query: 'clean energy' },
-            },
-          ],
+          content: [createSearchToolUse('clean energy')],
           stop_reason: 'tool_use',
           usage: {
             input_tokens: 10,
@@ -2085,9 +2126,8 @@ describe('AnthropicMessagesProvider', () => {
       });
     });
 
-    it('does not cache MCP continuation results by default', async () => {
-      enableCache();
-      provider = createProvider('claude-sonnet-4-6', {
+    it('preserves cache TTL usage across MCP continuation rounds for billing', async () => {
+      provider = createProvider('claude-opus-4-8', {
         config: {
           mcp: {
             enabled: true,
@@ -2098,6 +2138,65 @@ describe('AnthropicMessagesProvider', () => {
           },
         },
       });
+
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_input_tokens: 2,
+            cache_creation_input_tokens: 7,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 3,
+              ephemeral_1h_input_tokens: 4,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar matches your query.' }],
+          stop_reason: 'end_turn',
+          usage: {
+            input_tokens: 7,
+            output_tokens: 4,
+            cache_read_input_tokens: 1,
+            cache_creation_input_tokens: 5,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 2,
+              ephemeral_1h_input_tokens: 3,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 32,
+        completion: 9,
+        total: 41,
+        completionDetails: {
+          cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 12,
+        },
+      });
+      expect(result.cost).toBeCloseTo(0.00041275, 10);
+    });
+
+    it('does not cache MCP continuation results by default', async () => {
+      enableCache();
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       mcpMocks.callTool.mockResolvedValue({
         content: 'Fresh tool output.',
@@ -2155,33 +2254,10 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('leaves mixed MCP and non-MCP tool_use blocks on the existing output path', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'toolu_search',
-            name: 'search_companies',
-            input: { query: 'clean energy' },
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_weather',
-            name: 'get_weather',
-            input: { location: 'San Francisco' },
-          },
-        ],
+        content: [createSearchToolUse('clean energy'), createWeatherToolUse()],
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
       } as Anthropic.Messages.Message);
@@ -2199,13 +2275,7 @@ describe('AnthropicMessagesProvider', () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
           tool_choice: 'required' as any,
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
+          mcp: createMcpServerOptions(),
         },
       });
 
@@ -2262,17 +2332,7 @@ describe('AnthropicMessagesProvider', () => {
     ])(
       'marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)',
       async ({ mcpResult, expectedContent }) => {
-        provider = createProvider('claude-sonnet-4-6', {
-          config: {
-            mcp: {
-              enabled: true,
-              server: {
-                command: 'npm',
-                args: ['start'],
-              },
-            },
-          },
-        });
+        provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
         mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
 
@@ -2317,27 +2377,10 @@ describe('AnthropicMessagesProvider', () => {
     );
 
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'toolu_weather',
-            name: 'get_weather',
-            input: { location: 'San Francisco' },
-          },
-        ],
+        content: [createWeatherToolUse()],
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
       } as Anthropic.Messages.Message);
@@ -2351,11 +2394,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('publishes executed MCP tool calls as metadata.toolCalls across rounds', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       mcpMocks.callTool
         .mockResolvedValueOnce({ content: 'Acme Solar, Helio Grid' })
@@ -2415,11 +2454,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('marks a failed MCP tool call as is_error in metadata.toolCalls', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       mcpMocks.callTool.mockRejectedValueOnce(new Error('upstream refused'));
 
@@ -2451,11 +2486,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('omits metadata.toolCalls entirely when no MCP tool ran', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'No tool needed.' }],
@@ -2481,30 +2512,10 @@ describe('AnthropicMessagesProvider', () => {
       mcpMocks.callTool.mockResolvedValue({ content: 'Still needs another lookup.' });
 
       vi.spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_first',
-              name: 'search_companies',
-              input: { query: 'clean energy' },
-            },
-          ],
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
-        } as Anthropic.Messages.Message)
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_second',
-              name: 'search_companies',
-              input: { query: 'solar' },
-            },
-          ],
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
+        .mockResolvedValueOnce(
+          createSearchTurn('toolu_second', 'solar', 8, 4) as Anthropic.Messages.Message,
+        );
 
       const result = await provider.callApi('Find clean energy companies');
 
@@ -2520,13 +2531,7 @@ describe('AnthropicMessagesProvider', () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
+          mcp: createMcpServerOptions(),
         },
       });
 
@@ -2535,30 +2540,10 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       vi.spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_first',
-              name: 'search_companies',
-              input: { query: 'clean energy' },
-            },
-          ],
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
-        } as Anthropic.Messages.Message)
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_second',
-              name: 'search_companies',
-              input: { query: 'solar' },
-            },
-          ],
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
+        .mockResolvedValueOnce(
+          createSearchTurn('toolu_second', 'solar', 8, 4) as Anthropic.Messages.Message,
+        );
 
       const result = await provider.callApi('Find clean energy companies');
 
@@ -2580,25 +2565,12 @@ describe('AnthropicMessagesProvider', () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 0,
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
+          mcp: createMcpServerOptions(),
         },
       });
 
       const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'toolu_search',
-            name: 'search_companies',
-            input: { query: 'clean energy' },
-          },
-        ],
+        content: [createSearchToolUse('clean energy')],
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
       } as Anthropic.Messages.Message);
@@ -2617,13 +2589,7 @@ describe('AnthropicMessagesProvider', () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
+          mcp: createMcpServerOptions(),
         },
       });
 
@@ -2654,19 +2620,10 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('resumes a follow-up turn that pauses after an MCP tool call', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
       mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
       const toolUseTurn = {
-        content: [
-          {
-            type: 'tool_use',
-            id: 'toolu_search',
-            name: 'search_companies',
-            input: { query: 'solar' },
-          },
-        ],
+        content: [createSearchToolUse('solar')],
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
       } as Anthropic.Messages.Message;
@@ -2720,12 +2677,7 @@ describe('AnthropicMessagesProvider', () => {
           config: {
             stream,
             mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
-            ...(structured && {
-              output_format: {
-                type: 'json_schema',
-                schema: { type: 'object', properties: { answer: { type: 'string' } } },
-              },
-            }),
+            ...(structured && createAnswerOutputFormat()),
           },
         });
         mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
@@ -2753,12 +2705,7 @@ describe('AnthropicMessagesProvider', () => {
                   content: [fileReferences[1]],
                 },
               },
-              {
-                type: 'tool_use',
-                id: 'toolu_search',
-                name: 'search_companies',
-                input: { query: 'solar' },
-              },
+              createSearchToolUse('solar'),
             ],
             stop_reason: 'tool_use',
             usage: { input_tokens: 20, output_tokens: 5 },
@@ -2828,14 +2775,7 @@ describe('AnthropicMessagesProvider', () => {
             stop_reason: 'pause_turn',
           },
           {
-            content: [
-              {
-                type: 'tool_use',
-                id: 'toolu_search',
-                name: 'search_companies',
-                input: { query: 'solar' },
-              },
-            ],
+            content: [createSearchToolUse('solar')],
             container: null,
             stop_reason: 'tool_use',
           },
@@ -2901,13 +2841,7 @@ describe('AnthropicMessagesProvider', () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
           stream: true,
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
+          mcp: createMcpServerOptions(),
         },
       });
 
@@ -2963,13 +2897,7 @@ describe('AnthropicMessagesProvider', () => {
         config: {
           max_tool_calls: 1,
           stream: true,
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
+          mcp: createMcpServerOptions(),
         },
       });
 
@@ -3027,6 +2955,7 @@ describe('AnthropicMessagesProvider', () => {
       type: 'message',
       role: 'assistant',
       container: null,
+      diagnostics: null,
       stop_details: null,
       stop_sequence: null,
       content: [
@@ -3050,6 +2979,7 @@ describe('AnthropicMessagesProvider', () => {
         output_tokens_details: null,
         server_tool_use: null,
         service_tier: null,
+        speed: null,
       },
     };
     const finishedTurn: Anthropic.Messages.Message = {
@@ -3348,12 +3278,7 @@ describe('AnthropicMessagesProvider', () => {
     it('parses only the final JSON while retaining files from the whole resumed turn', async () => {
       enableCache();
       provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          output_format: {
-            type: 'json_schema',
-            schema: { type: 'object', properties: { answer: { type: 'string' } } },
-          },
-        },
+        config: createAnswerOutputFormat(),
       });
       const fileReferences = [
         { type: 'container_upload', file_id: 'file_paused' },
@@ -3452,17 +3377,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup errors gracefully', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 
       const client = mockMCPClient;
       expect(client).toBeDefined();
@@ -3477,17 +3392,7 @@ describe('AnthropicMessagesProvider', () => {
     it('should add structured-outputs beta header when output_format is used', async () => {
       const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-              },
-              required: ['name'],
-              additionalProperties: false,
-            },
-          },
+          output_format: createRequiredNameOutputFormat(),
         },
       });
 
@@ -3669,14 +3574,7 @@ describe('AnthropicMessagesProvider', () => {
       async ({ stopReason, block }) => {
         const provider = createProvider('claude-sonnet-5', {
           config: {
-            output_format: {
-              type: 'json_schema',
-              schema: {
-                type: 'object',
-                properties: { status: { type: 'string' } },
-                additionalProperties: false,
-              },
-            },
+            output_format: createStatusOutputFormat(),
           },
         });
         const text = '{"status":"pending"}';
@@ -3695,20 +3593,7 @@ describe('AnthropicMessagesProvider', () => {
     );
 
     it('should handle JSON parsing errors gracefully', async () => {
-      const provider = createProvider('claude-sonnet-4-5-20250929', {
-        config: {
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-              },
-              additionalProperties: false,
-            },
-          },
-        },
-      });
+      const provider = createProvider('claude-sonnet-4-5-20250929', createNameSchemaOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: 'Invalid JSON {name}' }],
@@ -3730,20 +3615,7 @@ describe('AnthropicMessagesProvider', () => {
     it('should handle nested output_format with file:// references', async () => {
       // This test verifies that the code can handle external file loading
       // In a real scenario, maybeLoadFromExternalFile would load the schema
-      const provider = createProvider('claude-sonnet-4-5-20250929', {
-        config: {
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-              },
-              additionalProperties: false,
-            },
-          },
-        },
-      });
+      const provider = createProvider('claude-sonnet-4-5-20250929', createNameSchemaOptions());
 
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [{ type: 'text', text: '{"name":"Bob"}' }],
@@ -3867,16 +3739,7 @@ describe('AnthropicMessagesProvider', () => {
       const provider = createProvider('claude-sonnet-4-5-20250929', {
         config: {
           stream: true,
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                status: { type: 'string' },
-              },
-              additionalProperties: false,
-            },
-          },
+          output_format: createStatusOutputFormat(),
         },
       });
 
@@ -3890,6 +3753,7 @@ describe('AnthropicMessagesProvider', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 10,
           output_tokens: 5,
@@ -3898,6 +3762,7 @@ describe('AnthropicMessagesProvider', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          speed: null,
           inference_geo: null,
           output_tokens_details: null,
         },
@@ -4007,17 +3872,7 @@ describe('AnthropicMessagesProvider', () => {
       const provider = createProvider('claude-opus-4-6', {
         config: {
           effort: 'high',
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-              },
-              required: ['name'],
-              additionalProperties: false,
-            },
-          },
+          output_format: createRequiredNameOutputFormat(),
         },
       });
 
@@ -4237,6 +4092,23 @@ describe('AnthropicMessagesProvider', () => {
         {},
       );
     });
+
+    it.each(['', 'invalid'])(
+      'does not revive ambient sampling after a provider temperature mask of %j',
+      async (temperature) => {
+        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
+          const provider = createProvider('claude-sonnet-4-6', {
+            config: {},
+            env: { ANTHROPIC_TEMPERATURE: temperature },
+          });
+          const create = vi
+            .spyOn(provider.anthropic.messages, 'create')
+            .mockResolvedValue(mockResponse);
+          await provider.callApi('Masked sampling');
+          expect(create.mock.calls[0][0]).toHaveProperty('temperature', 0);
+        });
+      },
+    );
 
     it('should prefer config temperature over provider-scoped env', async () => {
       const provider = createProvider('claude-sonnet-4-6', {
@@ -4512,11 +4384,49 @@ describe('AnthropicMessagesProvider', () => {
       expect(warnings).toHaveLength(1);
     });
 
+    it.each(['suite', 'file'] as const)(
+      'warns for deprecated sampling supplied by the %s layer',
+      async (layer) => {
+        const provider = createProvider('claude-sonnet-5', { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const run =
+          layer === 'suite'
+            ? cliState.withEnv.bind(cliState)
+            : cliState.withEnvFileOverrides.bind(cliState);
+        await run({ ANTHROPIC_TEMPERATURE: '0.3' }, () => provider.callApi('Scoped sampling test'));
+        expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        );
+      },
+    );
+
+    it.each(['', 'invalid'])(
+      'does not warn for masked deprecated sampling: %j',
+      async (temperature) => {
+        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
+          const provider = createProvider('claude-sonnet-5', {
+            config: {},
+            env: { ANTHROPIC_TEMPERATURE: temperature },
+          });
+          const create = vi
+            .spyOn(provider.anthropic.messages, 'create')
+            .mockResolvedValue(mockResp);
+          const warn = vi.spyOn(logger, 'warn');
+          await provider.callApi('Masked sampling');
+          expect(create.mock.calls[0][0]).not.toHaveProperty('temperature');
+          expect(warn).not.toHaveBeenCalledWith(
+            expect.stringContaining('temperature is deprecated'),
+          );
+        });
+      },
+    );
+
     it('warns on Opus 4.7 when temperature set via env override', async () => {
-      const provider = createProvider('claude-opus-4-7', {
-        config: {},
-        env: { ANTHROPIC_TEMPERATURE: '0.3' },
-      });
+      const provider = createProvider('claude-opus-4-7', createTemperatureEnvOptions());
       const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -4609,10 +4519,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('warns on Opus 4.8 when temperature set via env override', async () => {
-      const provider = createProvider('claude-opus-4-8', {
-        config: {},
-        env: { ANTHROPIC_TEMPERATURE: '0.3' },
-      });
+      const provider = createProvider('claude-opus-4-8', createTemperatureEnvOptions());
       const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -4655,9 +4562,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('converts manual thinking to adaptive on Opus 4.8 (migrated config)', async () => {
-      const provider = createProvider('claude-opus-4-8', {
-        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
-      });
+      const provider = createProvider('claude-opus-4-8', createBudgetedThinkingOptions());
       const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -4673,9 +4578,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('preserves manual thinking on Opus 4.6 (regression)', async () => {
-      const provider = createProvider('claude-opus-4-6', {
-        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
-      });
+      const provider = createProvider('claude-opus-4-6', createBudgetedThinkingOptions());
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
@@ -4689,26 +4592,35 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.budget_tokens).toBe(5000);
     });
 
-    it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
-      // Regression for the live-API 400: `temperature` is deprecated for this model.
-      const provider = createProvider('claude-sonnet-5', { config: {} });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+    it.each(['claude-sonnet-5', 'claude-haiku-5-5'])(
+      'omits default temperature on %s',
+      async (model) => {
+        // Regression for the live-API 400: `temperature` is deprecated for this model.
+        const provider = createProvider(model, { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
 
-      await provider.callApi('Hello');
+        await provider.callApi('Hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(params).not.toHaveProperty('temperature');
-    });
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params).not.toHaveProperty('temperature');
+        if (model === 'claude-haiku-5-5') {
+          expect(params.max_tokens).toBe(2048);
+        }
+      },
+    );
 
-    it('omits temperature/top_p/top_k and warns with a Sonnet 5 message', async () => {
-      const provider = createProvider('claude-sonnet-5', {
+    it.each([
+      ['claude-sonnet-5', 'Claude Sonnet 5'],
+      ['claude-haiku-5-5', 'Claude Haiku 5.5'],
+    ])('omits explicit sampling parameters and warns on %s', async (model, displayName) => {
+      const provider = createProvider(model, {
         config: { temperature: 0.5, top_p: 0.9, top_k: 40 },
       });
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+        .mockResolvedValue({ ...mockResp, model });
       const warnSpy = vi.spyOn(logger, 'warn');
 
       await provider.callApi('Hello');
@@ -4718,7 +4630,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).not.toHaveProperty('top_p');
       expect(params).not.toHaveProperty('top_k');
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        expect.stringContaining(`temperature is deprecated on ${displayName}`),
       );
     });
 
@@ -4735,9 +4647,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('converts manual thinking to adaptive on Sonnet 5 (migrated config)', async () => {
-      const provider = createProvider('claude-sonnet-5', {
-        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
-      });
+      const provider = createProvider('claude-sonnet-5', createBudgetedThinkingOptions());
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
@@ -4807,9 +4717,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('converts manual thinking to adaptive on Opus 5 (migrated config)', async () => {
-      const provider = createProvider('claude-opus-5', {
-        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
-      });
+      const provider = createProvider('claude-opus-5', createBudgetedThinkingOptions());
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValue({ ...mockResp, model: 'claude-opus-5' });
@@ -5180,14 +5088,44 @@ describe('AnthropicMessagesProvider', () => {
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 5 },
       } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Response');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_p');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_k');
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Using unknown Anthropic model'),
       );
+    });
+
+    it.each([
+      { name: 'default', sampling: {} },
+      { name: 'explicit', sampling: { temperature: 0.5, top_p: 0.7, top_k: 40 } },
+    ])('omits $name sampling parameters with adaptive thinking', async ({ sampling }) => {
+      const provider = createProvider('claude-mythos-preview', {
+        config: { thinking: { type: 'adaptive' }, ...sampling },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-mythos-preview',
+        id: 'msg-mythos-preview-sampling',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
     });
   });
 
@@ -5196,6 +5134,8 @@ describe('AnthropicMessagesProvider', () => {
     'claude-mythos-5',
     'claude-fable-5-1',
     'claude-mythos-5-1',
+    'claude-fable-5-2',
+    'claude-mythos-5-2',
     'claude-opus-5-5',
   ])('%s model', (model) => {
     const mockResponse = (modelName: string) =>
@@ -5266,49 +5206,53 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
-    '%s tool choice',
-    (model) => {
-      it.each([
-        { type: 'any' as const },
-        { type: 'tool' as const, name: 'get_weather' },
-        { type: 'auto' as const },
-        { type: 'none' as const },
-      ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
-        const warnSpy = vi.spyOn(logger, 'warn');
-        const provider = createProvider(model, {
-          config: {
-            tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
-            tool_choice,
-            thinking: { type: 'adaptive' },
-          },
-        });
-        const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-          id: 'msg-51',
-          type: 'message',
-          role: 'assistant',
-          model,
-          content: [{ type: 'text', text: 'ok' }],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: { input_tokens: 10, output_tokens: 5 },
-        } as Anthropic.Messages.Message);
-
-        await provider.callApi('Check the weather');
-
-        const params = createSpy.mock.calls[0][0];
-        expect(params.tools).toHaveLength(1);
-        if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
-          expect(params).not.toHaveProperty('tool_choice');
-          expect(warnSpy).toHaveBeenCalledWith(
-            expect.stringContaining('(forced tool use) is not supported on Claude'),
-          );
-        } else {
-          expect(params.tool_choice).toEqual(tool_choice);
-        }
+  describe.each([
+    'claude-fable-5-1',
+    'claude-mythos-5-1',
+    'claude-fable-5-2',
+    'claude-mythos-5-2',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+  ])('%s tool choice', (model) => {
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+      { type: 'auto' as const },
+      { type: 'none' as const },
+    ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createProvider(model, {
+        config: {
+          tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
+          tool_choice,
+          thinking: { type: 'adaptive' },
+        },
       });
-    },
-  );
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-51',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Check the weather');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.tools).toHaveLength(1);
+      if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
+        expect(params).not.toHaveProperty('tool_choice');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('(forced tool use) is not supported on Claude'),
+        );
+      } else {
+        expect(params.tool_choice).toEqual(tool_choice);
+      }
+    });
+  });
 
   describe('claude-sonnet-5-5 thinking', () => {
     const mockResponse = () =>
@@ -5449,9 +5393,7 @@ describe('AnthropicMessagesProvider', () => {
     it('injects the Claude Code identity block and beta headers when constructed with apiKeyRequired: false', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
-      const oauthProvider = createProvider('claude-sonnet-4-6', {
-        config: { apiKeyRequired: false },
-      });
+      const oauthProvider = createProvider('claude-sonnet-4-6', createOptionalApiKeyOptions());
 
       expect(oauthProvider.usingClaudeCodeOAuth).toBe(true);
 
@@ -5470,9 +5412,45 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
+
+    it.each([false, true])(
+      'sends a supported OAuth client version to newer models (stream: %s)',
+      async (stream) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+        const model = 'claude-opus-5-5';
+        const oauthProvider = createProvider(model, {
+          config: { apiKeyRequired: false, stream },
+        });
+        const message = mockMessageResponse(model);
+        const createSpy = vi
+          .spyOn(oauthProvider.anthropic.messages, 'create')
+          .mockResolvedValue(message);
+        const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+          finalMessage: async () => message,
+        } as ReturnType<typeof oauthProvider.anthropic.messages.stream>);
+
+        const response = await oauthProvider.callApi('hello');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        const requestSpy = stream ? streamSpy : createSpy;
+        expect(requestSpy).toHaveBeenCalledTimes(1);
+        const [params, requestOptions] = requestSpy.mock.calls[0];
+        expect(params.model).toBe(model);
+        const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+        const match = /^claude-cli\/(\d+\.\d+\.\d+) \(external, promptfoo\)$/.exec(
+          headers['user-agent'],
+        );
+        expect(match).not.toBeNull();
+        // The API rejects this model below 2.1.280; compare semver components
+        // correctly across minor/major releases. See issue #11322.
+        expect(satisfies(match?.[1] ?? '', '>=2.1.280')).toBe(true);
+      },
+    );
 
     it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
@@ -5511,9 +5489,7 @@ describe('AnthropicMessagesProvider', () => {
     it('adds the Claude Code identity block even when no user system prompt is provided', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
-      const oauthProvider = createProvider('claude-sonnet-4-6', {
-        config: { apiKeyRequired: false },
-      });
+      const oauthProvider = createProvider('claude-sonnet-4-6', createOptionalApiKeyOptions());
 
       const createSpy = vi
         .spyOn(oauthProvider.anthropic.messages, 'create')
@@ -5552,9 +5528,7 @@ describe('AnthropicMessagesProvider', () => {
         accessToken: 'sk-ant-oat-expired',
         expiresAt: Date.now() - 1000,
       });
-      const oauthProvider = createProvider('claude-sonnet-4-6', {
-        config: { apiKeyRequired: false },
-      });
+      const oauthProvider = createProvider('claude-sonnet-4-6', createOptionalApiKeyOptions());
 
       await expect(oauthProvider.callApi('hello')).rejects.toThrow(
         /Claude Code OAuth credential is expired.*claude \/login/s,
@@ -5648,7 +5622,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const [, requestOptions] = createSpy.mock.calls[0];
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
 
@@ -5675,7 +5649,7 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
   });

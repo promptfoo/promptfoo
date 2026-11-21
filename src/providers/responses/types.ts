@@ -4,18 +4,22 @@ export interface ProcessorConfig {
   modelName: string;
   providerType: 'openai' | 'azure' | 'xai';
   functionCallbackHandler: FunctionCallbackHandler;
-  costCalculator: (modelName: string, usage: any, config?: any) => number | undefined;
+  costCalculator: (
+    modelName: string,
+    usage: any,
+    config?: any,
+    responseData?: any,
+  ) => number | undefined;
 }
 
-export interface ProcessorContext {
+export interface ProcessorContext extends ResponseProcessingOptions {
   config: any;
   cached: boolean;
   data: any;
-  suppressReasoningOutput?: boolean;
-  abortSignal?: AbortSignal;
 }
 
 export interface ResponseProcessingOptions {
+  multiAgent?: boolean;
   suppressReasoningOutput?: boolean;
   abortSignal?: AbortSignal;
 }

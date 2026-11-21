@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { ReplicateImageProvider } from '../../src/providers/replicate';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 vi.mock('../../src/cache');
 
@@ -15,16 +16,13 @@ describe('ReplicateImageProvider Demonstration', () => {
 
   it('demonstrates FLUX 1.1 Pro Ultra image generation', async () => {
     // Mock successful API response
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-prediction-id',
         status: 'succeeded',
         output: ['https://replicate.delivery/pbxt/flux-ultra-example/beautiful-landscape.webp'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateImageProvider('black-forest-labs/flux-1.1-pro-ultra', {
       config: {
@@ -63,8 +61,8 @@ describe('ReplicateImageProvider Demonstration', () => {
 
   it('demonstrates multiple image outputs handling', async () => {
     // Some models return multiple images
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-prediction-id',
         status: 'succeeded',
         output: [
@@ -72,11 +70,8 @@ describe('ReplicateImageProvider Demonstration', () => {
           'https://replicate.delivery/pbxt/example/image2.png',
           'https://replicate.delivery/pbxt/example/image3.png',
         ],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateImageProvider('test-model', {
       config: { apiKey: mockApiKey },
@@ -91,16 +86,13 @@ describe('ReplicateImageProvider Demonstration', () => {
   });
 
   it('demonstrates raw mode for FLUX 1.1 Pro Ultra', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-prediction-id',
         status: 'succeeded',
         output: ['https://replicate.delivery/pbxt/flux-raw/photorealistic.png'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateImageProvider('black-forest-labs/flux-1.1-pro-ultra', {
       config: {
@@ -125,16 +117,13 @@ describe('ReplicateImageProvider Demonstration', () => {
   });
 
   it('demonstrates error handling', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: {
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         id: 'test-prediction-id',
         status: 'failed',
         error: 'NSFW content detected',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new ReplicateImageProvider('test-model', {
       config: { apiKey: mockApiKey },

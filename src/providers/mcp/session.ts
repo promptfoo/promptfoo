@@ -1,21 +1,21 @@
-import { awaitWithAbort } from '../../util/abort';
+import path from 'node:path';
+
+import cliState from '../../cliState';
 import { providerRegistry } from '../providerRegistry';
+import { waitForPromiseWithAbort } from '../shared';
 import { MCPClient } from './client';
 
 import type { MCPConfig } from './types';
 
-/** Owns restartable MCP connections and resources created before initialization fails. */
+/** A stable resource owner whose connection can be recreated after evaluation cleanup. */
 export class McpClientSession {
+  readonly #basePath = path.resolve(cliState.basePath || '.');
   private currentClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
-  private startupPending = false;
   private cleanupPromise?: Promise<void>;
-  private startupController = new AbortController();
+  private readonly resource = { shutdown: () => this.cleanup() };
 
-  constructor(
-    private readonly config: MCPConfig,
-    private readonly owner: { cleanup(): void | Promise<void> },
-  ) {
+  constructor(private readonly config: MCPConfig) {
     this.start();
   }
 
@@ -24,38 +24,41 @@ export class McpClientSession {
   }
 
   private start(): void {
-    this.startupController = new AbortController();
-    this.currentClient = new MCPClient(this.config);
-    providerRegistry.register(this.owner);
-    const initialization = this.currentClient.initialize(this.startupController.signal);
-    this.initializationPromise = initialization;
-    this.startupPending = true;
-    const markSettled = () => {
-      if (this.initializationPromise === initialization) {
-        this.startupPending = false;
-      }
-    };
-    // Handle eager startup rejection here; initialize() still awaits the original promise.
-    void initialization.then(markSettled, markSettled);
+    const client = new MCPClient(this.config);
+    this.currentClient = client;
+    providerRegistry.register(this.resource);
+    // Reconnection can run outside the loader's scope or under another evaluation's config.
+    this.initializationPromise = cliState.withBasePath(this.#basePath, () => client.initialize());
+    // Eager failures are observed here and still returned to the first caller.
+    void this.initializationPromise.catch(() => undefined);
   }
 
   async initialize(signal?: AbortSignal): Promise<MCPClient> {
-    signal?.throwIfAborted();
+    await providerRegistry.useResource(this.resource, signal);
+    providerRegistry.throwIfResourceUseAborted(signal);
     if (this.cleanupPromise) {
-      await awaitWithAbort(this.cleanupPromise, signal);
+      await waitForPromiseWithAbort(this.cleanupPromise, signal);
     }
+    providerRegistry.throwIfResourceUseAborted(signal);
     if (!this.currentClient) {
       this.start();
     }
-    // Repeated use claims the connection for the calling evaluation, including shared instances.
-    providerRegistry.register(this.owner);
     const client = this.currentClient!;
-    const startupSignal = this.startupController.signal;
-    await awaitWithAbort(
-      this.initializationPromise!,
-      signal ? AbortSignal.any([signal, startupSignal]) : startupSignal,
-    );
-    return client;
+    try {
+      await waitForPromiseWithAbort(this.initializationPromise!, signal);
+      providerRegistry.throwIfResourceUseAborted(signal);
+      if (this.currentClient !== client) {
+        throw new Error('MCP initialization interrupted by cleanup');
+      }
+      return client;
+    } catch (error) {
+      // A failed connection should be retryable, but one cancelled waiter must not
+      // close startup still used by another call. Evaluation ownership handles that case.
+      if (!signal?.aborted && this.currentClient === client) {
+        await this.cleanup();
+      }
+      throw error;
+    }
   }
 
   cleanup(): Promise<void> {
@@ -63,28 +66,15 @@ export class McpClientSession {
       return this.cleanupPromise;
     }
     const client = this.currentClient;
-    if (!client) {
-      return Promise.resolve();
-    }
-    this.startupController.abort();
-    this.cleanupPromise = (async () => {
-      try {
-        await client.cleanup();
-        if (this.startupPending) {
-          void this.initializationPromise
-            ?.then(
-              () => client.cleanup(),
-              () => undefined,
-            )
-            .catch(() => undefined);
-        }
-      } finally {
-        this.currentClient = null;
-        this.initializationPromise = null;
-        providerRegistry.unregister(this.owner);
+    this.currentClient = null;
+    this.initializationPromise = null;
+    const cleanup = Promise.resolve(client?.cleanup()).finally(() => {
+      providerRegistry.unregister(this.resource);
+      if (this.cleanupPromise === cleanup) {
         this.cleanupPromise = undefined;
       }
-    })();
-    return this.cleanupPromise;
+    });
+    this.cleanupPromise = cleanup;
+    return cleanup;
   }
 }
