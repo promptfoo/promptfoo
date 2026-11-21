@@ -4,6 +4,7 @@ import logger from '../logger';
 
 interface CleanupProvider {
   shutdown(): Promise<void>;
+  shutdownForProcess?(): Promise<void>;
 }
 
 interface IdleCleanupProvider {
@@ -318,9 +319,10 @@ export class ProviderRegistry {
   private forceResource(state: ResourceState): Promise<void> | undefined {
     const release = this.maybeReleaseResource(state, undefined, true);
     if (release) {
-      void state.release?.start(true);
+      const forced = state.release?.start(true) ?? release;
       if (this.processShuttingDown) {
-        this.trackProcessRelease(release);
+        this.trackProcessRelease(forced);
+        return forced;
       }
     }
     return release;
@@ -585,31 +587,35 @@ export class ProviderRegistry {
       finish();
     };
     let actual: Promise<void> | undefined;
+    let processActual: Promise<void> | undefined;
+    // Start synchronously. Direct reuse must never race a deferred shutdown.
+    const invoke = async (shutdown: () => Promise<void>, forced: boolean) => {
+      const registration = state.registration;
+      state.registered = false;
+      try {
+        await this.releasingResource.run({ state, registration, forced }, shutdown);
+      } catch (error) {
+        logger.warn('Error shutting down provider: ' + String(error));
+      }
+    };
     const start = (forceShutdown = false) => {
+      if (forceShutdown && this.processShuttingDown && state.resource.shutdownForProcess) {
+        if (!processActual) {
+          processActual = invoke(() => state.resource.shutdownForProcess!(), true);
+          if (!actual) {
+            actual = processActual.then(complete);
+            processActual = actual;
+          }
+        }
+        return processActual;
+      }
       if (!actual) {
         if (usesEvaluationCleanup && !forceShutdown) {
           actual = Promise.resolve();
           complete();
         } else {
-          const registration = state.registration;
-          state.registered = false;
-          // Begin cleanup before returning to callers. Deferring the call itself would let a
-          // direct reuse start first, then be interrupted by this older shutdown.
           actual = promise;
-          let shutdown: Promise<void>;
-          try {
-            shutdown = this.releasingResource.run(
-              { state, registration, forced: force || forceShutdown },
-              () => state.resource.shutdown(),
-            );
-          } catch (error) {
-            shutdown = Promise.reject(error);
-          }
-          void Promise.resolve(shutdown)
-            .catch((error) => {
-              logger.warn('Error shutting down provider: ' + String(error));
-            })
-            .then(complete);
+          void invoke(() => state.resource.shutdown(), force || forceShutdown).then(complete);
         }
       }
       return actual;
@@ -621,7 +627,7 @@ export class ProviderRegistry {
         () => start(),
       );
     } else {
-      void start();
+      void start(this.processShuttingDown);
     }
     return promise;
   }
