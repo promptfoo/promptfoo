@@ -1,5 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
-
 import logger from '../logger';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import {
@@ -105,26 +103,11 @@ function mapStatusCode(span: SpanData): 'unset' | 'ok' | 'error' {
   }
 }
 
-function buildSpanTree(spans: SpanData[]): Map<string, number> {
-  const depthMap = new Map<string, number>();
-  const spansById = new Map(spans.map((span) => [span.spanId, span]));
-  const depthCache = new Map<string, number | null>();
-  for (const span of spans) {
-    const depth = computeSpanDepth(span, spansById, depthCache);
-    if (depth !== null) {
-      depthMap.set(span.spanId, depth);
-    }
-  }
-
-  return depthMap;
-}
-
 function createTraceSpans(spans: SpanData[]): TraceSpan[] {
-  const depthMap = buildSpanTree(spans);
-
+  const spansById = new Map(spans.map((span) => [span.spanId, span]));
+  const depthMap = new Map<string, number | null>();
   return spans.map((span) => {
-    const endTime = span.endTime ?? span.startTime;
-    const durationMs = Math.max(0, endTime - span.startTime);
+    const durationMs = Math.max(0, (span.endTime ?? span.startTime) - span.startTime);
 
     return {
       spanId: span.spanId,
@@ -139,7 +122,7 @@ function createTraceSpans(spans: SpanData[]): TraceSpan[] {
         code: mapStatusCode(span),
         message: span.statusMessage,
       },
-      depth: depthMap.get(span.spanId) ?? 0,
+      depth: computeSpanDepth(span, spansById, depthMap) ?? 0,
       events: [],
     };
   });
@@ -257,8 +240,7 @@ function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
   const cyclicSpanIds = new Set<string>();
 
   const validSpans = spans.filter((span) => {
-    const depth = computeSpanDepth(span, spanMap, depthCache);
-    if (depth === null) {
+    if (computeSpanDepth(span, spanMap, depthCache) === null) {
       cyclicSpanIds.add(span.spanId);
       return false;
     }
@@ -288,7 +270,6 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<b
         spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
         {
           warnIfMissingTrace: false,
-          updateExisting: true,
           ...(index > 0 && { skipTraceCheck: true }),
         },
       );
@@ -428,7 +409,6 @@ async function fetchFromExternalProvider(
     await waitForRetry(queryDelay, abortSignal);
   }
 
-  let previousSpans: SpanData[] | undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
       throw createTraceAbortError(abortSignal);
@@ -461,18 +441,7 @@ async function fetchFromExternalProvider(
 
       const spans = await getTraceStore().getSpans(traceId, spanOptions);
       if (spans.length === 0) {
-        if (attempt === maxRetries) {
-          return null;
-        }
-        await waitForRetry(retryDelayMs, abortSignal);
-        continue;
-      }
-
-      const sortedSpans = [...spans].sort((a, b) => a.spanId.localeCompare(b.spanId));
-      if (attempt < maxRetries && !isDeepStrictEqual(sortedSpans, previousSpans)) {
-        previousSpans = sortedSpans;
-        await waitForRetry(retryDelayMs, abortSignal);
-        continue;
+        return null;
       }
 
       const traceSpans = createTraceSpans(spans);

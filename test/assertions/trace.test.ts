@@ -1,12 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  assertionUsesTrace,
-  hasTraceAwareAssertions,
-  runAssertion,
-  runAssertions,
-} from '../../src/assertions/index';
+import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
@@ -20,17 +15,13 @@ import type {
 } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
+const createSpanCountAssertion = (value: string = 'context.trace === undefined') => ({
+  type: 'javascript' as const,
+  value,
+});
+
 // Mock the trace store
 vi.mock('../../src/tracing/store');
-
-vi.mock('../../src/redteam/graders', () => ({
-  getGraderById: () => ({
-    getResult: async () => ({
-      grade: { pass: true, score: 1, reason: 'fixture' },
-      rubric: 'fixture rubric',
-    }),
-  }),
-}));
 
 // Mock Python execution
 vi.mock('../../src/python/wrapper', () => ({
@@ -74,12 +65,6 @@ vi.mock('../../src/python/wrapper', () => ({
 }));
 
 describe('trace assertions', () => {
-  it('recognizes inverse redteam assertions when trace grading is enabled', () => {
-    const assertions: Assertion[] = [{ type: 'not-promptfoo:redteam:mcp' as Assertion['type'] }];
-    expect(hasTraceAwareAssertions(assertions, true)).toBe(true);
-    expect(hasTraceAwareAssertions(assertions, false)).toBe(false);
-  });
-
   const originalBasePath = cliState.basePath;
   const originalTraceFetchEnv = {
     PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
@@ -124,7 +109,6 @@ describe('trace assertions', () => {
 
   const mockProviderResponse: ProviderResponse = {
     output: 'Test output',
-    prompt: 'Fixture request',
   };
 
   const mockTraceData: TraceData = {
@@ -151,6 +135,90 @@ describe('trace assertions', () => {
       },
     ],
   };
+
+  describe('deterministic assertions with span attribute filters', () => {
+    it.each<{ assertion: Assertion; pass: boolean }>([
+      { assertion: { type: 'trace-span-count', value: { max: 2 } }, pass: true },
+      { assertion: { type: 'trace-span-count', value: { min: 3 } }, pass: false },
+      { assertion: { type: 'trace-span-duration', value: { max: 500 } }, pass: true },
+      {
+        assertion: { type: 'trace-span-duration', value: { max: 200, percentile: 50 } },
+        pass: true,
+      },
+      {
+        assertion: { type: 'trace-span-duration', value: { max: 200, percentile: 95 } },
+        pass: false,
+      },
+      { assertion: { type: 'trace-error-spans', value: { max_count: 1 } }, pass: true },
+      {
+        assertion: { type: 'trace-error-spans', value: { max_percentage: 49 } },
+        pass: false,
+      },
+      {
+        assertion: { type: 'trace-error-spans', value: { max_percentage: 50 } },
+        pass: true,
+      },
+    ])('applies filters before grading $assertion', async ({ assertion, pass }) => {
+      const spans = [
+        { spanId: 'search-ok', duration: 100, tool: 'search', statusCode: 0 },
+        { spanId: 'search-error', duration: 300, tool: 'search', statusCode: 2 },
+        { spanId: 'fetch-error', duration: 5000, tool: 'fetch', statusCode: 2 },
+        { spanId: 'unknown-error', duration: 9000, tool: undefined, statusCode: 2 },
+      ].map(({ spanId, duration, tool, statusCode }) => ({
+        spanId,
+        name: 'execute_tool',
+        startTime: 1000,
+        endTime: 1000 + duration,
+        attributes: tool ? { 'gen_ai.tool.name': tool } : {},
+        statusCode,
+      }));
+      mockTraceStore.getTrace.mockResolvedValue({ ...mockTraceData, spans });
+
+      const result = await runAssertion({
+        assertion: {
+          ...assertion,
+          value: {
+            ...(assertion.value as object),
+            pattern: 'execute_*',
+            attributes: { 'gen_ai.tool.name': 'search' },
+          },
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(pass);
+      expect(result.score).toBe(pass ? 1 : 0);
+      expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
+      expect(result.reason).not.toContain('search');
+    });
+
+    it.each<{ assertion: Assertion; pass: boolean }>([
+      { assertion: { type: 'trace-span-count', value: { min: 1 } }, pass: false },
+      { assertion: { type: 'trace-span-duration', value: { max: 500 } }, pass: true },
+      { assertion: { type: 'trace-error-spans', value: { max_count: 0 } }, pass: true },
+    ])('explains an empty attribute selection for $assertion', async ({ assertion, pass }) => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      const result = await runAssertion({
+        assertion: {
+          ...assertion,
+          value: {
+            ...(assertion.value as object),
+            pattern: '*',
+            attributes: { 'gen_ai.tool.name': 'private-tool-value' },
+          },
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(pass);
+      expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
+      expect(result.reason).not.toContain('private-tool-value');
+    });
+  });
 
   describe('javascript assertions with trace', () => {
     it('uses the evaluation tracing context for the grader test index', async () => {
@@ -233,10 +301,7 @@ describe('trace assertions', () => {
         })
         .mockResolvedValueOnce(mockTraceData);
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace?.spans?.length === 2',
-      };
+      const assertion: Assertion = createSpanCountAssertion('context.trace?.spans?.length === 2');
 
       const result: GradingResult = await runAssertion({
         assertion,
@@ -257,10 +322,7 @@ describe('trace assertions', () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 
       const resultPromise = runAssertion({
-        assertion: {
-          type: 'javascript',
-          value: 'context.trace?.spans?.length === 2',
-        },
+        assertion: createSpanCountAssertion('context.trace?.spans?.length === 2'),
         test: mockTest,
         providerResponse: mockProviderResponse,
         traceId: 'test-trace-id',
@@ -286,10 +348,7 @@ describe('trace assertions', () => {
         .mockResolvedValueOnce(mockTraceData)
         .mockResolvedValueOnce(mockTraceData);
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace?.spans?.length === 2',
-      };
+      const assertion: Assertion = createSpanCountAssertion('context.trace?.spans?.length === 2');
 
       const result: GradingResult = await runAssertion({
         assertion,
@@ -305,10 +364,7 @@ describe('trace assertions', () => {
     it('should handle missing trace gracefully', async () => {
       mockTraceStore.getTrace.mockResolvedValue(null);
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace === undefined',
-      };
+      const assertion: Assertion = createSpanCountAssertion();
 
       const result: GradingResult = await runAssertion({
         assertion,
@@ -330,16 +386,7 @@ describe('trace assertions', () => {
       const result = await runAssertions({
         test: {
           ...mockTest,
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.trace === undefined',
-            },
-            {
-              type: 'javascript',
-              value: 'context.trace === undefined',
-            },
-          ],
+          assert: [createSpanCountAssertion(), createSpanCountAssertion()],
         },
         providerResponse: mockProviderResponse,
         traceId: 'non-existent-trace',
@@ -520,160 +567,11 @@ return {
     });
   });
 
-  it('preloads traces for direct red-team grading when the active suite enables it', async () => {
-    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-    const test = {
-      ...mockTest,
-      assert: [{ type: 'promptfoo:redteam:rbac' as const }],
-      metadata: { pluginId: 'rbac' },
-    };
-
-    await runAssertions({
-      test,
-      providerResponse: {
-        ...mockProviderResponse,
-        metadata: {
-          storedGraderResult: { pass: true, score: 1, reason: 'stored' },
-        },
-      },
-      traceId: 'test-trace-id',
-      includeRedteamTrace: true,
-    });
-
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
-      sanitizeAttributes: false,
-      includeInternalSpans: false,
-      maxDepth: 5,
-      maxSpans: 50,
-      spanFilter: undefined,
-    });
-  });
-
-  it('keeps ordinary trace assertions unfiltered beside red-team grading', async () => {
-    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-
-    await runAssertions({
-      test: {
-        ...mockTest,
-        assert: [
-          { type: 'trace-span-count', value: { pattern: '*', min: 1 } },
-          { type: 'promptfoo:redteam:rbac' as const },
-        ],
-        metadata: { pluginId: 'rbac' },
-      },
-      providerResponse: {
-        ...mockProviderResponse,
-        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
-      },
-      traceId: 'test-trace-id',
-      includeRedteamTrace: true,
-    });
-
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
-      sanitizeAttributes: false,
-    });
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
-      sanitizeAttributes: false,
-      includeInternalSpans: false,
-      maxDepth: 5,
-      maxSpans: 50,
-      spanFilter: undefined,
-    });
-  });
-
-  it('only derives red-team filters for direct red-team assertions', async () => {
-    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-    const test = {
-      ...mockTest,
-      metadata: {
-        pluginId: 'rbac',
-        tracing: { enabled: true, includeInGrading: true, maxSpans: 1 },
-      },
-    };
-
-    await runAssertion({
-      assertion: { type: 'trace-span-count', value: { pattern: '*', min: 1 } },
-      test,
-      providerResponse: mockProviderResponse,
-      traceId: 'test-trace-id',
-    });
-    expect(mockTraceStore.getTrace).toHaveBeenLastCalledWith('test-trace-id', {
-      sanitizeAttributes: false,
-    });
-
-    await runAssertion({
-      assertion: { type: 'promptfoo:redteam:rbac' },
-      test,
-      providerResponse: {
-        ...mockProviderResponse,
-        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
-      },
-      traceId: 'test-trace-id',
-    });
-    expect(mockTraceStore.getTrace).toHaveBeenLastCalledWith('test-trace-id', {
-      sanitizeAttributes: false,
-      includeInternalSpans: false,
-      maxDepth: 5,
-      maxSpans: 1,
-      spanFilter: undefined,
-    });
-
-    const traceCalls = mockTraceStore.getTrace.mock.calls.length;
-    await runAssertion({
-      assertion: { type: 'promptfoo:redteam:rbac' },
-      test,
-      providerResponse: {
-        ...mockProviderResponse,
-        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
-      },
-      traceId: 'test-trace-id',
-      includeRedteamTrace: false,
-    });
-    expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(traceCalls);
-  });
-
-  it('honors test tracing when the active suite has no red-team block', async () => {
-    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-
-    await runAssertions({
-      test: {
-        ...mockTest,
-        assert: [{ type: 'promptfoo:redteam:rbac' as const }],
-        metadata: {
-          pluginId: 'rbac',
-          tracing: {
-            enabled: true,
-            includeInGrading: true,
-            includeInternalSpans: true,
-            maxSpans: 1,
-            spanFilter: ['http.*'],
-          },
-        },
-      },
-      providerResponse: {
-        ...mockProviderResponse,
-        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
-      },
-      traceId: 'test-trace-id',
-    });
-
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
-      sanitizeAttributes: false,
-      includeInternalSpans: true,
-      maxDepth: 5,
-      maxSpans: 1,
-      spanFilter: ['http.*'],
-    });
-  });
-
   describe('trace store error handling', () => {
     it('should handle trace store errors gracefully', async () => {
       mockTraceStore.getTrace.mockRejectedValue(new Error('Database error'));
 
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace === undefined',
-      };
+      const assertion: Assertion = createSpanCountAssertion();
 
       const result: GradingResult = await runAssertion({
         assertion,

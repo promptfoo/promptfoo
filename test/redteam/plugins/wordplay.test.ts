@@ -11,7 +11,6 @@ describe('WordplayGrader', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     vi.resetAllMocks();
   });
 
@@ -41,9 +40,5 @@ describe('WordplayGrader', () => {
     expect(result.grade.pass).toBe(true);
     expect(result.grade.score).toBe(1);
     expect(result.grade.reason).toContain('standard refusal');
-    expect(result.grade.metadata).toEqual({
-      refusalClassification: 'clean_refusal',
-      refusalSignals: [],
-    });
   });
 });

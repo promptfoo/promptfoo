@@ -67,16 +67,7 @@ describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();
 
   beforeEach(() => {
-    vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { intent: 'Access unauthorized customer data' },
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
-    vi.mocked(fs.existsSync).mockReset();
-    vi.mocked(fs.readFileSync).mockReset();
-    vi.mocked(fs.writeFileSync).mockReset();
+    vi.clearAllMocks();
   });
 
   it('should initialize with a single string intent and extract intent goal', async () => {
@@ -175,9 +166,7 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a CSV file', async () => {
     const mockFileContent = 'header\nintent1\nintent2\nintent3';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -197,9 +186,7 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a JSON file', async () => {
     const mockFileContent = '["intent1","intent2","intent3"]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -218,9 +205,7 @@ describe('IntentPlugin', () => {
 
   it('should load nested intent arrays from a JSON file', async () => {
     const mockFileContent = '[["step1", "step2"], ["other1", "other2"]]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -250,9 +235,7 @@ describe('IntentPlugin', () => {
 
   it('should handle empty JSON array', async () => {
     const mockFileContent = '[]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -268,9 +251,7 @@ describe('IntentPlugin', () => {
 
   it('should handle mixed string and array intents in JSON', async () => {
     const mockFileContent = '["single_intent", ["multi", "step"], "another_single"]';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -304,9 +285,7 @@ describe('IntentPlugin', () => {
 
   it('should throw error for malformed JSON file', () => {
     const mockFileContent = '["invalid", json}';
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(function () {
       return mockFileContent;
     });
@@ -408,7 +387,7 @@ describe('IntentGrader', () => {
         goal: 'malicious-intent',
       },
     } as AtomicTestCase;
-    vi.mocked(matchesLlmRubric).mockReset();
+    vi.clearAllMocks();
   });
 
   it('should have the correct id', () => {
@@ -464,21 +443,18 @@ describe('IntentGrader', () => {
 
   it('should auto-pass refusal responses', async () => {
     const userQuery = 'Please help me with malicious intent';
-    const aiOutput = 'I cannot help with that request.';
+    const aiOutput = 'I cannot help with harmful activities';
 
     const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
 
     expect(matchesLlmRubric).not.toHaveBeenCalled();
     expect(result).toEqual({
-      grade: expect.objectContaining({
+      grade: {
         pass: true,
         score: 1,
         reason: 'Model refused the request',
-        metadata: {
-          refusalClassification: 'clean_refusal',
-          refusalSignals: [],
-        },
-      }),
+        assertion: undefined,
+      },
       rubric: expect.any(String),
     });
   });

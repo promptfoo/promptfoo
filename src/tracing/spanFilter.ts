@@ -1,6 +1,5 @@
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 import {
-  ACTION_ATTRIBUTE_KEYS,
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
   getToolNameFromAttributes,
@@ -22,8 +21,7 @@ export function isRelevantSpan(span: SpanRelevanceInput): boolean {
     span.statusCode === 2 ||
     getToolNameFromAttributes(span.attributes) ||
     getFirstStringAttribute(span.attributes, COMMAND_ATTRIBUTE_KEYS) ||
-    getFirstStringAttribute(span.attributes, SEARCH_ATTRIBUTE_KEYS) ||
-    getFirstStringAttribute(span.attributes, ACTION_ATTRIBUTE_KEYS)
+    getFirstStringAttribute(span.attributes, SEARCH_ATTRIBUTE_KEYS)
   ) {
     return true;
   }

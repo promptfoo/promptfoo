@@ -7,7 +7,6 @@ type ToolAttributeFamily = {
 };
 
 export const COMMAND_ATTRIBUTE_KEYS = [
-  'process.command_line',
   'codex.command',
   'command',
   'command.name',
@@ -19,8 +18,6 @@ export const SEARCH_ATTRIBUTE_KEYS = [
   'search.query',
   'search_query',
 ] as const;
-
-export const ACTION_ATTRIBUTE_KEYS = ['url.full', 'http.url', 'file.path'] as const;
 
 const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
   {

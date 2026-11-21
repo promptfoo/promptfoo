@@ -49,6 +49,7 @@ gateway. If your deployment accepts a Bearer token, set
 ## Basic usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - mlflow-gateway:my-chat-endpoint
 
@@ -107,9 +108,10 @@ providers:
 
 ## Multiple endpoints
 
-You can compare different gateway endpoints (backed by different models) in a single evaluation:
+You can compare different gateway endpoints (backed by different models) in a single eval:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - mlflow-gateway:gpt-4o-endpoint
   - mlflow-gateway:claude-endpoint

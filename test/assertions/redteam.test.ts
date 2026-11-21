@@ -4,8 +4,7 @@ import {
   isAssertionInverse,
   runAssertions,
 } from '../../src/assertions/index';
-import { handleRedteam, shouldIncludeRedteamTrace } from '../../src/assertions/redteam';
-import cliState from '../../src/cliState';
+import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import {
   getGradingAssertionHash,
@@ -13,9 +12,37 @@ import {
 } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
-import * as exfilTracking from '../../src/redteam/strategies/indirectWebPwn';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
+
+const createHateJailbreakTest = () => ({
+  vars: {},
+  options: {},
+  assert: [],
+  metadata: {
+    strategyId: 'jailbreak',
+    pluginId: 'harmful:hate',
+  },
+});
+
+const createPromptLeakVerdict = () => ({
+  grade: {
+    pass: false,
+    score: 0,
+    reason: 'Leaked prompt',
+  },
+  rubric: 'Mock rubric',
+});
+
+const createPromptExtractionMetadata = () => ({
+  purpose: 'Document assistant',
+  pluginId: 'prompt-extraction',
+});
+
+const createLeakedPromptResponse = () => ({
+  output: 'Leaked system prompt',
+  metadata: {},
+});
 
 describe('redteam strategy result grading', () => {
   const originalPrompt = 'Find personal details for Alex Rivera.';
@@ -98,6 +125,46 @@ describe('redteam strategy result grading', () => {
         reason: storedResult.reason,
         tokensUsed: storedResult.tokensUsed,
       });
+    },
+  );
+
+  it.each([false, true])(
+    'regrades saved text when fresh trace actions exist (%s)',
+    async (hasActions) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Observed action' },
+        rubric: 'New rubric',
+      });
+      const providerResponse = {
+        output,
+        metadata: { redteamFinalPrompt: attackPrompt, storedGraderResult: storedResult },
+      };
+      const trace = {
+        traceId: 'trace',
+        evaluationId: 'eval',
+        testCaseId: 'test',
+        spans: hasActions ? [{ spanId: 'one', name: 'describe-color', startTime: 1 }] : [],
+      };
+      const result = await handleRedteam({
+        assertion: piiAssertion,
+        baseType: getAssertionBaseType(piiAssertion),
+        assertionValueContext: { prompt: originalPrompt, vars: {}, test, providerResponse, trace },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output,
+        outputString: output,
+        prompt: originalPrompt,
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      });
+      expect(result.pass).toBe(!hasActions);
+      expect(getResult).toHaveBeenCalledTimes(Number(hasActions));
+      expect(result.tokensUsed?.total).toBe(storedResult.tokensUsed.total);
     },
   );
 
@@ -300,6 +367,57 @@ describe('redteam strategy result grading', () => {
       getGradingAssertionHash({ ...piiAssertion, value: { toJSON: () => ({}) } }),
     ).toBeUndefined();
   });
+
+  it.each(
+    [
+      { earlierError: true, currentError: false },
+      { earlierError: false, currentError: true },
+      { earlierError: true, currentError: true },
+      { earlierError: false, currentError: true, historyOutput: 'A different response' },
+    ].flatMap((scenario) => [
+      { ...scenario, useInputHash: false },
+      { ...scenario, useInputHash: true },
+    ]),
+  )(
+    'retains only unresolved history errors after fresh grading: %j',
+    async ({ earlierError, currentError, historyOutput = output, useInputHash }) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fresh verdict' },
+        rubric: 'Fresh rubric',
+      });
+      const history = [
+        ...(earlierError
+          ? [{ prompt: 'Earlier attack', output: 'Ungraded output', graderError: 'Outage' }]
+          : []),
+        {
+          prompt: attackPrompt,
+          output: historyOutput,
+          gradingInputHash: useInputHash
+            ? getGradingInputHash(attackPrompt, historyOutput, undefined, 'pii:social')
+            : undefined,
+          ...(currentError && { graderError: 'Outage' }),
+        },
+      ];
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test,
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            storedGraderResult: { ...storedResult, metadata: {} },
+            redteamHistory: history,
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(result.componentResults?.[0].metadata?.gradingIncomplete)).toBe(
+        earlierError || historyOutput !== output,
+      );
+      expect(result.componentResults?.[0].metadata?.graderError).toBeUndefined();
+    },
+  );
 
   it('retains prior strategy usage when stale-grade regrading throws', async () => {
     vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValue(
@@ -964,123 +1082,8 @@ describe('redteam strategy result grading', () => {
 });
 
 describe('handleRedteam', () => {
-  const originalConfig = cliState.config;
   afterEach(() => {
-    cliState.config = originalConfig;
     vi.resetAllMocks();
-    vi.restoreAllMocks();
-  });
-
-  it('keeps root tracing for coding-agent grading unless explicitly disabled', () => {
-    cliState.config = { ...originalConfig, tracing: { enabled: true }, redteam: { tracing: {} } };
-    const test = {
-      vars: {},
-      assert: [],
-      metadata: { pluginId: 'coding-agent:secret-env-read' },
-    };
-
-    expect(shouldIncludeRedteamTrace(test)).toBe(true);
-    expect(
-      shouldIncludeRedteamTrace({
-        ...test,
-        metadata: { ...test.metadata, tracing: { enabled: false } },
-      }),
-    ).toBe(false);
-  });
-
-  it.each([
-    { tracing: {}, metadata: {}, include: false },
-    { tracing: { enabled: true }, metadata: {}, include: true },
-    { tracing: { includeInGrading: false }, metadata: {}, include: false },
-    { tracing: {}, metadata: { tracing: { includeInGrading: false } }, include: false },
-    {
-      tracing: { strategies: { goat: { includeInGrading: false }, iterative: {} } },
-      metadata: { strategyId: 'goat' },
-      include: false,
-    },
-    {
-      tracing: { strategies: { goat: {}, iterative: { includeInGrading: false } } },
-      metadata: { strategyId: 'jailbreak' },
-      include: false,
-    },
-    {
-      tracing: {},
-      metadata: { strategyConfig: { tracing: { includeInGrading: false } } },
-      include: false,
-    },
-  ])('honors the effective trace grading setting: %j', async ({ tracing, metadata, include }) => {
-    cliState.config = { ...originalConfig, redteam: { tracing } };
-    const assertion = { type: 'promptfoo:redteam:rbac' as const };
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: { purpose: 'Document assistant', ...metadata },
-    };
-    const providerResponse = {
-      output: "I can't do that.",
-      metadata: {
-        webPageUuid: 'fixture-page',
-        webPageUrl: 'https://example.com/dynamic-pages/fixture-eval/fixture-page',
-      },
-    };
-    const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
-    const checkTracking = vi.spyOn(exfilTracking, 'checkExfilTracking').mockResolvedValue(tracking);
-    const trace = {
-      traceId: 'fixture-trace',
-      evaluationId: 'fixture-eval',
-      testCaseId: 'fixture-test',
-      spans: [
-        {
-          spanId: 'fixture-span',
-          name: 'read_private_document',
-          startTime: 0,
-          attributes: { 'tool.arguments': { path: '/private/fixture.txt' } },
-        },
-      ],
-    };
-    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-      grade: { pass: false, score: 0, reason: 'Private document read' },
-      rubric: 'Fixture rubric',
-    });
-    const params = {
-      assertion,
-      baseType: getAssertionBaseType(assertion),
-      assertionValueContext: {
-        prompt: 'Read that document',
-        vars: {},
-        test,
-        trace,
-        logProbs: [],
-        provider: undefined,
-        providerResponse,
-      },
-      cost: 0,
-      inverse: false,
-      latencyMs: 0,
-      logProbs: [],
-      output: providerResponse.output,
-      outputString: providerResponse.output,
-      prompt: 'Read that document',
-      provider: undefined,
-      providerResponse,
-      renderedValue: undefined,
-      test,
-      valueFromScript: undefined,
-    };
-    const result = await handleRedteam(params);
-    const context = getResult.mock.calls[0][7];
-    if (include) {
-      expect(context?.traceData).toBe(trace);
-      expect(context?.traceSummary).toContain('read_private_document');
-    } else {
-      expect(context).not.toHaveProperty('traceData');
-      expect(context).not.toHaveProperty('traceSummary');
-    }
-    expect(context?.providerResponse).toBe(providerResponse);
-    expect(context).toMatchObject(tracking);
-    expect(checkTracking).toHaveBeenCalledWith('fixture-page', 'fixture-eval');
-    expect(result.pass).toBe(false);
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
@@ -1088,15 +1091,7 @@ describe('handleRedteam', () => {
       type: 'promptfoo:redteam:harmful:hate' as const,
     };
 
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        strategyId: 'jailbreak',
-        pluginId: 'harmful:hate',
-      },
-    };
+    const test = createHateJailbreakTest();
 
     // Provider response with SOME (not all) turns having grader errors
     const providerResponse = {
@@ -1152,15 +1147,7 @@ describe('handleRedteam', () => {
       type: 'promptfoo:redteam:harmful:hate' as const,
     };
 
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        strategyId: 'jailbreak',
-        pluginId: 'harmful:hate',
-      },
-    };
+    const test = createHateJailbreakTest();
 
     // Provider response with ALL turns having grader errors
     const providerResponse = {
@@ -1357,25 +1344,12 @@ describe('handleRedteam', () => {
       },
       options: {},
       assert: [],
-      metadata: {
-        purpose: 'Document assistant',
-        pluginId: 'prompt-extraction',
-      },
+      metadata: createPromptExtractionMetadata(),
     };
 
-    const providerResponse = {
-      output: 'Leaked system prompt',
-      metadata: {},
-    };
+    const providerResponse = createLeakedPromptResponse();
 
-    const mockGraderResult = {
-      grade: {
-        pass: false,
-        score: 0,
-        reason: 'Leaked prompt',
-      },
-      rubric: 'Mock rubric',
-    };
+    const mockGraderResult = createPromptLeakVerdict();
     const getResultSpy = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValue(mockGraderResult);
@@ -1433,25 +1407,12 @@ describe('handleRedteam', () => {
       },
       options: {},
       assert: [],
-      metadata: {
-        purpose: 'Document assistant',
-        pluginId: 'prompt-extraction',
-      },
+      metadata: createPromptExtractionMetadata(),
     };
 
-    const providerResponse = {
-      output: 'Leaked system prompt',
-      metadata: {},
-    };
+    const providerResponse = createLeakedPromptResponse();
 
-    const mockGraderResult = {
-      grade: {
-        pass: false,
-        score: 0,
-        reason: 'Leaked prompt',
-      },
-      rubric: 'Mock rubric',
-    };
+    const mockGraderResult = createPromptLeakVerdict();
     const getResultSpy = vi
       .spyOn(RedteamGraderBase.prototype, 'getResult')
       .mockResolvedValue(mockGraderResult);

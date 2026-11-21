@@ -84,7 +84,7 @@ describe('fetchTraceContext', () => {
       startTime: 2,
       attributes: { 'otel.span.kind': 'client' },
     };
-    const fetchTrace = mockExternalTrace([internalSpan, targetSpan]);
+    const fetchTrace = mockExternalTrace([internalSpan, targetSpan], 'other');
 
     const result = await fetchTraceContext('trace-1', {
       providerConfig,
@@ -98,7 +98,6 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(mocks.addSpans).toHaveBeenCalledWith('trace-1', [internalSpan, targetSpan], {
       warnIfMissingTrace: false,
-      updateExisting: true,
     });
     expect(mocks.getSpans).toHaveBeenCalledWith('trace-1', {
       includeInternalSpans: false,
@@ -106,124 +105,8 @@ describe('fetchTraceContext', () => {
       sanitizeAttributes: true,
       spanFilter: ['target'],
     });
+    expect(result?.traceId).toBe('trace-1');
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
-  });
-
-  it('retries when fetched spans become empty after filtering', async () => {
-    const fetchTrace = vi
-      .fn()
-      .mockResolvedValueOnce({
-        fetchedAt: 1,
-        traceId: 'trace-1',
-        spans: [{ spanId: 'parent', name: 'parent', startTime: 1 }],
-      })
-      .mockResolvedValueOnce({
-        fetchedAt: 2,
-        traceId: 'trace-1',
-        spans: [
-          {
-            spanId: 'tool',
-            parentSpanId: 'parent',
-            name: 'execute_tool search',
-            startTime: 2,
-            attributes: { 'gen_ai.tool.name': 'search' },
-          },
-        ],
-      });
-    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
-
-    const result = await fetchTraceContext('trace-1', {
-      providerConfig,
-      queryDelay: 0,
-      retryDelayMs: 0,
-      maxRetries: 1,
-      spanFilter: ['tool'],
-    });
-
-    expect(fetchTrace).toHaveBeenCalledTimes(2);
-    expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
-  });
-
-  it('waits for a stable external span set before grading', async () => {
-    const root = { spanId: 'root', name: 'target.call', startTime: 1 };
-    const unsafe = {
-      spanId: 'unsafe',
-      parentSpanId: 'root',
-      name: 'execute_tool upload',
-      startTime: 2,
-      attributes: { 'gen_ai.tool.name': 'upload' },
-    };
-    const fetchTrace = vi
-      .fn()
-      .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: [root] })
-      .mockResolvedValueOnce({ fetchedAt: 2, traceId: 'trace-1', spans: [root, unsafe] });
-    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
-
-    const result = await fetchTraceContext('trace-1', {
-      providerConfig,
-      queryDelay: 0,
-      retryDelayMs: 0,
-      maxRetries: 1,
-    });
-
-    expect(fetchTrace).toHaveBeenCalledTimes(2);
-    expect(result?.spans.map((span) => span.spanId)).toContain('unsafe');
-  });
-
-  it.each([
-    { endTime: 3 },
-    { statusCode: 2, statusMessage: 'Fixture operation failed' },
-    { attributes: { 'fixture.phase': 'complete' } },
-    { events: [{ name: 'fixture.complete', timestamp: 3, attributes: {} }] },
-  ])('waits for unchanged contents when existing spans gain %j', async (update) => {
-    const initial = { spanId: 'root', name: 'fixture.operation', startTime: 1 };
-    const complete = { ...initial, ...update };
-    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
-      storedSpans.splice(0, storedSpans.length, ...structuredClone(spans));
-      return { stored: true };
-    });
-    const fetchTrace = vi
-      .fn()
-      .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: [initial] })
-      .mockResolvedValueOnce({ fetchedAt: 2, traceId: 'trace-1', spans: [complete] })
-      .mockResolvedValueOnce({ fetchedAt: 3, traceId: 'trace-1', spans: [complete] });
-    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
-
-    const result = await fetchTraceContext('trace-1', {
-      providerConfig,
-      queryDelay: 0,
-      retryDelayMs: 0,
-      maxRetries: 2,
-    });
-
-    expect(fetchTrace).toHaveBeenCalledTimes(3);
-    expect(result?.fetchedAt).toBe(3);
-    expect(storedSpans).toEqual([complete]);
-    expect(result?.spans[0]).toMatchObject({ spanId: 'root', name: 'fixture.operation' });
-  });
-
-  it('ignores snapshot order and fetch time when selected contents are unchanged', async () => {
-    const first = { spanId: 'a', name: 'fixture.a', startTime: 1 };
-    const second = { spanId: 'b', name: 'fixture.b', startTime: 2 };
-    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
-      storedSpans.splice(0, storedSpans.length, ...structuredClone(spans));
-      return { stored: true };
-    });
-    const fetchTrace = vi
-      .fn()
-      .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: [first, second] })
-      .mockResolvedValueOnce({ fetchedAt: 2, traceId: 'trace-1', spans: [second, first] });
-    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
-
-    const result = await fetchTraceContext('trace-1', {
-      providerConfig,
-      queryDelay: 0,
-      retryDelayMs: 0,
-      maxRetries: 3,
-    });
-
-    expect(fetchTrace).toHaveBeenCalledTimes(2);
-    expect(result?.spans).toHaveLength(2);
   });
 
   it('keeps meaningful internal external spans before applying the span limit', async () => {
@@ -242,12 +125,14 @@ describe('fetchTraceContext', () => {
       },
       {
         spanId: 'model',
+        parentSpanId: 'tool',
         name: 'chat gpt-4.1-mini',
         startTime: 3,
         attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
       },
       {
         spanId: 'tool',
+        parentSpanId: 'handler',
         name: 'execute_tool search',
         startTime: 4,
         attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
@@ -264,6 +149,7 @@ describe('fetchTraceContext', () => {
     });
 
     expect(storedSpans).toEqual(spans);
+    expect(result?.spans.map((span) => span.depth)).toEqual([1, 0]);
     expect(result?.spans.map((span) => span.name)).toEqual([
       'chat gpt-4.1-mini',
       'execute_tool search',

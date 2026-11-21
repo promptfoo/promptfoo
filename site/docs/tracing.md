@@ -146,22 +146,26 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
-const provider = new NodeTracerProvider({
+// Initialize tracer (SDK 3.x API - pass spanProcessors to constructor)
+const provider = new TracerProvider({
   resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
   spanProcessors: [
-    new SimpleSpanProcessor(
-      new OTLPTraceExporter({
+    new SimpleSpanProcessor({
+      exporter: new OTLPTraceExporter({
         url: 'http://localhost:4318/v1/traces',
       }),
-    ),
+    }),
   ],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 const tracer = trace.getTracer('my-provider');
 
@@ -251,21 +255,23 @@ tests:
         provider: openai:gpt-6-luna
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. When a span has both `process.command_line` and command-name attributes, Promptfoo uses the full command line. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+
+The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
 
-| Provider                         | Turn span name pattern                     | What a counted span represents                                                                                                          |
-| -------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round (includes subagent rounds — see the caveat below)                    |
-| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round (cache hits emit no turn span — see the caveat below)     |
-| `openai:agents` (TypeScript)     | `response *` (preferred) or `generation *` | `openai-agents-js` emits `response <id>` per LLM round; `generation *` is also produced when the SDK includes a `generation`-typed span |
-| `openai-agents` Python (example) | `turn *` (preferred) or `response *`       | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                       |
-| Google ADK (via `google.adk`)    | `call_llm`                                 | Emitted by ADK's built-in OpenTelemetry instrumentation                                                                                 |
-| `openai:codex-sdk`               | `gen_ai.turn *`                            | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                              |
-| `openai:codex-app-server`        | `gen_ai.turn *`                            | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                          |
+| Provider                         | Turn span name pattern                     | What a counted span represents                                                                                                              |
+| -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round (includes subagent rounds — see the caveat below)                        |
+| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round (cache hits emit no turn span — see the caveat below)         |
+| `openai:agents` (TypeScript)     | `response *` (preferred) or `generation *` | `openai-agents-js` emits `response <id>` per LLM round; `generation *` is also produced when the SDK includes a `generation`-typed span     |
+| `openai-agents` Python (example) | `turn *` (preferred) or `response *`       | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                           |
+| Google ADK (via `google.adk`)    | `generate_content *` or `call_llm`         | `generate_content *` counts model calls in the bundled example. Legacy `call_llm` steps can finish in a callback without calling the model. |
+| `openai:codex-sdk`               | `gen_ai.turn *`                            | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                                  |
+| `openai:codex-app-server`        | `gen_ai.turn *`                            | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                              |
 
 For providers whose rows above identify an internal LLM round, counting these spans tells you how many model round-trips an agent took. Note that a tool-using task normally spans **at least two** rounds — one generation emits the tool calls and a later generation folds the results into the answer — so a low total turn count alone does **not** prove the tools were batched.
 
@@ -352,13 +358,6 @@ A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_
 `token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
 from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
-When red-team tracing uses `includeInGrading`, model graders receive a bounded trace summary
-plus sampled tool arguments, commands, paths, and request URLs. Promptfoo masks common
-credential forms before shortening that evidence, including short password flags for MySQL,
-MariaDB, and Twine in command strings and argument arrays. Values over 32,000 characters are omitted;
-the combined summary is limited to 16,000 characters. Keep sensitive data out of traces and
-use deterministic assertions when complete trajectory evidence is required.
-
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
@@ -377,8 +376,8 @@ For traces created by an evaluation, Promptfoo stores the evaluation's redaction
 another's results — each trace is redacted with its own policy, not the active receiver's.
 Traces created only when spans arrive at the receiver (no evaluation row) use the
 registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
-startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
-and is not changed by an overlapping evaluation.
+startup defaults, which remain fixed until the receiver stops. Similarly, `acceptFormats`
+configures the active HTTP receiver endpoint and is not changed by an overlapping evaluation.
 
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
@@ -443,8 +442,6 @@ Here's how it works:
 
 To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
 
-External trace polling compares the selected spans' contents, including updated attributes and status, before stopping early. It still stops at the configured retry limit; an unchanged snapshot does not prove the trace is complete.
-
 #### Grafana Tempo
 
 Use the `tempo` trace provider to pull traces from Grafana Tempo:
@@ -464,8 +461,6 @@ tracing:
 ```
 
 After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
-
-When retries are configured, Promptfoo waits for the fetched span set to stabilize before using it for grading.
 
 Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
 
@@ -707,9 +702,9 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace');
 
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces
 });
 ```
@@ -843,7 +838,7 @@ async function compareModels(prompt, context) {
 
 ## Red Team Tracing
 
-When running [red team tests](/docs/red-team/), tracing provides a powerful capability: **traces from your application's internal operations can be fed back to adversarial attack strategies**, allowing them to craft more sophisticated attacks based on what they observe.
+During [red team tests](/docs/red-team/), attack strategies can use application traces to adapt their next attempt based on observed model calls, tool executions, guardrails, and errors.
 
 This creates a feedback loop where:
 

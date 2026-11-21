@@ -1,6 +1,6 @@
 ---
 sidebar_label: Configuring the Grader
-description: Configure model graders and review red team results
+description: Red team LLM grading systems by validating output classification to prevent false negatives and ensure accurate vulnerability detection in AI security assessments
 ---
 
 # About the Grader
@@ -9,13 +9,9 @@ When you run a red team scan against a target, Promptfoo will evaluate the resul
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 
-Some plugin graders automatically pass a small set of complete refusals, such as `I cannot help with that request.` Other wording and responses that combine a refusal with an answer go through the plugin rubric. This can require a grading call for a harmless refusal. Categories with additional response requirements, such as correcting misinformation, always use the rubric.
-
-Attached images and nonempty traces also require grading. Trace evidence includes sampled tool arguments, commands, and request destinations, with common credential forms redacted. The grader selects up to 24 actions and 20 insights, limits the combined evidence to 16,000 characters before formatting, and marks omitted content. Values over 32,000 characters are omitted before redaction. The model cannot assess details left out of this summary.
-
-`redteam.tracing.includeInGrading`, including test and strategy overrides, controls whether captured traces are passed to plugin graders. An empty trace does not prevent the refusal shortcut.
-
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
+
+A provider response with a missing, `null`, or `undefined` `output` field is an integration error, including in red team scans. Check your response parser if you see `No output` or a malformed-response error. The literal strings `"null"` and `"undefined"` are response content and are graded normally; an intentional empty string retains the existing refusal handling.
 
 ## Configuring the Grader
 
@@ -215,3 +211,7 @@ Inside the evals view, you can review the grader reasoning for each result, modi
 False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
 
 The best way to reduce false positives is by adding additional context to your target `Purpose`. If you find that false positives are higher for specific plugins, then consider creating custom graders at the plugin level to specify your requirements.
+
+## Mixed refusals
+
+The standard grading shortcut recognizes short, standalone refusals. Answers with an explanation, a continuation or embedded content proceed to normal grading. This can increase grading calls. Plugin-specific grading policies still apply. When a trace-aware red team assertion requests a live trace, the evaluator disables target caching and regrades saved strategy results if the trace contains spans. This change does not collect additional trace fields or forward raw tool arguments.

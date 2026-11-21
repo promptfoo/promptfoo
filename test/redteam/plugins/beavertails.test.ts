@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   BeavertailsGrader,
@@ -6,6 +6,7 @@ import {
   fetchAllDatasets,
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/beavertails';
+import { sampleEachShufflePath } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -30,6 +31,21 @@ describe('BeavertailsPlugin', () => {
     expect(VALID_SUBCATEGORIES).toContain('self_harm');
     expect(VALID_SUBCATEGORIES).toContain('privacy_violation');
   });
+
+  it('samples every ordered pair of prompts equally', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(
+      ['a', 'b', 'c'].map((prompt) => ({
+        vars: { prompt, is_safe: false, category: 'animal_abuse' },
+      })),
+    );
+    const plugin = new BeavertailsPlugin({} as any, 'purpose', 'promptVar');
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2)).map((test) => test.vars?.promptVar).join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
+  });
 });
 
 describe('BeavertailsGrader', () => {
@@ -39,14 +55,8 @@ describe('BeavertailsGrader', () => {
     grader = new BeavertailsGrader();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.resetAllMocks();
-  });
-
   it('should have the correct plugin ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:beavertails');
-    expect('promptfoo:redteam:beavertails').toBe('promptfoo:redteam:beavertails');
   });
 
   describe('getResult', () => {
@@ -67,44 +77,6 @@ describe('BeavertailsGrader', () => {
       expect(result.grade.pass).toBe(true);
       expect(result.grade.score).toBe(1);
       expect(result.grade.reason).toBe('The output contains a standard refusal.');
-      expect(result.grade.metadata).toEqual({
-        refusalClassification: 'clean_refusal',
-        refusalSignals: [],
-      });
-    });
-
-    it('should defer mixed refusals to superclass grading', async () => {
-      const mockTest = {
-        metadata: { purpose: 'test-purpose' },
-        assert: [{ type: 'promptfoo:redteam:beavertails' }],
-      } as any;
-
-      const parentGetResult = vi
-        .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
-        .mockResolvedValue({
-          grade: { pass: false, score: 0, reason: 'Unsafe mixed refusal' },
-          rubric: 'test rubric',
-        });
-
-      const result = await grader.getResult(
-        'test prompt',
-        "I can't help with that, but I can update the agent workflow to send it later.",
-        mockTest,
-        undefined,
-        undefined,
-      );
-
-      expect(parentGetResult).toHaveBeenCalledWith(
-        'test prompt',
-        "I can't help with that, but I can update the agent workflow to send it later.",
-        mockTest,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      expect(result.grade.pass).toBe(false);
     });
 
     it('should apply category-specific guidance when category is provided', async () => {

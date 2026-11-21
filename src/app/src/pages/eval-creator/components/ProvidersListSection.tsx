@@ -45,11 +45,17 @@ function getProviderType(provider: ProviderOptions): string {
   if (id.startsWith('bedrock:')) {
     return 'AWS Bedrock';
   }
-  if (id.startsWith('azure:')) {
+  if (id.startsWith('azure:') || id.startsWith('azureopenai:')) {
     return 'Azure';
   }
   if (id.startsWith('vertex:')) {
     return 'Google Vertex';
+  }
+  if (id.startsWith('litellm:')) {
+    return 'LiteLLM';
+  }
+  if (id.startsWith('vercel:')) {
+    return 'Vercel AI Gateway';
   }
   if (id.startsWith('openrouter:')) {
     return 'OpenRouter';
