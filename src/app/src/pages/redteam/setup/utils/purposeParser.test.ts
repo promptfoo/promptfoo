@@ -378,7 +378,7 @@ describe('roundtrip integration', () => {
 
   it('only closes an extended fence on a line containing the exact delimiter', () => {
     const content = 'Before\n```\n`````\n````json\nAfter';
-    const purpose = `Application Purpose:\n\`\`\`\`\n${content}\n\`\`\`\`\n\nKey Features and Capabilities:\n\`\`\`\nFeatures\n\`\`\``;
+    const purpose = `Application Purpose:\n\`\`\`\`\n${content}\n\`\`\`\` \t\n\nKey Features and Capabilities:\n\`\`\`\nFeatures\n\`\`\``;
 
     const imported = purposeToApplicationDefinition(purpose);
 

@@ -1095,6 +1095,56 @@ describe('importCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
+    it('preserves the legacy OpenAI identity and never replaces a colliding literal run', async () => {
+      tempFilePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      const runId = 'evalrun/a';
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          run_id: runId,
+          data_source_idx: 0,
+          item: { input: 'example' },
+          grades: { Match: 1 },
+        }),
+      );
+      const literal = `hashed-${sha256(JSON.stringify(runId))}`;
+      const saveLegacy = (id: string, run: string) =>
+        Eval.create(
+          {
+            metadata: {
+              openaiEvalsImport: { format: 'dashboard-output-items-jsonl', runIds: [run] },
+            },
+          },
+          [],
+          { id: `openai-evals-${id}` },
+        );
+      const retry = async (...flags: string[]) => {
+        process.exitCode = undefined;
+        const cli = new Command();
+        importCommand(cli);
+        await cli.parseAsync(['node', 'test', 'import', tempFilePath, ...flags]);
+      };
+
+      const collision = await saveLegacy(literal, literal);
+      await retry('--force');
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--new-id'));
+
+      const original = await saveLegacy('evalrun_a', runId);
+      await retry();
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining(`Eval ${original.id} already exists`),
+      );
+      await retry('--force');
+      expect(process.exitCode).toBeUndefined();
+      expect(await EvalResult.findManyByEvalId(original.id)).toHaveLength(1);
+      expect(
+        (await Eval.findById(collision.id))?.config.metadata?.openaiEvalsImport.runIds,
+      ).toEqual([literal]);
+      expect(await Eval.getMany(10)).toHaveLength(2);
+    });
+
     it('imports distinct run IDs that previously sanitized to the same eval ID', async () => {
       const runIds = ['evalrun/a', 'evalrun_a', 'evalrun?a', 'evalrunéa', 'evalrun中a'];
       const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);

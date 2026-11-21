@@ -5,7 +5,9 @@ import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
+import { createOpenAIEvalsId } from '../importers/openaiEvals/convert';
 import { parseImportFile } from '../importers/parse';
+import { IMPORT_SOURCE_OPENAI_EVALS } from '../importers/types';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
@@ -15,6 +17,7 @@ import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import type { Command } from 'commander';
+import type { OpenAIEvalsImportResult } from '../importers/openaiEvals';
 
 import type {
   EvaluateResult,
@@ -27,6 +30,36 @@ import type {
 
 function extractEvalId(evalData: any): string | undefined {
   return evalData.evalId || evalData.id;
+}
+
+async function findExistingOpenAIEval(data: OpenAIEvalsImportResult): Promise<Eval | undefined> {
+  const { format, runIds } = data.config.metadata.openaiEvalsImport;
+  const matches = (saved: Eval) => {
+    const identity = saved.config.metadata?.openaiEvalsImport;
+    return (
+      identity?.format === format &&
+      Array.isArray(identity.runIds) &&
+      JSON.stringify([...identity.runIds].sort()) === JSON.stringify([...runIds].sort())
+    );
+  };
+
+  const current = await Eval.findById(data.evalId);
+  if (current && matches(current)) {
+    return current;
+  }
+  const legacyId = createOpenAIEvalsId(runIds, 'legacy');
+  if (legacyId !== data.evalId) {
+    const legacy = await Eval.findById(legacyId);
+    if (legacy && matches(legacy)) {
+      return legacy;
+    }
+  }
+  if (current) {
+    throw new Error(
+      `Eval ${data.evalId} has a different run identity. Use --new-id to import it separately.`,
+    );
+  }
+  return undefined;
 }
 
 function parseImportedDate(value: unknown, field: string): Date | undefined {
@@ -445,7 +478,7 @@ export function importCommand(program: Command) {
         const evalData: any = parsed.evalData;
         const source = parsed.source;
 
-        const importId = extractEvalId(evalData);
+        let importId = extractEvalId(evalData);
         const importCreatedAt = extractCreatedAt(evalData);
         const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
@@ -472,8 +505,12 @@ export function importCommand(program: Command) {
         }
 
         if (importId && !cmdObj.newId) {
-          const existing = await Eval.findById(importId);
+          const existing =
+            parsed.source === IMPORT_SOURCE_OPENAI_EVALS
+              ? await findExistingOpenAIEval(parsed.evalData)
+              : await Eval.findById(importId);
           if (existing) {
+            importId = existing.id;
             if (cmdObj.force) {
               existingEval = existing;
             } else {

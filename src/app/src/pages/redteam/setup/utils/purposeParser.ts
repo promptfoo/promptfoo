@@ -122,7 +122,7 @@ export function purposeToApplicationDefinition(purpose: string | undefined): App
 
   // Try to parse structured format with code blocks
   // Match the exact opening fence on its own line so embedded fences remain content.
-  const sectionRegex = /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n(`{3,})\n([\s\S]*?)\n\2(?=\n|$)/g;
+  const sectionRegex = /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n(`{3,})\n([\s\S]*?)\n\2[ \t]*(?=\n|$)/g;
 
   let match;
   let foundAnySection = false;

@@ -278,9 +278,12 @@ function getOpenAIItemAlignmentKey(row: OpenAIEvalsJsonlRow): string {
   return `${row.data_source_idx}:${itemHash}`;
 }
 
-function createOpenAIEvalsId(runIds: string[]): string {
+export function createOpenAIEvalsId(runIds: string[], version?: 'legacy'): string {
   if (runIds.length === 1) {
     const runId = runIds[0];
+    if (version === 'legacy') {
+      return `${OPENAI_EVALS_PROVIDER_PREFIX}-${runId.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+    }
     // Preserve ordinary IDs, but reserve the generated single- and multi-run namespaces.
     if (
       /^[A-Za-z0-9_-]*$/.test(runId) &&
@@ -294,9 +297,9 @@ function createOpenAIEvalsId(runIds: string[]): string {
 
   const sortedRunIds = [...runIds].sort();
   // Keep existing IDs unless newline separators or UTF-8 replacement could lose identity.
-  const needsEncoding = sortedRunIds.some(
-    (runId) => runId.includes('\n') || Buffer.from(runId).toString() !== runId,
-  );
+  const needsEncoding =
+    version !== 'legacy' &&
+    sortedRunIds.some((runId) => runId.includes('\n') || Buffer.from(runId).toString() !== runId);
   const identity = needsEncoding ? JSON.stringify(sortedRunIds) : sortedRunIds.join('\n');
   const namespace = needsEncoding ? 'runs-encoded' : 'runs';
   return `${OPENAI_EVALS_PROVIDER_PREFIX}-${namespace}-${sha256(identity).slice(0, 24)}`;
