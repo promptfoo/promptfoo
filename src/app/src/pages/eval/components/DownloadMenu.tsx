@@ -289,10 +289,11 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           return [];
         }
         // Persisted tables keep seeds in row.vars and executed prompts on individual outputs.
-        const executed = row.outputs
-          .map((output) => output && getExecutedPrompt(output))
-          .filter(Boolean);
-        return executed.length ? executed : [promptText(seed)];
+        const outputs = row.outputs.filter(Boolean);
+        const fallback = promptText(seed);
+        return outputs.length
+          ? outputs.map((output) => getExecutedPrompt(output) || fallback)
+          : [fallback];
       })
       .filter((input) => input && input !== '[prompt stripped]')
       .map((input) => {

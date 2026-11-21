@@ -448,7 +448,7 @@ describe('DownloadMenu', () => {
     },
   );
 
-  it('exports executed prompts from persisted outputs with a custom injection variable', async () => {
+  it('uses each populated output or its original custom variable in persisted exports', async () => {
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
         head: { prompts: mockTable.head.prompts, vars: ['customInput'] },
@@ -458,7 +458,10 @@ describe('DownloadMenu', () => {
             vars: ['seed'],
             outputs: [
               { response: { prompt: 'first' } },
+              null,
               { metadata: { redteamFinalPrompt: 'second' } },
+              { response: { output: 'answer' } },
+              { response: { prompt: '[prompt stripped]' } },
             ],
           },
         ],
@@ -468,7 +471,7 @@ describe('DownloadMenu', () => {
     });
     renderDownloadDialog();
     await userEvent.click(screen.getByText('Burp Payloads'));
-    expect(await readDownloadedBlob()).toBe('first\nsecond');
+    expect(await readDownloadedBlob()).toBe('first\nsecond\nseed');
   });
 
   it.each([
