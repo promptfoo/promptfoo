@@ -14,7 +14,6 @@ import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import {
   deleteErrorResults,
-  findReplacedErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
   retryCommand,
@@ -149,6 +148,57 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
+    it.each(['reordered', 'omitted', 'extra', 'different provider'])(
+      'protects %s saved errors on retry',
+      async (change) => {
+        const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+        const tests = ['one', 'two'].map((name) => ({ vars: { name } }));
+        const record = await Eval.create(
+          {
+            prompts: [prompt.raw],
+            providers: ['echo'],
+            tests:
+              change === 'reordered'
+                ? [...tests].reverse()
+                : change === 'extra'
+                  ? [...tests, { vars: { name: 'never' } }]
+                  : tests.slice(0, 1),
+          },
+          [prompt],
+          { id: uniqueEvalId() },
+        );
+        const db = await getDb();
+        const ids = [randomUUID(), randomUUID()];
+        await db.insert(evalResultsTable).values(
+          tests.map((testCase, testIdx) => ({
+            id: ids[testIdx],
+            evalId: record.id,
+            promptIdx: 0,
+            testIdx,
+            prompt,
+            testCase,
+            provider:
+              change === 'different provider'
+                ? { id: 'echo', config: { url: 'https://example.org' } }
+                : { id: 'echo' },
+            success: false,
+            error: 'offline',
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            namedScores: {},
+          })),
+        );
+        if (change === 'reordered' || change === 'different provider') {
+          await expect(retryCommand(record.id, {})).rejects.toThrow('saved test or provider');
+          expect(new Set(await getErrorResultIds(record.id))).toEqual(new Set(ids));
+        } else {
+          await retryCommand(record.id, {});
+          expect(await getErrorResultIds(record.id)).toEqual(change === 'extra' ? [] : [ids[1]]);
+        }
+        expect(await record.getResults()).toHaveLength(2);
+      },
+    );
+
     it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
       const artifactId = randomUUID();
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);
@@ -681,140 +731,6 @@ describe('retry command', () => {
         .where(eq(evalResultsTable.evalId, evalRecord.id));
 
       expect(remaining).toHaveLength(0);
-    });
-  });
-
-  describe('findReplacedErrorResults', () => {
-    type Row = {
-      name: string;
-      testIdx: number;
-      promptIdx: number;
-      provider: { id: string; label?: string };
-      isError?: boolean;
-    };
-
-    /** Saves the rows of an eval and returns the id of each by its name. */
-    async function insertRows(
-      rows: Row[],
-    ): Promise<{ evalId: string; id: (name: string) => string }> {
-      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
-      const id = (name: string) => `${evalRecord.id}-${name}`;
-      const db = await getDb();
-      await db.insert(evalResultsTable).values(
-        rows.map((row) => ({
-          id: id(row.name),
-          evalId: evalRecord.id,
-          promptIdx: row.promptIdx,
-          testIdx: row.testIdx,
-          prompt: { raw: 'test', display: 'test', label: 'test' },
-          testCase: { vars: {} },
-          provider: row.provider,
-          success: !row.isError,
-          score: row.isError ? 0 : 1,
-          failureReason: row.isError ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
-          namedScores: {},
-        })),
-      );
-      return { evalId: evalRecord.id, id };
-    }
-
-    const target = { id: 'test-provider' };
-
-    it('separates the errors that have another result in their cell from the rest', async () => {
-      const { evalId, id } = await insertRows([
-        // Retried, and it passed.
-        { name: 'error-0', testIdx: 0, promptIdx: 0, provider: target, isError: true },
-        { name: 'retried-0', testIdx: 0, promptIdx: 0, provider: target },
-        // Not run again.
-        { name: 'error-1', testIdx: 1, promptIdx: 0, provider: target, isError: true },
-        // Retried, and it failed again. The new error stands for the old one.
-        { name: 'error-2', testIdx: 2, promptIdx: 0, provider: target, isError: true },
-        { name: 'retried-2', testIdx: 2, promptIdx: 0, provider: target, isError: true },
-        // A result of the same test in another column replaces nothing.
-        { name: 'error-3', testIdx: 3, promptIdx: 0, provider: target, isError: true },
-        { name: 'other-column-3', testIdx: 3, promptIdx: 1, provider: target },
-      ]);
-      const captured = ['error-0', 'error-1', 'error-2', 'error-3'].map(id);
-
-      const { replaced, kept } = await findReplacedErrorResults(evalId, [
-        ...captured,
-        'not-in-this-eval',
-      ]);
-
-      expect(replaced).toEqual([id('error-0'), id('error-2')]);
-      expect(kept).toEqual([id('error-1'), id('error-3')]);
-
-      // Deleting what was replaced leaves every cell with a result.
-      await deleteErrorResults(replaced);
-      const db = await getDb();
-      const remaining = await db
-        .select({ id: evalResultsTable.id })
-        .from(evalResultsTable)
-        .where(eq(evalResultsTable.evalId, evalId));
-      expect(remaining.map((row) => row.id).sort()).toEqual(
-        ['error-1', 'error-3', 'other-column-3', 'retried-0', 'retried-2'].map(id).sort(),
-      );
-    });
-
-    it('does not count the results of another eval', async () => {
-      const { evalId, id } = await insertRows([
-        { name: 'error-0', testIdx: 0, promptIdx: 0, provider: target, isError: true },
-      ]);
-      await insertRows([{ name: 'retried-0', testIdx: 0, promptIdx: 0, provider: target }]);
-
-      await expect(findReplacedErrorResults(evalId, [id('error-0')])).resolves.toEqual({
-        replaced: [],
-        kept: [id('error-0')],
-      });
-    });
-
-    it('goes by the cell and not by the provider of the result in it', async () => {
-      // A provider whose id comes from the environment, such as a URL that was corrected
-      // for the retry, runs in its own column under a new id.
-      const { evalId, id } = await insertRows([
-        {
-          name: 'error',
-          testIdx: 0,
-          promptIdx: 1,
-          provider: { id: 'http://old.example/chat' },
-          isError: true,
-        },
-        { name: 'retried', testIdx: 0, promptIdx: 1, provider: { id: 'http://new.example/chat' } },
-      ]);
-
-      await expect(findReplacedErrorResults(evalId, [id('error')])).resolves.toEqual({
-        replaced: [id('error')],
-        kept: [],
-      });
-    });
-
-    it('finds the replaced errors of an eval with many other results', async () => {
-      const passing = Array.from({ length: 600 }, (_, index) => ({
-        name: `pass-${index}`,
-        testIdx: index + 10,
-        promptIdx: index % 3,
-        provider: target,
-      }));
-      const { evalId, id } = await insertRows([
-        ...passing,
-        { name: 'error-0', testIdx: 0, promptIdx: 0, provider: target, isError: true },
-        { name: 'retried-0', testIdx: 0, promptIdx: 0, provider: target },
-        { name: 'error-1', testIdx: 1, promptIdx: 2, provider: target, isError: true },
-        // The same test in another column, and the same column in another test.
-        { name: 'pass-near-1a', testIdx: 1, promptIdx: 1, provider: target },
-        { name: 'pass-near-1b', testIdx: 2, promptIdx: 2, provider: target },
-      ]);
-
-      await expect(
-        findReplacedErrorResults(evalId, [id('error-0'), id('error-1')]),
-      ).resolves.toEqual({ replaced: [id('error-0')], kept: [id('error-1')] });
-    });
-
-    it('does no database work without captured errors', async () => {
-      await expect(findReplacedErrorResults('no-such-eval', [])).resolves.toEqual({
-        replaced: [],
-        kept: [],
-      });
     });
   });
 

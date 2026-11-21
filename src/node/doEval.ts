@@ -10,7 +10,9 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { EvalRunError } from '../evaluator/errors';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -21,16 +23,17 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
@@ -46,7 +49,6 @@ import {
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
-import { maybeLoadFromExternalFile } from '../util/file';
 import {
   printBorder,
   setupEnv,
@@ -54,20 +56,16 @@ import {
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { isPromptAllowed } from '../util/promptMatching';
-import { checkProviderApiKeys, getProviderIdentifier } from '../util/provider';
+import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import {
   deleteErrorResults,
-  findReplacedErrorResults,
   getErrorResultIds,
-  getRetryColumnMismatch,
   recalculatePromptMetrics,
-  warnAboutKeptErrorResults,
+  trackRetryResults,
 } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
@@ -77,8 +75,6 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
-  Prompt,
-  Scenario,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -110,257 +106,6 @@ function runtimeTagsForEval(
   };
 
   return Object.keys(tags).length > 0 ? tags : undefined;
-}
-
-/** A results-table column of a saved eval: a prompt and the provider that ran it. */
-type SavedColumn = Prompt & { provider?: string };
-
-function toReplayPrompt(column: SavedColumn): Prompt {
-  return { raw: column.raw, label: column.label, config: column.config } as Prompt;
-}
-
-function isSamePrompt(a: Prompt, b: Prompt): boolean {
-  return a.label === b.label && a.raw === b.raw;
-}
-
-/**
- * Splits saved columns into the columns of each provider in `providerKeys`. Providers with
- * the same identifier have the same prompt filter, so they ran the same prompts and share
- * the columns saved under that identifier equally.
- *
- * Returns undefined when the columns do not belong to these providers.
- */
-function splitColumnsByProvider(
-  columns: SavedColumn[],
-  providerKeys: string[],
-): SavedColumn[][] | undefined {
-  const sharing = new Map<string, number>();
-  for (const key of providerKeys) {
-    sharing.set(key, (sharing.get(key) ?? 0) + 1);
-  }
-  const columnsByKey = new Map<string, SavedColumn[]>();
-  for (const column of columns) {
-    if (column.provider === undefined || !sharing.has(column.provider)) {
-      return undefined;
-    }
-    const saved = columnsByKey.get(column.provider) ?? [];
-    saved.push(column);
-    columnsByKey.set(column.provider, saved);
-  }
-  const runs: SavedColumn[][] = [];
-  for (const key of providerKeys) {
-    const saved = columnsByKey.get(key) ?? [];
-    const length = saved.length / (sharing.get(key) ?? 1);
-    if (!Number.isInteger(length)) {
-      return undefined;
-    }
-    runs.push(saved.slice(0, length));
-  }
-  return runs;
-}
-
-/** Splits saved columns wherever the provider changes, without knowing the providers. */
-function splitColumnsAtProviderChanges(columns: SavedColumn[]): SavedColumn[][] | undefined {
-  if (columns.some((column) => typeof column.provider !== 'string')) {
-    return undefined;
-  }
-  const runs: SavedColumn[][] = [];
-  for (const column of columns) {
-    const run = runs[runs.length - 1];
-    if (run && run[0].provider === column.provider) {
-      run.push(column);
-    } else {
-      runs.push([column]);
-    }
-  }
-  return runs;
-}
-
-/**
- * Merges the prompts each provider ran back into the one list they were selected from.
- *
- * Every run is that list with some prompts left out, so the next prompt of the list is at
- * the front of every run that still has it. A prompt can be listed more than once, so an
- * entry is a prompt together with how many times it came before in its run.
- *
- * Returns undefined when the runs disagree about the order.
- */
-function mergeProviderRuns(runs: SavedColumn[][] | undefined): Prompt[] | undefined {
-  if (!runs) {
-    return undefined;
-  }
-  const entries = runs.map((run) => {
-    const seen = new Map<string, number>();
-    return run.map((column) => {
-      const prompt = JSON.stringify([column.label, column.raw]);
-      const occurrence = seen.get(prompt) ?? 0;
-      seen.set(prompt, occurrence + 1);
-      return { key: `${occurrence}:${prompt}`, column };
-    });
-  });
-  // How many runs still have each entry.
-  const pending = new Map<string, number>();
-  for (const { key } of entries.flat()) {
-    pending.set(key, (pending.get(key) ?? 0) + 1);
-  }
-
-  const positions = entries.map(() => 0);
-  const merged: Prompt[] = [];
-  while (pending.size > 0) {
-    const fronts = entries.map((run, index) => run[positions[index]]);
-    const atFront = new Map<string, number>();
-    for (const front of fronts) {
-      if (front) {
-        atFront.set(front.key, (atFront.get(front.key) ?? 0) + 1);
-      }
-    }
-    const next = fronts.find((front) => front && atFront.get(front.key) === pending.get(front.key));
-    if (!next) {
-      return undefined;
-    }
-    merged.push(toReplayPrompt(next.column));
-    pending.delete(next.key);
-    fronts.forEach((front, index) => {
-      if (front?.key === next.key) {
-        positions[index]++;
-      }
-    });
-  }
-  return merged;
-}
-
-/** The first provider's columns, when every provider has the same ones. */
-function getRepeatedColumns(columns: SavedColumn[], providerCount: number): Prompt[] | undefined {
-  const length = columns.length / providerCount;
-  if (!Number.isInteger(length)) {
-    return undefined;
-  }
-  const repeats = columns.every((column, index) => isSamePrompt(column, columns[index % length]));
-  return repeats ? columns.slice(0, length).map(toReplayPrompt) : undefined;
-}
-
-/** Each distinct saved prompt once, in the order of its first column. */
-function getDistinctPrompts(columns: SavedColumn[]): Prompt[] {
-  const distinct: Prompt[] = [];
-  for (const column of columns) {
-    if (!distinct.some((prompt) => isSamePrompt(prompt, column))) {
-      distinct.push(toReplayPrompt(column));
-    }
-  }
-  return distinct;
-}
-
-/**
- * Whether the evaluator would build exactly the saved columns from `prompts`, given which
- * prompts each provider runs.
- */
-function buildsSavedColumns(
-  prompts: Prompt[],
-  columns: SavedColumn[],
-  providerKeys: string[],
-  providerPromptMap: TestSuite['providerPromptMap'],
-): boolean {
-  let index = 0;
-  for (const key of providerKeys) {
-    for (const prompt of prompts) {
-      if (!isPromptAllowed(prompt, providerPromptMap?.[key])) {
-        continue;
-      }
-      const column = columns[index++];
-      if (
-        !column ||
-        !isSamePrompt(column, prompt) ||
-        (column.provider !== undefined && column.provider !== key)
-      ) {
-        return false;
-      }
-    }
-  }
-  return index === columns.length;
-}
-
-/**
- * The prompts of a saved eval, rebuilt from its results-table columns.
- *
- * A saved eval has one column per provider and prompt, so with several providers each
- * prompt is saved several times. Passing every column back as a prompt would create each
- * column once per provider again, and results would no longer line up with their columns.
- *
- * The list is rebuilt from the saved columns alone. The prompts the saved config resolves to
- * now are not consulted: a prompt file can have changed since, and results stay addressed
- * by the saved column positions. The first reconstruction from which the evaluator would
- * build the saved columns again is used.
- *
- * The same goes for which prompts each provider runs. When the prompt filters of the config
- * no longer produce the saved columns, for example because they list the labels of a prompt
- * file that has changed, `providerPromptMap` holds filters taken from the saved columns.
- */
-function getReplayPrompts(
-  columns: SavedColumn[],
-  testSuite: TestSuite,
-): { prompts: Prompt[]; providerPromptMap?: TestSuite['providerPromptMap'] } {
-  const providerKeys = testSuite.providers.map((provider) => getProviderIdentifier(provider));
-  const providerRuns = splitColumnsByProvider(columns, providerKeys);
-  const reconstructions = [
-    // Each provider's columns, merged. Providers can run different prompts.
-    () => mergeProviderRuns(providerRuns),
-    // The same, for columns that do not line up with the providers the config resolves to.
-    () => mergeProviderRuns(splitColumnsAtProviderChanges(columns)),
-    // Columns that do not name their provider, as long as every provider ran the same prompts.
-    () => getRepeatedColumns(columns, providerKeys.length),
-    // Such columns can also all belong to one provider, with their repeats.
-    () => columns.map(toReplayPrompt),
-    () => getDistinctPrompts(columns),
-  ];
-  // Every column as a prompt is only right when it is known to rebuild the columns: with
-  // several providers it would create each column once per provider.
-  const isNearest = [true, true, true, false, true];
-
-  let closest: Prompt[] | undefined;
-  for (const [index, reconstruct] of reconstructions.entries()) {
-    const prompts = reconstruct();
-    if (
-      prompts &&
-      buildsSavedColumns(prompts, columns, providerKeys, testSuite.providerPromptMap)
-    ) {
-      return { prompts };
-    }
-    if (isNearest[index]) {
-      closest ??= prompts;
-    }
-  }
-
-  // The config's prompt filters do not produce the saved columns. Each provider's saved
-  // columns say which prompts it ran, so they can stand in for its filter.
-  const merged = mergeProviderRuns(providerRuns);
-  if (providerRuns && merged) {
-    const providerPromptMap = Object.fromEntries(
-      providerKeys.map((key, index) => [
-        key,
-        [...new Set(providerRuns[index].map((column) => column.label))],
-      ]),
-    );
-    if (buildsSavedColumns(merged, columns, providerKeys, providerPromptMap)) {
-      return { prompts: merged, providerPromptMap };
-    }
-  }
-
-  // The providers no longer produce the saved columns, for example because one was filtered
-  // out. This is the nearest list there is.
-  logger.debug('[Eval] The saved prompt columns could not be reproduced exactly', {
-    columns: columns.length,
-    providers: providerKeys.length,
-  });
-  return { prompts: closest ?? columns.map(toReplayPrompt) };
-}
-
-/** Makes a resumed or retried eval build the prompt columns of its first run again. */
-function applyReplayPrompts(testSuite: TestSuite, columns: SavedColumn[]): void {
-  const { prompts, providerPromptMap } = getReplayPrompts(columns, testSuite);
-  testSuite.prompts = prompts;
-  if (providerPromptMap) {
-    testSuite.providerPromptMap = providerPromptMap;
-  }
 }
 
 async function resolveReplayConfigs(
@@ -401,17 +146,8 @@ async function resolveReplayConfigs(
   return configs;
 }
 
-export class EvalRunError extends Error {
-  readonly exitCode: number;
-
-  constructor(message: string, exitCode: number = 1) {
-    super(message);
-    this.name = 'EvalRunError';
-    // POSIX exit codes are 1-255 (0 means success). Coerce silly values to the
-    // default rather than letting `exitCode = 0` silently mask a real failure.
-    this.exitCode = Number.isInteger(exitCode) && exitCode >= 1 && exitCode <= 255 ? exitCode : 1;
-  }
-}
+// Compatibility export for existing source consumers.
+export { EvalRunError } from '../evaluator/errors';
 
 function failEvalRun(
   message: string,
@@ -484,6 +220,39 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
   });
 }
 
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+async function cleanupOnSigterm(): Promise<void> {
+  // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
+  await flushOtel();
+  try {
+    await providerRegistry.shutdownForProcess();
+  } catch (error) {
+    logger.debug('Provider cleanup failed during SIGTERM', { error });
+  }
+  await shutdownOtel();
+}
+
+/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([cleanupOnSigterm(), timeout]);
+    } finally {
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    }
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => process.removeListener('SIGTERM', onSigterm);
+}
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -554,11 +323,8 @@ async function doEvalWithEnv(
   envFileOverrides: EnvOverrides | undefined,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
-
-  let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
-  let _basePath: string | undefined = undefined;
-  let commandLineOptions: Record<string, any> | undefined = undefined;
+  const inputCommand = cmdObj;
+  const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -598,14 +364,25 @@ async function doEvalWithEnv(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
+  const runEvaluationWithEnv = async (
+    runEnv: EnvOverrides,
+    envFileOverrides: EnvOverrides | undefined,
+    cmdObj: Partial<CommandLineOptions & Command>,
+    defaultConfig: Partial<UnifiedConfig>,
+    evaluateOptions: InternalEvaluateOptions,
+    initialization?: boolean,
+  ) => {
     const startTime = Date.now();
+    let config: Partial<UnifiedConfig>;
+    let testSuite: TestSuite;
+    let _basePath: string | undefined;
+    let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+      ...(Boolean(defaultConfig.redteam) && { isRedteam: true }),
     });
 
     if (cmdObj.write) {
@@ -657,6 +434,9 @@ async function doEvalWithEnv(
         );
       }
       cmdObj.config = resolvedConfigPaths;
+      if (initialization) {
+        inputCommand.config = resolvedConfigPaths;
+      }
     }
 
     // Check for conflicting options
@@ -712,10 +492,6 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
-      // Ensure prompts exactly match the previous run to preserve IDs and content
-      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        applyReplayPrompts(testSuite, resumeEval.prompts);
-      }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
       if (cmdObj.write === false) {
@@ -762,11 +538,6 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
-
-      // Ensure prompts exactly match the previous run to preserve IDs and content
-      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        applyReplayPrompts(testSuite, resumeEval.prompts);
-      }
     } else {
       ({
         config,
@@ -777,9 +548,14 @@ async function doEvalWithEnv(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    // Clean up the providers this run loaded once no evaluation is using them.
+    await providerRegistry.cleanupWhenIdle(testSuite.providers, evaluateOptions.abortSignal);
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
+    if (commandLineOptions?.safeMode) {
+      cliState.safeMode = true;
+    }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -799,12 +575,6 @@ async function doEvalWithEnv(
         `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
         isCliInvocation,
       );
-    }
-    // A retry whose providers and prompts make other columns than the eval has is not run.
-    const columnMismatch =
-      resumeEval && retryErrorResultIds ? getRetryColumnMismatch(resumeEval, testSuite) : undefined;
-    if (columnMismatch) {
-      return failEvalRun(columnMismatch, isCliInvocation);
     }
     if (resumeEval) {
       cliState.resume = true;
@@ -852,12 +622,12 @@ async function doEvalWithEnv(
       };
     }
 
-    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
+    // Resume and error retries must preserve the original expansion and cache settings.
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
     let delay: number;
-    if (resumeRaw) {
+    if (resumeEval) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
@@ -892,7 +662,7 @@ async function doEvalWithEnv(
     // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
-    const explicitMaxConcurrency = resumeRaw
+    const explicitMaxConcurrency = resumeEval
       ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
@@ -1020,10 +790,14 @@ async function doEvalWithEnv(
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
-    // Strip any providerFilter a config file injected via evaluateOptions — only the
-    // normalized CLI/persisted value above may be persisted and replayed.
-    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
-      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
+    // Strip orchestration keys from config-supplied options. Only the normalized
+    // provider filter is persisted; saved-column restoration is set at the call site.
+    const {
+      providerFilter: _ignoredProviderFilter,
+      restorePromptColumns: _ignoredRestorePromptColumns,
+      retryResults: _ignoredRetryResults,
+      ...safeEvaluateOptions
+    } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
       showProgressBar:
@@ -1075,17 +849,6 @@ async function doEvalWithEnv(
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-    }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
@@ -1132,10 +895,6 @@ async function doEvalWithEnv(
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
-    const previousAbortSignal = evaluateOptions.abortSignal;
-    evaluateOptions.abortSignal = previousAbortSignal
-      ? AbortSignal.any([previousAbortSignal, abortController.signal])
-      : abortController.signal;
 
     let paused = false;
     let sigintHandler: NodeJS.SignalsListener | undefined;
@@ -1150,8 +909,6 @@ async function doEvalWithEnv(
         clearTimeout(forceExitTimeout);
         forceExitTimeout = undefined;
       }
-      // Restore original abort signal for watch mode
-      evaluateOptions.abortSignal = previousAbortSignal;
     };
 
     // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
@@ -1194,26 +951,52 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      if (resumeRaw && !evalRecord.useOldResults()) {
+        // Older evals lack this counter. Recover it without recalculating other metrics.
+        const missingCacheCounts = evalRecord.prompts.map(({ metrics }) =>
+          metrics && metrics.testCacheHitCount === undefined ? { metrics, count: 0 } : undefined,
+        );
+        if (missingCacheCounts.some(Boolean)) {
+          for await (const batch of evalRecord.fetchResultsBatched()) {
+            for (const result of batch) {
+              const pending = missingCacheCounts[result.promptIdx];
+              if (pending && result.response?.cached) {
+                pending.count++;
+              }
+            }
+          }
+          // Publish only after every batch succeeds; a failed read must not leave partial counts.
+          for (const pending of missingCacheCounts) {
+            if (pending) {
+              pending.metrics.testCacheHitCount = pending.count;
+            }
+          }
+        }
+      }
+
+      const retryResults =
+        retryErrorResultIds && trackRetryResults(evalRecord.id, retryErrorResultIds);
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        retryResults,
+        restorePromptColumns: Boolean(resumeEval),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
+        pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
         isRedteam: Boolean(config.redteam),
       });
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
       // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
+      if (retryResults && !paused && !ret.resultPersistenceFailed) {
+        const errorResultIds = retryResults.replacedIds();
         try {
-          // Only an error that another result has replaced is removed. A cell that did not
-          // run again, for example because the run stopped early, keeps its error.
-          const { replaced, kept } = await findReplacedErrorResults(ret.id, errorResultIds);
-          await deleteErrorResults(replaced);
+          await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
-          logger.debug(`Cleaned up ${replaced.length} old ERROR results after successful retry`);
-          warnAboutKeptErrorResults(kept);
+          logger.debug(
+            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+          );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
@@ -1271,28 +1054,7 @@ async function doEvalWithEnv(
       sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
 
-    let successes = 0;
-    let failures = 0;
-    let errors = 0;
-    const tokenUsage = createEmptyTokenUsage();
-
-    // Calculate our total successes and failures
-    for (const prompt of evalRecord.prompts) {
-      if (prompt.metrics?.testPassCount) {
-        successes += prompt.metrics.testPassCount;
-      }
-      if (prompt.metrics?.testFailCount) {
-        failures += prompt.metrics.testFailCount;
-      }
-      if (prompt.metrics?.testErrorCount) {
-        errors += prompt.metrics.testErrorCount;
-      }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
-    }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
-    if (generationTokenUsage) {
-      tokenUsage.generation = generationTokenUsage;
-    }
+    const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
@@ -1337,6 +1099,9 @@ async function doEvalWithEnv(
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    const repeatStability = resumeEval
+      ? await evalRecord.getRepeatStability()
+      : await evalRecord.getObservedRepeatStability();
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
@@ -1352,32 +1117,19 @@ async function doEvalWithEnv(
       successes,
       failures,
       errors,
+      cacheHits,
       duration,
       maxConcurrency,
       tracker,
       targetErrorStatus,
+      repeatStability,
     });
 
-    // Special case: show cloud signup instructions when user wants to share but can't
-    if (cmdObj.write && wantsToShare && !canShareEval) {
-      logger.info(summaryLines[0]); // Show just the completion message
-      notCloudEnabledShareInstructions();
-      // Skip the guidance lines and show the rest
-      for (let i = 1; i < summaryLines.length; i++) {
-        if (summaryLines[i].includes('View results:')) {
-          // Skip guidance section
-          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
-            i++;
-          }
-          i--; // Back up one so the for loop increment works
-        } else {
-          logger.info(summaryLines[i]);
-        }
-      }
-    } else {
-      // Normal case: show all summary lines
-      for (const line of summaryLines) {
-        logger.info(line);
+    const showShareInstructions = cmdObj.write && wantsToShare && !canShareEval;
+    for (const [index, line] of summaryLines.entries()) {
+      logger.info(line);
+      if (index === 0 && showShareInstructions) {
+        notCloudEnabledShareInstructions();
       }
     }
 
@@ -1493,7 +1245,12 @@ async function doEvalWithEnv(
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
+        const watcher = chokidar.watch(watchPaths, {
+          atomic: true,
+          ignored: /^\./,
+          persistent: true,
+        });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
@@ -1504,7 +1261,8 @@ async function doEvalWithEnv(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            clearConfigCache();
+            // Watch reruns have always reloaded CommonJS .js default configurations.
+            clearCjsModuleCache();
             try {
               await runEvaluation();
             } catch (error) {
@@ -1525,11 +1283,12 @@ async function doEvalWithEnv(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (
-        isCliInvocation &&
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
-      ) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+      const belowThreshold =
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+      // An eval stopped because its target is unavailable did not run every test, so it
+      // fails whatever the tests before the stop did.
+      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+        if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
@@ -1537,36 +1296,59 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
+        // A run that failed its tests returns here, as it always has. A run stopped by its
+        // target goes on to clean up its providers, as it did when it still exited with 0.
+        if (targetErrorStatus == null) {
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
-    }
-
     return ret;
   };
 
-  const runEvaluation = (initialization?: boolean) => {
-    // Each watch run starts clean and retains its resolved env through output and cleanup.
+  const runEvaluation = async (initialization?: boolean) => {
+    // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
-    return cliState.withConfig(undefined, () =>
-      cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
-      ),
-    );
+    const runEnvFileOverrides =
+      initialization || !initialEnvFileOverrides
+        ? envFileOverrides
+        : { ...initialEnvFileOverrides };
+    const runCommand = { ...cmdObj };
+    const runDefaults = { ...defaultConfig };
+    const runOptions = { ...evaluateOptions };
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    // Keep it until the whole run settles, including sharing and output files after evaluate().
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    try {
+      return await cliState.withSafeMode(
+        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        () =>
+          cliState.withConfig(undefined, () =>
+            cliState.withBasePath(undefined, () =>
+              cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+                cliState.withEnv(runEnv, () =>
+                  providerRegistry.withEvaluation(() =>
+                    runEvaluationWithEnv(
+                      runEnv,
+                      runEnvFileOverrides,
+                      runCommand,
+                      runDefaults,
+                      runOptions,
+                      initialization,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      );
+    } finally {
+      removeSigtermHandler?.();
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);

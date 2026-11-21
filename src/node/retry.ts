@@ -1,9 +1,17 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import chalk from 'chalk';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
+import { getResultIndexKey } from '../evaluator/resultIndex';
+import {
+  sanitizeForDbWithSecrets,
+  sanitizeProvider,
+  serializeResultProviderRefs,
+} from '../evaluator/resultProcessing';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
@@ -15,19 +23,14 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
+import { createDefaultPromptMetrics, updatePromptResultCounts } from '../util/eval/promptMetrics';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
-import { isPromptAllowed } from '../util/promptMatching';
-import { getProviderIdentifier } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
-import {
-  accumulateGradingTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../util/tokenUsageUtils';
+import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { TestSuite, TokenUsage } from '../types/index';
+import type { AtomicTestCase, EvaluateResult, PromptMetrics, RunEvalOptions } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -142,96 +145,93 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
-/**
- * Why the ERROR results of a saved eval cannot be retried with a test suite, if they cannot.
- *
- * Results are addressed by column, and a retry removes the errors it replaces. With another
- * number of columns, for example because a provider no longer resolves, the retried results
- * would land in the columns of other providers. An extension can still change the providers
- * and prompts before the run, so a suite with extensions is not judged.
- */
-export function getRetryColumnMismatch(
-  evalRecord: Pick<Eval, 'id' | 'prompts'>,
-  testSuite: TestSuite,
-): string | undefined {
-  if (testSuite.extensions?.length) {
-    return undefined;
-  }
-  const savedColumns = Array.isArray(evalRecord.prompts) ? evalRecord.prompts.length : 0;
-  // The columns the evaluator builds: for each provider, the prompts it is allowed to run.
-  let columns = 0;
-  for (const provider of testSuite.providers) {
-    const allowed = testSuite.providerPromptMap?.[getProviderIdentifier(provider)];
-    columns += testSuite.prompts.filter((prompt) => isPromptAllowed(prompt, allowed)).length;
-  }
-  if (savedColumns === 0 || columns === savedColumns) {
-    return undefined;
-  }
-  return `Cannot retry errors for evaluation ${evalRecord.id}: it has ${savedColumns} result ${savedColumns === 1 ? 'column' : 'columns'}, but its providers and prompts now make ${columns}, so retried results would not line up with the saved ones. The evaluation was not changed.`;
+// Match the same public test representation that EvalResult writes, including
+// older rows without the empty containers supplied by the current evaluator.
+function retryTestIdentity(testCase: AtomicTestCase) {
+  const saved = sanitizeForDbWithSecrets(serializeResultProviderRefs({ testCase }).testCase);
+  return { vars: {}, assert: [], options: {}, metadata: {}, ...saved };
 }
 
-/**
- * Splits the ERROR results captured before a retry into the ones another result has replaced
- * and the ones to keep.
- *
- * An error is replaced by another result in its cell (test and column), which is how the
- * evaluator decides what to run again. A cell that did not run, for example because the run
- * stopped early, has nothing in place of its error.
- */
-export async function findReplacedErrorResults(
-  evalId: string,
-  errorResultIds: string[],
-): Promise<{ replaced: string[]; kept: string[] }> {
-  if (errorResultIds.length === 0) {
-    return { replaced: [], kept: [] };
-  }
-
-  const db = await getDb();
-  // Only the cells that hold an ERROR result are read, so this grows with the errors and
-  // not with the eval.
-  const rows = await db
-    .select({
-      id: evalResultsTable.id,
-      testIdx: evalResultsTable.testIdx,
-      promptIdx: evalResultsTable.promptIdx,
-    })
-    .from(evalResultsTable)
-    .where(
-      and(
-        eq(evalResultsTable.evalId, evalId),
-        sql`(${evalResultsTable.testIdx}, ${evalResultsTable.promptIdx}) IN (
-          SELECT test_idx, prompt_idx FROM ${evalResultsTable}
-          WHERE eval_id = ${evalId} AND failure_reason = ${ResultFailureReason.ERROR}
-        )`,
-      ),
-    )
-    .all();
-
-  const captured = new Set(errorResultIds);
-  const getCell = (row: { testIdx: number; promptIdx: number }) =>
-    `${row.testIdx}:${row.promptIdx}`;
-  const replacedCells = new Set(rows.filter((row) => !captured.has(row.id)).map(getCell));
+export function trackRetryResults(evalId: string, errorIds: string[]) {
+  const captured = new Set(errorIds);
+  const cells = new Map<string, { ids: string[]; identity: unknown }>();
   const replaced = new Set<string>();
-  const kept = new Set<string>();
-  for (const row of rows) {
-    if (captured.has(row.id)) {
-      (replacedCells.has(getCell(row)) ? replaced : kept).add(row.id);
-    }
-  }
-
-  return {
-    replaced: errorResultIds.filter((id) => replaced.has(id)),
-    kept: errorResultIds.filter((id) => kept.has(id)),
+  const identity = (test: AtomicTestCase, provider: Parameters<typeof sanitizeProvider>[0]) => {
+    const { id, label, config = {} } = sanitizeProvider(provider);
+    // Config loading injects a working directory that older rows did not store.
+    const { basePath: _basePath, ...settings } = config;
+    return { test: retryTestIdentity(test), id, label: label || id, settings };
   };
-}
-
-/** Says how many ERROR results a retry left in place, if any. */
-export function warnAboutKeptErrorResults(kept: string[]): void {
-  if (kept.length > 0) {
-    logger.warn(
-      `Kept ${kept.length} ERROR ${kept.length === 1 ? 'result' : 'results'} without a retried result: the test, prompt or provider did not run again.`,
+  const mismatch = () =>
+    new ConfigResolutionError(
+      'Cannot retry because a saved test or provider changed position or content. Existing ERROR results were preserved. Start a new evaluation.',
     );
-  }
+  return {
+    async prepare(steps: RunEvalOptions[]) {
+      const db = await getDb();
+      const rows = await db
+        .select({
+          id: evalResultsTable.id,
+          testIdx: evalResultsTable.testIdx,
+          promptIdx: evalResultsTable.promptIdx,
+          test: evalResultsTable.testCase,
+          provider: evalResultsTable.provider,
+        })
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, evalId),
+            eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+          ),
+        )
+        .all();
+      for (const row of rows) {
+        if (!captured.has(row.id)) {
+          continue;
+        }
+        const key = getResultIndexKey(row);
+        const expected = identity(row.test, row.provider);
+        const cell = cells.get(key);
+        if (cell) {
+          if (!isDeepStrictEqual(cell.identity, expected)) {
+            throw mismatch();
+          }
+          cell.ids.push(row.id);
+        } else {
+          cells.set(key, { ids: [row.id], identity: expected });
+        }
+      }
+      return steps.filter((step) => {
+        const cell = cells.get(getResultIndexKey(step));
+        if (!cell) {
+          return false;
+        }
+        if (!isDeepStrictEqual(cell.identity, identity(step.test, step.provider))) {
+          throw mismatch();
+        }
+        return true;
+      });
+    },
+    saved(row: Pick<EvaluateResult, 'provider' | 'testCase' | 'testIdx' | 'promptIdx'>) {
+      const cell = cells.get(getResultIndexKey(row));
+      // An extension can change a test after planning. Never delete an original
+      // error solely because another row was written at its indices.
+      if (cell && isDeepStrictEqual(cell.identity, identity(row.testCase, row.provider))) {
+        for (const id of cell.ids) {
+          replaced.add(id);
+        }
+      }
+    },
+    replacedIds() {
+      const kept = captured.size - replaced.size;
+      if (kept) {
+        logger.warn(
+          `Kept ${kept} ERROR ${kept === 1 ? 'result' : 'results'} without a matching persisted replacement.`,
+        );
+      }
+      return [...replaced];
+    },
+  };
 }
 
 /**
@@ -275,41 +275,9 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   let totalProcessed = 0;
 
   // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<
-    number,
-    {
-      score: number;
-      testPassCount: number;
-      testFailCount: number;
-      testErrorCount: number;
-      assertPassCount: number;
-      assertFailCount: number;
-      totalLatencyMs: number;
-      tokenUsage: TokenUsage;
-      namedScores: Record<string, number>;
-      namedScoresCount: Record<string, number>;
-      namedScoreWeights?: Record<string, number>;
-      cost: number;
-      incurredCost?: number;
-    }
-  >();
-
-  // Initialize metrics for each prompt
+  const promptMetricsMap = new Map<number, PromptMetrics>();
   for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, {
-      score: 0,
-      testPassCount: 0,
-      testFailCount: 0,
-      testErrorCount: 0,
-      assertPassCount: 0,
-      assertFailCount: 0,
-      totalLatencyMs: 0,
-      tokenUsage: createEmptyTokenUsage(),
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-      cost: 0,
-    });
+    promptMetricsMap.set(promptIdx, createDefaultPromptMetrics());
   }
 
   // Stream results in batches to avoid OOM with large evaluations
@@ -330,14 +298,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           continue;
         }
 
-        // Update test counts
-        if (result.success) {
-          metrics.testPassCount++;
-        } else if (result.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount++;
-        } else {
-          metrics.testFailCount++;
-        }
+        updatePromptResultCounts(metrics, result);
 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
@@ -467,13 +428,6 @@ async function retryWithConfig(
 ) {
   const evalId = originalEval.id;
 
-  // An explicit config, or a provider that no longer resolves, can make other columns than
-  // the eval has. Nothing is run then.
-  const columnMismatch = getRetryColumnMismatch(originalEval, testSuite);
-  if (columnMismatch) {
-    throw new ConfigResolutionError(columnMismatch);
-  }
-
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
   // - If retry failed (network error, API timeout, etc.), the ERROR results were already gone
@@ -515,10 +469,13 @@ async function retryWithConfig(
   }
 
   // Set up evaluation options
+  const retryResults = trackRetryResults(evalId, errorResultIds);
   const evaluateOptions: InternalEvaluateOptions = {
+    retryResults,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
+    restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 
@@ -534,12 +491,9 @@ async function retryWithConfig(
 
     let errorRowsDeleted = false;
     try {
-      // Only an error that another result has replaced is removed.
-      const { replaced, kept } = await findReplacedErrorResults(evalId, errorResultIds);
-      await deleteErrorResults(replaced);
+      await deleteErrorResults(retryResults.replacedIds());
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
-      warnAboutKeptErrorResults(kept);
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
       logger.warn('Post-retry cleanup had issues. Retry results are saved.', {

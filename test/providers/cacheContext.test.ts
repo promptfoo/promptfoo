@@ -24,12 +24,6 @@ describe.each([
     responseBody: (output: string) => ({ choices: [{ message: { content: output } }] }),
   },
   {
-    name: 'Cohere',
-    createProvider: () =>
-      new CohereChatCompletionProvider('command-r', { config: { apiKey: 'test-key' } }),
-    responseBody: (output: string) => ({ text: output }),
-  },
-  {
     name: 'LocalAI chat',
     createProvider: () => new LocalAiChatProvider('test-model'),
     responseBody: (output: string) => ({ choices: [{ message: { content: output } }] }),
@@ -94,6 +88,55 @@ describe.each([
       });
       expect(await callApi()).toMatchObject({ output: 'response 1' });
       expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+    },
+  );
+});
+
+// Cohere deliberately bypasses the persistent cache, which includes authenticated headers
+// in its identity, rather than retaining a credential-derived cache key.
+describe('Cohere uncached context', () => {
+  let provider: CohereChatCompletionProvider;
+  const cohereNamespace = 'cohere-uncached-context';
+  const callApi = (callContext?: CallApiContextParams) =>
+    withCacheNamespace(cohereNamespace, () => provider.callApi(prompt, callContext));
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    provider = new CohereChatCompletionProvider('command-r', { config: { apiKey: 'test-key' } });
+    vi.mocked(fetchWithRetries).mockImplementation(async () =>
+      Response.json({ text: `response ${vi.mocked(fetchWithRetries).mock.calls.length}` }),
+    );
+  });
+
+  afterEach(async () => {
+    await withCacheNamespace(cohereNamespace, () => getCache().clear());
+    vi.resetAllMocks();
+  });
+
+  it.each([
+    undefined,
+    {},
+    { bustCache: true },
+    { debug: true },
+    { debug: false },
+    { bustCache: false, debug: true },
+    { bustCache: true, debug: false },
+  ])('keeps requests uncached with flags %j', async (flags) => {
+    const callContext = flags ? { ...context, ...flags } : undefined;
+    expect(await callApi(callContext)).toMatchObject({ output: 'response 1', cached: false });
+    expect(await callApi(callContext)).toMatchObject({ output: 'response 2', cached: false });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([undefined, { bustCache: true }, { debug: true }])(
+    'returns network errors without falling back to a cached response with flags %j',
+    async (flags) => {
+      const callContext = flags ? { ...context, ...flags } : undefined;
+      expect(await callApi(callContext)).toMatchObject({ output: 'response 1' });
+      vi.mocked(fetchWithRetries).mockRejectedValueOnce(new Error('unavailable'));
+      expect(await callApi(callContext)).toEqual({ error: 'API call error: Error: unavailable' });
+      expect(await callApi(callContext)).toMatchObject({ output: 'response 3', cached: false });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(3);
     },
   );
 });

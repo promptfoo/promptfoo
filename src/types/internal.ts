@@ -1,5 +1,5 @@
 import type { EventSource } from './eventSource';
-import type { EvaluateOptions } from './index';
+import type { EvaluateOptions, EvaluateResult, RunEvalOptions } from './index';
 import type { TokenUsage } from './shared';
 
 /**
@@ -9,6 +9,15 @@ import type { TokenUsage } from './shared';
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
+  /** CLI-owned graceful pause; ordinary caller cancellation retains its error rows. */
+  pauseSignal?: AbortSignal;
+  /** CLI recovery reuses saved columns; this is neither configurable nor persisted. */
+  restorePromptColumns?: boolean;
+  /** CLI retry verifies the planned cells and records durable replacements. */
+  retryResults?: {
+    prepare(steps: RunEvalOptions[]): Promise<RunEvalOptions[]>;
+    saved(row: Pick<EvaluateResult, 'provider' | 'testCase' | 'testIdx' | 'promptIdx'>): void;
+  };
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
 };
