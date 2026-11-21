@@ -8,7 +8,6 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type TokenUsage,
-  type Vars,
 } from '../../types/index';
 import { sha256 } from '../../util/createHash';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -19,12 +18,7 @@ import type { OpenAIEvalsImportResult, OpenAIEvalsJsonlRow, OpenAISample } from 
 const OPENAI_EVALS_PROVIDER_PREFIX = 'openai-evals';
 const OPENAI_EVALS_IMPORT_FORMAT = 'dashboard-output-items-jsonl';
 
-function createOpenAIItemVars(item: Record<string, unknown>): Vars {
-  return { item };
-}
-
-function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): CompletedPrompt {
-  const hasStringInput = rows.every((row) => typeof row.item['input'] === 'string');
+function createOpenAIEvalsPrompt(runId: string, hasStringInput: boolean): CompletedPrompt {
   const raw = hasStringInput ? '{{item.input}}' : 'Imported OpenAI eval item';
   const label = hasStringInput
     ? `OpenAI eval item input (${runId})`
@@ -40,7 +34,7 @@ function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): Co
 function createOpenAITestCase(row: OpenAIEvalsJsonlRow): AtomicTestCase {
   return {
     description: `Imported OpenAI eval item ${row.data_source_idx}`,
-    vars: createOpenAIItemVars(row.item),
+    vars: { item: row.item },
     metadata: {
       openaiRunId: row.run_id,
       openaiDataSourceIdx: row.data_source_idx,
@@ -215,7 +209,7 @@ function createOpenAIResult(
   promptIdx: number,
   importedPrompt: CompletedPrompt,
 ): EvaluateResult {
-  const vars = createOpenAIItemVars(row.item);
+  const vars = { item: row.item };
   const gradingResult = createOpenAIGradingResult(row);
   const response = createOpenAIResponse(row.sample);
   const error = getOpenAISampleError(row.sample);
@@ -335,37 +329,34 @@ export function convertOpenAIEvalsJsonl(rows: OpenAIEvalsJsonlRow[]): OpenAIEval
     throw new Error('OpenAI eval items JSONL import requires at least one row.');
   }
 
-  const runIds: string[] = [];
-  const promptIdxByRunId = new Map<string, number>();
-  const rowsByRunId = new Map<string, OpenAIEvalsJsonlRow[]>();
-  const firstRowByAlignmentKey = new Map<string, OpenAIEvalsJsonlRow>();
+  const stringInputsByRun = new Map<string, boolean>();
   const testIdxByAlignmentKey = new Map<string, number>();
-  const alignmentKeyByRow: string[] = new Array(rows.length);
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (!promptIdxByRunId.has(row.run_id)) {
-      promptIdxByRunId.set(row.run_id, runIds.length);
-      runIds.push(row.run_id);
-      rowsByRunId.set(row.run_id, []);
+  const tests: AtomicTestCase[] = [];
+  const testIndices = rows.map((row) => {
+    stringInputsByRun.set(
+      row.run_id,
+      (stringInputsByRun.get(row.run_id) ?? true) && typeof row.item.input === 'string',
+    );
+    const key = getOpenAIItemAlignmentKey(row);
+    const existing = testIdxByAlignmentKey.get(key);
+    if (existing !== undefined) {
+      return existing;
     }
-    rowsByRunId.get(row.run_id)!.push(row);
+    const testIdx = tests.length;
+    testIdxByAlignmentKey.set(key, testIdx);
+    tests.push(createOpenAITestCase(row));
+    return testIdx;
+  });
 
-    const alignmentKey = getOpenAIItemAlignmentKey(row);
-    alignmentKeyByRow[i] = alignmentKey;
-    if (!firstRowByAlignmentKey.has(alignmentKey)) {
-      testIdxByAlignmentKey.set(alignmentKey, firstRowByAlignmentKey.size);
-      firstRowByAlignmentKey.set(alignmentKey, row);
-    }
-  }
-
-  const importedPrompts = runIds.map((runId) =>
-    createOpenAIEvalsPrompt(runId, rowsByRunId.get(runId)!),
+  const runIds = [...stringInputsByRun.keys()];
+  const promptIdxByRunId = new Map(runIds.map((id, index) => [id, index]));
+  const importedPrompts = Array.from(stringInputsByRun, ([id, hasStringInput]) =>
+    createOpenAIEvalsPrompt(id, hasStringInput),
   );
   const resultsByPromptIdx: EvaluateResult[][] = runIds.map(() => []);
   const results = rows.map((row, i) => {
     const promptIdx = promptIdxByRunId.get(row.run_id)!;
-    const testIdx = testIdxByAlignmentKey.get(alignmentKeyByRow[i])!;
+    const testIdx = testIndices[i];
     const result = createOpenAIResult(row, testIdx, promptIdx, importedPrompts[promptIdx]);
     resultsByPromptIdx[promptIdx].push(result);
     return result;
@@ -374,7 +365,6 @@ export function convertOpenAIEvalsJsonl(rows: OpenAIEvalsJsonlRow[]): OpenAIEval
     ...importedPrompt,
     metrics: createOpenAIPromptMetrics(resultsByPromptIdx[promptIdx]),
   }));
-  const tests = Array.from(firstRowByAlignmentKey.values()).map(createOpenAITestCase);
   const timestamp = new Date().toISOString();
   const evalId =
     runIds.length === 1

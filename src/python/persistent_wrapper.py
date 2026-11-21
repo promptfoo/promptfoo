@@ -382,20 +382,10 @@ def handle_call(command_line, user_module, default_function_name):
         # Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
         parts = command_line.split("|", 3)
 
-        # Extract response_file first (always the last part) so it's available even if validation fails
-        # This ensures we can write an error response file if command format is invalid
-        if len(parts) >= 3:
-            response_file = parts[-1]
-
-        if len(parts) == 4:
-            # New format: CALL|<function_name>|<request_file>|<response_file>
-            _, function_name, request_file, _ = parts
-        elif len(parts) == 3:
-            # Legacy format: CALL|<request_file>|<response_file>
-            _, request_file, _ = parts
-            function_name = default_function_name
-        else:
+        if len(parts) < 3:
             raise ValueError(f"Invalid CALL command format: {command_line}")
+        request_file, response_file = parts[-2:]
+        function_name = parts[1] if len(parts) == 4 else default_function_name
 
         # Resolve the callable for this call
         method_callable = get_callable(user_module, function_name)
