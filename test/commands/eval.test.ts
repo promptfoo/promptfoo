@@ -2726,6 +2726,7 @@ describe('evalCommand', () => {
   ])(
     'awaits owned-provider cleanup after evaluation %s when another cleanup %s',
     async (outcome, cleanupMode) => {
+      const warn = vi.spyOn(logger, 'warn');
       const cleanupError = new Error('MCP initialization failed');
       const evaluationError = new Error('primary evaluation failed');
       let startCleanup!: () => void;
@@ -2802,12 +2803,13 @@ describe('evalCommand', () => {
         }
         expect(failingProvider.cleanup).toHaveBeenCalledExactlyOnceWith();
         expect(slowProvider.cleanup).toHaveBeenCalledOnce();
-        expect(logger.warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
+        expect(warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
           error: cleanupError,
         });
       } finally {
         finishCleanup();
         await Promise.allSettled([evaluation]);
+        warn.mockClear();
         vi.mocked(evaluate).mockReset();
         vi.mocked(resolveConfigs).mockReset();
         vi.mocked(writeMultipleOutputs).mockReset();

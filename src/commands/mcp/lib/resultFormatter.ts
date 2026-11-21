@@ -1,4 +1,5 @@
 import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+import { sanitizeProviderIdForLog } from '../../../util/provider';
 import { truncateText } from './utils';
 
 import type {
@@ -7,6 +8,16 @@ import type {
   EvaluateSummaryV3,
   ResultFailureReason,
 } from '../../../types/index';
+
+export function formatProviderId(provider: string | { id: string | (() => string) }): string {
+  const id =
+    typeof provider === 'string'
+      ? provider
+      : typeof provider.id === 'function'
+        ? provider.id()
+        : provider.id;
+  return sanitizeProviderIdForLog(id);
+}
 
 /**
  * Union type for evaluation summaries
@@ -152,8 +163,8 @@ function formatSingleResult(
       raw: promptRaw,
     },
     provider: {
-      id: result.provider?.id ?? 'unknown',
-      label: result.provider?.label,
+      id: formatProviderId(result.provider?.id ?? 'unknown'),
+      label: result.provider?.label && formatProviderId(result.provider.label),
     },
     response: {
       output: outputText,
@@ -216,7 +227,7 @@ export function formatPromptsSummary(summary: EvaluateSummary): Array<{
   if (summary.version === 3 && 'prompts' in summary) {
     return summary.prompts.map((prompt) => ({
       label: prompt.label,
-      provider: prompt.provider,
+      provider: prompt.provider && formatProviderId(prompt.provider),
       metrics: prompt.metrics,
     }));
   }

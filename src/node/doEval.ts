@@ -17,6 +17,9 @@ import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
   getAuthor,
+  getUserEmail,
+  getUserEmailNeedsValidation,
+  getUserEmailValidated,
   promptForEmailUnverified,
 } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -31,7 +34,17 @@ import telemetry from '../telemetry';
 import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
-import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
+import {
+  type CommandLineOptions,
+  CommandLineOptionsSchema,
+  type EnvOverrides,
+  type EvalRuntimeOptions,
+  MAX_SUGGESTIONS_COUNT,
+  type TestCase,
+  type TestSuite,
+  TestSuiteSchema,
+  type UnifiedConfig,
+} from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -50,13 +63,18 @@ import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import {
+  buildConfiguredProviderMap,
+  resolveRuntimeGradingProviderReferences,
+} from '../util/gradingProvider';
+import {
   printBorder,
   setupEnv,
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { checkProviderApiKeys } from '../util/provider';
+import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
+import { checkProviderApiKeys, doesProviderRefMatch, isProviderAllowed } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -66,13 +84,6 @@ import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
-import type {
-  CommandLineOptions,
-  EnvOverrides,
-  EvalRuntimeOptions,
-  TestSuite,
-  UnifiedConfig,
-} from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
@@ -90,6 +101,112 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+function selectEligibleProviders(testSuite: TestSuite): TestSuite['providers'] {
+  const defaultProviders =
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.providers : undefined;
+  const restrictions = testSuite.tests?.length
+    ? testSuite.tests.map((test) => test.providers ?? defaultProviders)
+    : testSuite.scenarios
+      ? []
+      : [defaultProviders];
+  for (const scenario of testSuite.scenarios ?? []) {
+    for (const data of scenario.config) {
+      for (const test of scenario.tests ?? [{}]) {
+        restrictions.push(
+          { providers: defaultProviders, ...data, ...test }.providers ?? defaultProviders,
+        );
+      }
+    }
+  }
+  return testSuite.providers.filter((provider) => {
+    const prompts =
+      getProviderPromptOverride(provider, testSuite.providerPromptMap) ?? provider.prompts;
+    return (
+      restrictions.some((allowed) => isProviderAllowed(provider, allowed)) &&
+      testSuite.prompts.some((prompt) => isPromptAllowed(prompt, prompts))
+    );
+  });
+}
+
+function applyTestSelection(
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  prepareTestSuite: (suite: TestSuite) => TestSuite,
+  providerConfigs: UnifiedConfig['providers'] = [],
+) {
+  const originalProviders = [...testSuite.providers];
+  const originalTests = testSuite.tests;
+  const testConfigs = config.tests;
+  const testsBySource =
+    Array.isArray(testConfigs) && originalTests
+      ? new Map(originalTests.map((test, index) => [test, testConfigs[index]]))
+      : undefined;
+  testSuite = prepareTestSuite(testSuite);
+  testSuite.providers = selectEligibleProviders(testSuite);
+  const configs = Array.isArray(providerConfigs) ? providerConfigs : [providerConfigs];
+  if (configs.length !== originalProviders.length) {
+    throw new Error('Could not preserve the selected provider configurations.');
+  }
+  // Replay validates each restriction, including defaults overridden by a test.
+  // Keep empty lists explicit so pruning never broadens a restriction.
+  type Source = Extract<UnifiedConfig['tests'], unknown[]>[number] | UnifiedConfig['defaultTest'];
+  function forReplay<T extends Source>(test: T): T {
+    if (!test || typeof test !== 'object' || !('providers' in test) || !test.providers) {
+      return test;
+    }
+    const providers = test.providers.filter((ref) =>
+      testSuite.providers.some((provider) => doesProviderRefMatch(ref, provider)),
+    );
+    return { ...test, providers };
+  }
+  const selectedTests = testsBySource
+    ? testSuite.tests?.map((test) => forReplay(testsBySource.get(test)!))
+    : testConfigs;
+  const selected = new Set(testSuite.providers);
+  // Resolve grading with the complete lookup. Only generation targets become columns.
+  // Keep the original configs for permission checks, sharing and persistence.
+  const providerMap = buildConfiguredProviderMap(originalProviders);
+  function withGraders<T extends Partial<TestCase>>(test: T): T {
+    const copy = { ...test };
+    resolveRuntimeGradingProviderReferences(copy, providerMap, selected);
+    return copy;
+  }
+  testSuite.tests = testSuite.tests?.map(withGraders);
+  if (testSuite.defaultTest && typeof testSuite.defaultTest === 'object') {
+    testSuite.defaultTest = withGraders(testSuite.defaultTest);
+  }
+  testSuite.scenarios = testSuite.scenarios?.map((scenario) => ({
+    ...scenario,
+    config: scenario.config.map(withGraders),
+    tests: scenario.tests?.map(withGraders),
+  }));
+  config = {
+    ...config,
+    providers: configs.filter((_, index) => selected.has(originalProviders[index])),
+    tests: selectedTests,
+    defaultTest: forReplay(config.defaultTest),
+    scenarios: config.scenarios?.map((scenario) =>
+      typeof scenario === 'string'
+        ? scenario
+        : {
+            ...scenario,
+            config: scenario.config.map(forReplay),
+            tests: scenario.tests?.map(forReplay),
+          },
+    ),
+    // Applying a saved range again could remove every selected row on retry.
+    evaluateOptions: config.evaluateOptions && {
+      ...config.evaluateOptions,
+      filterRange: undefined,
+    },
+    commandLineOptions: config.commandLineOptions && {
+      ...config.commandLineOptions,
+      filterRange: undefined,
+    },
+  };
+  return { testSuite, config };
+}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -297,27 +414,40 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+type DoEvalCommandOptions = Partial<CommandLineOptions & Command> &
+  Pick<InternalEvaluateOptions, 'timeoutMs'>;
+
 export async function doEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: DoEvalCommandOptions,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
+  prepareTestSuite?: (testSuite: TestSuite) => TestSuite,
 ): Promise<Eval> {
   const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
-    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
+    doEvalWithEnv(
+      cmdObj,
+      defaultConfig,
+      defaultConfigPath,
+      evaluateOptions,
+      envFileOverrides,
+      prepareTestSuite,
+    ),
   );
 }
 
 async function doEvalWithEnv(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: DoEvalCommandOptions,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
   envFileOverrides: EnvOverrides | undefined,
+  prepareTestSuite?: (testSuite: TestSuite) => TestSuite,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
+  const isMcpInvocation = evaluateOptions.eventSource === 'mcp';
   const inputCommand = cmdObj;
   const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
 
@@ -362,7 +492,7 @@ async function doEvalWithEnv(
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
     envFileOverrides: EnvOverrides | undefined,
-    cmdObj: Partial<CommandLineOptions & Command>,
+    cmdObj: DoEvalCommandOptions,
     defaultConfig: Partial<UnifiedConfig>,
     evaluateOptions: InternalEvaluateOptions,
     initialization?: boolean,
@@ -373,6 +503,9 @@ async function doEvalWithEnv(
     let _basePath: string | undefined;
     let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
+    let selectedProviderConfigs: Awaited<
+      ReturnType<typeof resolveConfigs>
+    >['selectedProviderConfigs'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -540,6 +673,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
+        selectedProviderConfigs,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -550,6 +684,17 @@ async function doEvalWithEnv(
     cliState.basePath = _basePath;
     if (commandLineOptions?.safeMode) {
       cliState.safeMode = true;
+    }
+
+    // Application callers can select resolved inputs inside the evaluation's env scope.
+    // Keep this callback separate from options loaded from user configuration.
+    if (prepareTestSuite) {
+      ({ testSuite, config } = applyTestSelection(
+        testSuite,
+        config,
+        prepareTestSuite,
+        selectedProviderConfigs ?? config.providers,
+      ));
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
@@ -650,7 +795,9 @@ async function doEvalWithEnv(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
+      if (!isMcpInvocation) {
+        disableCache();
+      }
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
@@ -692,9 +839,12 @@ async function doEvalWithEnv(
         `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
       );
     }
-    const filterRange = resumeEval
-      ? resumeFilterRange
-      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    // Application selection owns the resolved inputs; do not reindex them with config filters.
+    const filterRange = prepareTestSuite
+      ? undefined
+      : resumeEval
+        ? resumeFilterRange
+        : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const hasActiveTestFilter =
@@ -709,8 +859,8 @@ async function doEvalWithEnv(
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
-    // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeEval) {
+    // Preserve indices for replay and application-selected inputs.
+    if (!resumeEval && !prepareTestSuite) {
       if (shouldApplyFiltersToImplicitDefaultTest) {
         const defaultMetadata =
           typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
@@ -744,11 +894,23 @@ async function doEvalWithEnv(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
+      if (isMcpInvocation && !isCI() && !getUserEmail()) {
+        throw new Error(
+          'Redteam evals require email verification. Run this evaluation in an interactive terminal to configure your work email, then retry.',
+        );
+      }
       let hasValidEmail = false;
       while (!hasValidEmail) {
-        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const emailNeedsValidation = isMcpInvocation
+          ? getUserEmailNeedsValidation() && !getUserEmailValidated()
+          : (await promptForEmailUnverified()).emailNeedsValidation;
         const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
         hasValidEmail = res === EMAIL_OK_STATUS;
+        if (isMcpInvocation && !hasValidEmail) {
+          throw new Error(
+            'Redteam evals require a valid work email. Update your email before retrying.',
+          );
+        }
       }
     }
 
@@ -759,8 +921,12 @@ async function doEvalWithEnv(
       );
     }
 
-    // Check for missing API keys after provider filtering
-    const missingApiKeys = checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
+    // Filtered MCP runs historically validate authentication in the providers they
+    // execute, including test-level selection and request-specific header credentials.
+    const missingApiKeys =
+      isMcpInvocation && prepareTestSuite
+        ? new Map<string, string[]>()
+        : checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
 
     if (missingApiKeys.size > 0) {
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
@@ -781,7 +947,7 @@ async function doEvalWithEnv(
       });
     }
 
-    await checkCloudPermissions(config as UnifiedConfig);
+    await checkCloudPermissions(config);
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
@@ -794,6 +960,7 @@ async function doEvalWithEnv(
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      timeoutMs: cmdObj.timeoutMs ?? evaluateOptions.timeoutMs,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
@@ -842,6 +1009,11 @@ async function doEvalWithEnv(
     }
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
+    }
+    if (isMcpInvocation && !resumeEval && options.generateSuggestions) {
+      throw new Error(
+        'Interactive prompt suggestions are not supported over MCP. Disable generateSuggestions or run this evaluation in an interactive terminal.',
+      );
     }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
@@ -942,7 +1114,6 @@ async function doEvalWithEnv(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
     let ret;
     try {
       if (resumeRaw && !evalRecord.useOldResults()) {
@@ -1042,7 +1213,10 @@ async function doEvalWithEnv(
     let sharePromise: Promise<string | null> | null = null;
     if (willShare) {
       // Start the share operation in background with silent mode (no progress bar)
-      sharePromise = createShareableUrl(evalRecord, { silent: true });
+      sharePromise = createShareableUrl(evalRecord, {
+        silent: true,
+        ...(isMcpInvocation ? { interactive: false } : {}),
+      });
     }
 
     const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
@@ -1063,12 +1237,6 @@ async function doEvalWithEnv(
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
-    } else if (failures !== 0) {
-      logger.debug(
-        `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
-          evalRecord.prompts,
-        )}`,
-      );
     }
 
     if (totalTests >= 500) {

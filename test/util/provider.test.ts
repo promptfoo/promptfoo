@@ -347,6 +347,12 @@ describe('sanitizeProviderIdForLog', () => {
     ).toBe('http://example.com/api?cursor=%5BREDACTED%5D&safe=ok');
   });
 
+  it('hides webhook URLs even when a label precedes them', () => {
+    expect(sanitizeProviderIdForLog('Test target (webhook:https://host.test/private)')).toBe(
+      'Test target (webhook)',
+    );
+  });
+
   it('leaves non-URL provider IDs unchanged', () => {
     expect(sanitizeProviderIdForLog('openai:gpt-4.1')).toBe('openai:gpt-4.1');
   });
