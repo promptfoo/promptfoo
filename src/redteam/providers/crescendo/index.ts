@@ -18,7 +18,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../../util/traceRedaction';
+import { getStrategyContext, requiresTraceRedaction } from '../../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -255,6 +255,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoResponse> {
+    context = context && getStrategyContext(context);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

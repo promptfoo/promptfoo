@@ -1950,12 +1950,16 @@ describe('HydraProvider', () => {
           prompt: { raw: 'test prompt', label: 'test' },
           test: {
             assert: [{ type: `promptfoo:redteam:${pluginId}`, value: { rawReceipt: secret } }],
-            metadata: { goal: 'test goal', pluginId },
+            metadata: { goal: secret, purpose: secret, modifiers: { note: secret }, pluginId },
           } as AtomicTestCase,
         };
         const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
         const result = await provider.callApi('', context);
         expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(JSON.stringify(mockTargetProvider.callApi.mock.calls[0][1])).not.toContain(secret);
+        expect(JSON.stringify(mockTargetProvider.callApi.mock.calls[1][1]?.test)).not.toContain(
+          secret,
+        );
         expect(mockTargetProvider.callApi.mock.calls[1][1]?.vars.sessionId).toBe(secret);
         expect(context.vars).not.toHaveProperty('sessionId');
         expect(JSON.stringify(mockAgentProvider.callApi.mock.calls)).not.toContain(secret);

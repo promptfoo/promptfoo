@@ -19,7 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getStrategyContext, requiresTraceRedaction } from '../../util/traceRedaction';
 import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
@@ -209,6 +209,7 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
+    context = context && getStrategyContext(context);
     // Reset successful attacks array for each new call
     this.successfulAttacks = [];
 

@@ -40,7 +40,7 @@ import {
 } from '../../util/fetch/responseHeadersObserver';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { withPrivateEvaluation } from '../../util/privateEvaluation';
+import { isPrivateEvaluation, withPrivateEvaluation } from '../../util/privateEvaluation';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
@@ -48,6 +48,8 @@ import {
 } from '../../util/tokenUsageUtils';
 import {
   getAssertionLeaves,
+  getLocalStrategyTest,
+  getPrivateTargetContext,
   getProtectedAssertionValue,
   REDACTED_PROMPT,
   requiresTraceRedaction,
@@ -532,6 +534,10 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
+// A session ID may equal a protected value. Return it only to the target
+// that issued it for this test, never on the strength of an input variable.
+const privateSessions = new WeakMap<AtomicTestCase, { provider: ApiProvider; id: string }>();
+
 /** Invoke a red-team target with the same tracing behavior across every strategy. */
 export function callTargetProvider(
   targetProvider: ApiProvider,
@@ -541,17 +547,27 @@ export function callTargetProvider(
 ): Promise<ProviderResponse> {
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const privateCall = requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert);
+  const test: AtomicTestCase | undefined = context?.test;
+  const privateCall = requiresTraceRedaction(test?.assert);
   const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // The raw response and headers must stay inside the target / local verifier boundary.
     // Neither diagnostics, response hooks nor trace callbacks may observe that evidence.
-    if (privateCall) {
+    if (privateCall || isPrivateEvaluation()) {
       return withPrivateEvaluation(async () => {
         try {
-          const raw = await targetProvider.callApi(targetPrompt, context, {
+          invariant(privateCall && test && context, 'Missing private verification context');
+          const targetContext = getPrivateTargetContext(context);
+          const session = privateSessions.get(test);
+          if (session?.provider === targetProvider && session.id === context.vars.sessionId) {
+            targetContext.vars.sessionId = session.id;
+          }
+          const raw = await targetProvider.callApi(targetPrompt, targetContext, {
             ...options,
             onResponseHeaders: undefined,
           });
+          if (typeof raw.sessionId === 'string' && raw.sessionId) {
+            privateSessions.set(test, { provider: targetProvider, id: raw.sessionId });
+          }
           return await externalizeResponseForRedteamHistory(raw, context);
         } catch (error) {
           if (isTargetCallAbortError(error, options?.abortSignal)) {
@@ -779,13 +795,14 @@ export async function gradeRedactionResponse(
   // Invalid verification must stop the strategy, even after a previous turn passed.
   try {
     const { getGraderById } = await import('../graders');
+    const local = getLocalStrategyTest(test);
     const original = privateRedactionResponses.get(response);
     invariant(original && !original.metadata?.redactionContentOmitted, 'Missing private evidence');
     const output =
       typeof original.output === 'string'
         ? original.output
         : (safeJsonStringify(original.output) ?? '');
-    for (const [index, assertion] of getAssertionLeaves(test.assert).entries()) {
+    for (const [index, assertion] of getAssertionLeaves(local.assert).entries()) {
       const type = assertion.type.replace(/^not-/, '');
       if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
         continue;
@@ -796,7 +813,7 @@ export async function gradeRedactionResponse(
         grader.getResult(
           prompt,
           output,
-          test,
+          local,
           undefined,
           getGraderAssertionValue(assertion),
           undefined,

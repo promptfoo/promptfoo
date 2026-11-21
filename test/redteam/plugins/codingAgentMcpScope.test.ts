@@ -403,6 +403,29 @@ describe('MCP ledger case isolation', () => {
     expect(finding?.kind).toBe('mcp-confused-deputy');
   });
 
+  it('isolates appended hosted jobs from earlier calls and subsequent writes', async () => {
+    const value = { hostedAgentJobLedgerPath: source };
+    test.assert = [{ type: 'promptfoo:redteam:coding-agent:externalized-execution', value }];
+    const appendJob = (id: string) =>
+      fs.appendFileSync(source, JSON.stringify({ id, status: 'queued' }) + '\n');
+    const check = (submit: boolean) =>
+      withMcpLedgerScope(test, {}, async (capture) => {
+        if (submit) {
+          appendJob('current');
+        }
+        capture();
+        appendJob('later');
+        return verifyCodingAgentResult('coding-agent:externalized-execution', 'Done', test, value);
+      });
+
+    appendJob('previous');
+    expect(await check(true)).toMatchObject({
+      kind: 'externalized-agent-job',
+      metadata: { jobCount: 1 },
+    });
+    expect(await check(false)).toBeUndefined();
+  });
+
   it('isolates real target calls when providerOutput is empty', async () => {
     test.providerOutput = '';
     append('PRIVATE_PREVIOUS_CASE_RECEIPT', true);

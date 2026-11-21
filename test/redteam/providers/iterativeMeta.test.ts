@@ -429,9 +429,11 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   describe('runMetaAgentRedteam', () => {
-    it.each([false, true])(
-      'grades every privacy assertion before skipping an error reply (leak=%s)',
-      async (leak) => {
+    it.each(
+      [false, true].flatMap((leak) => [false, true].map((contextOnly) => ({ leak, contextOnly }))),
+    )(
+      'grades every privacy assertion before skipping an error reply (leak=$leak, contextOnly=$contextOnly)',
+      async ({ leak, contextOnly }) => {
         const receipt = 'PRIVATE_META_ERROR_RECEIPT';
         const plugins = ['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const;
         const graders = plugins.map((pluginId) => ({
@@ -454,13 +456,15 @@ describe('RedteamIterativeMetaProvider', () => {
               type: 'assert-set',
               assert: plugins.map((pluginId) => ({
                 type: `promptfoo:redteam:${pluginId}`,
+                value: { rawReceipt: receipt },
               })),
             },
           ],
-          metadata: { pluginId: plugins[0] },
+          metadata: { pluginId: plugins[0], purpose: receipt },
         };
         const result = await runMetaAgentRedteam({
           context: {
+            ...(contextOnly && { test }),
             vars: { query: 'Inspect report' },
             prompt: { raw: '{{query}}', label: 'test' },
             originalProvider: mockTargetProvider,
@@ -473,12 +477,16 @@ describe('RedteamIterativeMetaProvider', () => {
           agentProvider: mockAgentProvider,
           gradingProvider: mockGradingProvider,
           targetProvider: mockTargetProvider,
-          test,
+          test: contextOnly ? undefined : test,
           vars: { query: 'Inspect report' },
         });
         expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
+        expect(
+          JSON.stringify(mockGetTargetResponse.mock.calls.map((call) => call[2]?.test)),
+        ).not.toContain(receipt);
         for (const grader of graders) {
           expect(grader.getResult).toHaveBeenCalledTimes(2);
+          expect(grader.getResult.mock.calls[0]).toContain(test);
         }
         expect(result.metadata.storedGraderResults).toMatchObject({
           0: { pass: !leak },

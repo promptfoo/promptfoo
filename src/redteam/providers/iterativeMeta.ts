@@ -15,7 +15,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getPrivateIterationContext } from '../../util/traceRedaction';
 import { getAgenticAttackProfile } from '../agenticProfile';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
@@ -199,6 +199,12 @@ export async function runMetaAgentRedteam({
   tokenUsage: TokenUsage;
   error?: string;
 }> {
+  const privateContext = getPrivateIterationContext(context, { vars, prompt, test });
+  const redactTrace = Boolean(privateContext);
+  if (privateContext) {
+    context = privateContext;
+    ({ vars, prompt, test } = context);
+  }
   // Store the original vars and transformVars config
   const originalVars = { ...vars };
   const transformVarsConfig = test?.options?.transformVars;
@@ -217,10 +223,6 @@ export async function runMetaAgentRedteam({
   const assertToUse =
     test?.assert?.find((a) => a.type && a.type.includes(test.metadata?.pluginId)) ??
     test?.assert?.find((a) => a.type);
-  const redactTrace = requiresTraceRedaction(test?.assert);
-  if (redactTrace && context?.test !== test) {
-    context = { ...context, vars, prompt, test };
-  }
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({

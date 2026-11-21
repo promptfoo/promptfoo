@@ -5,13 +5,13 @@ import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import { isApiProvider, isProviderOptions } from '../types/providers';
-import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
   isSecretField,
-  mapTestProviderRefs,
+  mapGradingResultProviderRefs,
   REDACTED,
   sanitizeObject,
+  snapshotResultProviderRefs,
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
@@ -231,34 +231,6 @@ export function projectTestCase(
     : projectedTestCase;
 }
 
-/** Map only grading assertion providers and component results. */
-function mapGradingResultProviderRefs<T>(
-  gradingResult: T,
-  mapProvider: (provider: unknown) => unknown,
-): T {
-  const visited = new WeakMap<object, Record<string, unknown>>();
-  const project = (value: unknown): unknown => {
-    const result = asRecord(value);
-    if (!result) {
-      return value;
-    }
-    const previous = visited.get(result);
-    if (previous) {
-      return previous;
-    }
-    const projected = { ...result };
-    visited.set(result, projected);
-    if (result.assertion) {
-      projected.assertion = mapTestProviderRefs(result.assertion, mapProvider);
-    }
-    if (Array.isArray(result.componentResults)) {
-      projected.componentResults = result.componentResults.map(project);
-    }
-    return projected;
-  };
-  return project(gradingResult) as T;
-}
-
 /** Project assertion providers only, preserving grading details and unrelated metadata. */
 export function projectGradingResult<T>(gradingResult: T, stripPromptText: boolean): T {
   return stripPromptText
@@ -307,68 +279,12 @@ export function sanitizeProvider(
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 
-/** Snapshot live provider references for replay without retaining runtime client state. */
-export function toSerializableProviderRef(provider: unknown): unknown {
-  if (isApiProvider(provider)) {
-    return {
-      ...sanitizeProvider(provider),
-      ...sanitizeObject(
-        {
-          transform: typeof provider.transform === 'string' ? provider.transform : undefined,
-          delay: provider.delay,
-          inputs: provider.inputs,
-        },
-        { context: 'provider options', sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY },
-      ),
-      ...(provider.prompts && { prompts: [...provider.prompts] }),
-    };
-  }
-  if (Array.isArray(provider)) {
-    return provider.map(toSerializableProviderRef);
-  }
-  if (isProviderTypeMap(provider)) {
-    let serialized: Record<string, unknown> | undefined;
-    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-      if (isApiProvider(provider[type])) {
-        serialized ??= { ...provider };
-        serialized[type] = toSerializableProviderRef(provider[type]);
-      }
-    }
-    return serialized ?? provider;
-  }
-  return provider;
-}
+export { toSerializableProviderRef } from '../util/sanitizer';
 
-/** Snapshot live grading references before generic result serialization invokes provider toJSON. */
+/** Private rows must drop provider internals without invoking any provider methods. */
 export function serializeResultProviderRefs<T extends object>(result: T): T {
-  const record = sanitizeRedactionResult(result) as Record<string, unknown>;
-  const serializeProvider = (provider: unknown) => {
-    if (!isApiProvider(provider) && !isProviderTypeMap(provider)) {
-      return provider;
-    }
-    return sanitizeObject(toSerializableProviderRef(provider), {
-      context: 'grading provider',
-      sanitizeUrls: true,
-      maxDepth: Number.POSITIVE_INFINITY,
-      throwOnError: true,
-    });
-  };
-  const projected: Record<string, unknown> = { ...record };
-  if (record.testCase) {
-    projected.testCase = mapTestProviderRefs(record.testCase, serializeProvider);
-  }
-  const prompt = asRecord(record.prompt);
-  const config = asRecord(prompt?.config);
-  if (config?.provider !== undefined) {
-    projected.prompt = {
-      ...prompt,
-      config: { ...config, provider: serializeProvider(config.provider) },
-    };
-  }
-  if (record.gradingResult) {
-    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeProvider);
-  }
-  return projected as T;
+  const projected = sanitizeRedactionResult(result);
+  return projected === result ? snapshotResultProviderRefs(result) : projected;
 }
 
 /**

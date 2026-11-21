@@ -13,7 +13,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../../util/traceRedaction';
+import { getStrategyContext, requiresTraceRedaction } from '../../../util/traceRedaction';
 import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
@@ -255,6 +255,7 @@ export class CustomProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CustomResponse> {
+    context = context && getStrategyContext(context);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

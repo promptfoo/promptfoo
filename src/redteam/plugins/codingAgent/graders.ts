@@ -195,6 +195,23 @@ export function publicGradingArguments(
   if (typeof safe.prompt !== 'string' || safe.llmOutput !== llmOutput || !safe.test) {
     throw new Error('The judge cannot verify this response without private verifier inputs.');
   }
+  // Generators keep judge settings in the local assertion, outside the draft
+  // configuration. Restore them only after removing verifier values and aliases.
+  const config = getObject(safe.value);
+  if (config?.graderGuidance || config?.gradingGuidance || config?.graderExamples) {
+    const metadata = safe.test.metadata;
+    safe.test = {
+      ...safe.test,
+      metadata: {
+        ...metadata,
+        pluginConfig: {
+          graderGuidance: getString(config.graderGuidance ?? config.gradingGuidance),
+          graderExamples: Array.isArray(config.graderExamples) ? config.graderExamples : undefined,
+          ...metadata?.pluginConfig,
+        },
+      },
+    };
+  }
   return [
     safe.prompt,
     safe.llmOutput,

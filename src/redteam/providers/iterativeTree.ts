@@ -29,7 +29,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getPrivateIterationContext } from '../../util/traceRedaction';
 import { withGradingUsage } from '../grading/storedResult';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
@@ -580,6 +580,12 @@ async function runRedteamConversation({
   };
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
+  const privateContext = getPrivateIterationContext(context, { vars, prompt, test });
+  const redactTrace = Boolean(privateContext);
+  if (privateContext) {
+    context = privateContext;
+    ({ vars, prompt, test } = context);
+  }
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
 
   // Store the original vars and transformVars config
@@ -625,10 +631,6 @@ async function runRedteamConversation({
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
   const storedGraderResults: Record<number, GradingResult> = {};
-  const redactTrace = requiresTraceRedaction(test?.assert);
-  if (redactTrace && context?.test !== test) {
-    context = { ...context, vars, prompt, test };
-  }
   let bestGraderResult: GradingResult | undefined;
   const getBestGraderResult = () =>
     bestGraderResult

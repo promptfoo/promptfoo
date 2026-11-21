@@ -13,7 +13,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getPrivateIterationContext } from '../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -269,6 +269,12 @@ async function runRedteamConversation({
   // Assume redteam provider is also a vision model
   const visionProvider = redteamProvider;
   const nunjucks = getNunjucksEngine();
+  const privateContext = getPrivateIterationContext(context, { vars, prompt, test });
+  const redactTrace = Boolean(privateContext);
+  if (privateContext) {
+    context = privateContext;
+    ({ vars, prompt, test } = context);
+  }
   const goal = vars[injectVar];
 
   // Store the original vars and transformVars config
@@ -291,7 +297,6 @@ async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
-  const redactTrace = requiresTraceRedaction(test?.assert);
   let mediaRedactionError: string | undefined;
   const storedGraderResults: Record<number, GradingResult> = {};
   let storedGraderResult: GradingResult | undefined;

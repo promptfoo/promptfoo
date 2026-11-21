@@ -32,6 +32,7 @@ import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../../../src/scheduler/providerCallExecutionContext';
+import { withPrivateEvaluation } from '../../../src/util/privateEvaluation';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
@@ -782,6 +783,48 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it.each([callTargetProvider, getTargetResponse])(
+      'isolates private inputs and grades the original evidence with %s',
+      async (invoke) => {
+        const receipt = 'LOCAL_VERIFIER_RECEIPT_8964';
+        const test: AtomicTestCase = {
+          assert: [
+            {
+              type: 'promptfoo:redteam:harness:artifact-redaction',
+              value: { rawReceipt: receipt },
+            },
+          ],
+        };
+        const context: CallApiContextParams = {
+          originalProvider: createMockProvider({ config: { alias: receipt } }),
+          vars: { task: 'Inspect', sessionId: receipt, rawReceipt: 'PRIVATE_HOOK_VALUE' },
+          prompt: { raw: '{{task}}', label: 'fixture', config: { alias: receipt, temperature: 0 } },
+          test,
+        };
+        const target = createMockProvider({ response: { output: 'Complete', raw: { receipt } } });
+        const history = await invoke(target, 'Inspect', context);
+        const forwarded = target.callApi.mock.calls[0][1]!;
+        expect(forwarded.prompt.config?.temperature).toBe(0);
+        expect(forwarded.vars.task).toBe('Inspect');
+        expect(JSON.stringify(forwarded)).not.toContain(receipt);
+        expect(JSON.stringify(forwarded)).not.toContain('PRIVATE_HOOK_VALUE');
+        const receivedTest: AtomicTestCase = forwarded.test!;
+        receivedTest.assert = [];
+        expect(test.assert).toHaveLength(1);
+        expect(await gradeRedactionResponse('Inspect', history, context.test, {})).toMatchObject({
+          pass: false,
+        });
+      },
+    );
+
+    it('refuses a delegated private call without a verification context', async () => {
+      const target = createMockProvider();
+      await expect(
+        withPrivateEvaluation(() => callTargetProvider(target, 'Inspect')),
+      ).rejects.toThrow();
+      expect(target.callApi).not.toHaveBeenCalled();
+    });
+
     it.each(
       ['typed-array', 'array-buffer', 'data-view'].flatMap((kind) =>
         [false, true].map((withError) => ({ kind, withError })),

@@ -101,11 +101,15 @@ describeEvaluator('evaluator assertions', () => {
     const visible: unknown[] = [];
     vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => {
       expect(context?.bustCache).toBe(true);
-      visible.push(context?.test);
+      expect(context?.vars.publicHint).toBe('helpful');
+      visible.push(context?.test, context?.vars, context?.prompt);
       return { output: marker };
     });
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
-      if (phase === 'afterEach' && 'result' in context) {
+      if (phase === 'beforeEach' && 'test' in context) {
+        context.test.vars = { ...context.test.vars, publicHint: 'helpful', alias: marker };
+        context.test.options = { ...context.test.options, extensionHint: marker };
+      } else if (phase === 'afterEach' && 'result' in context) {
         visible.push(structuredClone(context));
         context.result.success = true;
         context.result.testCase.assert = [];
@@ -154,7 +158,8 @@ describeEvaluator('evaluator assertions', () => {
     try {
       fs.writeFileSync(file, JSON.stringify({ rawReceipt: marker }));
       vi.mocked(runExtensionHook).mockImplementation(async (_hooks, phase, ctx) => {
-        if (phase === 'beforeEach') {
+        if (phase === 'beforeEach' && 'test' in ctx) {
+          ctx.test.vars = { alias: marker };
           fs.writeFileSync(file, JSON.stringify({ rawReceipt: 'REPLACEMENT_SYNTHETIC_RECEIPT' }));
         }
         return ctx;
@@ -169,6 +174,9 @@ describeEvaluator('evaluator assertions', () => {
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       await evaluate(suite, record, {});
       const { results } = await record.toEvaluateSummary();
+      expect(
+        JSON.stringify(vi.mocked(mockApiProvider.callApi).mock.calls[0][1]?.vars),
+      ).not.toContain(marker);
       expect(results[0].failureReason).toBe(ResultFailureReason.ASSERT);
       expect(JSON.stringify(results[0])).not.toContain(marker);
     } finally {

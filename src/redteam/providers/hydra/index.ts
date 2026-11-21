@@ -16,7 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../../util/traceRedaction';
+import { getStrategyContext, requiresTraceRedaction } from '../../../util/traceRedaction';
 import { getTargetConversation } from '../../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
@@ -284,6 +284,7 @@ export class HydraProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<HydraResponse> {
+    context = context && getStrategyContext(context);
     logger.debug(`${this.logPrefix} callApi invoked`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');

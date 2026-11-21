@@ -20,7 +20,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getPrivateIterationContext } from '../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -176,6 +176,12 @@ export async function runRedteamConversation({
 }> {
   const nunjucks = getNunjucksEngine();
 
+  const privateContext = getPrivateIterationContext(context, { vars, prompt, test });
+  const redactTrace = Boolean(privateContext);
+  if (privateContext) {
+    context = privateContext;
+    ({ vars, prompt, test } = context);
+  }
   // Store the original vars and transformVars config
   const originalVars = { ...vars };
   const transformVarsConfig = test?.options?.transformVars;
@@ -260,10 +266,6 @@ export async function runRedteamConversation({
     test,
     config: test?.metadata?.strategyConfig,
   });
-  const redactTrace = requiresTraceRedaction(test?.assert);
-  if (redactTrace && context?.test !== test) {
-    context = { ...context, vars, prompt, test };
-  }
   const shouldFetchTrace =
     !redactTrace &&
     tracingOptions.enabled &&

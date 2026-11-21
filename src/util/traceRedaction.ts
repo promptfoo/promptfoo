@@ -6,10 +6,11 @@ import { hasPrivateMedia } from './redactionMedia';
 import {
   getAssertionLeaves,
   projectRedactionResult,
+  requiresTraceRedaction,
   sanitizeCodingAgentVerifierInputs,
 } from './verifierPrivacy';
 
-import type { Assertion, AtomicTestCase, ProviderResponse } from '../types';
+import type { Assertion, AtomicTestCase, CallApiContextParams, ProviderResponse } from '../types';
 
 export {
   configRequiresTraceRedaction,
@@ -63,12 +64,70 @@ export function getCapturedVerifierInputs(test: AtomicTestCase) {
   };
 }
 
+// Strategies clone the outer test while replacing turn variables. The assertion
+// list keeps its identity, so no private references need to travel in a request.
+const localStrategyTests = new WeakMap<NonNullable<AtomicTestCase['assert']>, AtomicTestCase>();
+
+export function getLocalStrategyTest(test: AtomicTestCase): AtomicTestCase {
+  return (test.assert && localStrategyTests.get(test.assert)) ?? test;
+}
+
+export function getStrategyContext(context: CallApiContextParams): CallApiContextParams {
+  const test: AtomicTestCase | undefined = context.test;
+  if (!test?.assert || !requiresTraceRedaction(test.assert)) {
+    return context;
+  }
+  const safe = getPrivateTargetContext(context);
+  const projected: AtomicTestCase | undefined = safe.test;
+  if (!projected?.assert || !requiresTraceRedaction(projected.assert)) {
+    throw new Error('Private strategy inputs could not be projected');
+  }
+  localStrategyTests.set(projected.assert, getLocalStrategyTest(test));
+  return { ...safe, originalProvider: context.originalProvider };
+}
+
+/** Legacy strategies accept a test either separately or inside the provider context. */
+export function getPrivateIterationContext(
+  context: CallApiContextParams | undefined,
+  input: Pick<CallApiContextParams, 'vars' | 'prompt' | 'test'>,
+): CallApiContextParams | undefined {
+  const delegated: AtomicTestCase | undefined = context?.test;
+  const test: AtomicTestCase | undefined = input.test ?? delegated;
+  if (test !== delegated && requiresTraceRedaction(delegated?.assert)) {
+    throw new Error('Conflicting private strategy tests');
+  }
+  return requiresTraceRedaction(test?.assert)
+    ? getStrategyContext({ ...context, ...input, test })
+    : undefined;
+}
+
+/** The rendered task is target input. Local verification controls in its context are not. */
+export function getPrivateTargetContext(context: CallApiContextParams): CallApiContextParams {
+  const { filters, getCache, logger, originalProvider: _provider, ...input } = context;
+  // Mark the entire context as verifier-owned. A hook or strategy may add a
+  // private variable that doesn't occur in test.vars or the assertion.
+  const test = context.test && getLocalStrategyTest(context.test);
+  const { data } = sanitizeCodingAgentVerifierInputs(
+    { id: 'coding-agent:trace-redaction', data: input },
+    {
+      preservePaths: false,
+      strict: true,
+      source: test && { test, captured: getCapturedVerifierInputs(test) },
+    },
+  );
+  if (!data?.vars || !data.prompt || !data.test) {
+    throw new Error('Private target inputs could not be projected');
+  }
+  return { ...data, filters, getCache, logger, bustCache: true };
+}
+
 /** Model graders only see public inputs after local verification. */
 export function sanitizeRedactionGradingInputs<TArgs extends unknown[]>(
   type: string,
   test: AtomicTestCase & { gradingArguments?: TArgs },
   value: Assertion['value'],
 ) {
+  const local = getLocalStrategyTest(test);
   const assert = getAssertionLeaves(test.assert).map(({ type }) => ({ type }));
   const publicTest = {
     assert,
@@ -83,10 +142,10 @@ export function sanitizeRedactionGradingInputs<TArgs extends unknown[]>(
       strict: true,
       source: {
         type,
-        assert: test.assert,
-        vars: test.vars,
-        metadata: test.metadata,
-        captured: getCapturedVerifierInputs(test),
+        assert: local.assert,
+        vars: local.vars,
+        metadata: local.metadata,
+        captured: getCapturedVerifierInputs(local),
       },
     },
   );

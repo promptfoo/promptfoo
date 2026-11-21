@@ -61,13 +61,13 @@ import {
 } from '../util/tokenUsageUtils';
 import {
   getAssertionLeaves,
-  getCapturedVerifierInputs,
+  getPrivateTargetContext,
+  getStrategyContext,
   requiresTraceRedaction,
   sanitizeRedactionResult,
   TRACE_REDACTION_ASSERTIONS,
 } from '../util/traceRedaction';
 import { transform } from '../util/transform';
-import { sanitizeCodingAgentVerifierInputs } from '../util/verifierPrivacy';
 import type winston from 'winston';
 
 import type {
@@ -698,25 +698,22 @@ async function callActiveProvider({
     !privateTest || !adaptive || isAttackProvider(id) || id === 'promptfoo:redteam:iterative:image',
     'This strategy cannot verify every private response.',
   );
-  // The rendered prompt is the intended target input. Keep local verification
-  // material out of ordinary providers' context and isolate their mutations.
-  const target =
-    privateTest && !adaptive
-      ? sanitizeCodingAgentVerifierInputs(
-          { test, vars },
-          { preservePaths: false, source: getCapturedVerifierInputs(test) },
-        )
-      : { test, vars };
-  const callApiContext = buildCallApiContext({
+  const context = buildCallApiContext({
     evalId,
     filters,
     originalProvider,
     promptForRender,
     repeatIndex,
-    ...target,
+    test,
+    vars,
     testIndex,
     traceContext,
   });
+  const callApiContext = privateTest
+    ? adaptive
+      ? getStrategyContext(context)
+      : getPrivateTargetContext(context)
+    : context;
   let completedResponse: ProviderResponse | undefined;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
