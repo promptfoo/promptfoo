@@ -511,12 +511,14 @@ describe('SDK client lifecycle', () => {
       >;
       const original = target[boundary];
       vi.spyOn(target, boundary).mockImplementationOnce(async (...args) => {
+        // Start credential discovery while the scope is open and delay its completion.
+        const result = rejects ? undefined : await original.apply(provider, args);
         began.resolve();
         await release.promise;
         if (rejects) {
           throw new Error('fixture initialization failed');
         }
-        return original.apply(provider, args);
+        return result;
       });
       const destroy = vi.spyOn(prototype, 'destroy');
       let pending!: Promise<unknown>;
@@ -568,9 +570,10 @@ describe('SDK client lifecycle', () => {
       const ready = await provider.getSageMakerRuntimeInstance('us-east-1');
       readyDestroy = vi.spyOn(ready, 'destroy');
       vi.spyOn(provider, 'getCredentials').mockImplementationOnce(async () => {
+        const credentials = await original();
         began.resolve();
         await release.promise;
-        return original();
+        return credentials;
       });
       pending = provider.getSageMakerRuntimeInstance('us-west-2');
       await began.promise;

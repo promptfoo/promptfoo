@@ -43,7 +43,7 @@ beforeEach(() => {
     VERTEX_REGION: undefined,
     GOOGLE_LOCATION: undefined,
   });
-  auth.getClient.mockResolvedValue({ request: auth.request });
+  auth.getClient.mockResolvedValue({ request: auth.request, projectId: 'credential-project' });
   auth.getProjectId.mockResolvedValue('adc-project');
 });
 
@@ -142,7 +142,7 @@ describe('scoped Google cloud project resolution', () => {
     [{}, { GOOGLE_PROJECT_ID: 'google', GOOGLE_CLOUD_PROJECT: 'scoped' }, {}, 'google'],
     [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { GOOGLE_PROJECT_ID: 'google' }, 'scoped'],
     [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { GOOGLE_CLOUD_PROJECT: 'process' }, 'scoped'],
-    [{}, { GOOGLE_CLOUD_PROJECT: '' }, { GOOGLE_CLOUD_PROJECT: 'process' }, 'adc-project'],
+    [{}, { GOOGLE_CLOUD_PROJECT: '' }, { GOOGLE_CLOUD_PROJECT: 'process' }, 'credential-project'],
     [{}, {}, {}, 'adc-project'],
   ])(
     'preserves project precedence for config=%j, scoped=%j, process=%j',
