@@ -16,14 +16,16 @@ Use a Docker or Kubernetes runner. To include the template without copying it:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/ec50c5ba1a356d335289cf919d17775c78766e1f/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-cz2wVf0zjR0hztQqPoLIJw8d7xUc2oqVhG9nmFWSS0I='
+  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/3555f2d7e84639c19af4e3119abd43bbb7a18398/examples/integration-gitlab-ci/gitlab-ci.yml'
+    integrity: 'sha256-zSDqyyxz0S8dwjX+JIcGK27yRpir6yumYRu3CVmiO2s='
 
 promptfoo-eval:
   extends: .promptfoo-eval
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 ```
+
+For local use, copy the reviewed `gitlab-ci.yml` into the repository and replace the remote include with `include: [{ local: gitlab-ci.yml }]`. Set `PROMPTFOO_OUTPUT_DIR` to an empty directory under the checkout. Absolute paths, traversal and symlinks are rejected.
 
 The URL pins the template to a reviewed commit. GitLab 17.9 or later also verifies `include:integrity`; on older versions, omit `integrity` and keep the pinned URL. Update the URL and integrity value together when changing template versions. The template uses a digest-pinned Promptfoo image.
 

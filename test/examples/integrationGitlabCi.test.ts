@@ -50,6 +50,7 @@ process.exitCode = Number(process.env.TEST_EXIT_CODE ?? 0);
           env: {
             ...process.env,
             ...job.variables,
+            CI_PROJECT_DIR: tempDir,
             PATH: `${binDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
             TEST_RESULT: JSON.stringify({
               results: { stats: { successes: 1, failures: 0, errors: 0 } },
@@ -103,9 +104,36 @@ process.exitCode = Number(process.env.TEST_EXIT_CODE ?? 0);
     }
   });
 
-  it('runs when the bundled template changes', () => {
+  it('runs for every merge request, including application-only changes', () => {
     const pipeline = parse(fs.readFileSync(path.join(exampleDir, '.gitlab-ci.yml'), 'utf8'));
-    expect(pipeline['promptfoo-eval'].rules[0].changes).toContain('gitlab-ci.yml');
+    expect(pipeline['promptfoo-eval'].rules[0]).toEqual({
+      if: '$CI_PIPELINE_SOURCE == "merge_request_event"',
+    });
+  });
+
+  it.each(['.', '../other', '.git', 'alias', 'alias/nested', 'absolute'])(
+    'rejects %s before creating or removing artifacts',
+    async (output) => {
+      const project = path.join(tempDir, 'project');
+      const other = path.join(tempDir, 'other');
+      fs.mkdirSync(project);
+      fs.mkdirSync(other);
+      fs.symlinkSync(other, path.join(project, 'alias'));
+      fs.writeFileSync(path.join(other, 'results.json'), 'keep');
+      const result = await run({
+        CI_PROJECT_DIR: project,
+        PROMPTFOO_OUTPUT_DIR: output === 'absolute' ? other : output,
+      });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('relative directory');
+      expect(fs.readFileSync(path.join(other, 'results.json'), 'utf8')).toBe('keep');
+      expect(fs.existsSync(path.join(other, 'nested'))).toBe(false);
+    },
+  );
+
+  it('allows a fresh nested output directory in the checkout', async () => {
+    expect((await run({ PROMPTFOO_OUTPUT_DIR: 'artifacts/eval' })).status).toBe(0);
+    expect(fs.existsSync(path.join(tempDir, 'artifacts/eval/results.json'))).toBe(true);
   });
 
   it.each(['false', 'true'])('passes explicit sharing=%s to the CLI', async (share) => {
