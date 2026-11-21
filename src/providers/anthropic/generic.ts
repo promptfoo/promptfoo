@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
+import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
+import { resolveProviderApiKey } from '../credentials';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
   CLAUDE_CODE_USER_AGENT,
@@ -14,9 +16,24 @@ import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
 import type { AnthropicBaseOptions } from './types';
+
+function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
+  return (
+    getExplicitProviderEnv(env)?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides('provider')?.ANTHROPIC_CUSTOM_HEADERS ??
+    env?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides('file')?.ANTHROPIC_CUSTOM_HEADERS
+  );
+}
 
 /**
  * Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
@@ -26,8 +43,7 @@ import type { AnthropicBaseOptions } from './types';
  * gateway/proxy secrets) off foreign hosts.
  */
 export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
-  const scopedHeaders =
-    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  const scopedHeaders = getScopedCustomHeaders(env);
   return Object.fromEntries(
     Object.keys({
       ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
@@ -109,8 +125,7 @@ function setCaseInsensitiveHeaderValue(
 function getAnthropicCustomHeaderOverrides(
   env: EnvOverrides | undefined,
 ): Record<string, string | null> {
-  const customHeaders =
-    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  const customHeaders = getScopedCustomHeaders(env);
   if (customHeaders === undefined) {
     return {};
   }
@@ -160,6 +175,27 @@ export function hashAnthropicCacheValue(value: unknown): string {
     .update('\0')
     .update(serialized)
     .digest('hex');
+}
+
+class PromptfooAnthropicClient extends Anthropic {
+  // Promptfoo resolves credentials itself. Bedrock authenticates only at dispatch.
+  protected override _shouldResolveDefaultCredentials(): boolean {
+    return false;
+  }
+
+  protected override async authHeaders(options: Parameters<Anthropic['authHeaders']>[0]) {
+    const headers = await super.authHeaders(options);
+    if (headers) {
+      // Existing evals and compatible gateways use the original Messages protocol.
+      // SDK default and per-request custom headers can still override this value.
+      headers.values.set('anthropic-version', '2023-06-01');
+      if (this.apiKey) {
+        headers.values.delete('authorization');
+        headers.values.set('x-api-key', this.apiKey);
+      }
+    }
+    return headers;
+  }
 }
 
 /**
@@ -217,12 +253,7 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   constructor(
     modelName: string,
-    options: {
-      config?: AnthropicBaseOptions;
-      id?: string;
-      label?: string;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<ProviderOptions<AnthropicBaseOptions>, 'config' | 'id' | 'label' | 'env'> = {},
   ) {
     const { config, id, label, env } = options;
     this.env = env;
@@ -230,9 +261,7 @@ export class AnthropicGenericProvider implements ApiProvider {
     this.config = config || {};
     this.label = label;
     const customHeaders =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
-      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
-      process.env.ANTHROPIC_CUSTOM_HEADERS;
+      getScopedCustomHeaders(this.env) ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
     this.clientHasCustomHeaders =
       Object.keys(this.config.headers ?? {}).length > 0 ||
       Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
@@ -283,8 +312,7 @@ export class AnthropicGenericProvider implements ApiProvider {
       ...getAnthropicCustomHeaderOverrides(this.env),
       ...defaultHeaders,
     };
-    const scopedCustomHeaderValue =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+    const scopedCustomHeaderValue = getScopedCustomHeaders(this.env);
     const scopedCustomHeaders = parseAnthropicCustomHeaders(scopedCustomHeaderValue);
     const scopedAuthHeaders = new Set(
       Object.keys(scopedCustomHeaders).map((name) => name.toLowerCase()),
@@ -304,11 +332,13 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
-    this.anthropic = new Anthropic(
+    this.anthropic = new PromptfooAnthropicClient(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
+        // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
+        openTelemetry: false,
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
@@ -339,27 +369,22 @@ export class AnthropicGenericProvider implements ApiProvider {
   /**
    * Whether promptfoo's preflight check should require an API key before
    * dispatching requests to this provider. Returns `false` only for
-   * OAuth-capable subclasses (see {@link SUPPORTS_CLAUDE_CODE_OAUTH}) when
-   * the user has opted in via `apiKeyRequired: false`. All other subclasses
-   * keep the preflight check so missing-credential errors surface upfront
-   * rather than at per-request call time.
+   * providers that loaded a Claude Code OAuth credential. Opting in via
+   * `apiKeyRequired: false` alone does not guarantee that a credential was
+   * found, so missing-credential errors must still surface upfront.
    */
   requiresApiKey(): boolean {
-    const subclass = this.constructor as typeof AnthropicGenericProvider;
-    if (subclass.SUPPORTS_CLAUDE_CODE_OAUTH && this.config.apiKeyRequired === false) {
-      return false;
-    }
-    return true;
+    return !this.usingClaudeCodeOAuth;
   }
 
   getApiKey(): string | undefined {
-    return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['ANTHROPIC_API_KEY']);
   }
 
   getApiBaseUrl(): string | undefined {
-    return (
-      this.config?.apiBaseUrl || this.env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL')
-    );
+    const envUrl =
+      getProviderEnvString(this.env, 'ANTHROPIC_BASE_URL') ?? getEnvString('ANTHROPIC_BASE_URL');
+    return this.config?.apiBaseUrl || (envUrl === '' ? 'https://api.anthropic.com' : envUrl);
   }
 
   protected getCacheIdentityHash(): string {
@@ -370,9 +395,7 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   protected hasCustomHeaders(): boolean {
     const customHeaders =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
-      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
-      process.env.ANTHROPIC_CUSTOM_HEADERS;
+      getScopedCustomHeaders(this.env) ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
     return (
       this.clientHasCustomHeaders ||
       Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0

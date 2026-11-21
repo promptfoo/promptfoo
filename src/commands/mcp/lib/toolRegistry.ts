@@ -33,73 +33,24 @@ export interface ToolMetadata {
 }
 
 /**
- * Global tool registry for auto-generating documentation
+ * Generate documentation object for MCP resources.
  */
-class ToolRegistry {
-  private tools: Map<string, ToolMetadata> = new Map();
+export function generateToolDocs() {
+  const toolDocs = TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+    category: tool.category,
+    annotations: tool.annotations,
+  }));
 
-  /**
-   * Register a tool with its metadata
-   */
-  register(metadata: ToolMetadata): void {
-    this.tools.set(metadata.name, metadata);
-  }
-
-  /**
-   * Get all registered tools
-   */
-  getAll(): ToolMetadata[] {
-    return Array.from(this.tools.values());
-  }
-
-  /**
-   * Get tool by name
-   */
-  get(name: string): ToolMetadata | undefined {
-    return this.tools.get(name);
-  }
-
-  /**
-   * Generate documentation object for MCP resources
-   */
-  generateDocs(): {
-    tools: Array<{
-      name: string;
-      description: string;
-      parameters: string;
-      category: string;
-      annotations: ToolAnnotations;
-    }>;
-    version: string;
-    lastUpdated: string;
-    totalTools: number;
-  } {
-    const toolDocs = this.getAll().map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-      category: tool.category,
-      annotations: tool.annotations,
-    }));
-
-    return {
-      tools: toolDocs,
-      version: '1.0.0',
-      lastUpdated: new Date().toISOString(),
-      totalTools: toolDocs.length,
-    };
-  }
-
-  /**
-   * Get tools by category
-   */
-  getByCategory(category: ToolMetadata['category']): ToolMetadata[] {
-    return this.getAll().filter((tool) => tool.category === category);
-  }
+  return {
+    tools: toolDocs,
+    version: '1.0.0',
+    lastUpdated: new Date().toISOString(),
+    totalTools: toolDocs.length,
+  };
 }
-
-// Singleton instance
-export const toolRegistry = new ToolRegistry();
 
 /**
  * Tool definitions with metadata for all MCP tools
@@ -226,12 +177,3 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
     category: 'debugging',
   },
 ];
-
-/**
- * Initialize the tool registry with all tool definitions
- */
-export function initializeToolRegistry(): void {
-  for (const tool of TOOL_DEFINITIONS) {
-    toolRegistry.register(tool);
-  }
-}

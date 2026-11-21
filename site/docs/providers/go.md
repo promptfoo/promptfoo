@@ -1,11 +1,15 @@
 ---
 sidebar_label: Custom Go (Golang)
-description: Use Go functions as Promptfoo providers. Configure provider files, pass options, and return outputs from named packages or legacy package main implementations.
+description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for evaluation
 ---
 
 # Custom Go Provider
 
-Use a Go function as a Promptfoo provider to evaluate your existing Go clients, models, or application logic.
+The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
+
+:::info
+The golang provider is experimental
+:::
 
 ## Quick Start
 

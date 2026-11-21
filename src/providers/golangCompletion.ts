@@ -16,6 +16,7 @@ import { safeJsonStringify } from '../util/json';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -38,6 +39,7 @@ interface GolangProviderConfig {
 }
 
 export class GolangProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
   config: GolangProviderConfig;
 
   private scriptPath: string;
@@ -121,15 +123,9 @@ export class GolangProvider implements ApiProvider {
     prompt: string,
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
+    abortSignal?: AbortSignal,
   ): Promise<any> {
-    // Validate before caching so a previous response cannot hide a configuration error.
-    if (this.functionName && !SUPPORTED_FUNCTION_NAMES.has(this.functionName)) {
-      throw new Error(
-        `Go providers must export a function named 'CallApi', but '${this.scriptPath}' requested '${this.functionName}'. ` +
-          `Rename the function to 'CallApi' or drop the ':${this.functionName}' suffix from the provider id.`,
-      );
-    }
-
+    abortSignal?.throwIfAborted();
     const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
@@ -145,6 +141,7 @@ export class GolangProvider implements ApiProvider {
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
+    abortSignal?.throwIfAborted();
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       return { ...JSON.parse(cachedResult), cached: true };
@@ -175,6 +172,7 @@ export class GolangProvider implements ApiProvider {
           await fs.mkdir(dest, { recursive: true });
           const entries = await fs.readdir(src, { withFileTypes: true });
           for (const entry of entries) {
+            abortSignal?.throwIfAborted();
             const srcPath = path.join(src, entry.name);
             const destPath = path.join(dest, entry.name);
             if (entry.isDirectory()) {
@@ -197,38 +195,69 @@ export class GolangProvider implements ApiProvider {
         const goExecutable = this.config.goExecutable || 'go';
 
         const env = getProcessEnv();
-        const { buildDir, buildFiles } = await this.prepareBuild({
+        const runCommand = async (file: string, args: string[], cwd?: string) => {
+          abortSignal?.throwIfAborted();
+          const execution = execFileAsync(file, args, {
+            ...(cwd ? { cwd } : {}),
+            env,
+            ...(abortSignal ? { signal: abortSignal } : {}),
+          });
+          const closed =
+            abortSignal && execution.child
+              ? new Promise<void>((resolve) => execution.child.once('close', () => resolve()))
+              : undefined;
+          // execFile abort sends SIGTERM, which a provider may ignore.
+          return execution.finally(async () => {
+            if (abortSignal?.aborted) {
+              execution.child?.kill('SIGKILL');
+            }
+            await closed;
+          });
+        };
+        const { stdout: packageJson } = await runCommand(
           goExecutable,
-          tempDir,
+          ['list', '-json', '.'],
           scriptDir,
-          scriptFile: path.basename(relativeScriptPath),
-          env,
-        });
+        );
+        const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
+        let buildDir = scriptDir;
+        let buildFiles = ['wrapper.go', path.basename(relativeScriptPath)];
+
+        if (packageInfo.Name && packageInfo.Name !== 'main') {
+          if (!packageInfo.ImportPath) {
+            throw new Error('Could not determine Go provider import path');
+          }
+
+          buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
+          await fs.writeFile(
+            path.join(buildDir, 'provider.go'),
+            `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = provider.CallApi\n`,
+          );
+          buildFiles = ['wrapper.go', 'provider.go'];
+        }
 
         await fs.copyFile(
           path.join(getWrapperDir('golang'), WRAPPER_FILE),
           path.join(buildDir, WRAPPER_FILE),
         );
 
-        await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
-          cwd: buildDir,
-          env,
-        });
+        await runCommand(goExecutable, ['build', '-o', executablePath, ...buildFiles], buildDir);
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
-        const { stdout, stderr } = await execFileAsync(
-          executablePath,
-          [tempScriptPath, functionName, jsonArgs],
-          { env },
-        );
+        const { stdout, stderr } = await runCommand(executablePath, [
+          tempScriptPath,
+          functionName,
+          jsonArgs,
+        ]);
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }
         logger.debug(`Golang script stdout: ${stdout}`);
 
+        abortSignal?.throwIfAborted();
         const result = JSON.parse(stdout);
 
         if (isCacheEnabled() && !('error' in result)) {
@@ -236,6 +265,7 @@ export class GolangProvider implements ApiProvider {
         }
         return result;
       } catch (error) {
+        abortSignal?.throwIfAborted();
         logger.error(`Error running Golang script: ${(error as Error).message}`);
         logger.error('Full error object', { error });
         throw new Error(`Error running Golang script: ${(error as Error).message}`);
@@ -252,8 +282,12 @@ export class GolangProvider implements ApiProvider {
     return this.executeGolangScript(prompt, context, 'call_api');
   }
 
-  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    return this.executeGolangScript(prompt, undefined, 'call_embedding_api');
+  async callEmbeddingApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    return this.executeGolangScript(prompt, undefined, 'call_embedding_api', options?.abortSignal);
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
