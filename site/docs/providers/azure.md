@@ -1246,7 +1246,7 @@ export AZURE_API_KEY=<key>   # or authenticate with `az login` (Entra ID)
 
 ### Image generation (`azure:image`)
 
-Azure retired `MAI-Image-2` and `MAI-Image-2e` in August 2026, and [retires `MAI-Image-2.5`, `MAI-Image-2.5-Flash` and `MAI-Image-2.5-Pro` on November 24, 2026](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule). For new deployments, use [MAI-Image-2.7, MAI-Image-2.6, or their Flash variants](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image). Historical cost metadata remains available.
+Azure retired `MAI-Image-2` and `MAI-Image-2e` in August 2026, and [retires `MAI-Image-2.5`, `MAI-Image-2.5-Flash` and `MAI-Image-2.5-Pro` on November 24, 2026](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule). For new deployments, use [MAI-Image-2.7, MAI-Image-2.6, or their Flash variants](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image). A deployment that keeps Azure's default version-upgrade setting can be moved to a newer model, for example from MAI-Image-2.5 to MAI-Image-2.6, without changing its name. Check the model with `az cognitiveservices account deployment show` and keep `model` in sync so cost estimates use the right rates. Historical cost metadata remains available.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
