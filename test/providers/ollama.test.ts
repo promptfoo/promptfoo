@@ -8,7 +8,7 @@ import {
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
 import * as util from '../../src/util/index';
-import { createDeferred, mockProcessEnv } from '../util/utils';
+import { mockProcessEnv } from '../util/utils';
 import { createAttributeRecordingSpan } from './openai/tracing';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -82,22 +82,14 @@ describe.each([
 
   it('forwards the caller signal to the active request', async () => {
     const controller = new AbortController();
-    const started = createDeferred<void>();
-    vi.mocked(fetchWithCache).mockImplementationOnce(async (_url, request) => {
-      started.resolve();
-      expect(request?.signal).toBe(controller.signal);
-      return new Promise((_resolve, reject) => {
-        controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
-          once: true,
-        });
-      });
+    vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
+      controller.abort(new Error('canceled during dispatch'));
+      throw new Error('transport error');
     });
-    const pending = new Provider('test').callApi('hello', undefined, {
-      abortSignal: controller.signal,
-    });
-    await started.promise;
-    controller.abort(new Error('canceled during dispatch'));
-    await expect(pending).rejects.toThrow('canceled during dispatch');
+    await expect(
+      new Provider('test').callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toThrow('canceled during dispatch');
+    expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(controller.signal);
   });
 });
 
@@ -645,7 +637,7 @@ describe('OllamaChatProvider', () => {
     const provider = new OllamaChatProvider('llama3.3', { config: { tools: [] } });
     try {
       const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
-      await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(loader).toHaveBeenCalledWith([], undefined, controller.signal));
       controller.abort(new Error('cancelled tool loader'));
       await expect(call).rejects.toThrow('cancelled tool loader');
       expect(fetchWithCache).not.toHaveBeenCalled();

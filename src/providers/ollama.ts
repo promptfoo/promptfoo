@@ -481,6 +481,50 @@ function applyOllamaThinking(output: unknown, thinking: string, showThinking?: b
   return output ? `Thinking: ${thinking}\n\n${output}` : `Thinking: ${thinking}`;
 }
 
+async function fetchOllamaGeneration(
+  endpoint: 'generate' | 'chat',
+  params: Record<string, unknown>,
+  env?: EnvOverrides,
+  context?: CallApiContextParams,
+  signal?: AbortSignal,
+): Promise<FetchWithCacheResult<string> | { error: string }> {
+  const apiKey = getProviderEnvString(env, 'OLLAMA_API_KEY') ?? getEnvString('OLLAMA_API_KEY');
+  let response: FetchWithCacheResult<string>;
+  try {
+    response = await fetchWithCache<string>(
+      getOllamaApiUrl(env, endpoint),
+      {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
+        },
+        body: JSON.stringify(params),
+      },
+      getRequestTimeoutMs(),
+      'text',
+      shouldBustProviderCache(context),
+    );
+  } catch (err) {
+    throwIfAborted(signal);
+    return { error: `API call error: ${String(err)}` };
+  }
+  logger.debug('[Ollama] API response received', {
+    endpoint,
+    status: response.status,
+    dataLength: response.data?.length,
+  });
+
+  const error = getOllamaResponseError(response);
+  if (error) {
+    // fetchWithCache only detects error keys in JSON, so evict HTTP 200 text errors.
+    await response.deleteFromCache?.();
+    return { error };
+  }
+  return response;
+}
+
 export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
@@ -558,38 +602,9 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     logger.debug('Calling Ollama API', { params });
 
-    const apiKey =
-      getProviderEnvString(this.env, 'OLLAMA_API_KEY') ?? getEnvString('OLLAMA_API_KEY');
-    let response: FetchWithCacheResult<string> | undefined;
-    try {
-      response = await fetchWithCache<string>(
-        getOllamaApiUrl(this.env, 'generate'),
-        {
-          method: 'POST',
-          ...(signal && { signal }),
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
-          },
-          body: JSON.stringify(params),
-        },
-        getRequestTimeoutMs(),
-        'text',
-        shouldBustProviderCache(context),
-      );
-    } catch (err) {
-      throwIfAborted(signal);
-      return {
-        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
-      };
-    }
-    logger.debug(`\tOllama generate API response: ${response.data}`);
-    const responseError = getOllamaResponseError(response);
-    if (responseError) {
-      // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
-      // error body would otherwise be replayed from cache for the full TTL.
-      await response.deleteFromCache?.();
-      return { error: responseError };
+    const response = await fetchOllamaGeneration('generate', params, this.env, context, signal);
+    if ('error' in response) {
+      return response;
     }
 
     try {
@@ -715,7 +730,7 @@ export class OllamaChatProvider implements ApiProvider {
     // Handle tools if configured
     if (this.config.tools) {
       const loadedTools = await waitForPromiseWithAbort(
-        maybeLoadToolsFromExternalFile(this.config.tools, context?.vars),
+        maybeLoadToolsFromExternalFile(this.config.tools, context?.vars, signal),
         signal,
       );
       if (loadedTools !== undefined) {
@@ -726,42 +741,9 @@ export class OllamaChatProvider implements ApiProvider {
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });
 
-    const apiKey =
-      getProviderEnvString(this.env, 'OLLAMA_API_KEY') ?? getEnvString('OLLAMA_API_KEY');
-    let response: FetchWithCacheResult<string> | undefined;
-    try {
-      response = await fetchWithCache<string>(
-        getOllamaApiUrl(this.env, 'chat'),
-        {
-          method: 'POST',
-          ...(signal && { signal }),
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
-          },
-          body: JSON.stringify(params),
-        },
-        getRequestTimeoutMs(),
-        'text',
-        shouldBustProviderCache(context),
-      );
-    } catch (err) {
-      throwIfAborted(signal);
-      return {
-        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
-      };
-    }
-    logger.debug('[Ollama Chat] API response received', {
-      status: response.status,
-      dataLength: response.data?.length,
-    });
-
-    const responseError = getOllamaResponseError(response);
-    if (responseError) {
-      // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
-      // error body would otherwise be replayed from cache for the full TTL.
-      await response.deleteFromCache?.();
-      return { error: responseError };
+    const response = await fetchOllamaGeneration('chat', params, this.env, context, signal);
+    if ('error' in response) {
+      return response;
     }
 
     try {
