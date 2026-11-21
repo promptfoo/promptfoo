@@ -867,7 +867,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
           <AgentOutcomeCoverage count={outcomeErrors} evalId={evalId} />
           <Overview
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+            categoryStats={visibleAttacks.categoryStats}
             plugins={evalData.config.redteam.plugins || []}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           />
