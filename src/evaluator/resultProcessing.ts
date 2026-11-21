@@ -15,6 +15,7 @@ import {
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
+import { projectOperationalMetadata } from '../validation/literalVars';
 
 import type { ProviderConfig } from '../providers/shared';
 import type {
@@ -221,8 +222,11 @@ export function projectTestCase(
   if (options.stripOutput) {
     delete projectedTestCase.providerOutput;
   }
-  if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
-    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+  if (options.stripMetadata) {
+    const metadata = projectOperationalMetadata(testCase.metadata, !options.stripVars);
+    if (metadata) {
+      projectedTestCase.metadata = metadata;
+    }
   }
 
   return options.stripPromptText

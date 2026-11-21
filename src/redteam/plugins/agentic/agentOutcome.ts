@@ -24,6 +24,10 @@ import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../ty
 
 const reservedNames = new Set([
   'agentOutcome',
+  '__evalId',
+  '__evalStepId',
+  '__repeatIndex',
+  '_conversation',
   MULTI_INPUT_VAR,
   '__proto__',
   'prototype',
@@ -163,7 +167,12 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
       if (count <= 0) {
         return [];
       }
-      const rows = await super.generateTests(count, delayMs, () => this.getTemplate(source));
+      const rows = await super.generateTests(
+        count,
+        delayMs,
+        () => this.getTemplate(source),
+        source === 'indirect' ? this.legitimateTask : undefined,
+      );
       return rows.map((row) => this.bindCase(row, source));
     };
     if (mode !== 'both') {
@@ -194,16 +203,18 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
           ]),
         )
       : undefined;
+    const vars = {
+      [this.injectVar]: message,
+      [indirectInjectionVar]: artifact,
+      ...inputVars,
+      agentOutcome,
+    };
     return {
       ...row,
-      vars: {
-        [this.injectVar]: message,
-        [indirectInjectionVar]: artifact,
-        ...inputVars,
-        agentOutcome,
-      },
+      vars,
       metadata: {
         ...row.metadata,
+        __promptfoo: { ...row.metadata?.__promptfoo, literalVars: Object.keys(vars) },
         ...(inputVars ? { inputVars, pluginConfig: { ...this.config, inputs } } : {}),
         agentOutcome,
       },

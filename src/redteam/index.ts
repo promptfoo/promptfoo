@@ -563,7 +563,7 @@ function addLanguageToPluginMetadata(
       },
       // Hoist language to top-level metadata for backward compatibility and easier access
       ...languageToAdd,
-      ...getMaterializedMultiInputPromptMetadata(test.vars),
+      ...(!isAgentOutcomePlugin(plugin.id) && getMaterializedMultiInputPromptMetadata(test.vars)),
     },
   };
 }

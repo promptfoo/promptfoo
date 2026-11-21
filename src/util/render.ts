@@ -1,5 +1,6 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { processConfigField } from '../validation/literalVars';
 import { getNunjucksEngine } from './templates';
 
 import type { VarValue } from '../types';
@@ -130,7 +131,7 @@ export function renderEnvOnlyInObject<T>(
     if (typeof value === 'object' && value !== null) {
       return mapObjectValues(value, (key, child) =>
         // Conversation history is runtime data and may contain untrusted model output.
-        key === '_conversation' ? child : render(child),
+        key === '_conversation' ? child : processConfigField(value, key, child, render),
       );
     }
 

@@ -24,6 +24,7 @@ import {
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { sanitizeConfigForOutput } from './util/sanitizer';
+import { processConfigField } from './validation/literalVars';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -215,7 +216,7 @@ function stripTestPaths(test: TestCase): void {
     test.metadata = stripProviderOrigin(test.metadata);
   }
   if (test.vars) {
-    test.vars = stripFilePaths(test.vars);
+    test.vars = processConfigField(test, 'vars', test.vars, stripFilePaths) as TestCase['vars'];
   }
   if (test.provider) {
     test.provider = stripProviderPaths(test.provider);

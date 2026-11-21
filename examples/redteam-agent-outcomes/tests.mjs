@@ -13,7 +13,12 @@ export default function curated() {
       }
       tests.push({
         description: [pluginId, mode, variant].join(' / '),
-        metadata: { pluginId, strategyId: 'basic', agentOutcome },
+        metadata: {
+          pluginId,
+          strategyId: 'basic',
+          agentOutcome,
+          __promptfoo: { literalVars: Object.keys(vars) },
+        },
         vars,
         assert: [{ type: 'promptfoo:redteam:' + pluginId }],
       });
