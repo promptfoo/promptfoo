@@ -11,6 +11,35 @@ export interface TransformResponseContext {
   response: FetchWithCacheResult<any>;
 }
 
+// Detects `(...) =>` and `function(...) {}` source strings. The arrow check walks
+// the first parenthesized group and only accepts `=>` when it closes the outer
+// group, so a nested callback (e.g. `map((item) => ...)` inside a parenthesized
+// object literal) stays on the expression path instead of being invoked.
+function isFunctionExpressionSource(source: string): boolean {
+  if (/^function\b[\w$\s]*\(.*?\)/s.test(source)) {
+    return true;
+  }
+  if (source[0] !== '(') {
+    return false;
+  }
+  let depth = 0;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === '(') {
+      depth++;
+    } else if (ch === ')') {
+      depth--;
+      if (depth === 0) {
+        return /^\s*=>/.test(source.slice(i + 1));
+      }
+      if (depth < 0) {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
 // This is in another module so it can be imported by the frontend
 // Useful to test these in the UI before running an eval
 // Note: file:// references should be pre-loaded using loadTransformModule
@@ -44,8 +73,7 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
+        const isFunctionExpression = isFunctionExpressionSource(trimmedParser);
         // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         const transformFn = new Function(
           'json',
@@ -103,8 +131,7 @@ export async function createTransformRequest(
     return async (prompt, vars, context) => {
       try {
         const trimmedTransform = transform.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+        const isFunctionExpression = isFunctionExpressionSource(trimmedTransform);
 
         let body: string;
         if (isFunctionExpression) {
