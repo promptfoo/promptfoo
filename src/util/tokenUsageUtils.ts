@@ -506,35 +506,51 @@ export function accumulateResponseTokenUsage(
   });
 }
 
-/**
- * Record generation-time provider tokens separately from target usage and probes.
- * Returns whether the payload contained observable generation usage.
- */
+function readGenerationUsage({
+  attacker: _attacker,
+  assertions: _assertions,
+  generation: _generation,
+  incurredTokenUsage,
+  ...logical
+}: TokenUsage) {
+  const { attacker, assertions, generation, ...direct } = incurredTokenUsage ?? {};
+  const billed = incurredTokenUsage && [direct, attacker, assertions, generation];
+  const counters = [logical, ...(billed ?? [])]
+    .flatMap((part) => [
+      ...Object.values(part ?? {}),
+      ...Object.values(part?.completionDetails ?? {}),
+    ])
+    .filter((value) => typeof value === 'number');
+  if (
+    !counters.some((value) => value > 0) ||
+    counters.some((value) => !Number.isFinite(value) || value < 0)
+  ) {
+    return undefined;
+  }
+  return { logical, billed };
+}
+
+export function hasGenerationTokenUsage(usage: TokenUsage): boolean {
+  return Boolean(readGenerationUsage(usage));
+}
+
+/** Attribute all billed generation work to generation, without inflating target probes. */
 export function accumulateGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
   const parsed = BaseTokenUsageSchema.safeParse(update);
-  if (!parsed.success) {
+  const usage = parsed.success && readGenerationUsage(parsed.data);
+  if (!usage) {
     return false;
   }
 
-  const {
-    attacker: _attacker,
-    assertions: _assertions,
-    generation: _generation,
-    incurredTokenUsage,
-    ...generationUsage
-  } = parsed.data;
-  const hasUsage =
-    Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some(
-      (value) => typeof value === 'number' && value !== 0,
-    );
-  if (!hasUsage) {
-    return false;
+  // The generation bucket has no nested breakdown. Include each billed component once.
+  const incurred: TokenUsage = {};
+  for (const part of usage.billed ?? []) {
+    accumulateTokenUsage(incurred, part);
   }
   accumulateTokenUsage(target, {
-    generation: generationUsage,
-    ...((target.incurredTokenUsage || incurredTokenUsage) && {
-      incurredTokenUsage: { generation: incurredTokenUsage ?? generationUsage },
+    generation: usage.logical,
+    ...((target.incurredTokenUsage || usage.billed) && {
+      incurredTokenUsage: { generation: usage.billed ? incurred : usage.logical },
     }),
   });
   return true;

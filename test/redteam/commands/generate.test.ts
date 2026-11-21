@@ -463,7 +463,16 @@ describe('doGenerateRedteam', () => {
     },
   );
 
-  it('should persist aggregate generation token usage in generated output metadata', async () => {
+  it.each([
+    { cached: 0, completion: 7, numRequests: 2, prompt: 13, total: 20 },
+    { numRequests: 0, total: 0, incurredTokenUsage: { numRequests: 1, total: 12 } },
+  ])('persists observed generation usage in both metadata fields (%j)', async (usage) => {
+    const expected = expect.objectContaining({
+      ...usage,
+      ...('incurredTokenUsage' in usage && {
+        incurredTokenUsage: expect.objectContaining(usage.incurredTokenUsage!),
+      }),
+    });
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
       config: 'config.yaml',
@@ -489,13 +498,7 @@ describe('doGenerateRedteam', () => {
       entities: [],
       injectVar: 'input',
       failedPlugins: [],
-      generationTokenUsage: {
-        cached: 0,
-        completion: 7,
-        numRequests: 2,
-        prompt: 13,
-        total: 20,
-      },
+      generationTokenUsage: usage,
     });
 
     await doGenerateRedteam(options);
@@ -503,17 +506,11 @@ describe('doGenerateRedteam', () => {
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
-          generationTokenUsage: {
-            cached: 0,
-            completion: 7,
-            numRequests: 2,
-            prompt: 13,
-            total: 20,
-          },
+          generationTokenUsage: expected,
           generation: expect.objectContaining({
             id: expect.any(String),
             generatedAt: expect.any(String),
-            tokenUsage: { cached: 0, completion: 7, numRequests: 2, prompt: 13, total: 20 },
+            tokenUsage: expected,
           }),
         }),
       }),

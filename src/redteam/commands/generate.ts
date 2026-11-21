@@ -42,7 +42,7 @@ import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateTokenUsage, hasGenerationTokenUsage } from '../../util/tokenUsageUtils';
 import { isUuid } from '../../util/uuid';
 import { loadYaml } from '../../util/yamlLoad';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -838,11 +838,12 @@ async function doGenerateRedteamInternal(
       sharing: config.sharing,
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
+    const hasUsage = hasGenerationTokenUsage(generationTokenUsage);
     const generationRequestCount = generationTokenUsage.numRequests ?? 0;
     const generation = {
       id: options.generationRunId ?? randomUUID(),
       generatedAt: new Date().toISOString(),
-      ...(generationRequestCount > 0 ? { tokenUsage: generationTokenUsage } : {}),
+      ...(hasUsage && { tokenUsage: generationTokenUsage }),
     };
     if (generationRequestCount > 0) {
       const hasReportedGenerationTokens =
@@ -907,7 +908,7 @@ async function doGenerateRedteamInternal(
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
-          ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          ...(hasUsage && { generationTokenUsage }),
           generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
@@ -977,7 +978,7 @@ async function doGenerateRedteamInternal(
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
-        ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        ...(hasUsage && { generationTokenUsage }),
         generation,
       };
       const author = getAuthor();
@@ -1020,7 +1021,7 @@ async function doGenerateRedteamInternal(
         {
           ...(options.description ? { description: options.description } : {}),
           metadata: {
-            ...((generationTokenUsage.numRequests ?? 0) > 0 ? { generationTokenUsage } : {}),
+            ...(hasUsage && { generationTokenUsage }),
             generation,
           },
           tests: redteamTests,
