@@ -17,6 +17,7 @@ afterEach(() => {
 });
 
 const mockProduct: FourthwallProduct = {
+  type: 'PRODUCT',
   id: 'prod-1',
   slug: 'test-product',
   name: 'Test Product',
@@ -42,6 +43,7 @@ function renderModal(product: FourthwallProduct, addToCart = vi.fn()) {
     selectedProduct: product,
     closeProductModal: vi.fn(),
     addToCart,
+    addBundleToCart: vi.fn(),
     isLoading: false,
     cart: null,
     error: null,

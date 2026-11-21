@@ -208,7 +208,12 @@ tests:
 providers:
   - anthropic:claude-sonnet-5
   - openai:o4-mini
-  - deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-flash
+    config:
+      max_tokens: 8192
+      passthrough:
+        thinking:
+          type: enabled
 ```
 
 **Increase reasoning depth:**
@@ -246,7 +251,7 @@ As Dan Hendrycks (CAIS co-founder) notes:
 - Token budget increases alone don't guarantee accuracy improvements
 - Substantial gaps remain between AI and human expert performance
 
-Promptfoo provides HLE eval capabilities through automated dataset integration, parallel execution, and comprehensive results analysis.
+Promptfoo can load the HLE dataset, run cases in parallel, and report scores.
 
 ## Learn More
 

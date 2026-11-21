@@ -1,6 +1,6 @@
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { resolveProviderApiKey } from '../credentials';
 import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
 import { appendOpenAiApiPath } from '../openai/util';
 import { getRequestTimeoutMs } from '../shared';
@@ -62,20 +62,8 @@ export class NscaleImageProvider extends OpenAiImageProvider {
   }
 
   getApiKey(): string | undefined {
-    if (this.config.apiKey) {
-      return this.config.apiKey;
-    }
-    if (this.config.apiKeyEnvar) {
-      return this.env?.[this.config.apiKeyEnvar] || getEnvString(this.config.apiKeyEnvar);
-    }
-
     // Native Nscale credentials prefer service tokens over legacy API keys.
-    return (
-      this.env?.NSCALE_SERVICE_TOKEN ||
-      getEnvString('NSCALE_SERVICE_TOKEN') ||
-      this.env?.NSCALE_API_KEY ||
-      getEnvString('NSCALE_API_KEY')
-    );
+    return resolveProviderApiKey(this.config, this.env, ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']);
   }
 
   /**

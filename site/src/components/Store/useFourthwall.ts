@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type {
   FourthwallAttributeValue,
   FourthwallCart,
-  FourthwallProduct,
+  FourthwallCartItem,
+  FourthwallCartRequestItem,
+  FourthwallCatalogItem,
   FourthwallStock,
 } from './types';
 
@@ -85,7 +87,7 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 // Fetch all products from a collection (handles pagination)
 export function useProducts(collectionSlug: string = 'all') {
-  const [products, setProducts] = useState<FourthwallProduct[]>([]);
+  const [products, setProducts] = useState<FourthwallCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,12 +97,12 @@ export function useProducts(collectionSlug: string = 'all') {
       setError(null);
 
       try {
-        const allProducts: FourthwallProduct[] = [];
+        const allProducts: FourthwallCatalogItem[] = [];
         let page = 0;
 
         // Fetch pages until we get an empty results array
         while (true) {
-          const response = await apiFetch<{ results: FourthwallProduct[] }>(
+          const response = await apiFetch<{ results: FourthwallCatalogItem[] }>(
             `/collections/${collectionSlug}/products?page=${page}&size=${PAGE_SIZE}`,
           );
 
@@ -159,49 +161,31 @@ export function useCart() {
     }
   }, []);
 
-  const createCart = useCallback(async (variantId: string, quantity: number = 1) => {
-    // Validate inputs
-    validateVariantId(variantId);
-    validateQuantity(quantity);
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const newCart = await apiFetch<FourthwallCart>('/carts', {
-        method: 'POST',
-        body: JSON.stringify({
-          items: [{ variantId, quantity }],
-        }),
-      });
-      storage.setItem(CART_STORAGE_KEY, newCart.id);
-      setCart(newCart);
-      return newCart;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create cart');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+  const createCart = useCallback(async (items: FourthwallCartRequestItem[]) => {
+    const newCart = await apiFetch<FourthwallCart>('/carts', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+    storage.setItem(CART_STORAGE_KEY, newCart.id);
+    setCart(newCart);
+    return newCart;
   }, []);
 
-  const addToCart = useCallback(
-    async (variantId: string, quantity: number = 1) => {
-      // Validate inputs
-      validateVariantId(variantId);
-      validateQuantity(quantity);
-
+  const addItemsToCart = useCallback(
+    async (items: FourthwallCartRequestItem[]) => {
+      for (const item of items) {
+        validateVariantId(item.variantId);
+        validateQuantity(item.quantity);
+      }
       setIsLoading(true);
       setError(null);
       try {
         if (!cart) {
-          return createCart(variantId, quantity);
+          return await createCart(items);
         }
-
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/add`, {
           method: 'POST',
-          body: JSON.stringify({
-            items: [{ variantId, quantity }],
-          }),
+          body: JSON.stringify({ items }),
         });
         setCart(updatedCart);
         return updatedCart;
@@ -215,8 +199,66 @@ export function useCart() {
     [cart, createCart],
   );
 
+  const addToCart = useCallback(
+    (variantId: string, quantity: number = 1) => addItemsToCart([{ variantId, quantity }]),
+    [addItemsToCart],
+  );
+
+  const addBundleToCart = useCallback(
+    (bundleId: string, variantIds: string[]) => {
+      validateVariantId(bundleId);
+      if (variantIds.length === 0) {
+        throw new Error('Select a variant for each product in the bundle');
+      }
+      return addItemsToCart(variantIds.map((variantId) => ({ variantId, quantity: 1, bundleId })));
+    },
+    [addItemsToCart],
+  );
+
+  // The live /change and /remove endpoints only address ungrouped variants.
+  // Replace a bundle cart atomically, preserving every other item and bundle.
+  const replaceBundle = useCallback(
+    async (groupedId: string, quantity: number) => {
+      if (!cart) return;
+      const batches = new Map<string, FourthwallCartRequestItem[]>();
+      for (const item of cart.items) {
+        const nextQuantity = item.groupedBy?.groupedId === groupedId ? quantity : item.quantity;
+        if (nextQuantity === 0) continue;
+        const key = item.groupedBy?.groupedId ?? 'individual';
+        const items = batches.get(key) ?? [];
+        items.push({
+          variantId: item.variant.id,
+          quantity: nextQuantity,
+          ...(item.groupedBy ? { bundleId: item.groupedBy.bundleId } : {}),
+        });
+        batches.set(key, items);
+      }
+      if (batches.size === 0) {
+        storage.removeItem(CART_STORAGE_KEY);
+        setCart(null);
+        return;
+      }
+      // Each bundle configuration needs its own request. Publish the new cart ID
+      // only after every batch succeeds so a failure leaves the original intact.
+      let replacement: FourthwallCart | undefined;
+      for (const items of batches.values()) {
+        replacement = await apiFetch<FourthwallCart>(
+          replacement ? `/carts/${replacement.id}/add` : '/carts',
+          { method: 'POST', body: JSON.stringify({ items }) },
+        );
+      }
+      if (replacement) {
+        storage.setItem(CART_STORAGE_KEY, replacement.id);
+        setCart(replacement);
+      }
+      return replacement;
+    },
+    [cart],
+  );
+
   const removeFromCart = useCallback(
-    async (variantId: string) => {
+    async (item: FourthwallCartItem) => {
+      const variantId = item.variant.id;
       if (!cart) return;
 
       // Validate input
@@ -225,6 +267,9 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       try {
+        if (item.groupedBy) {
+          return await replaceBundle(item.groupedBy.groupedId, 0);
+        }
         // API expects: { items: [{ variantId }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/remove`, {
           method: 'POST',
@@ -241,11 +286,12 @@ export function useCart() {
         setIsLoading(false);
       }
     },
-    [cart],
+    [cart, replaceBundle],
   );
 
   const updateQuantity = useCallback(
-    async (variantId: string, quantity: number) => {
+    async (item: FourthwallCartItem, quantity: number) => {
+      const variantId = item.variant.id;
       if (!cart) return;
 
       // Validate inputs
@@ -255,6 +301,9 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       try {
+        if (item.groupedBy) {
+          return await replaceBundle(item.groupedBy.groupedId, quantity);
+        }
         // API expects: { items: [{ variantId, quantity }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/change`, {
           method: 'POST',
@@ -271,15 +320,18 @@ export function useCart() {
         setIsLoading(false);
       }
     },
-    [cart],
+    [cart, replaceBundle],
   );
 
-  const clearCart = useCallback(() => {
-    storage.removeItem(CART_STORAGE_KEY);
-    setCart(null);
-  }, []);
-
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const countedBundles = new Set<string>();
+  const itemCount =
+    cart?.items.reduce((sum, item) => {
+      if (item.groupedBy) {
+        if (countedBundles.has(item.groupedBy.groupedId)) return sum;
+        countedBundles.add(item.groupedBy.groupedId);
+      }
+      return sum + item.quantity;
+    }, 0) ?? 0;
 
   return {
     cart,
@@ -287,9 +339,9 @@ export function useCart() {
     error,
     itemCount,
     addToCart,
+    addBundleToCart,
     removeFromCart,
     updateQuantity,
-    clearCart,
   };
 }
 
@@ -313,18 +365,22 @@ export function stripHtml(html: string): string {
   return doc.body.textContent || '';
 }
 
-export function isInStock(stock: FourthwallStock): boolean {
-  return (
-    stock.type === 'UNLIMITED' ||
-    (stock.type === 'LIMITED' && Number.isFinite(stock.inStock) && stock.inStock > 0)
-  );
+export function isInStock(stock?: FourthwallStock): boolean {
+  if (stock?.type !== 'LIMITED') {
+    return stock?.type === 'UNLIMITED';
+  }
+  const available = stock.inStock ?? stock.quantity ?? 0;
+  return Number.isSafeInteger(available) && available > 0;
 }
 
-export function isProductSoldOut(product: FourthwallProduct): boolean {
-  return (
-    product.state.type !== 'AVAILABLE' ||
-    !product.variants.some((variant) => isInStock(variant.stock))
-  );
+export function isProductSoldOut(product: FourthwallCatalogItem): boolean {
+  if (product.state?.type !== 'AVAILABLE') {
+    return true;
+  }
+  if (product.type === 'BUNDLE') {
+    return !product.offers.length || product.offers.some(isProductSoldOut);
+  }
+  return !product.variants.some((variant) => isInStock(variant.stock));
 }
 
 // Get display name from attribute value (handles both string and object formats)
