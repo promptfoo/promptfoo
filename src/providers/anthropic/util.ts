@@ -1,5 +1,9 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase } from '../shared';
+import {
+  calculateCost as calculateCostBase,
+  type ModelCost,
+  parseToolCallArguments,
+} from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -13,9 +17,19 @@ import type {
   WebSearchToolConfig20260318,
 } from './types';
 
+export function formatLegacyCompletionPrompt(prompt: string): string {
+  return `\n\nHuman: ${prompt} \n\nAssistant:`;
+}
+
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
+  // Fast mode on Fable/Mythos 5.2 ($16/$80) is not encoded here; set `inputCost` and
+  // `outputCost` to track it.
+  ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
+    input: 8 / 1e6, // $8 / MTok
+    output: 40 / 1e6, // $40 / MTok
+  }),
   ...modelsWithCost(
     ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'],
     {
@@ -23,6 +37,13 @@ export const ANTHROPIC_MODELS = [
       output: 50 / 1e6, // $50 / MTok
     },
   ),
+  // Haiku 5.5 uses these rates through 100K input tokens; larger prompts are
+  // priced in calculateAnthropicCost, including cached input in the threshold.
+  ...modelsWithCost(['claude-haiku-5-5'], {
+    input: 0.1 / 1e6,
+    output: 0.5 / 1e6,
+    longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
+  }),
   // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
   // doubles these rates (see `fastModePriceMultiplier`).
   ...modelsWithCost(['claude-opus-5-5'], {
@@ -32,8 +53,7 @@ export const ANTHROPIC_MODELS = [
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
-  // flat rate. Fast mode ($10/$50, Claude API only) doubles these rates (see
-  // `fastModePriceMultiplier`).
+  // flat rate. Fast mode ($10/$50, Claude API only) doubles these rates.
   ...modelsWithCost(['claude-opus-5'], {
     input: 5 / 1e6, // $5 / MTok
     output: 25 / 1e6, // $25 / MTok
@@ -113,13 +133,6 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   ),
-  // Claude Haiku 5.5 has two rate cards, chosen per request by the prompt's length with cache
-  // reads and writes counted: a prompt over 100K tokens bills the whole request at the higher one.
-  ...modelsWithCost(['claude-haiku-5-5'], {
-    input: 0.1 / 1e6, // $0.10 / MTok
-    output: 0.5 / 1e6, // $0.50 / MTok
-    longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
-  }),
   ...modelsWithCost(['claude-haiku-4-5', 'claude-haiku-4-5-20251001'], {
     input: 1 / 1e6, // $1 / MTok
     output: 5 / 1e6, // $5 / MTok
@@ -187,6 +200,8 @@ export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
+const CLAUDE_FABLE_MYTHOS_52_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-2(?![a-z0-9])/i;
+const CLAUDE_HAIKU_55_PATTERN = /(^|[^a-z0-9])claude-haiku-5-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
 // `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
 // a dated snapshot, so it is excluded while `claude-opus-5-20260801`-style suffixes still match.
@@ -194,7 +209,6 @@ const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?!-[0-9](?![0-9]))(?![
 const CLAUDE_SONNET_55_PATTERN = /(^|[^a-z0-9])claude-sonnet-5-5(?![a-z0-9])/i;
 // Like Opus 5: `claude-sonnet-5-5` is a point release, not a Sonnet 5 dated snapshot.
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?!-[0-9](?![0-9]))(?![a-z0-9])/i;
-const CLAUDE_HAIKU_55_PATTERN = /(^|[^a-z0-9])claude-haiku-5-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
@@ -220,7 +234,7 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
-  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1 and 5.2). */
   forcedToolChoiceUnsupported?: boolean;
   /**
    * Omitting `thinking` runs adaptive thinking rather than no thinking, so requests that never
@@ -255,10 +269,31 @@ interface ClaudeModelFamily {
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
+    match: CLAUDE_HAIKU_55_PATTERN,
+    warningName: 'Claude Haiku 5.5',
+    samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
+    disabledThinkingEffortCapped: true,
+    regionalPremium: true,
+  },
+  {
     match: CLAUDE_MYTHOS_PREVIEW_RE,
     warningName: 'Claude Mythos Preview',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
+  },
+  // `CLAUDE_FABLE_MYTHOS_5_PATTERN` also matches the point releases, so each 5.x row must
+  // precede it: the warning name and cache-read multiplier come from the first matching row.
+  // Fable/Mythos 5.2 keep the 5.1 request rules (verified live): thinking can't be disabled,
+  // sampling params and forced `tool_choice` return 400, and cache reads cost 0.025x input.
+  {
+    match: CLAUDE_FABLE_MYTHOS_52_PATTERN,
+    warningName: 'Claude Fable 5.2 and Claude Mythos 5.2',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+    cacheReadMultiplier: 0.025,
   },
   {
     match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
@@ -281,29 +316,30 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   // live). Unlike Opus 5, lowering `effort` is the only way to reduce thinking.
   {
     match: CLAUDE_OPUS_55_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Opus 5.5',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
     forcedToolChoiceUnsupported: true,
     regionalPremium: true,
     cacheReadMultiplier: 0.05,
-    fastModePriceMultiplier: 2,
   },
   // Opus 5 thinks by default (omitting `thinking` runs adaptive, unlike Opus 4.7/4.8) and
   // still accepts `disabled`, but only at effort `high` or below.
   {
     match: CLAUDE_OPUS_5_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Opus 5',
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
-    fastModePriceMultiplier: 2,
   },
   // Sonnet 5.5 replaces disabled thinking with between_tools at effort high or below.
   {
     match: CLAUDE_SONNET_55_PATTERN,
     warningName: 'Claude Sonnet 5.5',
+    cacheReadMultiplier: 0.05,
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
@@ -322,23 +358,13 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     thinkingOnByDefault: true,
     regionalPremium: true,
   },
-  // Haiku 5.5 thinks by default and, like Opus 5, accepts `disabled` only at effort `high` or
-  // below. Unlike Sonnet 5.5 and Opus 5.5, it accepts a forced `tool_choice` (verified live).
-  {
-    match: CLAUDE_HAIKU_55_PATTERN,
-    warningName: 'Claude Haiku 5.5',
-    samplingParamsDeprecated: true,
-    thinkingOnByDefault: true,
-    disabledThinkingEffortCapped: true,
-    regionalPremium: true,
-  },
-  // Opus 4.7 and 4.8 share behavior and warning wording. Only 4.8 still offers fast mode.
+  // Opus 4.7 and 4.8 share behavior and warning wording.
   {
     match: CLAUDE_OPUS_48_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
     regionalPremium: true,
-    fastModePriceMultiplier: 2,
   },
   {
     match: CLAUDE_OPUS_47_PATTERN,
@@ -361,6 +387,11 @@ function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boo
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
 
+/** Matches Claude Haiku 5.5 model IDs across hosting providers. */
+export function isClaudeHaiku55Model(modelId: string): boolean {
+  return CLAUDE_HAIKU_55_PATTERN.test(modelId);
+}
+
 /** Matches Claude Opus 5.5 model IDs. */
 export function isClaudeOpus55Model(modelId: string): boolean {
   return CLAUDE_OPUS_55_PATTERN.test(modelId);
@@ -371,7 +402,7 @@ export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
 
-/** Matches the Claude 5 Fable and Mythos model IDs. */
+/** Matches the Claude 5 Fable and Mythos model IDs, including point releases such as 5.2. */
 export function isClaudeFableOrMythos5Model(modelId: string): boolean {
   return CLAUDE_FABLE_MYTHOS_5_PATTERN.test(modelId);
 }
@@ -379,11 +410,6 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
 /** Matches Claude Sonnet 5.5 model IDs. */
 export function isClaudeSonnet55Model(modelId: string): boolean {
   return CLAUDE_SONNET_55_PATTERN.test(modelId);
-}
-
-/** Matches Claude Haiku 5.5 model IDs. */
-export function isClaudeHaiku55Model(modelId: string): boolean {
-  return CLAUDE_HAIKU_55_PATTERN.test(modelId);
 }
 
 /** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, `-5-5`, or `-50`). */
@@ -422,10 +448,9 @@ export function isBetweenToolsLowestThinkingClaudeModel(modelId: string): boolea
 }
 
 /**
- * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5, Sonnet 5 and 5.5, and
- * Haiku 5.5). Callers use this so that thinking-token headroom (e.g. the default `max_tokens`)
- * reflects what the API will actually do rather than assuming an absent `thinking` field means
- * thinking is off.
+ * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5 / Sonnet 5). Callers use this
+ * so that thinking-token headroom (e.g. the default `max_tokens`) reflects what the API will
+ * actually do rather than assuming an absent `thinking` field means thinking is off.
  */
 export function isThinkingOnByDefaultClaudeModel(modelId: string): boolean {
   return hasClaudeCapability(modelId, 'thinkingOnByDefault');
@@ -456,10 +481,10 @@ export function claudeThinkingConsumesTokens(
 }
 
 /**
- * True when the request cannot turn thinking off at this effort level. Claude Opus 5 and Haiku 5.5
- * only accept `disabled` at effort `high` or below, and Claude Sonnet 5.5 its `between_tools`
+ * True when the request cannot turn thinking off at this effort level. Claude Opus 5 only
+ * accepts `disabled` at effort `high` or below, and Claude Sonnet 5.5 its `between_tools`
  * replacement, so either with `xhigh`/`max` is a 400. An unset effort uses the API default
- * (`high`, or `medium` on Haiku 5.5), which is within the cap.
+ * (`high`), which is within the cap.
  */
 export function isDisabledThinkingRejectedAtEffort(
   modelId: string,
@@ -511,7 +536,26 @@ export function clampMaxTokensForThinkingBudget(
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
-  return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
+  const normalized = modelName.replace(
+    /^(?:(?:global|us|us-gov|eu|jp|au|in|ca)\.)?anthropic\./,
+    '',
+  );
+  // Haiku 4.5 has a versioned ID on Bedrock Runtime and a short ID on Mantle.
+  return normalized !== modelName && normalized === 'claude-haiku-4-5-20251001-v1:0'
+    ? 'claude-haiku-4-5-20251001'
+    : normalized;
+}
+
+/** Shared gateways may use opaque deployment aliases. Only match complete known model IDs. */
+export function isKnownClaudeModelWithDeprecatedSampling(modelId: string): boolean {
+  const canonical = normalizeAnthropicModelName(modelId)
+    .replace(/-v\d+:\d+$/, '') // Bedrock revision
+    .replace(/(?:[-@]\d{8}|-latest)$/, '') // dated snapshot or model alias
+    .replace(/(\d)\.(\d)/, '$1-$2'); // OpenRouter uses dotted versions
+  return CLAUDE_MODEL_FAMILIES.some(
+    ({ match, samplingParamsDeprecated }) =>
+      samplingParamsDeprecated && match.exec(canonical)?.[0] === canonical,
+  );
 }
 
 /**
@@ -766,30 +810,76 @@ export function parseMessages(messages: string): {
   extractedMessages: Anthropic.MessageParam[];
   thinking?: Anthropic.ThinkingConfigParam;
 } {
+  let parsed;
   try {
-    const parsed = JSON.parse(messages);
-    if (Array.isArray(parsed)) {
-      const systemMessage = parsed.find((msg) => msg.role === 'system');
-      const thinking = parsed.find((msg) => msg.thinking)?.thinking;
-      return {
-        extractedMessages: parsed
-          .filter((msg) => msg.role && msg.role !== 'system')
-          .map((msg) => ({
-            role: msg.role,
-            content: Array.isArray(msg.content)
-              ? processAnthropicImageContent(msg.content)
-              : [{ type: 'text', text: msg.content }],
-          })),
-        system: systemMessage
-          ? Array.isArray(systemMessage.content)
-            ? systemMessage.content
-            : [{ type: 'text', text: systemMessage.content }]
-          : undefined,
-        thinking,
-      };
-    }
+    parsed = JSON.parse(messages);
   } catch {
-    // Not JSON, parse as plain text
+    // Not JSON, parse as plain text below.
+  }
+  if (Array.isArray(parsed) && parsed.every((msg) => msg != null)) {
+    const extractedMessages: Anthropic.MessageParam[] = [];
+    const systemMessages = parsed.filter(
+      (msg) => msg.role === 'system' || msg.role === 'developer',
+    );
+    for (const msg of parsed.filter((item) => item.role && !systemMessages.includes(item))) {
+      if (msg.role === 'tool' || msg.tool_call_id != null) {
+        if (typeof msg.tool_call_id !== 'string' || !msg.tool_call_id) {
+          throw new Error('Tool result requires a tool_call_id');
+        }
+        const result: Anthropic.ToolResultBlockParam = {
+          type: 'tool_result',
+          tool_use_id: msg.tool_call_id,
+          content: Array.isArray(msg.content)
+            ? processAnthropicImageContent(msg.content)
+            : typeof msg.content === 'string' || msg.content == null
+              ? (msg.content ?? '')
+              : JSON.stringify(msg.content),
+        };
+        const previous = extractedMessages[extractedMessages.length - 1];
+        if (
+          previous?.role === 'user' &&
+          Array.isArray(previous.content) &&
+          previous.content.length &&
+          previous.content.every((block) => block.type === 'tool_result')
+        ) {
+          previous.content.push(result);
+        } else {
+          extractedMessages.push({ role: 'user', content: [result] });
+        }
+        continue;
+      }
+      const content: Anthropic.ContentBlockParam[] = Array.isArray(msg.content)
+        ? processAnthropicImageContent(msg.content)
+        : msg.content == null || (msg.tool_calls?.length && msg.content === '')
+          ? []
+          : [{ type: 'text', text: msg.content }];
+      for (const call of msg.tool_calls ?? []) {
+        if (
+          typeof call?.id !== 'string' ||
+          !call.id ||
+          typeof call.function?.name !== 'string' ||
+          !call.function.name
+        ) {
+          throw new Error('Tool call requires an id and function name');
+        }
+        content.push({
+          type: 'tool_use',
+          id: call.id,
+          name: call.function.name,
+          input: parseToolCallArguments(call.function.arguments),
+        });
+      }
+      extractedMessages.push({ role: msg.role, content });
+    }
+    return {
+      extractedMessages,
+      system: systemMessages.length
+        ? systemMessages.flatMap((msg) =>
+            Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }],
+          )
+        : undefined,
+      thinking: parsed.find((msg) => msg.thinking)?.thinking,
+    };
   }
   const lines = messages
     .split('\n')
@@ -892,9 +982,12 @@ export function calculateAnthropicCost(
     (hasExplicitPricing
       ? ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.find((model) => model.id === pricingModelName)
       : undefined);
-  const modelInfo: { id: string; cost: AnthropicModelCost } | undefined =
-    pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
-      ? { id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }
+  const totalInputTokens =
+    (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
+  const modelInfo =
+    registeredModel?.cost.longContext &&
+    totalInputTokens > registeredModel.cost.longContext.threshold
+      ? { ...registeredModel, cost: registeredModel.cost.longContext }
       : registeredModel;
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
@@ -942,33 +1035,22 @@ export function calculateAnthropicCost(
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
   const cacheCreation1h = cacheCreation1hTokens ?? 0;
-  // A model's long-prompt rates replace its standard rates for the whole request once the prompt,
-  // cache reads and writes included, is over the threshold.
-  const longContext = modelInfo?.cost.longContext;
-  const pricedModel =
-    modelInfo &&
-    longContext &&
-    (Number.isFinite(promptTokens) ? Number(promptTokens) : 0) + cacheRead + cacheCreation >
-      longContext.threshold
-      ? { id: modelInfo.id, cost: { input: longContext.input, output: longContext.output } }
-      : modelInfo;
 
-  // Other size-based tiers are provider-specific, and callers supply them as explicit
-  // input/output rates, while cache pricing is applied whenever cache tokens are present.
+  // Haiku 5.5 tiers are selected above. Explicit input/output rates still take precedence,
+  // and cache pricing is applied whenever cache tokens are present.
   // The `typeof` guards narrow `number | undefined` to `number`; `Number.isFinite` alone already
   // rejects `undefined` at runtime but does not narrow the type.
   if (
     !usesFlatCost &&
-    pricedModel &&
+    modelInfo &&
     (cacheRead || cacheCreation) &&
     typeof promptTokens !== 'undefined' &&
     typeof completionTokens !== 'undefined' &&
     Number.isFinite(promptTokens) &&
     Number.isFinite(completionTokens)
   ) {
-    const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? pricedModel.cost.input;
-    const outputCost =
-      effectiveConfig.outputCost ?? effectiveConfig.cost ?? pricedModel.cost.output;
+    const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
+    const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
     return withPricingMultipliers(
       calculateCacheInputCost(
         inputCost,
@@ -988,7 +1070,7 @@ export function calculateAnthropicCost(
       effectiveConfig,
       promptTokens,
       completionTokens,
-      pricedModel ? [pricedModel] : [],
+      modelInfo ? [modelInfo] : [],
     ),
   );
 }
@@ -1204,19 +1286,6 @@ export function processAnthropicTools(
   return { processedTools, requiredBetaFeatures };
 }
 
-interface AnthropicModelCost {
-  input: number;
-  output: number;
-  /**
-   * The rates for a whole request whose prompt, cache reads and writes included, is longer than
-   * `threshold` tokens. `getModelPricing` returns them too.
-   */
-  longContext?: { threshold: number; input: number; output: number };
-}
-
-function modelsWithCost(ids: string[], cost: AnthropicModelCost) {
-  return ids.map((id) => ({
-    id,
-    cost: { ...cost, ...(cost.longContext && { longContext: { ...cost.longContext } }) },
-  }));
+function modelsWithCost(ids: string[], cost: ModelCost) {
+  return ids.map((id) => ({ id, cost: { ...cost } }));
 }

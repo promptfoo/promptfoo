@@ -111,11 +111,11 @@ jobs:
         with: &python-3-14-8
           python-version: 3.14.8
 
-      # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
-      - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+      - &use-ruby
+        name: Use Ruby
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
-          ruby-version: ${{ startsWith(matrix.os, 'windows-') && '4.0.0' || '4.0.1' }}
+          ruby-version: '4.0.9'
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
@@ -144,23 +144,23 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ runner.os == 'Linux' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
 
       - name: Test process fixtures without parallel workers
         # Cold npm and Python processes can miss deadlines when competing
         # with test forks. Run these unchanged suites once per Windows Node version.
         if: startsWith(matrix.os, 'windows-') && matrix.shard == 1
-        run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
+        run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/examples/integrationInspectOsworldProvider.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
-        if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
+        if: runner.os != 'Linux' && (!matrix.shard || matrix.shard == '1')
         run: |
           npx tsdown
           npm run postbuild
           npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
       - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        if: runner.os == 'Linux' && matrix.node == '22.22' && !matrix.shard
         env:
           COVERAGE_BASE: ${{ inputs.coverage_base }}
         run: |
@@ -171,7 +171,7 @@ jobs:
           npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        if: runner.os == 'Linux' && matrix.node == '22.22' && !matrix.shard
         # Authentication can fail before fail_ci_if_error applies; uploads are informational.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -327,7 +327,7 @@ jobs:
       - *built-skill-examples
 
       - name: Upload package for platform acceptance
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: promptfoo-platform-package
           path: ${{ steps.package-artifact.outputs.tarball }}
@@ -360,10 +360,7 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: *python-3-14-8
 
-      - name: Use Ruby for installed wrapper acceptance
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with: &ruby-4-0-1
-          ruby-version: '4.0.1'
+      - *use-ruby
 
       - name: Use Go for installed wrapper acceptance
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -371,7 +368,7 @@ jobs:
           go-version-file: src/golang/go.mod
 
       - &download-platform-package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: promptfoo-platform-package
           path: ${{ runner.temp }}/package-artifact
@@ -390,7 +387,7 @@ jobs:
       - *test-package-artifact
 
       - name: Upload packed consumer inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-runtime
           path: ${{ runner.temp }}/sbom-runtime
@@ -513,10 +510,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install shfmt
+      - name: Install shfmt 3.12.0
         run: |
           curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
-            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --header 'Accept: application/octet-stream' \
+            https://api.github.com/repos/mvdan/sh/releases/assets/270490140 \
             --output "$RUNNER_TEMP/shfmt"
           printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
           chmod +x "$RUNNER_TEMP/shfmt"
@@ -550,11 +548,7 @@ jobs:
 
       - *use-node
 
-      - name: Use Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          # The pinned ModelAudit schema generator requires Python <3.14.
-          python-version: '3.13'
+      - *use-python-3-14
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
@@ -572,6 +566,9 @@ jobs:
           npm run jsonSchema:generate
           npm run modelAuditSchema:generate
 
+      - name: Check local server OpenAPI spec
+        run: npm run openapi:check
+
       - name: Check for changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
@@ -588,18 +585,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.14]
+        python-version: ['3.9', '3.14']
     steps:
       - *checkout-repo-read-only
 
+      # setup-python has no CPython 3.9 build for Ubuntu 26.04. uv can install it independently of the runner image.
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: '0.13.8'
           python-version: ${{ matrix.python-version }}
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/python-venv
+          enable-cache: false
 
       - name: Install Dependencies
         run: |
-          pip install ruff==0.15.1
+          uv pip install ruff==0.15.1
 
       - name: Check Formatting
         run: |
@@ -640,7 +642,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload docs browser inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-site
           path: site/build/browser-inventory.json
@@ -661,11 +663,11 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           package-manager-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sbom-runtime
           path: ${{ runner.temp }}/sbom-current
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sbom-site
           path: ${{ runner.temp }}/sbom-site
@@ -708,7 +710,7 @@ jobs:
             --source-sha "$GITHUB_SHA" --base-sha "$BASE_SHA" \
             --output "$RUNNER_TEMP/sbom-report"
       - name: Upload SBOM comparison and next baseline
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-inventory
           path: ${{ runner.temp }}/sbom-report
@@ -793,7 +795,8 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 10
+    # Allow slow browser system dependency downloads before browser and coverage tests.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
@@ -811,6 +814,10 @@ jobs:
       # Browser binaries are opt-in; install the version from the locked SDK.
       - name: Install Chromium
         run: node node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Run Site Browser Tests
+        working-directory: site
+        run: npm run test:browser
 
       - name: Run App Browser Tests
         run: npm run test:app:browser
@@ -860,10 +867,7 @@ jobs:
 
       - *use-python-3-14
 
-      - &use-ruby
-        name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with: *ruby-4-0-1
+      - *use-ruby
 
       - name: Install Dependencies
         run: |
@@ -1086,7 +1090,7 @@ jobs:
       - *checkout-repo
 
       - name: Use Ruby ${{ matrix.ruby-version }}
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: ${{ matrix.ruby-version }}
 

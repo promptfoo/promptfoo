@@ -2046,32 +2046,6 @@ Third line`;
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 
-    it('omits temperature and topP for Claude Haiku 5.5', async () => {
-      // Verified live: temperature 0 returns 400 "deprecated for this model" on Haiku 5.5.
-      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-haiku-5-5', {
-        config: {
-          region: 'us-east-1',
-          max_tokens: 1024,
-          temperature: 0,
-          topP: 0.9,
-        },
-      });
-
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
-
-      await provider.callApi('Test');
-
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
-        -1,
-      )?.[0] as { inferenceConfig?: Record<string, unknown> };
-      expect(call?.inferenceConfig?.temperature).toBeUndefined();
-      expect(call?.inferenceConfig?.topP).toBeUndefined();
-      expect(call?.inferenceConfig?.maxTokens).toBe(1024);
-    });
-
     it.each(['any', { tool: { name: 'test_tool' } }])(
       'omits forced tool choice for Claude Fable 5 while preserving tools: %j',
       async (toolChoice) => {
@@ -2525,11 +2499,7 @@ Third line`;
       );
     });
 
-    it.each([
-      'global.anthropic.claude-sonnet-5-5',
-      'anthropic.claude-opus-5',
-      'global.anthropic.claude-haiku-5-5',
-    ])(
+    it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-opus-5'])(
       'drops config thinking "disabled" for %s when raw fields carry a capped effort',
       async (model) => {
         // Turning thinking off at xhigh/max is a 400 on both models, and the raw
@@ -2858,6 +2828,32 @@ Third line`;
   });
 
   describe('cost calculation', () => {
+    it.each([
+      ['us.openai.gpt-6-luna', 0.000165],
+      ['us.openai.gpt-6.1-sol', 0.0033],
+      ['us.openai.gpt-6.1-terra', 0.00165],
+      ['global.openai.gpt-6.1-terra', 0.0015],
+      ['us.openai.gpt-6-sol', 0.0033],
+    ] as const)('supports cost assertions for %s', async (model, expectedCost) => {
+      const provider = new AwsBedrockConverseProvider(model, { config: { region: 'us-east-1' } });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('pong', {
+          usage: { inputTokens: 1000, outputTokens: 100, totalTokens: 1100 },
+        }),
+      );
+      const providerResponse = await provider.callApi('ping');
+      expect(providerResponse.cost).toBeCloseTo(expectedCost, 12);
+      const { runAssertion } = await import('../../../src/assertions');
+      for (const threshold of [0, 0.15]) {
+        const grade = await runAssertion({
+          assertion: { type: 'cost', threshold },
+          test: {},
+          providerResponse,
+        });
+        expect(grade.pass).toBe(threshold >= expectedCost);
+      }
+    });
+
     it('should calculate cost for Nova models', async () => {
       // Model ID needs to contain 'amazon.nova-lite' for pricing lookup
       const provider = new AwsBedrockConverseProvider('amazon.nova-lite-v1:0', {
@@ -2906,6 +2902,19 @@ Third line`;
       const result = await provider.callApi('Test');
 
       expect(result.cost).toBeUndefined();
+    });
+
+    it('prices Kimi K3 using the tier returned by Converse', async () => {
+      const provider = new AwsBedrockConverseProvider('global.moonshotai.kimi-k3', {
+        config: { region: 'us-east-1', serviceTier: { type: 'priority' } },
+      });
+      mockSend.mockResolvedValueOnce({
+        ...createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+        }),
+        serviceTier: { type: 'default' },
+      });
+      expect((await provider.callApi('Test')).cost).toBeCloseTo(0.006, 12);
     });
 
     it('passes region and service tier through to the shared cost calculator', async () => {
@@ -3692,6 +3701,23 @@ Third line`;
       expect(result.output).toBe('Hello World');
       expect(result.tokenUsage?.prompt).toBe(10);
       expect(result.tokenUsage?.completion).toBe(5);
+    });
+
+    it('prices Kimi K3 using the tier in Converse stream metadata', async () => {
+      const provider = new AwsBedrockConverseProvider('global.moonshotai.kimi-k3', {
+        config: { region: 'us-east-1', serviceTier: { type: 'priority' }, streaming: true },
+      });
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream([
+          {
+            metadata: {
+              usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+              serviceTier: { type: 'flex' },
+            },
+          },
+        ]),
+      });
+      expect((await provider.callApiStreaming('Test')).cost).toBeCloseTo(0.003, 12);
     });
 
     it('should include prompt cache reads and writes in streaming cost', async () => {

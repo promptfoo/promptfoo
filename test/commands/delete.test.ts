@@ -6,8 +6,6 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import * as database from '../../src/util/database';
 
-import type { EvalWithMetadata } from '../../src/types/index';
-
 vi.mock('@inquirer/confirm');
 vi.mock('../../src/util/database');
 vi.mock('../../src/logger');
@@ -66,70 +64,17 @@ describe('delete command', () => {
 
   describe('delete command', () => {
     it('should handle eval deletion when resource exists', async () => {
-      const mockEval = {
-        id: 'test-id',
-        date: new Date(),
-        config: {},
-        version: 3,
-        timestamp: new Date().toISOString(),
-        results: {
-          version: 3,
-          timestamp: new Date().toISOString(),
-          results: [],
-          prompts: [],
-          stats: {
-            successes: 0,
-            failures: 0,
-            errors: 0,
-            duration: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: {
-                reasoning: 0,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-              assertions: {} as any,
-            },
-          },
-        },
-        prompts: [],
-        stats: {
-          successes: 0,
-          failures: 0,
-          errors: 0,
-          duration: 0,
-          tokenUsage: {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            numRequests: 0,
-            completionDetails: {
-              reasoning: 0,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-            assertions: {} as any,
-          },
-        },
-      } as EvalWithMetadata;
-
-      vi.mocked(database.getEvalFromId).mockResolvedValueOnce(mockEval);
+      vi.mocked(database.hasRecentEvalWithIdPrefix).mockResolvedValueOnce(true);
 
       deleteCommand(program);
       await program.parseAsync(['node', 'test', 'delete', 'test-id']);
 
-      expect(database.getEvalFromId).toHaveBeenCalledWith('test-id');
+      expect(database.hasRecentEvalWithIdPrefix).toHaveBeenCalledWith('test-id');
       expect(database.deleteEval).toHaveBeenCalledWith('test-id');
     });
 
     it('should handle when resource does not exist', async () => {
-      vi.mocked(database.getEvalFromId).mockResolvedValueOnce(undefined);
+      vi.mocked(database.hasRecentEvalWithIdPrefix).mockResolvedValueOnce(false);
 
       deleteCommand(program);
       await program.parseAsync(['node', 'test', 'delete', 'test-id']);

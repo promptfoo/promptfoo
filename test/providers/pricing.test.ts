@@ -8,6 +8,19 @@ describe('getModelPricing', () => {
     expect(pricing!.input * 1000 + pricing!.output * 1000).toBeCloseTo(0.0015);
   });
 
+  it('exposes Haiku 5.5 long-context rates to custom providers', () => {
+    const pricing = getModelPricing('anthropic', 'claude-haiku-5-5');
+    expect(pricing).toEqual({
+      input: 0.1 / 1e6,
+      output: 0.5 / 1e6,
+      longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
+    });
+    const tier = pricing!.longContext!;
+    expect(tier.input * 200_000 + tier.output * 1000).toBeCloseTo(0.1025);
+    tier.input = 0;
+    expect(getModelPricing('anthropic', 'claude-haiku-5-5')?.longContext?.input).toBe(0.5 / 1e6);
+  });
+
   it('recognizes cataloged OpenAI aliases and snapshots', () => {
     const pricing = getModelPricing('openai', 'gpt-4o-mini');
     expect(pricing).toEqual({ input: 0.15 / 1e6, output: 0.6 / 1e6 });
@@ -38,14 +51,6 @@ describe('getModelPricing', () => {
     copy!.longContext!.threshold = 0;
 
     expect(getModelPricing('openai', 'gpt-5.4')).toEqual(original);
-  });
-
-  it("returns Claude Haiku 5.5's rates for prompts over 100K tokens", () => {
-    expect(getModelPricing('anthropic', 'claude-haiku-5-5')).toEqual({
-      input: 0.1 / 1e6,
-      output: 0.5 / 1e6,
-      longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
-    });
   });
 
   it('returns only text-token rates for a model with audio pricing', () => {
