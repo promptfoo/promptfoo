@@ -18,3 +18,16 @@ export function getNGrams(words: string[], n: number): string[] {
   }
   return ngrams;
 }
+
+/**
+ * Counts how many times each n-gram occurs.
+ *
+ * @internal
+ */
+export function countNGrams(ngrams: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const gram of ngrams) {
+    counts.set(gram, (counts.get(gram) ?? 0) + 1);
+  }
+  return counts;
+}

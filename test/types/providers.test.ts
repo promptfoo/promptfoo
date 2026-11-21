@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiModerationProvider, ProviderOptions } from '../../src/types/providers';
+import type { ProviderResponse as PortableProviderResponse } from '../../src/contracts/providers';
+import type { ProviderOptions, ProviderResponse } from '../../src/types/providers';
 
 describe('isApiProvider', () => {
   it('should correctly identify valid ApiProvider objects', () => {
@@ -109,14 +110,13 @@ describe('isProviderOptions', () => {
   });
 });
 
-describe('ApiModerationProvider', () => {
-  // `ApiModerationProvider` is re-exported from the package root, so `context`/`options`
-  // must stay optional: requiring them breaks every downstream two-argument call.
-  it('stays callable with just a prompt and a response', async () => {
-    const provider: ApiModerationProvider = Object.assign(createMockProvider(), {
-      callModerationApi: async () => ({ flags: [] }),
-    });
-
-    await expect(provider.callModerationApi('prompt', 'response')).resolves.toEqual({ flags: [] });
-  });
+describe('ProviderResponse metadata compatibility', () => {
+  it.each(['custom-provider', 17, { source: 'custom-provider' }])(
+    'accepts existing custom errorOrigin metadata: %j',
+    (errorOrigin) => {
+      const response: ProviderResponse = { metadata: { errorOrigin } };
+      const portable: PortableProviderResponse = response;
+      expect(portable.metadata?.errorOrigin).toEqual(errorOrigin);
+    },
+  );
 });

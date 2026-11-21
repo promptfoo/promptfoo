@@ -11,6 +11,11 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
+const createConversationInput = () => ({
+  userPrompt: 'test prompt',
+  assistantResponse: 'test response',
+});
+
 describe('matchesModeration', () => {
   const mockModerationResponse = {
     flags: [],
@@ -87,16 +92,13 @@ describe('matchesModeration', () => {
       .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    await matchesModeration(createConversationInput());
 
-    expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response', undefined, undefined);
+    expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
   it.each([false, true])(
-    'forwards traced context and cancellation, signal=%s',
+    'preserves traced context and call arity, signal=%s',
     async (withSignal) => {
       setTestEnv({ OPENAI_API_KEY: 'test-key' });
       const abortSignal = withSignal ? new AbortController().signal : undefined;
@@ -131,8 +133,7 @@ describe('matchesModeration', () => {
       expect(call.mock.calls[0]).toEqual([
         'test prompt',
         'test response',
-        tracedContext,
-        abortSignal ? { abortSignal } : undefined,
+        ...(abortSignal ? [tracedContext, { abortSignal }] : []),
       ]);
     },
   );
@@ -143,10 +144,7 @@ describe('matchesModeration', () => {
       mockModerationResponse,
     );
 
-    const result = await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    const result = await matchesModeration(createConversationInput());
 
     expect(result.tokensUsed).toEqual(normalizedTokenUsage);
   });
@@ -157,12 +155,9 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    await matchesModeration(createConversationInput());
 
-    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response', undefined, undefined);
+    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
   it('should respect provider override in grading config', async () => {
@@ -171,17 +166,11 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration(
-      {
-        userPrompt: 'test prompt',
-        assistantResponse: 'test response',
-      },
-      {
-        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-      },
-    );
+    await matchesModeration(createConversationInput(), {
+      provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+    });
 
-    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response', undefined, undefined);
+    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
   it('should fail when the moderation API returns an error', async () => {

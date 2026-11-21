@@ -1,14 +1,14 @@
 import crypto from 'node:crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString } from '../../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAbortError, getRequestTimeoutMs, waitWithAbort } from '../shared';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import { AzureGenericProvider } from './generic';
 
-import type { EnvVarKey } from '../../envars';
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
   CallApiContextParams,
@@ -168,14 +168,11 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     this.configWithHeaders = config || {};
     this.apiVersion =
       config?.apiVersion ||
-      env?.AZURE_CONTENT_SAFETY_API_VERSION ||
-      getEnvString('AZURE_CONTENT_SAFETY_API_VERSION') ||
+      (env?.AZURE_CONTENT_SAFETY_API_VERSION ?? getEnvString('AZURE_CONTENT_SAFETY_API_VERSION')) ||
       '2024-09-01';
 
     this.endpoint =
-      config?.endpoint ||
-      env?.AZURE_CONTENT_SAFETY_ENDPOINT ||
-      getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT');
+      config?.endpoint || resolveProviderEnv(env, ['AZURE_CONTENT_SAFETY_ENDPOINT'])?.value;
 
     if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown Azure moderation model: ${modelName}`);
@@ -189,19 +186,18 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   getContentSafetyApiKey(): string | undefined {
-    const extendedEnv = this.env as EnvOverrides & { AZURE_CONTENT_SAFETY_API_KEY?: string };
-
+    const namedKey = this.configWithHeaders.apiKeyEnvar
+      ? (getProviderEnvString(this.env, this.configWithHeaders.apiKeyEnvar) ??
+        getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey))
+      : undefined;
     return (
       this.configWithHeaders.apiKey ||
-      (this.configWithHeaders.apiKeyEnvar
-        ? getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey) ||
-          (this.env && this.configWithHeaders.apiKeyEnvar in this.env
-            ? (this.env as any)[this.configWithHeaders.apiKeyEnvar]
-            : undefined)
-        : undefined) ||
-      extendedEnv?.AZURE_CONTENT_SAFETY_API_KEY ||
-      getEnvString('AZURE_CONTENT_SAFETY_API_KEY') ||
-      this.getApiKey()
+      (namedKey ??
+        resolveProviderApiKey(undefined, this.env, [
+          'AZURE_CONTENT_SAFETY_API_KEY',
+          'AZURE_API_KEY',
+          'AZURE_OPENAI_API_KEY',
+        ]))
     );
   }
 
@@ -212,11 +208,10 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
     const abortSignal = options?.abortSignal;
-    if (abortSignal?.aborted) {
-      throw getAbortError(abortSignal);
-    }
+    throwIfAborted(abortSignal);
 
-    await waitWithAbort(this.ensureInitialized(), abortSignal);
+    await waitForPromiseWithAbort(this.ensureInitialized(), abortSignal);
+    throwIfAborted(abortSignal);
 
     const apiKey =
       this.configWithHeaders.apiKey || this.getContentSafetyApiKey() || this.getApiKeyOrThrow();
@@ -230,10 +225,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       );
     }
 
-    if (apiKey) {
-      const maskedKey = apiKey.substring(0, 4) + '...' + apiKey.substring(apiKey.length - 4);
-      logger.debug(`Using Azure Content Safety API key: ${maskedKey}`);
-    } else {
+    if (!apiKey) {
       logger.error('No Azure Content Safety API key found');
       return handleApiError(
         new Error(
@@ -251,7 +243,8 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         { ...this.configWithHeaders, endpoint: this.endpoint, apiVersion: this.apiVersion },
         assistantResponse,
       );
-      const cachedResponse = await waitWithAbort(cache.get(cacheKey), abortSignal);
+      const cachedResponse = await waitForPromiseWithAbort(cache.get(cacheKey), abortSignal);
+      throwIfAborted(abortSignal);
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
@@ -289,8 +282,10 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         abortSignal,
       );
 
+      throwIfAborted(abortSignal);
       if (!response.ok) {
         const errorText = await response.text();
+        throwIfAborted(abortSignal);
         logger.error(`Azure Content Safety API error: ${response.status} ${response.statusText}`);
         logger.error('Azure Content Safety API error details', {
           status: response.status,
@@ -313,17 +308,17 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       }
 
       const data = await response.json();
+      throwIfAborted(abortSignal);
       const result = parseAzureModerationResponse(data);
 
       if (cache) {
-        await waitWithAbort(cache.set(cacheKey, result), abortSignal);
+        await waitForPromiseWithAbort(cache.set(cacheKey, result), abortSignal);
+        throwIfAborted(abortSignal);
       }
 
       return result;
     } catch (err) {
-      if (abortSignal?.aborted) {
-        throw getAbortError(abortSignal);
-      }
+      throwIfAborted(abortSignal);
       return handleApiError(err);
     }
   }

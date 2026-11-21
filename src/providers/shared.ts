@@ -1,7 +1,87 @@
 import { getEnvBool, getEnvInt } from '../envars';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
 import { loadYaml } from '../util/yamlLoad';
 
-import type { ApiProvider } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
+
+/** An explicit bustCache setting takes precedence over the legacy debug fallback. */
+export function shouldBustProviderCache(
+  context?: Pick<CallApiContextParams, 'bustCache' | 'debug'>,
+): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
+
+/**
+ * Mark cached responses without changing reported usage or cost. The evaluator
+ * uses the cache marker to calculate incurred usage; missing counts stay unknown.
+ */
+export function withResponseCacheMetadata<T extends ProviderResponse | ProviderEmbeddingResponse>(
+  response: T,
+  cached: boolean,
+): Omit<T, 'cached' | 'tokenUsage'> & Pick<ProviderResponse, 'tokenUsage'> & { cached: boolean } {
+  if (!cached || !response.tokenUsage) {
+    return { ...response, cached };
+  }
+  const base: Omit<T, 'cached' | 'tokenUsage'> = response;
+  const { cached: reportedCached, ...usage } = response.tokenUsage;
+  const providerCached =
+    usage.completionDetails?.cacheReadInputTokens ??
+    (response.cached === true ? undefined : reportedCached);
+  return {
+    ...base,
+    cached,
+    tokenUsage: {
+      ...usage,
+      ...(providerCached !== undefined && {
+        completionDetails: { ...usage.completionDetails, cacheReadInputTokens: providerCached },
+      }),
+      ...(usage.total !== undefined && { cached: usage.total }),
+      numRequests: 0,
+      incurredTokenUsage: {},
+    },
+  };
+}
+
+export function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw getCallerAbortError(signal);
+  }
+}
+
+/** Stop only this caller's wait; shared work keeps running and its rejection is observed. */
+export function waitForPromiseWithAbort<T>(
+  promise: PromiseLike<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return Promise.resolve(promise);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(getCallerAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
 
 /** Returns the complete model suffix after the given number of provider/type segments. */
 export function modelNameFromProviderPath(providerPath: string, segments: number): string {
@@ -41,72 +121,7 @@ export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
  */
 export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
 
-const abortSignalIds = new WeakMap<AbortSignal, number>();
-let nextAbortSignalId = 0;
-
-/** Normalize cancellation to AbortError while preserving the original reason. */
-export function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const message =
-    reason instanceof Error
-      ? reason.message
-      : typeof reason === 'string' && reason
-        ? reason
-        : 'Request was aborted';
-  // The app's ES2020 lib does not support the ErrorOptions constructor overload.
-  const error = new Error(message) as Error & { cause?: unknown };
-  error.name = 'AbortError';
-  error.cause = reason;
-  return error;
-}
-
-/** Stop waiting on work that cannot itself be cancelled, such as a cache operation. */
-export async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) {
-    return promise;
-  }
-
-  let onAbort!: () => void;
-  const aborted = new Promise<never>((_resolve, reject) => {
-    onAbort = () => reject(getAbortError(signal));
-    signal.addEventListener('abort', onAbort, { once: true });
-    if (signal.aborted) {
-      onAbort();
-    }
-  });
-  try {
-    const result = await Promise.race([promise, aborted]);
-    if (signal.aborted) {
-      throw getAbortError(signal);
-    }
-    return result;
-  } catch (error) {
-    throw signal.aborted ? getAbortError(signal) : error;
-  } finally {
-    signal.removeEventListener('abort', onAbort);
-  }
-}
-
-/**
- * Partition an in-flight request key by abort signal so callers that can be cancelled
- * independently never share (and therefore never cancel) each other's request.
- */
-export function getInFlightCacheKey(cacheKey: string, signal?: AbortSignal): string {
-  if (!signal) {
-    return cacheKey;
-  }
-  let signalId = abortSignalIds.get(signal);
-  if (signalId === undefined) {
-    signalId = ++nextAbortSignalId;
-    abortSignalIds.set(signal, signalId);
-  }
-  return `${cacheKey}:signal:${signalId}`;
-}
-
-interface ModelCost {
+export interface ModelCost {
   input: number;
   output: number;
   audioInput?: number;
@@ -212,10 +227,6 @@ function looksLikeJson(prompt: string): boolean {
       /^[\d-]/.test(afterBracket) || // number
       /^(true|false|null)/.test(afterBracket) // boolean or null
     ) {
-      return true;
-    }
-    // If it's just whitespace or empty, it might be JSON
-    if (afterBracket.length === 0 || /^\s+$/.test(afterBracket)) {
       return true;
     }
     // Otherwise, it's likely plain text (e.g., [INST]...[/INST])
@@ -548,6 +559,25 @@ export function openaiToolsToGoogle(tools: OpenAITool[]): GoogleTool[] {
       : {}),
   }));
   return [{ functionDeclarations }];
+}
+
+/**
+ * OpenAI history may contain either JSON-encoded or already-parsed tool arguments. Some
+ * OpenAI-compatible servers send an empty string for a call that takes no arguments.
+ */
+export function parseToolCallArguments(args: unknown): Record<string, unknown> {
+  let parsed: unknown = args === undefined ? {} : args;
+  if (typeof args === 'string') {
+    try {
+      parsed = args.trim() === '' ? {} : JSON.parse(args);
+    } catch {
+      parsed = undefined;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Tool call arguments must be a JSON object');
+  }
+  return parsed as Record<string, unknown>;
 }
 
 export type ToolFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';

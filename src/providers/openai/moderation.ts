@@ -1,10 +1,16 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import {
+  fetchWithCache,
+  getAbortSignalScopedKey,
+  getCache,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import logger from '../../logger';
-import { getAbortError, getInFlightCacheKey, getRequestTimeoutMs, waitWithAbort } from '../shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { appendOpenAiApiPath } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel, RETIRED_OPENAI_MODEL_IDS } from './util';
 
 import type {
   ApiModerationProvider,
@@ -14,10 +20,13 @@ import type {
   ProviderModerationResponse,
 } from '../../types/index';
 
-const OPENAI_MODERATION_MODELS = [
+const OPENAI_MODERATION_AND_RETIRED_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
 ];
+const OPENAI_MODERATION_MODELS = OPENAI_MODERATION_AND_RETIRED_MODELS.filter(
+  ({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id),
+);
 
 type OpenAIModerationModelId = string;
 
@@ -230,6 +239,7 @@ export class OpenAiModerationProvider
     options: { config?: OpenAIModerationConfig; id?: string; env?: any } = {},
   ) {
     super(modelName, options);
+    assertOpenAiApiModel(modelName, this.getApiUrl());
     if (!OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI moderation model: ${modelName}`);
     }
@@ -242,9 +252,7 @@ export class OpenAiModerationProvider
     options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
     const abortSignal = options?.abortSignal;
-    if (abortSignal?.aborted) {
-      throw getAbortError(abortSignal);
-    }
+    throwIfAborted(abortSignal);
 
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
@@ -261,7 +269,8 @@ export class OpenAiModerationProvider
     });
 
     if (cache) {
-      const cachedResponse = await waitWithAbort(cache.get(cacheKey), abortSignal);
+      const cachedResponse = await waitForPromiseWithAbort(cache.get(cacheKey), abortSignal);
+      throwIfAborted(abortSignal);
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
@@ -285,7 +294,7 @@ export class OpenAiModerationProvider
 
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
-        getInFlightCacheKey(getScopedCacheKey(cacheKey), abortSignal),
+        getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal),
         async () =>
           fetchWithCache<OpenAIModerationResponse>(
             appendOpenAiApiPath(this.getApiUrl(), 'moderations'),
@@ -302,6 +311,7 @@ export class OpenAiModerationProvider
           ),
       );
 
+      throwIfAborted(abortSignal);
       if (status < 200 || status >= 300) {
         return handleApiError(
           `${status} ${statusText}`,
@@ -314,14 +324,13 @@ export class OpenAiModerationProvider
       const response = parseOpenAIModerationResponse(data);
 
       if (cache) {
-        await waitWithAbort(cache.set(cacheKey, JSON.stringify(response)), abortSignal);
+        await waitForPromiseWithAbort(cache.set(cacheKey, JSON.stringify(response)), abortSignal);
+        throwIfAborted(abortSignal);
       }
 
       return response;
     } catch (err) {
-      if (abortSignal?.aborted) {
-        throw getAbortError(abortSignal);
-      }
+      throwIfAborted(abortSignal);
       return handleApiError(err);
     }
   }

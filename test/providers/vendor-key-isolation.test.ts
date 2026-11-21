@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers/index';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 import type { OpenAiGenericProvider } from '../../src/providers/openai';
 import type { ApiProvider } from '../../src/types/providers';
@@ -22,15 +23,12 @@ beforeEach(() => {
     MISSING_VENDOR_KEY: undefined,
   });
   vi.mocked(fetchWithCache).mockReset();
-  vi.mocked(fetchWithCache).mockResolvedValue({
-    data: {
+  vi.mocked(fetchWithCache).mockResolvedValue(
+    createMockFetchResponse({
       choices: [{ message: { content: 'Hello' }, text: 'Hello', finish_reason: 'stop' }],
       data: [{ embedding: [0.1, 0.2], url: 'https://example.invalid/image.png' }],
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  });
+    }),
+  );
 });
 afterEach(() => {
   restoreEnv();
@@ -123,7 +121,7 @@ describe.each(routes)('$path credential isolation', ({ path, family, mode, vendo
 describe.each(routes.filter(({ family }) => family === 'nscale'))(
   '$path native credential serialization',
   ({ path }) => {
-    it('prefers a process service token over a scoped legacy key', async () => {
+    it('prefers a scoped legacy key over a process service token', async () => {
       const restore = mockProcessEnv({ NSCALE_SERVICE_TOKEN: 'process-service-token' });
       try {
         const provider = await loadApiProvider(path, {
@@ -135,7 +133,7 @@ describe.each(routes.filter(({ family }) => family === 'nscale'))(
         const result = await invoke(provider);
         expect(result.error).toBeUndefined();
         expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
-          Authorization: 'Bearer process-service-token',
+          Authorization: 'Bearer scoped-legacy-key',
         });
       } finally {
         restore();

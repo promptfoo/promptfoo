@@ -1,9 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
   clampCachedTokens,
-  getAbortError,
   getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -19,25 +18,29 @@ import {
   toTitleCase,
   transformToolChoice,
   transformTools,
-  waitWithAbort,
 } from '../../src/providers/shared';
 import { createMockProvider } from '../factories/provider';
-import { createDeferred } from '../util/utils';
+
+const createLongContextModel = () => ({
+  id: 'model1',
+  cost: {
+    input: 0.001,
+    output: 0.002,
+    longContext: {
+      threshold: 1_000,
+      input: 0.003,
+      output: 0.004,
+    },
+  },
+});
 
 vi.mock('../../src/envars');
 
 describe('Shared Provider Functions', () => {
-  afterEach(() => {
-    vi.resetAllMocks();
-    vi.restoreAllMocks();
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
       return defaultValue ?? 0;
     });
@@ -79,102 +82,6 @@ describe('Shared Provider Functions', () => {
       expect(getRequestTimeoutMs()).toBe(12_345);
       expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
     });
-  });
-
-  describe('getAbortError', () => {
-    it('returns the abort reason unchanged when it is already an AbortError', () => {
-      const controller = new AbortController();
-      const reason = new Error('cancelled by user');
-      reason.name = 'AbortError';
-      controller.abort(reason);
-
-      expect(getAbortError(controller.signal)).toBe(reason);
-    });
-
-    it('keeps a non-AbortError reason as the cause', () => {
-      const controller = new AbortController();
-      const reason = new Error('eval timed out');
-      controller.abort(reason);
-
-      const error = getAbortError(controller.signal);
-      expect(error.name).toBe('AbortError');
-      expect(error.message).toBe('eval timed out');
-      expect(error.cause).toBe(reason);
-    });
-
-    it('keeps a string abort reason as the message and the cause', () => {
-      const controller = new AbortController();
-      controller.abort('user pressed ctrl+c');
-
-      const error = getAbortError(controller.signal);
-      expect(error.name).toBe('AbortError');
-      expect(error.message).toBe('user pressed ctrl+c');
-      expect(error.cause).toBe('user pressed ctrl+c');
-    });
-
-    it('falls back to a generic message for a reason that is neither an error nor a string', () => {
-      const controller = new AbortController();
-      const reason = { code: 'CANCELLED' };
-      controller.abort(reason);
-
-      const error = getAbortError(controller.signal);
-      expect(error.name).toBe('AbortError');
-      expect(error.message).toBe('Request was aborted');
-      expect(error.cause).toBe(reason);
-    });
-  });
-
-  describe('waitWithAbort', () => {
-    it('preserves results and errors without a signal', async () => {
-      await expect(waitWithAbort(Promise.resolve('result'))).resolves.toBe('result');
-      const error = new Error('operation failed');
-      await expect(waitWithAbort(Promise.reject(error))).rejects.toBe(error);
-    });
-
-    it.each(['resolve', 'reject'] as const)(
-      'removes its listener when work %ss',
-      async (outcome) => {
-        const controller = new AbortController();
-        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
-        const operation = createDeferred<string>();
-        const result = waitWithAbort(operation.promise, controller.signal);
-        if (outcome === 'resolve') {
-          operation.resolve('result');
-          await expect(result).resolves.toBe('result');
-        } else {
-          const error = new Error('cache unavailable');
-          operation.reject(error);
-          await expect(result).rejects.toBe(error);
-        }
-        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
-      },
-    );
-
-    it('cancels pending work, removes the listener, and handles a later rejection', async () => {
-      const controller = new AbortController();
-      const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
-      const operation = createDeferred<string>();
-      const result = waitWithAbort(operation.promise, controller.signal);
-      controller.abort('cancelled');
-
-      await expect(result).rejects.toMatchObject({ name: 'AbortError', cause: 'cancelled' });
-      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
-      operation.reject(new Error('late cache error'));
-    });
-
-    it.each([true, false])(
-      'rejects settled work when cancellation is already visible: %s',
-      async (alreadyAborted) => {
-        const controller = new AbortController();
-        if (alreadyAborted) {
-          controller.abort();
-        }
-        const result = waitWithAbort(Promise.resolve('cached result'), controller.signal);
-        controller.abort();
-
-        await expect(result).rejects.toMatchObject({ name: 'AbortError' });
-      },
-    );
   });
 
   describe('parseChatPrompt', () => {
@@ -219,9 +126,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when PROMPTFOO_REQUIRE_JSON_PROMPTS is true', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(true);
 
       const invalidJson = '"role": "user", "content": "Hello" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -231,9 +136,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt looks like JSON object', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const invalidJson = '{ "invalid: "json" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -243,9 +146,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt looks like JSON array', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const invalidJson = '[{ "invalid": }]';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -255,9 +156,7 @@ describe('Shared Provider Functions', () => {
 
     it('should return default value for plain text that starts/ends with brackets', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const defaultValue = [{ role: 'user', content: 'Default' }];
       // This is a common pattern in LLM prompts (e.g., Llama chat format)
@@ -332,55 +231,18 @@ describe('Shared Provider Functions', () => {
     });
 
     it('should use long-context rates when prompt tokens exceed the model threshold', () => {
-      const cost = calculateCost('model1', {}, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
-      ]);
+      const cost = calculateCost('model1', {}, 1_001, 500, [createLongContextModel()]);
       expect(cost).toBeCloseTo(5.003);
     });
 
     it('should prefer config cost over model long-context rates', () => {
-      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
-      ]);
+      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [createLongContextModel()]);
       expect(cost).toBeCloseTo(7.505);
     });
 
     it('should prefer separate config costs over model long-context rates', () => {
       const cost = calculateCost('model1', { inputCost: 0.005, outputCost: 0.006 }, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
+        createLongContextModel(),
       ]);
       expect(cost).toBeCloseTo(8.005);
     });
