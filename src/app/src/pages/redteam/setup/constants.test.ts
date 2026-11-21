@@ -39,7 +39,7 @@ describe('requiresPluginConfig', () => {
     if (requiresPluginConfig(plugin)) {
       // TypeScript should narrow the type to PluginRequiringConfig
       // This is a type-level test - if it compiles, the type guard works
-      const narrowedPlugin: 'indirect-prompt-injection' | 'prompt-extraction' = plugin;
+      const narrowedPlugin: (typeof PLUGINS_REQUIRING_CONFIG)[number] = plugin;
       expect(narrowedPlugin).toBe('indirect-prompt-injection');
     }
   });

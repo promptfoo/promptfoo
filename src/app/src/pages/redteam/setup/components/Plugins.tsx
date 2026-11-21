@@ -16,13 +16,16 @@ import {
 import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
+import {
+  countSelectedCustomIntents,
+  countSelectedCustomPolicies,
+  isPluginConfigComplete,
+} from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
 import PageWrapper from './PageWrapper';
 import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { Config, LocalPluginConfig } from '../types';
 
@@ -30,8 +33,6 @@ interface PluginsProps {
   onNext: () => void;
   onBack: () => void;
 }
-
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
@@ -238,26 +239,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     [config.plugins, updatePlugins],
   );
 
-  const isConfigValid = useCallback(() => {
-    for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-        const config = pluginConfig[plugin];
-        if (!config || Object.keys(config).length === 0) {
-          return false;
-        }
-        for (const key in config) {
-          const value = config[key as keyof PluginConfig];
-          if (Array.isArray(value) && value.length === 0) {
-            return false;
-          }
-          if (typeof value === 'string' && value.trim() === '') {
-            return false;
-          }
-        }
-      }
-    }
-    return true;
-  }, [selectedPlugins, pluginConfig]);
+  const isPluginConfigured = useCallback(
+    (plugin: Plugin) => isPluginConfigComplete(plugin, pluginConfig[plugin]),
+    [pluginConfig],
+  );
+
+  const isConfigValid = useCallback(
+    () => Array.from(selectedPlugins).every(isPluginConfigured),
+    [selectedPlugins, isPluginConfigured],
+  );
 
   const hasAnyPluginsConfigured = useCallback(() => {
     // Check regular plugins
@@ -288,30 +278,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return hasPolicies || hasIntents;
   }, [selectedPlugins, config.plugins]);
 
-  const isPluginConfigured = useCallback(
-    (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
-        return true;
-      }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
-    },
-    [pluginConfig],
-  );
-
   const getNextButtonTooltip = useCallback(() => {
     if (!hasAnyPluginsConfigured()) {
       return 'Select at least one plugin';
@@ -319,7 +285,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
     if (!isConfigValid()) {
       const missingConfigPlugins = Array.from(selectedPlugins).filter(
-        (plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin),
+        (plugin) => !isPluginConfigured(plugin),
       );
 
       if (missingConfigPlugins.length === 1) {

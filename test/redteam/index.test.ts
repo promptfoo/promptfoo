@@ -1219,6 +1219,28 @@ describe('synthesize', () => {
       );
     });
 
+    it('keeps MCP tool envelopes verbatim when applying a custom strategy', async () => {
+      const envelope = '{"tool": "read_fixture", "args": {}}';
+      const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: envelope } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'mcp:tool-response-poisoning',
+        action: pluginAction,
+      });
+      const rewrite = vi
+        .fn()
+        .mockImplementation((tests) => tests.map(() => ({ vars: { query: 'rewritten' } })));
+      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(rewrite));
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'mcp:tool-response-poisoning', numTests: 1 }],
+        prompts: ['{{query}}'],
+        strategies: [{ id: 'basic' }, { id: 'custom:fixture' }],
+        targetIds: ['test-provider'],
+      });
+      expect(result.testCases.map((test) => test.vars?.query)).toEqual([envelope]);
+    });
+
     it('should fall back to base strategy ID for custom variants', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
@@ -4327,6 +4349,34 @@ describe('Language configuration', () => {
       if (inputs && Object.keys(inputs).length) {
         expect(messages).toContain('Using multi-input mode with 2 variables: query, context');
       }
+    });
+
+    it('should exclude mcp:tool-response-poisoning in multi-input mode', async () => {
+      // The plugin emits a single JSON tool-call envelope that MCPProvider.callApi
+      // strictly JSON.parses. Multi-input mode swaps in the <Prompt>{...}</Prompt>
+      // formatter, which cannot parse the plugin's output (yielding zero tests) and
+      // would destroy the envelope even if it did.
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'mcp:tool-response-poisoning', numTests: 1 },
+          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('mcp:tool-response-poisoning');
+      expect(skipMessage).not.toContain('contracts');
     });
   });
 });
