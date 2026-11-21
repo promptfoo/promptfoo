@@ -1,12 +1,11 @@
 export interface Strategy {
   category: string;
-  categoryLink?: string;
   strategy: string;
   displayName: string;
   description: string;
   longDescription: string;
   cost: string;
-  link?: string;
+  link: string;
   recommended?: boolean;
   isRemote?: boolean;
 }
@@ -246,6 +245,16 @@ export const strategies: Strategy[] = [
       'Tests detection and handling of hex-encoded malicious payloads to bypass content filters',
     cost: 'Low',
     link: '/docs/red-team/strategies/hex/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'arabic-presentation-forms',
+    displayName: 'Arabic Presentation Forms',
+    description: 'Unicode compatibility characters',
+    longDescription:
+      'Tests detection and handling of Arabic text encoded with isolated Unicode presentation forms',
+    cost: 'Low',
+    link: '/docs/red-team/strategies/arabic-presentation-forms/',
   },
   {
     category: 'Static (Single-Turn)',

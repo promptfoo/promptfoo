@@ -1,14 +1,9 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 import { describe, expect, it, vi } from 'vitest';
 
 // Mock logger for tests that need it
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createLoggerModule());
 
 import {
   type BasePlugin,
@@ -1075,7 +1070,7 @@ describe('RedteamConfigSchema transform', () => {
     ).toBe(false);
   });
 
-  it('should expand collection plugins correctly', () => {
+  const verifyHarmfulPluginExpansion = () => {
     const result = RedteamConfigSchema.parse({
       numTests: 5,
       plugins: ['harmful'],
@@ -1087,7 +1082,9 @@ describe('RedteamConfigSchema transform', () => {
       true,
     );
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
-  });
+  };
+
+  it('should expand collection plugins correctly', verifyHarmfulPluginExpansion);
 
   it.each([
     ['ecommerce', ECOMMERCE_PLUGINS],
@@ -1352,19 +1349,7 @@ describe('RedteamConfigSchema transform', () => {
       'purpose',
     ]);
   });
-  it('should expand harmful plugin to all harm categories', () => {
-    const result = RedteamConfigSchema.parse({
-      numTests: 5,
-      plugins: ['harmful'],
-    });
-
-    // Should expand 'harmful' into individual harm categories
-    // Note: bias plugins are separate from harmful plugins now
-    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
-      true,
-    );
-    expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
-  });
+  it('should expand harmful plugin to all harm categories', verifyHarmfulPluginExpansion);
 
   it('should expand foundation plugin to all foundation plugins', () => {
     const result = RedteamConfigSchema.parse({
@@ -1800,20 +1785,5 @@ describe('InputsSchema', () => {
       const result = InputsSchema.safeParse(inputs);
       expect(result.success).toBe(true);
     });
-  });
-
-  it('rejects incompatible layer agentic ordering', () => {
-    for (const steps of [
-      ['indirect-web-pwn', 'jailbreak:hydra'],
-      ['mischievous-user', 'indirect-web-pwn'],
-      ['jailbreak:hydra', 'crescendo'],
-    ]) {
-      expect(
-        RedteamConfigSchema.safeParse({
-          plugins: ['default'],
-          strategies: [{ id: 'layer', config: { steps } }],
-        }).success,
-      ).toBe(false);
-    }
   });
 });

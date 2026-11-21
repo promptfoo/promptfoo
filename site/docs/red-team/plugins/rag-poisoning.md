@@ -23,7 +23,7 @@ These attacks can be particularly effective because:
 
 - The LLM treats retrieved content as authoritative, and the content may occupy a privileged position in the context window
 - Document embeddings may not capture semantic attacks
-- Traditional content filtering may miss sophisticated attacks
+- Content filters may miss instructions embedded in retrieved documents
 
 ## Usage
 

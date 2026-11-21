@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { processDiff } from '../../../src/codeScan/git/diffProcessor';
 
-const mockExeca = vi.hoisted(() => vi.fn());
+const mockRunCommand = vi.hoisted(() => vi.fn());
 
-vi.mock('execa', () => ({
-  execa: mockExeca,
+vi.mock('../../../src/util/runCommand', () => ({
+  runCommand: mockRunCommand,
 }));
 
 describe('processDiff', () => {
   beforeEach(() => {
-    mockExeca.mockReset();
+    mockRunCommand.mockReset();
   });
 
   afterEach(() => {
@@ -27,10 +27,10 @@ describe('processDiff', () => {
       .flatMap(({ path, sha }) => [`:000000 100644 ${'0'.repeat(40)} ${sha} A`, path])
       .concat('')
       .join('\0');
-    const numstat = files.map(({ path }) => `1\t0\t${path}`).join('\n');
+    const numstat = files.map(({ path }) => `1\t0\t${path}\0`).join('');
     const blobSizes = files.map(({ sha }) => `${sha} blob 4`).join('\n');
 
-    mockExeca
+    mockRunCommand
       .mockResolvedValueOnce({ stdout: rawDiff })
       .mockResolvedValueOnce({ stdout: numstat })
       .mockResolvedValueOnce({ stdout: blobSizes });
@@ -42,22 +42,29 @@ describe('processDiff', () => {
       files.map(({ path }) =>
         expect.objectContaining({
           path,
+          linesAdded: 1,
+          linesRemoved: 0,
           isText: false,
           skipReason: 'binary',
         }),
       ),
     );
-    expect(mockExeca).toHaveBeenCalledTimes(3);
-    expect(mockExeca).toHaveBeenNthCalledWith(
+    expect(mockRunCommand).toHaveBeenCalledTimes(3);
+    expect(mockRunCommand).toHaveBeenNthCalledWith(
       1,
       'git',
       ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', 'base...head'],
       { cwd: '/repo' },
     );
-    expect(mockExeca).toHaveBeenNthCalledWith(2, 'git', ['diff', '--numstat', 'base...head'], {
-      cwd: '/repo',
-    });
-    expect(mockExeca).toHaveBeenNthCalledWith(
+    expect(mockRunCommand).toHaveBeenNthCalledWith(
+      2,
+      'git',
+      ['diff', '--numstat', '-z', 'base...head'],
+      {
+        cwd: '/repo',
+      },
+    );
+    expect(mockRunCommand).toHaveBeenNthCalledWith(
       3,
       'git',
       ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Custom Strategy Scripts
 title: Custom Strategy Scripts
-description: Build custom red team strategies using JavaScript to generate and transform test cases, preserve metadata, and load your strategy from your configuration file.
+description: Build custom red team strategies in JavaScript to generate and transform attack inputs. Configure a strategy module and use it with Promptfoo red team plugins.
 ---
 
 # Custom Strategy Scripts

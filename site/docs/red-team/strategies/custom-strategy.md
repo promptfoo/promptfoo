@@ -14,7 +14,7 @@ tags: [red-team, strategies, custom, multi-turn]
 
 # Custom Strategy
 
-Write natural language instructions to create reusable multi-turn red team strategies. No coding required.
+Define a multi-turn red team strategy using natural language instructions.
 
 :::tip Quick Start
 
@@ -194,6 +194,8 @@ strategies:
 The global red team option `excludeTargetOutputFromAgenticAttackGeneration` prevents an agentic attacker from seeing target responses when generating follow-up attacks. This applies to agentic strategies, not just Custom Strategy.
 
 :::
+
+An explicit `redteamProvider` in the strategy config is used for both the attacker and conversation scoring, even when remote generation is enabled. Without one, the strategy uses remote generation when available.
 
 ## Stateful vs Stateless Mode
 

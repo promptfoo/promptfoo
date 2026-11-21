@@ -71,7 +71,7 @@ Number of text variations generated per step. The hosted service accepts up to `
 Start with `1`. A larger pool mainly affects error retries and requests already running when a normal response stops further scheduling.
 
 :::tip
-Start with `useBasicRefusal: true` and low candidate counts to confirm that the target accepts the transformed input and that the final grade matches expectations.
+For initial testing, we recommend starting with `useBasicRefusal: true` and relatively low values for `nSteps` and `maxCandidatesPerStep`. Increase these limits after checking the results and API cost.
 :::
 
 ## Performance

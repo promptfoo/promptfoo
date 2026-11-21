@@ -33,7 +33,7 @@ This strategy does **not** cover modern prompt injection techniques such as:
 - Indirect/multi-turn injection
 - Function/tool calling exploits
 
-For comprehensive prompt injection testing, consider using:
+For additional prompt injection tests, consider:
 
 - [`jailbreak:meta`](/docs/red-team/strategies/meta) - AI-generated adaptive jailbreaks
 - [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks) - Multi-technique attacks

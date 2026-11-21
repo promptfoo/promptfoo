@@ -129,7 +129,7 @@ redteam:
 
 ## ASI04: Agentic Supply Chain Vulnerabilities
 
-Compromised tools, plugins, prompt templates, and external servers introduce vulnerabilities that agents may unknowingly leverage.
+Compromised tools, plugins, prompt templates, and external servers can expose agents to malicious instructions or code.
 
 ### Attack Scenarios
 
@@ -299,7 +299,7 @@ The OWASP Top 10 for Agentic Applications extends and complements the OWASP LLM 
 | ASI06: Memory and Context Poisoning | LLM04: Data and Model Poisoning        |
 | ASI08: Cascading Failures           | LLM09: Misinformation                  |
 
-Test both frameworks together for comprehensive coverage:
+Run both framework presets together:
 
 ```yaml
 redteam:

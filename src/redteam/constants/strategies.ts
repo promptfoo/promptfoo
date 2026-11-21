@@ -57,6 +57,53 @@ export const AGENTIC_STRATEGIES = [
 ] as const;
 export const AGENTIC_STRATEGIES_SET: ReadonlySet<string> = new Set(AGENTIC_STRATEGIES);
 
+// A layer can have one orchestrator or wrapper. Web Pwn is a separate step.
+const layerWrappers = new Set(['best-of-n', 'authoritative-markup-injection', 'mischievous-user']);
+
+export function isLayerProvider(id: string): boolean {
+  return (
+    id !== 'indirect-web-pwn' &&
+    (AGENTIC_STRATEGIES_SET.has(id) || isCustomStrategy(id) || layerWrappers.has(id))
+  );
+}
+
+export function isTerminalLayerStep(id: string): boolean {
+  return (
+    MULTI_MODAL_STRATEGIES_SET.has(id) ||
+    id === 'authoritative-markup-injection' ||
+    id === 'mischievous-user'
+  );
+}
+
+/** Ordering rules shared by the config validator and the layer editor. */
+export function getLayerOrderError(ids: readonly string[]): string | undefined {
+  if (ids.includes('layer')) {
+    return 'Layer steps cannot recurse.';
+  }
+  const terminal = ids.findIndex(isTerminalLayerStep);
+  if (terminal !== -1 && terminal !== ids.length - 1) {
+    return `The ${ids[terminal]} step must be last.`;
+  }
+  const providers = ids.filter(isLayerProvider);
+  if (providers.length > 1) {
+    return 'A layer can contain only one agentic strategy or provider wrapper.';
+  }
+
+  const web = ids.indexOf('indirect-web-pwn');
+  if (web !== ids.lastIndexOf('indirect-web-pwn')) {
+    return 'A layer can contain only one indirect-web-pwn step.';
+  }
+  const [provider] = providers;
+  if (web !== -1 && provider) {
+    if (isCustomStrategy(provider) || layerWrappers.has(provider)) {
+      return `Cannot combine ${provider} with indirect-web-pwn.`;
+    }
+    if (web < ids.indexOf(provider)) {
+      return `Place ${provider} before indirect-web-pwn.`;
+    }
+  }
+}
+
 export const DATASET_PLUGINS = [
   'beavertails',
   'cyberseceval',
@@ -71,6 +118,7 @@ export const DATASET_PLUGINS = [
 ] as const;
 
 export const ADDITIONAL_STRATEGIES = [
+  'arabic-presentation-forms',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -146,6 +194,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */
 export const ENCODING_STRATEGIES = new Set([
+  'arabic-presentation-forms',
   'base64',
   'hex',
   'rot13',

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Compare red team strategies for LLM applications, including text transforms, adaptive jailbreaks, multi-turn conversations, and indirect prompt injection.
+description: Choose red team strategies for single-turn attacks, multi-turn conversations, encodings, and other ways to probe LLM applications for vulnerabilities.
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
@@ -14,7 +14,7 @@ Strategies change how adversarial inputs reach an LLM application. [Plugins](/do
 
 ## Recommended Strategies
 
-Start with a single-turn and a multi-turn strategy, then add specialized strategies for the attack surfaces your application exposes.
+Start with `jailbreak:meta` for single-turn attacks and `jailbreak:hydra` for multi-turn conversations. Add strategies for attack surfaces specific to your application.
 
 ### Meta Agent: Single-Turn Coverage {#meta-agent-best-for-single-turn}
 
@@ -30,7 +30,7 @@ The [Meta Agent](/docs/red-team/strategies/meta/) builds an attack taxonomy, tra
 
 ### Quick Start
 
-For most applications, start with:
+Configure both strategies:
 
 ```yaml
 redteam:

@@ -41,7 +41,7 @@ The agent discovers four key areas:
 3. **Tools**: Available external functions, APIs, and their interfaces
 4. **User Context**: How the system perceives and categorizes users
 
-The responses are synthesized into a comprehensive profile to inform attack strategies. For privacy, target responses are not stored except in error cases where they may appear in Promptfoo Cloud's error logs for debugging purposes.
+The responses are combined into a target profile used by attack strategies. For privacy, target responses are not stored except in error cases where they may appear in Promptfoo Cloud's error logs for debugging purposes.
 
 ## Troubleshooting
 

@@ -29,16 +29,30 @@ afterEach(() => {
 });
 
 describe('RedteamConfigSchema', () => {
-  it.each([null, {}, { config: {} }, { id: 42 }, { id: '' }, 42, '', ' '])(
-    'rejects malformed layer step %j before runtime',
-    (step) => {
-      const result = RedteamStrategySchema.safeParse({ id: 'layer', config: { steps: [step] } });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0].path).toEqual(['config', 'steps']);
-      }
-    },
-  );
+  it.each([
+    null,
+    {},
+    { config: {} },
+    { id: 42 },
+    { id: '' },
+    42,
+    '',
+    ' ',
+    'unknown-id',
+    { id: 'unknown-id' },
+    { id: 'custom', config: 42 },
+  ])('rejects malformed layer step %j before runtime', (step) => {
+    const result = RedteamStrategySchema.safeParse({ id: 'layer', config: { steps: [step] } });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].path).toEqual(['config', 'steps']);
+    }
+  });
+
+  it('preserves named custom strategies and local modules in valid layers', () => {
+    const entry = { id: 'layer', config: { steps: [{ id: 'custom:example' }, 'file://local.js'] } };
+    expect(RedteamStrategySchema.parse(entry)).toEqual(entry);
+  });
 
   it.each([null, {}, 'base64', 42])('rejects non-array layer steps %j', (steps) => {
     const result = RedteamStrategySchema.safeParse({ id: 'layer', config: { steps } });
@@ -760,21 +774,31 @@ describe('redteam validators', () => {
     });
 
     describe('integration with actual use cases', () => {
-      it.each([
-        ['recursive layer', ['layer']],
-        ['mischievous user with an attack provider', ['mischievous-user', 'jailbreak:hydra']],
-        ['transform after mischievous user', ['mischievous-user', 'audio']],
-        ['multiple provider setters', ['best-of-n', 'jailbreak:hydra']],
-        ['two wrapper providers', ['best-of-n', 'authoritative-markup-injection']],
-        ['wrapper with web pwn', ['best-of-n', 'indirect-web-pwn']],
-        ['web pwn with wrapper', ['indirect-web-pwn', 'best-of-n']],
-        ['transform after markup injection', ['authoritative-markup-injection', 'base64']],
-        ['media before a later transform', ['audio', 'base64']],
-        ['multiple media transforms', ['audio', 'image']],
-      ])('rejects %s steps', (_name, steps) => {
-        expect(() => RedteamStrategySchema.parse({ id: 'layer', config: { steps } })).toThrow(
-          /cannot recurse|agentic providers|media transform/,
-        );
+      it.each(
+        [
+          ['layer'],
+          ['mischievous-user', 'jailbreak:hydra'],
+          ['mischievous-user', 'audio'],
+          ['mischievous-user', 'indirect-web-pwn'],
+          ['jailbreak:hydra', 'crescendo'],
+          ['best-of-n', 'jailbreak:hydra'],
+          ['best-of-n', 'authoritative-markup-injection'],
+          ['best-of-n', 'indirect-web-pwn'],
+          ['indirect-web-pwn', 'best-of-n'],
+          ['indirect-web-pwn', 'jailbreak:hydra'],
+          ['indirect-web-pwn', 'indirect-web-pwn'],
+          ['custom', 'indirect-web-pwn'],
+          ['custom:variant', 'indirect-web-pwn'],
+          ['authoritative-markup-injection', 'base64'],
+          ['audio', 'base64'],
+          ['audio', 'image'],
+        ].map((steps) => ({ steps })),
+      )('rejects invalid layer $steps', ({ steps }) => {
+        const result = RedteamConfigSchema.safeParse({
+          plugins: ['default'],
+          strategies: [{ id: 'layer', config: { steps } }],
+        });
+        expect(result.error?.issues[0].path).toEqual(['strategies', 0, 'config', 'steps']);
       });
 
       it('should validate realistic custom strategy configurations', () => {
@@ -829,24 +853,6 @@ describe('redteam validators', () => {
 });
 
 describe('layer strategy deduplication', () => {
-  it('should reject duplicate indirect-web-pwn steps', () => {
-    expect(
-      RedteamStrategySchema.safeParse({
-        id: 'layer',
-        config: { steps: ['jailbreak:hydra', 'indirect-web-pwn', 'indirect-web-pwn'] },
-      }).success,
-    ).toBe(false);
-  });
-
-  it.each(['custom', 'custom:variant'])('should reject %s with indirect-web-pwn', (customId) => {
-    expect(
-      RedteamStrategySchema.safeParse({
-        id: 'layer',
-        config: { steps: [customId, 'indirect-web-pwn'] },
-      }).success,
-    ).toBe(false);
-  });
-
   it('should keep multiple layer strategies with different labels', () => {
     const config = {
       plugins: ['default'],

@@ -1,6 +1,6 @@
 ---
 sidebar_label: E-commerce
-description: Test e-commerce AI systems for payment-data exposure, price manipulation, compliance bypass, and order fraud using Promptfoo's configurable plugin collection.
+description: Test e-commerce AI systems for payment data exposure, price manipulation, regulatory control bypasses, and order fraud. Configure plugins and review failures.
 ---
 
 # E-commerce Red Teaming Plugins

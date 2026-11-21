@@ -168,7 +168,7 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 
 ## Dataset Characteristics
 
-- **Comprehensive coverage**: ~1,400 unsafe images across 4 categories and 8 subcategories (combining both splits)
+- **Dataset size**: ~1,400 unsafe images across 4 categories and 8 subcategories (combining both splits)
 - **MIT licensed**: Open dataset from the original VLGuard research at ICML 2024
 - **Hugging Face hosted**: Requires dataset access approval and HF_TOKEN
 

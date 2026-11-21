@@ -56,6 +56,10 @@ The Harmful Content collection includes the following subcategories:
 
 The plugin generates adversarial requests tailored to the target's purpose, then grades whether the response refuses, redirects, or otherwise avoids assisting with the harmful goal. The generated probes can be combined with [jailbreak strategies](/docs/red-team/strategies/) to test whether reframing weakens a safety boundary.
 
+<a id="use-case-travel-agent-chat-bot"></a>
+<a id="use-case-it-helpdesk"></a>
+<a id="use-case-startup-pitch-generator"></a>
+
 ## Examples
 
 The following examples illustrate the failure signals without reproducing actionable harmful instructions:

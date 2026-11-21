@@ -1323,59 +1323,57 @@ describe('StrategyConfigDialog', () => {
       expect(screen.queryByRole('option', { name: 'jailbreak' })).not.toBeInTheDocument();
     });
 
-    it('should not allow indirect-web-pwn after mischievous-user', async () => {
-      const user = userEvent.setup();
+    function renderLayer(steps: unknown[], isStrategyDisabled?: (id: string) => boolean) {
       renderWithProviders(
         <StrategyConfigDialog
-          open={true}
+          open
           strategy="layer"
-          config={{ steps: ['mischievous-user'] }}
+          config={{ steps }}
           onClose={mockOnClose}
           onSave={mockOnSave}
           strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          isStrategyDisabled={isStrategyDisabled}
         />,
       );
+    }
 
-      await user.click(screen.getByRole('combobox'));
-      expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
-    });
-
-    it('should not allow indirect-web-pwn after custom', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(
-        <StrategyConfigDialog
-          open={true}
-          strategy="layer"
-          config={{ steps: ['custom'] }}
-          onClose={mockOnClose}
-          onSave={mockOnSave}
-          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
-        />,
-      );
-
-      await user.click(screen.getByRole('combobox'));
-      expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
-    });
-
-    it.each(['best-of-n', 'authoritative-markup-injection'])(
-      'should not allow indirect-web-pwn after %s',
-      async (step) => {
-        const user = userEvent.setup();
-        renderWithProviders(
-          <StrategyConfigDialog
-            open={true}
-            strategy="layer"
-            config={{ steps: [step] }}
-            onClose={mockOnClose}
-            onSave={mockOnSave}
-            strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
-          />,
-        );
-
-        await user.click(screen.getByRole('combobox'));
-        expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
+    it.each(['mischievous-user', 'authoritative-markup-injection'])(
+      'keeps %s last when adding or moving steps',
+      (id) => {
+        renderLayer(['base64', id]);
+        expect(screen.getByRole('combobox')).toBeDisabled();
+        expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeDisabled();
+        expect(screen.getAllByLabelText('move step up')[1]).toBeDisabled();
+        expect(screen.getAllByLabelText('move step down')[0]).toBeDisabled();
       },
     );
+
+    it.each(['best-of-n', 'custom', 'custom:example'])(
+      'excludes incompatible providers after %s',
+      async (id) => {
+        renderLayer([{ id }]);
+        await userEvent.click(screen.getByRole('combobox'));
+        expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: 'jailbreak:hydra' })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+      },
+    );
+
+    it('lets an imported malformed step be removed before saving', async () => {
+      renderLayer([null, 'base64']);
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      await userEvent.click(screen.getAllByLabelText('delete step')[0]);
+      expect(save).toBeEnabled();
+    });
+
+    it('applies the parent strategy restrictions to layer choices and saved steps', async () => {
+      renderLayer(['best-of-n'], (id) => id === 'best-of-n' || id === 'audio');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      await userEvent.click(screen.getByRole('combobox'));
+      expect(screen.queryByRole('option', { name: 'audio' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
 
     it('should not allow an orchestrating attack strategy after indirect-web-pwn', async () => {
       const user = userEvent.setup();

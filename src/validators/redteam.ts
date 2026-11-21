@@ -19,12 +19,11 @@ import {
   SeveritySchema,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
-import { isCustomStrategy, MULTI_MODAL_STRATEGIES } from '../redteam/constants/strategies';
-import { isAttackProvider } from '../redteam/shared/attackProviders';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { getLayerOrderError, isCustomStrategy } from '../redteam/constants/strategies';
+import { isJavascriptFile } from '../validation/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
+import type { Collection, FrameworkComplianceId, Strategy } from '../redteam/constants';
 import type {
   PluginConfig,
   RedteamContext,
@@ -33,6 +32,15 @@ import type {
   RedteamStrategy,
   TracingConfig,
 } from '../redteam/types';
+
+const pluginCollections: Record<Collection, Iterable<string>> = {
+  ...PLUGIN_CATEGORIES,
+  foundation: FOUNDATION_PLUGINS,
+  default: REDTEAM_DEFAULT_PLUGINS,
+  'guardrails-eval': GUARDRAILS_EVALUATION_PLUGINS,
+  'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
+  'coding-agent:all': CODING_AGENT_PLUGINS,
+};
 
 const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   z.object({
@@ -80,30 +88,33 @@ const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
 ].sort();
+
+function createPluginIdSchema() {
+  return z.union([
+    z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!pluginOptions.includes(val)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+        });
+      }
+    }),
+    z.string().superRefine((val, ctx) => {
+      if (!val.startsWith('file://')) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+        });
+      }
+    }),
+  ]);
+}
+
 /**
  * Schema for individual redteam plugins
  */
 export const RedteamPluginObjectSchema = z.object({
-  id: z
-    .union([
-      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
-        if (!pluginOptions.includes(val)) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
-          });
-        }
-      }),
-      z.string().superRefine((val, ctx) => {
-        if (!val.startsWith('file://')) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
-          });
-        }
-      }),
-    ])
-    .describe('Name of the plugin'),
+  id: createPluginIdSchema().describe('Name of the plugin'),
   numTests: z
     .int()
     .positive()
@@ -121,26 +132,7 @@ const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
  * Schema for individual redteam plugins or their shorthand.
  */
 export const RedteamPluginSchema = z.union([
-  z
-    .union([
-      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
-        if (!pluginOptions.includes(val)) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
-          });
-        }
-      }),
-      z.string().superRefine((val, ctx) => {
-        if (!val.startsWith('file://')) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
-          });
-        }
-      }),
-    ])
-    .describe('Name of the plugin or path to custom plugin'),
+  createPluginIdSchema().describe('Name of the plugin or path to custom plugin'),
   RedteamConfigPluginObjectSchema,
 ]);
 
@@ -181,87 +173,39 @@ export const strategyIdSchema = z.union([
 /**
  * Schema for individual redteam strategies
  */
-export const RedteamStrategySchema = z
-  .union([
-    strategyIdSchema,
-    z.object({
-      id: strategyIdSchema,
-      config: z
-        .record(z.string(), z.unknown())
-        .optional()
-        .describe('Strategy-specific configuration'),
-    }),
-  ])
-  .superRefine((strategy, ctx) => {
-    if (typeof strategy === 'string' || strategy.id !== 'layer') {
+const strategyObject = z.object({
+  id: strategyIdSchema,
+  config: z.record(z.string(), z.unknown()).optional().describe('Strategy-specific configuration'),
+});
+const layerSteps = z.array(z.union([strategyIdSchema, strategyObject]));
+
+export const RedteamStrategySchema = z.union([
+  strategyIdSchema,
+  strategyObject.superRefine((strategy, ctx) => {
+    if (strategy.id !== 'layer' || strategy.config?.steps === undefined) {
       return;
     }
-    const steps = strategy.config?.steps;
-    if (steps === undefined) {
-      return;
-    }
-    if (!Array.isArray(steps)) {
+    const steps = layerSteps.safeParse(strategy.config.steps);
+    if (!steps.success) {
+      const index = steps.error.issues[0].path[0];
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['config', 'steps'],
-        message: 'Layer steps must be an array',
-      });
-      return;
-    }
-    const ids = steps.map((step) =>
-      typeof step === 'string' ? step : (step as { id?: unknown })?.id,
-    );
-    if (ids.some((id) => typeof id !== 'string' || id.trim().length === 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['config', 'steps'],
-        message: 'Each layer step must be a nonempty string or an object with a nonempty string id',
-      });
-      return;
-    }
-    const attackIndexes = ids.flatMap((id, index) =>
-      typeof id === 'string' && isAttackProvider(id) ? [index] : [],
-    );
-    const indirectIndexes = ids.flatMap((id, index) => (id === 'indirect-web-pwn' ? [index] : []));
-    const indirectIndex = indirectIndexes[0] ?? -1;
-    const mediaIndexes = ids.flatMap((id, index) =>
-      typeof id === 'string' && (MULTI_MODAL_STRATEGIES as readonly string[]).includes(id)
-        ? [index]
-        : [],
-    );
-    const providerIndexes = ids.flatMap((id, index) =>
-      typeof id === 'string' &&
-      (isAttackProvider(id) ||
-        id === 'best-of-n' ||
-        id === 'authoritative-markup-injection' ||
-        id === 'mischievous-user')
-        ? [index]
-        : [],
-    );
-    const hasMischievousUser = ids.includes('mischievous-user');
-    const invalid =
-      ids.includes('layer') ||
-      attackIndexes.length > 1 ||
-      indirectIndexes.length > 1 ||
-      (ids.some((id) => typeof id === 'string' && isCustomStrategy(id)) && indirectIndex >= 0) ||
-      (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
-      (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
-      (indirectIndex >= 0 && attackIndexes.length === 0 && providerIndexes.length > 0) ||
-      providerIndexes.length > 1 ||
-      (hasMischievousUser && providerIndexes[0] !== ids.length - 1) ||
-      (ids.includes('authoritative-markup-injection') &&
-        ids[ids.length - 1] !== 'authoritative-markup-injection') ||
-      mediaIndexes.length > 1 ||
-      (mediaIndexes.length === 1 && mediaIndexes[0] !== ids.length - 1);
-    if (invalid) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['config', 'steps'],
         message:
-          'Layer steps cannot recurse; use at most one attack provider before indirect-web-pwn, do not combine custom or mischievous-user with indirect-web-pwn, and use at most one final media transform',
+          typeof index === 'number'
+            ? `Invalid layer step ${index + 1}. Use a registered strategy ID or an object with an ID and optional config.`
+            : 'Layer steps must be an array.',
       });
+      return;
     }
-  });
+    const message = getLayerOrderError(
+      steps.data.map((step) => (typeof step === 'string' ? step : step.id)),
+    );
+    if (message) {
+      ctx.addIssue({ code: 'custom', path: ['config', 'steps'], message });
+    }
+  }),
+]);
 
 /**
  * Schema for `promptfoo redteam generate` command options
@@ -473,40 +417,17 @@ export const RedteamConfigSchema = z
       pluginMap.set(key, pluginObject);
     };
 
-    const expandCollection = (
-      collection: string[] | ReadonlySet<Plugin>,
-      config: PluginConfig | undefined,
-      numTests: number | undefined,
-      severity?: Severity,
-    ) => {
-      (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
-        // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
-        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
-        if (!existingPlugin || existingPlugin.numTests === undefined) {
-          addPlugin(item, config, numTests, severity);
-        }
-      });
-    };
-
     const handleCollectionExpansion = (
       id: Collection,
       config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      const category = PLUGIN_CATEGORIES[id as keyof typeof PLUGIN_CATEGORIES];
-      if (category) {
-        expandCollection([...category], config, numTests, severity);
-      } else if (id === 'foundation') {
-        expandCollection([...FOUNDATION_PLUGINS], config, numTests, severity);
-      } else if (id === 'default') {
-        expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
-      } else if (id === 'guardrails-eval') {
-        expandCollection([...GUARDRAILS_EVALUATION_PLUGINS], config, numTests, severity);
-      } else if (id === 'coding-agent:core') {
-        expandCollection([...CODING_AGENT_CORE_PLUGINS], config, numTests, severity);
-      } else if (id === 'coding-agent:all') {
-        expandCollection([...CODING_AGENT_PLUGINS], config, numTests, severity);
+      for (const item of pluginCollections[id]) {
+        const existing = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
+        if (existing?.numTests === undefined) {
+          addPlugin(item, config, numTests, severity);
+        }
       }
     };
 
@@ -519,20 +440,22 @@ export const RedteamConfigSchema = z
               numTests: plugin.numTests ?? data.numTests ?? DEFAULT_NUM_TESTS_PER_PLUGIN,
             };
 
+      const expandPlugin = (id: string) => {
+        if (COLLECTIONS.includes(id as Collection)) {
+          handleCollectionExpansion(
+            id as Collection,
+            pluginObj.config,
+            pluginObj.numTests,
+            pluginObj.severity,
+          );
+        } else {
+          addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
+        }
+      };
+
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
-          plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as Collection)) {
-              handleCollectionExpansion(
-                id as Collection,
-                pluginObj.config,
-                pluginObj.numTests,
-                pluginObj.severity,
-              );
-            } else {
-              addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
-            }
-          });
+          plugins.forEach(expandPlugin);
           strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
       } else if (COLLECTIONS.includes(pluginObj.id as Collection)) {
@@ -548,18 +471,7 @@ export const RedteamConfigSchema = z
         );
         if (mapping) {
           const [, aliasedMapping] = mapping;
-          aliasedMapping[pluginObj.id].plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as Collection)) {
-              handleCollectionExpansion(
-                id as Collection,
-                pluginObj.config,
-                pluginObj.numTests,
-                pluginObj.severity,
-              );
-            } else {
-              addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
-            }
-          });
+          aliasedMapping[pluginObj.id].plugins.forEach(expandPlugin);
           aliasedMapping[pluginObj.id].strategies.forEach((strategy) =>
             strategySet.add(strategy as Strategy),
           );

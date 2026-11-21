@@ -51,7 +51,9 @@ The meta-agent remembers earlier attempts. When one approach fails, it can switc
 
 The top-level `jailbreak` strategy is deprecated and now runs `jailbreak:meta`. Replace `jailbreak` with `jailbreak:meta` in existing configurations to avoid the deprecation warning.
 
-The meta-agent stops when an attack succeeds, the attacker stops, or it reaches the iteration limit.
+The meta-agent stops when the grader confirms a vulnerability, the attacker stops, or it reaches the iteration limit. A grader transport or parsing error is not a vulnerability verdict, so the strategy continues to the next iteration. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error. It also stops with an error if remote multi-input generation returns an invalid prompt format.
+
+If Cloud explicitly reports that the upstream provider rejected a coordination request as invalid JSON (`invalid_json`), the strategy stops and reports the error while retaining completed attempts. Other coordination errors continue through the existing retry and iteration behavior.
 
 ## When to Use
 

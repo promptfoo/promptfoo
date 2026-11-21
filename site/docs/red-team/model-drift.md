@@ -24,7 +24,7 @@ Traditional monitoring captures production incidents after they occur. Red teami
 
 ## Establishing a Baseline
 
-Start by running a comprehensive red team scan to establish your security baseline:
+Run a red team scan to establish a baseline:
 
 ```yaml
 targets:
@@ -222,7 +222,7 @@ fi
 
 ### Combining Red Team and Custom Tests
 
-For comprehensive drift detection, run both:
+To detect changes in known behavior and security findings, run both:
 
 1. **Custom tests** for specific, known behaviors you need to preserve
 2. **Red team tests** for broad coverage of potential vulnerabilities
@@ -370,7 +370,7 @@ This reveals which models are more resistant to specific attack types and helps 
 
 ## Best Practices
 
-1. **Start with a baseline**: Run a comprehensive scan before deploying, then track changes from that point
+1. **Start with a baseline**: Run a baseline scan before deploying, then track changes
 2. **Use consistent test cases**: Re-run existing tests for accurate drift detection; regenerate periodically for coverage
 3. **Automate with CI/CD**: Manual drift detection doesn't scale; schedule regular scans
 4. **Set actionable thresholds**: Define clear pass/fail criteria tied to your risk tolerance

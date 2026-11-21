@@ -6,7 +6,7 @@ sidebar_label: Layer
 
 # Layer Strategy
 
-The Layer strategy composes multiple red team strategies sequentially by feeding the output of one strategy into the next. Use it to apply multiple encoding layers or combine agentic attacks with multimodal output such as audio or images.
+The Layer strategy sends the output of each strategy to the next. Use it to stack encodings or combine agentic attacks with audio or image transformations.
 
 ## Quick Start
 
@@ -76,14 +76,14 @@ redteam:
 
 Layer supports one orchestrating attack strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, `custom`, `jailbreak:meta`, or `jailbreak:tree` first when later steps should transform each turn or attempt. Chain text transforms such as `base64`, `rot13`, and `leetspeak` after it, then add an output transform such as `audio` or `image`.
 
-Key limitations:
+The configuration validator and layer editor enforce the following rules.
 
-- Steps before an agentic strategy transform the initial goal once, not each turn.
-- Only the first supported attack strategy orchestrates the attack; do not chain multiple attack strategies.
-- `mischievous-user` and `simba` do not support per-turn transforms.
-- Audio and image transforms require a target and prompt that accept the resulting payload. Use one multimodal output transform at the end of the layer.
-- `indirect-web-pwn` requires Promptfoo Cloud and a target that can fetch public URLs.
-- Crescendo and Custom pass unblocking prompts through the same runtime transforms as other turns.
+- Use registered strategy IDs or JavaScript or TypeScript modules. A layer cannot include another layer.
+- Use at most one agentic strategy or provider wrapper. Steps before it apply once to the initial goal.
+- Place `mischievous-user`, `authoritative-markup-injection`, or a media transform (`audio`, `image`, or `video`) last.
+- Use `indirect-web-pwn` at most once, after any agentic strategy. It requires Promptfoo Cloud and a target that can fetch public URLs. It cannot run alongside `custom`, named `custom:*` strategies, `best-of-n`, `authoritative-markup-injection`, or `mischievous-user`.
+
+When remote generation is disabled, the editor excludes strategies that require hosted services.
 
 ### Valid Patterns
 
@@ -245,7 +245,7 @@ Hydra adapts the conversation while `indirect-web-pwn` generates and tracks an i
 
 ### Multi-Turn Audio Attack
 
-Test voice-enabled AI agents with adaptive jailbreak attempts:
+Test voice-enabled agents with jailbreak attempts:
 
 ```yaml
 redteam:

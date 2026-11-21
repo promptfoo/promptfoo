@@ -1,20 +1,18 @@
 ---
 title: MCP Security Testing Guide
-description: Secure Model Context Protocol servers through comprehensive red teaming, tool poisoning tests, and API vulnerability scanning
+description: Test Model Context Protocol (MCP) servers for tool poisoning, data exfiltration, authentication abuse, and prompt injection across three deployment scenarios.
 sidebar_label: MCP Security Testing
 ---
 
 # MCP Security Testing Guide
 
-This guide covers security testing approaches for Model Context Protocol (MCP) servers.
-
-We'll explore three testing scenarios, each addressing different threat models and deployment architectures, with particular focus on Tool Poisoning Attacks and other MCP-specific vulnerabilities.
+Test Model Context Protocol (MCP) servers in three deployment scenarios, including tool poisoning and data exfiltration.
 
 For general MCP integration with Promptfoo, see the [MCP Integration Guide](/docs/integrations/mcp). For using MCP as a provider, see the [MCP Provider documentation](/docs/providers/mcp).
 
 ## Overview
 
-The Model Context Protocol's server-based architecture introduces unique security challenges. When providing MCP servers to clients or integrating them into your infrastructure, it's crucial to test for various security vulnerabilities. The disconnect between what users see and what AI models process creates opportunities for:
+MCP servers expose tool descriptions, results, and other content to models. Test whether an attacker can abuse these surfaces for:
 
 - Tool poisoning attacks via hidden instructions in tool descriptions
 - Sensitive data exfiltration through side-channel communication

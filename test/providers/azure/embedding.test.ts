@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureEmbeddingProvider } from '../../../src/providers/azure/embedding';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache');
 
@@ -61,12 +62,9 @@ describe('AzureEmbeddingProvider', () => {
     'preserves the deployment and forwards dimensions %s',
     async (dimensions) => {
       provider.config.dimensions = dimensions;
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({ data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } }),
+      );
 
       const result = await provider.callEmbeddingApi('A small sample');
 
@@ -181,4 +179,56 @@ describe('AzureEmbeddingProvider', () => {
       },
     });
   });
+
+  it.each([
+    [{ bustCache: true }, true],
+    [{ debug: true }, true],
+    [{ bustCache: false, debug: true }, false],
+  ] as const)('forwards cache settings %j', async (settings, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({ data: [{ embedding: [0.1] }] }),
+    );
+    await provider.callEmbeddingApi('test text', {
+      prompt: { raw: 'test text', label: 'test' },
+      vars: {},
+      ...settings,
+    });
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0].slice(3)).toEqual(['json', expected]);
+  });
+
+  it('reports the HTTP status and Azure error body when a request is rejected', async () => {
+    const data = {
+      error: { code: '401', message: 'Access denied due to invalid subscription key' },
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse(data, { status: 401, statusText: 'Unauthorized' }),
+    );
+
+    expect(await provider.callEmbeddingApi('test text')).toEqual({
+      error: `API error: 401 Unauthorized\n${JSON.stringify(data)}`,
+      tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
+    });
+  });
+
+  it.each([
+    [false, { total: 7, prompt: 7, completion: 0, numRequests: 1 }],
+    [true, { cached: 7, total: 7, numRequests: 1 }],
+  ] as const)(
+    'evicts a successful response missing its embedding (cached=%s)',
+    async (cached, tokenUsage) => {
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      const data = { data: [], usage: { total_tokens: 7, prompt_tokens: 7, completion_tokens: 0 } };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse(data, { cached }),
+        deleteFromCache,
+      });
+
+      expect(await provider.callEmbeddingApi('test text')).toEqual({
+        error: expect.stringContaining('No embedding returned'),
+        tokenUsage,
+      });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    },
+  );
 });

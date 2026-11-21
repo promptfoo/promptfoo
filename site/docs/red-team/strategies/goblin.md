@@ -8,6 +8,8 @@ description: Adaptive multi-turn jailbreak agent focused on encoding, math, and 
 
 The Goblin strategy (`jailbreak:goblin`) uses the same multi-turn execution, backtracking, and scan-wide learning as [Hydra](hydra.md). Its attacker prompt favors techniques such as unusual encodings, interleaved questions, and logic problems that may bypass semantic guardrails.
 
+Like Hydra, Goblin continues after a grader transport or parsing error, retains an incomplete-grading marker for ungraded attempts, and reports an evaluation error if required final grading throws.
+
 Goblin complements Hydra by testing edge cases inspired by [Involuntary In-Context Learning (IICL)](https://arxiv.org/abs/2604.19461), including abstract few-shot pattern completion and encoding shifts.
 
 ## Implementation
