@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# Example of using the layer strategy to compose multiple transformations
-# This example shows how to chain strategies.
+# Apply the layer to inputs generated in Spanish and French.
 
 targets:
   - openai:chat:gpt-5.4-nano
@@ -11,14 +10,12 @@ redteam:
   plugins:
     - harmful:hate
 
+  language: ['es', 'fr']
+
   strategies:
-    # Layer strategy: translate then encode
     - id: layer
       config:
         steps:
-          - id: multilingual
-            config:
-              languages: ['es', 'fr']
           - leetspeak
 
     # Another layer: progressive obfuscation
