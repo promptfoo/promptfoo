@@ -652,7 +652,7 @@ async function runRedteamConversation({
         prompt: bestNode.prompt,
         metadata: {
           highestScore: maxScore,
-          redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+          redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
           messages: treeOutputs as Record<string, any>[],
           attempts,
           redteamTreeHistory: treeOutputs,
@@ -725,7 +725,7 @@ async function runRedteamConversation({
             error: error.message,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -861,6 +861,11 @@ async function runRedteamConversation({
           }
         }
 
+        // Extracted input fields must not replace a configured per-turn transform.
+        if (perTurnLayers.length > 0) {
+          updatedVars[injectVar] = finalInjectVar;
+        }
+
         const targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
@@ -872,7 +877,7 @@ async function runRedteamConversation({
         let targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
-          iterationContext,
+          iterationContext && { ...iterationContext, vars: updatedVars },
           options,
         );
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
@@ -1147,7 +1152,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1191,7 +1196,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt ?? lastFinalAttackPrompt ?? bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1294,6 +1299,14 @@ async function runRedteamConversation({
     }
   }
 
+  if (perTurnLayers.length > 0) {
+    const transformed = bestFinalAttackPrompt ?? lastFinalAttackPrompt;
+    if (transformed === undefined) {
+      return buildFinalResponse({ error: 'No tree attempt completed the required transforms.' });
+    }
+    finalUpdatedVars[injectVar] = transformed;
+  }
+
   const finalTargetPrompt = await renderPrompt(
     prompt,
     finalUpdatedVars,
@@ -1305,7 +1318,7 @@ async function runRedteamConversation({
   const finalTargetResponse = await getTargetResponse(
     targetProvider,
     finalTargetPrompt,
-    context,
+    context && { ...context, vars: finalUpdatedVars },
     options,
   );
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
@@ -1466,6 +1479,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       attackerUsesRemoteProvider,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
+      perTurnLayers: (this.config._perTurnLayers as LayerConfig[]) ?? [],
     });
   }
 }
