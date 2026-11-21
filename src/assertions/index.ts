@@ -127,6 +127,35 @@ const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
+function clearMetricOnlyMarkers(result: GradingResult): GradingResult {
+  const clones = new WeakMap<GradingResult, GradingResult>();
+  const pending: GradingResult[] = [];
+  const clone = (source: GradingResult): GradingResult => {
+    const existing = clones.get(source);
+    if (existing) {
+      return existing;
+    }
+    const { metricOnly: _metricOnly, ...assertion } = source.assertion ?? {};
+    const { metricOnly: _metadataMetricOnly, ...metadata } = source.metadata ?? {};
+    const target = {
+      ...source,
+      ...(source.assertion && { assertion: assertion as Assertion }),
+      ...(source.metadata && { metadata }),
+    };
+    clones.set(source, target);
+    pending.push(source);
+    return target;
+  };
+  const normalized = clone(result);
+  while (pending.length > 0) {
+    const source = pending.pop()!;
+    if (source.componentResults) {
+      clones.get(source)!.componentResults = source.componentResults.map(clone);
+    }
+  }
+  return normalized;
+}
+
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'agent-rubric',
   'answer-relevance',
@@ -377,8 +406,8 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 }
 
 // Zero-weight assertions record their scores without failing the test.
-function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
-  return weight === 0 ? { ...result, pass: true } : result;
+function applyAssertionWeight(result: GradingResult, assertion: Assertion): GradingResult {
+  return !assertion.metricOnly && assertion.weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -493,7 +522,7 @@ async function runAssertionInternal({
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
-    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -676,7 +705,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    return applyAssertionWeight(result, assertion.weight);
+    return applyAssertionWeight(result, assertion);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
@@ -866,11 +895,15 @@ export async function runAssertions({
       claimStoredGradingUsage,
     });
 
+    // A script's returned assertion metadata cannot opt a configured scoring
+    // assertion out of downstream counts. Normalize individual results here,
+    // before set aggregation, to preserve genuine metric-only children.
     assertResult.addResult({
       index,
-      result,
+      result: assertion.metricOnly ? result : clearMetricOnlyMarkers(result),
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
+      metricOnly: assertion.metricOnly,
     });
   };
 
@@ -894,14 +927,20 @@ export async function runAssertions({
     const result = await subAssertResult.testResult();
     const {
       index,
-      assertionSet: { metric, weight },
+      assertionSet: { assert, metric, weight },
     } = subAssertResult.parentAssertionSet!;
+
+    // A set whose assertions are all metricOnly is metric-only in effect:
+    // its aggregate score is always 0 and must not dilute the test score.
+    const metricOnly = assert.length > 0 && assert.every((subAssert) => subAssert.metricOnly);
 
     mainAssertResult.addResult({
       index,
       result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
+      metricOnly,
+      childAssertionSet: subAssertResult,
     });
   });
 

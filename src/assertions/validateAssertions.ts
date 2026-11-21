@@ -3,6 +3,7 @@ import {
   type Assertion,
   AssertionOrSetSchema,
   type AssertionSet,
+  type Scenario,
   type TestCase,
 } from '../types/index';
 
@@ -53,8 +54,29 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
     );
   }
 
+  // Comparison assertions decide pass/fail across outputs, so they can't be
+  // metric-only. Reject rather than silently ignore the property.
+  if (
+    (result.data.type === 'select-best' || result.data.type === 'max-score') &&
+    assertionObj.metricOnly === true
+  ) {
+    throw new AssertValidationError(
+      `Invalid assertion at ${context}:\n` +
+        `'metricOnly' is not supported on ${result.data.type}. Comparison assertions decide pass/fail across outputs and cannot be metric-only.\n\n` +
+        `Received: ${JSON.stringify(assertion, null, 2)}`,
+    );
+  }
+
   // For assert-set, also validate nested assertions recursively
   if (result.data.type === 'assert-set') {
+    if (assertionObj.metricOnly === true) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}:\n` +
+          `'metricOnly' is not supported on assert-set. Set it on the assertions inside the set instead; ` +
+          `a set whose assertions are all metricOnly is excluded from the test score automatically.\n\n` +
+          `Received: ${JSON.stringify(assertion, null, 2)}`,
+      );
+    }
     const assertSet = result.data as AssertionSet;
     if (!assertSet.assert || !Array.isArray(assertSet.assert)) {
       throw new AssertValidationError(
@@ -83,7 +105,18 @@ const MAX_ASSERTIONS_PER_TEST = 10000;
  * @throws AssertValidationError if any assertion is malformed
  */
 
-export function validateAssertions(tests: TestCase[], defaultTest?: Partial<TestCase>): void {
+export function validateAssertions(
+  tests: TestCase[],
+  defaultTest?: Partial<TestCase>,
+  scenarios?: Scenario[],
+): void {
+  for (const scenario of scenarios ?? []) {
+    validateAssertions(scenario.tests ?? []);
+    for (const config of scenario.config ?? []) {
+      validateAssertions([], config);
+    }
+  }
+
   // Validate defaultTest assertions
   if (defaultTest?.assert) {
     if (!Array.isArray(defaultTest.assert)) {

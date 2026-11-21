@@ -45,7 +45,7 @@ import {
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
-import { ResultFailureReason } from '@promptfoo/types/results';
+import { countedComponentResults, ResultFailureReason } from '@promptfoo/types/results';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -304,16 +304,15 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
         acc[pluginId].total++;
 
-        // Check if moderation tests failed but other tests passed - this indicates content was
-        // flagged by moderation but would have passed otherwise
-        const moderationPassed = row.gradingResult?.componentResults?.some(
+        // Counted moderation failures represent mitigation; metric-only results do not.
+        const moderationFailed = countedComponentResults(row.gradingResult?.componentResults).some(
           (result) => result.assertion?.type === 'moderation' && !result.pass,
         );
 
         if (row.success) {
           acc[pluginId].pass++;
           acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
-        } else if (moderationPassed) {
+        } else if (moderationFailed) {
           acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
         }
 
