@@ -248,6 +248,82 @@ describe('evaluatorHelpers', () => {
       },
     );
 
+    it('should call a failing custom filter only once when rendering a JSON prompt', async () => {
+      const validate = vi.fn(() => {
+        throw new Error('Invalid label');
+      });
+      const prompt = toPrompt('[{"content": "{{ name | validate }}"}]');
+
+      await expect(renderPrompt(prompt, { name: 'Alice' }, { validate })).rejects.toThrow(
+        'Invalid label',
+      );
+      expect(validate).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([false, true])(
+      'should propagate the first custom filter error with JSON autoescaping disabled=%s',
+      async (disabled) => {
+        mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: String(disabled) });
+        const lookup = vi
+          .fn((name: string) => name)
+          .mockImplementationOnce(() => {
+            throw new Error('Lookup unavailable');
+          });
+        const prompt = toPrompt('[{"content": "{{ name | lookup }}"}]');
+
+        await expect(renderPrompt(prompt, { name: 'Alice' }, { lookup })).rejects.toThrow(
+          'Lookup unavailable',
+        );
+        expect(lookup).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('should render a Nunjucks expression outside a JSON string', async () => {
+      const prompt = toPrompt('[{"content": {{ name | dump }}}]');
+      const name = 'Alice "A"';
+
+      expect(JSON.parse(await renderPrompt(prompt, { name }))).toEqual([{ content: name }]);
+    });
+
+    it('should preserve a partial template tag in a JSON prompt', async () => {
+      const prompt = toPrompt('["Write {{"]');
+
+      expect(JSON.parse(await renderPrompt(prompt, {}))).toEqual(['Write {{']);
+    });
+
+    it('should render Nunjucks blocks that span JSON values', async () => {
+      const prompt = toPrompt('["{% if show %}a", "b{% endif %}"]');
+
+      expect(JSON.parse(await renderPrompt(prompt, { show: true }))).toEqual(['a', 'b']);
+    });
+
+    it('should preserve the fallback when a custom filter handles a nested filter error', async () => {
+      const prompt = toPrompt(`["{{ name | label('!') }}", "{{ (spec | load).theme }}"]`);
+      const vars = {
+        name: 'Alice',
+        spec: '{{ profile.config }}',
+        profile: { config: '{"theme":"blue"}' },
+      };
+      const filters = {
+        unavailable() {
+          throw new Error('Unavailable');
+        },
+        label(
+          this: { env: { getFilter(name: string): () => string } },
+          name: string,
+          suffix: string,
+        ) {
+          try {
+            return this.env.getFilter('unavailable')();
+          } catch {
+            return name + suffix;
+          }
+        },
+      };
+
+      expect(JSON.parse(await renderPrompt(prompt, vars, filters))).toEqual(['Alice!', 'blue']);
+    });
+
     it('should render nested variables in JSON prompts', async () => {
       const prompt = toPrompt('{"text": "{{ outer[inner] }}"}');
       const renderedPrompt = await renderPrompt(
