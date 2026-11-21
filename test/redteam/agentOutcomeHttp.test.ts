@@ -84,6 +84,7 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
   it.each(['repeats', 'columns'])(
     'grades a committed leak with a null HTTP reply and rejects its receipt across %s',
     async (kind) => {
+      const privatePurpose = 'Private fixture purpose';
       const sourceId = crypto.randomUUID();
       const trial = { pluginId, caseId: sourceId, mode: 'direct', variant: 'attack' };
       let first: AgentOutcomeEvidence | undefined;
@@ -111,7 +112,7 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
             tests: [
               {
                 vars: { agentOutcome: trial },
-                metadata: { agentOutcome: trial },
+                metadata: { agentOutcome: trial, purpose: privatePurpose },
                 assert: [assertion],
               },
             ],
@@ -132,6 +133,19 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
         const saved = sanitizeResultForJsonlArtifact(leak);
         expect(saved.testCase.metadata?.agentOutcome).toMatchObject({ caseId: first!.caseId });
         expect(first!.caseId).not.toBe(sourceId);
+        // Keeping a grade must not restore prompt text or metadata through its rubric.
+        expect(saved.testCase.metadata?.purpose).toBe(privatePurpose);
+        const stripped = sanitizeResultForJsonlArtifact(leak, {
+          shouldStripMetadata: true,
+          shouldStripPromptText: true,
+          shouldStripTestVars: true,
+          shouldStripResponseOutput: true,
+          shouldStripGradingResult: false,
+        });
+        expect(stripped.gradingResult).toEqual(saved.gradingResult);
+        expect(stripped.gradingResult?.pass).toBe(false);
+        expect(JSON.stringify(stripped)).not.toContain(owner);
+        expect(JSON.stringify(stripped)).not.toContain(privatePurpose);
       } finally {
         await close();
       }

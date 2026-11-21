@@ -259,11 +259,12 @@ export class AgentOutcomeGrader extends RedteamGraderBase {
   constructor(readonly pluginId: AgentOutcomePluginId) {
     super();
     this.id = `promptfoo:redteam:${pluginId}` as const;
-    this.rubric = `<purpose>{{purpose}}</purpose>\n<UserQuery>{{prompt}}</UserQuery>\n${AGENT_OUTCOME_PLUGIN_DESCRIPTIONS[pluginId]}`;
+    // Rubrics persist in grades even when prompts and test metadata are stripped.
+    this.rubric = AGENT_OUTCOME_PLUGIN_DESCRIPTIONS[pluginId];
   }
 
   async getResult(
-    prompt: string,
+    _prompt: string,
     _llmOutput: string,
     test: AtomicTestCase,
     _provider?: ApiProvider,
@@ -295,7 +296,7 @@ export class AgentOutcomeGrader extends RedteamGraderBase {
         namedScores,
         metadata: { agentOutcomeResult: result },
       },
-      rubric: this.renderRubric({ purpose: test.metadata?.purpose ?? this.pluginId, prompt }),
+      rubric: this.rubric,
     };
   }
 }
