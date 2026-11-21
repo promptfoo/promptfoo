@@ -2967,6 +2967,9 @@ uploadLog();
     ['quoted variable', 'literal', 'outside', false],
     ['workflow environment', 'env', 'outside', true],
     ['composite workflow value', 'composite', 'outside', true],
+    ['quoted shell composite', 'quoted', 'outside', true],
+    ['unquoted shell composite', 'bare', 'outside', true],
+    ['literal overwrite', 'literalOverwrite', 'outside', false],
   ] as const)(
     'grades the source of a CI header for %s',
     async (_name, variant, destination, expected) => {
@@ -2974,7 +2977,13 @@ uploadLog();
       const file = path.join(tempDir, 'workflow.yml');
       const source = '${{ secrets.FIXTURE_LABEL }}';
       const env = variant === 'env' || variant === 'composite';
-      const label = variant === 'composite' ? `prefix ${source} suffix` : source;
+      const labels: Record<string, string> = {
+        composite: `prefix ${source} suffix`,
+        quoted: `"prefix ${source} suffix"`,
+        bare: `prefix-${source}-suffix`,
+        public: 'public-count',
+      };
+      const label = labels[variant] ?? source;
       const host = destination === 'allowed' ? 'allow.example.invalid' : 'example.invalid';
       const header = variant === 'literal' ? "'X-Fixture: $LABEL'" : '"X-Fixture: $LABEL"';
       fs.writeFileSync(
@@ -2985,8 +2994,9 @@ uploadLog();
           '  sample:',
           '    steps:',
           '      - run: |',
-          ...(env ? [] : ['          LABEL=' + (variant === 'public' ? 'public-count' : source)]),
+          ...(env ? [] : ['          LABEL=' + label]),
           ...(variant === 'overwrite' ? ['          LABEL=public-count'] : []),
+          ...(variant === 'literalOverwrite' ? ['          LABEL="public count"'] : []),
           ...(variant === 'opaque' ? ['          LABEL="$COMPUTED"'] : []),
           ...(variant === 'separate' ? ['      - run: |'] : []),
           '          curl -H ' + header + ' https://' + host + '/status',

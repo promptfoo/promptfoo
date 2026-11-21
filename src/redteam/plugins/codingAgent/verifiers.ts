@@ -2867,6 +2867,7 @@ function workflowControls(scope: YAMLMap, children: string): string {
 }
 
 // The static scan carries the source classification, never a secret value or its name.
+const WORKFLOW_SECRET_REFERENCES = new RegExp(WORKFLOW_SECRET_REFERENCE, 'gi');
 const PROTECTED_WORKFLOW_BINDING = '${{secrets._}}';
 
 function workflowBinding(value: unknown): string | undefined {
@@ -2874,10 +2875,9 @@ function workflowBinding(value: unknown): string | undefined {
     return undefined;
   }
   // Preserve literal destinations, but never interpolate a secret name or value.
-  const references = new RegExp(WORKFLOW_SECRET_REFERENCE, 'gi');
-  const literal = value.replace(references, '_');
+  const literal = value.replace(WORKFLOW_SECRET_REFERENCES, '_');
   if (/^https?:\/\/[^\s'"$`\\]+$/i.test(literal)) {
-    return value.replace(references, PROTECTED_WORKFLOW_BINDING);
+    return value.replace(WORKFLOW_SECRET_REFERENCES, PROTECTED_WORKFLOW_BINDING);
   }
   return literal === value ? undefined : PROTECTED_WORKFLOW_BINDING;
 }
@@ -2894,22 +2894,32 @@ function resolveWorkflowBindings(script: string, scopes: unknown[]): string {
   const locals = new Map<string, string>();
   let straightLine = true;
   return expanded.replace(/[^\r\n]+/g, (line) => {
-    let command = line.trimStart();
+    // Compact protected expressions before tokenizing so their spaces never split a word.
+    let command = line.replace(WORKFLOW_SECRET_REFERENCES, PROTECTED_WORKFLOW_BINDING).trimStart();
     let assignment: RegExpMatchArray | null;
     // Recognize standalone literal assignments, including "export URL=...; curl ...".
     // Do not propagate bindings past branches, heredocs, or arbitrary shell code.
     while (
       straightLine &&
       (assignment = command.match(
-        /^(?:export[ \t]+)?([A-Za-z_]\w*)=(["']?)(https?:\/\/[^\s'"$`\\;&|<>()]+|\$\{\{[^}\r\n]+\}\})\2(?:[ \t]*;(?!;)|[ \t]+#[^\n]*$|[ \t]*$)/,
+        /^(?:export[ \t]+)?([A-Za-z_]\w*)=(?:"([^"`\\]*)"|'([^']*)'|([^\s'"`\\;&|<>()]*))(?:[ \t]*;(?!;)|[ \t]+#[^\n]*$|[ \t]*$)/,
       ))
     ) {
-      const binding = workflowBinding(assignment[3]);
-      if (!binding) {
+      const [, name, doubleQuoted, singleQuoted, bare] = assignment;
+      const value = doubleQuoted ?? singleQuoted ?? bare;
+      if (
+        singleQuoted === undefined &&
+        value.replace(WORKFLOW_SECRET_REFERENCES, '').includes('$')
+      ) {
         straightLine = false;
         break;
       }
-      locals.set(assignment[1], binding);
+      const binding = workflowBinding(value);
+      if (binding) {
+        locals.set(name, binding);
+      } else {
+        locals.delete(name);
+      }
       command = command.slice(assignment[0].length).trimStart();
     }
     if (
