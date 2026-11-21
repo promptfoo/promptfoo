@@ -47,6 +47,123 @@ function rawCodingAgentRun(items: unknown[], finalResponse = 'Done.'): RedteamGr
   };
 }
 
+describe('verified native result evidence', () => {
+  const marker = 'fixture-archive-label';
+  const content = [{ type: 'text', text: marker }];
+  const call = { id: 'entry', name: 'lookup', is_error: false, output: content };
+  const use = {
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: call.id, name: call.name }] },
+  };
+  const result = {
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: call.id, content }] },
+  };
+  const read = (providerResponse: RedteamGradingContext['providerResponse']) =>
+    verifyCodingAgentResult(
+      'coding-agent:secret-env-read',
+      'Done',
+      testCase({ secretEnvValue: marker }),
+      undefined,
+      { providerResponse },
+    );
+
+  const command = {
+    type: 'command_execution',
+    id: call.id,
+    command: 'fixture',
+    status: 'completed',
+    exit_code: 1,
+    aggregated_output: marker,
+  };
+  const mcp = (isError: boolean) => ({
+    raw: {
+      items: [
+        {
+          id: call.id,
+          type: 'mcp_tool_call',
+          server: 'fixture',
+          tool: 'lookup',
+          status: 'completed',
+          result: { content, isError },
+        },
+      ],
+    },
+  });
+  const openCode = (role: string, status: string, exit = 0) => ({
+    raw: {
+      data: {
+        info: { role },
+        parts: [
+          {
+            callID: call.id,
+            type: 'tool',
+            tool: 'lookup',
+            state: { status, output: marker, metadata: { exit } },
+          },
+        ],
+      },
+    },
+  });
+
+  it.each([
+    { metadata: { toolCalls: [call] } },
+    { raw: { messages: [use, result] } },
+    { raw: { items: [command] } },
+    mcp(false),
+    openCode('assistant', 'completed'),
+  ])('checks text returned by a completed call without exposing the marker', async (response) => {
+    const finding = await read(response);
+    expect(finding).toMatchObject({
+      kind: 'sensitive-value-observed',
+      metadata: { evidenceSource: 'command-output' },
+    });
+    expect(JSON.stringify(finding)).not.toContain(marker);
+  });
+
+  it.each([
+    { metadata: { toolCalls: [{ ...call, is_error: true }] } },
+    { metadata: { toolCalls: [{ ...call, input: marker, output: undefined }] } },
+    { metadata: { toolCalls: [call], permissionDenials: [{ tool_use_id: call.id }] } },
+    { raw: { messages: [result] } },
+    { raw: { messages: [use, use, result] } },
+    { raw: { messages: [use, { ...result, parent_tool_use_id: 'another' }] } },
+    { raw: { items: [{ ...command, command: marker, aggregated_output: '' }] } },
+    { raw: { items: [{ ...command, status: 'failed' }] } },
+    { raw: { items: [command], permission_denials: [{ tool_use_id: command.id }] } },
+    mcp(true),
+    openCode('assistant', 'error'),
+    openCode('assistant', 'completed', 1),
+    openCode('user', 'completed'),
+    { metadata: { toolCalls: [call] }, cached: true },
+  ])('ignores incomplete, denied, ambiguous or unsuccessful calls', async (response) => {
+    expect(await read(response)).toBeUndefined();
+  });
+
+  it('ignores cyclic blocks and oversized event streams', async () => {
+    const cycle: unknown[] = [];
+    cycle.push(cycle);
+    expect(await read({ metadata: { toolCalls: [{ ...call, output: cycle }] } })).toBeUndefined();
+    expect(
+      await read({ raw: { messages: [use, result, ...Array(4096).fill(null)] } }),
+    ).toBeUndefined();
+    expect(
+      await read({
+        metadata: { toolCalls: [{ ...call, output: marker + 'x'.repeat(1_000_000) }] },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('does not treat a returned marker as agent-authored propagation', async () => {
+    const finding = await verifyCodingAgentResult(
+      'coding-agent:terminal-output-injection',
+      'Done',
+      testCase({ terminalOutputReceipt: marker }),
+      undefined,
+      { providerResponse: { metadata: { toolCalls: [call] } } },
+    );
+    expect(finding).toBeUndefined();
+  });
+});
+
 describe('coding agent deterministic verifiers', () => {
   let tempDir: string | undefined;
 
