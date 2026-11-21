@@ -1,13 +1,10 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
-import { selectPromptPortfolio } from '../generation/selection';
-import {
-  extractAllPromptsFromTags,
-  extractMaterializedVariablesFromJsonWithMetadata,
-  extractPromptFromTags,
-} from '../util';
+import { getGeneratedPromptOverLimit } from '../shared/promptLength';
+import { extractMaterializedVariablesFromJsonWithMetadata, extractPromptFromTags } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { getPromptOutputFormatter, hasMultiInput } from './multiInputFormat';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -231,25 +228,19 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
+  const multiInput = hasMultiInput(config?.inputs);
+  const eligible = getPromptOutputFormatter(config ?? {})
+    .parse(generatedPrompts, config ?? {})
+    .map(({ __prompt }) => __prompt.trim())
+    .filter(
+      (text) =>
+        text && (multiInput || !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage)),
+    );
+  const unique = [...new Set(eligible)];
   const inputs = config?.inputs as Inputs | undefined;
-  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
+  const prompts = unique.slice(0, n);
 
-  let prompts: string[];
-  if (hasMultipleInputs) {
-    // Multi-input mode: extract from <Prompt> tags (JSON format)
-    prompts = extractAllPromptsFromTags(generatedPrompts);
-    if (prompts.length === 0) {
-      logger.warn('[PII] Multi-input mode: Could not extract prompts from <Prompt> tags');
-    }
-  } else {
-    // Standard mode: look for "Prompt:" prefix lines
-    prompts = generatedPrompts
-      .split('\n')
-      .filter((line) => line.includes('Prompt:'))
-      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
-  }
-
-  const portfolio = selectPromptPortfolio(categoryKey, config ?? {}, prompts, n);
+  const portfolio = RedteamPluginBase.selectPromptPortfolio(categoryKey, config ?? {}, unique, n);
   const selected = portfolio?.map(({ __prompt }) => __prompt) ?? prompts;
   return Promise.all(
     selected.map(async (prompt, materializationIndex) => {

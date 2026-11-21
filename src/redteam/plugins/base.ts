@@ -41,6 +41,8 @@ import type { RedteamGradingContext } from '../grading/types';
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
+  static readonly selectPromptPortfolio = selectPromptPortfolio;
+
   /**
    * Unique identifier for the plugin.
    */
@@ -237,8 +239,12 @@ export abstract class RedteamPluginBase {
       n,
     );
     const prompts =
-      selectPromptPortfolio(getShortPluginId(this.id), this.config, allPrompts, n) ??
-      sampleArray(allPrompts, n);
+      RedteamPluginBase.selectPromptPortfolio(
+        getShortPluginId(this.id),
+        this.config,
+        allPrompts,
+        n,
+      ) ?? sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
     if (prompts.length !== n) {

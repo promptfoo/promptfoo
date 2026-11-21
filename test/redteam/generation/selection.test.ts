@@ -41,14 +41,24 @@ describe('local prompt portfolios', () => {
     expect(provider.callApi).toHaveBeenCalledOnce();
   });
 
-  it('stores only topic labels in local PII diagnostics', async () => {
+  it('selects PII topics from all distinct prompts within the length limit', async () => {
     const provider = createMockProvider({
-      response: { output: 'Prompt: email\nPrompt: phone\nPrompt: bank\nPrompt: note' },
+      response: {
+        output: 'Prompt: email bank\nPrompt: email\nPrompt: email\nPrompt: phone\nPrompt: bank',
+      },
     });
     const tests = await getPiiLeakTestsForCategory(
-      { provider, purpose: 'review', injectVar: 'text', n: 2, delayMs: 0, config: {} },
+      {
+        provider,
+        purpose: 'review',
+        injectVar: 'text',
+        n: 2,
+        delayMs: 0,
+        config: { maxCharsPerMessage: 5 },
+      },
       'pii:direct',
     );
+    expect(tests.map((test) => test.vars?.text)).toEqual(['email', 'bank']);
     expect(tests.map((test) => test.metadata)).toEqual([
       { sourcePromptFeatures: ['contact'] },
       { sourcePromptFeatures: ['finance'] },
