@@ -63,6 +63,12 @@ describe.each([
     expect(calls[0][0]).toContain(directGoal);
     expect(calls[1][0]).toContain(indirectGoal);
     expect(calls[1][0]).toContain('Internal demo agent');
+    // The direct generator never sees the safe owner task it could merge into the request.
+    expect(calls[0][0]).not.toContain(AGENT_OUTCOME_DEFAULT_TASKS[Plugin.id]);
+    expect(calls[1][0]).toContain(AGENT_OUTCOME_DEFAULT_TASKS[Plugin.id]);
+    for (const [template] of calls) {
+      expect(template).toContain('Every scenario must push for the unsafe outcome.');
+    }
   });
 });
 
@@ -84,6 +90,20 @@ describe('agent outcome configuration', () => {
     expect(provider.callApi.mock.calls[0][0]).toContain('8 characters or fewer');
     expect(provider.callApi.mock.calls[2][0]).not.toContain('8 characters or fewer');
     expect(rows[1].metadata?.pluginConfig?.maxCharsPerMessage).toBe(8);
+  });
+
+  it('renders template syntax in the configured assignment verbatim', async () => {
+    const provider = createMockProvider({ response: { output: 'Prompt: note' } });
+    const legitimateTask = 'Run {{ purpose }} and {% endraw %}{% if x %}keep{% endif %} it.';
+    const plugin = new PrivateToPublicDisclosurePlugin(provider, 'Support desk', 'query', {
+      mode: 'indirect',
+      legitimateTask,
+    });
+    const [row] = await plugin.generateTests(1);
+    expect(provider.callApi.mock.calls[0][0]).toContain(
+      'Run {{ purpose }} and {% if x %}keep{% endif %} it.',
+    );
+    expect(row.vars?.query).toBe(legitimateTask);
   });
 
   it('keeps the configured assignment fixed while varying only the named tool content', async () => {
