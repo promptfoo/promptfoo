@@ -36,6 +36,36 @@ import type {
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
 
+export type GeneratedPrompt = {
+  /** Multi-input prompts contain a JSON-encoded object. */
+  __prompt: string;
+  metadata?: Record<string, unknown>;
+};
+
+function checkPromptLengths(parsed: GeneratedPrompt[], config: PluginConfig) {
+  const prompts: GeneratedPrompt[] = [];
+  let longest: ReturnType<typeof getGeneratedPromptOverLimit>;
+  for (const prompt of parsed) {
+    // TODO(ian): Check individual field values in multi-input prompts, whose keys and
+    // braces currently count toward the limit.
+    const violation = getGeneratedPromptOverLimit(prompt.__prompt, config.maxCharsPerMessage);
+    if (!violation) {
+      prompts.push(prompt);
+    } else if (!longest || violation.length > longest.length) {
+      longest = violation;
+    }
+  }
+  const rejected = parsed.length - prompts.length;
+  const retry = longest
+    ? dedent`
+        Your previous response included ${rejected} generated prompt${rejected === 1 ? '' : 's'} that exceeded the ${longest.limit}-character limit.
+        The longest rejected prompt was ${longest.length} characters.
+        Generate replacement prompts only, and keep every user message within the character limit.
+      `.trim()
+    : undefined;
+  return { prompts, retry };
+}
+
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
@@ -107,50 +137,45 @@ export abstract class RedteamPluginBase {
   async generateTests(
     n: number,
     delayMs: number = 0,
-    templateGetter: () => Promise<string> = this.getTemplate.bind(this),
+    templateGetter?: () => Promise<string>,
   ): Promise<TestCase[]> {
-    logger.debug(`Generating ${n} test cases`);
+    const prompts = await RedteamPluginBase.generatePrompts(this, n, delayMs, templateGetter);
+    return this.promptsToTestCases(prompts);
+  }
+
+  /** Generate a batch for a plugin without invoking any instance helper of the same name. */
+  protected static async generatePrompts(
+    plugin: RedteamPluginBase,
+    n: number,
+    delayMs: number = 0,
+    templateGetter: () => Promise<string> = () => plugin.getTemplate(),
+  ): Promise<GeneratedPrompt[]> {
+    const { provider, purpose, config } = plugin;
     const batchSize = 20;
+    const hasMultipleInputs = !!config.inputs && Object.keys(config.inputs).length > 0;
 
-    // Check if we're using multi-input mode
-    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
-
-    if (hasMultipleInputs) {
-      logger.debug(
-        `Using multi-input mode with inputs: ${Object.keys(this.config.inputs!).join(', ')}`,
-      );
-    }
-
-    /**
-     * Generates a batch of prompts/test cases using the API provider.
-     * In single-input mode, returns { __prompt: string }[]
-     * In multi-input mode, returns Record<string, string>[]
-     */
     let retryInstructions: string | undefined;
-    // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
-    const generatePrompts = async (
-      currentPrompts: { __prompt: string }[] | Record<string, string>[],
-    ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
+    const generateBatch = async (currentPrompts: GeneratedPrompt[]) => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
 
       logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
       const renderedTemplate = nunjucks.renderString(await templateGetter(), {
-        purpose: this.purpose,
+        purpose,
         n: currentBatchSize,
-        examples: this.config.examples,
-        outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
-        hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
+        examples: config.examples,
+        outputFormat: RedteamPluginBase.getOutputFormatInstruction(config),
+        hasCustomOutputFormat: hasMultipleInputs,
       });
 
       const finalTemplate = [
-        RedteamPluginBase.appendModifiers(renderedTemplate, this.config),
+        RedteamPluginBase.appendModifiers(renderedTemplate, config),
         retryInstructions,
       ]
         .filter(Boolean)
         .join('\n\n');
-      const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
+      const { output: generatedPrompts, error } = await provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
         await sleep(delayMs);
@@ -158,7 +183,7 @@ export abstract class RedteamPluginBase {
 
       if (error) {
         logger.error(
-          `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
+          `Error from API provider, skipping generation for ${plugin.constructor.name}: ${error}`,
         );
         return [];
       }
@@ -170,79 +195,38 @@ export abstract class RedteamPluginBase {
         return [];
       }
 
-      // Handle inference refusals. Result is thrown rather than returning an empty array in order to
-      // catch and show a explanatory error message.
-      // Skip the refusal check if the output contains valid prompt markers (e.g., "Prompt:", "PromptBlock:", "<Prompt>"),
-      // since generated test prompts may contain refusal-like language (e.g., "as an AI") as part of their content.
+      // Parsed tests may themselves contain refusal language.
       const hasValidPromptMarkers =
         /prompt\s*:/i.test(generatedPrompts) ||
         generatedPrompts.includes('PromptBlock:') ||
         /<Prompt>/i.test(generatedPrompts);
       if (!hasValidPromptMarkers && isBasicRefusal(generatedPrompts)) {
-        let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
-        // We don't know exactly why the prompt was refused, but we can provide hints to the user based on the values which were
-        // included in the context window during inference.
-        const context: Record<string, string> = {};
-        if (this.purpose) {
-          context.purpose = this.purpose;
+        let message = `${provider.id()} returned a refusal during inference for ${plugin.constructor.name} test case generation.`;
+        if (purpose || config.examples?.length) {
+          const context = {
+            purpose: purpose || undefined,
+            examples: config.examples?.length ? config.examples.join(', ') : undefined,
+          };
+          message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
         }
-        if (this.config.examples) {
-          context.examples = this.config.examples.join(', ');
-        }
-
-        message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
-
         throw new Error(message);
       }
 
-      // Use formatter to parse output
-      const formatter = getPromptOutputFormatter(this.config);
-      const parsedPrompts = formatter.parse(generatedPrompts, this.config);
-      const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
-      const rejectedPromptLengths: number[] = [];
-      let rejectedPromptLimit: number | undefined;
-
-      for (const prompt of parsedPrompts) {
-        const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
-        // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
-        // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
-        const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
-        if (violation) {
-          rejectedPromptLengths.push(violation.length);
-          rejectedPromptLimit = violation.limit;
-        } else {
-          acceptedPrompts.push(prompt);
-        }
-      }
-
-      if (rejectedPromptLengths.length > 0) {
-        retryInstructions = dedent`
-          Your previous response included ${rejectedPromptLengths.length} generated prompt${
-            rejectedPromptLengths.length === 1 ? '' : 's'
-          } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
-          Generate replacement prompts only, and keep every user message within the character limit.
-        `.trim();
-      } else {
-        retryInstructions = undefined;
-      }
-
-      return acceptedPrompts as { __prompt: string }[] | Record<string, string>[];
+      const parsed = getPromptOutputFormatter(config).parse(generatedPrompts, config);
+      const { prompts, retry } = checkPromptLengths(parsed, config);
+      retryInstructions = retry;
+      return prompts;
     };
-    // biome-ignore-end lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
 
-    const allPrompts = await retryWithDeduplication(
-      generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
-      n,
-    );
+    const allPrompts = await retryWithDeduplication(generateBatch, n);
     const prompts = sampleArray(allPrompts, n);
-    logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
+    logger.debug(`${plugin.constructor.name} generated test cases from ${prompts.length} prompts`);
 
     if (prompts.length !== n) {
-      logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
+      logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${plugin.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts as { __prompt: string }[]);
+    return prompts;
   }
 
   /**
@@ -253,7 +237,7 @@ export abstract class RedteamPluginBase {
    * @param prompts - An array of { __prompt: string } objects.
    * @returns An array of test cases.
    */
-  protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {
+  protected async promptsToTestCases(prompts: GeneratedPrompt[]): Promise<TestCase[]> {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
     return Promise.all(
@@ -284,6 +268,7 @@ export abstract class RedteamPluginBase {
             vars,
             assert: this.getAssertions(promptObj.__prompt),
             metadata: {
+              ...promptObj.metadata,
               pluginId: getShortPluginId(this.id),
               pluginConfig: this.config,
               ...(materializedInputVars?.metadata

@@ -77,6 +77,28 @@ describe('RedteamPluginBase', () => {
     vi.clearAllMocks();
   });
 
+  it('reuses generation without dispatching to existing subclass helpers', async () => {
+    class CustomPlugin extends TestPlugin {
+      generatePrompts() {
+        return ['legacy'];
+      }
+
+      async withSource() {
+        const [prompt] = await RedteamPluginBase.generatePrompts(this, 1);
+        return this.promptsToTestCases([
+          { ...prompt, metadata: { source: 'custom', pluginId: 'other', pluginConfig: null } },
+        ]);
+      }
+    }
+    const custom = new CustomPlugin(provider, 'test purpose', 'testVar');
+    expect(await custom.generateTests(1)).toMatchObject([
+      { vars: { testVar: expect.stringContaining('prompt') } },
+    ]);
+    expect(await custom.withSource()).toMatchObject([
+      { metadata: { source: 'custom', pluginId: custom.id, pluginConfig: {} } },
+    ]);
+  });
+
   it('should generate test cases correctly', async () => {
     expect.assertions(3);
     const tests = await plugin.generateTests(2);
@@ -273,7 +295,9 @@ describe('RedteamPluginBase', () => {
     );
     expect(provider.callApi).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('The longest rejected prompt was 20 characters.'),
+      expect.stringMatching(
+        /10-character limit\.\s+The longest rejected prompt was 20 characters\./,
+      ),
     );
     expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
       language: 'German',
@@ -335,12 +359,23 @@ describe('RedteamPluginBase', () => {
       expect(result.length).toBeGreaterThan(0);
     });
 
+    it.each([{}, { examples: [] }])('omits empty refusal context with %o', async (config) => {
+      provider.callApi.mockResolvedValue({ output: "I'm sorry, but I cannot help with that." });
+      const empty = new TestPlugin(provider, '', 'testVar', config);
+      await expect(empty.generateTests(1)).rejects.toThrow(/returned a refusal.*generation\.$/);
+    });
+
     it('should still throw refusal error when output is a genuine refusal without prompt markers', async () => {
       vi.spyOn(provider, 'callApi').mockResolvedValue({
         output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
       });
 
-      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+      const configured = new TestPlugin(provider, 'test purpose', 'testVar', {
+        examples: ['example'],
+      });
+      await expect(configured.generateTests(1)).rejects.toThrow(
+        '{"purpose":"test purpose","examples":"example"}',
+      );
     });
 
     it('should still throw refusal error for "as a language model" without prompt markers', async () => {

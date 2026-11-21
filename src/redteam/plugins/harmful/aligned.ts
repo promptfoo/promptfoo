@@ -2,7 +2,7 @@ import logger from '../../../logger';
 import invariant from '../../../util/invariant';
 import { HARM_PLUGINS } from '../../constants';
 import { extractMaterializedVariablesFromJsonWithMetadata, getShortPluginId } from '../../util';
-import { RedteamPluginBase } from '../base';
+import { type GeneratedPrompt, RedteamPluginBase } from '../base';
 import { getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
@@ -39,7 +39,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return getHarmfulAssertions(this.harmCategory);
   }
 
-  protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {
+  protected async promptsToTestCases(prompts: GeneratedPrompt[]): Promise<TestCase[]> {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
     const harmCategoryLabel = HARM_PLUGINS[this.harmCategory] || this.harmCategory;
     const pluginId = getShortPluginId(this.harmCategory);
@@ -47,7 +47,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return Promise.all(
       [...prompts]
         .sort((a, b) => a.__prompt.localeCompare(b.__prompt))
-        .map(async ({ __prompt }, materializationIndex) => {
+        .map(async ({ __prompt, metadata }, materializationIndex) => {
           // Base vars with the primary injectVar
           const vars: Record<string, string> = {
             [this.injectVar]: __prompt,
@@ -91,6 +91,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
           return {
             vars,
             metadata: {
+              ...metadata,
               harmCategory: harmCategoryLabel,
               pluginId,
               pluginConfig: this.config,
