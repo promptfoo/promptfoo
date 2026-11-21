@@ -1073,23 +1073,35 @@ describe('invocation-scoped cache settings', () => {
     },
   );
 
-  it('discards a provider cache lookup that completes after its generation is cleared', async () => {
-    await cliState.withEnv(memory, async () => {
-      const selected = cache.getCache();
-      const context = cache.getCacheWriteContext();
-      const lookup = createDeferred<string>();
-      const entered = createDeferred<void>();
-      vi.spyOn(selected, 'get').mockImplementationOnce(() => {
-        entered.resolve();
-        return lookup.promise;
+  it.each(['provider', 'fetch'])(
+    'discards a %s lookup after its generation is cleared',
+    async (kind) => {
+      await cliState.withEnv(memory, async () => {
+        const selected = cache.getCache();
+        const context = cache.getCacheWriteContext();
+        const lookup = createDeferred<string>();
+        const entered = createDeferred<void>();
+        vi.spyOn(selected, 'get').mockImplementationOnce(() => {
+          entered.resolve();
+          return lookup.promise;
+        });
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(Response.json('fresh'));
+        const reading =
+          kind === 'provider'
+            ? context.get('key')
+            : cache.fetchWithCache('https://cache-fixture.invalid/clear');
+        await entered.promise;
+        await selected.clear();
+        lookup.resolve(JSON.stringify({ data: 'old' }));
+        if (kind === 'provider') {
+          expect(await reading).toBeUndefined();
+        } else {
+          expect(await reading).toMatchObject({ cached: false, data: 'fresh' });
+          expect(fetchWithRetries).toHaveBeenCalledOnce();
+        }
       });
-      const reading = context.get('key');
-      await entered.promise;
-      await selected.clear();
-      lookup.resolve('old');
-      expect(await reading).toBeUndefined();
-    });
-  });
+    },
+  );
 
   it('cancels a provider read waiting for a clear without cancelling the clear', async () => {
     await cliState.withEnv(memory, async () => {

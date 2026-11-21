@@ -1316,7 +1316,7 @@ export async function fetchWithCache<T = unknown>(
     signal,
   );
   throwIfAborted(signal);
-  if (cachedResponse != null) {
+  if (cachedResponse != null && generationState.clearGeneration === clearGeneration) {
     const result = deserializeFetchResponse<T>(
       cachedResponse,
       true,

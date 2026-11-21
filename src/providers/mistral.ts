@@ -623,6 +623,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       : undefined;
     const params = buildMistralChatParams(this.modelName, messages, config, loadedTools);
 
+    const cacheContext = getCacheWriteContext();
     const cacheKey = getMistralCacheKey('chat', this.modelName, apiUrl, apiKey, params);
     if (isCacheEnabled()) {
       const cachedResult = await cacheContext.get<ProviderResponse>(cacheKey);
@@ -649,23 +650,27 @@ export class MistralChatCompletionProvider implements ApiProvider {
       cached = false;
 
     try {
-      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, clearGeneration, async () => {
-        return (await fetchWithCache(
-          url,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-promptfoo-silent': 'true',
-              Authorization: `Bearer ${apiKey}`,
+      ({ data, cached } = await fetchMistralWithDedupe(
+        cacheKey,
+        cacheContext.generation,
+        async () => {
+          return (await fetchWithCache(
+            url,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-promptfoo-silent': 'true',
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(params),
             },
-            body: JSON.stringify(params),
-          },
-          getRequestTimeoutMs(),
-          'json',
-          true,
-        )) as unknown as MistralFetchResult;
-      }));
+            getRequestTimeoutMs(),
+            'json',
+            true,
+          )) as unknown as MistralFetchResult;
+        },
+      ));
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -810,6 +815,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     const apiUrl = this.getApiUrl();
     const url = `${apiUrl}/embeddings`;
+    const cacheContext = getCacheWriteContext();
     const cacheKey = getMistralCacheKey('embedding', this.modelName, apiUrl, apiKey, body);
 
     let data;
@@ -843,7 +849,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       try {
         ({ data, cached, status, statusText } = await fetchMistralWithDedupe(
           cacheKey,
-          clearGeneration,
+          cacheContext.generation,
           async () => {
             return (await fetchWithCache(
               url,
