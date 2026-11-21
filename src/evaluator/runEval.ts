@@ -12,7 +12,7 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
-import { getSessionId } from '../redteam/util';
+import { getSessionId, needsFreshTargetResponse } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
   withProviderCallExecutionContext,
@@ -501,7 +501,7 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
+      const request = {
         abortSignal,
         pauseSignal,
         evalId,
@@ -519,7 +519,10 @@ async function callProviderForRunEval({
         testSuite,
         traceContext,
         vars,
-      });
+      };
+      response = await withCacheEnabled(needsFreshTargetResponse(test) ? false : undefined, () =>
+        callActiveProvider(request),
+      );
     }
 
     sanitizeResponseMetadata(response);
