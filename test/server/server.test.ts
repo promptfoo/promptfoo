@@ -60,7 +60,7 @@ vi.mock('../../src/server/services/promptCacheService', () => ({
 
 import { readSignalFile, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
-import Eval from '../../src/models/eval';
+import Eval, { getEvalSummaries } from '../../src/models/eval';
 import {
   invalidateEvaluationCache,
   invalidateEvaluationCaches,
@@ -791,6 +791,10 @@ describe('server', () => {
         const serverClosed = new Promise<void>((resolve) => server.once('close', resolve));
         const clients: ReturnType<typeof createSocketIoClient>[] = [];
         let shutdownStarted = false;
+        let resume!: () => void;
+        const released = new Promise<void>((resolve) => {
+          resume = resolve;
+        });
         try {
           await vi.waitFor(() => expect(server.listening).toBe(true));
           const address = server.address() as { port: number };
@@ -805,6 +809,21 @@ describe('server', () => {
               client.once('connect_error', reject);
             });
           }
+          vi.mocked(getEvalSummaries)
+            .mockClear()
+            .mockImplementationOnce(async () => {
+              await released;
+              return [];
+            });
+          const status = new Promise<number | undefined>((resolve) => {
+            http
+              .get(`http://127.0.0.1:${address.port}/api/results`, { agent: false }, (response) => {
+                response.resume();
+                resolve(response.statusCode);
+              })
+              .on('error', () => resolve(undefined));
+          });
+          await vi.waitFor(() => expect(getEvalSummaries).toHaveBeenCalledOnce());
           shutdownStarted = true;
           triggerSignal('SIGTERM');
           await vi.waitFor(() =>
@@ -813,6 +832,8 @@ describe('server', () => {
               'closed',
             ]),
           );
+          resume();
+          expect(await status).toBe(200);
           await serverClosed;
           expect(closingIo?.engine.clientsCount).toBe(0);
           if (failurePoint === 'normal') {
@@ -826,6 +847,7 @@ describe('server', () => {
             });
           }
         } finally {
+          resume();
           clients.forEach((client) => client.disconnect());
           if (!shutdownStarted) {
             triggerSignal('SIGTERM');

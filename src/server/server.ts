@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import type { Socket } from 'node:net';
+import type { Duplex } from 'node:stream';
 
 import compression from 'compression';
 import cors from 'cors';
@@ -373,10 +373,10 @@ export async function startServer(
   const app = createApp();
 
   const httpServer = http.createServer(app);
-  const connections = new Set<Socket>();
-  httpServer.on('connection', (socket) => {
-    connections.add(socket);
-    socket.once('close', () => connections.delete(socket));
+  const upgraded = new Set<Duplex>();
+  httpServer.on('upgrade', (_req, socket) => {
+    upgraded.add(socket);
+    socket.once('close', () => upgraded.delete(socket));
   });
   const io = new SocketIOServer(httpServer, {
     cors: {
@@ -521,7 +521,7 @@ export async function startServer(
         closeError = Object.assign(new Error('Socket.IO shutdown failed', { cause: error }), {
           code: 'ESHUTDOWN',
         });
-        for (const socket of connections) {
+        for (const socket of upgraded) {
           socket.destroy();
         }
         closeHttpServer();
