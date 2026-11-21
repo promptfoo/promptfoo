@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { builtinModules } from 'node:module';
+import { isBuiltin } from 'node:module';
 import path from 'node:path';
 
 import { escape as escapeGlob, globSync } from 'glob';
@@ -57,10 +57,6 @@ const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.mjs': ['.mts', '.d.mts'],
   '.cjs': ['.cts', '.d.cts'],
 };
-const BUILTIN_MODULES = new Set(
-  builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
-);
-
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
 }
@@ -74,6 +70,13 @@ function normalizeSourceRoot(repoRoot: string, root: unknown): string {
   const relative = normalizePath(path.relative(repoRoot, path.resolve(repoRoot, root)));
   if (!relative || relative === '..' || relative.startsWith('../')) {
     throw new Error(`Architecture root "${root}" must be inside the repository.`);
+  }
+  let current = repoRoot;
+  for (const segment of relative.split('/').filter(Boolean)) {
+    current = path.join(current, segment);
+    if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error(`Architecture root "${root}" must not traverse a symbolic link.`);
+    }
   }
   return relative;
 }
@@ -476,6 +479,9 @@ export function resolveInternalModule(
   aliases: Record<string, string> = {},
   additionalRoots: string[] = [],
 ): string | undefined {
+  if (isBuiltin(specifier)) {
+    return undefined;
+  }
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
     .find((alias) => specifier === alias || specifier.startsWith(`${alias}/`));
@@ -547,8 +553,7 @@ export function getExternalModuleName(specifier: string): string | undefined {
 
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
-  const moduleName = getExternalModuleName(specifier);
-  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  return isBuiltin(specifier) ? undefined : getExternalModuleName(specifier);
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';

@@ -130,9 +130,29 @@ export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): strin
       }
       visited.add(referencedConfigPath);
       const referencedConfig = readProjectConfig(referencedConfigPath, repositoryRoot);
-      const projectPrefix = `${normalizePath(
+      const projectDir = normalizePath(
         path.relative(repositoryRoot, path.dirname(referencedConfigPath)),
-      )}/`;
+      );
+      if (!projectDir) {
+        // Root-level referenced configs can cover product files. A closer
+        // referenced project still takes precedence over this fallback.
+        for (const file of getProjectFiles(
+          referencedConfig,
+          referencedConfigPath,
+          repositoryRoot,
+        )) {
+          if (
+            file.startsWith('packages/') ||
+            (!hasPrefix(file, rootOwnedPrefixes) &&
+              configuredRoots.some((root) => root === file || file.startsWith(`${root}/`)))
+          ) {
+            projectFiles.add(file);
+          }
+        }
+        visitReferences(referencedConfig, referencedConfigPath);
+        continue;
+      }
+      const projectPrefix = `${projectDir}/`;
 
       // Referenced product projects own only files beneath their own directory.
       // Standard source and tooling directories keep the root compiler requirement.
