@@ -559,6 +559,20 @@ describe('sanitizeConfigForOutput', () => {
     expect(config.tests[0].metadata.note).toBe('remove me');
   });
 
+  it('keeps all variables literal if sanitization rewrites imported names', () => {
+    const name = 'color'.repeat(14);
+    const test = {
+      vars: { [name]: 'file://data.txt' },
+      metadata: { __promptfoo: { remote: true, remoteVars: [name] } },
+    };
+    const saved = { ...test, metadata: { __promptfoo: { remote: true } } };
+    expect(sanitizeObject(test)).toEqual(saved);
+    expect(sanitizeConfigForOutput({ tests: [test] }, { shouldStripMetadata: true }).tests).toEqual(
+      [saved],
+    );
+    expect(test.metadata.__promptfoo.remoteVars).toEqual([name]);
+  });
+
   it.each([true, false])(
     'preserves output-redaction state across repeated exports (metadata stripping: %s)',
     (stripMetadata) => {

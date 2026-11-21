@@ -1450,6 +1450,11 @@ function sanitizePlainObject(
           : sanitizedValue;
     }
   }
+  // If a name changed, the list can no longer identify the imported keys. Keep all vars literal.
+  const origin = sanitized.__promptfoo;
+  if (origin?.remote === true && !deepEqual(obj.__promptfoo?.remoteVars, origin.remoteVars)) {
+    delete origin.remoteVars;
+  }
   return sanitized;
 }
 
