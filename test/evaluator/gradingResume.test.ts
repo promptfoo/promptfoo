@@ -15,7 +15,7 @@ import {
 } from '../../src/models/evalResult';
 import { ResultFailureReason } from '../../src/types/index';
 import { createDeferred } from '../util/utils';
-import { toPrompt } from './helpers';
+import { toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/index';
@@ -51,7 +51,7 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
   ])(
     'retries grading without repeating the target, pass=$pass repeated=$interruptAgain termination=$termination concurrency=$concurrency initial=$initialTermination',
     async ({ pass, interruptAgain, termination, concurrency, initialTermination = 'pause' }) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const runAssertions = vi.spyOn(assertions, 'runAssertions');
       const controller = new AbortController();
       const started = createDeferred<void>();
@@ -150,12 +150,16 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
         if (interruptAgain) {
           const retryController = new AbortController();
           const retryRecord = await Eval.findById(record.id);
-          const retry = evaluate(suite, retryRecord!, {
-            abortSignal: retryController.signal,
-            maxConcurrency: 1,
-            timeoutMs: termination === 'step timeout' ? 10 : 0,
-            maxEvalTimeMs: termination === 'deadline' ? 10 : 0,
-          });
+          const retry = cliState.withEnv(
+            { PROMPTFOO_STRIP_GRADING_RESULT: 'true', PROMPTFOO_STRIP_METADATA: 'true' },
+            () =>
+              evaluate(suite, retryRecord!, {
+                abortSignal: retryController.signal,
+                maxConcurrency: 1,
+                timeoutMs: termination === 'step timeout' ? 10 : 0,
+                maxEvalTimeMs: termination === 'deadline' ? 10 : 0,
+              }),
+          );
           await vi.advanceTimersByTimeAsync(1);
           await retryStarted.promise;
           if (termination === 'pause') {

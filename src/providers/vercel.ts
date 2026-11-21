@@ -2,14 +2,15 @@ import { createHmac } from 'crypto';
 
 import { context as otelContext, trace } from '@opentelemetry/api';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
-import { extractTraceparentContext, getOtelTracer } from '../tracing/otelSdk';
+import { extractTraceparentContext, getOtelTracer } from '../tracing/otelContext';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
-import type { LanguageModelUsage } from 'ai';
+import type { LanguageModelUsage, ProviderMetadata } from 'ai';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -22,6 +23,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
  * Message format for chat completions.
@@ -47,6 +49,12 @@ export interface VercelAiConfig {
   frequencyPenalty?: number;
   presencePenalty?: number;
   stopSequences?: string[];
+  providerOptions?: {
+    openai?: {
+      reasoningEffort?: OpenAiCompletionOptions['reasoning_effort'];
+      serviceTier?: NonNullable<OpenAiCompletionOptions['service_tier']>;
+    };
+  };
 
   // Request settings
   maxRetries?: number;
@@ -75,10 +83,12 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
   if (config.apiKey) {
     return config.apiKey;
   }
+  // Check the registered fallback alias before retained suite values in default lookup.
   const apiKey = config.apiKeyEnvar
-    ? ((env?.[config.apiKeyEnvar as keyof EnvOverrides] as string | undefined) ??
-      getEnvString(config.apiKeyEnvar))
-    : ((env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
+    ? (getProviderEnvString(env, config.apiKeyEnvar) ?? getEnvString(config.apiKeyEnvar))
+    : (getProviderEnvString(getExplicitProviderEnv(env), 'VERCEL_AI_GATEWAY_API_KEY') ??
+      getEnvOverrides('provider')?.AI_GATEWAY_API_KEY ??
+      getProviderEnvString(env, 'VERCEL_AI_GATEWAY_API_KEY') ??
       getEnvString('VERCEL_AI_GATEWAY_API_KEY'));
   return apiKey ?? getEnvString('AI_GATEWAY_API_KEY');
 }
@@ -89,7 +99,7 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
 function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | undefined {
   return (
     config.baseUrl ??
-    (env?.VERCEL_AI_GATEWAY_BASE_URL as string | undefined) ??
+    getProviderEnvString(env, 'VERCEL_AI_GATEWAY_BASE_URL') ??
     getEnvString('VERCEL_AI_GATEWAY_BASE_URL')
   );
 }
@@ -115,6 +125,15 @@ function mapTokenUsage(
     total: usage?.totalTokens ?? (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),
     numRequests: 1,
   };
+}
+
+function getGatewayCost(metadata: ProviderMetadata | undefined): number | undefined {
+  const value = metadata?.gateway?.cost;
+  const cost =
+    typeof value === 'string' && /^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)
+      ? Number(value)
+      : value;
+  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
 }
 
 /** Normalize fresh and cached responses to the same provider contract. */
@@ -165,9 +184,16 @@ function withSdkTraceContext<T>(context: CallApiContextParams | undefined, fn: (
   return otelContext.with(parentContext, fn);
 }
 
-/**
- * Picks defined generation options from config.
- */
+// Only these OpenAI options are forwarded and included in the generation cache key.
+function getSdkProviderOptions(config: VercelAiConfig) {
+  const { reasoningEffort, serviceTier } = config.providerOptions?.openai ?? {};
+  if (reasoningEffort === undefined && serviceTier === undefined) {
+    return undefined;
+  }
+  return { openai: { reasoningEffort, serviceTier } };
+}
+
+/** Picks defined generation options from config. */
 function pickGenerateOptions(config: VercelAiConfig) {
   const {
     temperature,
@@ -189,6 +215,7 @@ function pickGenerateOptions(config: VercelAiConfig) {
       presencePenalty,
       stopSequences,
       maxRetries,
+      providerOptions: getSdkProviderOptions(config),
     }).filter(([, v]) => v !== undefined),
   );
 }
@@ -307,6 +334,7 @@ export class VercelAiProvider implements ApiProvider {
           stopSequences: config.stopSequences,
           streaming: config.streaming,
           responseSchema: config.responseSchema,
+          providerOptions: getSdkProviderOptions(config),
         },
       }),
     )}`;
@@ -355,7 +383,11 @@ export class VercelAiProvider implements ApiProvider {
       if (streamError) {
         throw streamError.error;
       }
-      const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
+      const [usage, finishReason, providerMetadata] = await Promise.all([
+        result.usage,
+        result.finishReason,
+        result.providerMetadata,
+      ]);
       signal.throwIfAborted();
 
       logger.debug('Vercel AI Gateway streaming response received', {
@@ -366,6 +398,7 @@ export class VercelAiProvider implements ApiProvider {
 
       return {
         output,
+        cost: getGatewayCost(providerMetadata),
         tokenUsage: mapTokenUsage(usage),
         finishReason,
       };
@@ -470,6 +503,10 @@ export class VercelAiProvider implements ApiProvider {
         abortSignal: signal,
         ...(config.responseSchema
           ? {
+              // The SDK reports billing before parsing structured output, which can still fail.
+              onFinish: ({ providerMetadata }) => {
+                response.cost = getGatewayCost(providerMetadata);
+              },
               output: Output.object({
                 schema: jsonSchema<Record<string, unknown>>({
                   ...config.responseSchema,
@@ -491,6 +528,7 @@ export class VercelAiProvider implements ApiProvider {
 
       // Reading structured output can throw even though the SDK returned usage and a finish reason.
       response = {
+        cost: getGatewayCost(result.providerMetadata),
         tokenUsage: mapTokenUsage(result.usage),
         finishReason: result.finishReason,
       };
@@ -501,6 +539,7 @@ export class VercelAiProvider implements ApiProvider {
       }
       if (sdk?.NoObjectGeneratedError.isInstance(error)) {
         response = {
+          ...response,
           tokenUsage: error.usage ? mapTokenUsage(error.usage) : undefined,
           finishReason: error.finishReason,
         };
@@ -524,6 +563,8 @@ export class VercelAiProvider implements ApiProvider {
  * Vercel AI Gateway embedding provider.
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   public modelName: string;
   public config: VercelAiConfig;
   public env?: EnvOverrides;
@@ -556,6 +597,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
   async callEmbeddingApi(
     input: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     const config = { ...this.config, apiKey: resolveApiKey(this.config, this.env) };
     const cacheEnabled = isCacheEnabled() && Boolean(config.apiKey);
@@ -582,7 +624,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     }
 
     const timeout = config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout);
+    const { signal, cleanup } = createTimeoutController(timeout, options?.abortSignal);
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
@@ -622,6 +664,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       return response;
     } catch (error) {
       cleanup();
+      options?.abortSignal?.throwIfAborted();
       return handleApiError(error, timeout, 'embedding');
     }
   }

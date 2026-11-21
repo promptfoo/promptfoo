@@ -5,7 +5,7 @@ import {
   DEFAULT_VERTEX_TARGET_ID,
 } from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
-import { getProviderType } from './helpers';
+import { getLocalProviderConfig, getProviderType, isLocalOpenAiProviderType } from './helpers';
 import { getProviderDocumentationUrl } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
@@ -259,6 +259,7 @@ const providerCatalog: ProviderTypeOption[] = [
     description: "Amazon's agent orchestration service",
     tag: 'agents',
     defaultId: 'bedrock-agent:your-agent-id',
+    createConfig: () => ({ agentAliasId: 'your-agent-alias-id' }),
     editor: 'custom',
   },
   {
@@ -285,7 +286,7 @@ const providerCatalog: ProviderTypeOption[] = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-6.1 Sol, GPT-6 Luna and Astra, and GPT-5.6 Terra',
+    description: 'GPT-6.2 Astra and Sol, GPT-6.1 Terra, and GPT-6 Luna',
     tag: 'providers',
     recommended: true,
     defaultId: DEFAULT_OPENAI_TARGET_ID,
@@ -395,7 +396,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Groq',
     description: 'Ultra-fast inference API',
     tag: 'providers',
-    defaultId: 'groq:llama-3.1-70b-versatile',
+    defaultId: 'groq:openai/gpt-oss-120b',
     editor: 'foundation',
   },
   {
@@ -405,6 +406,22 @@ const providerCatalog: ProviderTypeOption[] = [
     tag: 'providers',
     defaultId: 'openrouter:openai/gpt-6-sol',
     editor: 'foundation',
+  },
+  {
+    value: 'litellm',
+    label: 'LiteLLM',
+    description: 'Models configured on your LiteLLM proxy',
+    tag: 'providers',
+    defaultId: 'litellm:openai/gpt-6.2-sol',
+    editor: 'custom',
+  },
+  {
+    value: 'vercel',
+    label: 'Vercel AI Gateway',
+    description: 'OpenAI, Anthropic, and other models through Vercel',
+    tag: 'providers',
+    defaultId: 'vercel:openai/gpt-6.2-sol',
+    editor: 'custom',
   },
   {
     value: 'fireworks',
@@ -419,7 +436,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Together AI',
     description: 'Open-source model inference',
     tag: 'providers',
-    defaultId: 'together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+    defaultId: 'togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo',
     editor: 'custom',
   },
   {
@@ -427,7 +444,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Cerebras',
     description: 'High-speed Llama inference',
     tag: 'providers',
-    defaultId: 'cerebras:llama3.1-70b',
+    defaultId: 'cerebras:gpt-oss-120b',
     editor: 'foundation',
   },
   {
@@ -451,7 +468,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Hugging Face',
     description: 'Inference API for thousands of models',
     tag: 'providers',
-    defaultId: 'huggingface:meta-llama/Meta-Llama-3-70B-Instruct',
+    defaultId: 'huggingface:chat:meta-llama/Meta-Llama-3-70B-Instruct',
     editor: 'custom',
   },
   {
@@ -459,7 +476,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Cloudflare AI',
     description: 'Edge AI inference',
     tag: 'providers',
-    defaultId: 'cloudflare-ai:@cf/meta/llama-3-8b-instruct',
+    defaultId: 'cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     editor: 'custom',
   },
   {
@@ -467,7 +484,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Databricks',
     description: 'Foundation Model APIs',
     tag: 'providers',
-    defaultId: 'databricks:databricks-meta-llama-3-1-70b-instruct',
+    defaultId: 'databricks:databricks-meta-llama-3-3-70b-instruct',
     editor: 'custom',
   },
   {
@@ -483,7 +500,7 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'fal.ai',
     description: 'Image generation models',
     tag: 'providers',
-    defaultId: 'fal:fal-ai/flux/dev',
+    defaultId: 'fal:image:fal-ai/flux/dev',
     editor: 'custom',
   },
   {
@@ -500,7 +517,7 @@ const providerCatalog: ProviderTypeOption[] = [
     description: 'Easy local model runner',
     tag: 'local',
     recommended: true,
-    defaultId: 'ollama:llama3',
+    defaultId: 'ollama:llama3.2:3b',
     editor: 'custom',
   },
   {
@@ -508,7 +525,8 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'vLLM',
     description: 'High-performance inference server',
     tag: 'local',
-    defaultId: 'vllm:http://localhost:8000/v1',
+    defaultId: 'openai:chat:your-served-model-name',
+    createConfig: () => getLocalProviderConfig('vllm')!,
     editor: 'custom',
   },
   {
@@ -516,7 +534,8 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'llama.cpp',
     description: 'Lightweight CPU/GPU inference',
     tag: 'local',
-    defaultId: 'llama.cpp:http://localhost:8080/completion',
+    defaultId: 'llama:local-model',
+    createConfig: () => ({ n_predict: 1024 }),
     editor: 'custom',
   },
   {
@@ -532,7 +551,8 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Llamafile',
     description: 'Single-file executable models',
     tag: 'local',
-    defaultId: 'llamafile:http://localhost:8080/v1/chat/completions',
+    defaultId: 'openai:chat:local-model',
+    createConfig: () => getLocalProviderConfig('llamafile')!,
     editor: 'custom',
   },
   {
@@ -540,7 +560,8 @@ const providerCatalog: ProviderTypeOption[] = [
     label: 'Text Generation WebUI',
     description: 'Gradio-based model interface',
     tag: 'local',
-    defaultId: 'text-generation-webui:http://localhost:5000',
+    defaultId: 'openai:chat:your-served-model-name',
+    createConfig: () => getLocalProviderConfig('text-generation-webui')!,
     editor: 'custom',
   },
 ];
@@ -581,6 +602,16 @@ export const allProviderOptions = providerCatalog
     // Otherwise sort alphabetically
     return a.label.localeCompare(b.label);
   });
+export function isModelProviderId(id: string): boolean {
+  const separator = id.indexOf(':');
+  if (separator < 0 || separator === id.length - 1) {
+    return false;
+  }
+  // Match the provider family so agent and endpoint subtypes keep their full IDs.
+  const family = getProviderType(id.slice(0, separator));
+  return providerCatalog.some((option) => option.tag === 'providers' && option.value === family);
+}
+
 export function getProviderEditorKind(type?: string): ProviderEditorKind | undefined {
   return (
     allProviderOptions.find((option) => option.value === type)?.editor ??
@@ -598,11 +629,20 @@ export function createDefaultProvider(type: string, label?: string): ProviderOpt
 }
 
 // UI inference is separate from the provider-family classification used for draft recovery.
-export function getProviderEditorType(id?: string): string | undefined {
+export function getProviderEditorType(
+  id?: string,
+  config?: Record<string, unknown>,
+): string | undefined {
   if (!id || typeof id !== 'string') {
     return undefined;
   }
-  const template = allProviderOptions.find((option) => option.defaultId === id);
+  const family = getProviderType(id, config);
+  if (isLocalOpenAiProviderType(family) || family === 'custom') {
+    return family;
+  }
+  const template = allProviderOptions.find(
+    (option) => option.defaultId === id && !isLocalOpenAiProviderType(option.value),
+  );
   if (template) {
     return template.value;
   }
@@ -617,11 +657,13 @@ export function getProviderEditorType(id?: string): string | undefined {
   ) {
     return 'claude-agent-sdk';
   }
-  const family = getProviderType(id);
   if (allProviderOptions.some((option) => option.value === family) || family === 'github') {
     return family;
   }
   if (id.startsWith('file://')) {
+    if (/\.(json|ya?ml)$/i.test(id)) {
+      return 'custom';
+    }
     // Retain extensionless legacy framework paths; ordinary Python/JS/Go files use their language editor.
     return (
       allProviderOptions.find(

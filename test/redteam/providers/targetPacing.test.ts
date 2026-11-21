@@ -17,7 +17,7 @@ import type {
 
 describe('delegated target pacing', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(0);
   });
   afterEach(() => {
@@ -198,7 +198,7 @@ describe('delegated target pacing', () => {
   });
 
   it.each(['options', 'execution context'])(
-    'propagates %s cancellation during the post-response wait',
+    'keeps the response when %s cancellation interrupts pacing',
     async (source) => {
       const controller = new AbortController();
       const provider: ApiProvider = {
@@ -212,11 +212,10 @@ describe('delegated target pacing', () => {
           : withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
               getTargetResponse(provider, 'hello'),
             );
-      const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
       await vi.advanceTimersByTimeAsync(0);
       expect(provider.callApi).toHaveBeenCalledTimes(1);
       controller.abort();
-      await rejected;
+      await expect(result).resolves.toMatchObject({ output: 'ok' });
       expect(vi.getTimerCount()).toBe(0);
     },
   );

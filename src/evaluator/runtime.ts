@@ -66,6 +66,7 @@ export interface EvaluationStore<
     savedTest: AtomicTestCase,
     currentTest: AtomicTestCase,
     resolveGradingProvider: GradingProviderResolver,
+    result?: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>,
   ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;
@@ -73,7 +74,7 @@ export interface EvaluationStore<
   saveResult(result: TResult): Promise<void>;
   setDurationMs(durationMs: number): void;
   setVars(vars: string[]): void;
-  toEvaluateResult(result: TResult | EvaluateResult): EvaluateResult;
+  toEvaluateResult(result: TResult | EvaluateResult, forGrading?: boolean): EvaluateResult;
 }
 
 export interface EvaluatorResultWriter {

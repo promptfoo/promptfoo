@@ -130,6 +130,14 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiKey()).toBe('custom-key');
     });
 
+    it('prefers a provider-scoped custom key over the suite key', () => {
+      mockProcessEnv({ DASHSCOPE_API_KEY: 'suite-key' });
+      const scopedProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiKeyEnvar: 'DASHSCOPE_API_KEY' },
+        env: { DASHSCOPE_API_KEY: 'provider-key' },
+      });
+      expect(scopedProvider.getApiKey()).toBe('provider-key');
+    });
     it.each([undefined, true, false])(
       'respects useDefaultApiKey=%s without changing explicit key priority',
       (useDefaultApiKey) => {

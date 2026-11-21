@@ -1,6 +1,8 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import { getShareAuthorizedBlob } from '../blobs/index';
+import { toSerializableProviderRef } from '../evaluator/resultProcessing';
 import EvalResult, { asEvaluateResult, PROMPTFOO_METADATA_KEY } from '../models/evalResult';
 import { isApiProvider } from '../types/providers';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
@@ -17,12 +19,35 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+// A function name or source text cannot identify a closure. Only the same live
+// function may be reused. Across processes, require a declarative/file assertion.
+const callbacks = new WeakMap<object, string>();
+
+function callbackRef(callback: object): string {
+  let id = callbacks.get(callback);
+  if (!id) {
+    id = `[Function] ${randomUUID()}`;
+    callbacks.set(callback, id);
+  }
+  return id;
+}
+
+function project(value: unknown): unknown {
+  return value == null
+    ? value
+    : JSON.parse(
+        JSON.stringify(
+          sanitizeObject(toSerializableProviderRef(value), {
+            sanitizeUrls: true,
+            maxDepth: Number.POSITIVE_INFINITY,
+            throwOnError: true,
+          }),
+        ),
+      );
+}
+
 function matchesStoredProvider(saved: unknown, current: unknown): boolean {
-  return (
-    isApiProvider(current) &&
-    (saved === `[${current.constructor?.name ?? 'Object'} Instance]` ||
-      isDeepStrictEqual(saved, sanitizeObject(current, { maxDepth: Number.POSITIVE_INFINITY })))
-  );
+  return isApiProvider(current) && isDeepStrictEqual(saved, project(current));
 }
 
 function requireRuntimeGradingFunction(saved: unknown, current: unknown, field: string): void {
@@ -30,11 +55,31 @@ function requireRuntimeGradingFunction(saved: unknown, current: unknown, field: 
     typeof saved === 'string' &&
     saved.startsWith('[Function] ') &&
     saved !== current &&
-    (typeof current !== 'function' || saved !== `[Function] ${current.name}`)
+    (typeof current !== 'function' || callbacks.get(current) !== saved)
   ) {
     throw new Error(
       `Cannot resume assertion grading: runtime function '${field}' is unavailable. ` +
-        'Rerun the test to recreate hook-only callbacks.',
+        'Rerun the test to recreate the original callback.',
+    );
+  }
+}
+
+// A secret from today's config must never be replayed against a saved recipient
+// or destination that has changed. A numeric sampling temperature does not route requests.
+function checkSecretRecipient(saved: unknown, current: unknown) {
+  if (!JSON.stringify(saved)?.includes(REDACTED)) {
+    return;
+  }
+  const comparable = (value: unknown) => {
+    const descriptor = project(value) as { config?: { temperature?: number } } | undefined;
+    if (typeof descriptor?.config?.temperature === 'number') {
+      delete descriptor.config.temperature;
+    }
+    return descriptor;
+  };
+  if (!isDeepStrictEqual(comparable(saved), comparable(current))) {
+    throw new Error(
+      'Cannot resume assertion grading: a redacted input is missing or its recipient changed. Rerun the test.',
     );
   }
 }
@@ -50,7 +95,6 @@ async function resolveStoredGradingProvider(
     !saved ||
     typeof saved !== 'object' ||
     Array.isArray(saved) ||
-    ('id' in saved && typeof saved.id === 'string') ||
     isApiProvider(current) ||
     current == null
   ) {
@@ -69,8 +113,24 @@ async function resolveStoredGradingProvider(
     }
     return resolved;
   }
+  // A loaded file grader may expose an ID different from its import path.
+  // Re-load only a currently configured path, never one supplied by a saved row.
+  const currentId = typeof current === 'string' ? current : (current as { id?: string }).id;
+  if (
+    !('id' in saved) ||
+    typeof saved.id !== 'string' ||
+    saved.id.startsWith('file://') ||
+    !currentId?.startsWith('file://')
+  ) {
+    return current;
+  }
   const resolved = await resolveGradingProvider(current);
-  return matchesStoredProvider(saved, resolved) ? resolved : current;
+  if (!matchesStoredProvider(saved, resolved)) {
+    throw new Error(
+      'Cannot resume assertion grading: the configured provider changed. Rerun the test.',
+    );
+  }
+  return resolved;
 }
 
 async function restoreGradingAssertion(
@@ -95,13 +155,13 @@ function preserveAssertionFunctions(assertion: Assertion): Assertion {
   return {
     ...assertion,
     ...(typeof assertion.value === 'function' && {
-      value: `[Function] ${assertion.value.name}`,
+      value: callbackRef(assertion.value),
     }),
     ...(typeof assertion.transform === 'function' && {
-      transform: `[Function] ${assertion.transform.name}`,
+      transform: callbackRef(assertion.transform),
     }),
     ...(typeof assertion.contextTransform === 'function' && {
-      contextTransform: `[Function] ${assertion.contextTransform.name}`,
+      contextTransform: callbackRef(assertion.contextTransform),
     }),
   };
 }
@@ -117,8 +177,15 @@ function restoreRuntimeGradingValues(saved: unknown, current: unknown): unknown 
     }
     return current;
   }
-  if (typeof current === 'function' && saved === `[Function] ${current.name}`) {
+  if (
+    typeof current === 'function' &&
+    typeof saved === 'string' &&
+    callbacks.get(current) === saved
+  ) {
     return current;
+  }
+  if (isApiProvider(current) && typeof saved === 'string' && saved.endsWith(' Instance]')) {
+    throw new Error('Cannot resume assertion grading: the saved provider identity is unavailable.');
   }
   if (matchesStoredProvider(saved, current)) {
     return current;
@@ -131,6 +198,10 @@ function restoreRuntimeGradingValues(saved: unknown, current: unknown): unknown 
   if (saved && typeof saved === 'object') {
     const runtime =
       current && typeof current === 'object' ? (current as Record<string, unknown>) : {};
+    // Validate the whole credential-bearing provider before recursing into keys.
+    if ('id' in saved || ('config' in saved && !('type' in saved))) {
+      checkSecretRecipient(saved, current);
+    }
     return Object.fromEntries(
       Object.entries(saved).map(([key, value]) => [
         key,
@@ -178,7 +249,7 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
         testCase: {
           ...test,
           ...(typeof test.assertScoringFunction === 'function' && {
-            assertScoringFunction: `[Function] ${test.assertScoringFunction.name}`,
+            assertScoringFunction: callbackRef(test.assertScoringFunction),
           }),
           assert: test.assert?.map((assertion) =>
             assertion.type === 'assert-set'
@@ -223,6 +294,7 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     savedTest: AtomicTestCase,
     currentTest: AtomicTestCase,
     resolveGradingProvider: GradingProviderResolver,
+    result?: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>,
   ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }> {
     requireRuntimeGradingFunction(
       savedTest.assertScoringFunction,
@@ -271,8 +343,20 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     if (!response.audio?.blobRef) {
       return { providerResponse: response, test };
     }
-    const blob = await getShareAuthorizedBlob(response.audio.blobRef.hash, this.id);
-    if (!blob) {
+    if (
+      !result ||
+      !Number.isSafeInteger(result.testIdx) ||
+      !Number.isSafeInteger(result.promptIdx)
+    ) {
+      throw new Error('Cannot grade stored audio without a test and prompt index.');
+    }
+    const { hash } = response.audio.blobRef;
+    const blob = await getShareAuthorizedBlob(hash, this.id, result);
+    if (
+      !blob ||
+      !blob.metadata.mimeType?.startsWith('audio/') ||
+      createHash('sha256').update(blob.data).digest('hex') !== hash
+    ) {
       throw new Error('Stored audio is not available for this evaluation');
     }
     return {
@@ -308,7 +392,18 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     this.evaluation.setVars(vars);
   }
 
-  toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-    return asEvaluateResult(result);
+  toEvaluateResult(result: EvalResult | EvaluateResult, forGrading = false): EvaluateResult {
+    return asEvaluateResult(
+      result,
+      forGrading
+        ? {
+            shouldStripGradingResult: false,
+            shouldStripMetadata: false,
+            shouldStripPromptText: false,
+            shouldStripResponseOutput: false,
+            shouldStripTestVars: false,
+          }
+        : undefined,
+    );
   }
 }

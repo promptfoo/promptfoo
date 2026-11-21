@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createTransformResponse } from '../../../src/providers/a2a/transforms';
+import { createTextParts } from '../../factories/literalFixtures';
 
 describe('A2A createTransformResponse', () => {
   const finalResponse = {
     events: [{ statusUpdate: { status: { state: 'TASK_STATE_COMPLETED' } } }],
-    message: {
-      parts: [{ text: 'hello from message' }],
-      role: 'ROLE_AGENT',
-    },
+    message: createTextParts('hello from message', 'ROLE_AGENT'),
     raw: {
-      message: {
-        parts: [{ text: 'hello from message' }],
-        role: 'ROLE_AGENT',
-      },
+      message: createTextParts('hello from message', 'ROLE_AGENT'),
     },
     task: {
       id: 'task-1',

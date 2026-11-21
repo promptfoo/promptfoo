@@ -14,9 +14,9 @@ import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-ho
 import { ExportResultCode } from '@opentelemetry/core';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
@@ -31,7 +31,7 @@ import {
 } from '../../src/tracing/otelSdk';
 import { withGraderSpan, withTargetSpan } from '../../src/tracing/targetTracer';
 import { createDeferred } from '../util/utils';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
@@ -300,8 +300,8 @@ describe('evaluation-owned OpenTelemetry', () => {
 
   it('retains a real host tracer captured by a disabled evaluation', async () => {
     const hostExporter = new InMemorySpanExporter();
-    const host = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    const host = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
     expect(trace.setGlobalTracerProvider(host)).toBe(true);
     try {
@@ -353,8 +353,8 @@ describe('evaluation-owned OpenTelemetry', () => {
       custom.startSpan('first eval').end();
     });
     const hostExporter = new InMemorySpanExporter();
-    const host = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    const host = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
     expect(trace.setGlobalTracerProvider(host)).toBe(true);
     const globalProvider = trace.getTracerProvider();
@@ -381,14 +381,16 @@ describe('evaluation-owned OpenTelemetry', () => {
     const require = createRequire(import.meta.url);
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-otel-api-'));
     const hostExporter = new InMemorySpanExporter();
-    const host = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    const host = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
     try {
-      const apiRoot = path.resolve(path.dirname(require.resolve('@opentelemetry/api')), '../..');
+      const entry = require.resolve('@opentelemetry/api');
       const copy = path.join(tempDir, 'api');
-      fs.cpSync(apiRoot, copy, { recursive: true });
-      const foreignApi = require(copy) as typeof import('@opentelemetry/api');
+      fs.cpSync(path.dirname(entry), copy, { recursive: true });
+      const foreignApi = require(
+        path.join(copy, path.basename(entry)),
+      ) as typeof import('@opentelemetry/api');
       const custom = trace.getTracer('cached-before-foreign-host');
       await runScoped({}, async () => {
         custom.startSpan('owned first').end();
@@ -510,8 +512,8 @@ describe('evaluation-owned OpenTelemetry', () => {
     'preserves a host tracer, context manager, and custom propagator ($fields)',
     async ({ fields }) => {
       const hostExporter = new InMemorySpanExporter();
-      const host = new NodeTracerProvider({
-        spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+      const host = new TracerProvider({
+        spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
       });
       const manager = new AsyncLocalStorageContextManager().enable();
       const hostKey = createContextKey('host-marker');
@@ -520,7 +522,9 @@ describe('evaluation-owned OpenTelemetry', () => {
         inject: vi.fn(),
         extract: (ctx: typeof import('@opentelemetry/api').ROOT_CONTEXT) => ctx,
       };
-      host.register({ contextManager: manager, propagator: hostPropagator });
+      trace.setGlobalTracerProvider(host);
+      context.setGlobalContextManager(manager);
+      propagation.setGlobalPropagator(hostPropagator);
       const globalProvider = trace.getTracerProvider();
       const disable = vi.spyOn(manager, 'disable');
       const shutdown = vi.spyOn(host, 'shutdown');
@@ -551,45 +555,33 @@ describe('evaluation-owned OpenTelemetry', () => {
     },
   );
 
-  it.each(['SIGINT', 'SIGTERM'] as const)(
-    'clears the owning scope after %s shuts its provider down',
-    async (signal) => {
-      const existingListeners = new Set(process.listeners(signal));
-      await runScoped({}, async () => {
-        const shutdownListener = process
-          .listeners(signal)
-          .find((listener) => !existingListeners.has(listener));
-        expect(shutdownListener).toBeDefined();
-        // Invoke only this module's handler, outside the owning async scope.
-        withOtelContext(() => shutdownListener!(signal));
-        await vi.waitFor(() => expect(isOtelInitialized()).toBe(false));
+  it('flushes on SIGTERM and keeps tracing open until the CLI finishes draining', async () => {
+    const existing = new Set(process.listeners('SIGTERM'));
+    await runScoped({}, async () => {
+      const onSignal = process.listeners('SIGTERM').find((listener) => !existing.has(listener));
+      getOtelTracer('fixture').startSpan('in flight').end();
+      await withOtelContext(() => onSignal!('SIGTERM'));
+      expect(localSpans.map((span) => span.name)).toEqual(['in flight']);
+      expect(isOtelInitialized()).toBe(true);
+      getOtelTracer('fixture').startSpan('settled').end();
+      await withOtelContext(() => shutdownOtel('process'));
+      expect(isOtelInitialized()).toBe(false);
+    });
+    expect(localSpans.map((span) => span.name)).toEqual(['in flight', 'settled']);
+    expect(process.listeners('SIGTERM')).toEqual([...existing]);
+  });
 
-        initializeOtel({ ...config, serviceName: 'replacement' });
-        expect(isOtelInitialized()).toBe(true);
-        getOtelTracer('fixture').startSpan('after handled signal').end();
-      });
-      expect(
-        localSpans.map((span) => [span.name, span.resource.attributes['service.name']]),
-      ).toEqual([['after handled signal', 'replacement']]);
-      expect(process.listeners(signal)).toEqual([...existingListeners]);
-    },
-  );
-
-  it.each([
-    ['SIGINT', false],
-    ['SIGTERM', false],
-    ['SIGINT', true],
-    ['SIGTERM', true],
-  ] as const)(
-    're-arms %s during an earlier shutdown (repeated shutdown=%s)',
-    async (signal, repeatShutdown) => {
+  it.each([false, true])(
+    're-arms SIGINT during an earlier shutdown (repeated shutdown=%s)',
+    async (repeatShutdown) => {
+      const signal = 'SIGINT';
       const existing = new Set(process.rawListeners(signal));
       const pending = createDeferred<void>();
       const stopped = createDeferred<void>();
-      const realShutdown = NodeTracerProvider.prototype.shutdown;
+      const realShutdown = TracerProvider.prototype.shutdown;
       const shutdown = vi
-        .spyOn(NodeTracerProvider.prototype, 'shutdown')
-        .mockImplementationOnce(async function (this: NodeTracerProvider) {
+        .spyOn(TracerProvider.prototype, 'shutdown')
+        .mockImplementationOnce(async function (this: TracerProvider) {
           await pending.promise;
           try {
             await realShutdown.call(this);
@@ -638,10 +630,10 @@ describe('evaluation-owned OpenTelemetry', () => {
   it('re-arms beforeExit when a new provider starts during an earlier flush', async () => {
     const existing = new Set(process.rawListeners('beforeExit'));
     const pending = createDeferred<void>();
-    const realFlush = NodeTracerProvider.prototype.forceFlush;
+    const realFlush = TracerProvider.prototype.forceFlush;
     const flush = vi
-      .spyOn(NodeTracerProvider.prototype, 'forceFlush')
-      .mockImplementationOnce(async function (this: NodeTracerProvider) {
+      .spyOn(TracerProvider.prototype, 'forceFlush')
+      .mockImplementationOnce(async function (this: TracerProvider) {
         await pending.promise;
         await realFlush.call(this);
       });
@@ -691,12 +683,12 @@ describe('evaluation-owned OpenTelemetry', () => {
   });
 
   it('logs flush and shutdown errors while releasing its scope', async () => {
-    vi.spyOn(NodeTracerProvider.prototype, 'forceFlush').mockRejectedValueOnce(
+    vi.spyOn(TracerProvider.prototype, 'forceFlush').mockRejectedValueOnce(
       new Error('flush failed'),
     );
-    const realShutdown = NodeTracerProvider.prototype.shutdown;
-    vi.spyOn(NodeTracerProvider.prototype, 'shutdown').mockImplementationOnce(async function (
-      this: NodeTracerProvider,
+    const realShutdown = TracerProvider.prototype.shutdown;
+    vi.spyOn(TracerProvider.prototype, 'shutdown').mockImplementationOnce(async function (
+      this: TracerProvider,
     ) {
       await realShutdown.call(this);
       throw new Error('shutdown failed');

@@ -13,15 +13,22 @@ import { getProviderDelay } from '../../src/scheduler/providerCallExecutionConte
 import { REDACTED } from '../../src/util/sanitizer';
 import { transform } from '../../src/util/transform';
 import { createDeferred } from '../util/utils';
-import { toPrompt } from './helpers';
+import { toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/index';
 
 describeEvaluator('interrupted grading context', () => {
-  it.each(['value', 'transform', 'contextTransform', 'assertScoringFunction'] as const)(
+  it.each([
+    'value',
+    'transform',
+    'contextTransform',
+    'assertScoringFunction',
+    'same named scorer',
+  ] as const)(
     'reports an unavailable hook-created %s without replaying its target or hook',
-    async (field) => {
+    async (mode) => {
+      const field = mode === 'same named scorer' ? 'assertScoringFunction' : mode;
       const controller = new AbortController();
       const started = createDeferred<void>();
       const pending = createDeferred<ProviderResponse>();
@@ -67,7 +74,16 @@ describeEvaluator('interrupted grading context', () => {
         providers: [target],
         prompts: [toPrompt('hello')],
         extensions: ['file://offline-hook.js'],
-        tests: [{ assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }] }],
+        tests: [
+          {
+            ...(mode === 'same named scorer' && {
+              assertScoringFunction: function injectedScorer() {
+                throw new Error('A different callback with the same name must never run');
+              },
+            }),
+            assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }],
+          },
+        ],
       };
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       const evaluation = evaluate(suite, record, {
@@ -343,7 +359,7 @@ describeEvaluator('interrupted grading context', () => {
     { label: 'environment', delay: undefined, envDelay: '41', expected: 41 },
     { label: 'explicit zero', delay: 0, envDelay: '41', expected: 0 },
   ])('restores $label pacing during grading replay', async ({ delay, envDelay, expected }) => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
     const controller = new AbortController();
     const started = createDeferred<void>();
     const pending = createDeferred<ProviderResponse>();

@@ -1,21 +1,22 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
-  waitForProviderCall,
+  runProviderCallWithAbort,
   withProviderCallExecutionContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import invariant from '../util/invariant';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  CancellableEmbeddingProvider,
   GradingConfig,
   ProviderOptions,
   ProviderResponse,
@@ -47,13 +48,33 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
   return abortSignal ? { abortSignal } : undefined;
 }
 
+export async function callEmbeddingProvider(
+  provider: ApiProvider,
+  input: string,
+  context?: CallApiContextParams,
+) {
+  const options = getGradingProviderCallOptions();
+  const result =
+    (context || options) && provider.supportsEmbeddingCancellation
+      ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, context, options)
+      : await provider.callEmbeddingApi!(input);
+  // A provider that cannot observe cancellation may report it as an error response.
+  if (result.error) {
+    options?.abortSignal?.throwIfAborted();
+  }
+  return result;
+}
+
 /**
  * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
-export function callGradingProvider<T extends ProviderResponse>(
+export async function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
-  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  invoke: (
+    context: CallApiContextParams | undefined,
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
+  ) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
     operationName?: 'embeddings';
@@ -62,50 +83,52 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const signal = executionContext?.abortSignal;
-  const callProvider = (): Promise<T> => {
-    let providerCall: Promise<T> | undefined;
-    const invokeWithCancellation = async (
-      context: CallApiContextParams | undefined,
-    ): Promise<T> => {
-      signal?.throwIfAborted();
-      providerCall = withProviderCallExecutionContext(
-        { ...executionContext, providerCallOwned: true },
-        () => Promise.resolve(invoke(context)),
-      );
-      return waitForProviderCall(providerCall, signal);
-    };
-    const result = tracingContext
-      ? (tracingContext.withProviderSpan(
-          { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invokeWithCancellation,
-        ) as Promise<T>)
-      : invokeWithCancellation(callContext);
-    return result.finally(async () => {
-      // Settle cancellation and its span promptly, but retain scheduler ownership
-      // until the underlying request finishes.
-      await providerCall?.catch(() => {});
-    });
-  };
+  const callProvider = (
+    onResponseHeaders?: CallApiOptionsParams['onResponseHeaders'],
+  ): Promise<T> =>
+    providerRegistry.withProvider(
+      provider,
+      async () => {
+        const invokeProvider = (context: CallApiContextParams | undefined) =>
+          withProviderCallExecutionContext({ ...executionContext, providerCallOwned: true }, () => {
+            executionContext?.abortSignal?.throwIfAborted();
+            return onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);
+          });
+        return tracingContext
+          ? (tracingContext.withProviderSpan(
+              { provider, callContext, operationName, role: 'grader', promptLabel: label },
+              invokeProvider,
+            ) as Promise<T>)
+          : invokeProvider(callContext);
+      },
+      executionContext?.abortSignal,
+    );
 
-  const executeCall = () => {
+  const executeCall = async () => {
+    // Never start a grader after cancellation; queued graders check once they reach the front.
+    executionContext?.abortSignal?.throwIfAborted();
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(executionContext.abortSignal),
       );
     }
 
     return callProvider();
   };
 
-  const result = executionContext?.providerCallQueue
-    ? executionContext.providerCallQueue.enqueue(provider.id(), () =>
-        waitForProviderCall(executeCall(), signal),
-      )
-    : executeCall();
-  return waitForProviderCall(result, signal);
+  return runProviderCallWithAbort(
+    () =>
+      executionContext?.providerCallQueue
+        ? executionContext.providerCallQueue.enqueue(
+            provider.id(),
+            executeCall,
+            executionContext.abortSignal,
+          )
+        : executeCall(),
+    executionContext?.abortSignal,
+  );
 }
 
 /** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
@@ -127,32 +150,20 @@ export function callProviderWithContext(
     },
     vars,
   };
-  const callApiOptions = getGradingProviderCallOptions();
+  const contextOptions = getGradingProviderCallOptions();
   return callGradingProvider(
     provider,
     label,
-    (tracedContext) =>
-      callApiOptions
+    (tracedContext, onResponseHeaders) => {
+      const callApiOptions = onResponseHeaders
+        ? { ...contextOptions, onResponseHeaders }
+        : contextOptions;
+      return callApiOptions
         ? provider.callApi(prompt, tracedContext, callApiOptions)
-        : provider.callApi(prompt, tracedContext),
+        : provider.callApi(prompt, tracedContext);
+    },
     { callContext: callApiContext },
   );
-}
-
-async function loadFromProviderOptions(provider: ProviderOptions) {
-  invariant(
-    typeof provider === 'object',
-    `Provider must be an object, but received a ${typeof provider}: ${provider}`,
-  );
-  invariant(
-    !Array.isArray(provider),
-    `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
-  );
-  invariant(provider.id, 'Provider supplied to assertion must have an id');
-  return loadApiProvider(provider.id, {
-    options: provider as ProviderOptions,
-    basePath: cliState.basePath,
-  });
 }
 
 function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
@@ -183,6 +194,12 @@ export async function getGradingProvider(
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
 ): Promise<ApiProvider | null> {
+  if (Array.isArray(provider)) {
+    throw new Error(
+      'Provider must be an object or string, but received an array. Remove the array around the grading provider.',
+    );
+  }
+
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
@@ -213,24 +230,14 @@ export async function getGradingProvider(
       } else {
         finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
       }
-    } else if ((provider as ProviderOptions).id) {
-      // Defined as ProviderOptions
-      finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
-    } else if (Array.isArray(provider)) {
-      throw new Error(
-        `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
-          provider[0],
-          null,
-          2,
-        )} is not nested in an array.`,
-      );
+    } else if ('id' in provider && typeof provider.id === 'string' && provider.id) {
+      finalProvider = await loadApiProvider(provider.id, {
+        options: provider,
+        basePath: cliState.basePath,
+      });
     } else {
       throw new Error(
-        `Invalid provider definition for output type '${type}': ${JSON.stringify(
-          provider,
-          null,
-          2,
-        )}`,
+        `Invalid provider definition for output type '${type}'. Set a provider id or configure the '${type}' entry in the grading provider map.`,
       );
     }
   } else {

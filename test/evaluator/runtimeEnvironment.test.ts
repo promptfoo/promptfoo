@@ -1,6 +1,6 @@
 import './setup';
 
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import * as comparisonMatchers from '../../src/matchers/comparison';
@@ -18,9 +18,10 @@ import { getProviderDelay } from '../../src/scheduler/providerCallExecutionConte
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { isRateLimitWrapped } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { ResultFailureReason } from '../../src/types/index';
 import { sleep } from '../../src/util/time';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import { toPrompt } from './helpers';
+import { recordPacing, toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse, TestSuite } from '../../src/types/index';
@@ -34,6 +35,10 @@ function createProvider(id = 'offline'): ApiProvider {
 }
 
 describeEvaluator('evaluation environment defaults', () => {
+  beforeEach(() => {
+    const spy = recordPacing();
+    return () => spy.mockRestore();
+  });
   it.each([
     { providerDelay: undefined, evalDelay: undefined, cached: false, expected: 7 },
     { providerDelay: undefined, evalDelay: 5, cached: false, expected: 5 },
@@ -106,7 +111,7 @@ describeEvaluator('evaluation environment defaults', () => {
           'abort',
           () => {
             stopped = true;
-            pending.reject(new DOMException('Fixture stopped', 'AbortError'));
+            pending.reject(options.abortSignal!.reason);
           },
           { once: true },
         );
@@ -561,9 +566,9 @@ describeEvaluator('evaluation environment defaults', () => {
   });
 
   it.each([1, 2])(
-    'leaves an interrupted delay incomplete at concurrency %s',
+    'keeps the transformed target when cancellation interrupts pacing at concurrency %s',
     async (maxConcurrency) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const controller = new AbortController();
       const grade = vi.fn().mockReturnValue(true);
       const provider = createProvider();
@@ -580,14 +585,16 @@ describeEvaluator('evaluation environment defaults', () => {
       controller.abort();
       await vi.advanceTimersByTimeAsync(0);
       await evaluation;
-      expect(await record.getResults()).toEqual([]);
+      expect(await record.getResults()).toMatchObject([
+        { response: { output: 'ok' }, success: false, error: expect.stringMatching(/^Aborted:/) },
+      ]);
       await vi.advanceTimersByTimeAsync(1000);
       expect(grade).not.toHaveBeenCalled();
     },
   );
 
   it('cancels the post-response delay before a timed-out step can grade', async () => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
     const actualTime =
       await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
     await vi.mocked(sleep).withImplementation(actualTime.sleep, async () => {
@@ -610,13 +617,13 @@ describeEvaluator('evaluation environment defaults', () => {
 
   it.each(
     ['provider', 'delegated delay', 'late response'].flatMap((phase) =>
-      ['pause', 'pause with reason', 'step timeout', 'evaluation timeout'].map((termination) => ({
+      ['cancel', 'cancel with reason', 'step timeout', 'evaluation timeout'].map((termination) => ({
         phase,
         termination,
       })),
     ),
   )('preserves interruption results without grading: %j', async ({ phase, termination }) => {
-    vi.useFakeTimers();
+    useEvaluationTimers();
     const controller = new AbortController();
     const pending = createDeferred<ProviderResponse>();
     const started = createDeferred<void>();
@@ -633,7 +640,7 @@ describeEvaluator('evaluation environment defaults', () => {
           options?.abortSignal?.addEventListener(
             'abort',
             () => {
-              pending.reject(new DOMException('Fixture stopped', 'AbortError'));
+              pending.reject(options.abortSignal!.reason);
             },
             { once: true },
           );
@@ -652,9 +659,9 @@ describeEvaluator('evaluation environment defaults', () => {
     });
     await vi.advanceTimersByTimeAsync(1);
     await started.promise;
-    if (termination.startsWith('pause')) {
+    if (termination.startsWith('cancel')) {
       controller.abort(
-        termination === 'pause with reason' ? new Error('Paused by fixture') : undefined,
+        termination === 'cancel with reason' ? new Error('Paused by fixture') : undefined,
       );
     } else {
       await vi.advanceTimersByTimeAsync(20);
@@ -665,8 +672,8 @@ describeEvaluator('evaluation environment defaults', () => {
     await vi.advanceTimersByTimeAsync(0);
     await evaluation;
     const results = await record.getResults();
-    if (termination.startsWith('pause')) {
-      expect(results).toEqual([]);
+    if (termination.startsWith('cancel')) {
+      expect(results).toMatchObject([{ success: false, failureReason: ResultFailureReason.ERROR }]);
     } else {
       expect(results).toHaveLength(1);
       expect(results[0].success).toBe(false);
@@ -687,7 +694,7 @@ describeEvaluator('evaluation environment defaults', () => {
   ])(
     'records max-duration errors when pacing is interrupted: %j',
     async ({ maxConcurrency, runSerially }) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const grade = vi.fn().mockReturnValue(true);
       const provider = createProvider();
       const suite = createSuite(provider, { PROMPTFOO_DELAY_MS: '1000' });
@@ -706,7 +713,7 @@ describeEvaluator('evaluation environment defaults', () => {
       expect(results.map((result) => result.testIdx).sort()).toEqual([0, 1, 2]);
       for (const result of results) {
         expect(result.success).toBe(false);
-        expect(result.error).toBe('Evaluation exceeded max duration of 10ms');
+        expect(result.error).toContain('Evaluation exceeded max duration of 10ms');
       }
       await vi.advanceTimersByTimeAsync(1000);
       expect(grade).not.toHaveBeenCalled();
@@ -716,7 +723,7 @@ describeEvaluator('evaluation environment defaults', () => {
   it.each([undefined, 0])(
     'preserves timeout override %s against an environment default',
     async (timeoutMs) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       let release!: () => void;
       const responseReady = new Promise<void>((resolve) => {
         release = resolve;

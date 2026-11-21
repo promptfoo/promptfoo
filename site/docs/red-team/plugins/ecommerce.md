@@ -1,6 +1,6 @@
 ---
 sidebar_label: E-commerce
-description: Red team AI systems for e-commerce vulnerabilities including PCI DSS compliance, price manipulation, regulatory bypass, and order fraud to protect revenue and ensure legal compliance
+description: Test e-commerce AI systems for payment data exposure, price manipulation, regulatory control bypasses, and order fraud. Configure plugins and review failures.
 ---
 
 # E-commerce Red Teaming Plugins

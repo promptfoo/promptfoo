@@ -12,20 +12,20 @@ import {
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
-import { getEnvString, getProcessEnv } from '../../envars';
+import { getProcessEnv } from '../../envars';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
+  getGenAITracer,
   getTraceparent,
   openTurnSpan,
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { getOtelTracer } from '../../tracing/otelSdk';
 import {
   formatRateLimitErrorMessage,
   HARD_QUOTA_ERROR_CODES,
@@ -36,7 +36,9 @@ import {
 import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -57,6 +59,12 @@ import {
   shouldInjectApiKey,
   usesCustomModelProvider,
 } from './codexApiKeyGating';
+import { CodexCliCompatibilityError, checkCodexCliCompatibility } from './codexCliCompatibility';
+import {
+  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
+  findGitRepositoryRoot,
+  getMinimalProcessEnv,
+} from './codexProcess';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -110,8 +118,7 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
 /**
  * OpenAI Codex SDK Provider
  *
- * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install promptfoo @openai/codex-sdk@^0.156.1
+ * Install the optional @openai/codex-sdk package in the eval project.
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -141,7 +148,9 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-6-astra / gpt-6-sol / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6.2-astra / gpt-6.2-sol: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'.
+ *   Available in the bundled CLI catalog from 0.169.1, or a fetched catalog from 0.166.0.
+ * - gpt-6-astra / gpt-6-sol / gpt-5.6-sol / gpt-5.6-terra: the same six reasoning efforts
  * - gpt-6-luna / gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max';
  *   gpt-6-luna does not support 'ultra'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
@@ -210,39 +219,6 @@ interface CodexStreamingState {
   activeTurnIndex: number;
 }
 
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
-
 export interface OpenAICodexSDKConfig {
   /**
    * Internal promptfoo config base path. Accepted for loader compatibility but not
@@ -294,6 +270,11 @@ export interface OpenAICodexSDKConfig {
    * Path to custom codex binary
    */
   codex_path_override?: string;
+
+  /**
+   * Skip the custom binary's exact SDK/CLI version compatibility check.
+   */
+  skip_codex_version_check?: boolean;
 
   /**
    * Model to use (e.g., 'gpt-6-sol' or 'gpt-6-luna').
@@ -439,6 +420,7 @@ const OpenAICodexSDKConfigShape = {
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
+  skip_codex_version_check: z.boolean().optional(),
   model: z.string().min(1).optional(),
   model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
@@ -486,18 +468,6 @@ function parseCodexConfig(
 
     throw error;
   }
-}
-
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  const processEnv = getProcessEnv();
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = processEnv[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
 }
 
 // The transient throttle code plus the shared hard-quota set, so a billing code
@@ -635,7 +605,7 @@ function buildCodexRateLimitResponse(
   };
 }
 
-export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.170.0';
 
 export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
@@ -654,14 +624,14 @@ export function resolveCodexSdkPackage(): string | null {
   return null;
 }
 
-async function loadCodexSDK(): Promise<any> {
+async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
   const codexPath = resolveCodexSdkPackage();
   if (!codexPath) {
     throw new Error(
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
+        npm install promptfoo "@openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}"
 
       Requires Node.js >=22.22.0.
 
@@ -672,12 +642,15 @@ async function loadCodexSDK(): Promise<any> {
   const version = getPackageVersion('@openai/codex-sdk', codexPath);
   if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
     throw new Error(
-      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo "@openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}"`,
     );
   }
 
   try {
-    return await importModule(codexPath);
+    return {
+      entryPoint: codexPath,
+      module: await importModule(codexPath),
+    };
   } catch (err) {
     logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
     if ((err as any).stack) {
@@ -691,7 +664,7 @@ async function loadCodexSDK(): Promise<any> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
+        npm install promptfoo "@openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}"
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -702,7 +675,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private cleanupGeneration = 0;
 
   static OPENAI_MODELS = [
+    'gpt-6.2-astra',
+    'gpt-6.2-sol',
     'gpt-6-astra',
+    'gpt-6.1-sol',
+    'gpt-6.1-terra',
     'gpt-6-sol',
     'gpt-6-luna',
     // GPT-5.6 models (requires Codex 0.144.0 or later)
@@ -733,13 +710,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   apiKey?: string;
 
   private providerId = 'openai:codex-sdk';
-  private codexModule?: any;
+  private codexSdk?: { module: any; entryPoint: string };
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
-  private threadRunQueues: Map<string, Promise<void>> = new Map();
+  private threadRunQueues = new AgenticRunQueue('Codex thread turn wait aborted');
   private deepTracingWarningShown = false; // Show warning once per instance
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
+  private compatibilitySkipWarningShown = false;
+  private compatibilityChecks = new Map<AbortController, Promise<void>>();
 
   constructor(
     options: {
@@ -769,13 +748,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   getApiKey(config: OpenAICodexSDKConfig = this.config): string | undefined {
-    return (
-      config?.apiKey ||
-      this.env?.OPENAI_API_KEY ||
-      this.env?.CODEX_API_KEY ||
-      getEnvString('OPENAI_API_KEY') ||
-      getEnvString('CODEX_API_KEY')
-    );
+    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
   }
 
   requiresApiKey(): boolean {
@@ -803,6 +776,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     this.cleanupGeneration++;
     providerRegistry.unregister(this);
+    const compatibilityChecks = [...this.compatibilityChecks.entries()];
+    for (const [controller] of compatibilityChecks) {
+      controller.abort(createAbortError('Codex compatibility check interrupted by cleanup'));
+    }
     const instances = [...this.codexInstances.values()];
     this.codexInstances.clear();
     this.threads.clear();
@@ -814,6 +791,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
+    }
+    if (compatibilityChecks.length > 0) {
+      await Promise.allSettled(compatibilityChecks.map(([, pending]) => pending));
     }
   }
 
@@ -1036,19 +1016,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
+    return findGitRepositoryRoot(workingDir);
   }
 
   /**
@@ -1168,14 +1136,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     skillRootPrefixes: readonly string[] = [],
   ): Promise<any> {
     const { events } = await thread.runStreamed(prompt, runOptions);
-    const tracer = getOtelTracer('promptfoo.codex-sdk');
+    const tracer = getGenAITracer('promptfoo.codex-sdk');
     const state = this.createCodexStreamingState(prompt);
 
     try {
       for await (const event of events) {
         const eventTime = Date.now();
         if (callOptions?.abortSignal?.aborted) {
-          throw this.createAbortError('OpenAI Codex SDK call aborted');
+          throw createAbortError('OpenAI Codex SDK call aborted');
         }
 
         this.handleStreamingEvent(event, state, tracer, eventTime, skillRootPrefixes);
@@ -2022,72 +1990,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       .digest('hex');
   }
 
-  private async runSerializedThreadTurn<T>(
-    queueKey: string | undefined,
-    abortSignal: AbortSignal | undefined,
-    executeTurn: () => Promise<T>,
-  ): Promise<T> {
-    if (!queueKey) {
-      return executeTurn();
-    }
-
-    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
-    let releaseCurrentRun: () => void = () => {};
-    const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
-    });
-    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
-    this.threadRunQueues.set(queueKey, queuedRun);
-    void queuedRun.finally(() => {
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await this.waitForPreviousThreadRun(previousRun, abortSignal);
-      return await executeTurn();
-    } finally {
-      releaseCurrentRun();
-    }
-  }
-
-  private async waitForPreviousThreadRun(
-    previousRun: Promise<void>,
-    abortSignal: AbortSignal | undefined,
-  ): Promise<void> {
-    const previousRunDone = previousRun.catch(() => undefined);
-
-    if (!abortSignal) {
-      await previousRunDone;
-      return;
-    }
-
-    if (abortSignal.aborted) {
-      throw this.createAbortError('Codex thread turn wait aborted');
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(this.createAbortError('Codex thread turn wait aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    try {
-      await Promise.race([previousRunDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
-    }
-  }
-
-  private createAbortError(message: string): Error {
-    const error = new Error(message);
-    error.name = 'AbortError';
-    return error;
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -2306,6 +2208,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig,
         apiKey,
         cleanupGeneration,
+        callOptions?.abortSignal,
       );
       const activeInstance = codexInstance.activeInstance;
       localInstance = codexInstance.localInstance;
@@ -2337,6 +2240,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return { error: 'OpenAI Codex SDK call aborted' };
       }
 
+      if (error instanceof CodexCliCompatibilityError) {
+        return { error: `Error calling OpenAI Codex SDK: ${error.message}` };
+      }
+
       // Safely extract error message - error may not be an Error object
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
@@ -2365,15 +2272,22 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     resolvedConfig: OpenAICodexSDKConfig,
     apiKey: string | undefined,
     cleanupGeneration: number,
+    abortSignal?: AbortSignal,
   ): Promise<{
     activeInstance: any;
     instanceKey: string;
     localInstance: any;
     useLocalInstance: boolean;
   }> {
-    if (!this.codexModule) {
-      this.codexModule = await loadCodexSDK();
+    if (!this.codexSdk) {
+      this.codexSdk = await loadCodexSDK();
     }
+    const codexSdk = this.codexSdk;
+
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
+    }
+    await this.ensureCodexCompatibility(env, resolvedConfig, codexSdk.entryPoint, abortSignal);
 
     if (cleanupGeneration !== this.cleanupGeneration) {
       throw new Error('Codex SDK call was interrupted by cleanup');
@@ -2385,7 +2299,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const instanceKey = this.generateInstanceKey(stableEnv, resolvedConfig);
     if (resolvedConfig.deep_tracing) {
       this.warnOnceForDeepTracingThreadOptions(resolvedConfig);
-      const localInstance = new this.codexModule.Codex(
+      const localInstance = new codexSdk.module.Codex(
         this.buildCodexOptions(env, resolvedConfig, apiKey),
       );
       return {
@@ -2398,7 +2312,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     let activeInstance = this.codexInstances.get(instanceKey);
     if (!activeInstance) {
-      activeInstance = new this.codexModule.Codex(
+      activeInstance = new codexSdk.module.Codex(
         this.buildCodexOptions(env, resolvedConfig, apiKey),
       );
       this.codexInstances.set(instanceKey, activeInstance);
@@ -2410,6 +2324,61 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       localInstance: undefined,
       useLocalInstance: false,
     };
+  }
+
+  private async ensureCodexCompatibility(
+    env: Record<string, string>,
+    resolvedConfig: OpenAICodexSDKConfig,
+    sdkEntryPoint: string,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const codexPathOverride = resolvedConfig.codex_path_override;
+    if (!codexPathOverride) {
+      return;
+    }
+    if (resolvedConfig.skip_codex_version_check) {
+      if (!this.compatibilitySkipWarningShown) {
+        logger.warn(
+          '[CodexSDK] Skipping custom Codex binary version compatibility check by explicit configuration.',
+          { codexPathOverride },
+        );
+        this.compatibilitySkipWarningShown = true;
+      }
+      return;
+    }
+
+    // The SDK's direct CLI dependency is its event-schema compatibility contract. The bundled
+    // CLI already satisfies it, so only a custom override needs a version probe.
+    const preflightEnv = { ...env };
+    delete preflightEnv.CODEX_API_KEY;
+    delete preflightEnv.OPENAI_API_KEY;
+    delete preflightEnv.TRACEPARENT;
+    delete preflightEnv.OTEL_RESOURCE_ATTRIBUTES;
+
+    if (abortSignal?.aborted) {
+      throw createAbortError('Codex compatibility check aborted');
+    }
+
+    const controller = new AbortController();
+    const signal = abortSignal
+      ? AbortSignal.any([abortSignal, controller.signal])
+      : controller.signal;
+    // Register ownership before the helper can spawn a process, including when
+    // cleanup or caller cancellation happens before this microtask starts.
+    const compatibilityCheck = Promise.resolve().then(() =>
+      checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride,
+        env: preflightEnv,
+        signal,
+      }),
+    );
+    this.compatibilityChecks.set(controller, compatibilityCheck);
+    try {
+      await compatibilityCheck;
+    } finally {
+      this.compatibilityChecks.delete(controller);
+    }
   }
 
   private warnOnceForDeepTracingThreadOptions(resolvedConfig: OpenAICodexSDKConfig): void {
@@ -2442,7 +2411,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
-    return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
+    return this.threadRunQueues.run(queueKey, callOptions?.abortSignal, async () => {
       if (cleanupGeneration !== this.cleanupGeneration) {
         throw new Error('Codex SDK call was interrupted by cleanup');
       }

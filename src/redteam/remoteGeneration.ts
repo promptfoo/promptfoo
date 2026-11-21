@@ -1,13 +1,16 @@
+import { context, defaultTextMapSetter } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import cliState from '../cliState';
-import { getEnvBool, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
-import { getTraceContextHeaders } from '../tracing/otelSdk';
 import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
 
 export { remoteGenerationContextPayload } from './remoteGenerationContext';
 export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
+
+const traceContextPropagator = new W3CTraceContextPropagator();
 
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
@@ -22,24 +25,28 @@ export function providerRemoteGenerationContextPayload(contextOrCloudTargetId?: 
   return buildRemoteGenerationContextPayload(contextOrCloudTargetId);
 }
 
+function resolveRemoteEndpoint(envName: EnvVarKey, path: string): string {
+  // Check env var first
+  const envUrl = getEnvString(envName);
+  if (envUrl) {
+    return envUrl;
+  }
+  // If logged into cloud use that url + the task path
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return cloudConfig.getApiHost() + path;
+  }
+  // otherwise use the default
+  return 'https://api.promptfoo.app' + path;
+}
+
 /**
  * Gets the remote generation API endpoint URL.
  * Prioritizes: env var > cloud config > default endpoint.
  * @returns The remote generation URL
  */
 export function getRemoteGenerationUrl(): string {
-  // Check env var first
-  const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
-  if (envUrl) {
-    return envUrl;
-  }
-  // If logged into cloud use that url + /task
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/api/v1/task';
-  }
-  // otherwise use the default
-  return 'https://api.promptfoo.app/api/v1/task';
+  return resolveRemoteEndpoint('PROMPTFOO_REMOTE_GENERATION_URL', '/api/v1/task');
 }
 
 /**
@@ -54,9 +61,12 @@ export function getRemoteGenerationUrl(): string {
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
+  // Use W3C headers exclusively so a host propagator cannot add private baggage.
+  const traceHeaders: Record<string, string> = {};
+  traceContextPropagator.inject(context.active(), traceHeaders, defaultTextMapSetter);
   return {
     'Content-Type': 'application/json',
-    ...getTraceContextHeaders(),
+    ...traceHeaders,
     ...extraHeaders,
   };
 }
@@ -190,16 +200,5 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
  * @returns The unaligned inference URL
  */
 export function getRemoteGenerationUrlForUnaligned(): string {
-  // Check env var first
-  const envUrl = getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT');
-  if (envUrl) {
-    return envUrl;
-  }
-  // If logged into cloud use that url + /task
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/api/v1/task/harmful';
-  }
-  // otherwise use the default
-  return 'https://api.promptfoo.app/api/v1/task/harmful';
+  return resolveRemoteEndpoint('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT', '/api/v1/task/harmful');
 }

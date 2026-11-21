@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as timeUtils from '../../src/util/time';
+import { recordPacing } from '../evaluator/helpers';
 import {
   createMockProvider,
   createProviderResponse,
@@ -11,6 +12,16 @@ import {
 import { createDeferred } from '../util/utils';
 
 import type { ApiProvider } from '../../src/types/index';
+
+beforeEach(() => {
+  const spy = recordPacing();
+  return () => spy.mockRestore();
+});
+
+const createAgentResponse = () => ({
+  output: 'agent response',
+  tokenUsage: { numRequests: 1 },
+});
 
 vi.mock('../../src/util/time', async (importOriginal) => {
   return {
@@ -48,10 +59,7 @@ describe('SimulatedUser', () => {
     originalProvider = createMockProvider({
       id: 'test-agent',
       callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
-        return {
-          output: 'agent response',
-          tokenUsage: { numRequests: 1 },
-        };
+        return createAgentResponse();
       }),
     });
 
@@ -310,10 +318,7 @@ describe('SimulatedUser', () => {
         id: 'mutating-provider',
         callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
           delete context?.originalProvider;
-          return {
-            output: 'agent response',
-            tokenUsage: { numRequests: 1 },
-          };
+          return createAgentResponse();
         }),
       });
 

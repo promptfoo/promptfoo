@@ -5,7 +5,7 @@ import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { SequenceProvider } from '../../src/providers/sequence';
 import { createDeferred } from '../util/utils';
-import { toPrompt } from './helpers';
+import { toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
@@ -18,7 +18,7 @@ describeEvaluator('delegated request ownership', () => {
   )(
     'keeps a timed-out target in its scheduler slot until it really settles: delay=$delay $outcome',
     async ({ delay, outcome }) => {
-      vi.useFakeTimers();
+      useEvaluationTimers();
       const pending = createDeferred<ProviderResponse>();
       const target: ApiProvider = {
         id: () => 'offline-delegated-target',

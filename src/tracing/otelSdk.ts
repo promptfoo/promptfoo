@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 
 import {
@@ -6,144 +5,38 @@ import {
   createContextKey,
   DiagConsoleLogger,
   DiagLogLevel,
-  defaultTextMapGetter,
-  defaultTextMapSetter,
   diag,
-  ProxyTracerProvider,
   propagation,
-  ROOT_CONTEXT,
   trace,
 } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider as SdkTracerProvider } from '@opentelemetry/sdk-trace';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
-import type { Tracer, TracerProvider } from '@opentelemetry/api';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import {
+  getOtelScope,
+  isProxyTracerProvider,
+  routingState,
+  traceContextPropagator,
+} from './otelContext';
+import { batchProcessorFromEnv, traceOptionsFromEnv } from './tracerProvider';
+
+export { getOtelTracer, withOtelContext } from './otelContext';
+
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { OtelConfig } from './otelConfig';
 
 const require = createRequire(import.meta.url);
-const traceContextPropagator = new W3CTraceContextPropagator();
-
-/** Explicit traceparent values use W3C format independently of the host's propagator. */
-export function extractTraceparentContext(traceparent: string) {
-  return traceContextPropagator.extract(ROOT_CONTEXT, { traceparent }, defaultTextMapGetter);
-}
-
-/** W3C-only transport headers, independent of the host's propagator and baggage. */
-export function getTraceContextHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  traceContextPropagator.inject(context.active(), headers, defaultTextMapSetter);
-  return headers;
-}
-
-interface OtelScope {
-  provider?: NodeTracerProvider;
-}
-
-// Custom providers can load the public package alongside the CLI bundle. Share the
-// storage object, never a current provider, so both observe the same async scope.
-const OTEL_SCOPE_KEY = Symbol.for('promptfoo.otelScope');
-const OTEL_ROUTING_KEY = Symbol.for('promptfoo.otelRouting');
-interface OtelRoutingState {
-  provider: TracerProvider;
-  owners: Set<NodeTracerProvider>;
-  contextManager?: AsyncLocalStorageContextManager;
-}
-const globalScopes = globalThis as {
-  [OTEL_SCOPE_KEY]?: AsyncLocalStorage<OtelScope>;
-  [OTEL_ROUTING_KEY]?: OtelRoutingState;
-};
-const otelScope = (globalScopes[OTEL_SCOPE_KEY] ??= new AsyncLocalStorage<OtelScope>());
-const noopProvider = new ProxyTracerProvider();
-const routingState = (globalScopes[OTEL_ROUTING_KEY] ??= {
-  provider: createRoutingProvider(),
-  owners: new Set<NodeTracerProvider>(),
-});
-const ownedProviders = new Map<NodeTracerProvider, OtelScope>();
+const handlers = (routingState.handlers ??= [
+  ['SIGTERM', () => flushOtel('process')],
+  ['SIGINT', () => shutdownOtel('process')],
+  ['beforeExit', () => flushOtel('process')],
+] as const);
 const contextProbeKey = createContextKey('promptfoo.contextProbe');
-
-/** Isolate provider ownership even for evaluations with tracing disabled. */
-export function withOtelContext<T>(fn: () => T): T {
-  return otelScope.run({}, fn);
-}
-
-function getOtelScope(): OtelScope | undefined {
-  return otelScope.getStore();
-}
-
-/** Use the evaluation's provider without replacing a host application's global provider. */
-export function getOtelTracer(name: string, version?: string): Tracer {
-  const scope = getOtelScope();
-  if (!scope) {
-    return trace.getTracer(name, version);
-  }
-  if (scope.provider) {
-    return scope.provider.getTracer(name, version);
-  }
-  const globalProvider = trace.getTracerProvider();
-  if (isProxyTracerProvider(globalProvider)) {
-    // A disabled turn can outlive its async scope. Capture only a real host
-    // delegate; a dynamic router could later select another evaluation.
-    const hostTracer =
-      globalProvider.getDelegate() === routingState.provider
-        ? undefined
-        : globalProvider.getDelegateTracer(name, version);
-    return hostTracer ?? noopProvider.getTracer(name, version);
-  }
-  return trace.getTracer(name, version);
-}
-
-function isProxyTracerProvider(
-  provider: TracerProvider,
-): provider is TracerProvider & Pick<ProxyTracerProvider, 'getDelegate' | 'getDelegateTracer'> {
-  // OTel shares its global registration across installed API copies. Their
-  // public proxy methods are compatible even when class identities differ.
-  return (
-    'getDelegate' in provider &&
-    typeof provider.getDelegate === 'function' &&
-    'getDelegateTracer' in provider &&
-    typeof provider.getDelegateTracer === 'function'
-  );
-}
-
-function createRoutingProvider(): TracerProvider {
-  return {
-    getTracer(name, version, options) {
-      // A custom provider can cache this tracer before the first evaluation.
-      // Resolve both evaluation ownership and a later host SDK for each span.
-      const current = () => {
-        const globalProvider = trace.getTracerProvider();
-        if (
-          isProxyTracerProvider(globalProvider) &&
-          globalProvider.getDelegate() !== routingState.provider
-        ) {
-          const hostTracer = globalProvider.getDelegateTracer(name, version, options);
-          if (hostTracer) {
-            return hostTracer;
-          }
-        }
-        return (
-          getOtelScope()?.provider?.getTracer(name, version, options) ??
-          noopProvider.getTracer(name, version, options)
-        );
-      };
-      return {
-        startSpan: (spanName, spanOptions, parentContext) =>
-          current().startSpan(spanName, spanOptions, parentContext),
-        startActiveSpan(...args: unknown[]) {
-          const tracer = current();
-          return Reflect.apply(tracer.startActiveSpan, tracer, args);
-        },
-      };
-    },
-  };
-}
 
 function ensureGlobalTracerRouting(): void {
   const globalProvider = trace.getTracerProvider();
@@ -153,10 +46,13 @@ function ensureGlobalTracerRouting(): void {
   }
 }
 
-function releaseGlobalTracingRegistrations(provider: NodeTracerProvider): void {
+function releaseGlobalTracingRegistrations(provider: SdkTracerProvider): void {
   routingState.owners.delete(provider);
   if (routingState.owners.size > 0) {
     return;
+  }
+  for (const [event, handler] of handlers) {
+    process.removeListener(event, handler);
   }
   const globalProvider = trace.getTracerProvider();
   if (
@@ -198,7 +94,7 @@ function ensureContextManager(): void {
  * Initialize the OpenTelemetry SDK for tracing LLM provider calls.
  *
  * This sets up:
- * - A NodeTracerProvider with promptfoo service info
+ * - A SdkTracerProvider with promptfoo service info
  * - LocalSpanExporter for storing spans in TraceStore (SQLite)
  * - Optional OTLPTraceExporter for external backends (Jaeger, Honeycomb, etc.)
  *
@@ -220,7 +116,7 @@ export function initializeOtel(config: OtelConfig): void {
 
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
     serviceName: config.serviceName,
-    endpoint: config.endpoint,
+    externalExport: Boolean(config.endpoint),
     localExport: config.localExport,
   });
 
@@ -241,7 +137,7 @@ export function initializeOtel(config: OtelConfig): void {
   // Add local exporter (writes to TraceStore/SQLite)
   if (config.localExport) {
     const localExporter = new LocalSpanExporter();
-    spanProcessors.push(new BatchSpanProcessor(localExporter));
+    spanProcessors.push(batchProcessorFromEnv(localExporter));
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -253,14 +149,13 @@ export function initializeOtel(config: OtelConfig): void {
     const otlpExporter = new OTLPTraceExporter({
       url: config.endpoint,
     });
-    spanProcessors.push(new BatchSpanProcessor(otlpExporter));
-    logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
+    spanProcessors.push(batchProcessorFromEnv(otlpExporter));
+    logger.debug('[OtelSdk] Added OTLP exporter');
   }
 
   // Create trace provider with resource and span processors
-  scope.provider = new NodeTracerProvider({ resource, spanProcessors });
-  ownedProviders.set(scope.provider, scope);
-  routingState.owners.add(scope.provider);
+  scope.provider = new SdkTracerProvider({ ...traceOptionsFromEnv(), resource, spanProcessors });
+  routingState.owners.set(scope.provider, scope);
   ensureContextManager();
   // Propagation is stateless and process-wide. Per-eval cleanup must not unregister
   // it: the public API cannot identify a replacement installed by the host.
@@ -270,92 +165,50 @@ export function initializeOtel(config: OtelConfig): void {
   ensureGlobalTracerRouting();
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
-  // Set up graceful shutdown
-  setupShutdownHandlers();
-}
-
-/**
- * Shutdown the OpenTelemetry SDK.
- * Flushes any pending spans and releases resources.
- */
-export async function shutdownOtel(): Promise<void> {
-  const scope = getOtelScope();
-  const provider = scope?.provider;
-  if (!provider) {
-    return;
-  }
-  scope.provider = undefined;
-  await shutdownProvider(provider);
-}
-
-async function shutdownProvider(provider: NodeTracerProvider): Promise<void> {
-  const scope = ownedProviders.get(provider);
-  if (scope?.provider === provider) {
-    scope.provider = undefined;
-  }
-  ownedProviders.delete(provider);
-  if (ownedProviders.size === 0) {
-    cleanupShutdownHandlers();
-  }
-  try {
-    await provider.shutdown();
-  } catch (error) {
-    logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
-  } finally {
-    releaseGlobalTracingRegistrations(provider);
-  }
-}
-
-/**
- * Force flush any pending spans.
- * Useful before process exit to ensure all spans are exported.
- */
-export async function flushOtel(): Promise<void> {
-  const provider = getOtelScope()?.provider;
-  if (!provider) {
-    return;
-  }
-
-  logger.debug('[OtelSdk] Flushing pending spans');
-
-  try {
-    await provider.forceFlush();
-    logger.debug('[OtelSdk] Spans flushed successfully');
-  } catch (error) {
-    logger.error('[OtelSdk] Error flushing spans', { error });
-  }
-}
-
-/**
- * Check if OTEL SDK is initialized and enabled.
- */
-export function isOtelInitialized(): boolean {
-  return getOtelScope()?.provider !== undefined;
-}
-
-// Signal callbacks do not execute within an evaluation's async context. Drain only
-// providers owned here, and keep one set of listeners until the last scope closes.
-function onShutdown(): void {
-  void Promise.all([...ownedProviders.keys()].map(shutdownProvider));
-}
-
-async function onBeforeExit(): Promise<void> {
-  await Promise.allSettled([...ownedProviders.keys()].map((provider) => provider.forceFlush()));
-}
-
-function setupShutdownHandlers(): void {
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    if (!process.listeners(signal).includes(onShutdown)) {
-      process.once(signal, onShutdown);
+  // SIGTERM flushes first. The CLI closes tracing after draining providers.
+  for (const [event, handler] of handlers) {
+    if (!process.listeners(event).includes(handler)) {
+      process.once(event, handler);
     }
   }
-  if (!process.listeners('beforeExit').includes(onBeforeExit)) {
-    process.once('beforeExit', onBeforeExit);
-  }
 }
 
-function cleanupShutdownHandlers(): void {
-  process.removeListener('SIGTERM', onShutdown);
-  process.removeListener('SIGINT', onShutdown);
-  process.removeListener('beforeExit', onBeforeExit);
+function providersFor(mode?: 'process') {
+  if (mode === 'process') {
+    return [...routingState.owners.keys()];
+  }
+  const provider = getOtelScope()?.provider;
+  return provider ? [provider] : [];
+}
+
+/** Only a process-exit handler should close another evaluation's exporter. */
+export async function shutdownOtel(mode?: 'process'): Promise<void> {
+  await Promise.all(
+    providersFor(mode).map(async (provider) => {
+      const scope = routingState.owners.get(provider)!;
+      scope.provider = undefined;
+      releaseGlobalTracingRegistrations(provider);
+      try {
+        await provider.shutdown();
+      } catch (error) {
+        logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
+      }
+    }),
+  );
+}
+
+export async function flushOtel(mode?: 'process'): Promise<void> {
+  await Promise.all(
+    providersFor(mode).map(async (provider) => {
+      try {
+        await provider.forceFlush();
+      } catch (error) {
+        logger.error('[OtelSdk] Error flushing spans', { error });
+      }
+    }),
+  );
+}
+
+export function isOtelInitialized(): boolean {
+  return getOtelScope()?.provider !== undefined;
 }
