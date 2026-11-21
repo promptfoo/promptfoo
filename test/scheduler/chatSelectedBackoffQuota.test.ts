@@ -11,7 +11,7 @@ import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
-const variants = ['429 Retry-After', '200 exhausted requests'] as const;
+const variants = ['429 Retry-After', '403 exhausted requests'] as const;
 const headers = { 'content-type': 'application/json' };
 const usage = { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 };
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -36,10 +36,24 @@ function limited(variant: (typeof variants)[number], code = 'rate_limit_exceeded
       headers: { ...headers, 'retry-after': '2' },
     });
   }
+  // A non-429 rejection whose only rate-limit signal is the exhausted request header.
+  return new Response(JSON.stringify({ error: { code, message: 'fixture quota diagnostic' } }), {
+    status: 403,
+    statusText: 'Forbidden',
+    headers: {
+      ...headers,
+      'x-ratelimit-remaining-requests': '0',
+      'x-ratelimit-reset-requests': '2s',
+    },
+  });
+}
+
+/** A successful response that used the window's last request. */
+function exhaustedSuccess() {
   return new Response(
     JSON.stringify({
       choices: [
-        { message: { role: 'assistant', content: 'soft limited output' }, finish_reason: 'stop' },
+        { message: { role: 'assistant', content: 'last slot output' }, finish_reason: 'stop' },
       ],
       usage,
     }),
@@ -561,6 +575,37 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
       expect(vi.getTimerCount()).toBe(0);
     },
   );
+
+  it('returns a success that exhausts requests and paces the next call to its reset', async () => {
+    const { registry, wrapped } = await createTarget();
+    const selected = observeSelectedWait();
+    const dispatches = staticTransport(exhaustedSuccess());
+    const first = start(wrapped, 'A', caller());
+    await first.done;
+    // The completed response is kept, not discarded and bought again.
+    expect(first.state.value).toMatchObject({ output: 'last slot output' });
+    expect(first.state.value?.error).toBeUndefined();
+    expect(dispatches).toHaveLength(1);
+    const resetAt = dispatches[0].at + 2000;
+
+    const second = start(wrapped, 'B', caller());
+    await vi.advanceTimersByTimeAsync(resetAt - Date.now() - 1);
+    expect(dispatches).toHaveLength(1);
+    expect(second.state.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await second.done;
+    expect(second.state.value).toMatchObject({ output: 'B output' });
+    expect(dispatches).toEqual([
+      { caller: 'A', at: resetAt - 2000 },
+      { caller: 'B', at: resetAt },
+    ]);
+    expect(selected.waits).toHaveLength(0);
+    expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+      completedRequests: 2,
+      failedRequests: 0,
+      retriedRequests: 0,
+    });
+  });
 
   it('lets fresh successful quota replace an older exhausted deadline', async () => {
     const { registry, wrapped } = await createTarget({}, 2);

@@ -60,8 +60,8 @@ describe('explicit selected rate-limit backoff observation', () => {
   it.each<{ name: string; status: number; headers: Record<string, string> }>([
     { name: 'Retry-After-only 429', status: 429, headers: { 'retry-after': '5' } },
     {
-      name: 'soft200 zero/reset',
-      status: 200,
+      name: 'header-only 403 zero/reset',
+      status: 403,
       headers: { 'x-ratelimit-remaining-requests': '0', 'x-ratelimit-reset-requests': '5s' },
     },
   ])(
@@ -180,7 +180,7 @@ describe('explicit selected rate-limit backoff observation', () => {
   });
 
   it('does not emit for an already-aborted effective caller', async () => {
-    transport.mockResolvedValueOnce(rateLimit(200, { 'x-ratelimit-remaining-requests': '0' }));
+    transport.mockResolvedValueOnce(rateLimit(403, { 'x-ratelimit-remaining-requests': '0' }));
     const controller = new AbortController();
     const reason = Object.assign(new Error('already cancelled'), { name: 'AbortError' });
     controller.abort(reason);
@@ -432,7 +432,7 @@ describe('explicit selected rate-limit backoff observation', () => {
 
   it('does not notify an observer about a concurrent fetch that omitted it', async () => {
     const softLimit = () =>
-      rateLimit(200, {
+      rateLimit(403, {
         'x-ratelimit-remaining-requests': '0',
         'x-ratelimit-reset-requests': '5s',
       });
@@ -453,7 +453,7 @@ describe('explicit selected rate-limit backoff observation', () => {
     try {
       await selected;
       expect(observe).toHaveBeenCalledOnce();
-      expect(observe.mock.calls[0][0]).toMatchObject({ status: 200, resetAt: now + 5000 });
+      expect(observe.mock.calls[0][0]).toMatchObject({ status: 403, resetAt: now + 5000 });
     } finally {
       targetOwner.abort();
       auxiliaryOwner.abort();
