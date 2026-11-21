@@ -13,6 +13,7 @@ import { loadDefaultConfig } from '../util/config/default';
 import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { withCloudScriptPolicy } from '../util/scriptExecution';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
@@ -21,7 +22,12 @@ import { PartialGenerationError } from './types';
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
-export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+export function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  const run = () => runRedteam(options);
+  return options.loadedFromCloud ? withCloudScriptPolicy(run) : run();
+}
+
+async function runRedteam(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);
 
   if (options.verbose) {

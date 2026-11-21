@@ -29,6 +29,7 @@ import {
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
   resolveTeamId,
+  withCloudScriptPolicy,
 } from '../../util/cloud';
 import {
   ConfigResolutionError,
@@ -279,7 +280,10 @@ export async function doGenerateRedteam(
     logger.info('Cache is disabled');
   }
 
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  const generate = () => doGenerateRedteamInternal(options);
+  return withCacheEnabled(cacheOverride, () =>
+    options.configFromCloud ? withCloudScriptPolicy(generate) : generate(),
+  );
 }
 
 async function doGenerateRedteamInternal(

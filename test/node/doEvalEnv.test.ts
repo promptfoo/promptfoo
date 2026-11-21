@@ -80,6 +80,21 @@ describe('doEval environment files', () => {
     expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
   });
 
+  it.each([
+    { prompts: ['exec:fixture'], providers: ['echo'] },
+    { prompts: ['Fixture'], providers: ['exec:fixture'] },
+  ])('rejects executable selection in a fetched eval configuration (case %#)', async (config) => {
+    vi.mocked(getEvalConfigFromCloud).mockResolvedValue({ ...config, tests: [{ vars: {} }] });
+    await expect(
+      doEval(
+        { config: ['11111111-1111-4111-8111-111111111111'], write: false, share: false },
+        {},
+        undefined,
+        { eventSource: 'mcp' },
+      ),
+    ).rejects.toThrow('disabled for cloud configurations');
+  });
+
   it('restores the caller environment when cloud loading fails', async () => {
     const envPath = path.join(tempDir, 'failed.env');
     fs.writeFileSync(envPath, 'PROMPTFOO_REVIEW_ENV_PROBE=failed\n');

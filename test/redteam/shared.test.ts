@@ -12,6 +12,7 @@ import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
+import { requireLocalCommand } from '../../src/util/scriptExecution';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
@@ -249,6 +250,15 @@ describe('doRedteamRun', () => {
     ])(
       'writes the live config in $directory for loadedFromCloud=$loadedFromCloud',
       async ({ loadedFromCloud, directory }) => {
+        vi.mocked(doGenerateRedteam).mockImplementationOnce(async () => {
+          const select = () => requireLocalCommand('fixture');
+          if (loadedFromCloud) {
+            expect(select).toThrow('disabled for cloud configurations');
+          } else {
+            expect(select).not.toThrow();
+          }
+          return {};
+        });
         await doRedteamRun({ liveRedteamConfig: mockConfig, loadedFromCloud });
 
         const [[filename, contents, options]] = vi.mocked(fsPromises.writeFile).mock.calls;

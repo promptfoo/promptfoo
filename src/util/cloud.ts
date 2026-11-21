@@ -16,6 +16,8 @@ import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
 import type { ProviderOptions } from '../types/providers';
 
+export { withCloudScriptPolicy } from './scriptExecution';
+
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
 
