@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getGradingProvider } from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
+import { withProviderCleanup } from '../../src/providers/lifecycle';
 import { createMockProvider } from '../factories/provider';
 
 const createAzureDefaultGrader = () => ({
@@ -34,6 +35,19 @@ describe('getGradingProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('cleans only graders constructed in the current scope', async () => {
+    const borrowed = createMockProvider({ cleanup: true });
+    const owned = createMockProvider({ cleanup: true });
+    vi.mocked(loadApiProvider).mockResolvedValue(owned);
+    await withProviderCleanup(async () => {
+      await getGradingProvider('text', borrowed, null);
+      await getGradingProvider('text', { id: 'echo' }, null);
+      expect(owned.cleanup).not.toHaveBeenCalled();
+    });
+    expect(owned.cleanup).toHaveBeenCalledOnce();
+    expect(borrowed.cleanup).not.toHaveBeenCalled();
   });
 
   describe('explicit provider parameter', () => {

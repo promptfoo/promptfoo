@@ -5,6 +5,7 @@ import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { trackProvider } from '../../providers/lifecycle';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -142,7 +143,9 @@ async function loadRedteamProvider({
   jsonOnly = false,
   preferSmallModel = false,
   purpose = 'redteam',
+  cache = false,
 }: {
+  cache?: boolean;
   provider?: RedteamFileConfig['provider'];
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
@@ -152,10 +155,17 @@ async function loadRedteamProvider({
   const redteamProvider = provider;
   if (isApiProvider(redteamProvider)) {
     logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
-    ret = redteamProvider;
+    return redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
-    ret = (await redteamProviderLoader([redteamProvider]))[0];
+    const [first, ...rest] = await redteamProviderLoader([redteamProvider]);
+    // A provider file may instantiate multiple entries even though only the first is selected.
+    for (const provider of rest) {
+      if (provider !== first) {
+        trackProvider(provider);
+      }
+    }
+    ret = first;
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
@@ -166,7 +176,7 @@ async function loadRedteamProvider({
       },
     });
   }
-  return ret;
+  return cache ? ret : trackProvider(ret);
 }
 
 class RedteamProviderManager {
@@ -212,8 +222,12 @@ class RedteamProviderManager {
     // Do not publish a partially replaced cache. Both variants and the spec must
     // describe the same provider selection or callers can route different phases
     // of one generation run to different backends.
-    const loadedProvider = await loadRedteamProvider({ provider });
-    const loadedJsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+    const loadedProvider = await loadRedteamProvider({ cache: true, provider });
+    const loadedJsonOnlyProvider = await loadRedteamProvider({
+      cache: true,
+      provider,
+      jsonOnly: true,
+    });
 
     this.providerSpec =
       typeof provider === 'string' || isProviderOptions(provider) ? provider : undefined;
@@ -377,12 +391,17 @@ class RedteamProviderManager {
 
   async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
     // For multilingual, prefer a provider configured for structured JSON output
-    this.multilingualProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+    this.multilingualProvider = await loadRedteamProvider({
+      cache: true,
+      provider,
+      jsonOnly: true,
+    });
   }
 
   async setGradingProvider(provider: RedteamFileConfig['provider']) {
-    this.gradingProvider = await loadRedteamProvider({ provider, purpose: 'grading' });
+    this.gradingProvider = await loadRedteamProvider({ cache: true, provider, purpose: 'grading' });
     this.gradingJsonOnlyProvider = await loadRedteamProvider({
+      cache: true,
       provider,
       jsonOnly: true,
       purpose: 'grading',

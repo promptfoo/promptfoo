@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesModeration } from '../../src/matchers/moderation';
+import { withProviderCleanup } from '../../src/providers/lifecycle';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';
 import {
@@ -155,8 +157,10 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration(createConversationInput());
+    const shutdown = vi.spyOn(providerRegistry, 'shutdown');
+    await withProviderCleanup(() => matchesModeration(createConversationInput()));
 
+    expect(shutdown).toHaveBeenCalledExactlyOnceWith(replicateSpy.mock.contexts[0]);
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
