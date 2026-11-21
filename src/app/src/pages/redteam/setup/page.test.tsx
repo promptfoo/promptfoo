@@ -5,7 +5,7 @@ import { callApi } from '@app/utils/api';
 import { getUnifiedConfig } from '@promptfoo/presentation/redteamConfig';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { load as loadYaml } from 'js-yaml';
+import { dump as dumpYaml, load as loadYaml } from 'js-yaml';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { getEstimatedDuration, getEstimatedProbes } from './components/strategies/utils';
@@ -306,6 +306,59 @@ describe('RedTeamSetupPage', () => {
   });
 
   describe('YAML file import', () => {
+    it.each(['openai:codex:gpt-6-sol', 'openai:codex-sdk:gpt-6-sol'])(
+      'keeps the full %s target ID through YAML import, JSON edit and Save Config',
+      async (id) => {
+        const user = userEvent.setup();
+        mockLocation.hash = '#1';
+        try {
+          render(
+            <MemoryRouter initialEntries={['/redteam/setup#1']}>
+              <TooltipProvider>
+                <RedTeamSetupPage />
+              </TooltipProvider>
+            </MemoryRouter>,
+          );
+          await user.click(screen.getByRole('button', { name: /Load Config/i }));
+          const file = new File([dumpYaml({ targets: [id] })], 'config.yaml', {
+            type: 'text/yaml',
+          });
+          await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+          await waitFor(() => expect(useRedTeamConfig.getState().config.target.id).toBe(id));
+          expect(useRedTeamConfig.getState().providerType).toBe('codex-sdk');
+          expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(id);
+
+          const editor = screen
+            .getByText('Configuration (JSON)')
+            .parentElement!.parentElement!.querySelector('textarea')!;
+          expect(editor).toBeVisible();
+          await user.click(editor);
+          await user.keyboard('{Control>}a{/Control}');
+          await user.paste(JSON.stringify({ working_dir: './edited-workspace' }));
+          const expected = { id, config: { working_dir: './edited-workspace' } };
+          await waitFor(() =>
+            expect(useRedTeamConfig.getState().config.target).toMatchObject(expected),
+          );
+
+          await user.click(screen.getByRole('button', { name: 'Config' }));
+          await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+          await user.type(screen.getByLabelText('Configuration Name'), 'Codex round trip');
+          await user.click(screen.getByRole('button', { name: /^Save$/ }));
+          await waitFor(() => {
+            const [, request] = mockedCallApi.mock.calls.find(
+              ([url, options]) => url === '/configs' && options?.method === 'POST',
+            )!;
+            expect(JSON.parse(String(request?.body)).config.target).toMatchObject(expected);
+          });
+          expect(loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config))).toMatchObject({
+            targets: [expected],
+          });
+        } finally {
+          mockLocation.hash = '';
+        }
+      },
+    );
+
     it('preserves plugin overrides through import, editing, and YAML export', async () => {
       const user = userEvent.setup();
       render(
@@ -354,7 +407,10 @@ describe('RedTeamSetupPage', () => {
       });
     });
 
-    it('normalizes an object target with an omitted config while importing YAML', async () => {
+    it.each([
+      { id: 'openai:gpt-5', label: 'customer-service-agent' },
+      'openai:codex-sdk:gpt-6-sol',
+    ])('preserves the provider and supplies an empty config when importing %j', async (target) => {
       const user = userEvent.setup();
       const showToast = vi.fn();
       mockedUseToast.mockReturnValue({ showToast });
@@ -365,20 +421,15 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
       await user.click(screen.getByRole('button', { name: /Load Config/i }));
-      const file = new File(
-        [
-          'description: Valid shorthand target\ntargets:\n  - id: openai:gpt-5\n    label: customer-service-agent\nredteam:\n  plugins: [default]\n',
-        ],
-        'config.yaml',
-        { type: 'text/yaml' },
-      );
+      const file = new File([dumpYaml({ targets: [target] })], 'config.yaml', {
+        type: 'text/yaml',
+      });
 
       await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
 
       await waitFor(() => {
         expect(useRedTeamConfig.getState().config.target).toEqual({
-          id: 'openai:gpt-5',
-          label: 'customer-service-agent',
+          ...(typeof target === 'string' ? { id: target, label: target } : target),
           config: {},
         });
         expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
@@ -786,7 +837,7 @@ redteam:
 
     it.each([
       ['openai:responses:gpt-6.2-astra', 'openai'],
-      ['openai:codex-sdk:gpt-6.2-sol', 'openai'],
+      ['openai:codex-sdk:gpt-6.2-sol', 'codex-sdk'],
       ['litellm:openai/gpt-6.2-sol', 'litellm'],
       ['openrouter:openai/gpt-6.2-astra', 'openrouter'],
       ['vercel:openai/gpt-6.2-sol', 'vercel'],
