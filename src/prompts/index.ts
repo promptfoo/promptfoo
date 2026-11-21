@@ -210,6 +210,24 @@ export async function readPrompts(
   return prompts;
 }
 
+/** Cloud prompt content must never enter local file, glob or executable resolution. */
+export function readCloudPrompts(input: Parameters<typeof normalizeInput>[0]): Prompt[] {
+  return normalizeInput(input).flatMap((prompt) => {
+    const raw = prompt.raw;
+    if (
+      typeof raw !== 'string' ||
+      prompt.function ||
+      raw.startsWith('exec:') ||
+      maybeFilePath(raw)
+    ) {
+      throw new Error(
+        'Local prompt files and commands are disabled for cloud configurations. Use an inline prompt or a trusted local configuration file.',
+      );
+    }
+    return processString(prompt);
+  });
+}
+
 export async function processPrompts(
   prompts: EvaluateTestSuite['prompts'],
   basePath?: string,

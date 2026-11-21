@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../src/envars';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
+import { resolveConfigs } from '../../src/util/config/load';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/util/cloud', async (importOriginal) => ({
@@ -80,20 +81,43 @@ describe('doEval environment files', () => {
     expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
   });
 
+  it('preserves inline cloud aliases and uses only local sources for prompt files and paths', async () => {
+    const cloud = {
+      basePath: tempDir,
+      prompts: { 'Hello {{name}}': 'Greeting' },
+      providers: ['echo'],
+    };
+    const inline = await resolveConfigs({}, {}, undefined, cloud);
+    expect(inline.basePath).toBe(process.cwd());
+    expect(inline.testSuite.prompts[0]).toMatchObject({ raw: 'Hello {{name}}', label: 'Greeting' });
+    const local = path.join(tempDir, 'prompt.txt');
+    fs.writeFileSync(local, 'Local prompt');
+    const override = await resolveConfigs({ prompts: [local] }, {}, undefined, {
+      ...cloud,
+      prompts: ['file://ignored.txt'],
+    });
+    expect(override.testSuite.prompts[0].raw).toBe('Local prompt');
+  });
+
   it.each([
     { prompts: ['exec:fixture'], providers: ['echo'] },
+    { prompts: ['file://fixture.txt'], providers: ['echo'] },
+    { prompts: [{ id: './fixture-*', label: 'Named file' }], providers: ['echo'] },
     { prompts: ['Fixture'], providers: ['exec:fixture'] },
-  ])('rejects executable selection in a fetched eval configuration (case %#)', async (config) => {
-    vi.mocked(getEvalConfigFromCloud).mockResolvedValue({ ...config, tests: [{ vars: {} }] });
-    await expect(
-      doEval(
-        { config: ['11111111-1111-4111-8111-111111111111'], write: false, share: false },
-        {},
-        undefined,
-        { eventSource: 'mcp' },
-      ),
-    ).rejects.toThrow('disabled for cloud configurations');
-  });
+  ])(
+    'rejects local prompt or command selection in a fetched eval configuration (case %#)',
+    async (config) => {
+      vi.mocked(getEvalConfigFromCloud).mockResolvedValue({ ...config, tests: [{ vars: {} }] });
+      await expect(
+        doEval(
+          { config: ['11111111-1111-4111-8111-111111111111'], write: false, share: false },
+          {},
+          undefined,
+          { eventSource: 'mcp' },
+        ),
+      ).rejects.toThrow('disabled for cloud configurations');
+    },
+  );
 
   it('restores the caller environment when cloud loading fails', async () => {
     const envPath = path.join(tempDir, 'failed.env');

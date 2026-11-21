@@ -339,6 +339,7 @@ async function doEvalWithEnv(
     );
   }
 
+  let cloudEval: UnifiedConfig | undefined;
   if (configArgs.length === 1 && uuidConfigArgs.length === 1) {
     const cloudConfigId = uuidConfigArgs[0];
     if (cmdObj.watch) {
@@ -348,7 +349,7 @@ async function doEvalWithEnv(
     }
 
     try {
-      defaultConfig = await getEvalConfigFromCloud(cloudConfigId);
+      cloudEval = await getEvalConfigFromCloud(cloudConfigId);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(
@@ -356,6 +357,8 @@ async function doEvalWithEnv(
       );
     }
 
+    // A fetched prompt or directory is never a local configuration source.
+    defaultConfig = {};
     cmdObj.config = undefined;
     defaultConfigPath = undefined;
   }
@@ -382,7 +385,7 @@ async function doEvalWithEnv(
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(defaultConfig.redteam) && { isRedteam: true }),
+      ...(Boolean(cloudEval?.redteam ?? defaultConfig.redteam) && { isRedteam: true }),
     });
 
     if (cmdObj.write) {
@@ -545,7 +548,9 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = cloudEval
+        ? await resolveConfigs(cmdObj, {}, undefined, cloudEval)
+        : await resolveConfigs(cmdObj, defaultConfig));
     }
 
     // Clean up the providers this run loaded once no evaluation is using them.
@@ -1321,7 +1326,7 @@ async function doEvalWithEnv(
     const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
     try {
       return await cliState.withSafeMode(
-        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        Boolean(runCommand.safeMode || (cloudEval ?? runDefaults).commandLineOptions?.safeMode),
         () =>
           cliState.withConfig(undefined, () =>
             cliState.withBasePath(undefined, () =>
@@ -1348,7 +1353,7 @@ async function doEvalWithEnv(
   };
 
   const initialize = () => runEvaluation(true);
-  const result = await (uuidConfigArgs.length ? withCloudScriptPolicy(initialize) : initialize());
+  const result = await (cloudEval ? withCloudScriptPolicy(initialize) : initialize());
   if (watchTermination) {
     await watchTermination;
   }
