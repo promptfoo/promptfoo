@@ -24,7 +24,7 @@ import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
-import { sleep } from './util/time';
+import { sleep, sleepWithAbort } from './util/time';
 import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
@@ -650,6 +650,87 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
 
   claimedCacheKeys.add(scopedCacheKey);
   return true;
+}
+
+/**
+ * Store background billing claims compactly, independently of response-cache expiry.
+ * The synchronous public claim helper retains its separate legacy marker contract.
+ */
+export async function claimBackgroundUsageOnce(
+  cacheKey: string,
+  options: { signal?: AbortSignal; deadline?: number; onCommit?: () => void } = {},
+): Promise<boolean> {
+  const deadline = options.deadline ?? Date.now() + 5000;
+  const checkDeadline = () => {
+    options.signal?.throwIfAborted();
+    if (Date.now() >= deadline) {
+      throw new Error('Timed out claiming background usage');
+    }
+  };
+  checkDeadline();
+  const scopedCacheKey = getScopedCacheKey(cacheKey);
+  let claimed: boolean;
+  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const claimsPath = path.join(cachePath, 'claims');
+    const hash = sha256(scopedCacheKey);
+    if (fs.existsSync(path.join(claimsPath, hash))) {
+      return false;
+    }
+    try {
+      fs.mkdirSync(claimsPath, { recursive: true });
+      const databasePath = path.join(claimsPath, 'claims.db');
+      // The native driver must release prepared statements before Windows can remove the index.
+      const { DatabaseSync } = await import('node:sqlite');
+      while (true) {
+        checkDeadline();
+        try {
+          const db = new DatabaseSync(databasePath, { timeout: 0 });
+          try {
+            db.exec('BEGIN IMMEDIATE');
+            db.exec('CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID');
+            checkDeadline();
+            const { changes } = db
+              .prepare('INSERT OR IGNORE INTO claims (key) VALUES (?)')
+              .run(Buffer.from(hash, 'hex'));
+            checkDeadline();
+            db.exec('COMMIT');
+            claimed = changes === 1;
+            break;
+          } finally {
+            // Closing also rolls back an interrupted transaction.
+            db.close();
+          }
+        } catch (error) {
+          // Extended SQLite result codes carry the primary code in the low byte.
+          const code = ((error as { errcode?: number }).errcode ?? 0) & 0xff;
+          if (code !== 5 /* SQLITE_BUSY */ && code !== 6 /* SQLITE_LOCKED */) {
+            throw error;
+          }
+          // Wait asynchronously so cancellation can interrupt a contended write.
+          checkDeadline();
+          const delay = Math.min(25, deadline - Date.now());
+          if (options.signal) {
+            await sleepWithAbort(delay, options.signal);
+          } else {
+            await sleep(delay);
+          }
+        }
+      }
+    } catch (error) {
+      const wrapped = new Error('Failed to persist a one-time cache claim');
+      // The app compiles this module with ES2020, before ErrorOptions was added.
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
+    }
+  } else {
+    claimed = claimCacheKeyOnce(cacheKey);
+  }
+  if (claimed) {
+    options.onCommit?.();
+  }
+  return claimed;
 }
 
 function getSanitizedResponse(
