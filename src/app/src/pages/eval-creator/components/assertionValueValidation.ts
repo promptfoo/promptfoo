@@ -29,17 +29,21 @@ export const THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'latency',
   'perplexity',
   'perplexity-score',
+  'ttft',
   'not-cost',
   'not-latency',
   'not-perplexity',
   'not-perplexity-score',
+  'not-ttft',
 ]);
 
 export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'cost',
   'latency',
+  'ttft',
   'not-cost',
   'not-latency',
+  'not-ttft',
 ]);
 
 export const WORD_COUNT_ASSERTION_TYPES = new Set<AssertionType>(['word-count', 'not-word-count']);
@@ -213,9 +217,15 @@ function getThresholdError(assertion: Assertion): string | undefined {
       !Number.isFinite(assertion.threshold) ||
       assertion.threshold < 0
     ) {
-      return assertion.type === 'latency'
-        ? 'Enter a maximum latency in milliseconds, 0 or greater.'
-        : 'Enter a maximum cost, 0 or greater.';
+      if (assertion.type === 'latency' || assertion.type === 'not-latency') {
+        return 'Enter a maximum latency in milliseconds, 0 or greater.';
+      }
+
+      if (assertion.type === 'ttft' || assertion.type === 'not-ttft') {
+        return 'Enter a TTFT threshold in milliseconds, 0 or greater.';
+      }
+
+      return 'Enter a maximum cost, 0 or greater.';
     }
   }
 

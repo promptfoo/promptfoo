@@ -8,7 +8,7 @@ import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
 import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import {
   HttpProviderConfigFieldsSchema,
@@ -53,6 +53,7 @@ import {
   type RenderedHttpMultipartBody,
   renderHttpMultipartBody,
 } from './httpMultipart';
+import { estimateStreamingTokensPerSecond, processStreamingResponse } from './httpStreaming';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -77,6 +78,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+
+type StreamingMetrics = NonNullable<ProviderResponse['streamingMetrics']>;
 
 const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
 const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);
@@ -1678,6 +1681,19 @@ async function createHttpsAgent(
     .compose(stripDecompressionHeaders());
 }
 
+function requestsStreamingTransport(body: unknown): boolean {
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return false;
+    }
+  }
+  return (
+    typeof body === 'object' && body !== null && (body as Record<string, unknown>).stream === true
+  );
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1750,6 +1766,52 @@ export class HttpProvider implements ApiProvider {
     // Process body to resolve file:// references
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
+    }
+  }
+
+  private async fetchResponse(
+    url: string,
+    options: RequestInit,
+    bustCache?: boolean,
+  ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
+    const streaming = requestsStreamingTransport(options.body);
+    const controller = streaming ? new AbortController() : undefined;
+    let streamingMetrics: StreamingMetrics | undefined;
+    const start = Date.now();
+    const readBody = async (raw: Response) => {
+      const result = await processStreamingResponse(raw, start, {
+        streamFormat: this.config.streamFormat,
+      });
+      streamingMetrics = result.streamingMetrics;
+      return result.text;
+    };
+
+    try {
+      const response = await fetchWithCache<string>(
+        url,
+        controller
+          ? {
+              ...options,
+              readBody,
+              signal: options.signal
+                ? AbortSignal.any([options.signal, controller.signal])
+                : controller.signal,
+            }
+          : options,
+        getRequestTimeoutMs(),
+        'text',
+        bustCache,
+        this.config.maxRetries,
+      );
+      if (streaming) {
+        // Include body consumption and retries so latency and TTFT share a start time.
+        response.latencyMs = Date.now() - start;
+      }
+      return { response, streamingMetrics };
+    } catch (error) {
+      // Stop all response branches, including any debug logger clone.
+      controller?.abort(error);
+      throw error;
     }
   }
 
@@ -2609,31 +2671,12 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        multipartBody ? true : (context?.bustCache ?? context?.debug),
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      multipartBody ? true : (context?.bustCache ?? context?.debug),
+    );
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2646,6 +2689,9 @@ export class HttpProvider implements ApiProvider {
     const ret: ProviderResponse = {};
     ret.raw = data;
     ret.latencyMs = latencyMs;
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
     ret.cached = cached;
     ret.metadata = {
       http: {
@@ -2851,31 +2897,12 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context?.bustCache ?? context?.debug,
+    );
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
@@ -2895,6 +2922,9 @@ export class HttpProvider implements ApiProvider {
     }
     const ret: ProviderResponse = {};
     ret.latencyMs = latencyMs;
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
     ret.cached = cached;
 
     // If we used a session endpoint, set the sessionId we used
@@ -2964,19 +2994,6 @@ export class HttpProvider implements ApiProvider {
   }
 
   /**
-   * Extracts completion text from parsed output with fallback to raw text
-   */
-  private getCompletionText(parsedOutput: any, rawText: string): string {
-    if (typeof parsedOutput === 'string') {
-      return parsedOutput;
-    }
-    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
-      return parsedOutput.output;
-    }
-    return rawText;
-  }
-
-  /**
    * Processes response and adds token estimation if enabled
    */
   private async processResponseWithTokenEstimation(
@@ -2987,6 +3004,28 @@ export class HttpProvider implements ApiProvider {
     prompt: string,
     originalResponse?: unknown,
   ): Promise<ProviderResponse> {
+    const completionText =
+      typeof parsedOutput === 'string'
+        ? parsedOutput
+        : typeof parsedOutput?.output === 'string'
+          ? parsedOutput.output
+          : undefined;
+    const metrics = ret.streamingMetrics;
+    // Without an explicit transform the output can contain SSE framing.
+    if (
+      metrics &&
+      (this.config.transformResponse || this.config.responseParser) &&
+      completionText !== undefined
+    ) {
+      metrics.completionChars = completionText.length;
+      if (metrics.multiChunkDelivery) {
+        metrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+          completionText.length,
+          metrics.totalStreamTime,
+        );
+      }
+    }
+
     const originalTokenUsage =
       originalResponse &&
       typeof originalResponse === 'object' &&
@@ -2999,8 +3038,7 @@ export class HttpProvider implements ApiProvider {
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
       const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
-      const completionText = this.getCompletionText(parsedOutput, rawText);
-      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
+      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText ?? rawText);
     }
 
     const normalizedOutput = normalizeResponseTransformResult(parsedOutput);

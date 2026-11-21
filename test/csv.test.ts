@@ -773,6 +773,11 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(1000);
   });
 
+  it.each(['ttft', 'not-ttft'])('preserves explicit %s thresholds without a default', (type) => {
+    expect(assertionFromString(`${type}(1000)`)).toMatchObject({ type, threshold: 1000 });
+    expect(assertionFromString(type).threshold).toBeUndefined();
+  });
+
   it('should create a perplexity assertion', () => {
     const expected = 'perplexity(1.5)';
 
