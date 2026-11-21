@@ -161,7 +161,7 @@ describe('XAI Image Provider', () => {
       expect(result.cost).toBe(0.02);
     });
 
-    it('keeps the pro request slug while fallback pricing follows the quality redirect', async () => {
+    it('keeps the pro request slug while fallback pricing follows the image-2.0 low redirect', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-pro', {
         config: { apiKey: mockApiKey },
       });
@@ -182,22 +182,25 @@ describe('XAI Image Provider', () => {
         },
         getRequestTimeoutMs(),
       );
-      expect(result.cost).toBe(0.05);
+      expect(result.cost).toBeCloseTo(0.04, 10);
     });
 
     it('prices grok-imagine-image-2.0 by quality and resolution tier', async () => {
       // Tiers from xAI /v1/models/grok-imagine-image-2.0 `pricing`, verified live
-      // 2026-08-31: low/1k $0.04, low/2k $0.06, medium/1k $0.06, medium/2k $0.08.
+      // 2026-11-20: low 1k/1.5k/2k $0.04/$0.05/$0.06, medium $0.06/$0.07/$0.08.
       const cases: {
         quality?: 'low' | 'medium' | 'auto';
-        resolution?: '1k' | '2k';
+        resolution?: '1k' | '1.5k' | '2k';
         expected: number;
       }[] = [
         { expected: 0.04 },
         { quality: 'auto', resolution: '1k', expected: 0.04 },
         { quality: 'low', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '1.5k', expected: 0.05 },
+        { quality: 'auto', resolution: '1.5k', expected: 0.05 },
         { quality: 'low', resolution: '2k', expected: 0.06 },
         { quality: 'medium', resolution: '1k', expected: 0.06 },
+        { quality: 'medium', resolution: '1.5k', expected: 0.07 },
         { quality: 'medium', resolution: '2k', expected: 0.08 },
       ];
 
@@ -218,17 +221,17 @@ describe('XAI Image Provider', () => {
       }
     });
 
-    it('does not price grok-imagine-image-2.0 at the quality-model fallback rate', async () => {
-      // Regression guard: before grok-imagine-image-2.0 was indexed it fell through
-      // the "unknown grok-imagine-* slug" branch and was billed at $0.05/$0.07.
+    it('does not price grok-imagine-image-2.0 at the retired-slug fallback rate', async () => {
+      // Regression guard: grok-imagine-image-2.0 must use its own quality tiers, not the
+      // "unknown grok-imagine-* slug" bucket, which always bills the low tier.
       const provider = new XAIImageProvider('grok-imagine-image-2.0', {
-        config: { apiKey: mockApiKey, quality: 'low', resolution: '1k' },
+        config: { apiKey: mockApiKey, quality: 'medium', resolution: '1k' },
       });
 
       const result = await provider.callApi('Generate a cat');
 
-      expect(result.cost).not.toBeCloseTo(0.05, 10);
-      expect(result.cost).toBeCloseTo(0.04, 10);
+      expect(result.cost).not.toBeCloseTo(0.04, 10);
+      expect(result.cost).toBeCloseTo(0.06, 10);
     });
 
     it('prices auto-quality grok-imagine-image-2.0 edits at the medium output tier', async () => {
@@ -260,7 +263,7 @@ describe('XAI Image Provider', () => {
         expect.any(Object),
         getRequestTimeoutMs(),
       );
-      expect(result.cost).toBe(0.05);
+      expect(result.cost).toBeCloseTo(0.04, 10);
     });
 
     it('preserves unknown Grok Imagine slugs instead of falling back to grok-2-image', async () => {
@@ -278,19 +281,19 @@ describe('XAI Image Provider', () => {
       );
     });
 
-    it('prices unknown Grok Imagine slugs at the quality tier, not grok-2-image', async () => {
+    it('prices unknown Grok Imagine slugs like the retired quality slug, not grok-2-image', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-future-preview', {
         config: { apiKey: mockApiKey },
       });
 
       const result = await provider.callApi('Generate a cat');
 
-      // Unknown grok-imagine-* slugs are priced like grok-imagine-image-quality
-      // ($0.05 at 1k), not the legacy grok-2-image rate ($0.07).
-      expect(result.cost).toBe(0.05);
+      // Unknown grok-imagine-* slugs are priced like grok-imagine-image-quality, which xAI
+      // now bills as grok-imagine-image-2.0 low ($0.04 at 1k), not grok-2-image ($0.07).
+      expect(result.cost).toBeCloseTo(0.04, 10);
     });
 
-    it('supports the quality image model with resolution-sensitive fallback pricing', async () => {
+    it('prices the retired quality slug at the grok-imagine-image-2.0 low tier', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-quality', {
         config: { apiKey: mockApiKey, resolution: '2k' },
       });
@@ -312,7 +315,18 @@ describe('XAI Image Provider', () => {
         },
         getRequestTimeoutMs(),
       );
-      expect(result.cost).toBe(0.07);
+      // xAI serves the retired slug as grok-imagine-image-2.0 low: $0.06 at 2k.
+      expect(result.cost).toBeCloseTo(0.06, 10);
+
+      for (const [resolution, expected] of [
+        ['1k', 0.04],
+        ['1.5k', 0.05],
+      ] as const) {
+        const tierResult = await new XAIImageProvider('grok-imagine-image-quality', {
+          config: { apiKey: mockApiKey, resolution },
+        }).callApi('Generate a cat');
+        expect(tierResult.cost).toBeCloseTo(expected, 10);
+      }
     });
 
     it('uses the edits endpoint when image inputs are provided', async () => {
@@ -377,10 +391,11 @@ describe('XAI Image Provider', () => {
         },
         getRequestTimeoutMs(),
       );
-      expect(result.cost).toBe(0.07);
+      // $0.04 low-tier output + 2 source images * $0.01.
+      expect(result.cost).toBeCloseTo(0.06, 10);
     });
 
-    it('uses quality redirect pricing for deprecated pro edit fallback costs', async () => {
+    it('uses image-2.0 low redirect pricing for retired pro edit fallback costs', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-pro', {
         config: {
           apiKey: mockApiKey,
@@ -390,7 +405,7 @@ describe('XAI Image Provider', () => {
 
       const result = await provider.callApi('Restyle this source image');
 
-      expect(result.cost).toBeCloseTo(0.06, 10);
+      expect(result.cost).toBeCloseTo(0.05, 10);
     });
 
     it('should generate an image successfully', async () => {
