@@ -267,7 +267,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       ? await extractMetadata(absoluteRepoPath, baseBranch, snapshot.commit, true)
       : undefined;
     // Use the same immutable revisions for the snapshot, patches and hosted metadata.
-    const files = await processDiff(
+    const { files, totalFiles } = await processDiff(
       absoluteRepoPath,
       fullScanMetadata?.baseSha ?? baseBranch,
       snapshot?.commit ?? compareRef,
@@ -275,10 +275,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     );
 
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
-    const skippedFileCount = files.length - includedFiles.length;
+    const skippedFileCount = totalFiles - includedFiles.length;
 
     logger.debug(
-      `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFileCount} skipped)`,
+      `Files changed: ${totalFiles} (${includedFiles.length} included, ${skippedFileCount} skipped)`,
     );
 
     // Check if there are no files to scan

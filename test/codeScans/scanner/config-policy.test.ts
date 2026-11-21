@@ -39,7 +39,9 @@ describe('scanner config policy boundary', () => {
     const disconnect = vi.fn();
 
     vi.doMock('../../../src/codeScan/git/diffProcessor', () => ({
-      processDiff: vi.fn().mockResolvedValue(processDiffResult),
+      processDiff: vi
+        .fn()
+        .mockResolvedValue({ files: processDiffResult, totalFiles: processDiffResult.length }),
     }));
     vi.doMock('../../../src/codeScan/git/diff', () => ({
       getDefaultBaseBranch: vi.fn().mockResolvedValue('main'),

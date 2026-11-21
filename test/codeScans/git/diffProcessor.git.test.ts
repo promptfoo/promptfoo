@@ -11,7 +11,7 @@ import { mockProcessEnv } from '../../util/utils';
 
 describe('processDiff with real git blobs', () => {
   let repoPath: string;
-  let files: Awaited<ReturnType<typeof processDiff>>;
+  let files: Awaited<ReturnType<typeof processDiff>>['files'];
   const text = 'const message = "scan this text";\n'.repeat(200);
   const unusualPaths = [
     'name\twith-tab.ts',
@@ -69,7 +69,7 @@ describe('processDiff with real git blobs', () => {
     const tree = await git(['mktree', '-z'], entries.join(''));
     const head = await git(['commit-tree', tree, '-p', base, '-m', 'add fixtures']);
 
-    files = await processDiff(repoPath, base, head);
+    files = (await processDiff(repoPath, base, head)).files;
   });
 
   afterAll(async () => {
@@ -155,6 +155,24 @@ describe('full-scan diff data sharing', () => {
       { cwd: repo, input, encoding: 'utf8' },
     ).trim();
 
+  it('counts an entirely excluded full scan without exposing any private paths or patches', async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), 'promptfoo-skipped-diff-'));
+    try {
+      git(repo, ['init', '--quiet', '--template=']);
+      git(repo, ['commit', '--allow-empty', '-qm', 'base']);
+      await writeFile(path.join(repo, 'credentials.json'), '{}');
+      await writeFile(path.join(repo, 'binary.png'), Buffer.from([0, 1]));
+      git(repo, ['add', '.']);
+      git(repo, ['commit', '-qm', 'excluded files']);
+      await expect(processDiff(repo, 'HEAD~1', 'HEAD', true)).resolves.toEqual({
+        files: [],
+        totalFiles: 2,
+      });
+    } finally {
+      await rm(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  });
+
   it('returns only literal, in-scope regular files whose complete blobs pass the sharing policy', async () => {
     const repo = await mkdtemp(path.join(tmpdir(), 'promptfoo-full-diff-'));
     const write = async (name: string, body: string) => {
@@ -195,7 +213,8 @@ describe('full-scan diff data sharing', () => {
       git(repo, ['update-index', '--add', '--cacheinfo', `160000,${base},app/nested-repo`]);
       git(repo, ['commit', '-qm', 'changes']);
 
-      const files = await processDiff(path.join(repo, 'app'), base, 'HEAD', true);
+      const { files, totalFiles } = await processDiff(path.join(repo, 'app'), base, 'HEAD', true);
+      expect(totalFiles).toBe(14);
       expect(files.map((file) => file.path).sort()).toEqual([
         'app/[ab].ts',
         'app/from.ts',
@@ -244,7 +263,8 @@ describe('full-scan diff data sharing', () => {
       const head = git(repo, ['commit-tree', tree, '-p', base, '-m', 'fixture']);
       const restore = mockProcessEnv({ GIT_ICASE_PATHSPECS: '1' });
       try {
-        const files = await processDiff(repo, base, head, true);
+        const { files, totalFiles } = await processDiff(repo, base, head, true);
+        expect(totalFiles).toBe(3);
         expect(files.map((file) => file.path)).toEqual(['other.ts']);
         expect(files[0].patch).toContain('ordinary fixture');
         expect(files[0].patch).not.toContain('PRIVATE KEY');
@@ -279,7 +299,8 @@ describe('full-scan diff data sharing', () => {
       git(repo, ['commit', '-qm', 'replacement comparison']);
       git(repo, ['replace', compare, git(repo, ['rev-parse', 'HEAD'])]);
 
-      const files = await processDiff(repo, base, compare, true);
+      const { files, totalFiles } = await processDiff(repo, base, compare, true);
+      expect(totalFiles).toBe(2);
       expect(files.map((file) => file.path)).toEqual(['visible.custom']);
       expect(files[0]).toMatchObject({
         afterSizeBytes: Buffer.byteLength(eligible),

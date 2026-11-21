@@ -533,17 +533,21 @@ async function getGitHubOIDCToken(): Promise<string> {
 // Checkout supplies the full history. Never give Git a token, fetch from a
 // mutable origin or resolve Git through a previous step's GITHUB_PATH.
 const git = process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git';
-const gitEnv = {
+const gitEnv = (workspace: string) => ({
+  GIT_CONFIG_COUNT: '1',
+  GIT_CONFIG_KEY_0: 'safe.directory',
+  GIT_CONFIG_VALUE_0: workspace,
   GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_NO_REPLACE_OBJECTS: '1',
   GIT_TERMINAL_PROMPT: '0',
-};
+});
 
-async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
+async function assertWorkspaceHead(context: PullRequestContext, workspace: string): Promise<void> {
   let output = '';
   const exitCode = await exec.exec(`"${git}"`, ['rev-parse', 'HEAD'], {
-    env: gitEnv,
+    cwd: workspace,
+    env: gitEnv(workspace),
     listeners: {
       stdout: (data: Buffer) => {
         output += data.toString();
@@ -916,7 +920,11 @@ async function runCodeScan(): Promise<void> {
   core.info('🔍 Starting Promptfoo Code Scan...');
 
   const context = await getGitHubContext(inputs.githubToken);
-  await assertWorkspaceHead(context);
+  const workspace = fs.realpathSync(process.env.GITHUB_WORKSPACE || process.cwd());
+  if (!path.isAbsolute(workspace) || path.basename(workspace) === '*') {
+    throw new Error('A single absolute checkout directory is required.');
+  }
+  await assertWorkspaceHead(context, workspace);
   core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
   core.info('🔎 Checking if this is a setup PR...');
@@ -953,7 +961,7 @@ async function runCodeScan(): Promise<void> {
     const cliArgs = [
       'code-scans',
       'run',
-      process.env.GITHUB_WORKSPACE || process.cwd(),
+      workspace,
       ...(apiHost ? ['--api-host', apiHost] : []),
       '--config',
       finalConfigPath,
@@ -979,7 +987,7 @@ async function runCodeScan(): Promise<void> {
 
         let scanOutput = '';
         let scanError = '';
-        const scanEnv = Object.assign(createSubprocessEnv(), gitEnv, {
+        const scanEnv = Object.assign(createSubprocessEnv(), gitEnv(workspace), {
           PATH: [path.dirname(git), path.dirname(process.execPath)].join(path.delimiter),
         });
         if (oidcToken) {
@@ -1035,7 +1043,7 @@ async function runCodeScan(): Promise<void> {
       ? Promise.resolve(createMockScanResponse())
       : runPromptfooScan());
 
-    await assertWorkspaceHead(context);
+    await assertWorkspaceHead(context, workspace);
     if ((await assertCurrentPRHead(api, context)) !== baseSha) {
       throw new Error('Pull request base changed during the scan. Run the scan again.');
     }

@@ -548,18 +548,43 @@ describe('code-scan-action main', () => {
       expect(options?.env?.NODE_PATH).toBeUndefined();
     });
 
+    it('refuses a canonical workspace that grants a wildcard Git allowance', async () => {
+      mocks.fs.realpathSync.mockReturnValue(path.resolve('/test/*'));
+      await import('../../code-scan-action/src/main');
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          'A single absolute checkout directory is required.',
+        );
+      });
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+    });
+
     it('isolates every Git subprocess from inherited credentials and Git overrides', async () => {
       mockInheritedActionAuthEnv();
       mockProcessEnv({
         GIT_EXEC_PATH: '/fixture/git-helpers',
         GIT_CONFIG_COUNT: '20',
+        GIT_CONFIG_KEY_0: 'safe.directory',
+        GIT_CONFIG_VALUE_0: '*',
         GIT_CONFIG_KEY_19: 'fixture.setting',
         GIT_CONFIG_VALUE_19: 'fixture-value',
         GIT_SSH_COMMAND: 'fixture-ssh',
         GIT_DIR: '/fixture/other-repository',
         GIT_ASKPASS: '/fixture/askpass',
       });
-      await importActionAndGetPromptfooCall();
+      const workspace = path.resolve('/test/real-checkout');
+      mocks.fs.realpathSync.mockImplementation((p: string) =>
+        p === process.env.GITHUB_WORKSPACE ? workspace : p,
+      );
+      const scopedGit = {
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'safe.directory',
+        GIT_CONFIG_VALUE_0: workspace,
+      };
+      const scan = await importActionAndGetPromptfooCall();
+      expect(scan.args).toContain(workspace);
+      expect(scan.options?.env).toMatchObject(scopedGit);
+      expect(scan.options?.env?.GIT_CONFIG_KEY_19).toBeUndefined();
       await vi.waitFor(() =>
         expect(
           mocks.exec.exec.mock.calls.filter(([, args]) => args?.[0] === 'rev-parse'),
@@ -587,7 +612,8 @@ describe('code-scan-action main', () => {
         expect(options?.env?.GIT_CONFIG_GLOBAL).toBe('/dev/null');
         expect(options?.env?.GIT_CONFIG_NOSYSTEM).toBe('1');
         if (args?.[0] === 'rev-parse') {
-          expect(options?.env?.GIT_CONFIG_COUNT).toBeUndefined();
+          expect(options?.cwd).toBe(workspace);
+          expect(options?.env).toMatchObject(scopedGit);
         }
       }
     });

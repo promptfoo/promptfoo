@@ -16,6 +16,7 @@ describe('Scanner machine-readable output', () => {
     processDiffError,
     configApiHost,
     files = [],
+    totalFiles = files.length,
     dirtyFiles,
   }: {
     initialLogLevel?: string;
@@ -23,6 +24,7 @@ describe('Scanner machine-readable output', () => {
     processDiffError?: Error;
     configApiHost?: string;
     files?: FileRecord[];
+    totalFiles?: number;
     dirtyFiles?: Array<{ path: string }>;
   } = {}) {
     let currentLogLevel = initialLogLevel;
@@ -34,7 +36,7 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: processDiffError
         ? vi.fn().mockRejectedValue(processDiffError)
-        : vi.fn().mockResolvedValue(files),
+        : vi.fn().mockResolvedValue({ files, totalFiles }),
     }));
     vi.doMock('../../src/codeScan/git/metadata', () => ({
       extractMetadata: vi.fn().mockResolvedValue({ branch: 'feature', commitMessages: [] }),
@@ -264,28 +266,17 @@ describe('Scanner machine-readable output', () => {
     },
   );
 
-  it('reports skipped files in machine-readable no-file responses', async () => {
-    mockScanner({
-      files: [
-        {
-          path: 'package-lock.json',
-          status: 'M',
-          skipReason: 'denylist',
-          shaA: 'abc123',
-          shaB: 'def456',
-          linesAdded: 10,
-          linesRemoved: 5,
-        },
-      ],
-    });
+  it('reports filtered records in a full scan without disclosing the files', async () => {
+    mockScanner({ totalFiles: 2 });
+    mockMcpLifecycle();
 
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { displayScanResults } = await import('../../src/codeScan/scanner/output');
 
-    await executeScan('/test/repo', { json: true, diffsOnly: true });
+    await executeScan('/test/repo', { json: true, diffsOnly: false });
 
     expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan', skippedFiles: 1 },
+      { success: true, comments: [], review: 'No files to scan', skippedFiles: 2 },
       expect.any(Number),
       { format: CodeScanOutputFormat.JSON, githubPr: undefined },
     );
