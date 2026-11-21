@@ -4,7 +4,24 @@ import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-ap
 import { withGenAISpan } from '../../../src/providers/tracing';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { checkProviderApiKeys } from '../../../src/util/provider';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
+
+const createGatewayKeyEnvironment = () => ({
+  OPENAI_API_KEY: 'ambient-openai-key',
+  GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
+});
+
+const createGatewayHeaderConfig = () => ({
+  config: {
+    apiBaseUrl: 'https://gateway.example/v1',
+    headers: { 'api-key': 'gateway-credential' },
+  },
+});
+
+const createAgentModelContext = () => ({
+  vars: {},
+  prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
+});
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -231,12 +248,7 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   it('accepts a credential header for compatible gateways without an API key', async () => {
-    const result = await new OpenAiAgentsApiProvider('', {
-      config: {
-        apiBaseUrl: 'https://gateway.example/v1',
-        headers: { 'api-key': 'gateway-credential' },
-      },
-    }).callApi('hi');
+    const result = await new OpenAiAgentsApiProvider('', createGatewayHeaderConfig()).callApi('hi');
     expect(result.output).toBe('42');
     const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0][1]!.headers);
     expect(headers.get('api-key')).toBe('gateway-credential');
@@ -284,10 +296,7 @@ describe('OpenAiAgentsApiProvider', () => {
     };
 
     beforeEach(() => {
-      mockProcessEnv({
-        OPENAI_API_KEY: 'ambient-openai-key',
-        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
-      });
+      mockProcessEnv(createGatewayKeyEnvironment());
     });
 
     // X-Gateway-Auth does not look like a credential name; any custom header may still authenticate.
@@ -515,10 +524,7 @@ describe('OpenAiAgentsApiProvider', () => {
         expected: 'Bearer ambient-openai-key',
       },
     ])('sends $description despite URL credentials', async ({ config, expected }) => {
-      mockProcessEnv({
-        OPENAI_API_KEY: 'ambient-openai-key',
-        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
-      });
+      mockProcessEnv(createGatewayKeyEnvironment());
       await new OpenAiAgentsApiProvider('', { config }).callApi('hi');
       const values = authorizations();
       expect(values.length).toBeGreaterThan(0);
@@ -528,10 +534,7 @@ describe('OpenAiAgentsApiProvider', () => {
     });
 
     it('lets a configured Authorization header win over keys and URL userinfo', async () => {
-      mockProcessEnv({
-        OPENAI_API_KEY: 'ambient-openai-key',
-        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
-      });
+      mockProcessEnv(createGatewayKeyEnvironment());
       const result = await new OpenAiAgentsApiProvider('', {
         config: {
           apiBaseUrl: 'https://gateway-user:p%40ss@gateway.example/v1',
@@ -637,20 +640,14 @@ describe('OpenAiAgentsApiProvider', () => {
 
   it.each(['', 'gpt-6-astra'])('preserves model suffix precedence (%s)', async (suffix) => {
     const agentProvider = new OpenAiAgentsApiProvider(suffix, { config: { apiKey: 'test-key' } });
-    await agentProvider.callApi('hi', {
-      vars: {},
-      prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
-    });
+    await agentProvider.callApi('hi', createAgentModelContext());
     expect(
       JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent.model,
     ).toBe(suffix || 'gpt-5.6');
   });
 
   it('allows prompt config to override a configured model without a suffix', async () => {
-    await provider({ model: 'gpt-6-astra' }).callApi('hi', {
-      vars: {},
-      prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
-    });
+    await provider({ model: 'gpt-6-astra' }).callApi('hi', createAgentModelContext());
 
     expect(
       JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent.model,
@@ -710,12 +707,7 @@ describe('OpenAiAgentsApiProvider', () => {
           .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization')),
       );
     };
-    const headerGateway = new OpenAiAgentsApiProvider('', {
-      config: {
-        apiBaseUrl: 'https://gateway.example/v1',
-        headers: { 'api-key': 'gateway-credential' },
-      },
-    });
+    const headerGateway = new OpenAiAgentsApiProvider('', createGatewayHeaderConfig());
     expect(await authorizationsFor(headerGateway, {})).toEqual(new Set([null]));
     expect(await authorizationsFor(headerGateway, { apiKeyEnvar: 'PROMPT_OPENAI_KEY' })).toEqual(
       new Set(['Bearer prompt-envar-key']),
@@ -820,6 +812,28 @@ describe('OpenAiAgentsApiProvider', () => {
     describe.each([{ apiBaseUrl: 'https://prompt.example/v1' }, { apiHost: 'prompt.example' }])(
       'endpoint header isolation with %j',
       (endpointConfig) => {
+        const createCredentialFailureHandler =
+          (phase: string, credential: string) => (pathname: string, method: string) => {
+            if (method === 'DELETE') {
+              return apiError(400, `Cleanup failed: ${credential}`);
+            }
+            if (phase === 'creation' && method === 'POST') {
+              return apiError(400, `Invalid instructions: ${credential}`);
+            }
+            if (pathname.endsWith('/turns')) {
+              return json(
+                page([
+                  {
+                    ...turn,
+                    status: 'failed',
+                    error: { message: `Invalid instructions: ${credential}` },
+                  },
+                ]),
+              );
+            }
+            return undefined;
+          };
+
         const fakeJwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJvZmZsaW5lIn0.offline';
         const inheritedHeaders = {
           'X-Goog-Iap-Jwt-Assertion': fakeJwt,
@@ -937,26 +951,7 @@ describe('OpenAiAgentsApiProvider', () => {
           it.each(['creation', 'turn'])('redacts %s and cleanup errors', async (phase) => {
             const credential = 'offline-discarded-opaque-credential';
             mockProcessEnv({ REPLACEMENT_KEY: 'offline-replacement-key' });
-            mockApi((pathname, method) => {
-              if (method === 'DELETE') {
-                return apiError(400, `Cleanup failed: ${credential}`);
-              }
-              if (phase === 'creation' && method === 'POST') {
-                return apiError(400, `Invalid instructions: ${credential}`);
-              }
-              if (pathname.endsWith('/turns')) {
-                return json(
-                  page([
-                    {
-                      ...turn,
-                      status: 'failed',
-                      error: { message: `Invalid instructions: ${credential}` },
-                    },
-                  ]),
-                );
-              }
-              return undefined;
-            });
+            mockApi(createCredentialFailureHandler(phase, credential));
             const result = await provider({
               apiBaseUrl: 'https://gateway.example/v1',
               apiKey,
@@ -997,26 +992,7 @@ describe('OpenAiAgentsApiProvider', () => {
             'redacts credential components from %s and cleanup errors',
             async (phase) => {
               const credential = 'offline-url-credential';
-              mockApi((pathname, method) => {
-                if (method === 'DELETE') {
-                  return apiError(400, `Cleanup failed: ${credential}`);
-                }
-                if (phase === 'creation' && method === 'POST') {
-                  return apiError(400, `Invalid instructions: ${credential}`);
-                }
-                if (pathname.endsWith('/turns')) {
-                  return json(
-                    page([
-                      {
-                        ...turn,
-                        status: 'failed',
-                        error: { message: `Invalid instructions: ${credential}` },
-                      },
-                    ]),
-                  );
-                }
-                return undefined;
-              });
+              mockApi(createCredentialFailureHandler(phase, credential));
               const result = await provider({
                 apiBaseUrl: 'https://gateway.example/v1',
                 headers: { 'X-Gateway-Url': '{{ gatewayUrl }}' },
@@ -2206,18 +2182,20 @@ describe('OpenAiAgentsApiProvider', () => {
 
   it('honors eval cancellation that arrives while cleanup retries deletion', async () => {
     vi.useFakeTimers();
+    const deletionStarted = createDeferred<void>();
     let deletions = 0;
     mockApi((_pathname, method) => {
       if (method !== 'DELETE') {
         return undefined;
       }
       deletions++;
+      deletionStarted.resolve();
       return deletions < 3 ? apiError(409, 'session must be durably idle') : undefined;
     });
     const controller = new AbortController();
     const pending = provider().callApi('hi', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toThrow('cancel eval');
-    await vi.waitFor(() => expect(deletions).toBeGreaterThan(0));
+    await deletionStarted.promise;
     controller.abort(new Error('cancel eval'));
     await vi.advanceTimersByTimeAsync(5_000);
     await rejected;
@@ -2288,6 +2266,38 @@ describe('OpenAiAgentsApiProvider', () => {
           10,
         );
       }
+    },
+  );
+
+  it.each([
+    { model: 'gpt-6.2-sol', started: '2027-03-01T07:59:59Z', expected: 0.000972 },
+    { model: 'gpt-6.2-astra', started: '2027-03-01T08:00:00Z', expected: 0.007776 },
+  ])(
+    'uses the root turn start to price $model Ultrafast usage',
+    async ({ model, started, expected }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2027-03-02T00:00:00Z'));
+      const agent = { model, service_tier: 'ultrafast', reasoning: { effort: 'high' } };
+      mockApi((pathname) => {
+        if (pathname.endsWith('/turns')) {
+          return json(
+            page([
+              {
+                ...turn,
+                created_at: Date.parse('2027-03-01T07:00:00Z') / 1000,
+                started_at: Date.parse(started) / 1000,
+              },
+            ]),
+          );
+        }
+        return pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+          ? json({ ...session, agent })
+          : undefined;
+      });
+      const result = await provider({ agent }).callApi('hi');
+      expect(JSON.parse(calls()[0].options!.body as string).agent).toEqual(agent);
+      expect(result.output).toBe('42');
+      expect(result.cost).toBeCloseTo(expected, 10);
     },
   );
 

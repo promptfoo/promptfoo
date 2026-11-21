@@ -18,8 +18,8 @@ export function createDecompressionInterceptor(): Dispatcher.DispatchInterceptor
   process.emitWarning = wrappedEmitWarning;
 
   try {
-    // Retain decompression for all statuses and undici's decompressed size limit.
-    return interceptors.decompress({ skipErrorResponses: false });
+    // Keep the 64 MiB response limit explicit: undici 7.30 defaults to unlimited.
+    return interceptors.decompress({ skipErrorResponses: false, maxSize: 64 * 1024 * 1024 });
   } finally {
     if (process.emitWarning === wrappedEmitWarning) {
       process.emitWarning = originalEmitWarning;

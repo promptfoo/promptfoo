@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 title: Self-hosting
-description: Learn how to self-host promptfoo using Docker, Docker Compose, or Helm. This comprehensive guide walks you through setup, configuration, and troubleshooting.
+description: Self-host a Promptfoo server with Docker, Docker Compose, or Helm. Configure persistent storage, share eval results, and troubleshoot common deployment issues.
 keywords:
   - AI testing
   - configuration
@@ -19,7 +19,7 @@ keywords:
 
 # Self-hosting Promptfoo
 
-Promptfoo provides a basic Docker image that allows you to host a server that stores evals. This guide covers various deployment methods.
+Use the Promptfoo Docker image to host a server that stores and shares eval results.
 
 Self-hosting enables you to:
 
@@ -86,7 +86,7 @@ docker run -d \
 - **`-d`**: Run in detached mode (background).
 - **`--name promptfoo_container`**: Assign a name to the container.
 - **`-p 3000:3000`**: Map host port 3000 to container port 3000.
-- **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: **Crucial for persistence.** Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
+- **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
 - **`-e OPENAI_API_KEY=sk-abc123`**: Example of setting an environment variable. Add necessary API keys here so users can run evals directly from the web UI. Replace `sk-abc123` with your actual key.
 
 Access the UI at `http://localhost:3000`.
@@ -281,6 +281,13 @@ first advance the checkout to the desired release, then rebuild and redeploy. Us
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
+To refresh Alpine packages even when the parent image is unchanged, change the
+`OS_PACKAGE_REFRESH` build argument on each rebuild:
+
+```sh
+docker build --pull --build-arg OS_PACKAGE_REFRESH="$(date +%s)" -t promptfoo:custom .
+```
+
 Custom Dockerfiles that bake Promptfoo into another base image should identify themselves so update
 notices do not suggest a host-level `npm` or `npx` command:
 
@@ -334,7 +341,7 @@ After configuring the CLI, you need to explicitly upload eval results to your se
 2. Run `promptfoo share` to upload the results
 3. Or use `promptfoo eval --share` to do both in one command
 
-Custom upload clients should follow the same import contract: save the eval with complete prompt metrics, then upload result chunks to `POST /api/eval/{id}/results`. Chunk uploads append rows but do not recompute those metrics. Run a new eval to calculate results for additional tests.
+`POST /api/eval/{id}/results` appends rows to an existing evaluation without recalculating prompt scores or pass/fail counts. When importing results in chunks, supply complete prompt metrics when you create the evaluation. Run a new eval to score additional tests.
 
 Alternatively, configure these URLs permanently in your `promptfooconfig.yaml`:
 
@@ -375,6 +382,8 @@ When configured correctly, your self-hosted server handles requests like:
 By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
 
 By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
+
+`PROMPTFOO_MEDIA_PATH` applies only to legacy `storageRef` media, which defaults to `/home/promptfoo/.promptfoo/media`; it does not move the `blobs` directory. Set it before media storage is first used: that location stays fixed for the process.
 
 ### Custom Config Directory
 

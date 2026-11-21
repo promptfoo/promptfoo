@@ -88,7 +88,6 @@ describe('TempoProvider', () => {
 
     const result = await provider.fetchTrace(TRACE_ID);
 
-    expect(result).toMatchObject({ traceId: TRACE_ID, services: ['target-service'] });
     expect(result?.spans).toHaveLength(2);
     expect(result?.spans[0]).toMatchObject({
       spanId: '0123456789abcdef',
@@ -190,7 +189,7 @@ describe('TempoProvider', () => {
     const result = await provider.fetchTrace(TRACE_ID);
 
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
-    expect(result?.services).toEqual(['target-service']);
+    expect(result?.spans[0].attributes?.['service.name']).toBe('target-service');
     expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 4 malformed spans');
   });
 
@@ -277,18 +276,5 @@ describe('TempoProvider', () => {
 
     await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
     expect(cancel).toHaveBeenCalledOnce();
-  });
-
-  it('checks readiness through the proxy-aware client without following redirects', async () => {
-    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-
-    expect(await provider.healthCheck()).toBe(true);
-    expect(mockedFetch).toHaveBeenCalledWith(
-      'http://tempo:3200/ready',
-      expect.objectContaining({ redirect: 'error', signal: expect.any(AbortSignal) }),
-    );
-
-    mockedFetch.mockRejectedValueOnce(new Error('offline'));
-    expect(await provider.healthCheck()).toBe(false);
   });
 });

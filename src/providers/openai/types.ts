@@ -184,10 +184,13 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     bitrate?: string;
     format?: string | 'wav' | 'mp3' | 'flac' | 'opus' | 'pcm16' | 'aac';
     speed?: number;
-    voice?: string;
+    voice?: OpenAI.Chat.Completions.ChatCompletionAudioParam['voice'];
   };
 
   // Responses API specific options
+  access_programs?: {
+    cyber?: 'standard' | 'daybreak_blue' | 'daybreak_red';
+  };
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;

@@ -42,6 +42,18 @@ import type {
   Prompt,
 } from '../../../src/types/index';
 
+const createLimitedMessageContext = () => ({
+  prompt: { raw: '', label: '' },
+  vars: {},
+  test: {
+    metadata: {
+      pluginConfig: {
+        maxCharsPerMessage: 5,
+      },
+    },
+  },
+});
+
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
 const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
@@ -816,17 +828,7 @@ describe('shared redteam provider utilities', () => {
           tokenUsage: { numRequests: 1 },
         },
       });
-      const context = {
-        prompt: { raw: '', label: '' },
-        vars: {},
-        test: {
-          metadata: {
-            pluginConfig: {
-              maxCharsPerMessage: 5,
-            },
-          },
-        },
-      } as CallApiContextParams;
+      const context = createLimitedMessageContext() as CallApiContextParams;
 
       const result = await getTargetResponse(mockProvider, 'too long', context);
 
@@ -843,17 +845,7 @@ describe('shared redteam provider utilities', () => {
           tokenUsage: { numRequests: 1 },
         },
       });
-      const context = {
-        prompt: { raw: '', label: '' },
-        vars: {},
-        test: {
-          metadata: {
-            pluginConfig: {
-              maxCharsPerMessage: 5,
-            },
-          },
-        },
-      } as CallApiContextParams;
+      const context = createLimitedMessageContext() as CallApiContextParams;
       const prompt = JSON.stringify({
         _promptfoo_audio_hybrid: true,
         history: [
@@ -883,17 +875,7 @@ describe('shared redteam provider utilities', () => {
           tokenUsage: { numRequests: 1 },
         },
       });
-      const context = {
-        prompt: { raw: '', label: '' },
-        vars: {},
-        test: {
-          metadata: {
-            pluginConfig: {
-              maxCharsPerMessage: 5,
-            },
-          },
-        },
-      } as CallApiContextParams;
+      const context = createLimitedMessageContext() as CallApiContextParams;
       const prompt = JSON.stringify({
         _promptfoo_audio_hybrid: true,
         history: [],
@@ -1039,33 +1021,109 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it.each(['success', 'completed error'] as const)(
+      'retains a completed %s when cancellation interrupts target delay',
+      async (outcome) => {
+        const realTime =
+          await vi.importActual<typeof import('../../../src/util/time')>('../../../src/util/time');
+        mockedSleep.mockImplementation(realTime.sleep);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const caller = new AbortController();
+        const reason = new Error('caller stopped target delay');
+        const response = {
+          output: 'Completed local response',
+          cost: 0.25,
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          ...(outcome === 'completed error' && {
+            error: 'Completed tool failure',
+            metadata: { errorOrigin: 'tool' },
+          }),
+        };
+        const provider = createMockProvider({ delay: 1000, response });
+        const pending = getTargetResponse(provider, 'harmless prompt', undefined, {
+          abortSignal: caller.signal,
+        });
+        let settled = false;
+        void pending.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        try {
+          await vi.advanceTimersByTimeAsync(0);
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          await vi.advanceTimersByTimeAsync(999);
+          expect(settled).toBe(false);
+          caller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+          expect(settled, 'Caller cancellation must release the completed target delay').toBe(true);
+          expect(await pending).toMatchObject(response);
+          expect(caller.signal.reason).toBe(reason);
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          caller.abort(reason);
+          await vi.runAllTimersAsync();
+          await Promise.allSettled([pending]);
+          mockedSleep.mockReset();
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('respects provider delay for non-cached responses', async () => {
+      const realTime =
+        await vi.importActual<typeof import('../../../src/util/time')>('../../../src/util/time');
+      mockedSleep.mockImplementation(realTime.sleep);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const mockProvider = createMockProvider({
         delay: 100,
-        response: {
-          output: 'test response',
-          tokenUsage: { numRequests: 1 },
-        },
+        response: { output: 'test response' },
       });
-
-      await getTargetResponse(mockProvider, 'test prompt');
-
-      expect(mockedSleep).toHaveBeenCalledWith(100);
+      const pending = getTargetResponse(mockProvider, 'test prompt');
+      let settled = false;
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(99);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await pending).toMatchObject({ output: 'test response' });
+        expect(settled).toBe(true);
+      } finally {
+        await vi.runAllTimersAsync();
+        await Promise.allSettled([pending]);
+        mockedSleep.mockReset();
+        vi.useRealTimers();
+      }
     });
 
     it('skips delay for cached responses', async () => {
-      const mockProvider = createMockProvider({
-        delay: 100,
-        response: {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const mockProvider = createMockProvider({
+          delay: 100,
+          response: { output: 'test response', cached: true },
+        });
+        expect(await getTargetResponse(mockProvider, 'test prompt')).toMatchObject({
           output: 'test response',
           cached: true,
-          tokenUsage: { numRequests: 1 },
-        },
-      });
-
-      await getTargetResponse(mockProvider, 'test prompt');
-
-      expect(mockedSleep).not.toHaveBeenCalled();
+        });
+        expect(vi.getTimerCount()).toBe(0);
+        expect(mockedSleep).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('returns an error when neither output nor error is set', async () => {
@@ -1482,6 +1540,7 @@ describe('shared redteam provider utilities', () => {
   describe('grader assertion helpers', () => {
     const singleAssertion: Assertion = {
       type: 'llm-rubric',
+      metric: 'TestMetric',
       value: 'original rubric',
     };
     const assertionSet: AssertionSet = {
@@ -1492,12 +1551,19 @@ describe('shared redteam provider utilities', () => {
     it('uses grade assertion when present', () => {
       expect(
         buildGraderResultAssertion(
-          { type: 'javascript', pass: true, score: 1, reason: 'ok' } as Assertion,
+          {
+            type: 'javascript',
+            metric: 'GradeMetric',
+            pass: true,
+            score: 1,
+            reason: 'ok',
+          } as Assertion,
           singleAssertion,
           'rendered rubric',
         ),
       ).toEqual({
         type: 'javascript',
+        metric: 'GradeMetric',
         pass: true,
         score: 1,
         reason: 'ok',
@@ -1508,6 +1574,7 @@ describe('shared redteam provider utilities', () => {
     it('falls back to a single assertion and exposes its value', () => {
       expect(buildGraderResultAssertion(undefined, singleAssertion, 'rendered rubric')).toEqual({
         type: 'llm-rubric',
+        metric: 'TestMetric',
         value: 'rendered rubric',
       });
       expect(getGraderAssertionValue(singleAssertion)).toBe('original rubric');
