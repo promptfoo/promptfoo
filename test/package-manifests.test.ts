@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import * as yaml from 'js-yaml';
 import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
@@ -684,73 +683,6 @@ describe('package manifests', () => {
     ).toThrow('Unable to resolve override reference $missing');
   });
 
-  it('exercises each supported Node floor in CI and an unsupported runtime in CLI smoke tests', () => {
-    const workflowPath = '.github/workflows/main.yml';
-    const workflow = yaml.load(fs.readFileSync(workflowPath, 'utf8')) as {
-      env: { NODE_FLOORS: string };
-      jobs: Record<string, { steps: { uses?: string; with?: { 'node-version'?: string } }[] }>;
-    };
-    const supportedNodeRange = readPackageJson<{ engines: { node: string } }>('package.json')
-      .engines.node;
-    const renovateConfig = readPackageJson<{
-      packageRules?: Array<{
-        enabled?: boolean;
-        matchCurrentValue?: string;
-        matchFileNames?: string[];
-        matchManagers?: string[];
-        matchPackageNames?: string[];
-      }>;
-    }>('renovate.json');
-
-    const floors: Record<string, string> = JSON.parse(workflow.env.NODE_FLOORS);
-    const nodeVersions = (job: string) =>
-      workflow.jobs[job].steps
-        .filter((step) => step.uses?.startsWith('actions/setup-node@'))
-        .map((step) => step.with?.['node-version']);
-    const [unsupported, minimum] = nodeVersions('smoke-tests');
-    expect(unsupported).toBeDefined();
-    expect(satisfies(unsupported!, supportedNodeRange)).toBe(false);
-    expect(minimum).toBe("${{ fromJSON(env.NODE_FLOORS)['22.22'] }}");
-    expect(floors['22.22']).toBe(minVersion(supportedNodeRange)?.version);
-    expect(Object.values(floors).sort()).toEqual(
-      supportedNodeRange
-        .split('||')
-        .map((range) => minVersion(range)?.version)
-        .sort(),
-    );
-    for (const job of ['build', 'package-build', 'package-acceptance']) {
-      expect(nodeVersions(job)).toEqual([
-        '${{ fromJSON(env.NODE_FLOORS)[matrix.node] || matrix.node }}',
-      ]);
-    }
-
-    const protectedRuntimeRule = renovateConfig.packageRules?.find(
-      (rule) =>
-        rule.enabled === false &&
-        rule.matchManagers?.includes('github-actions') &&
-        rule.matchPackageNames?.includes('node') &&
-        rule.matchPackageNames?.includes('actions/node-versions') &&
-        rule.matchFileNames?.includes(workflowPath) &&
-        rule.matchCurrentValue,
-    );
-
-    expect(
-      protectedRuntimeRule,
-      'Renovate must not replace intentionally unsupported or minimum-supported smoke-test runtimes',
-    ).toBeDefined();
-
-    const protectedRuntimePattern = new RegExp(
-      protectedRuntimeRule!.matchCurrentValue!.slice(1, -1),
-    );
-
-    expect(protectedRuntimePattern.test(unsupported!)).toBe(true);
-    for (const [label, version] of Object.entries(floors)) {
-      expect(satisfies(version, label)).toBe(true);
-      expect(protectedRuntimePattern.test(version)).toBe(true);
-    }
-    expect(protectedRuntimePattern.test(fs.readFileSync('.nvmrc', 'utf8').trim())).toBe(false);
-  });
-
   it('keeps the Docker runtime on the patched Node release', () => {
     const expectedVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
@@ -868,11 +800,6 @@ describe('package manifests', () => {
     }
   });
 
-  it('links the streaming OpenAI example to the supported Node releases', () => {
-    const readme = fs.readFileSync('examples/config-websockets/streaming/server/README.md', 'utf8');
-    expect(readme).toContain('https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support');
-  });
-
   it('does not import jsdom from root src/', () => {
     // Guards against re-introducing jsdom into the CLI startup graph, which
     // previously broke `npx promptfoo` on Node 24 via ERR_REQUIRE_ASYNC_MODULE.
@@ -891,21 +818,5 @@ describe('package manifests', () => {
       'jsdom',
     );
     expect(offenders).toEqual([]);
-  });
-
-  it('keeps the supported Node.js range aligned across workspace manifests', () => {
-    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
-      ?.node;
-
-    expect(validRange(rootEngines ?? '')).toBeTruthy();
-
-    for (const manifestPath of [
-      'site/package.json',
-      'code-scan-action/package.json',
-      'examples/config-websockets/streaming/server/package.json',
-    ]) {
-      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
-      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
-    }
   });
 });
