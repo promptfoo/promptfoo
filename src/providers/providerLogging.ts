@@ -128,15 +128,13 @@ const DIAGNOSTIC_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'<>]+/gi;
 // `name: value`, `name=value`, and quoted or (repeatedly) JSON-escaped `"name": "value"` fields.
 const CREDENTIAL_FIELD =
   /(?<![\w.\\-])(\\{0,8}["']?)([A-Za-z_][\w.-]{0,63})\1\s*[:=]\s*(\\{0,8}["'])?/g;
-const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
-  '"': /(?<!\\)"/g,
-  "'": /(?<!\\)'/g,
-  // Authorization values can span several tokens and comma-separated parameters; cookie values
-  // span `;`-separated pairs but cannot contain a comma.
-  authorization: /[;\r\n]/g,
-  cookie: /[,\r\n]/g,
-  bare: /[\s,;&})\]"'\\]/g,
-};
+const CREDENTIAL_FIELD_END = new Map([
+  ['"', /(?<!\\)"/g],
+  ["'", /(?<!\\)'/g],
+  // Authorization can span comma-separated parameters, cookies can span semicolon-separated pairs.
+  ['authorization', /[;\r\n]/g],
+  ['cookie', /[,\r\n]/g],
+]);
 
 function matchDiagnosticFields(source: string, redact: Redact) {
   for (const match of source.matchAll(DIAGNOSTIC_URL)) {
@@ -160,10 +158,8 @@ function matchDiagnosticFields(source: string, redact: Redact) {
       redact(start, source.length);
       return;
     }
-    const end =
-      CREDENTIAL_FIELD_END[
-        quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? 'bare'
-      ];
+    const kind = quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? '';
+    const end = CREDENTIAL_FIELD_END.get(kind) ?? /[\s,;&})\]"'\\]/g;
     end.lastIndex = source.startsWith(REDACTED, start) ? start + REDACTED.length : start;
     copied = end.exec(source)?.index ?? source.length;
     redact(start, copied);

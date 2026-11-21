@@ -122,6 +122,7 @@ describe('redactDiagnosticText', () => {
       JSON.stringify(JSON.stringify(JSON.stringify({ FAL_KEY: 'upstream-1 "upstream-2"' }))),
     ],
     ['multi-token authorization', 'Authorization: Token upstream-1 upstream-2; context'],
+    ['prototype-like field name', '__proto__.Authorization: Token upstream-1; context'],
     [
       'digest authorization',
       'Proxy-Authorization: Digest username="upstream-1", response="upstream-2"',
