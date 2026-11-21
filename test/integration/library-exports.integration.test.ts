@@ -82,8 +82,9 @@ describeIfBuildExists('Library Exports', () => {
       // chunk), not just the shim, so a regression that inlines a heavy dep into a chunk is caught.
       for (const entry of ['contracts.js', 'contracts.cjs']) {
         const { totalBytes, bareSpecifiers } = readModuleClosure(path.join(distDir, entry));
-        // MCP and HTTP contracts are ~48KB (ESM) / ~55KB (CJS), without bundling Zod.
-        expect(totalBytes).toBeLessThan(65000);
+        // HTTP/MCP/OpenAI/Azure/Anthropic: ~91 KB runtime and ~912 KB declarations.
+        // Allow roughly 10% headroom; Zod remains the only external below.
+        expect(totalBytes).toBeLessThan(100000);
         // Leaf-safe contract: zod is the ONLY external the subpath may pull. This catches both a
         // newly-leaked dependency (extra entry) AND zod accidentally being inlined (zod disappears).
         expect([...bareSpecifiers].sort()).toEqual(['zod']);
@@ -92,7 +93,7 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(225000);
+        expect(fs.statSync(declarationPath).size).toBeLessThan(1000000);
       }
     });
 
@@ -193,7 +194,7 @@ describeIfBuildExists('Library Exports', () => {
 
   describe('ESM library import', () => {
     it('should be importable via dynamic import', async () => {
-      const esmPath = `file://${path.join(distDir, 'index.js')}`;
+      const esmPath = pathToFileURL(path.join(distDir, 'index.js')).href;
       const esmModule = await import(esmPath);
 
       // Check for Zod schemas (common exports)
@@ -202,7 +203,7 @@ describeIfBuildExists('Library Exports', () => {
     });
 
     it('should export the same keys in ESM and CJS', async () => {
-      const esmPath = `file://${path.join(distDir, 'index.js')}`;
+      const esmPath = pathToFileURL(path.join(distDir, 'index.js')).href;
       const cjsPath = path.join(distDir, 'index.cjs');
 
       const esmModule = await import(esmPath);
@@ -229,7 +230,7 @@ describeIfBuildExists('Library Exports', () => {
 
   describe('ESM contracts import', () => {
     it('should export portable contract schemas', async () => {
-      const contractsModule = await import(`file://${path.join(distDir, 'contracts.js')}`);
+      const contractsModule = await import(pathToFileURL(path.join(distDir, 'contracts.js')).href);
       expect(contractsModule.EmailSchema).toBeDefined();
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();

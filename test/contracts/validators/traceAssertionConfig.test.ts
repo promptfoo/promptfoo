@@ -6,6 +6,18 @@ import {
 } from '../../../src/contracts/index';
 
 describe('traceAssertionConfig shared validators', () => {
+  it('rejects invalid attribute filters across all validators', () => {
+    const config = { max: 1, attributes: [] };
+    for (const validate of [
+      traceSpanCountBoundsError,
+      traceSpanDurationConfigError,
+      traceErrorSpansConfigError,
+    ]) {
+      expect(validate(config)).toMatch(/attributes must be/);
+      expect(validate({ ...config, attributes: { test: true } })).toBeUndefined();
+    }
+  });
+
   describe('traceSpanCountBoundsError', () => {
     it('requires at least one bound', () => {
       expect(traceSpanCountBoundsError({})).toBe(
@@ -87,7 +99,9 @@ describe('traceAssertionConfig shared validators', () => {
 
     it('accepts values that resolve to defaults at runtime', () => {
       expect(traceErrorSpansConfigError({})).toBeUndefined();
-      expect(traceErrorSpansConfigError('anything')).toBeUndefined();
+      expect(traceErrorSpansConfigError(undefined)).toBeUndefined();
+      expect(traceErrorSpansConfigError('2')).toMatch(/requires a number/);
+      expect(traceErrorSpansConfigError([])).toMatch(/requires a number/);
     });
   });
 });

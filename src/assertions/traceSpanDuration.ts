@@ -133,6 +133,9 @@ export const handleTraceSpanDuration = ({
     const durations = spanDurations.map((s) => s.duration);
     const percentileValue = calculatePercentile(durations, percentile, method);
 
+    const rounded = percentileValue.toFixed(2);
+    const displayDuration =
+      percentileValue > max && Number(rounded) <= max ? String(percentileValue) : rounded;
     if (percentileValue > max) {
       basePass = false;
       const slowestSpans = spanDurations
@@ -140,10 +143,10 @@ export const handleTraceSpanDuration = ({
         .sort((a, b) => b.duration - a.duration)
         .slice(0, 3);
 
-      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) exceeds threshold ${max}ms. `;
+      reason = `${percentile}th percentile duration (${displayDuration}ms, method=${method}) exceeds threshold ${max}ms. `;
       reason += `Slowest spans: ${slowestSpans.map((s) => `${s.name} (${s.duration}ms)`).join(', ')}`;
     } else {
-      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) is within threshold ${max}ms`;
+      reason = `${percentile}th percentile duration (${displayDuration}ms, method=${method}) is within threshold ${max}ms`;
     }
   }
 

@@ -38,7 +38,7 @@ describe('TraceTimeline', () => {
         {
           spanId: 'root-2',
           name: 'Another Root Span',
-          startTime: 600,
+          startTime: 50,
           endTime: 800,
         },
       ],
@@ -49,13 +49,17 @@ describe('TraceTimeline', () => {
     expect(screen.getByText('Trace ID: trace-happy-path-123')).toBeInTheDocument();
     expect(screen.getByText('Total Duration: 800ms')).toBeInTheDocument();
 
-    const parentSpanName = screen.getByText('Parent Span');
-    const childSpanName = screen.getByText('Child Span');
-    const anotherRootSpanName = screen.getByText('Another Root Span');
-
-    expect(parentSpanName).toBeInTheDocument();
-    expect(childSpanName).toBeInTheDocument();
-    expect(anotherRootSpanName).toBeInTheDocument();
+    const labels = screen.getAllByText(/^(Parent Span|Child Span|Another Root Span)$/);
+    expect(labels.map((label) => label.textContent)).toEqual([
+      'Parent Span',
+      'Child Span',
+      'Another Root Span',
+    ]);
+    expect(labels.map((label) => label.parentElement?.style.paddingLeft)).toEqual([
+      '0px',
+      '16px',
+      '0px',
+    ]);
   });
 
   it('should render a message "No trace data available" when given a trace with an empty spans array', () => {

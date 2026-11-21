@@ -261,6 +261,8 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
+Span name patterns and string attribute filters can include a named test variable such as `{{ operation }}`. This also works in externally loaded values. Numeric thresholds must be numbers. Use a numeric value or return a number from an assertion function for a dynamic error budget.
+
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
@@ -840,7 +842,7 @@ async function compareModels(prompt, context) {
 
 ## Red Team Tracing
 
-When running [red team tests](/docs/red-team/), tracing provides a powerful capability: **traces from your application's internal operations can be fed back to adversarial attack strategies**, allowing them to craft more sophisticated attacks based on what they observe.
+During [red team tests](/docs/red-team/), attack strategies can use application traces to adapt their next attempt based on observed model calls, tool executions, guardrails, and errors.
 
 This creates a feedback loop where:
 

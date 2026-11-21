@@ -140,10 +140,11 @@ describe('trace assertions', () => {
   };
 
   describe.each(['json', 'yaml'])('external %s assertion configs', (extension) => {
+    const filters = { pattern: '{{ operation }}', attributes: { 'http.method': '{{method}}' } };
     it.each([
-      ['trace-error-spans', { pattern: 'http.*', max_count: 1 }],
-      ['trace-span-count', { pattern: 'http.*', min: 1, max: 1 }],
-      ['trace-span-duration', { pattern: 'http.*', max: 500 }],
+      ['trace-error-spans', { ...filters, requirePresence: true, max_count: 1 }],
+      ['trace-span-count', { ...filters, min: 1, max: 1 }],
+      ['trace-span-duration', { ...filters, requirePresence: true, max: 500 }],
     ] as const)('loads structured %s values', async (type, value) => {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-trace-assertions-'));
       mockTraceStore.getTrace.mockResolvedValue({
@@ -158,7 +159,7 @@ describe('trace assertions', () => {
         );
         const result = await runAssertion({
           assertion: { type, value: `file://${filename}` },
-          test: mockTest,
+          test: { ...mockTest, vars: { operation: 'http.*', method: 'GET' } },
           providerResponse: mockProviderResponse,
           traceId: mockTraceData.traceId,
         });
@@ -167,6 +168,33 @@ describe('trace assertions', () => {
         fs.rmSync(directory, { recursive: true, force: true });
       }
     });
+  });
+
+  it('rejects a string budget instead of silently using zero', async () => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+    await expect(
+      runAssertion({
+        assertion: { type: 'not-trace-error-spans', value: '{{budget}}' },
+        test: { vars: { budget: 2 } },
+        providerResponse: mockProviderResponse,
+        traceId: mockTraceData.traceId,
+      }),
+    ).rejects.toThrow('requires a number');
+  });
+
+  it('reports the nonzero duration that exceeded the threshold', async () => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      spans: [{ name: 'lookup', spanId: '1', startTime: 0, endTime: 0.001 }],
+    });
+    const result = await runAssertion({
+      assertion: { type: 'trace-span-duration', value: { max: 0, percentile: 99 } },
+      test: mockTest,
+      providerResponse: mockProviderResponse,
+      traceId: mockTraceData.traceId,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('0.001ms');
   });
 
   describe('deterministic assertions with span attribute filters', () => {

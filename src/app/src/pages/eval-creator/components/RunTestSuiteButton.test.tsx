@@ -151,6 +151,16 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it('blocks a trace assertion missing its required bounds', () => {
+    useStore.getState().updateConfig({
+      prompts: ['Check'],
+      providers: ['echo'],
+      tests: [{ assert: [{ type: 'trace-span-count', value: { pattern: '*' } }] }],
+    });
+    renderWithProvider(<RunTestSuiteButton />);
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
+  });
+
   it('should be enabled for scalar provider, prompt, and test configs', () => {
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',

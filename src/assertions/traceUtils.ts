@@ -1,8 +1,43 @@
+import { traceAttributesError } from '../contracts/validators/traceAssertionConfig';
+
 /**
  * Shared utilities for trace assertions
  */
 
 export type TraceSpanAttributeFilter = Record<string, string | number | boolean>;
+
+// Script results can contain target data. Substitute named variables once without
+// interpreting that data as template code or mutating the original configuration.
+export function renderTraceFilters<T>(config: T, vars: Record<string, unknown>): T {
+  if (
+    !config ||
+    typeof config !== 'object' ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(config))
+  ) {
+    return config;
+  }
+  const { pattern, attributes } = config as Record<string, unknown>;
+  const render = (value: unknown) =>
+    typeof value === 'string'
+      ? value.replace(/\{\{\s*([\w.-]+)\s*\}\}|\{\{|\{%/g, (_match, key: string | undefined) => {
+          if (!key || !Object.hasOwn(vars, key)) {
+            throw new Error('Trace filters require a named test variable');
+          }
+          return String(vars[key]);
+        })
+      : value;
+  return {
+    ...config,
+    ...(typeof pattern === 'string' && { pattern: render(pattern) }),
+    ...(attributes && typeof attributes === 'object' && !traceAttributesError(attributes)
+      ? {
+          attributes: Object.fromEntries(
+            Object.entries(attributes).map(([key, value]) => [key, render(value)]),
+          ),
+        }
+      : {}),
+  };
+}
 
 export function withTraceAttributeFilterContext(
   reason: string,
@@ -19,22 +54,9 @@ export function filterTraceSpans<T extends { name: string; attributes?: Record<s
   pattern: string,
   attributes?: unknown,
 ): T[] {
-  if (attributes !== undefined) {
-    if (
-      attributes === null ||
-      typeof attributes !== 'object' ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(attributes)) ||
-      Object.values(attributes).some(
-        (value) =>
-          typeof value !== 'string' &&
-          typeof value !== 'boolean' &&
-          !(typeof value === 'number' && Number.isFinite(value)),
-      )
-    ) {
-      throw new Error(
-        'Trace assertion attributes must be an object with string, boolean, or finite number values',
-      );
-    }
+  const error = traceAttributesError(attributes);
+  if (error) {
+    throw new Error(error);
   }
 
   const entries = Object.entries(attributes ?? {});

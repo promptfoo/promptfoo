@@ -1,6 +1,6 @@
 ---
 sidebar_label: Answer Relevance
-description: 'Score LLM response relevance and completeness against user queries using sophisticated AI-powered evaluation metrics'
+description: Score how relevant an LLM response is to the query using three generated questions and embedding similarity. Configure the assertion threshold and grader.
 ---
 
 # Answer Relevance

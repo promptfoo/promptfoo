@@ -11,9 +11,26 @@ function finiteNonNegativeIntegerError(value: unknown, label: string): string | 
     : `${label} must be a finite non-negative integer`;
 }
 
+export function traceAttributesError(attributes: unknown): string | undefined {
+  if (
+    attributes !== undefined &&
+    (!attributes ||
+      typeof attributes !== 'object' ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(attributes)) ||
+      Object.values(attributes).some(
+        (value) =>
+          typeof value !== 'string' && typeof value !== 'boolean' && !Number.isFinite(value),
+      ))
+  ) {
+    return 'Trace assertion attributes must be an object with string, boolean, or finite number values';
+  }
+  return undefined;
+}
+
 export function traceSpanCountBoundsError(value: {
   min?: unknown;
   max?: unknown;
+  attributes?: unknown;
 }): string | undefined {
   const { min, max } = value;
   if (min === undefined && max === undefined) {
@@ -33,12 +50,13 @@ export function traceSpanCountBoundsError(value: {
   }
   return min !== undefined && max !== undefined && (max as number) < (min as number)
     ? 'trace-span-count assertion max must be greater than or equal to min'
-    : undefined;
+    : traceAttributesError(value.attributes);
 }
 
 export function traceSpanDurationConfigError(value: {
   pattern?: unknown;
   max?: unknown;
+  attributes?: unknown;
   percentile?: unknown;
   method?: unknown;
   requirePresence?: unknown;
@@ -66,21 +84,29 @@ export function traceSpanDurationConfigError(value: {
       return 'trace-span-duration assertion method must be "nearest" or "linear"';
     }
   }
-  return undefined;
+  return traceAttributesError(value.attributes);
 }
 
 export function traceErrorSpansConfigError(value: unknown): string | undefined {
   if (typeof value === 'number') {
     return finiteNonNegativeIntegerError(value, 'trace-error-spans assertion max_count');
   }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (value === undefined) {
     return undefined;
+  }
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  ) {
+    return 'trace-error-spans assertion requires a number or a configuration object';
   }
   const {
     pattern,
     requirePresence,
     max_count: maxCount,
     max_percentage: maxPercentage,
+    attributes,
   } = value as Record<string, unknown>;
   if (pattern !== undefined && (typeof pattern !== 'string' || !pattern.trim())) {
     return 'trace-error-spans assertion pattern must be a non-empty string';
@@ -106,5 +132,5 @@ export function traceErrorSpansConfigError(value: unknown): string | undefined {
       return 'trace-error-spans assertion max_percentage must be between 0 and 100';
     }
   }
-  return undefined;
+  return traceAttributesError(attributes);
 }

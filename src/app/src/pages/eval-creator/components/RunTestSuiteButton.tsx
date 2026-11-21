@@ -9,12 +9,7 @@ import { normalizeLocalProviders } from '@app/pages/redteam/setup/components/Tar
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useLocation, useNavigate } from 'react-router';
-import {
-  countTests,
-  normalizePrompts,
-  normalizePromptsForJob,
-  normalizeProviders,
-} from './setupReadiness';
+import { getSetupReadiness, normalizePromptsForJob } from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const POLL_TIMEOUT_MS = 30_000;
@@ -61,16 +56,7 @@ const RunTestSuiteButton = () => {
     };
   }, [clearPollInterval]);
 
-  const normalizedProviders = normalizeProviders(providers);
-  const normalizedPrompts = normalizePrompts(prompts);
-  const jobPrompts = normalizePromptsForJob(prompts);
-  const testCount = countTests(tests);
-
-  const isDisabled =
-    isRunning ||
-    normalizedProviders.length === 0 ||
-    normalizedPrompts.length === 0 ||
-    testCount === 0;
+  const isDisabled = isRunning || !getSetupReadiness(config).isReadyToRun;
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -90,7 +76,7 @@ const RunTestSuiteButton = () => {
       description,
       env,
       evaluateOptions,
-      prompts: jobPrompts,
+      prompts: normalizePromptsForJob(prompts),
       providers: normalizeLocalProviders(providers, { forRuntime: true }),
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'

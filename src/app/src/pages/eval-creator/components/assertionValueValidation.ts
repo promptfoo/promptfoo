@@ -313,38 +313,18 @@ function getWordCountError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
-function getTraceAttributeFiltersError(value: unknown): string | undefined {
-  if (!isRecord(value) || value.attributes === undefined) {
-    return undefined;
-  }
-  const attributes = value.attributes;
-  if (
-    !isRecord(attributes) ||
-    ![Object.prototype, null].includes(Object.getPrototypeOf(attributes)) ||
-    Object.values(attributes).some(
-      (attribute) =>
-        typeof attribute !== 'string' &&
-        typeof attribute !== 'boolean' &&
-        !(typeof attribute === 'number' && Number.isFinite(attribute)),
-    )
-  ) {
-    return 'Enter trace attribute filters as a JSON object with string, boolean, or finite number values.';
-  }
-  return undefined;
-}
-
 function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  return traceSpanCountBoundsError(value) ?? getTraceAttributeFiltersError(value);
+  return traceSpanCountBoundsError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
-  return traceSpanDurationConfigError(value) ?? getTraceAttributeFiltersError(value);
+  return traceSpanDurationConfigError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -385,12 +365,19 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     typeof assertion.value === 'string' &&
     (assertion.value.startsWith('file://') || assertion.value.startsWith('package:'))
   ) {
+    if (
+      assertion.value.startsWith('package:') &&
+      !/^package:[^:\s]+:[^:\s]+$/.test(assertion.value)
+    ) {
+      return 'Use package:packageName:exportedFunction for a trace assertion.';
+    }
+    if (assertion.value.startsWith('file://') && !assertion.value.slice(7).trim()) {
+      return 'Enter a path for the trace assertion.';
+    }
     return undefined;
   }
   if (type === 'trace-error-spans') {
-    return (
-      traceErrorSpansConfigError(assertion.value) ?? getTraceAttributeFiltersError(assertion.value)
-    );
+    return traceErrorSpansConfigError(assertion.value);
   }
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&

@@ -317,7 +317,7 @@ describe('structured value assertions', () => {
     ]) {
       expect(
         getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
-      ).toMatch(/attribute filters/);
+      ).toMatch(/attributes must be/);
     }
     for (const attributes of [
       undefined,
@@ -685,10 +685,14 @@ describe('trace assertion validation', () => {
   it.each(['trace-span-count', 'trace-span-duration', 'trace-error-spans'] as const)(
     'defers external %s values until evaluation',
     (type) => {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: 'package:fixture/config' })),
+      ).toMatch(/packageName/);
+      expect(getRunnableAssertionValueError(make({ type, value: 'file://' }))).toMatch(/path/);
       for (const value of [
         'file://assertion.json',
         'file://assertion.yaml',
-        'package:fixture/config',
+        'package:fixture:config',
       ]) {
         expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
       }
