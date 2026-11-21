@@ -4,15 +4,17 @@ import {
   getProviderEnvOverrides,
 } from './envOverrides';
 import { loadEnvFiles } from './util/envFile';
-import { parseEnvBool as parseBoolean } from './util/parseEnvBool';
+import { parseEnvBool } from './util/parseEnvBool';
 
 import type { EnvOverrides } from './types/env';
 
-// Preserve the original host restriction before loading .env, shared across CLI/library bundles.
-const HOST_TEST_MODE_KEY = Symbol.for('promptfoo.envars.isHostTesting');
-export const isHostTesting = ((process as unknown as Record<symbol, boolean>)[
-  HOST_TEST_MODE_KEY
-] ??= parseBoolean(process.env.IS_TESTING));
+// Capture host restrictions before .env files load, across CLI and library bundles.
+const host = process as unknown as Record<symbol, boolean>;
+export const isHostTesting = (host[Symbol.for('promptfoo.envars.isHostTesting')] ??= parseEnvBool(
+  process.env.IS_TESTING,
+));
+const hostTelemetryDisabled = (host[Symbol.for('promptfoo.envars.hostTelemetryDisabled')] ??=
+  parseEnvBool(process.env.PROMPTFOO_DISABLE_TELEMETRY));
 
 loadEnvFiles();
 
@@ -575,9 +577,16 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
   return parseEnvBool(getEnvString(key), defaultValue);
 }
 
-// Preserve the existing helper entry point for internal consumers.
-export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
-  return parseBoolean(input, defaultValue);
+export { parseEnvBool };
+
+/** A narrower scope can opt out, but cannot lift an operator restriction. */
+export function isTelemetryDisabled(): boolean {
+  return (
+    hostTelemetryDisabled ||
+    parseEnvBool(process.env.PROMPTFOO_DISABLE_TELEMETRY) ||
+    parseEnvBool(getEnvOverrides('file')?.PROMPTFOO_DISABLE_TELEMETRY) ||
+    parseEnvBool(getEnvOverrides()?.PROMPTFOO_DISABLE_TELEMETRY)
+  );
 }
 
 /** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */

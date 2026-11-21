@@ -182,9 +182,10 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
-  PROMPTFOO_DISABLE_TELEMETRY: z.string().optional(),
-});
+// Reuse the provider schema as a single reference in generated JSON Schema.
+export const EnvOverridesSchema = ProviderEnvOverridesSchema.and(
+  z.object({ PROMPTFOO_DISABLE_TELEMETRY: z.string().optional() }),
+);
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
 // `z.object` mode). The type widens with `Record<string, string | undefined>`

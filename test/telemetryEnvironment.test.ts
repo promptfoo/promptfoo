@@ -47,9 +47,13 @@ vi.mock('../src/util/fetch/index', () => ({
 
 let restoreEnv = () => {};
 const hostTestModeKey = Symbol.for('promptfoo.envars.isHostTesting');
+const hostTelemetryKey = Symbol.for('promptfoo.envars.hostTelemetryDisabled');
 let previousHostTestMode: unknown;
+let previousHostTelemetry: unknown;
 
 beforeEach(() => {
+  previousHostTelemetry = Reflect.get(process, hostTelemetryKey);
+  Reflect.deleteProperty(process, hostTelemetryKey);
   previousHostTestMode = Reflect.get(process, hostTestModeKey);
   Reflect.deleteProperty(process, hostTestModeKey);
   vi.resetModules();
@@ -81,6 +85,7 @@ afterEach(async () => {
   }
   restoreEnv();
   Reflect.set(process, hostTestModeKey, previousHostTestMode);
+  Reflect.set(process, hostTelemetryKey, previousHostTelemetry);
   vi.restoreAllMocks();
   vi.resetAllMocks();
 });
@@ -319,7 +324,7 @@ describe('telemetry test-mode environment restrictions', () => {
   });
 
   it('suppresses both transports when another exit listener records during shutdown', async () => {
-    const handlerKey = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const handlerKey = Symbol.for('promptfoo.telemetry.registryShutdownHandler');
     const previousFlag = Reflect.get(process, handlerKey);
     Reflect.deleteProperty(process, handlerKey);
     const once = vi.spyOn(process, 'once');
@@ -350,7 +355,10 @@ describe('telemetry test-mode environment restrictions', () => {
   });
 
   it('drains shared and closing clients across module reloads at process exit', async () => {
-    const handlerKey = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const handlerKey = Symbol.for('promptfoo.telemetry.registryShutdownHandler');
+    const legacyKey = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const previousLegacyFlag = Reflect.get(process, legacyKey);
+    Reflect.set(process, legacyKey, true);
     const previousFlag = Reflect.get(process, handlerKey);
     Reflect.deleteProperty(process, handlerKey);
     const once = vi.spyOn(process, 'once');
@@ -388,6 +396,7 @@ describe('telemetry test-mode environment restrictions', () => {
       if (handler) {
         process.removeListener('beforeExit', handler);
       }
+      Reflect.set(process, legacyKey, previousLegacyFlag);
       Reflect.set(process, handlerKey, previousFlag);
     }
   });
@@ -496,24 +505,27 @@ describe('telemetry test-mode environment restrictions', () => {
     },
   );
 
-  it('sends the production opt-out acknowledgment after a test scope suppressed it', async () => {
-    const { default: cliState } = await import('../src/cliState');
-    const { Telemetry } = await import('../src/telemetry');
-    const telemetry = new Telemetry(false);
-    await cliState.withEnv({ IS_TESTING: 'true', PROMPTFOO_DISABLE_TELEMETRY: 'true' }, () => {
-      telemetry.record('eval_ran', {});
-    });
-    expect(request).not.toHaveBeenCalled();
-    await cliState.withEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' }, () => {
-      telemetry.record('eval_ran', {});
-      telemetry.record('eval_ran', {});
-    });
-    expect(request).toHaveBeenCalledOnce();
-    expect(JSON.parse(request.mock.calls[0][1].body)).toMatchObject({
-      meta: { feature: 'telemetry disabled' },
-    });
-    expect(client.capture).not.toHaveBeenCalled();
-  });
+  it.each(['host', 'file', 'suite'])(
+    'honors a %s opt-out when a narrower scope enables telemetry',
+    async (scope) => {
+      const key = 'PROMPTFOO_DISABLE_TELEMETRY';
+      mockProcessEnv({ [key]: String(scope === 'host') });
+      const { default: cliState } = await import('../src/cliState');
+      const { Telemetry } = await import('../src/telemetry');
+      mockProcessEnv({ [key]: 'false' });
+      await cliState.withEnvFileOverrides({ [key]: String(scope === 'file') }, () =>
+        cliState.withEnv({ [key]: String(scope === 'suite') }, async () => {
+          const telemetry = new Telemetry();
+          expect(telemetry.disabled).toBe(true);
+          await telemetry.identify();
+          telemetry.record('eval_ran', {});
+          await telemetry.shutdown();
+        }),
+      );
+      expect(request).not.toHaveBeenCalled();
+      expect(PostHog).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['false', '0', '', undefined])(
     'allows telemetry when test mode is %j everywhere',

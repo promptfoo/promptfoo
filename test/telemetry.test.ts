@@ -67,10 +67,8 @@ vi.mock('../src/envars', async () => {
   return {
     ...actual,
     isHostTesting: false,
+    isTelemetryDisabled: () => process.env.PROMPTFOO_DISABLE_TELEMETRY === '1',
     getEnvBool: vi.fn().mockImplementation((key) => {
-      if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
-      }
       if (key === 'IS_TESTING') {
         return (
           (process.env as NodeJS.ProcessEnv).IS_TESTING === 'true' ||
@@ -364,28 +362,6 @@ describe('Telemetry', () => {
     );
   });
 
-  it('should not send user events when telemetry is disabled', async () => {
-    mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
-
-    resetModulesAndMockFetch();
-
-    const telemetryModule = await import('../src/telemetry');
-    const { Telemetry: TelemetryClass, default: telemetryInstance } = telemetryModule;
-
-    // Create spy on the dynamically imported class (not the statically imported one)
-    const localSendEventSpy = vi.spyOn(TelemetryClass.prototype as any, 'sendEvent');
-
-    telemetryInstance.record('eval_ran', { foo: 'bar' });
-
-    // When telemetry is disabled, sendEvent is called with the "telemetry disabled" event
-    // but NOT with the user's event ('eval_ran')
-    expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', {
-      feature: 'telemetry disabled',
-    });
-    expect(localSendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
-    localSendEventSpy.mockRestore();
-  });
-
   describe('PostHog client initialization', () => {
     it('should initialize PostHog client when telemetry is enabled and POSTHOG_KEY is present', async () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
@@ -478,10 +454,8 @@ describe('Telemetry', () => {
         return {
           ...actual,
           isHostTesting: false,
+          isTelemetryDisabled: () => process.env.PROMPTFOO_DISABLE_TELEMETRY === '1',
           getEnvBool: vi.fn().mockImplementation((key: string) => {
-            if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
-              return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
-            }
             if (key === 'IS_TESTING') {
               return (
                 (process.env as NodeJS.ProcessEnv).IS_TESTING === 'true' ||
@@ -767,7 +741,7 @@ describe('Telemetry', () => {
 
   describe('reporting request lifecycle', () => {
     beforeEach(() => {
-      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '0' });
       fetchWithProxySpy.mockReset();
     });
 
@@ -872,30 +846,12 @@ describe('Telemetry', () => {
       expect(getUserAuthInfo).not.toHaveBeenCalled();
     });
 
-    it('preserves one documented opt-out acknowledgment outside test mode', () => {
-      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
-      const telemetry = new Telemetry(false);
-      telemetry.record('eval_ran', {});
-      telemetry.record('command_used', { name: 'eval' });
-
-      expect(fetchWithProxySpy).toHaveBeenCalledOnce();
-      const options = fetchWithProxySpy.mock.calls[0][1];
-      expect(JSON.parse(options!.body as string)).toMatchObject({
-        event: 'feature_used',
-        meta: { feature: 'telemetry disabled' },
-      });
-    });
-
-    it('should record telemetry disabled event only once', () => {
+    it('sends no user or acknowledgment events while disabled', () => {
       mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
       const telemetry = new Telemetry();
-
-      telemetry.record('eval_ran', { foo: 'bar' });
-      expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
-      expect(sendEventSpy).toHaveBeenCalledTimes(1);
-
-      sendEventSpy.mockClear();
-      telemetry.record('command_used', { name: 'test' });
+      telemetry.record('eval_ran', {});
+      telemetry.record('command_used', { name: 'eval' });
+      expect(fetchWithProxySpy).not.toHaveBeenCalled();
       expect(sendEventSpy).not.toHaveBeenCalled();
     });
   });
@@ -946,7 +902,7 @@ describe('Telemetry', () => {
   });
 
   describe('beforeExit handler registration', () => {
-    const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.registryShutdownHandler');
 
     beforeEach(() => {
       // Clear the process-level flags before each test

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import cliState from '../../src/cliState';
-import { getEnvBool } from '../../src/envars';
+import { isTelemetryDisabled } from '../../src/envars';
 import { CreateJobRequestSchema } from '../../src/types/api/eval';
 import { TestSuiteConfigSchema, TestSuiteSchema } from '../../src/types/index';
 import { ProviderOptionsSchema } from '../../src/validators/providers';
@@ -29,13 +29,13 @@ const parsers = [
 ] as const;
 
 describe.each(parsers)('%s telemetry settings', (_name, parse) => {
-  it.each(['true', 'false', ''])('preserves the opt-out flag and explicit mask %j', (value) => {
+  it.each(['true', 'false', ''])('accepts %j without lifting a file opt-out', (value) => {
     const env = { PROMPTFOO_DISABLE_TELEMETRY: value };
     const parsed = parse(env);
     expect(parsed).toEqual(env);
     cliState.withEnvFileOverrides({ PROMPTFOO_DISABLE_TELEMETRY: 'true' }, () =>
       cliState.withEnv(parsed, () => {
-        expect(getEnvBool('PROMPTFOO_DISABLE_TELEMETRY')).toBe(value === 'true');
+        expect(isTelemetryDisabled()).toBe(true);
       }),
     );
   });

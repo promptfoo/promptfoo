@@ -196,7 +196,7 @@ export function addCommonOptionsRecursively(command: Command) {
     if (thisCommand === actionCommand) {
       const commandName = getCommandPath(actionCommand);
       // Eval records start/completion events after loading the suite's telemetry settings.
-      if (commandName && commandName !== 'eval') {
+      if (commandName && actionCommand.name() !== 'eval') {
         telemetry.record('command_used', { name: commandName });
       }
     }

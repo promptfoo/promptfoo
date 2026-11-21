@@ -2,7 +2,7 @@ import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString, getProviderEnvString } from '../envars';
+import { getEnvString, getProviderEnvString, parseEnvBool } from '../envars';
 import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -305,6 +305,10 @@ export function mergeProviderEnv(
     }
     for (const [key, value] of Object.entries(layer)) {
       if (value === undefined) {
+        continue;
+      }
+      // Provider constructors inherit the suite's telemetry restriction.
+      if (key === 'PROMPTFOO_DISABLE_TELEMETRY' && parseEnvBool(merged[key])) {
         continue;
       }
       const isExplicit = explicitLayers[index]?.[key] !== undefined;

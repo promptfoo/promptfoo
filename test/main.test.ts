@@ -369,16 +369,20 @@ describe('addCommonOptionsRecursively', () => {
     expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
   });
 
-  it('leaves eval telemetry to the action after its configuration is loaded', async () => {
-    const action = vi.fn();
-    program.command('eval').action(action);
-    addCommonOptionsRecursively(program);
+  it.each([false, true])(
+    'leaves eval telemetry to the action after loading its configuration (nested=%s)',
+    async (nested) => {
+      const action = vi.fn();
+      const parent = nested ? program.command('redteam') : program;
+      parent.command('eval').action(action);
+      addCommonOptionsRecursively(program);
 
-    await program.parseAsync(['eval'], { from: 'user' });
+      await program.parseAsync(nested ? ['redteam', 'eval'] : ['eval'], { from: 'user' });
 
-    expect(action).toHaveBeenCalledOnce();
-    expect(mockTelemetryRecord).not.toHaveBeenCalled();
-  });
+      expect(action).toHaveBeenCalledOnce();
+      expect(mockTelemetryRecord).not.toHaveBeenCalled();
+    },
+  );
 
   it('should record telemetry once for nested subcommands', async () => {
     const nestedParent = program.command('redteam');

@@ -16,6 +16,7 @@ import {
   getProcessEnv,
   getProviderEnvString,
   isCI,
+  parseEnvBool,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
@@ -24,6 +25,12 @@ import type { EnvVarKey } from '../src/envars';
 import type { EnvOverrides } from '../src/types/env';
 
 describe('envars', () => {
+  it('accepts unquoted YAML booleans without falling back to a default', () => {
+    expect(parseEnvBool(true)).toBe(true);
+    expect(parseEnvBool(false, true)).toBe(false);
+    expect(parseEnvBool('', true)).toBe(true);
+  });
+
   const originalEnv = { ...process.env };
   const originalCliState = { ...cliState };
 

@@ -8,6 +8,7 @@ import {
   getEnvString,
   isCI,
   isHostTesting,
+  isTelemetryDisabled,
   parseEnvBool,
 } from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
@@ -80,7 +81,6 @@ export class Telemetry {
   private clientRecord: ClientRecord | null = null;
   private shutdownPromise: Promise<void> = Promise.resolve();
 
-  private telemetryDisabledRecorded = false;
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -90,7 +90,7 @@ export class Telemetry {
   }
 
   initialize(): void {
-    if (this.id !== null) {
+    if (this.id !== null || this.disabled) {
       return;
     }
     this.id = getUserId();
@@ -98,7 +98,7 @@ export class Telemetry {
   }
 
   private getPostHogClient(): PostHog | null {
-    if (clientRegistry.exiting || getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || isTestMode()) {
+    if (clientRegistry.exiting || this.disabled || isTestMode()) {
       return null;
     }
 
@@ -159,23 +159,15 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
-  }
-
-  private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded && !isTestMode()) {
-      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
-      this.telemetryDisabledRecorded = true;
-    }
+    return isTelemetryDisabled();
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    this.initialize();
     if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.sendEvent(eventName, properties);
+      return;
     }
+    this.initialize();
+    this.sendEvent(eventName, properties);
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
@@ -287,13 +279,11 @@ export class Telemetry {
   }
 }
 
-// The CLI initializes this singleton after early --env-file handling so identity and all other
-// process-global state use the same config directory. Direct Telemetry instances retain eager
-// initialization for backward compatibility.
+// Defer identification until the command has loaded its configuration.
 const telemetry = new Telemetry(false);
 
 // Module reloads share one exit hook and the registry of clients to drain.
-const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
+const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.registryShutdownHandler');
 
 if (!(process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY]) {
   (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
