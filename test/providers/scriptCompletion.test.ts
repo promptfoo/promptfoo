@@ -195,6 +195,25 @@ describe('ScriptCompletionProvider', () => {
     createHashMock.mockReturnValue(mockHashUpdate);
   });
 
+  it.each([
+    ['python rag.py', 'python', ['rag.py']],
+    ['echo "hello world"', 'echo', ['hello world']],
+    ['./path/to/file.py run', './path/to/file.py', ['run']],
+    ['"/Path/To/My File.py"', '/Path/To/My File.py', []],
+  ] as const)('keeps fixed and runtime arguments separate for %s', async (spec, command, args) => {
+    execFileAsync.mockReturnValue(execution('fixture output'));
+    const options = { config: { setting: 42 } };
+    const prompt = 'Test prompt';
+    const context = { prompt: { raw: prompt, label: prompt }, vars: { value: 'quoted "text"' } };
+    const result = await new ScriptCompletionProvider(spec, options).callApi(prompt, context);
+    expect(result.output).toBe('fixture output');
+    expect(execFileAsync).toHaveBeenCalledExactlyOnceWith(
+      command,
+      [...args, prompt, JSON.stringify(options), JSON.stringify(context)],
+      expect.objectContaining({ shell: false }),
+    );
+  });
+
   it('rejects invalid setup before child dispatch', () => {
     expect(() => prepareScript('   ')).toThrow('No command found');
     expect(execFileAsync).not.toHaveBeenCalled();
