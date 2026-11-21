@@ -11,6 +11,7 @@ import logger from '../src/logger';
 import { getRequestTimeoutMs } from '../src/providers/shared';
 import { HttpRateLimitError } from '../src/util/fetch/errors';
 import {
+  classifySdkRateLimit,
   clearAgentCache,
   computeRateLimitWaitMs,
   fetchWithProxy,
@@ -1325,6 +1326,79 @@ describe('isRateLimited', () => {
       status: 200,
     });
     expect(isRateLimited(response)).toBe(false);
+  });
+});
+
+describe('classifySdkRateLimit', () => {
+  it.each([
+    [{ records: [] }, 'rate_limit'],
+    [
+      {
+        records: [{ code: 'rate_limit_exceeded' }, { error: { code: 'billing_not_active' } }],
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [{ records: [{ type: 'rate_limit_error' }, { type: 'billing_not_active' }] }, 'quota'],
+    [{ records: [{ error: { code: 'insufficient_quota' } }] }, 'quota'],
+    [
+      { records: [{ error: { code: 'insufficient_quota' } }], headers: { 'retry-after': '1' } },
+      'rate_limit',
+    ],
+    [
+      {
+        records: [{ error: { code: 'credit_balance_exhausted' } }],
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [{ records: [{ code: 'ERR_API' }], texts: ['insufficient_quota: no balance'] }, 'quota'],
+    [
+      {
+        records: [{ code: 'insufficient_quota' }],
+        texts: ['credit_balance_exhausted'],
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [
+      {
+        records: [{ type: 'insufficient_quota' }, { type: 'billing_not_active' }],
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [
+      { records: [{ error: { code: 'rate_limit_exceeded', type: 'billing_not_active' } }] },
+      'quota',
+    ],
+  ])('classifies an SDK-reported HTTP 429: %#', (input, kind) => {
+    expect(classifySdkRateLimit(input)).toMatchObject({ status: 429, kind });
+  });
+
+  it.each([
+    [{ code: 'CREDIT_BALANCE_EXHAUSTED' }, 'credit_balance_exhausted', undefined, 'quota'],
+    [{ code: 'UnKnOwN', type: 'BILLING_NOT_ACTIVE' }, 'unknown', 'billing_not_active', 'quota'],
+    [
+      { code: 'RATE_LIMIT_EXCEEDED', type: 'INSUFFICIENT_QUOTA' },
+      'rate_limit_exceeded',
+      'insufficient_quota',
+      'rate_limit',
+    ],
+  ])('normalizes SDK error code and type before classification: %j', (error, code, type, kind) => {
+    expect(classifySdkRateLimit({ records: [{ error }] })).toMatchObject({
+      status: 429,
+      code,
+      type,
+      kind,
+    });
+  });
+
+  it('keeps the recovery timing from the headers', () => {
+    expect(classifySdkRateLimit({ records: [], headers: { 'retry-after': '2' } })).toMatchObject({
+      kind: 'rate_limit',
+      retryAfterMs: 2000,
+    });
   });
 });
 
