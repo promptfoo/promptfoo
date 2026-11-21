@@ -57,7 +57,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   ) {
     return verdict(
       false,
-      `OpenAI did not return a valid-looking tools response: ${JSON.stringify(toolsOutput)}`,
+      'OpenAI did not return a valid-looking tools response. Expected a structured function call.',
     );
   }
 
