@@ -55,6 +55,29 @@ describe('GoogleInteractionsProvider', () => {
     ),
   );
 
+  function mockVertexTextInteraction() {
+    const getRequestHeaders = vi
+      .fn()
+      .mockResolvedValue(new Headers({ Authorization: 'Bearer vertex-token' }));
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    return getRequestHeaders;
+  }
+
   beforeEach(() => {
     // resetAllMocks (not clearAllMocks) so per-test persistent setters like
     // mockFetchWithCache.mockResolvedValue cannot leak across randomized test order.
@@ -97,6 +120,98 @@ describe('GoogleInteractionsProvider', () => {
     restoreGoogleEnv();
     vi.useRealTimers();
   });
+
+  it('transcribes an uploaded audio file and retains word annotations and paid-tier usage', async () => {
+    const input = [
+      { type: 'file', file_uri: 'https://generativelanguage.googleapis.com/v1beta/files/sample' },
+    ];
+    const annotations = [
+      { type: 'word_info', text: 'Hello', speaker: 'spk_1', start_offset: '0.1s' },
+    ];
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'transcript-1',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Hello', annotations }] }],
+        usage: { total_input_tokens: 100, total_output_tokens: 10 },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-3.5-transcribe', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          generation_config: { transcription_config: { language_codes: ['en-US'] } },
+        },
+      },
+    });
+    const response = await provider.callApi(JSON.stringify(input));
+    const [url, request] = mockFetchWithCache.mock.calls[0];
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/interactions');
+    expect(JSON.parse(request?.body as string)).toEqual({
+      model: 'models/gemini-3.5-transcribe',
+      input,
+      generation_config: { transcription_config: { language_codes: ['en-US'] } },
+      background: false,
+      stream: false,
+    });
+    expect(response).toMatchObject({
+      output: 'Hello',
+      tokenUsage: { prompt: 100, completion: 10, total: 110, numRequests: 1 },
+      metadata: { interactionId: 'transcript-1', status: 'completed', annotations },
+    });
+    expect(response.cost).toBeCloseTo((100 * 2 + 10 * 12) / 1e6, 10);
+  });
+
+  it.each([undefined, {}, { total_output_tokens: 10 }])(
+    'preserves a REST model resource override and leaves incomplete pricing unknown: %j',
+    async (usage) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          usage,
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Hello' }] }],
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+        config: { apiKey: 'test-key', passthrough: { model: 'models/gemini-3.5-transcribe' } },
+      });
+      const result = await provider.callApi('[{"type":"file","file_uri":"files/sample"}]');
+      expect(result.output).toBe('Hello');
+      expect(result.cost).toBeUndefined();
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+      expect(body.model).toBe('models/gemini-3.5-transcribe');
+      expect(body).not.toHaveProperty('response_format');
+    },
+  );
+
+  it.each([
+    [
+      { passthrough: { model: 'models/gemini-3.5-transcribe-live' } },
+      'Model "gemini-3.5-transcribe-live" requires the Gemini Live API. Use google:live:gemini-3.5-transcribe-live.',
+    ],
+    [{ vertexai: true }, 'For file transcription on Vertex AI, use vertex:gemini-3.5-transcribe.'],
+    [
+      { passthrough: { tools: [{ type: 'google_search' }] } },
+      'Gemini Transcribe does not support tools.',
+    ],
+    [
+      { service_tier: 'flex' as const },
+      'Gemini Transcribe supports only the Standard service tier.',
+    ],
+  ] as const)(
+    'rejects unsupported Transcribe options before transport: %j',
+    async (config, error) => {
+      const provider = new GoogleInteractionsProvider('gemini-3.5-transcribe', {
+        config: { apiKey: 'test-key', ...config },
+      });
+      await expect(
+        provider.callApi('[{"type":"file","file_uri":"files/sample"}]'),
+      ).resolves.toEqual({ error });
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
     'routes %s through the Interactions API and prices video output tokens',
@@ -1778,6 +1893,38 @@ describe('GoogleInteractionsProvider', () => {
       transcription_config: { language_code: 'en-US' },
       video_config: { task: 'text_to_video' },
     });
+  });
+
+  it('sends Gemini 4 Hydrogen XHIGH thinking as xhigh without sampling fields', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: '130' }] }],
+        usage: { total_input_tokens: 47, total_output_tokens: 7, total_thought_tokens: 98 },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-4-hydrogen', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          temperature: 0.2,
+          topK: 10,
+          presencePenalty: 0.5,
+          candidateCount: 2,
+          thinkingConfig: { thinkingLevel: 'XHIGH' },
+        } as any,
+      },
+    });
+
+    const result = await provider.callApi('What is 13 * 10?');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.model).toBe('gemini-4-hydrogen');
+    expect(body.generation_config).toEqual({ thinking_level: 'xhigh' });
+    expect(result.output).toBe('130');
+    expect(result.cost).toBeCloseTo((47 * 1.5 + (7 + 98) * 7.5) / 1e6, 12);
   });
 
   it('rejects numeric thinkingBudget instead of sending an invalid thinkingConfig object', async () => {
@@ -3566,22 +3713,7 @@ describe('GoogleInteractionsProvider', () => {
       for (const [name, value] of Object.entries(processEnv)) {
         vi.stubEnv(name, value);
       }
-      const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
-      const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
-      const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-        client: {
-          getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-          getRequestHeaders,
-        },
-        projectId: 'detected-project',
-      });
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
-        },
-        cached: false,
-      } as any);
+      const getRequestHeaders = mockVertexTextInteraction();
       const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
         id: 'vertex:gemini-robotics-er-2-preview',
         config: { vertexai: true },
@@ -3591,7 +3723,7 @@ describe('GoogleInteractionsProvider', () => {
       const result = await provider.callApi('Move the block.');
 
       expect(result.error).toBeUndefined();
-      expect(getOAuthClient).toHaveBeenCalledTimes(1);
+      expect(GoogleAuthManager.getOAuthClient).toHaveBeenCalledTimes(1);
       expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         endpoint,
@@ -3682,50 +3814,82 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
-  it('uses a provider-scoped GOOGLE_CLOUD_LOCATION for Vertex Interactions', async () => {
-    vi.stubEnv('VERTEX_REGION', 'europe-west1');
-    const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
-    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
-    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-      client: {
-        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-        getRequestHeaders,
-      },
-      projectId: 'detected-project',
-    });
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        status: 'completed',
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'text', text: 'Move forward.' }],
-          },
-        ],
-      },
-      cached: false,
-    } as any);
-    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
-      config: { vertexai: true, projectId: 'configured-project' },
+  it.each([
+    {
+      name: 'the us multi-region',
+      config: { region: 'us' },
+      env: {},
+      region: 'us',
+      host: 'aiplatform.us.rep.googleapis.com',
+    },
+    {
+      name: 'the configured eu multi-region over a provider-scoped region',
+      config: { region: 'eu' },
+      env: { VERTEX_REGION: 'us' },
+      region: 'eu',
+      host: 'aiplatform.eu.rep.googleapis.com',
+    },
+    {
+      name: 'a provider-scoped GOOGLE_CLOUD_LOCATION over the process region',
+      config: {},
       env: { GOOGLE_CLOUD_LOCATION: 'us-central1' },
-    });
+      region: 'us-central1',
+      host: 'us-central1-aiplatform.googleapis.com',
+    },
+    {
+      name: 'a provider-scoped multi-region over the process region',
+      config: {},
+      env: { VERTEX_REGION: 'eu' },
+      region: 'eu',
+      host: 'aiplatform.eu.rep.googleapis.com',
+    },
+    {
+      name: 'apiBaseUrl over apiHost and a provider-scoped host',
+      config: { region: 'us', apiBaseUrl: 'https://base.example/proxy/', apiHost: 'host.example' },
+      env: { VERTEX_API_HOST: 'env.example' },
+      region: 'us',
+      host: 'base.example/proxy',
+    },
+    {
+      name: 'apiHost over a provider-scoped host',
+      config: { region: 'eu', apiHost: 'host.example' },
+      env: { VERTEX_API_HOST: 'env.example' },
+      region: 'eu',
+      host: 'host.example',
+    },
+    {
+      name: 'a provider-scoped host over the multi-region default',
+      config: { region: 'us' },
+      env: { VERTEX_API_HOST: 'https://env.example/' },
+      region: 'us',
+      host: 'env.example',
+    },
+  ])(
+    'resolves the Vertex Interactions endpoint using $name',
+    async ({ config, env, region, host }) => {
+      vi.stubEnv('VERTEX_REGION', 'europe-west1');
+      const getRequestHeaders = mockVertexTextInteraction();
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: { vertexai: true, projectId: 'configured-project', ...config },
+        env,
+      });
 
-    const result = await provider.callApi('Move the block.');
+      const result = await provider.callApi('Move the block.');
 
-    const endpoint =
-      'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/us-central1/interactions';
-    expect(result.error).toBeUndefined();
-    expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
-    expect(mockFetchWithCache).toHaveBeenCalledWith(
-      endpoint,
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
-      }),
-      expect.any(Number),
-      'json',
-      true,
-    );
-  });
+      const endpoint = `https://${host}/v1beta1/projects/configured-project/locations/${region}/interactions`;
+      expect(result.error).toBeUndefined();
+      expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        endpoint,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    },
+  );
 
   it.each([
     [
