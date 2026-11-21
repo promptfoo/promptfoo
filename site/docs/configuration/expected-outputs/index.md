@@ -136,7 +136,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                                            |
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is a non-empty valid SQL statement                                       |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output is valid SQL or contains a valid SQL code block                          |
-| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                                  |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document containing any required elements |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                                           |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | the provider reports a refusal or the output indicates one                      |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                               |
@@ -172,6 +172,8 @@ Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascr
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+
+For tool-call validity assertions, `not-` inverts a validation verdict. Tool configuration errors and unexpected validator failures remain failures.
 
 When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
@@ -554,12 +556,12 @@ Each derived metric requires:
 - **value**: A mathematical expression or JavaScript function
 
 :::tip
-Derived metrics are initialized to 0 and calculated per prompt. Errors are logged at debug level.
+Unsupported formula syntax stops the evaluation before any test cases run. During scoring, errors such as a missing input score are logged at debug level.
 :::
 
 ### Mathematical expressions
 
-Use [mathjs](https://mathjs.org/) syntax for calculations:
+String formulas support numeric literals, named scores, `__count`, parentheses, and the arithmetic operators `+`, `-`, `*`, and `/`. Use numeric comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`) and `condition ? a : b` to handle cases such as a zero denominator. For a range check, write `score > 0 ? (score < 1 ? 1 : 0) : 0`. Chained comparisons such as `0 < score < 1` are rejected. Each formula can contain up to 1,024 characters. Function calls, property access, and assignments are rejected.
 
 ```yaml
 derivedMetrics:
@@ -572,19 +574,18 @@ derivedMetrics:
 
 ### JavaScript functions
 
-For complex logic:
+In a trusted JavaScript configuration, pass a function value for more complex logic:
 
-```yaml
-derivedMetrics:
-  - name: 'adaptive_score'
-    value: |
-      function(namedScores, evalStep) {
-        const { accuracy = 0, speed = 0 } = namedScores;
-        if (evalStep.tokensUsed?.total > 1000) {
-          return accuracy * 0.8; // Penalize verbose responses
-        }
-        return accuracy * 0.6 + speed * 0.4;
-      }
+```js
+export default {
+  derivedMetrics: [
+    {
+      name: 'adaptive_score',
+      value: ({ accuracy = 0, speed = 0 }, evalStep) =>
+        evalStep.tokensUsed?.total > 1000 ? accuracy * 0.8 : accuracy * 0.6 + speed * 0.4,
+    },
+  ],
+};
 ```
 
 ### Example: F1 score
@@ -650,16 +651,7 @@ The `__count` variable contains the number of test evals for the current prompt-
 - Each test case produces a value that gets summed (like error metrics)
 - You want to display the average instead of the total
 
-For JavaScript functions, `__count` is available in the `namedScores` object:
-
-```yaml
-derivedMetrics:
-  - name: 'average_error'
-    value: |
-      function(namedScores, evalStep) {
-        return namedScores.total_error / namedScores.__count;
-      }
-```
+JavaScript callbacks receive the same count as `namedScores.__count`.
 
 ### Notes
 
@@ -676,7 +668,6 @@ See also:
 
 - [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics) - Basic named metrics usage
 - [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) - Complete F1 score implementation
-- [MathJS documentation](https://mathjs.org/docs/expressions/syntax.html) - Expression syntax reference
 
 ## Running assertions directly on outputs
 

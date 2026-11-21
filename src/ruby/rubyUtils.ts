@@ -133,36 +133,6 @@ async function tryRubyCommands(commands: string[]): Promise<string | null> {
 }
 
 /**
- * Attempts to validate Ruby commands directly as a final fallback.
- * Validates each command by running it with --version.
- * @param commands - Array of Ruby command names to try (e.g., ['ruby'])
- * @returns The validated Ruby executable path, or null if all commands fail
- */
-async function tryDirectCommands(commands: string[]): Promise<string | null> {
-  for (const cmd of commands) {
-    try {
-      const validated = await tryPath(cmd);
-      if (validated) {
-        return validated;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.debug(`Direct command "${cmd}" failed: ${errorMsg}`);
-
-      // Log permission/access errors differently
-      if (
-        errorMsg.includes('Access is denied') ||
-        errorMsg.includes('EACCES') ||
-        errorMsg.includes('EPERM')
-      ) {
-        logger.warn(`Permission denied when trying Ruby command "${cmd}": ${errorMsg}`);
-      }
-    }
-  }
-  return null;
-}
-
-/**
  * Attempts to get the Ruby executable path using platform-appropriate strategies.
  * @returns The Ruby executable path if successful, or null if failed.
  */
@@ -181,7 +151,7 @@ export async function getSysExecutable(): Promise<string | null> {
     }
 
     // Final fallback to direct ruby command
-    return await tryDirectCommands(['ruby']);
+    return await tryPath('ruby');
   } else {
     // Unix: Standard ruby detection
     return await tryRubyCommands(['ruby']);

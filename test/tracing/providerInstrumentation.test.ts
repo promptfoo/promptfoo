@@ -1,9 +1,9 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
@@ -12,6 +12,7 @@ import {
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 import { withTargetSpan } from '../../src/tracing/targetTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -32,15 +33,15 @@ vi.mock('../../src/logger', () => ({
 }));
 
 describe('GenAI span export and provider instrumentation', () => {
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let memoryExporter: InMemorySpanExporter;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: memoryExporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   afterAll(async () => {
