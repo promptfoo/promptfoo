@@ -46,6 +46,8 @@ interface TracedGraderOptions {
 
 /** Runtime-only instrumentation hooks injected by the evaluator for one traced execution. */
 export interface ProviderCallTracingContext {
+  /** A rejected external snapshot makes this row's trace unreliable, even after a later fetch. */
+  externalTraceRejected?: boolean;
   getActiveTraceparent: () => string | undefined;
   testIndex?: number;
   withGraderSpan: <T>(options: TracedGraderOptions, fn: () => Promise<T>) => Promise<T>;

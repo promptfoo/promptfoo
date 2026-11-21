@@ -5,6 +5,8 @@ import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
+import { TempoProvider } from '../../src/tracing/providers/tempo';
+import { IncompleteTraceError } from '../../src/tracing/providers/types';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
 import { createDeferred } from '../util/utils';
@@ -769,6 +771,94 @@ describe('evaluator trace integration', () => {
       expect(warning).toHaveBeenCalledWith(
         '[Evaluator] Failed to fetch external traces: Error: Tempo unavailable',
       );
+    });
+
+    it.each(['missing', 'rejected', 'cached'])(
+      'fails trace-dependent grading with %s external evidence and preserves the target response',
+      async (state) => {
+        const provider = createMockProvider({
+          response: { output: 'Target output', cost: 0.01, cached: state === 'cached' },
+        });
+        const options = createRunOptions(provider);
+        options.test.assert = [
+          { type: 'assert-set', assert: [{ type: 'not-trajectory:tool-used', value: 'lookup' }] },
+        ];
+        if (state === 'rejected') {
+          mockFetchTraceContext.mockRejectedValueOnce(new Error('Rejected trace'));
+        } else if (state === 'missing') {
+          mockFetchTraceContext.mockResolvedValueOnce(null);
+        }
+        const [result] = await runEval(options);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Required external trace is unavailable');
+        expect(result.response?.output).toBe('Target output');
+        if (state !== 'cached') {
+          expect(result.cost).toBe(0.01);
+        }
+      },
+    );
+
+    it.each(['trace', 'script', 'output'] as const)(
+      'retains completed work after an earlier rejected snapshot with %s grading',
+      async (grading) => {
+        const { fetchTraceContext } = await vi.importActual<
+          typeof import('../../src/tracing/traceContext')
+        >('../../src/tracing/traceContext');
+        vi.spyOn(TempoProvider.prototype, 'fetchTrace').mockRejectedValue(
+          new IncompleteTraceError('Rejected snapshot'),
+        );
+        const provider = createMockProvider({
+          callApi: async () => {
+            expect(await fetchTraceContext(traceId, { providerConfig, queryDelay: 0 })).toBeNull();
+            return { output: 'Target output', cost: 0.01, tokenUsage: { total: 3 } };
+          },
+        });
+        const options = createRunOptions(provider);
+        options.test.assert = [
+          grading === 'trace'
+            ? { type: 'trace-span-count', value: { pattern: 'target.call', min: 1 } }
+            : grading === 'script'
+              ? { type: 'javascript', value: 'Boolean(context.trace)' }
+              : { type: 'equals', value: 'Target output' },
+        ];
+        const [result] = await runEval(options);
+        expect(mockFetchTraceContext).toHaveBeenCalledOnce();
+        expect(result.success).toBe(grading === 'output');
+        expect(result.response?.output).toBe('Target output');
+        expect(result.cost).toBe(0.01);
+        expect(result.tokenUsage?.total).toBe(3);
+      },
+    );
+
+    it('allows an output-only script when an external snapshot is absent', async () => {
+      const options = createRunOptions(
+        createMockProvider({ response: { output: 'Target output' } }),
+      );
+      options.test.assert = [{ type: 'javascript', value: "output === 'Target output'" }];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+      const [result] = await runEval(options);
+      expect(result.success).toBe(true);
+    });
+
+    it.each([true, false])('keeps trace metrics optional with local evidence=%s', async (local) => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const options = createRunOptions(provider);
+      const trace = {
+        type: 'trace-span-count' as const,
+        value: { pattern: 'target.call', min: 2 },
+      };
+      options.test.assert = [
+        { type: 'equals', value: 'Target output' },
+        { ...trace, weight: 0 },
+        { type: 'assert-set', weight: 0, assert: [trace] },
+      ];
+      if (!local) {
+        mockTraceStore.getTrace.mockRejectedValueOnce(new Error('Store unavailable'));
+      }
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+      const [result] = await runEval(options);
+      expect(result.success).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalled();
     });
 
     it('distinguishes missing external traces from successful fetches', async () => {
