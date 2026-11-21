@@ -523,14 +523,16 @@ export function createServerOpenApiRegistry() {
     operationId: 'getEvalTable',
     tags: ['Eval'],
     summary: 'Get evaluation table data',
+    description:
+      'Every evaluation in comparisonEvalIds must use the same dataset as the requested evaluation. This also applies to CSV and JSON exports.',
     request: {
       params: EvalSchemas.Table.Params,
       query: EvalSchemas.Table.Query,
     },
     responses: {
       200: evalTableResponse(),
-      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
-      404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      400: jsonResponse(ErrorResponseSchema, 'Invalid query or incompatible comparison dataset'),
+      404: jsonResponse(ErrorResponseSchema, 'Requested or comparison evaluation not found'),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
       413: jsonResponse(ErrorResponseSchema, 'Evaluation table is too large'),
     },

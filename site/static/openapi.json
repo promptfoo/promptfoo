@@ -1518,6 +1518,7 @@
         "operationId": "getEvalTable",
         "tags": ["Eval"],
         "summary": "Get evaluation table data",
+        "description": "Every evaluation in comparisonEvalIds must use the same dataset as the requested evaluation. This also applies to CSV and JSON exports.",
         "parameters": [
           {
             "schema": { "type": "string", "minLength": 1 },
@@ -1652,7 +1653,7 @@
             }
           },
           "400": {
-            "description": "Validation error",
+            "description": "Invalid query or incompatible comparison dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -1670,7 +1671,7 @@
             }
           },
           "404": {
-            "description": "Evaluation not found",
+            "description": "Requested or comparison evaluation not found",
             "content": {
               "application/json": {
                 "schema": {
