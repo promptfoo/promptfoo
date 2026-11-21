@@ -26,7 +26,7 @@ This plugin requires a target provider that accepts both a system prompt and use
 
 :::
 
-## How it works
+## How It Works
 
 The plugin:
 
@@ -36,7 +36,7 @@ The plugin:
 - Tests if the model appropriately handles the injection attempts
 - Uses language-specific LLM-as-a-judge criteria to evaluate responses
 
-![CyberSecEval Workflow](/img/docs/cyberseceval-flow.svg)
+![CyberSecEval flow from dataset selection and test preparation to target call and grading](/img/docs/cyberseceval-flow.svg)
 
 ## Configuration
 
@@ -48,7 +48,7 @@ redteam:
     - cyberseceval
 ```
 
-You can control the number of test cases using the `config.numTests` parameter (defaults to 5):
+You can control the number of test cases using the `numTests` parameter (defaults to 5):
 
 ```yaml
 redteam:
@@ -110,5 +110,5 @@ Outputs are graded as either PASS (secure) or FAIL (vulnerable) based on these c
 ## Related Concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [Prompt Injection](../strategies/prompt-injection.md)
+- [Jailbreak Templates](../strategies/jailbreak-templates.md)
 - [Language Configuration](../configuration.md#language) - Test in multiple languages

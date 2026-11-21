@@ -34,7 +34,7 @@ tests:
       instructions: 'You are mia_li_3668...'
 ```
 
-## How it works
+## How It Works
 
 The conversation has two participants:
 

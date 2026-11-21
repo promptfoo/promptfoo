@@ -114,6 +114,59 @@ export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> 
   'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
 };
 
+const topLevelStrategies = new Set(['basic', 'default', 'multilingual', ...STRATEGY_COLLECTIONS]);
+
+// A layer can have one orchestrator or wrapper. Web Pwn is a separate step.
+const layerWrappers = new Set(['best-of-n', 'authoritative-markup-injection', 'mischievous-user']);
+
+export function isLayerProvider(id: string): boolean {
+  return (
+    id !== 'indirect-web-pwn' &&
+    (AGENTIC_STRATEGIES_SET.has(id) || isCustomStrategy(id) || layerWrappers.has(id))
+  );
+}
+
+export function isTerminalLayerStep(id: string): boolean {
+  return (
+    MULTI_MODAL_STRATEGIES_SET.has(id) ||
+    id === 'authoritative-markup-injection' ||
+    id === 'mischievous-user'
+  );
+}
+
+/** Ordering rules shared by the config validator and the layer editor. */
+export function getLayerOrderError(ids: readonly string[]): string | undefined {
+  if (ids.includes('layer')) {
+    return 'Layer steps cannot recurse.';
+  }
+  const topLevel = ids.find((id) => topLevelStrategies.has(id));
+  if (topLevel) {
+    return `Use ${topLevel} outside the layer. It does not transform individual steps.`;
+  }
+  const terminal = ids.findIndex(isTerminalLayerStep);
+  if (terminal !== -1 && terminal !== ids.length - 1) {
+    return `The ${ids[terminal]} step must be last.`;
+  }
+  const providers = ids.filter(isLayerProvider);
+  if (providers.length > 1) {
+    return 'A layer can contain only one agentic strategy or provider wrapper.';
+  }
+
+  const web = ids.indexOf('indirect-web-pwn');
+  if (web !== ids.lastIndexOf('indirect-web-pwn')) {
+    return 'A layer can contain only one indirect-web-pwn step.';
+  }
+  const [provider] = providers;
+  if (web !== -1 && provider) {
+    if (isCustomStrategy(provider) || layerWrappers.has(provider)) {
+      return `Cannot combine ${provider} with indirect-web-pwn.`;
+    }
+    if (web < ids.indexOf(provider)) {
+      return `Place ${provider} before indirect-web-pwn.`;
+    }
+  }
+}
+
 const _ALL_STRATEGIES = [
   'default',
   ...DEFAULT_STRATEGIES,
@@ -201,15 +254,19 @@ export function isFanoutStrategy(strategyId: string): strategyId is FanOutStrate
 // These strategies will be disabled in the UI when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
 export const STRATEGIES_REQUIRING_REMOTE = [
   'audio',
+  'authoritative-markup-injection',
+  'best-of-n',
   'citation',
   'gcg',
   'goat',
   'indirect-web-pwn',
+  'jailbreak',
   'jailbreak:composite',
   'jailbreak:goblin',
   'jailbreak:hydra',
   'jailbreak:likert',
   'jailbreak:meta',
+  'mischievous-user',
 ] as const;
 export const STRATEGIES_REQUIRING_REMOTE_SET: ReadonlySet<string> = new Set(
   STRATEGIES_REQUIRING_REMOTE,

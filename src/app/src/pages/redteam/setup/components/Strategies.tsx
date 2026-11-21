@@ -583,6 +583,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             }
             selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
             allStrategies={config.strategies}
+            isStrategyDisabled={isStrategyDisabled}
           />
         </div>
       </TestCaseGenerationProvider>

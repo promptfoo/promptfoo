@@ -7,29 +7,23 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
-  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
-  HARM_PLUGINS,
-  INSURANCE_PLUGINS,
-  MEDICAL_PLUGINS,
-  PHARMACY_PLUGINS,
-  PII_PLUGINS,
+  PLUGIN_CATEGORIES,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
-  TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
-import { isCustomStrategy } from '../redteam/constants/strategies';
+import { getLayerOrderError, isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../validation/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
+import type { Collection, FrameworkComplianceId, Strategy } from '../redteam/constants';
 import type {
   PluginConfig,
   RedteamContext,
@@ -38,6 +32,15 @@ import type {
   RedteamStrategy,
   TracingConfig,
 } from '../redteam/types';
+
+const pluginCollections: Record<Collection, Iterable<string>> = {
+  ...PLUGIN_CATEGORIES,
+  foundation: FOUNDATION_PLUGINS,
+  default: REDTEAM_DEFAULT_PLUGINS,
+  'guardrails-eval': GUARDRAILS_EVALUATION_PLUGINS,
+  'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
+  'coding-agent:all': CODING_AGENT_PLUGINS,
+};
 
 const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   z.object({
@@ -170,14 +173,37 @@ export const strategyIdSchema = z.union([
 /**
  * Schema for individual redteam strategies
  */
+const strategyObject = z.object({
+  id: strategyIdSchema,
+  config: z.record(z.string(), z.unknown()).optional().describe('Strategy-specific configuration'),
+});
+const layerSteps = z.array(z.union([strategyIdSchema, strategyObject]));
+
 export const RedteamStrategySchema = z.union([
   strategyIdSchema,
-  z.object({
-    id: strategyIdSchema,
-    config: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Strategy-specific configuration'),
+  strategyObject.superRefine((strategy, ctx) => {
+    if (strategy.id !== 'layer' || strategy.config?.steps === undefined) {
+      return;
+    }
+    const steps = layerSteps.safeParse(strategy.config.steps);
+    if (!steps.success) {
+      const index = steps.error.issues[0].path[0];
+      ctx.addIssue({
+        code: 'custom',
+        path: ['config', 'steps'],
+        message:
+          typeof index === 'number'
+            ? `Invalid layer step ${index + 1}. Use a registered strategy ID or an object with an ID and optional config.`
+            : 'Layer steps must be an array.',
+      });
+      return;
+    }
+    const message = getLayerOrderError(
+      steps.data.map((step) => (typeof step === 'string' ? step : step.id)),
+    );
+    if (message) {
+      ctx.addIssue({ code: 'custom', path: ['config', 'steps'], message });
+    }
   }),
 ]);
 
@@ -391,43 +417,17 @@ export const RedteamConfigSchema = z
       pluginMap.set(key, pluginObject);
     };
 
-    const expandCollection = (
-      collection: string[] | ReadonlySet<Plugin>,
-      config: PluginConfig | undefined,
-      numTests: number | undefined,
-      severity?: Severity,
-    ) => {
-      (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
-        // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
-        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
-        if (!existingPlugin || existingPlugin.numTests === undefined) {
-          addPlugin(item, config, numTests, severity);
-        }
-      });
-    };
-
     const handleCollectionExpansion = (
       id: Collection,
       config: PluginConfig | undefined,
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      const collection = new Map<Collection, () => string[]>([
-        ['foundation', () => [...FOUNDATION_PLUGINS]],
-        ['harmful', () => Object.keys(HARM_PLUGINS)],
-        ['pii', () => [...PII_PLUGINS]],
-        ['medical', () => [...MEDICAL_PLUGINS]],
-        ['pharmacy', () => [...PHARMACY_PLUGINS]],
-        ['insurance', () => [...INSURANCE_PLUGINS]],
-        ['financial', () => [...FINANCIAL_PLUGINS]],
-        ['teen-safety', () => [...TEEN_SAFETY_PLUGINS]],
-        ['default', () => [...REDTEAM_DEFAULT_PLUGINS]],
-        ['guardrails-eval', () => [...GUARDRAILS_EVALUATION_PLUGINS]],
-        ['coding-agent:core', () => [...CODING_AGENT_CORE_PLUGINS]],
-        ['coding-agent:all', () => [...CODING_AGENT_PLUGINS]],
-      ]).get(id)?.();
-      if (collection) {
-        expandCollection(collection, config, numTests, severity);
+      for (const item of pluginCollections[id]) {
+        const existing = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
+        if (existing?.numTests === undefined) {
+          addPlugin(item, config, numTests, severity);
+        }
       }
     };
 

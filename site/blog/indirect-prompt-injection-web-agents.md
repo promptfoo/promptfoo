@@ -55,9 +55,9 @@ The injection payload is embedded using one of several techniques, chosen random
 - **Semantic embedding** — woven into legitimate-looking paragraph content
 - **HTML comments** — tucked into `<!-- -->` blocks
 
-![Example generated web page with hidden prompt injection](/img/docs/indirect-web-pwn-example.png)
+![Example generated web page with prompt injection embedded in realistic page content](/img/docs/indirect-web-pwn-example.png)
 
-The page above looks like a normal SaaS company blog post. But it contains a hidden prompt injection payload in an HTML comment that's invisible to human readers but fully readable by an agent parsing the page.
+The generated page looks like a normal SaaS company blog post, while an HTML comment contains an instruction that is invisible to a reader but available to an agent parsing the page.
 
 ## Embedding techniques
 

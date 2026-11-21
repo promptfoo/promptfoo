@@ -98,7 +98,7 @@ Red team scans now support [multiple input variables](/docs/red-team/configurati
 
 ## December 2025 Release Highlights {#december-2025}
 
-This month we shipped **video generation providers**, **OWASP Agentic AI Top 10**, **xAI Voice Agent**, and **multi-modal attack strategies**.
+This month we shipped **video generation providers**, **OWASP Agentic AI Top 10**, **xAI Voice Agent**, and **multimodal attack strategies**.
 
 ### Evals {#december-2025-evals}
 
@@ -802,7 +802,7 @@ Biased AI systems can perpetuate discrimination at scale. Our new [comprehensive
 
 #### Enterprise-Grade Datasets
 
-- **[Aegis Dataset](/docs/red-team/plugins/aegis/)** - NVIDIA's 26,000+ manually annotated interactions across 13 safety categories for comprehensive content safety testing
+- **[Aegis Dataset](/docs/red-team/plugins/aegis/)** - NVIDIA's Aegis v1 dataset with about 12,000 annotated interactions across 13 safety categories for content safety testing
 
 #### New Red Team Capabilities
 

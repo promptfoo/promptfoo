@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 240" role="img" aria-labelledby="title desc">
+  <title id="title">Testing an MCP server through a trusted client</title>
+  <desc id="desc">Promptfoo discovers tools, generates natural-language attacks, sends them through a trusted application or model, invokes the MCP server, and grades the result.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+  <style>text{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0f172a}.title{font-size:17px;font-weight:650}.sub{font-size:14px;fill:#475569}.box{fill:#fff;stroke:#94a3b8;stroke-width:1.5}.blue{fill:#eff6ff;stroke:#2563eb;stroke-width:1.5}.line{fill:none;stroke:#64748b;stroke-width:1.5;marker-end:url(#arrow)}</style>
+  <rect width="1120" height="240" rx="16" fill="#f8fafc"/>
+  <text x="32" y="42" class="title">Trusted-client testing</text>
+  <text x="32" y="66" class="sub">Natural-language attacks exercise the MCP server through the same client path users rely on.</text>
+  <rect x="32" y="104" width="144" height="78" rx="10" class="box"/><text x="104" y="137" text-anchor="middle" class="title">Promptfoo</text><text x="104" y="160" text-anchor="middle" class="sub">Red team</text>
+  <path d="M176 143H210" class="line"/>
+  <rect x="212" y="104" width="150" height="78" rx="10" class="blue"/><text x="287" y="136" text-anchor="middle" class="title">Discover tools</text><text x="287" y="160" text-anchor="middle" class="sub">tools/list</text>
+  <path d="M362 143H396" class="line"/>
+  <rect x="398" y="104" width="156" height="78" rx="10" class="box"/><text x="476" y="136" text-anchor="middle" class="title">Build attacks</text><text x="476" y="160" text-anchor="middle" class="sub">Plugins + strategies</text>
+  <path d="M554 143H588" class="line"/>
+  <rect x="590" y="104" width="166" height="78" rx="10" class="blue"/><text x="673" y="136" text-anchor="middle" class="title">Trusted client</text><text x="673" y="160" text-anchor="middle" class="sub">Application or model</text>
+  <path d="M756 143H790" class="line"/>
+  <rect x="792" y="104" width="150" height="78" rx="10" class="blue"/><text x="867" y="136" text-anchor="middle" class="title">MCP server</text><text x="867" y="160" text-anchor="middle" class="sub">tools/call</text>
+  <path d="M942 143H976" class="line"/>
+  <rect x="978" y="104" width="110" height="78" rx="10" class="box"/><text x="1033" y="137" text-anchor="middle" class="title">Grade</text><text x="1033" y="160" text-anchor="middle" class="sub">Result</text>
+</svg>

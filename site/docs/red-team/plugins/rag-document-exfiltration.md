@@ -61,4 +61,6 @@ The plugin assesses the AI's response based on:
 
 Document exfiltration testing matters when retrieval quality and disclosure limits pull in opposite directions. This plugin checks whether the system stays within authorized disclosure limits instead of revealing sensitive document content, whether verbatim or summarized.
 
+## Related Concepts
+
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

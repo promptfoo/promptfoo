@@ -26,34 +26,36 @@ import useCloudConfig from '@app/hooks/useCloudConfig';
 import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
-  AGENTIC_STRATEGIES,
-  MULTI_MODAL_STRATEGIES,
+  ALL_STRATEGIES,
+  getLayerOrderError,
+  isCustomStrategy,
+  isLayerProvider,
+  isTerminalLayerStep,
+  MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
-import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import { isStrategyConfigured, STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
 
-// ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
-// We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
-// like 'default', 'multilingual' which aren't meant to be composed as layer steps.
-// We exclude 'layer' itself to prevent infinite recursion.
-const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+// Collections, recursive layers, and the deprecated bare jailbreak ID are not selectable steps.
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
+  (s) => s !== 'layer' && s !== 'jailbreak',
+).sort();
 
-// Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
 
-// Helper to extract step ID from either format
-const getStepId = (step: StepType): string => {
-  return typeof step === 'string' ? step : step.id;
-};
+const getStepId = (step: StepType) =>
+  typeof step === 'string' ? step : typeof step?.id === 'string' ? step.id : 'Invalid step';
+const isAgenticStrategy = (step: StepType) => isLayerProvider(getStepId(step));
+const isMultiModalStrategy = (step: StepType) => MULTI_MODAL_STRATEGIES_SET.has(getStepId(step));
+const isFileStep = (id: string) => id.startsWith('file://') && /\.[cm]?[jt]s$/i.test(id);
 
-// Stable empty arrays to avoid infinite loops in useEffect dependencies
 const EMPTY_PLUGINS_ARRAY: string[] = [];
-const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Partial<StrategyConfig> }> = [];
+const EMPTY_STRATEGIES_ARRAY: StepType[] = [];
 
 interface StrategyConfigDialogProps {
   open: boolean;
@@ -63,7 +65,8 @@ interface StrategyConfigDialogProps {
   onSave: (strategy: string, config: Partial<StrategyConfig>) => void;
   strategyData: StrategyCardData | null;
   selectedPlugins?: string[];
-  allStrategies?: Array<string | { id: string; config?: Partial<StrategyConfig> }>;
+  allStrategies?: StepType[];
+  isStrategyDisabled?: (id: string) => boolean;
 }
 
 export default function StrategyConfigDialog({
@@ -75,6 +78,7 @@ export default function StrategyConfigDialog({
   strategyData,
   selectedPlugins = EMPTY_PLUGINS_ARRAY,
   allStrategies = EMPTY_STRATEGIES_ARRAY,
+  isStrategyDisabled,
 }: StrategyConfigDialogProps) {
   const { data: cloudConfig } = useCloudConfig();
   const isCloudEnabled = cloudConfig?.isEnabled ?? false;
@@ -98,7 +102,9 @@ export default function StrategyConfigDialog({
   const [numTests, setNumTests] = React.useState<string>(config.numTests?.toString() || '10');
   const [error, setError] = React.useState<string>('');
 
-  const [steps, setSteps] = React.useState<StepType[]>((config.steps as StepType[]) || []);
+  const [steps, setSteps] = React.useState<StepType[]>(
+    Array.isArray(config.steps) ? config.steps : [],
+  );
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
   // Plugin targeting: 'all' or 'specific'
@@ -108,95 +114,50 @@ export default function StrategyConfigDialog({
 
   const availablePlugins = selectedPlugins;
 
-  // Helper functions to check strategy types
-  const isAgenticStrategy = React.useCallback((step: StepType): boolean => {
-    const strategyId = getStepId(step);
-    return (AGENTIC_STRATEGIES as readonly string[]).includes(strategyId);
-  }, []);
+  const stepIds = React.useMemo(() => steps.map(getStepId), [steps]);
+  const unavailable = stepIds.find(
+    (id) =>
+      isStrategyDisabled?.(id) ||
+      (!(ALL_STRATEGIES as readonly string[]).includes(id) &&
+        !isCustomStrategy(id) &&
+        !isFileStep(id)),
+  );
+  const layerError =
+    unavailable === undefined
+      ? getLayerOrderError(stepIds)
+      : `Remove the unavailable strategy "${unavailable}" to save this layer.`;
+  const lastStep = stepIds[stepIds.length - 1];
+  const isTerminal = lastStep !== undefined && isTerminalLayerStep(lastStep);
 
-  const isMultiModalStrategy = React.useCallback((step: StepType): boolean => {
-    const strategyId = getStepId(step);
-    return (MULTI_MODAL_STRATEGIES as readonly string[]).includes(strategyId);
-  }, []);
-
-  // Compute available strategies based on current steps
   const availableStrategies = React.useMemo(() => {
-    const hasAgenticStrategy = steps.some(isAgenticStrategy);
-    const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
-    const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
-
-    // If last step is multi-modal, no more steps can be added
-    if (lastStepIsMultiModal) {
-      return [];
-    }
-
-    const stepIds = new Set(steps.map(getStepId));
-
-    // Create a Map for O(1) lookup instead of O(n) find
-    const strategyConfigMap = new Map(
-      allStrategies.map((s) => {
-        const id = typeof s === 'string' ? s : s.id;
-        return [id, s];
-      }),
-    );
-
-    return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
-      // Cannot add duplicates
-      if (stepIds.has(strategy)) {
-        return false;
+    const available = new Map<string, StepType>();
+    const configured = new Map(allStrategies.map((step) => [getStepId(step), step]));
+    for (const id of LAYER_TRANSFORMABLE_STRATEGIES) {
+      if (
+        isStrategyDisabled?.(id) ||
+        stepIds.includes(id) ||
+        getLayerOrderError([...stepIds, id])
+      ) {
+        continue;
       }
-
-      // Cannot add multiple agentic strategies
-      if (hasAgenticStrategy && isAgenticStrategy(strategy)) {
-        return false;
+      const step = STRATEGIES_REQUIRING_CONFIG.includes(id) ? configured.get(id) : id;
+      if (step && isStrategyConfigured(id, step)) {
+        available.set(id, step);
       }
-
-      // Cannot add multiple multi-modal strategies
-      if (hasMultiModalStrategy && isMultiModalStrategy(strategy)) {
-        return false;
-      }
-
-      // Only include strategies that don't require config, or if they do, they must be configured
-      if (STRATEGIES_REQUIRING_CONFIG.includes(strategy)) {
-        const strategyConfig = strategyConfigMap.get(strategy);
-
-        if (!strategyConfig) {
-          return false; // Not configured, don't show
-        }
-
-        const config = typeof strategyConfig === 'object' ? strategyConfig.config : undefined;
-
-        if (strategy === 'custom') {
-          // Custom strategy needs strategyText
-          const strategyText = config?.strategyText;
-          return !!(strategyText && typeof strategyText === 'string' && strategyText.trim());
-        }
-      }
-
-      return true;
-    });
-  }, [steps, allStrategies, isAgenticStrategy, isMultiModalStrategy]);
-
-  // Get validation message for why strategies might be disabled
-  const getValidationMessage = (): string | null => {
-    const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
-
-    if (lastStepIsMultiModal) {
-      return 'Multi-modal strategies must be the last step. Remove the current multi-modal step to add more strategies.';
     }
+    return available;
+  }, [stepIds, allStrategies, isStrategyDisabled]);
 
-    const hasAgenticStrategy = steps.some(isAgenticStrategy);
-    const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
-
-    const messages: string[] = [];
-    if (hasAgenticStrategy) {
-      messages.push('Only one agentic strategy allowed');
+  const getValidationMessage = () => {
+    if (layerError) {
+      return layerError;
     }
-    if (hasMultiModalStrategy) {
-      messages.push('Only one multi-modal strategy allowed (must be last)');
+    if (isTerminal) {
+      return MULTI_MODAL_STRATEGIES_SET.has(lastStep)
+        ? 'Multi-modal strategies must be the last step. Remove the current multi-modal step to add more strategies.'
+        : `The ${lastStep} step must be last.`;
     }
-
-    return messages.length > 0 ? messages.join('. ') : null;
+    return steps.some(isAgenticStrategy) ? 'Only one agentic strategy allowed' : null;
   };
 
   // Check for ordering warnings (not blocking, just advisory)
@@ -274,8 +235,7 @@ export default function StrategyConfigDialog({
 
     if (strategy === 'layer') {
       // Keep steps as-is (can be strings or objects with {id, config})
-      const rawSteps = (nextConfig.steps as StepType[]) || [];
-      setSteps(rawSteps);
+      setSteps(Array.isArray(nextConfig.steps) ? nextConfig.steps : []);
 
       // Filter layerPlugins to only include plugins that are in availablePlugins
       const configPlugins = nextConfig.plugins || [];
@@ -300,96 +260,37 @@ export default function StrategyConfigDialog({
     }
   };
 
-  const handleAddStep = React.useCallback(
-    (value: string | null) => {
-      if (value && value.trim()) {
-        const trimmedValue = value.trim();
-        const isFilePath = trimmedValue.startsWith('file://');
+  const getNewStep = (id: string) => {
+    if (isFileStep(id) && !getLayerOrderError([...stepIds, id])) {
+      return id;
+    }
+    return availableStrategies.get(id);
+  };
 
-        // For file paths, allow them without additional validation
-        if (isFilePath) {
-          // Still check if last step is multi-modal
-          setSteps((prev) => {
-            const lastStepIsMultiModal =
-              prev.length > 0 && isMultiModalStrategy(prev[prev.length - 1]);
-            if (lastStepIsMultiModal) {
-              return prev; // Don't add if last step is multi-modal
-            }
-            return [...prev, trimmedValue];
-          });
-          setNewStep('');
-          return;
-        }
-
-        // For predefined strategies, check if it's in the available list
-        const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
-
-        if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
-
-            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
-              // Add step with its config
-              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
-            } else {
-              // Shouldn't reach here due to filtering, but add as string fallback
-              setSteps((prev) => [...prev, trimmedValue]);
-            }
-          } else {
-            // Regular strategy without config requirements
-            setSteps((prev) => [...prev, trimmedValue]);
-          }
-          setNewStep('');
-        }
-      }
-    },
-    [availableStrategies, allStrategies, isMultiModalStrategy],
-  );
+  const handleAddStep = (value: string) => {
+    const step = getNewStep(value.trim());
+    if (step) {
+      setSteps([...steps, step]);
+      setNewStep('');
+    }
+  };
 
   const handleRemoveStep = (index: number) => {
     setSteps((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleMoveStepUp = (index: number) => {
-    if (index > 0) {
-      setSteps((prev) => {
-        const newSteps = [...prev];
-        const stepToMove = newSteps[index];
+  // Adjacent moves must obey the same ordering rules as inserting a new step.
+  const canSwap = (index: number) =>
+    index >= 0 &&
+    index + 1 < steps.length &&
+    !getLayerOrderError([stepIds[index + 1], stepIds[index]]);
 
-        // Prevent moving a multi-modal strategy up (it must stay at the end)
-        if (isMultiModalStrategy(stepToMove) && index === prev.length - 1) {
-          return prev;
-        }
-
-        // Prevent moving up if the step below is multi-modal
-        if (index < prev.length - 1 && isMultiModalStrategy(prev[index + 1])) {
-          return prev;
-        }
-
-        [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
-        return newSteps;
-      });
+  const swapSteps = (index: number) => {
+    if (canSwap(index)) {
+      const next = [...steps];
+      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      setSteps(next);
     }
-  };
-
-  const handleMoveStepDown = (index: number) => {
-    setSteps((prev) => {
-      if (index < prev.length - 1) {
-        // Prevent moving down if the next step is multi-modal (multi-modal must stay last)
-        if (isMultiModalStrategy(prev[index + 1])) {
-          return prev;
-        }
-
-        const newSteps = [...prev];
-        [newSteps[index], newSteps[index + 1]] = [newSteps[index + 1], newSteps[index]];
-        return newSteps;
-      }
-      return prev;
-    });
   };
 
   const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1138,16 +1039,11 @@ export default function StrategyConfigDialog({
 
   const renderLayerStepCard = (step: StepType, index: number) => {
     const stepId = getStepId(step);
-    const hasConfig = typeof step === 'object' && step.config;
+    const hasConfig = typeof step === 'object' && step?.config;
     const isAgentic = isAgenticStrategy(step);
     const isMultiModal = isMultiModalStrategy(step);
-    const canMoveUp =
-      index > 0 &&
-      !(isMultiModal && index === steps.length - 1) &&
-      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
-    const canMoveDown =
-      index < steps.length - 1 &&
-      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+    const canMoveUp = canSwap(index - 1);
+    const canMoveDown = canSwap(index);
 
     return (
       <div
@@ -1188,7 +1084,7 @@ export default function StrategyConfigDialog({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => handleMoveStepUp(index)}
+            onClick={() => swapSteps(index - 1)}
             disabled={!canMoveUp}
             aria-label="move step up"
             className={cn('size-8', !canMoveUp && 'opacity-30')}
@@ -1199,7 +1095,7 @@ export default function StrategyConfigDialog({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => handleMoveStepDown(index)}
+            onClick={() => swapSteps(index)}
             disabled={!canMoveDown}
             aria-label="move step down"
             className={cn('size-8', !canMoveDown && 'opacity-30')}
@@ -1236,19 +1132,19 @@ export default function StrategyConfigDialog({
               handleAddStep(value);
             }
           }}
-          disabled={availableStrategies.length === 0 && !newStep.startsWith('file://')}
+          disabled={availableStrategies.size === 0}
         >
           <SelectTrigger className="flex-1">
             <SelectValue
               placeholder={
-                availableStrategies.length === 0
+                availableStrategies.size === 0
                   ? 'No more strategies available'
                   : 'Select a strategy'
               }
             />
           </SelectTrigger>
           <SelectContent>
-            {availableStrategies.map((strat) => (
+            {[...availableStrategies.keys()].map((strat) => (
               <SelectItem key={strat} value={strat}>
                 {strat}
               </SelectItem>
@@ -1259,6 +1155,7 @@ export default function StrategyConfigDialog({
 
       <div className="mt-2 flex gap-2">
         <Input
+          disabled={isTerminal}
           value={newStep}
           onChange={(e) => setNewStep(e.target.value)}
           placeholder="Or type file://path/to/custom.js"
@@ -1273,7 +1170,7 @@ export default function StrategyConfigDialog({
           type="button"
           variant="outline"
           onClick={() => handleAddStep(newStep)}
-          disabled={!newStep.trim()}
+          disabled={!getNewStep(newStep.trim())}
         >
           Add
         </Button>
@@ -1282,7 +1179,7 @@ export default function StrategyConfigDialog({
       <p
         className={cn(
           'mt-1 text-xs',
-          steps.length === 0 ? 'text-destructive' : 'text-muted-foreground',
+          steps.length === 0 || layerError ? 'text-destructive' : 'text-muted-foreground',
         )}
       >
         {steps.length === 0
@@ -1363,7 +1260,7 @@ export default function StrategyConfigDialog({
             disabled={
               (strategy === 'retry' && (!!error || !numTests)) ||
               !isCustomStrategyValid() ||
-              (strategy === 'layer' && steps.length === 0)
+              (strategy === 'layer' && (steps.length === 0 || !!layerError))
             }
           >
             Save

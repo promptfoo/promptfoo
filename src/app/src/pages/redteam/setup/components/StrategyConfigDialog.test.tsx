@@ -1302,5 +1302,118 @@ describe('StrategyConfigDialog', () => {
       // The autocomplete should show that multi-modal must be last
       expect(screen.getByText(/Multi-modal strategies must be the last step/)).toBeInTheDocument();
     });
+
+    it('should allow indirect-web-pwn after an orchestrating attack strategy', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.getByRole('option', { name: 'indirect-web-pwn' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'mischievous-user' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'jailbreak' })).not.toBeInTheDocument();
+    });
+
+    function renderLayer(steps: unknown[], isStrategyDisabled?: (id: string) => boolean) {
+      renderWithProviders(
+        <StrategyConfigDialog
+          open
+          strategy="layer"
+          config={{ steps }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          isStrategyDisabled={isStrategyDisabled}
+        />,
+      );
+    }
+
+    it.each(['mischievous-user', 'authoritative-markup-injection'])(
+      'keeps %s last when adding or moving steps',
+      (id) => {
+        renderLayer(['base64', id]);
+        expect(screen.getByRole('combobox')).toBeDisabled();
+        expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeDisabled();
+        expect(screen.getAllByLabelText('move step up')[1]).toBeDisabled();
+        expect(screen.getAllByLabelText('move step down')[0]).toBeDisabled();
+      },
+    );
+
+    it.each(['best-of-n', 'custom', 'custom:example'])(
+      'excludes incompatible providers after %s',
+      async (id) => {
+        renderLayer([{ id }]);
+        await userEvent.click(screen.getByRole('combobox'));
+        expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: 'jailbreak:hydra' })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+      },
+    );
+
+    it('lets an imported malformed step be removed before saving', async () => {
+      renderLayer([null, 'base64']);
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      await userEvent.click(screen.getAllByLabelText('delete step')[0]);
+      expect(save).toBeEnabled();
+    });
+
+    it('applies the parent strategy restrictions to layer choices and saved steps', async () => {
+      renderLayer(['best-of-n'], (id) => id === 'best-of-n' || id === 'audio');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      await userEvent.click(screen.getByRole('combobox'));
+      expect(screen.queryByRole('option', { name: 'audio' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'multilingual' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
+
+    it('should not allow an orchestrating attack strategy after indirect-web-pwn', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['indirect-web-pwn'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'jailbreak:hydra', config: { maxTurns: 5 } }]}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.queryByRole('option', { name: 'jailbreak:hydra' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'mischievous-user' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
+
+    it('should prevent reordering indirect-web-pwn before an orchestrating attack strategy', () => {
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra', 'indirect-web-pwn'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      const moveDownButtons = screen.getAllByLabelText('move step down');
+      const moveUpButtons = screen.getAllByLabelText('move step up');
+
+      expect(moveDownButtons[0]).toBeDisabled();
+      expect(moveUpButtons[1]).toBeDisabled();
+    });
   });
 });
