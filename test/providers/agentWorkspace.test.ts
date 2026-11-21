@@ -3473,17 +3473,22 @@ describe('agent workspaces', () => {
       }
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'reports a re-included FIFO under a wildcard rule',
-      async () => {
+    it.each(process.platform === 'win32' ? ['file'] : ['file', 'FIFO'])(
+      'reports a re-included %s under a wildcard rule',
+      async (type) => {
         const source = path.join(root, 'repo');
-        makeRepository(source, { '.gitignore': 'vendor/*\n!vendor/keep.fifo\n' });
+        makeRepository(source, { '.gitignore': 'vendor/*\n!vendor/keep\n' });
         const workspace = await create(source);
-        fs.mkdirSync(path.join(workspace.dir, 'vendor'));
-        execFileSync('mkfifo', [path.join(workspace.dir, 'vendor/keep.fifo')]);
+        const file = path.join(workspace.dir, 'vendor', 'keep');
+        fs.mkdirSync(path.dirname(file));
+        if (type === 'FIFO') {
+          execFileSync('mkfifo', [file]);
+        } else {
+          fs.writeFileSync(file, 'visible');
+        }
         const metadata = await workspace.metadata();
-        expect(metadata.workspaceDiff).toContain('vendor/keep.fifo');
-        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('vendor/keep');
+        expect(metadata.workspaceDiffIncomplete).toBe(type === 'FIFO' ? true : undefined);
       },
     );
 
