@@ -710,6 +710,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'latency',
   'levenshtein',
   'llm-rubric',
+  'math-equivalent',
   'pi',
   'meteor',
   'model-graded-closedqa',
