@@ -429,7 +429,7 @@ function mayHaveArrived(error: unknown): boolean {
 function scrub(text: string, secrets: Iterable<string>, limit = 500): string {
   let scrubbed = text;
   for (const secret of secrets) {
-    scrubbed = scrubbed.replaceAll(secret, '[REDACTED]');
+    scrubbed = scrubbed.split(secret).join('[REDACTED]');
   }
   return sanitizeBody(scrubbed).slice(0, limit);
 }
