@@ -5,7 +5,8 @@ import { getEnvString, getMergedEnvOverrides } from '../envars';
 import { memoizeAwsEnvironmentCredentials } from './awsCredentialRefresh';
 import { getScopedAwsProfileCredentials } from './awsProfileCredentials';
 import { createScopedSsoProvider } from './awsSsoCredentials';
-import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from './credentialCache';
+import { getCredentialCacheNamespace } from './credentialCache';
+import { getOpaqueCredentialCacheNamespace } from './opaqueCredentialCache';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../contracts/env';
