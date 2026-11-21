@@ -152,7 +152,12 @@ export function parseDatasetPath(path: string): {
 export async function fetchHuggingFaceDataset(
   datasetPath: string,
   limit?: number,
+  options: { cache?: boolean } = {},
 ): Promise<TestCase[]> {
+  const fetchPage = (url: string, headers: Record<string, string>) =>
+    options.cache === false
+      ? fetchWithCache<HuggingFaceResponse>(url, { headers }, undefined, undefined, true)
+      : fetchWithCache<HuggingFaceResponse>(url, { headers });
   const baseUrl = 'https://datasets-server.huggingface.co/rows';
   const { owner, repo, queryParams } = parseDatasetPath(datasetPath);
 
@@ -200,7 +205,7 @@ export async function fetchHuggingFaceDataset(
       headers.Authorization = `Bearer ${hfToken}`;
     }
 
-    const response = await fetchWithCache(url, { headers });
+    const response = await fetchPage(url, headers);
 
     if (response.status < 200 || response.status >= 300) {
       const error = `[HF Dataset] Failed to fetch dataset: ${response.statusText}.\nFetched ${url}`;
@@ -263,7 +268,7 @@ export async function fetchHuggingFaceDataset(
       }
 
       // Use fetchWithCache defaults (30s timeout, json format, 4 retries)
-      const response = await fetchWithCache(url, { headers });
+      const response = await fetchPage(url, headers);
 
       if (response.status < 200 || response.status >= 300) {
         if (response.status === 422) {
@@ -401,7 +406,7 @@ export async function fetchHuggingFaceDataset(
             Math.min(pageSize, totalNeeded - futureOffset),
           );
 
-          const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
+          const p = fetchPage(futureUrl, headers)
             .then((resp) => ({
               offset: futureOffset,
               response: resp,
