@@ -667,22 +667,28 @@ function isSensitiveRequestHeader(headerName: string): boolean {
   return isSensitiveResponseHeader(headerName) || isSecretField(headerName);
 }
 
-// Redact sensitive headers, but only when the value originates from `sourceHeaders` (the
-// transport headers). The provenance check matters for the legacy top-level `metadata.headers`
-// slot, which also holds arbitrary user metadata. A masked source value has unknown
-// provenance, so conservatively mask the matching sensitive header. For the canonical `metadata.http.*` slots the source
-// is the slot itself, so the guard reduces to the plain name check.
+// Legacy metadata can also hold unrelated user headers. Match every transport spelling
+// of a header and mask possible echoes when its source value could not be read.
 function redactSensitiveHeaders(
   headers: Record<string, unknown>,
   sourceHeaders: Record<string, unknown> = headers,
   isSensitiveHeader: (headerName: string) => boolean = isSensitiveResponseHeader,
 ): Record<string, unknown> | null {
+  const sources: Record<string, unknown[]> | undefined =
+    sourceHeaders === headers ? undefined : Object.create(null);
+  if (sources) {
+    for (const [name, source] of Object.entries(sourceHeaders)) {
+      (sources[name.toLowerCase()] ??= []).push(source);
+    }
+  }
   let next: Record<string, unknown> | null = null;
   for (const [key, value] of Object.entries(headers)) {
     if (
       isSensitiveHeader(key) &&
-      Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
-      (sourceHeaders[key] === REDACTED || isDeepStrictEqual(sourceHeaders[key], value))
+      (!sources ||
+        sources[key.toLowerCase()]?.some(
+          (source) => source === REDACTED || isDeepStrictEqual(source, value),
+        ))
     ) {
       next ??= { ...headers };
       next[key] = REDACTED;

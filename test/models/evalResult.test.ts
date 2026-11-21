@@ -350,7 +350,7 @@ describe('EvalResult', () => {
     }
   });
 
-  it.each(['headers', 'authorization'])('contains an opaque %s source', async (field) => {
+  it.each(['headers', 'Authorization'])('contains an opaque %s source', async (field) => {
     const get = vi.fn(() => {
       throw new Error('fixture-only');
     });
@@ -371,6 +371,20 @@ describe('EvalResult', () => {
       expect(row.metadata.headers).toEqual({ authorization: '[REDACTED]', language: 'en' });
     }
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it('matches all transport spellings without masking unrelated header values', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      response: { metadata: { headers: { Authorization: 'first', authorization: 'second' } } },
+      metadata: {
+        headers: { authorization: 'first', Authorization: 'second', AUTHORIZATION: 'public' },
+      },
+    });
+    expect(result.metadata.headers).toEqual({
+      authorization: '[REDACTED]',
+      Authorization: '[REDACTED]',
+      AUTHORIZATION: 'public',
+    });
   });
 
   it('does not invoke assertion accessors during artifact projection', () => {
