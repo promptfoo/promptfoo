@@ -273,6 +273,8 @@ interface TableState {
   setAuthor: (author: string | null) => void;
 
   table: EvaluateTable | null;
+  /** Shared across pages of one query, until a refresh or result count change. */
+  tableResultSet: { query: string } | null;
   setTable: (table: EvaluateTable | null) => void;
 
   config: Partial<UnifiedConfig> | null;
@@ -554,6 +556,7 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tableResultSet: null,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
@@ -562,6 +565,7 @@ export const useTableStore = create<TableState>()(
     setTable: (table: EvaluateTable | null) => {
       set((prevState) => ({
         table,
+        tableResultSet: table ? prevState.tableResultSet : null,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -635,10 +639,7 @@ export const useTableStore = create<TableState>()(
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
       // Cancel any existing metadata keys request and reset state for new eval
-      const currentState = get();
-      if (currentState.currentMetadataKeysRequest) {
-        currentState.currentMetadataKeysRequest.abort();
-      }
+      get().currentMetadataKeysRequest?.abort();
 
       set({
         activeEvalQuery: query,
@@ -706,8 +707,17 @@ export const useTableStore = create<TableState>()(
             return data;
           }
 
+          // Identify the rows being committed, independent of controls for a pending request.
+          url.searchParams.delete('offset');
+          const resultQuery = url.pathname + url.search;
           set((prevState) => ({
             table: data.table,
+            tableResultSet:
+              !skipLoadingState &&
+              prevState.tableResultSet?.query === resultQuery &&
+              prevState.filteredResultsCount === data.filteredCount
+                ? prevState.tableResultSet
+                : { query: resultQuery },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),

@@ -3564,7 +3564,7 @@ describe('ResultsTable default column sizing', () => {
   const mockTable = {
     body: [
       {
-        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        outputs: [{ pass: true, score: 1, text: 'test output', metadata: {} }],
         test: {},
         vars: [
           'ok',
@@ -3581,6 +3581,40 @@ describe('ResultsTable default column sizing', () => {
   const defaultProps = createDefaultProps();
 
   beforeEach(() => mockHeaderTable(mockTable));
+
+  it.each(['variable', 'transform'])(
+    'keeps expanded %s text open when zoom changes',
+    async (kind) => {
+      const text = 'Detailed ordinary evaluation text. '.repeat(12);
+      const table = {
+        ...mockTable,
+        head: { ...mockTable.head, vars: kind === 'variable' ? ['detail'] : [] },
+        body: [
+          {
+            ...mockTable.body[0],
+            vars: kind === 'variable' ? [text] : [],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: kind === 'transform' ? { transformDisplayVars: { __detail: text } } : {},
+              },
+            ],
+          },
+        ],
+      };
+      const state = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({ ...state, table });
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      await user.click(screen.getByText('...'));
+      const collapseControl = screen.getByText('Show less');
+
+      rerender(<ResultsTable {...defaultProps} zoom={1.25} />);
+
+      expect(screen.getByText('Show less')).toBe(collapseControl);
+    },
+  );
 
   it('gives larger metadata columns more initial width than compact metadata columns', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -3607,6 +3641,73 @@ describe('ResultsTable default column sizing', () => {
     expect(largeMetadataWidth).toBeGreaterThan(compactMetadataWidth);
     expect(largeMetadataWidth).toBeLessThanOrEqual(360);
     expect(outputWidth).toBe(480);
+  });
+
+  function renderPages(initial: string) {
+    let tableResultSet = { query: 'first' };
+    let value = initial;
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        filteredResultsCount: 2,
+        tableResultSet,
+        table: {
+          head: mockTable.head,
+          body: [
+            {
+              vars: ['ok', value],
+              test: { description: value },
+              outputs: [
+                {
+                  ...mockTable.body[0].outputs[0],
+                  metadata: value ? { transformDisplayVars: { __late: value } } : {},
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    let zoom = 1;
+    return (nextValue: string, query?: string) => {
+      value = nextValue;
+      if (query) {
+        tableResultSet = { query };
+      }
+      zoom += 0.01;
+      rerender(<ResultsTable {...defaultProps} zoom={zoom} debouncedSearchText="second" />);
+    };
+  }
+
+  const width = (label: string) =>
+    Number.parseFloat(screen.getByText(label).closest('th')!.style.width);
+  const widths = () => ['large_metadata', 'Description', 'late'].map(width);
+  const longValue = 'Long metadata value '.repeat(30);
+
+  it('keeps widths across pages until rows for a new query or refresh arrive', () => {
+    const showPage = renderPages('short');
+    const original = widths();
+    showPage(longValue);
+    expect(widths()).toEqual(original);
+    showPage(longValue, 'second');
+    const next = widths();
+    next.forEach((size, index) => expect(size).toBeGreaterThan(original[index]));
+    showPage('short');
+    expect(widths()).toEqual(next);
+    showPage('short', 'second');
+    expect(widths()).toEqual(original);
+  });
+
+  it('samples newly discovered columns but preserves widths for declared empty variables', () => {
+    const showPage = renderPages('');
+    const variableWidth = width('large_metadata');
+    showPage(longValue);
+    expect(width('large_metadata')).toBe(variableWidth);
+    expect(width('Description')).toBeGreaterThan(160);
+    expect(width('late')).toBeGreaterThan(160);
+    const discovered = widths();
+    showPage('short');
+    expect(widths()).toEqual(discovered);
   });
 
   it('renders matching header and body colgroups for the computed widths', () => {
