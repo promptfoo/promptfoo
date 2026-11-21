@@ -2,6 +2,9 @@ import { EventEmitter } from 'events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TargetLinkEvents } from '../../../src/types/targetLink';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 
 vi.mock('../../../src/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -224,5 +227,61 @@ describe('attachTargetLink', () => {
       expect(results).toHaveLength(1);
       expect((results[0].args[0] as any).tokenUsage).toBeUndefined();
     });
+  });
+
+  const url = 'https://example.test/start';
+  it.each([
+    [301, url, '/a', 'GET'],
+    [302, url, '/b', 'GET'],
+    [303, url, '/c', 'GET'],
+    [307, url, '/d', 'POST'],
+    [308, 'http://example.test/start', url, 'POST'],
+    [307, 'http://example.test:8080/start', url, null],
+    [307, url, 'http://example.test/start', null],
+    [307, url, 'https://other.test/next', null],
+  ] as const)('handles %s from %s to %s', async (status, start, location, method) => {
+    const success = method !== null;
+    const next = new URL(location, start).href;
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(new Response('', { status, headers: { location } }))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
+    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
+
+    fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
+      requestId: 'redirect-fixture',
+      url: start,
+      body: 'fixture data',
+    });
+
+    await vi.waitFor(() => {
+      const result = fakeClient._emittedToServer.find(
+        (event) => event.event === TargetLinkEvents.PROBE_HTTP_RESULT,
+      );
+      expect(result?.args[0]).toMatchObject({
+        requestId: 'redirect-fixture',
+        success,
+        ...(success
+          ? { finalUrl: next }
+          : { error: 'TargetLink HTTP probes do not follow cross-origin redirects' }),
+      });
+    });
+    expect(fetchWithProxy).toHaveBeenCalledTimes(success ? 2 : 1);
+    expect(fetchWithProxy).toHaveBeenNthCalledWith(
+      1,
+      start,
+      expect.objectContaining({ redirect: 'manual' }),
+    );
+    if (success) {
+      expect(fetchWithProxy).toHaveBeenNthCalledWith(
+        2,
+        next,
+        expect.objectContaining({
+          redirect: 'manual',
+          method,
+          body: method === 'POST' ? 'fixture data' : undefined,
+        }),
+      );
+    }
   });
 });
