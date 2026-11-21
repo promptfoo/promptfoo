@@ -1666,6 +1666,15 @@ async function main(): Promise<void> {
         values.profile === 'default',
       ),
     );
+    await timeAsyncPhase('check optional Vercel SDK', () =>
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Vercel AI',
+        package: 'ai',
+        version: '^6.0.286',
+        script: 'optional-vercel.mjs',
+        env: { PROMPTFOO_CACHE_ENABLED: 'false' },
+      }),
+    );
     await timeAsyncPhase('check optional Slack SDK', () =>
       runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
         name: 'Slack',

@@ -20,7 +20,7 @@ export VERCEL_AI_GATEWAY_API_KEY=your_api_key
 ```bash
 npx promptfoo@latest init --example integration-vercel/ai-gateway
 cd integration-vercel/ai-gateway
-npm install promptfoo "ai@^6.0.264"
+npm install promptfoo "ai@^6.0.286"
 npx promptfoo eval
 ```
 

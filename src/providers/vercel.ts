@@ -8,7 +8,10 @@ import { getExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../util/packageImportErrors';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
@@ -105,25 +108,24 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
   );
 }
 
+const sdkVersion = '^6.0.286';
+const installHint = optionalPackageInstallHint(`npm install promptfoo "ai@${sdkVersion}"`);
+
 async function loadAiSdk() {
   try {
     const { default: metadata } = await import(/* webpackIgnore: true */ 'ai/package.json', {
       with: { type: 'json' },
     });
-    if (!semverSatisfies(metadata.version, '^6.0.264')) {
+    if (!semverSatisfies(metadata.version, sdkVersion)) {
       throw new Error(
-        `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ` +
-          'Install the supported SDK alongside Promptfoo: npm install promptfoo "ai@^6.0.264". ' +
-          'For a global installation, use npm install -g promptfoo "ai@^6.0.264".',
+        `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ${installHint}`,
       );
     }
     return await import(/* webpackIgnore: true */ 'ai');
   } catch (error) {
     if (isMissingPackageImportError(error, 'ai')) {
       throw new Error(
-        'The Vercel AI Gateway provider requires the optional ai package. ' +
-          'Install it alongside Promptfoo: npm install promptfoo "ai@^6.0.264". ' +
-          'For a global installation, use npm install -g promptfoo "ai@^6.0.264".',
+        `The Vercel AI Gateway provider requires the optional ai package. ${installHint}`,
       );
     }
     throw error;
