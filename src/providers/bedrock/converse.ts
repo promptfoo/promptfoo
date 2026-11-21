@@ -43,6 +43,8 @@ import {
   type OpenAIToolChoice,
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import {
@@ -1219,19 +1221,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       region,
     })}`;
 
-    if (isCacheEnabled()) {
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    if (useCache) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
         const result = await this.parseResponse(parsed, toolsDisabled, betweenToolsThinking);
-        const total = result.tokenUsage?.total;
-        return {
-          ...result,
-          cached: true,
-          cost: 0,
-          tokenUsage: { total, cached: total, numRequests: 0 },
-        };
+        return withResponseCacheMetadata(result, true);
       }
     }
 
@@ -1266,7 +1263,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     // Cache the response
-    if (isCacheEnabled()) {
+    if (useCache) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {

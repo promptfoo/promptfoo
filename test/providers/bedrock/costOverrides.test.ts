@@ -45,7 +45,14 @@ describe('Bedrock cost override integration', () => {
       config: {},
     } as never);
 
-    const result = await provider.callApi('Say hello');
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    const result = await provider.callApi('Say hello', {
+      bustCache: true,
+      vars: {},
+      prompt: { raw: 'Say hello', label: 'test' },
+    });
+    expect((await getCache()).get).not.toHaveBeenCalled();
+    expect((await getCache()).set).not.toHaveBeenCalled();
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('Hello');
     expect(result.cost).toBeCloseTo(0.5825);
@@ -116,8 +123,14 @@ describe('Bedrock cost override integration', () => {
       } as never);
       const getInstance = vi.spyOn(provider, 'getBedrockInstance');
       const result = await provider.callApi('Say hello');
-      expect(result).toMatchObject({ cached: true, cost: 0, output: 'Hello' });
-      expect(result.tokenUsage).toEqual({ total: 30, cached: 30, numRequests: 0 });
+      expect(result).toMatchObject({ cached: true, cost: 0.5, output: 'Hello' });
+      expect(result.tokenUsage).toMatchObject({
+        total: 30,
+        prompt: 10,
+        completion: 20,
+        cached: 30,
+        numRequests: 0,
+      });
       expect(getInstance).not.toHaveBeenCalled();
     },
   );
