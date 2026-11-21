@@ -288,6 +288,8 @@ describe('loaded Chat elapsed selected quota with two active calls and queued de
       options: {
         config: {
           apiBaseUrl: 'https://completed-quota.fixture.test/v1',
+          // Trigger the abort only on the quota reader's EOF. Logging reads its own clone.
+          headers: { 'x-promptfoo-silent': 'true' },
           apiKey: 'fixture-key',
           maxRetries: 0,
         },
