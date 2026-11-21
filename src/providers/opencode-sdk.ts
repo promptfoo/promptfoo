@@ -1350,27 +1350,29 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   /** Keep configured credentials and their encoded forms for subsequent diagnostics. */
   private rememberCredentials(config: OpenCodeSDKConfig): void {
-    const add = (value: unknown) => {
+    const remember = (value: unknown, strong: boolean) => {
       if (typeof value !== 'string' || !value.trim()) {
         return;
       }
-      for (const form of new Set([value, value.trim()])) {
+      const addForm = (form: string) => {
         this.knownCredentials.add(form);
-        this.knownCredentials.add(JSON.stringify(form).slice(1, -1));
-        this.knownCredentials.add(new URLSearchParams({ form }).toString().slice('form='.length));
+        if (strong && form.length >= 4 && form.length < 8) {
+          this.shortCredentials.add(form);
+        }
+      };
+      for (const form of new Set([value, value.trim()])) {
+        addForm(form);
+        addForm(JSON.stringify(form).slice(1, -1));
+        addForm(new URLSearchParams({ form }).toString().slice('form='.length));
         try {
-          this.knownCredentials.add(encodeURIComponent(form));
+          addForm(encodeURIComponent(form));
         } catch {
           // Lone surrogates cannot be URI-encoded; the raw and JSON forms are still covered.
         }
       }
     };
-    const addStrong = (value: unknown) => {
-      add(value);
-      if (typeof value === 'string' && value.length >= 4 && value.length < 8) {
-        this.shortCredentials.add(value);
-      }
-    };
+    const add = (value: unknown) => remember(value, false);
+    const addStrong = (value: unknown) => remember(value, true);
     addStrong(config.apiKey);
     addStrong(this.getApiKey(config));
     addOpenCodeUrlCredentials(config.baseUrl, addStrong);

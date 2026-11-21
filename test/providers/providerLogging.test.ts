@@ -56,6 +56,13 @@ describe('credential redaction', () => {
     );
   });
 
+  it('omits the entire upstream token when it contains a known credential', () => {
+    const message = 'Bearer demo-key-rest; Basic pre-demo-key-rest; sk-demo-key-private';
+    expect(redactCredentials(message, ['demo-key'])).toBe(
+      'Bearer [REDACTED]; Basic [REDACTED]; [REDACTED]',
+    );
+  });
+
   it('derives the bare token, parameters, and decoded Basic parts from header values', () => {
     expect(getHeaderCredentialForms(' Bearer tok-123 ')).toEqual(['Bearer tok-123', 'tok-123']);
     expect(getHeaderCredentialForms('Digest username="u", response="r%2B1"')).toEqual(

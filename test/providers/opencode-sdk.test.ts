@@ -3607,6 +3607,14 @@ describe('OpenCodeSDKProvider', () => {
           },
         ],
         [
+          'embedded and URL-encoded short API keys',
+          {
+            config: { apiKey: 'a/bc' },
+            echo: ['prefix-a%2fbc-tail', 'prefix-a%252Fbc-tail'],
+            secrets: ['a%2fbc', 'a%252Fbc'],
+          },
+        ],
+        [
           'lowercase and repeatedly percent-encoded API keys',
           {
             config: { apiKey: 'abc/defgh' },

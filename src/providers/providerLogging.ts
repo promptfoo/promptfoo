@@ -117,8 +117,10 @@ export function redactCredentials(
     );
   }
   return redacted
-    .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]+/gi, `$1 ${REDACTED}`)
-    .replace(/\bsk-[\w-]{16,}/g, REDACTED);
+    .replace(/\b(Bearer|Basic)\s+(?:[\w.~+/=-]|\[REDACTED\])+/gi, `$1 ${REDACTED}`)
+    .replace(/\bsk-(?:[\w-]|\[REDACTED\])+/g, (key) =>
+      key.length >= 19 || key.includes(REDACTED) ? REDACTED : key,
+    );
 }
 
 /** Credential names per the shared sanitizer: config keys, env vars, headers, and text fields. */
