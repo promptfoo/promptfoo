@@ -39,12 +39,14 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  accumulateDiscardedGraderUsage,
   accumulateGraderResult,
   buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  isTerminalTargetError,
   preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
@@ -80,7 +82,8 @@ interface IterativeMetaMetadata {
     | 'Grader failed'
     | 'Agent abandoned'
     | 'Agent request failed'
-    | 'Max iterations reached';
+    | 'Max iterations reached'
+    | 'Target error';
   redteamHistory: {
     prompt: string;
     promptAudio?: MediaData;
@@ -198,6 +201,7 @@ export async function runMetaAgentRedteam({
 
   // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
   let lastFinalAttackPrompt: string | undefined;
+  let failedTargetPrompt: string | undefined;
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
@@ -517,10 +521,20 @@ export async function runMetaAgentRedteam({
     });
 
     if (targetResponse.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error`, {
+      if (!isTerminalTargetError(targetResponse)) {
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
+        continue;
+      }
+      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error, stopping attack`, {
         error: targetResponse.error,
       });
-      continue;
+      stopReason = 'Target error';
+      accumulateDiscardedGraderUsage(totalTokenUsage, storedGraderResult);
+      failedTargetPrompt = targetPrompt;
+      finalIteration = i + 1;
+      break;
     }
 
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
@@ -708,16 +722,19 @@ export async function runMetaAgentRedteam({
   const error = agentRequestError || failClosedError || lastResponse?.error;
   return preserveSelectedError(
     {
-      output: bestResponse || lastResponse?.output || '',
-      prompt: bestPrompt,
+      output:
+        (stopReason === 'Target error'
+          ? lastResponse?.output
+          : bestResponse || lastResponse?.output) || '',
+      prompt: failedTargetPrompt ?? bestPrompt,
       ...(error ? { error } : {}),
       metadata: {
         finalIteration,
         vulnerabilityAchieved,
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-        storedGraderResult,
+        redteamFinalPrompt: lastFinalAttackPrompt ?? bestPrompt,
+        storedGraderResult: stopReason === 'Target error' ? undefined : storedGraderResult,
         stopReason,
         redteamHistory,
         sessionIds,

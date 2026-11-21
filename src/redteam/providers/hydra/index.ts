@@ -44,12 +44,14 @@ import {
   isBasicRefusal,
 } from '../../util';
 import {
+  accumulateDiscardedGraderUsage,
   accumulateGraderResult,
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
+  isTerminalTargetError,
   type Message,
   preserveSelectedError,
   runRedteamGrader,
@@ -680,6 +682,17 @@ export class HydraProvider implements ApiProvider {
         { role: 'assistant', content: targetResponse.output || '' },
       ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      if (isTerminalTargetError(targetResponse)) {
+        logger.info(`${this.logPrefix} Target error, stopping attack`, {
+          turn,
+          error: targetResponse.error,
+        });
+        // The dispatched request counts as an attempted round.
+        stopReason = 'Target error';
+        accumulateDiscardedGraderUsage(totalTokenUsage, storedGraderResult);
+        storedGraderResult = undefined;
+        break;
+      }
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
       }
@@ -732,7 +745,10 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (targetResponse.error) {
-        logger.info(`${this.logPrefix} Target error`, { turn, error: targetResponse.error });
+        logger.info(`${this.logPrefix} Target turn could not complete`, {
+          turn,
+          error: targetResponse.error,
+        });
         continue;
       }
 
@@ -1003,7 +1019,7 @@ export class HydraProvider implements ApiProvider {
     }
 
     // Update scan learnings
-    if (scanId && !options?.abortSignal?.aborted) {
+    if (scanId && stopReason !== 'Target error' && !options?.abortSignal?.aborted) {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {
