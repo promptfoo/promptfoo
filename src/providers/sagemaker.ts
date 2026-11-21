@@ -103,6 +103,7 @@ abstract class SageMakerGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
       cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
+      privateClient: this.hasConfiguredCredentials(),
       client: undefined as any,
       runtimes: new Map<string, Promise<any>>(),
     }),
@@ -114,6 +115,18 @@ abstract class SageMakerGenericProvider {
       }
     },
   );
+  private hasConfiguredCredentials(): boolean {
+    const { profile, accessKeyId, secretAccessKey, sessionToken } = this.config;
+    return !!(profile || accessKeyId || secretAccessKey || sessionToken);
+  }
+
+  protected canShareResponse(): boolean {
+    // Reused clients retain their original credentials even if the config is cleared.
+    const state = this.getSdkState();
+    state.privateClient ||= this.hasConfiguredCredentials();
+    return !state.privateClient && !this.injectedRuntime;
+  }
+
   protected get responseCacheNamespace(): string | undefined {
     return this.getSdkState().cacheNamespace;
   }
@@ -180,6 +193,7 @@ abstract class SageMakerGenericProvider {
    * Get AWS credentials from config or environment
    */
   async getCredentials() {
+    this.getSdkState().privateClient ||= this.hasConfiguredCredentials();
     return resolveAwsCredentials(this.config, this.env);
   }
 
@@ -736,13 +750,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     const getCacheKey = () => {
       if (cacheKey === undefined) {
         const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
-        cacheKey = `sagemaker:v3:${request.endpoint}:${hash}`;
+        cacheKey = `sagemaker:v4:${request.endpoint}:${hash}`;
       }
       return cacheKey;
     };
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
-      const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+    if (isCacheEnabled() && !bustCache && this.canShareResponse()) {
+      const cache = await getCache();
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(getCacheKey());
@@ -853,8 +867,14 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       };
 
       // Save result to cache if successful and caching enabled
-      if (isCacheEnabled() && !bustCache && result.output && !result.error) {
-        const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+      if (
+        isCacheEnabled() &&
+        !bustCache &&
+        this.canShareResponse() &&
+        result.output &&
+        !result.error
+      ) {
+        const cache = await getCache();
         const resultToCache = JSON.stringify(result);
 
         try {
@@ -892,13 +912,9 @@ export class SageMakerEmbeddingProvider
     );
   }
 
-  /**
-   * Generate a consistent cache key for SageMaker embedding requests
-   * Uses crypto.createHash to generate a shorter, more efficient key
-   */
   private getCacheKey(text: string): string {
-    // Create a deterministic representation of the request parameters
-    const configForKey = {
+    const request = {
+      text,
       cacheNamespace: this.responseCacheNamespace,
       endpoint: this.getEndpointName(),
       modelType: this.config.modelType,
@@ -907,14 +923,8 @@ export class SageMakerEmbeddingProvider
       region: this.getRegion(),
       responseFormat: this.config.responseFormat,
     };
-
-    const configStr = JSON.stringify(configForKey);
-
-    // Generate shorter, more efficient hashed keys
-    const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
-
-    return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
+    const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    return `sagemaker:embedding:v2:${request.endpoint}:${hash}`;
   }
 
   /**
@@ -953,11 +963,9 @@ export class SageMakerEmbeddingProvider
 
     // Check if we should use cache - use the transformed text for cache key
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
+    if (isCacheEnabled() && !bustCache && this.canShareResponse()) {
       const cacheKey = this.getCacheKey(transformedText);
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+      const cache = await getCache();
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
@@ -1174,11 +1182,15 @@ export class SageMakerEmbeddingProvider
     const bustCache = context?.debug === true;
 
     // Save result to cache if successful and caching enabled
-    if (isCacheEnabled() && !bustCache && result.embedding && !result.error) {
+    if (
+      isCacheEnabled() &&
+      !bustCache &&
+      this.canShareResponse() &&
+      result.embedding &&
+      !result.error
+    ) {
       const cacheKey = this.getCacheKey(text);
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+      const cache = await getCache();
 
       // Add metadata about transformation
       if (isTransformed && originalText && !result.metadata) {

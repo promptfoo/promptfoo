@@ -12,12 +12,15 @@ describe('Vertex scoped credential cache ownership', () => {
     await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
       withCacheEnabled(true, async () => {
         const requests = vi.fn();
-        const makeProvider = (label: string) => {
+        const makeProvider = (label: string, projectId = 'same-project', keyFilename?: string) => {
           const provider = new VertexChatProvider('gemini-2.5-flash', {
-            config: { projectId: 'same-project', region: 'us-central1', expressMode: false },
-            env: { GOOGLE_APPLICATION_CREDENTIALS: `${label}.json` },
+            config: { region: 'us-central1', expressMode: false, keyFilename },
+            env: {
+              GOOGLE_APPLICATION_CREDENTIALS: `${label}.json`,
+              GOOGLE_CLOUD_PROJECT: projectId,
+            },
           });
-          vi.spyOn(provider, 'getProjectId').mockResolvedValue('same-project');
+          vi.spyOn(provider, 'getProjectId').mockResolvedValue(projectId);
           vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
             request: async () => {
               requests(label);
@@ -50,6 +53,11 @@ describe('Vertex scoped credential cache ownership', () => {
         await clearCache();
         await first.callApi('same prompt');
         expect(requests).toHaveBeenCalledTimes(4);
+        await makeProvider('first', 'other-project').callApi('same prompt');
+        const explicit = makeProvider('first', 'same-project', 'fixture.json');
+        await explicit.callApi('same prompt');
+        await explicit.callApi('same prompt');
+        expect(requests).toHaveBeenCalledTimes(7);
       }),
     );
   });

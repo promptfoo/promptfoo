@@ -161,7 +161,7 @@ describe('scoped SDK response cache compatibility', () => {
     expect(getAwsCredentialCacheNamespace({ profile: 'configured-role' })).toBeUndefined();
   });
 
-  it('retains the exact released SageMaker embedding cache key', () => {
+  it('migrates ambiguous SageMaker embeddings to a full request digest', () => {
     const provider = new SageMakerEmbeddingProvider('fixture-endpoint', {
       config: {
         region: 'us-east-1',
@@ -170,8 +170,8 @@ describe('scoped SDK response cache compatibility', () => {
         acceptType: 'application/json',
       },
     });
-    expect(Reflect.get(provider, 'getCacheKey').call(provider, 'fixture input')).toBe(
-      'sagemaker:embedding:v1:fixture-endpoint:bda3c7ef0c3f3baa:25221529',
+    expect(Reflect.get(provider, 'getCacheKey').call(provider, 'fixture input')).toMatch(
+      /^sagemaker:embedding:v2:fixture-endpoint:[a-f0-9]{64}$/,
     );
   });
 
