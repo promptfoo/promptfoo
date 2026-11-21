@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,29 +33,6 @@ function legacyDockerfile(): string {
   ].join('\n');
 }
 
-/** Post-#9790 tree: the fix is already present, so a backfill must refuse it. */
-function modernDockerfile(): string {
-  return [
-    'FROM base AS server',
-    'WORKDIR /app',
-    'COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules',
-    'COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json',
-    'COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist',
-    '',
-    'RUN ln -s /app /app/node_modules/promptfoo && \\',
-    '    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\',
-    '    ln -s /app/dist/src/entrypoint.js /usr/local/bin/promptfoo && \\',
-    '    ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf && \\',
-    '    mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo',
-    '',
-  ].join('\n');
-}
-
-// 0.120.x used dist/src/main.js; 0.121.x used dist/src/entrypoint.js.
-function packageJson(bin: string): string {
-  return `${JSON.stringify({ name: 'promptfoo', version: '0.0.0', bin: { promptfoo: bin, pf: bin } }, null, 2)}\n`;
-}
-
 // tsconfig.app.json is JSONC and its `include` shape drifts across tags.
 function tsconfig(include: string[]): string {
   return [
@@ -84,50 +61,36 @@ afterAll(() => {
 });
 
 interface Fixture {
-  dockerfile: string;
-  bin: string;
+  dockerfile?: string;
+  bin?: string;
+  manifest?: object;
   include?: string[];
+  tsconfig?: string;
 }
 
-interface RunResult {
-  ok: boolean;
-  stderr: string;
-  dockerfile: string;
-  tsconfig: string;
-}
-
-function run(fixture: Fixture, env: Record<string, string> = {}): RunResult {
+function run(fixture: Fixture, env: Record<string, string> = {}) {
   const dir = fs.mkdtempSync(path.join(tmpRoot, 'case-'));
-  fs.writeFileSync(path.join(dir, 'Dockerfile'), fixture.dockerfile);
-  fs.writeFileSync(path.join(dir, 'package.json'), packageJson(fixture.bin));
+  const bin = fixture.bin ?? 'dist/src/main.js';
+  const manifest = fixture.manifest ?? { version: '0.120.0', bin: { promptfoo: bin, pf: bin } };
+  fs.writeFileSync(path.join(dir, 'Dockerfile'), fixture.dockerfile ?? legacyDockerfile());
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest));
   fs.mkdirSync(path.join(dir, 'src/app'), { recursive: true });
   const tsconfigPath = path.join(dir, 'src/app/tsconfig.app.json');
-  fs.writeFileSync(tsconfigPath, tsconfig(fixture.include ?? ['./src']));
+  fs.writeFileSync(tsconfigPath, fixture.tsconfig ?? tsconfig(fixture.include ?? ['./src']));
 
-  let ok = true;
-  let stderr = '';
-  try {
-    execFileSync(process.execPath, [scriptPath], {
-      cwd: dir,
-      env: { ...process.env, ...env },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
-  } catch (err: any) {
-    ok = false;
-    stderr = String(err.stderr ?? '');
-  }
-
+  const result = spawnSync(process.execPath, [scriptPath], { cwd: dir, env, encoding: 'utf8' });
+  expect(result.error).toBeUndefined();
   return {
-    ok,
-    stderr,
+    ok: result.status === 0,
+    stderr: result.stderr,
     dockerfile: fs.readFileSync(path.join(dir, 'Dockerfile'), 'utf8'),
     tsconfig: fs.readFileSync(tsconfigPath, 'utf8'),
   };
 }
 
-describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
+describe('historical Docker backfill preparation', () => {
   it('rewrites the npm-link CLI stage for a 0.120.x-shaped tree', () => {
-    const result = run({ dockerfile: legacyDockerfile(), bin: 'dist/src/main.js' });
+    const result = run({});
 
     expect(result.ok).toBe(true);
     expect(result.dockerfile).not.toContain('npm link promptfoo');
@@ -148,7 +111,7 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
   });
 
   it('adds the package.json COPY the historical server stage lacks', () => {
-    const result = run({ dockerfile: legacyDockerfile(), bin: 'dist/src/main.js' });
+    const result = run({});
 
     const copies = result.dockerfile.match(
       /COPY --from=builder --chown=promptfoo:promptfoo \/app\/package\.json \.\/package\.json/g,
@@ -157,7 +120,7 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
   });
 
   it('uses the entrypoint.js bin for a 0.121.x-shaped tree', () => {
-    const result = run({ dockerfile: legacyDockerfile(), bin: 'dist/src/entrypoint.js' });
+    const result = run({ bin: 'dist/src/entrypoint.js' });
 
     expect(result.ok).toBe(true);
     expect(result.dockerfile).toContain(
@@ -167,10 +130,7 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
   });
 
   it('replaces the historical Python minor when requested', () => {
-    const result = run(
-      { dockerfile: legacyDockerfile(), bin: 'dist/src/entrypoint.js' },
-      { PYTHON_VERSION: '3.14' },
-    );
+    const result = run({ bin: 'dist/src/entrypoint.js' }, { PYTHON_VERSION: '3.14' });
 
     expect(result.ok).toBe(true);
     expect(result.dockerfile).toContain('ARG PYTHON_VERSION');
@@ -192,7 +152,7 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
   it('excludes test files from both historical tsconfig include shapes', () => {
     for (const include of [['./src'], ['./src', '../types/optional-deps.d.ts']]) {
       const result = run(
-        { dockerfile: legacyDockerfile(), bin: 'dist/src/entrypoint.js', include },
+        { bin: 'dist/src/entrypoint.js', include },
         { EXCLUDE_LEGACY_FRONTEND_TESTS: 'true' },
       );
 
@@ -206,66 +166,57 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
 
   it('leaves tsconfig untouched when the exclusion flag is off', () => {
     const original = tsconfig(['./src']);
-    const result = run({ dockerfile: legacyDockerfile(), bin: 'dist/src/main.js' });
+    const result = run({});
 
     expect(result.ok).toBe(true);
     expect(result.tsconfig).toBe(original);
   });
 
-  it('refuses a tree that already carries the modern CLI links', () => {
-    const result = run({ dockerfile: modernDockerfile(), bin: 'dist/src/entrypoint.js' });
-
+  it('rejects publication of 0.120.x before changing any files', () => {
+    const result = run({}, { RUN_CURRENT_IMAGE_CHECKS: 'true' });
     expect(result.ok).toBe(false);
-    expect(result.stderr).toContain('does not need legacy_backfill');
+    expect(result.stderr).toContain('promptfoo/contracts');
+    expect(result.stderr).toContain('PROMPTFOO_RUNNING_IN_DOCKER');
+    expect(result.stderr).toContain('Disable publish_legacy_image to validate only');
+    expect(result.dockerfile).toBe(legacyDockerfile());
   });
 
-  it('fails when the historical package.json omits a binary', () => {
-    const dir = fs.mkdtempSync(path.join(tmpRoot, 'nobin-'));
-    fs.writeFileSync(path.join(dir, 'Dockerfile'), legacyDockerfile());
-    fs.writeFileSync(
-      path.join(dir, 'package.json'),
-      `${JSON.stringify({ name: 'promptfoo', bin: { promptfoo: 'dist/src/main.js' } })}\n`,
-    );
-    fs.mkdirSync(path.join(dir, 'src/app'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'src/app/tsconfig.app.json'), tsconfig(['./src']));
-
-    let stderr = '';
-    expect(() => {
-      try {
-        execFileSync(process.execPath, [scriptPath], {
-          cwd: dir,
-          env: { ...process.env },
-          stdio: ['ignore', 'ignore', 'pipe'],
-        });
-      } catch (err: any) {
-        stderr = String(err.stderr ?? '');
-        throw err;
-      }
-    }).toThrow();
-    expect(stderr).toContain('promptfoo and pf binaries');
+  it('requires the update markers even on releases that export contracts', () => {
+    const manifest = { version: '0.121.16', exports: { './contracts': './contracts.js' } };
+    const result = run({ manifest }, { RUN_CURRENT_IMAGE_CHECKS: 'true' });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain('PROMPTFOO_OFFICIAL_DOCKER_IMAGE');
   });
 
-  it('refuses to add a second exclude to a tsconfig that already has one', () => {
-    const dir = fs.mkdtempSync(path.join(tmpRoot, 'dup-exclude-'));
-    fs.writeFileSync(path.join(dir, 'Dockerfile'), legacyDockerfile());
-    fs.writeFileSync(path.join(dir, 'package.json'), packageJson('dist/src/entrypoint.js'));
-    fs.mkdirSync(path.join(dir, 'src/app'), { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, 'src/app/tsconfig.app.json'),
-      '{\n  "exclude": ["dist"],\n  "include": ["./src"]\n}\n',
-    );
+  it('admits compatible tags unchanged and rejects legacy overrides', () => {
+    const dockerfile = fs.readFileSync('Dockerfile', 'utf8');
+    const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const fixture = { dockerfile, manifest };
+    expect(run(fixture, { RUN_CURRENT_IMAGE_CHECKS: 'true' })).toMatchObject({
+      ok: true,
+      dockerfile,
+      tsconfig: tsconfig(['./src']),
+    });
+    expect(run(fixture, { PYTHON_VERSION: '3.14' }).ok).toBe(false);
+  });
 
-    let stderr = '';
-    try {
-      execFileSync(process.execPath, [scriptPath], {
-        cwd: dir,
-        env: { ...process.env, EXCLUDE_LEGACY_FRONTEND_TESTS: 'true' },
-        stdio: ['ignore', 'ignore', 'pipe'],
-      });
-    } catch (err: any) {
-      stderr = String(err.stderr ?? '');
-    }
-    expect(stderr).toContain('already declares "exclude"');
+  it.each([
+    { promptfoo: 'dist/src/main.js' },
+    { promptfoo: 'untrusted; exit 1', pf: 'untrusted; exit 1' },
+  ])('rejects missing or unsafe CLI paths', (bin) => {
+    const result = run({ manifest: { bin } });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain('promptfoo and pf binaries');
+    expect(result.dockerfile).toBe(legacyDockerfile());
+  });
+
+  it('refuses to add a duplicate tsconfig exclude', () => {
+    const result = run(
+      { tsconfig: JSON.stringify({ exclude: ['dist'], include: ['./src'] }, null, 2) },
+      { EXCLUDE_LEGACY_FRONTEND_TESTS: 'true' },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain('already declares "exclude"');
   });
 });
 
@@ -400,10 +351,16 @@ describe.runIf(process.platform !== 'win32')('legacy backfill publication guards
       const dir = fs.mkdtempSync(path.join(tmpRoot, 'manifest-'));
       const marker = path.join(dir, 'published');
       fs.writeFileSync(path.join(dir, '1'.repeat(64)), '');
-      const step = workflow.jobs['merge-docker-digests'].steps.find(
+      const steps = workflow.jobs['merge-docker-digests'].steps;
+      const create = steps.findIndex(
         (candidate: { name: string }) => candidate.name === 'Create manifest list and push',
       );
-      const script = step.run
+      expect(steps[create - 1]).toMatchObject({
+        name: 'Ensure the legacy tag is not already published',
+        if: "env.LEGACY_BACKFILL == 'true' && inputs.publish_legacy_image",
+      });
+      const script = [steps[create - 1].run, steps[create].run]
+        .join('\n')
         .replaceAll('${{ env.REGISTRY }}', 'fixture.invalid')
         .replaceAll('${{ env.IMAGE_NAME }}', 'fixture/repo');
       const result = spawnSync(

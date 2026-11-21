@@ -34,7 +34,7 @@ on:
         default: false
         type: boolean
       publish_legacy_image:
-        description: 'Also publish the missing version tag after the current final-image checks pass'
+        description: 'Publish a missing tag only if it exports promptfoo/contracts and passes current Docker update and image checks'
         required: false
         default: false
         type: boolean
@@ -84,7 +84,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
   # Qualify tags so a same-named branch cannot change the release source.
-  SOURCE_REF: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.event.release.tag_name && format('refs/tags/{0}', github.event.release.tag_name) || github.ref }}
+  SOURCE_REF: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.sha }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   LEGACY_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && 'true' || 'false' }}
@@ -154,35 +154,6 @@ jobs:
             exit 1
           fi
 
-      # Backfills must not replace images already published under a version tag.
-      - name: Ensure the legacy tag is not already published
-        if: env.LEGACY_BACKFILL == 'true' && inputs.publish_legacy_image
-        run: |
-          token="$(curl -fsS "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull&service=${REGISTRY}" | jq -r '.token // empty')"
-          if [[ -z "$token" ]]; then
-            echo "::error::Could not obtain a ${REGISTRY} pull token for ${IMAGE_NAME}"
-            exit 1
-          fi
-
-          http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
-            -H "Authorization: Bearer $token" \
-            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
-            "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/${RELEASE_TAG}")"
-
-          case "$http_code" in
-            404)
-              echo "No image published for ${RELEASE_TAG}; safe to backfill"
-              ;;
-            200)
-              echo "::error::${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG} is already published. Backfills fill gaps; they must never repoint a distributed tag."
-              exit 1
-              ;;
-            *)
-              echo "::error::Unexpected HTTP ${http_code} while checking whether ${RELEASE_TAG} is already published"
-              exit 1
-              ;;
-          esac
-
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -227,6 +198,36 @@ jobs:
         name: Prepare historical Docker image build
         if: env.LEGACY_BACKFILL == 'true'
         run: node "$RUNNER_TEMP/prepareLegacyDockerBuild.cjs"
+
+      # Backfills must not replace images already published under a version tag.
+      - &check-missing-tag
+        name: Ensure the legacy tag is not already published
+        if: env.LEGACY_BACKFILL == 'true' && inputs.publish_legacy_image
+        run: |
+          token="$(curl -fsS "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull&service=${REGISTRY}" | jq -r '.token // empty')"
+          if [[ -z "$token" ]]; then
+            echo "::error::Could not obtain a ${REGISTRY} pull token for ${IMAGE_NAME}"
+            exit 1
+          fi
+
+          http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
+            "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/${RELEASE_TAG}")"
+
+          case "$http_code" in
+            404)
+              echo "No image published for ${RELEASE_TAG}"
+              ;;
+            200)
+              echo "::error::${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG} is already published. Backfills fill gaps; they must never repoint a distributed tag."
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected HTTP ${http_code} while checking whether ${RELEASE_TAG} is already published"
+              exit 1
+              ;;
+          esac
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
@@ -480,7 +481,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platforms.platform }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Record that the Dockerfile was patched and link the build run.
+          # Link the backfilled image to its workflow run.
           labels: |
             ${{ steps.meta.outputs.labels }}
             ${{ env.LEGACY_BACKFILL == 'true' && 'dev.promptfoo.image.backfilled=true' || '' }}
@@ -544,28 +545,11 @@ jobs:
             type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_RELEASE_FALLBACK != 'true' }}
 
+      - *check-missing-tag
+
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
-          if [[ "$LEGACY_BACKFILL" == 'true' ]]; then
-            token="$(curl -fsS "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull&service=${REGISTRY}" | jq -r '.token // empty')"
-            http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
-              -H "Authorization: Bearer $token" \
-              -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
-              "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/${RELEASE_TAG}")"
-            case "$http_code" in
-              404) ;;
-              200)
-                echo "::error::${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG} was published after validation; refusing to repoint it."
-                exit 1
-                ;;
-              *)
-                echo "::error::Unexpected HTTP ${http_code} while rechecking ${RELEASE_TAG}"
-                exit 1
-                ;;
-            esac
-          fi
-
           # shellcheck disable=SC2046,SC2091
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
