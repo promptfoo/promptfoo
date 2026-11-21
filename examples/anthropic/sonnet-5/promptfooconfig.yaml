@@ -14,9 +14,8 @@ providers:
       # Sonnet 5 deprecates manual sampling controls (temperature/top_p/top_k) at the
       # model level — promptfoo omits them automatically, so don't set them here.
       #
-      # Adaptive thinking is on by default on Sonnet 5 — omitting this block still
-      # lets the model decide when and how much to reason. Set explicitly here so the
-      # mode is visible; use `type: disabled` to turn reasoning off.
+      # Adaptive thinking is on by default. This explicit block documents the
+      # intended mode; use `type: disabled` when you need to turn thinking off.
       thinking:
         type: adaptive
       effort: high # Sonnet 5's cost-efficient sweet spot; xhigh/max are available for harder work

@@ -54,8 +54,8 @@ For chat completion models, you can use either format:
 
 ```yaml
 providers:
-  - nscale:chat:openai/gpt-oss-120b
-  - nscale:openai/gpt-oss-120b # Defaults to chat
+  - nscale:chat:<model-id>
+  - nscale:<model-id> # Defaults to chat
 ```
 
 ### Completion Models
@@ -64,7 +64,7 @@ For text completion models:
 
 ```yaml
 providers:
-  - nscale:completion:openai/gpt-oss-20b
+  - nscale:completion:<model-id>
 ```
 
 ### Embedding Models
@@ -73,8 +73,8 @@ For embedding models:
 
 ```yaml
 providers:
-  - nscale:embedding:Qwen/Qwen3-Embedding-8B
-  - nscale:embeddings:Qwen/Qwen3-Embedding-8B # Alternative format
+  - nscale:embedding:Qwen3-Embedding-8B
+  - nscale:embeddings:Qwen3-Embedding-8B # Alternative format
 ```
 
 ### Text-to-Image Models
@@ -88,17 +88,17 @@ providers:
 
 ## Popular Models
 
-Model IDs are the upstream Hugging Face repository IDs and are case-sensitive
-(`meta-llama/Llama-3.3-70B-Instruct`, not `meta/llama-3.3-70b-instruct`). The
-authoritative list for your account is `GET https://inference.api.nscale.com/v1/models`,
+The authoritative list for your account is `GET https://inference.api.nscale.com/v1/models`,
 which also returns pricing and context length:
 
 ```bash
-curl https://inference.api.nscale.com/v1/models \
+curl -fsS https://inference.api.nscale.com/v1/models \
   -H "Authorization: Bearer $NSCALE_SERVICE_TOKEN"
 ```
 
 ### Text Generation Models
+
+Use a returned `id` after the `nscale:` or `nscale:chat:` prefix.
 
 | Model                          | Provider Format                                    | Use Case                            |
 | ------------------------------ | -------------------------------------------------- | ----------------------------------- |
@@ -106,7 +106,7 @@ curl https://inference.api.nscale.com/v1/models \
 | GPT OSS 20B                    | `nscale:openai/gpt-oss-20b`                        | Lightweight general-purpose model   |
 | Kimi K2.5                      | `nscale:moonshotai/Kimi-K2.5`                      | Large-scale agentic reasoning       |
 | Qwen 3 235B A22B               | `nscale:Qwen/Qwen3-235B-A22B`                      | Large-scale language understanding  |
-| Qwen 3 235B A22B Instruct 2507 | `nscale:Qwen/Qwen3-235B-A22B-Instruct-2507`        | Latest Qwen 3 235B variant          |
+| Qwen 3 235B A22B Instruct 2507 | `nscale:Qwen/Qwen3-235B-A22B-Instruct-2507`        | Qwen 3 235B 2507 variant            |
 | Qwen 3 4B Instruct 2507        | `nscale:Qwen/Qwen3-4B-Instruct-2507`               | Lightweight instruction following   |
 | Qwen 3 4B Thinking 2507        | `nscale:Qwen/Qwen3-4B-Thinking-2507`               | Reasoning and thinking tasks        |
 | Qwen 3 8B                      | `nscale:Qwen/Qwen3-8B`                             | Mid-size general-purpose model      |
@@ -131,11 +131,14 @@ curl https://inference.api.nscale.com/v1/models \
 
 ### Embedding Models
 
-| Model               | Provider Format                            | Use Case                       |
-| ------------------- | ------------------------------------------ | ------------------------------ |
-| Qwen 3 Embedding 8B | `nscale:embedding:Qwen/Qwen3-Embedding-8B` | Text embeddings and similarity |
+Nscale's embedding API reference demonstrates `Qwen3-Embedding-8B`. Confirm it in
+your organization's `/v1/models` response before running an eval.
 
 ### Text-to-Image Models
+
+Nscale's image API reference demonstrates
+`nscale:image:black-forest-labs/FLUX.1-schnell`. Confirm it in your organization's catalog before
+running an eval.
 
 | Model               | Provider Format                                         | Use Case                      |
 | ------------------- | ------------------------------------------------------- | ----------------------------- |
@@ -149,7 +152,7 @@ Nscale supports standard OpenAI-compatible parameters:
 
 ```yaml
 providers:
-  - id: nscale:openai/gpt-oss-120b
+  - id: nscale:meta-llama/Llama-4-Scout-17B-16E-Instruct
     config:
       temperature: 0.7
       max_tokens: 1024
@@ -183,13 +186,16 @@ setting `stream: true` produces a response it cannot parse.
 
 Here's a complete example configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: nscale:openai/gpt-oss-120b
+    label: nscale-gpt-oss
     config:
       temperature: 0.7
       max_tokens: 512
   - id: nscale:meta-llama/Llama-3.3-70B-Instruct
+    label: nscale-llama
     config:
       temperature: 0.5
       max_tokens: 1024
@@ -204,8 +210,6 @@ tests:
     assert:
       - type: contains
         value: 'quantum'
-      - type: llm-rubric
-        value: 'Explanation should be clear and accurate'
 ```
 
 ## Pricing
