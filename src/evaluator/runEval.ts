@@ -253,7 +253,7 @@ function mergeProviderPromptConfig(
   promptConfig: Prompt['config'],
   testOptions: AtomicTestCase['options'],
 ): Prompt['config'] {
-  const { repeat: _repeat, ...providerOptions } = testOptions ?? {};
+  const { repeat: _repeat, literalVars: _literalVars, ...providerOptions } = testOptions ?? {};
   return {
     ...(promptConfig ?? {}),
     ...providerOptions,
@@ -269,7 +269,7 @@ function createRunEvalState({
   promptIndex: number;
 }): RunEvalState {
   const vars = structuredClone(test.vars || {});
-  const fileMetadata = collectFileMetadata(vars);
+  const fileMetadata = collectFileMetadata(vars, test.options?.literalVars);
   // Provider identifiers and prompt ids can both collide, but every result-table
   // column has a unique index. Encode the components as a tuple because identifiers
   // can contain separators that would make concatenated keys ambiguous.
@@ -407,15 +407,16 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+  const skipRenderVars = [...(test.options?.literalVars ?? [])];
+  if (shouldSkipRedteamInjectVar(test, testSuite, isRedteam)) {
+    skipRenderVars.push(getRedteamInjectVar(test, promptForRender, testSuite));
+  }
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
     filters,
     provider,
-    skipRenderVars,
+    skipRenderVars.length ? skipRenderVars : undefined,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
