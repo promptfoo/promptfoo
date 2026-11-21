@@ -1,3 +1,4 @@
+import { getEnvString, getProviderEnvString } from '../../envars';
 import { resolveProviderEnv } from '../env';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import { waitForPromiseWithAbort } from '../shared';
@@ -16,7 +17,6 @@ type VertexResponsesOptions = Omit<
 export class VertexResponsesProvider extends OpenAiResponsesProvider {
   declare config: VertexResponsesConfig;
 
-  private authClient?: ReturnType<typeof GoogleAuthManager.getOAuthClient>;
   private readonly apiBaseUrl: string;
 
   constructor(modelName: string, options: VertexResponsesOptions = {}) {
@@ -73,18 +73,38 @@ export class VertexResponsesProvider extends OpenAiResponsesProvider {
   }
 
   protected getRequestAuthentication() {
+    // Keep one identity through retries, polling and cancellation of this request.
+    const { credentials, googleAuthOptions, scopes } = this.config;
+    const explicitAuth =
+      credentials ||
+      googleAuthOptions?.credentials ||
+      googleAuthOptions?.keyFile ||
+      googleAuthOptions?.keyFilename ||
+      googleAuthOptions?.authClient ||
+      googleAuthOptions?.apiKey;
+    const keyFilename =
+      this.config.keyFilename ??
+      (explicitAuth
+        ? undefined
+        : (getProviderEnvString(this.env, 'GOOGLE_APPLICATION_CREDENTIALS') ??
+          getEnvString('GOOGLE_APPLICATION_CREDENTIALS')));
+    if (keyFilename !== undefined && !keyFilename.trim()) {
+      throw new Error('Vertex Responses credential file path is empty.');
+    }
+
+    let authClient: ReturnType<typeof GoogleAuthManager.getOAuthClient> | undefined;
     return async (signal?: AbortSignal): Promise<HeadersInit> => {
       signal?.throwIfAborted();
-      this.authClient ??= GoogleAuthManager.getOAuthClient({
-        credentials: this.config.credentials,
-        googleAuthOptions: this.config.googleAuthOptions,
-        keyFilename: this.config.keyFilename,
-        scopes: this.config.scopes,
+      authClient ??= GoogleAuthManager.getOAuthClient({
+        credentials,
+        googleAuthOptions,
+        keyFilename,
+        scopes,
       }).catch((error) => {
-        this.authClient = undefined;
+        authClient = undefined;
         throw error;
       });
-      const { client } = await waitForPromiseWithAbort(this.authClient, signal);
+      const { client } = await waitForPromiseWithAbort(authClient, signal);
       signal?.throwIfAborted();
       // The Google client refreshes expiring credentials; retain quota-project headers too.
       const headers = await waitForPromiseWithAbort<HeadersInit>(

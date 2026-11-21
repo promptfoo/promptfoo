@@ -29,6 +29,7 @@ describe('Vertex Responses', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreEnv = mockProcessEnv({
+      GOOGLE_APPLICATION_CREDENTIALS: '/ambient.json',
       GOOGLE_CLOUD_PROJECT: undefined,
       GOOGLE_PROJECT_ID: undefined,
       VERTEX_PROJECT_ID: undefined,
@@ -116,6 +117,74 @@ describe('Vertex Responses', () => {
     );
     expect(getRequestHeaders).toHaveBeenCalledWith(provider.getApiUrl());
     expect(getRequestHeaders).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps scoped credentials and background jobs separate even when the gateway reuses an ID', async () => {
+    vi.mocked(GoogleAuthManager.getOAuthClient).mockImplementation(async (options) => ({
+      client: {
+        getRequestHeaders: () => ({
+          Authorization: typeof options === 'object' ? options.keyFilename : '',
+        }),
+      },
+      projectId: 'project',
+    }));
+    vi.mocked(fetchWithCache).mockImplementation(async (_url, request) => {
+      const account = new Headers(await request!.getAuthHeaders!()).get('authorization');
+      return createMockFetchResponse(
+        request!.method === 'POST'
+          ? { id: 'job-1', status: 'queued' }
+          : {
+              ...response,
+              id: 'job-1',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: account }],
+                },
+              ],
+            },
+      );
+    });
+    const accounts = ['/one.json', '/two.json'];
+    const results = await Promise.all(
+      accounts.map((account) =>
+        new VertexResponsesProvider('gpt-6-luna', {
+          config: { apiBaseUrl: 'https://gateway.example/v1', background: true, cost: 0.01 },
+          env: { GOOGLE_APPLICATION_CREDENTIALS: account },
+        }).callApi('Hello'),
+      ),
+    );
+    expect(results.map((result) => result.output)).toEqual(accounts);
+    for (const result of results) {
+      expect(result.cached).not.toBe(true);
+      expect(result.cost).toBeCloseTo(0.18);
+    }
+    expect(fetchWithCache).toHaveBeenCalledTimes(4);
+  });
+
+  it('refuses to fall back to ambient ADC when the scoped credential path is empty', async () => {
+    const provider = new VertexResponsesProvider('gpt-6-luna', {
+      config: { projectId: 'project' },
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '' },
+    });
+    expect((await provider.callApi('Hello')).error).toContain('credential file path is empty');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('preserves explicitly configured auth options ahead of the scoped path', async () => {
+    const provider = new VertexResponsesProvider('gpt-6-luna', {
+      config: { projectId: 'project', googleAuthOptions: { keyFile: '/explicit.json' } },
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/scoped.json' },
+    });
+    await provider.callApi('Hello');
+    await vi.mocked(fetchWithCache).mock.calls[0][1]!.getAuthHeaders!();
+    expect(GoogleAuthManager.getOAuthClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        googleAuthOptions: { keyFile: '/explicit.json' },
+        keyFilename: undefined,
+      }),
+    );
   });
 
   it('can retry credential initialization after an authentication failure', async () => {
