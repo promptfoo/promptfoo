@@ -626,8 +626,8 @@ providers:
 Both models have a 1M-token context window, support up to 128K output tokens, and cost
 **$8 per million input tokens and $40 per million output tokens**. Cache reads cost $0.20 per
 million tokens, and promptfoo's cost estimates include cache pricing. Fast mode
-(`extra_body: { speed: fast }`) bills at $16 / $80; set `inputCost: 0.000016` and
-`outputCost: 0.00008` to track it.
+(`extra_body: { speed: fast }`) costs $16 / $80. Promptfoo applies these rates
+when Anthropic reports `usage.speed: fast`.
 
 Promptfoo adjusts requests to these rules and logs a warning:
 
@@ -734,7 +734,7 @@ providers:
 ### Claude Haiku 5.5 notes
 
 [Haiku 5.5](https://platform.claude.com/docs/en/models/haiku-5-5/overview) uses adaptive
-thinking by default. Promptfoo omits sampling parameters and converts manual thinking
+thinking by default and accepts forced tool calls. Promptfoo omits sampling parameters and converts manual thinking
 budgets to adaptive thinking. Set `thinking: { type: disabled }` with `effort: high`
 or lower to disable thinking; at `xhigh` or `max`, promptfoo omits that setting.
 
@@ -901,10 +901,10 @@ or `budget_tokens`. At `xhigh` or `max`, Promptfoo omits it so the model uses ad
 `display` controls the reasoning text returned by the API. Omitting that text does
 not disable thinking or remove its token cost:
 
-| Value          | Behavior                                                                                                                                                                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Value          | Behavior                                                                                                                                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `'omitted'`    | **Default** on Fable 5/5.1/5.2, Mythos 5/5.1/5.2, Opus 5.5, Opus 5, Opus 4.7/4.8, Sonnet 5.5, Sonnet 5, and Haiku 5.5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
-| `'summarized'` | Returns a readable summary of the reasoning. Default on Claude 4.6 and earlier.                                                                                                                             |
+| `'summarized'` | Returns a readable summary of the reasoning. Default on Claude 4.6 and earlier.                                                                                                                                     |
 
 Set `display: summarized` to request a readable summary:
 
@@ -1024,12 +1024,12 @@ providers:
 
 Support varies by model — sending an unsupported level returns a 400:
 
-| Model                                                                                   | Supported levels                            |
-| --------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Model                                                                                         | Supported levels                            |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | Fable/Mythos 5, 5.1, and 5.2, Opus 5.5, Opus 5, Sonnet 5.5, Sonnet 5, Haiku 5.5, Opus 4.7/4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
-| Opus 4.6, Sonnet 4.6                                                                    | `low`, `medium`, `high`, `max` (no `xhigh`) |
-| Opus 4.5                                                                                | `low`, `medium`, `high`                     |
-| Sonnet 4.5, Haiku 4.5                                                                   | Not supported — omit `effort`               |
+| Opus 4.6, Sonnet 4.6                                                                          | `low`, `medium`, `high`, `max` (no `xhigh`) |
+| Opus 4.5                                                                                      | `low`, `medium`, `high`                     |
+| Sonnet 4.5, Haiku 4.5                                                                         | Not supported — omit `effort`               |
 
 The API defaults to `medium` on Opus 5.5 and Haiku 5.5 and `high` on the other models that
 support effort. Set it explicitly when comparing models. See Anthropic's
@@ -1205,7 +1205,9 @@ tests:
   `config.extra_body.inference_geo`. Explicit `cost`, `inputCost`, or `outputCost`
   overrides take precedence over this surcharge. See
   [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing).
-  Web searches add $10 per 1,000 searches, and fast-mode responses use the fast-mode rates.
+- When Anthropic reports `usage.speed: fast`, promptfoo uses the fast-mode rates for supported
+  models. Setting `inputCost` or `outputCost` overrides only that rate. A flat `cost` overrides both.
+- Web search adds $0.01 per search reported in `usage.server_tool_use.web_search_requests`.
 
 When using the Anthropic disk response cache across runs, assign each provider a distinct, non-secret `label`. Promptfoo uses that stable label to isolate cached responses without persisting API-key or OAuth-token fingerprints. Unlabeled providers receive an ephemeral per-instance namespace, which safely preserves repeated calls within a run without reusing responses across tenants or processes. Requests with custom headers bypass the disk response cache because those headers may contain tenant credentials.
 
