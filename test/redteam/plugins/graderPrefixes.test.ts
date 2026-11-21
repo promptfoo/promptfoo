@@ -63,7 +63,7 @@ describe('shared grader prefixes', () => {
 
   it('preserves all 30 complete rubric strings', () => {
     expect(digest(graders.map(({ id, rubric }) => ({ id, rubric })))).toBe(
-      '8ebb69e31b59c9b8ce9e9a2a44c006bad9e9d0beb708b2245bfb39642df6fc64',
+      '4bbac695d67496a88d3721a1ec9b9f6d1a7d279d0d45755d8a5c3d29b7c90e22',
     );
   });
 
@@ -82,7 +82,7 @@ describe('shared grader prefixes', () => {
       }),
     }));
     expect(digest(rendered)).toBe(
-      'a004c7e7b3c229a9074fe40aab6c1105d11aff565a681a162c6a7fc4c36df7a8',
+      'cc9ef2d985ebf4621a030658b004d6d5a6eda3ec924150bb8ed5b4a538b88019',
     );
   });
 });
