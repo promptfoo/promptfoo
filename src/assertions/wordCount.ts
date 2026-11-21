@@ -38,6 +38,10 @@ export const handleWordCount = ({
       min !== undefined || max !== undefined,
       '"word-count" assertion object must have "min" and/or "max" properties',
     );
+    invariant(
+      (min === undefined || Number.isFinite(min)) && (max === undefined || Number.isFinite(max)),
+      '"word-count" assertion min/max must be finite numbers',
+    );
 
     if (min !== undefined && max !== undefined) {
       invariant(
