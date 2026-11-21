@@ -20,7 +20,7 @@ export function renderTraceFilters<T>(config: T, vars: Record<string, unknown>):
   const render = (value: unknown) =>
     typeof value === 'string'
       ? value.replace(/\{\{\s*([\w.-]+)\s*\}\}|\{\{|\{%/g, (_match, key: string | undefined) => {
-          if (!key || !Object.hasOwn(vars, key)) {
+          if (!key || !Object.prototype.hasOwnProperty.call(vars, key)) {
             throw new Error('Trace filters require a named test variable');
           }
           return String(vars[key]);
