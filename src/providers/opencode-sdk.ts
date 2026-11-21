@@ -1241,6 +1241,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private opencodeModuleLoad?: Promise<LoadedOpenCodeSDKModule>;
   private client?: OpenCodeClient;
   private clientConfig?: OpenCodeSDKConfig;
+  // Owned sessions outlive clients and must stay on the original server across reconnects.
+  readonly #baseUrl?: string;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
   // Every configured value an OpenCode diagnostic could echo. Kept for the provider's lifetime:
@@ -1272,6 +1274,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ) {
     const { config, env, id } = options;
     this.config = config ?? {};
+    this.#baseUrl = this.config.baseUrl;
     this.env = env;
     this.providerId = id ?? this.providerId;
   }
@@ -2004,9 +2007,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         'OpenCode SDK apiKey is provider-level configuration and cannot be overridden per prompt',
       );
     }
-    if (config.baseUrl !== this.config.baseUrl) {
+    if (config.baseUrl !== this.#baseUrl) {
       throw new Error(
-        'OpenCode SDK baseUrl is provider-level configuration and cannot be overridden per prompt',
+        'OpenCode SDK baseUrl is provider-level configuration. Create a new provider to change servers.',
       );
     }
 

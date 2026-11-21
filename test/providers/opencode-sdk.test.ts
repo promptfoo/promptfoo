@@ -2340,6 +2340,22 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it('keeps cleanup on the original server when a caller changes the provider URL', async () => {
+      const baseUrl = 'http://remote.test';
+      const provider = new OpenCodeSDKProvider({ config: { baseUrl } });
+      await provider.callApi('Test prompt', persistent('a'));
+      await provider.cleanupAfterEvaluation();
+
+      provider.config.baseUrl = 'http://other.test';
+      await expect(provider.callApi('Next prompt')).rejects.toThrow(/baseUrl is provider-level/);
+      await provider.cleanup();
+      expect(mockCreateOpencodeClient.mock.calls.map(([options]) => options.baseUrl)).toEqual([
+        baseUrl,
+        baseUrl,
+      ]);
+      expect(deletedIds()).toEqual(['s0']);
+    });
+
     it('retains persistent sessions when reconnection or the server-side deletion fails', async () => {
       const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
       await provider.callApi('Test prompt', persistent('a'));
@@ -5077,7 +5093,9 @@ describe('OpenCodeSDKProvider', () => {
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
 
-        await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
+        const first = contextWith(TRACEPARENT_A);
+        first.prompt.config = { working_dir: '/test/dir', workspace: 'original' };
+        await provider.callApi('Test prompt', first);
         await provider.callApi('Test prompt', contextWith(TRACEPARENT_B));
 
         expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
@@ -5089,7 +5107,11 @@ describe('OpenCodeSDKProvider', () => {
 
         await provider.cleanup();
         expect(mockSessionDelete).toHaveBeenCalledTimes(3);
-        expect(mockSessionDelete.mock.calls[2][0].sessionID).toBe('retry-first');
+        expect(mockSessionDelete.mock.calls[2][0]).toEqual({
+          sessionID: 'retry-first',
+          directory: '/test/dir',
+          workspace: 'original',
+        });
       });
 
       it('reuses the server when the traceparent is unchanged', async () => {
