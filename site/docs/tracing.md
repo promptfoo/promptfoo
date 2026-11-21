@@ -468,7 +468,9 @@ Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. T
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
-Promptfoo does not import Tempo snapshots that report dropped attributes, events, or links, contain invalid dropped-count fields, or exceed 10,000 unique spans. Missing, null, and zero counters are accepted. Repeated span IDs do not count toward the limit. Incomplete snapshots are not retried.
+Promptfoo rejects the entire Tempo snapshot if the requested trace reports dropped attributes, events, or links, has invalid drop counters, or exceeds 10,000 unique span IDs. Missing, null, and zero counters are valid. Each valid span ID counts once, even if another field is malformed. Promptfoo skips spans from other traces.
+
+Promptfoo does not retry incomplete snapshots. Grading that requires an external trace reports an error when the evidence is unavailable. Use `--no-cache` to collect a fresh trace.
 
 #### Braintrust
 
