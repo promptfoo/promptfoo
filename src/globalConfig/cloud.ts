@@ -1,5 +1,5 @@
+import { isHostedCloudHost } from '../contracts/api/user';
 import logger from '../logger';
-import { isHostedCloudHost } from '../types/api/user';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';

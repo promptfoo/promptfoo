@@ -1,9 +1,9 @@
-import type { Server } from 'node:http';
+import { gzipSync } from 'node:zlib';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { UserSchemas } from '../../../src/types/api/user';
+import { setupTestServer } from '../../util/testServer';
 
 // Mock dependencies before imports
 vi.mock('../../../src/globalConfig/accounts');
@@ -35,26 +35,7 @@ const mockedCloudConfig = vi.mocked(cloudConfig);
 const mockedTelemetry = vi.mocked(telemetry);
 
 describe('User Routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -81,6 +62,23 @@ describe('User Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('email');
+    });
+
+    it('continues serving after a gzip frame followed by invalid trailing bytes', async () => {
+      const body = Buffer.concat([
+        gzipSync('{"email":"test@example.com"}'),
+        Buffer.from([0]),
+        Buffer.alloc(128 * 1024, 0x58),
+      ]);
+      await api
+        .post('/api/user/email')
+        .set('Content-Type', 'application/json')
+        .set('Content-Encoding', 'gzip')
+        .serialize((bytes) => bytes)
+        .send(body)
+        .expect(200);
+      expect(mockedSetUserEmail).toHaveBeenCalledWith('test@example.com');
+      await api.get('/health').expect(200);
     });
 
     it('should return 200 when email is valid', async () => {

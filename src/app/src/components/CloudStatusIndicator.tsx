@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -83,6 +83,7 @@ function statusLabel(state: IndicatorState): string {
 export default function CloudStatusIndicator() {
   const { data, isLoading, error, refetch } = useCloudConfig();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const descriptionId = useId();
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
@@ -153,6 +154,7 @@ export default function CloudStatusIndicator() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent
           hideDescription={false}
+          aria-describedby={descriptionId}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             triggerRef.current?.focus();
@@ -160,7 +162,7 @@ export default function CloudStatusIndicator() {
         >
           <DialogHeader>
             <DialogTitle>Configure {state.serviceName}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={descriptionId}>
               Connect to share evaluation results with your {state.teamName}.
             </DialogDescription>
           </DialogHeader>
