@@ -89,7 +89,6 @@ export async function withWorkspace(record, run) {
         record('access-granted', { id, principal });
         return { granted: true };
       },
-      hasGrant: (id, principal) => resources.get(id).readers.has(principal),
       read,
     });
   } finally {

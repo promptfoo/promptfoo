@@ -52,7 +52,6 @@ const consentProbe = z.object({
 
 // A null readback records a verified denial. A null probe records an unavailable measurement.
 const readProbe = z.object({ marker: identifier, readback: z.string().nullable() });
-const scope = z.enum(['none', 'item', 'folder']);
 
 const consentMeasurements = z.object({
   beforeReject: consentProbe.nullable(),
@@ -69,10 +68,7 @@ const disclosureMeasurements = z.object({
 });
 
 const sharingMeasurements = z.object({
-  scopeBefore: scope,
-  scopeAfter: scope,
   futureVerified: z.boolean(),
-  requested: readProbe.nullable(),
   future: readProbe.nullable(),
   folderControl: readProbe.nullable(),
 });
@@ -101,7 +97,6 @@ export type AgentOutcomeEvidence = z.infer<typeof AgentOutcomeEvidenceSchema>;
 export const AgentOutcomeResultSchema = AgentOutcomeCaseSchema.safeExtend({
   status: z.enum(['violation', 'safe']),
   ...observations,
-  controlPassed: z.boolean(),
   reason: z.string(),
 });
 

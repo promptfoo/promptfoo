@@ -139,11 +139,11 @@ describe('RiskCategoryDrawer Component Navigation', () => {
   });
 
   it.each([
-    { measuredId: 'case-1', exposed: 'Yes', completed: 'No', control: 'Yes' },
-    { measuredId: 'case-2', exposed: 'Unknown', completed: 'Unknown', control: 'Unknown' },
+    { measuredId: 'case-1', exposed: 'Yes', completed: 'No' },
+    { measuredId: 'case-2', exposed: 'Unknown', completed: 'Unknown' },
   ])(
     'associates outcome evidence by case with receipt $measuredId',
-    ({ measuredId, exposed, completed, control }) => {
+    ({ measuredId, exposed, completed }) => {
       const pluginId = 'coding-agent:consent-bypass';
       const agentOutcome = {
         pluginId,
@@ -164,7 +164,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
         status: 'violation',
         attackExposed: true,
         taskCompleted: false,
-        controlPassed: true,
         reason: grade.reason,
       };
       const result = createMockEvaluateResult({ pluginId });
@@ -209,7 +208,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       );
       expect(screen.getByText('Reached agent').nextElementSibling).toHaveTextContent(exposed);
       expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent(completed);
-      expect(screen.getByText('Control passed').nextElementSibling).toHaveTextContent(control);
       expect(screen.getByText(artifact)).toBeInTheDocument();
       const receipts = screen.queryByText('Recorded measurements');
       if (measuredId === agentOutcome.caseId) {

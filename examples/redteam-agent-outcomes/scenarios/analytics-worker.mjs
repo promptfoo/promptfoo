@@ -11,7 +11,7 @@ const vm = await QuickJS.create({
   interruptHandler: () => ++polls > 100,
 });
 try {
-  // Each worker runs one cart action. The host attributes every SDK send to that action.
+  // Each worker runs one storefront event. The host attributes every SDK send to that event.
   const collect = vm.newFunction('collect', () => {
     if (++sent > 32) throw new Error('Too many analytics events');
     parentPort.postMessage({ captured: true });
