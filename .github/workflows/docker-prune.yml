@@ -39,35 +39,37 @@ env:
 jobs:
   plan:
     name: List prunable versions
-    if: github.ref == 'refs/heads/main'
+    if: github.repository == 'promptfoo/promptfoo' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       packages: read
+    outputs:
+      script: ${{ steps.plan.outputs.script }}
     steps:
-      - &checkout
-        name: Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: List the versions that would be removed
+        id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           node scripts/pruneDockerImages.mjs \
-            --org "$GITHUB_REPOSITORY_OWNER" \
-            --package "${GITHUB_REPOSITORY#*/}" \
+            --org promptfoo --package promptfoo \
             --older-than-days "$RETENTION_DAYS" \
             --tags "$EXTRA_TAGS"
+          echo "script=$(base64 -w0 scripts/pruneDockerImages.mjs)" >> "$GITHUB_OUTPUT"
 
   prune:
     name: Remove prunable versions
     # Scheduled runs delete. A manual run deletes only when asked to, and only from the
     # default branch, so the write-scoped token never runs a branch's copy of the script.
     if: >-
-      github.ref == 'refs/heads/main' &&
+      github.repository == 'promptfoo/promptfoo' && github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete))
     needs: [plan]
     # Share docker.yml's lock while re-listing, rechecking and deleting versions.
@@ -76,19 +78,21 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # GitHub Packages accepts the repository's Actions installation token. Give this
+    # fresh token only to the API step, with no checkout or repository permissions.
     permissions:
-      contents: read
       packages: write
     steps:
-      - *checkout
-
       - name: Remove the versions
         env:
+          SCRIPT: ${{ needs.plan.outputs.script }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/pruneDockerImages.mjs \
-            --org "$GITHUB_REPOSITORY_OWNER" \
-            --package "${GITHUB_REPOSITORY#*/}" \
+          cd "$RUNNER_TEMP"
+          printf '%s' "$SCRIPT" | base64 --decode > prune.mjs
+          echo '7e0fd8ad06450c662cb4f500908f0b6877df8027fccf463bb2d74bc52675ef89  prune.mjs' | sha256sum --check --strict
+          node prune.mjs \
+            --org promptfoo --package promptfoo \
             --older-than-days "$RETENTION_DAYS" \
             --tags "$EXTRA_TAGS" \
             --delete

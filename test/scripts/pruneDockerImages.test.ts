@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -39,24 +40,45 @@ describe('pruneDockerImages', () => {
     const file = path.resolve(import.meta.dirname, '../../.github/workflows/docker-prune.yml');
     const { on, jobs } = yaml.load(readFileSync(file, 'utf8')) as {
       on: Record<string, unknown>;
-      jobs: Record<string, { steps: { uses?: string; with?: unknown }[] }>;
+      jobs: Record<
+        string,
+        {
+          permissions: Record<string, string>;
+          steps: { uses?: string; with?: unknown; run?: string }[];
+        }
+      >;
     };
     expect(Object.keys(on).sort()).toEqual(['schedule', 'workflow_dispatch']);
     expect(Object.keys(jobs).sort()).toEqual(['plan', 'prune']);
-    const main = "github.ref == 'refs/heads/main'";
-    expect(jobs.plan).toMatchObject({ if: main, permissions: { packages: 'read' } });
+    const main = "github.repository == 'promptfoo/promptfoo' && github.ref == 'refs/heads/main'";
+    expect(jobs.plan).toMatchObject({
+      if: main,
+      outputs: { script: '${{ steps.plan.outputs.script }}' },
+    });
+    expect(jobs.plan.permissions).toEqual({ contents: 'read', packages: 'read' });
+    expect(jobs.plan.steps[0].with).toEqual({ 'persist-credentials': false });
     expect(jobs.prune).toMatchObject({
       if: `${main} && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete))`,
-      permissions: { packages: 'write' },
+      needs: ['plan'],
       concurrency: {
         group: 'docker-publish-${{ github.repository }}',
         'cancel-in-progress': false,
       },
     });
-    for (const { steps } of Object.values(jobs)) {
-      const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
-      expect(checkouts.map((step) => step.with)).toEqual([{ 'persist-credentials': false }]);
-    }
+    expect(jobs.prune.permissions).toEqual({ packages: 'write' });
+    expect(jobs.prune.steps).toHaveLength(1);
+    const [deletion] = jobs.prune.steps;
+    expect(deletion.uses).toBeUndefined();
+    expect(deletion).toMatchObject({
+      env: { SCRIPT: '${{ needs.plan.outputs.script }}', GITHUB_TOKEN: '${{ github.token }}' },
+    });
+    const digest = createHash('sha256')
+      .update(readFileSync(SCRIPT, 'utf8').replaceAll('\r\n', '\n'))
+      .digest('hex');
+    expect(deletion.run).toContain(
+      `echo '${digest}  prune.mjs' | sha256sum --check --strict\nnode prune.mjs`,
+    );
+    expect(deletion.run).toContain('--org promptfoo --package promptfoo');
   });
 
   it('removes an old build that has only its commit tag', () => {
