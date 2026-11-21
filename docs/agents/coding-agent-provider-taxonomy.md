@@ -26,6 +26,7 @@ The main providers in this family today are:
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
 | Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
 | OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server      |
+| Pi Coding Agent         | `pi`, `pi:<provider>/<model>`                         | Local Pi CLI process                            |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -163,8 +164,10 @@ The coding-agent providers already share several practical patterns:
 - Session or thread caches are keyed by provider config.
 - Provider-level config is stricter than prompt-level merged config.
 - Tool and skill usage are surfaced through metadata where possible.
-- Tracing is supported for Codex and is partially shared through OpenAI agent
-  tracing helpers.
+- A top-level GenAI `callApi` span is shared across providers via `withGenAISpan`
+  (Pi emits this span too). Deep tracing into the agent runtime — child OTEL
+  spans linked by `traceparent` — is implemented for Codex and the Claude Agent
+  SDK; Pi has no native OpenTelemetry, so the provider-level span is its boundary.
 
 Useful files:
 
@@ -174,6 +177,7 @@ Useful files:
 - `src/providers/openai/codex-sdk.ts`
 - `src/providers/openai/codex-security.ts`
 - `src/providers/openai/codex-app-server.ts`
+- `src/providers/pi.ts`
 - `src/providers/registry.ts`
 
 ### OpenAI Codex SDK
@@ -351,6 +355,25 @@ Docs and examples:
 
 - `site/docs/providers/opencode-sdk.md`
 - `examples/provider-opencode-sdk/`
+
+### Pi Coding Agent
+
+Status: implemented and documented.
+
+Provider IDs: `pi` and `pi:<provider>/<model>`, with an optional `:<thinking>` suffix.
+
+- Runs a trusted, external Pi 0.99.1+ executable once per test on Linux or macOS.
+  Prompts travel through stdin over RPC. Each run must emit `agent_settled` and exit cleanly.
+- Forwards one vendor's process key in an isolated profile, or uses an explicit trusted profile.
+- Disables all tools by default. Enabling even file reads requires a tool list,
+  a working directory and `allow_unsafe_tools: true`. Pi cannot confine a tool to that directory.
+- Allows test rows to select a model within the configured vendor and change thinking level.
+- Reports the final assistant response, usage, cost and tool names in one GenAI span.
+
+Pi supports evaluation as a target. It does not support copying a workspace for grading,
+grading with `agent-rubric`, session reuse, or result caching.
+
+See `site/docs/providers/pi.md` and `examples/provider-pi/` for configuration and examples.
 
 ## Current Naming Guidance
 

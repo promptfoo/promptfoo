@@ -534,6 +534,25 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('pi:') || providerPath === 'pi',
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
+      const { PiProvider } = await import('./pi');
+
+      const modelPattern = providerPath.slice(3);
+      if (providerPath !== 'pi' && !modelPattern.trim()) {
+        throw new Error('Pi requires a model after pi:, or use pi for the configured default');
+      }
+      return new PiProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: {
+          ...providerOptions.config,
+          ...(modelPattern ? { model: modelPattern } : {}),
+        },
+      });
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),
