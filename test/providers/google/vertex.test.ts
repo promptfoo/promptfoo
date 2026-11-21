@@ -3905,6 +3905,52 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(response.error).toBe(`No output found in Claude API response: ${JSON.stringify(data)}`);
   });
 
+  it.each([
+    {
+      name: 'nested max tokens, temperature, and top_k',
+      config: {
+        max_tokens: 1000,
+        temperature: 0.7,
+        top_k: 10,
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.2, topK: 40 },
+      },
+      expected: { max_tokens: 2048, temperature: 0.2, top_k: 40 },
+    },
+    {
+      name: 'nested top_p',
+      config: { max_tokens: 1000, top_p: 0.5, generationConfig: { topP: 0.9 } },
+      expected: { max_tokens: 1000, top_p: 0.9 },
+    },
+    {
+      name: 'top-level settings only',
+      config: { max_tokens: 1000, temperature: 0.7 },
+      expected: { max_tokens: 1000, temperature: 0.7 },
+    },
+  ])(
+    'sends and traces the effective Claude sampling options ($name)',
+    async ({ config, expected }) => {
+      using span = vi.spyOn(genaiTracer, 'withGenAISpan');
+      const request = mockVertexRequest({
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+      provider = new VertexChatProvider('claude-sonnet-4-6', {
+        config: { region: 'global', ...config },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(request.mock.calls[0][0].data).toMatchObject(expected);
+      expect(span.mock.calls[0][0]).toMatchObject({
+        maxTokens: expected.max_tokens,
+        temperature: expected.temperature,
+        topP: expected.top_p,
+        topK: expected.top_k,
+      });
+    },
+  );
+
   it('should accept anthropicVersion parameter', async () => {
     provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
       config: {
