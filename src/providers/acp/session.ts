@@ -9,7 +9,7 @@ import type {
 
 import type { ProviderResponse } from '../../types/providers';
 
-interface TurnOptions {
+export interface TurnOptions {
   cwd: string;
   prompt: string;
   authMethod?: string;

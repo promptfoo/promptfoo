@@ -2,10 +2,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers';
 import { AcpProvider } from '../../src/providers/acp';
 import { resolveAcpPreset } from '../../src/providers/acp/presets';
+import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 
 const fixture = path.resolve(import.meta.dirname, '../fixtures/acp/agent.mjs');
@@ -84,6 +85,56 @@ describe('Agent Client Protocol', () => {
       unrelatedKeyPresent: true,
     });
   });
+
+  it('requires a managed workspace for isolated calls and clears inherited Git selectors', async () => {
+    const source = path.dirname(fixture);
+    const provider = new AcpProvider('acp', {
+      ...options({ working_dir: source, copy_working_dir: true, pass_env: ['GIT_DIR'] }),
+      env: { GIT_DIR: source },
+    });
+    expect((await provider.callApi('inspect')).error).toContain('copy_working_dir');
+    const workspace = await createAgentWorkspace(source, 'copy');
+    try {
+      const result = await provider.callApi('inspect', {
+        prompt: { raw: '', label: '', config: { working_dir: workspace.dir } },
+        vars: {},
+      });
+      const { cwd, gitDir } = JSON.parse(result.output as string);
+      expect(cwd).toBe(workspace.dir);
+      expect(gitDir).toBeUndefined();
+    } finally {
+      await workspace.remove();
+    }
+  });
+
+  it('ignores executable names supplied by the workspace, including through PATH', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-test-acp-'));
+    try {
+      const name = process.platform === 'win32' ? 'node.exe' : 'node';
+      await fs.writeFile(path.join(cwd, name), 'invalid executable', { mode: 0o755 });
+      const provider = new AcpProvider('acp', {
+        ...options({ command: 'node', working_dir: cwd, pass_env: ['PATH'] }),
+        env: { PATH: ['.', cwd, path.dirname(process.execPath)].join(path.delimiter) },
+      });
+      expect((await provider.callApi('hello')).output).toBe('hello\n');
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform !== 'win32')(
+    'terminates the process group after a clean exit',
+    async () => {
+      const kill = vi.spyOn(process, 'kill');
+      try {
+        const result = await new AcpProvider('acp', options()).callApi('inspect');
+        const { pid } = JSON.parse(result.output as string);
+        expect(kill).toHaveBeenCalledWith(-pid, 'SIGKILL');
+      } finally {
+        kill.mockRestore();
+      }
+    },
+  );
 
   it.each([
     ['fail', 'Example agent error'],

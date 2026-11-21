@@ -3,14 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { z } from 'zod';
-import cliState from '../../cliState';
-import { getProcessEnv } from '../../envars';
 import { renderVarsInObject } from '../../util/render';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { getMinimalProcessEnv } from '../agentProcessEnv';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
 import { resolveAcpPreset } from './presets';
-import { runAcpTurn } from './session';
-import { withAcpStdio } from './stdio';
+import { runAcpAgent } from './stdio';
 
 import type {
   ApiProvider,
@@ -54,7 +52,7 @@ export class AcpProvider implements ApiProvider {
       throw new Error('The acp provider requires config.command or a named acp:<preset>.');
     }
     this.command = /[/\\]/.test(command)
-      ? path.resolve(this.config.basePath || cliState.basePath || '.', command)
+      ? path.resolve(this.config.basePath ?? '.', command)
       : command;
   }
 
@@ -84,39 +82,34 @@ export class AcpProvider implements ApiProvider {
         },
         context?.vars,
       );
-      const workingDir = resolveAgenticWorkingDir(
-        settings.working_dir,
-        this.config.basePath ?? cliState.basePath,
+      const workingDir = resolveAgenticWorkingDir(settings.working_dir, this.config.basePath);
+      const env = getMinimalProcessEnv(
+        [...(this.preset?.envKeys ?? []), ...(this.config.pass_env ?? [])],
+        this.options.env,
       );
+      if (
+        assertIsolatedWorkingDir({
+          working_dir: workingDir,
+          copy_working_dir: row?.copy_working_dir ?? this.config.copy_working_dir,
+        })
+      ) {
+        clearRepositoryEnv(env);
+      }
       const cwd = workingDir ?? (await mkdtemp(path.join(os.tmpdir(), 'promptfoo-acp-')));
       if (!workingDir) {
         temporaryWorkspace = cwd;
       }
-      const env = getMinimalProcessEnv();
-      const processEnv = getProcessEnv();
-      for (const key of [...(this.preset?.envKeys ?? []), ...(this.config.pass_env ?? [])]) {
-        const value = this.options.env?.[key] ?? processEnv[key];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-      return await withAcpStdio(
-        {
-          command: this.command,
-          args: this.config.args ?? this.preset?.args ?? [],
-          cwd,
-          env,
-        },
-        (stream) =>
-          runAcpTurn(stream, {
-            prompt,
-            cwd,
-            signal,
-            authMethod: this.config.auth_method,
-            mode: settings.mode,
-            model: settings.model,
-          }),
-      );
+      return await runAcpAgent({
+        command: this.command,
+        args: this.config.args ?? this.preset?.args ?? [],
+        cwd,
+        env,
+        prompt,
+        signal,
+        authMethod: this.config.auth_method,
+        mode: settings.mode,
+        model: settings.model,
+      });
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
       if (deadline.aborted) {

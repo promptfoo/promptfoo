@@ -97,7 +97,9 @@ for await (const line of createInterface({ input: process.stdin })) {
         textChunk(
           prompt === 'inspect'
             ? JSON.stringify({
+                pid: process.pid,
                 cwd: process.cwd(),
+                gitDir: process.env.GIT_DIR,
                 args: process.argv.slice(2),
                 mode,
                 model,

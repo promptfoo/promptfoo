@@ -125,8 +125,7 @@ import { createXAIResponsesProvider } from './xai/responses';
 import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
-import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ApiProvider, LoadApiProviderContext, ProviderOptions } from '../types/index';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
 const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
