@@ -4,7 +4,7 @@ import {
   TracerProvider,
 } from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { markEvaluatorSpan } from '../../src/tracing/otlpOwnership';
+import { markEvaluatorSpan, SPAN_ORIGIN_ATTRIBUTE } from '../../src/tracing/otlpOwnership';
 
 const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
@@ -316,18 +316,33 @@ describe('fetchTraceContext', () => {
       spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     const name = 'grader rubric';
+    const hosted = 'promptfoo.openai.hosted_trace_requested';
     const span = provider.getTracer('host').startSpan(name, {
-      attributes: { 'promptfoo.span.role': 'grader' },
+      attributes: { 'promptfoo.span.role': 'grader', [hosted]: true },
     });
-    markEvaluatorSpan(span, 'grader', name);
+    markEvaluatorSpan(span, 'grader', name, undefined, true);
     span.end();
     await provider.forceFlush();
     const [exported] = exporter.getFinishedSpans();
     await provider.shutdown();
     const { traceId, spanId } = exported.spanContext();
-    mockExternalTrace([{ spanId, name, startTime: 1, attributes: exported.attributes }], traceId);
-    await fetchTraceContext(traceId, { providerConfig, queryDelay: 0, maxRetries: 0 });
-    expect(storedSpans[0].attributes).toEqual({ 'promptfoo.span.role': 'grader' });
+    const signature = String(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]);
+    mockExternalTrace(
+      [{ spanId, name, statusMessage: signature, startTime: 1, attributes: exported.attributes }],
+      traceId,
+    );
+    await fetchTraceContext(traceId, {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['origin', hosted],
+    });
+    expect(storedSpans[0].attributes).toEqual({
+      'promptfoo.span.role': 'grader',
+      [hosted]: '[REDACTED]',
+    });
+    expect(storedSpans[0].statusMessage).toBe('[REDACTED]');
+    expect(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]).toBe(signature);
   });
 
   it.each([undefined, 'grader', 'forged-owner'])(
