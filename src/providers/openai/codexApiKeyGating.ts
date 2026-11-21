@@ -50,10 +50,8 @@ export function shouldInjectApiKey(
  * Apply the resolved Codex/OpenAI API key to the spawned Codex CLI environment.
  *
  * Inject it only when {@link shouldInjectApiKey} allows (the key belongs to the active
- * backend). When routing to a non-OpenAI provider without an explicit key, an ambient
- * OPENAI_API_KEY / CODEX_API_KEY is unrelated to the backend; never inject one, and also strip
- * any inherited via `inherit_process_env` — unless the user passed it explicitly through
- * cli_env.
+ * backend). Otherwise remove inherited keys, including credentials masked by the provider
+ * environment. Preserve keys the user passed explicitly through cli_env.
  */
 export function applyApiKeyToCliEnv(
   sortedEnv: Record<string, string>,
@@ -67,11 +65,9 @@ export function applyApiKeyToCliEnv(
     sortedEnv.CODEX_API_KEY = apiKey;
     return;
   }
-  if (usesCustomModelProvider(config)) {
-    for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
-      if (!(key in (config.cli_env ?? {}))) {
-        delete sortedEnv[key];
-      }
+  for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
+    if (!(key in (config.cli_env ?? {}))) {
+      delete sortedEnv[key];
     }
   }
 }

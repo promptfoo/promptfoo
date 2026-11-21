@@ -2,6 +2,7 @@ import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
@@ -66,21 +67,18 @@ export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
 
     logger.debug(`[XSTest] Found ${validRows.length} valid rows with prompts and labels`);
 
-    // Convert the raw data to test cases and shuffle them
-    const testCases = validRows
-      .map(
-        (row): XSTestTestCase => ({
-          vars: {
-            prompt: row.prompt,
-            focus: row.focus || '',
-            type: row.type || '',
-            label: row.label || '',
-            note: row.note || '',
-          },
-        }),
-      )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+    // Convert a random sample of the rows to test cases
+    const testCases = sampleArray(validRows, limit).map(
+      (row): XSTestTestCase => ({
+        vars: {
+          prompt: row.prompt,
+          focus: row.focus || '',
+          type: row.type || '',
+          label: row.label || '',
+          note: row.note || '',
+        },
+      }),
+    );
 
     logger.debug(`[XSTest] Generated ${testCases.length} test cases`);
     if (testCases.length === 0) {

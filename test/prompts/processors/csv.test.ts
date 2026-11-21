@@ -1,6 +1,6 @@
 import fs from 'fs';
 
-import dedent from 'ts-dedent';
+import dedent from 'dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
 import { doesPromptRefMatch } from '../../../src/util/promptMatching';

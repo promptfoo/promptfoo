@@ -4,6 +4,7 @@ import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache');
@@ -61,7 +62,7 @@ describe('OpenAI Provider', () => {
     }
 
     it('should reject a Codex-only completion passthrough model override before dispatch', async () => {
-      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: { apiKey: 'test-key', passthrough: { model: 'gpt-5.3-codex-spark' } },
       });
 
@@ -74,7 +75,7 @@ describe('OpenAI Provider', () => {
     it('should call API successfully with text completion', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
@@ -87,17 +88,17 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003').callApi('Test prompt', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model').callApi('Test prompt', {
           prompt: { raw: 'Test prompt', label: 'completion prompt' },
           testIdx: 7,
           vars: {},
         });
 
         expect(attributes).toMatchObject({
-          spanName: 'text_completion text-davinci-003',
+          spanName: 'text_completion ft:babbage-002:company::model',
           'gen_ai.operation.name': 'text_completion',
           'gen_ai.provider.name': 'openai',
-          'gen_ai.request.model': 'text-davinci-003',
+          'gen_ai.request.model': 'ft:babbage-002:company::model',
           'gen_ai.request.max_tokens': 1024,
           'gen_ai.request.temperature': 0,
           'gen_ai.request.top_p': 1,
@@ -119,7 +120,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             max_tokens: 50,
             temperature: 0.2,
@@ -171,7 +172,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: { stop: ['configured-stop'] },
         }).callApi('Test prompt');
 
@@ -197,7 +198,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: { passthrough: { stop: 'passthrough-stop' } },
         }).callApi('Test prompt');
 
@@ -216,7 +217,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: { passthrough: { stop: ['valid-stop', 123] } },
         }).callApi('Test prompt');
 
@@ -234,7 +235,7 @@ describe('OpenAI Provider', () => {
       ['ft:babbage-002:company::model', 1.6, 1.6],
       ['ft:davinci-002:company::model', 12, 12],
     ])(
-      'should call and price supported Completions model %s',
+      'should call and price legacy Completions model %s on a custom gateway',
       async (model, inputRate, outputRate) => {
         mockFetchWithCache.mockResolvedValueOnce({
           ...mockResponse,
@@ -244,12 +245,194 @@ describe('OpenAI Provider', () => {
           },
         });
 
-        const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
+        const result = await new OpenAiCompletionProvider(model, {
+          config: { apiBaseUrl: 'https://gateway.example/v1' },
+        }).callApi('Test prompt');
         const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
 
         expect(request[0]).toContain('/completions');
         expect(JSON.parse(request[1].body)).toMatchObject({ model, prompt: 'Test prompt' });
         expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
+      },
+    );
+
+    it('should bill a qualified passthrough completion model through a custom gateway', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: {
+            total_tokens: 2_000_000,
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+          },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('davinci-002', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'openai/babbage-002' },
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('openai/babbage-002');
+      expect(result.cost).toBeCloseTo(0.8, 10);
+    });
+
+    it('should not apply OpenAI pricing to another gateway model namespace', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: {
+            total_tokens: 2_000_000,
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+          },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('davinci-002', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'vendor/babbage-002' },
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('vendor/babbage-002');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should send the configured fast tier while retaining fast billing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Fast output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'fast',
+        },
+      });
+
+      const result = await provider.callApi('Answer quickly');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('fast');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should bill the effective passthrough service tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Priority output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'flex',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer with priority');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should remove inherited passthrough when a prompt replaces it with an empty object', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Standard output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Use the prompt override', {
+        prompt: { config: { passthrough: {} } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body).not.toHaveProperty('service_tier');
+      expect(result.cost).toBeCloseTo((1_000 * 0.25 + 100 * 2) / 1e6, 10);
+    });
+
+    it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Flex output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer flexibly', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('flex');
+      expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
+    });
+
+    it.each([
+      undefined,
+      'https://us.api.openai.com/v1',
+      'https://eu.api.openai.com/v1',
+      'https://au.api.openai.com/v1',
+      'https://ca.api.openai.com/v1',
+      'https://jp.api.openai.com/v1',
+      'https://in.api.openai.com/v1',
+      'https://sg.api.openai.com/v1',
+      'https://kr.api.openai.com/v1',
+      'https://gb.api.openai.com/v1',
+      'https://ae.api.openai.com/v1',
+    ])(
+      'should omit service tiers from first-party legacy Completion requests at %s',
+      async (apiBaseUrl) => {
+        mockFetchWithCache.mockResolvedValueOnce(mockResponse);
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
+          config: {
+            apiBaseUrl,
+            service_tier: 'default',
+            passthrough: { service_tier: 'priority' },
+          },
+        });
+
+        const result = await provider.callApi('Use the legacy endpoint', {
+          prompt: { config: { service_tier: 'flex' } },
+        } as any);
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+        expect(body).not.toHaveProperty('service_tier');
+        expect(result.cost).toBeCloseTo((5 * 1.6 + 5 * 1.6) / 1e6, 10);
       },
     );
 
@@ -266,7 +449,7 @@ describe('OpenAI Provider', () => {
         statusText: 'Bad Request',
       });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toBeDefined();
@@ -276,12 +459,30 @@ describe('OpenAI Provider', () => {
     it('should handle fetch errors', async () => {
       mockFetchWithCache.mockRejectedValue(new Error('Network error'));
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toBeDefined();
       expect(result.error).toContain('Network error');
     });
+
+    it.each([null, {}, { choices: [] }])(
+      'returns a clean error on a missing completion choice: %j',
+      async (data) => {
+        mockFetchWithCache.mockResolvedValue({
+          data,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Malformed response data');
+        expect(result.error).not.toContain('TypeError');
+      },
+    );
 
     it('should handle missing API key', async () => {
       // Save the original env var and clear it for this test
@@ -289,7 +490,7 @@ describe('OpenAI Provider', () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             apiKeyRequired: true,
           },
@@ -313,7 +514,7 @@ describe('OpenAI Provider', () => {
       mockProcessEnv({ CUSTOM_OPENAI_KEY: undefined });
 
       try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             apiKeyEnvar: 'CUSTOM_OPENAI_KEY',
           },
@@ -349,7 +550,7 @@ describe('OpenAI Provider', () => {
         cached: true,
       });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.cached).toBe(true);
@@ -357,16 +558,13 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle responses without usage information', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ text: 'Test output' }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Test output');
@@ -376,7 +574,7 @@ describe('OpenAI Provider', () => {
     it('should handle fetchWithCache returning undefined response', async () => {
       mockFetchWithCache.mockResolvedValue(undefined as any);
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
@@ -390,7 +588,7 @@ describe('OpenAI Provider', () => {
         'X-Test-Header': 'test-value',
       };
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: {
           headers: customHeaders,
         },
@@ -417,7 +615,7 @@ describe('OpenAI Provider', () => {
     it('should pass passthrough config fields in body', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: {
           passthrough: { logprobs: 3 },
         },
@@ -438,16 +636,16 @@ describe('OpenAI Provider', () => {
         statusText: 'OK',
       });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toMatch(/API error:/);
+      expect(result.error).toContain('Malformed response data');
     });
 
     it('should handle invalid OPENAI_STOP env var', async () => {
       mockProcessEnv({ OPENAI_STOP: '{invalid json}' });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: {
           apiKey: 'test-api-key',
         },
