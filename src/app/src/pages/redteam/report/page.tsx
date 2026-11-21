@@ -3,12 +3,13 @@ import { useEffect } from 'react';
 import { Spinner } from '@app/components/ui/spinner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
 
 export default function ReportPage() {
   const navigate = useNavigate();
+  const { pathname, search, hash } = useLocation();
   const [searchParams] = useSearchParams();
   const { email, isLoading, fetchEmail } = useUserStore();
   const evalId = searchParams.get('evalId');
@@ -23,9 +24,9 @@ export default function ReportPage() {
 
   useEffect(() => {
     if (!isLoading && !email) {
-      navigate(`/login?type=report&redirect=${window.location.pathname}${window.location.search}`);
+      navigate(`/login?type=report&redirect=${encodeURIComponent(pathname + search + hash)}`);
     }
-  }, [isLoading, email, navigate]);
+  }, [isLoading, email, navigate, pathname, search, hash]);
 
   if (isLoading) {
     return (

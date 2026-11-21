@@ -4,6 +4,22 @@ import { cn } from '@app/lib/utils';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 
+// Controlled dialogs opened by a row action have no Radix DialogTrigger to return to.
+export function useDialogReturnFocus() {
+  const trigger = React.useRef<Element | null>(null);
+  return {
+    onOpenAutoFocus: () => {
+      trigger.current = document.activeElement;
+    },
+    onCloseAutoFocus: (event: Event) => {
+      if (trigger.current instanceof HTMLElement && trigger.current.isConnected) {
+        event.preventDefault();
+        trigger.current.focus();
+      }
+    },
+  };
+}
+
 const Dialog = DialogPrimitive.Root;
 
 const DialogTrigger = DialogPrimitive.Trigger;

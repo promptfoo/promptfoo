@@ -27,7 +27,7 @@ export default function ReportIndex() {
           </Button>
         </div>
       </PageHeader>
-      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col max-w-screen-2xl px-4 py-6 sm:px-8">
+      <div className="mx-auto flex min-h-96 w-full flex-1 flex-col max-w-screen-2xl px-4 py-6 sm:px-8">
         <ReportsTable
           onReportSelected={(evalId) => navigate(REDTEAM_ROUTES.REPORT_DETAIL(evalId))}
         />

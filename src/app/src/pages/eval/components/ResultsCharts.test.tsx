@@ -53,6 +53,23 @@ describe('ResultsCharts', () => {
     vi.clearAllMocks();
   });
 
+  it('counts floating-point boundaries exactly once', () => {
+    const scores = [0, 1, 0.3, 0.3];
+    const table = {
+      head: { prompts: [{ provider: 'fixture', metrics: { namedScores: {} } }], vars: [] },
+      body: scores.map((score) => ({ outputs: [{ score, pass: true, text: 'output' }] })),
+    };
+    vi.mocked(useTableStore).mockReturnValue({ table, evalId: 'fixture', config: {} });
+    render(<ResultsCharts scores={scores} />);
+    for (const [range, count] of [
+      ['0.2 to 0.3', '0'],
+      ['0.3 to 0.4', '2'],
+      ['1 and above', '1'],
+    ]) {
+      expect(screen.getByText(range).nextElementSibling).toHaveTextContent(count);
+    }
+  });
+
   it('renders chart canvases without a close button', () => {
     const mockTable = {
       head: {

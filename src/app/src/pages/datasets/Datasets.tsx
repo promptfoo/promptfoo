@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
@@ -12,13 +12,13 @@ import DatasetDialog from './DatasetDialog';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
+export type DatasetRow = Omit<TestCasesWithMetadata, 'recentEvalDate'> & { recentEvalDate: string };
+
 interface DatasetsProps {
-  data: (TestCasesWithMetadata & { recentEvalDate: string })[];
+  data: DatasetRow[];
   isLoading: boolean;
   error: string | null;
 }
-
-type DatasetRow = TestCasesWithMetadata & { recentEvalDate: string };
 
 const getVariables = (testCases: DatasetRow['testCases']) => {
   if (!Array.isArray(testCases) || typeof testCases[0] === 'string') {
@@ -33,31 +33,10 @@ const getVariables = (testCases: DatasetRow['testCases']) => {
 
 export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   const [searchParams] = useSearchParams();
-  const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
-    open: false,
-    selectedIndex: 0,
-  });
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const selectedDataset = selectedIndex === null ? undefined : data[selectedIndex];
   const hasShownPopup = useRef(false);
 
-  const handleClickOpen = (index: number) => {
-    setDialogState({ open: true, selectedIndex: index });
-  };
-
-  const handleClose = () => {
-    setDialogState((prev) => ({ ...prev, open: false }));
-  };
-
-  const openDatasetDetails = useCallback(
-    (dataset: DatasetRow) => {
-      const index = data.findIndex((entry) => entry.id === dataset.id);
-      if (index !== -1) {
-        setDialogState({ open: true, selectedIndex: index });
-      }
-    },
-    [data],
-  );
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (hasShownPopup.current) {
       return;
@@ -67,7 +46,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     if (testCaseId) {
       const index = data.findIndex((testCase) => testCase.id.startsWith(testCaseId));
       if (index !== -1) {
-        handleClickOpen(index);
+        setSelectedIndex(index);
         hasShownPopup.current = true;
       }
     }
@@ -89,7 +68,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
               aria-label={`View dataset ${row.original.id}`}
               onClick={(event) => {
                 event.stopPropagation();
-                openDatasetDetails(row.original);
+                setSelectedIndex(row.index);
               }}
             >
               {id.slice(0, 6)}
@@ -168,8 +147,15 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         size: 150,
       },
     ],
-    [openDatasetDetails],
+    [],
   );
+
+  const handleRowClick = (dataset: DatasetRow) => {
+    const index = data.findIndex((d) => d.id === dataset.id);
+    if (index !== -1) {
+      setSelectedIndex(index);
+    }
+  };
 
   return (
     <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
@@ -189,7 +175,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
               data={data}
               isLoading={isLoading}
               error={error}
-              onRowClick={openDatasetDetails}
+              onRowClick={handleRowClick}
               emptyMessage="Create a dataset to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
               globalFilterLabel="Search datasets"
@@ -197,15 +183,13 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           </Card>
         </div>
       </div>
-      {dialogState.open &&
-        dialogState.selectedIndex < data.length &&
-        data[dialogState.selectedIndex] && (
-          <DatasetDialog
-            openDialog={dialogState.open}
-            handleClose={handleClose}
-            testCase={data[dialogState.selectedIndex]}
-          />
-        )}
+      {selectedDataset && (
+        <DatasetDialog
+          openDialog
+          handleClose={() => setSelectedIndex(null)}
+          testCase={selectedDataset}
+        />
+      )}
     </PageContainer>
   );
 }

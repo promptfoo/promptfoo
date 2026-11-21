@@ -85,6 +85,7 @@ export function MediaFilters({
   const evalFilterListboxId = useId();
   const evalFilterDescriptionId = useId();
   const evalSearchInputId = useId();
+  const tabbingOut = useRef(false);
   const evalFilterTriggerRef = useRef<HTMLButtonElement>(null);
   const evalSearchInputRef = useRef<HTMLInputElement>(null);
   const evalListboxRef = useRef<HTMLDivElement>(null);
@@ -282,6 +283,26 @@ export function MediaFilters({
             onEscapeKeyDown={(event) => {
               if (event.isComposing) {
                 event.preventDefault();
+              }
+            }}
+            onKeyDownCapture={(event) => {
+              if (event.key !== 'Tab') {
+                return;
+              }
+              const inSearch = event.target === evalSearchInputRef.current;
+              if (evalSearchQuery && (event.shiftKey ? !inSearch : inSearch)) {
+                return;
+              }
+              // Resume native tab order from the trigger, outside the portaled focus scope.
+              event.stopPropagation();
+              tabbingOut.current = true;
+              evalFilterTriggerRef.current?.focus();
+              closeEvalFilter();
+            }}
+            onCloseAutoFocus={(event) => {
+              if (tabbingOut.current) {
+                event.preventDefault();
+                tabbingOut.current = false;
               }
             }}
             onOpenAutoFocus={(event) => {

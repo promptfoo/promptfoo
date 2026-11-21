@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
@@ -26,43 +26,22 @@ export default function Prompts({
   showDatasetColumn = true,
 }: PromptsProps) {
   const [searchParams] = useSearchParams();
-  const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
-    open: false,
-    selectedIndex: 0,
-  });
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const selectedPrompt = selectedIndex === null ? undefined : data[selectedIndex];
 
   // Reset dialog state when data changes to prevent invalid index
   useEffect(() => {
-    if (dialogState.open && dialogState.selectedIndex >= data.length) {
-      setDialogState({ open: false, selectedIndex: 0 });
+    if (selectedIndex !== null && selectedIndex >= data.length) {
+      setSelectedIndex(null);
     }
-  }, [data, dialogState.open, dialogState.selectedIndex]);
+  }, [data, selectedIndex]);
 
-  const handleClickOpen = (index: number) => {
-    setDialogState({ open: true, selectedIndex: index });
-  };
-
-  const handleClose = () => {
-    setDialogState((prev) => ({ ...prev, open: false }));
-  };
-
-  const openPromptDetails = useCallback(
-    (prompt: ServerPromptWithMetadata) => {
-      const index = data.findIndex((entry) => entry.id === prompt.id);
-      if (index !== -1) {
-        setDialogState({ open: true, selectedIndex: index });
-      }
-    },
-    [data],
-  );
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {
       const promptIndex = data.findIndex((prompt) => prompt.id.startsWith(promptId));
       if (promptIndex !== -1) {
-        handleClickOpen(promptIndex);
+        setSelectedIndex(promptIndex);
       }
     }
   }, [data, searchParams]);
@@ -89,7 +68,7 @@ export default function Prompts({
             className="h-auto max-w-full justify-start whitespace-normal px-0 text-left"
             onClick={(event) => {
               event.stopPropagation();
-              openPromptDetails(row.original);
+              setSelectedIndex(row.index);
             }}
           >
             <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
@@ -135,8 +114,15 @@ export default function Prompts({
         meta: { align: 'right' },
       },
     ],
-    [openPromptDetails],
+    [],
   );
+
+  const handleRowClick = (prompt: ServerPromptWithMetadata) => {
+    const index = data.findIndex((p) => p.id === prompt.id);
+    if (index !== -1) {
+      setSelectedIndex(index);
+    }
+  };
 
   return (
     <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
@@ -156,7 +142,7 @@ export default function Prompts({
               data={data}
               isLoading={isLoading}
               error={error}
-              onRowClick={openPromptDetails}
+              onRowClick={handleRowClick}
               emptyMessage="Create a prompt to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
               globalFilterLabel="Search prompts"
@@ -164,16 +150,14 @@ export default function Prompts({
           </Card>
         </div>
       </div>
-      {dialogState.open &&
-        dialogState.selectedIndex < data.length &&
-        data[dialogState.selectedIndex] && (
-          <PromptDialog
-            openDialog={dialogState.open}
-            handleClose={handleClose}
-            selectedPrompt={data[dialogState.selectedIndex]}
-            showDatasetColumn={showDatasetColumn}
-          />
-        )}
+      {selectedPrompt && (
+        <PromptDialog
+          openDialog
+          handleClose={() => setSelectedIndex(null)}
+          selectedPrompt={selectedPrompt}
+          showDatasetColumn={showDatasetColumn}
+        />
+      )}
     </PageContainer>
   );
 }

@@ -85,11 +85,12 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    renderWithRouter('/reports?evalId=test-eval-123');
+    const report = '/reports?evalId=test-eval-123&mode=all#report-vulnerabilities';
+    renderWithRouter(report);
 
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith(
-      `/login?type=report&redirect=${window.location.pathname}${window.location.search}`,
+      `/login?type=report&redirect=${encodeURIComponent(report)}`,
     );
   });
 

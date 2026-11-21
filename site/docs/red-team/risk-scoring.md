@@ -129,8 +129,6 @@ For overall system assessment, Promptfoo calculates a system-wide risk score tha
    - Each additional high vulnerability: +0.25 points
 3. **Risk Distribution Analysis**: Provides breakdown of vulnerability counts by severity level
 
-This approach follows industry best practices for aggregating individual vulnerability scores into comprehensive security posture assessments.
-
 ## Using Risk Scores in Practice
 
 1. **Prioritize Critical and High Scores**: Address vulnerabilities with scores ≥9.0 (critical) and ≥7.0 (high) immediately

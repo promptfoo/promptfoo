@@ -106,7 +106,9 @@ function HistogramChart({ table }: ChartProps) {
         .map((row) => row.outputs[promptIdx]?.score)
         .filter((score) => typeof score === 'number' && !Number.isNaN(score));
       const counts = bins.map(
-        (bin) => promptScores.filter((score) => score >= bin && score < bin + binSize).length,
+        (bin, idx) =>
+          promptScores.filter((score) => score >= bin && score < (bins[idx + 1] ?? Infinity))
+            .length,
       );
       return {
         label: prompt.provider,
@@ -115,7 +117,7 @@ function HistogramChart({ table }: ChartProps) {
       };
     });
 
-    return { totalScores: scores.length, minScore, maxScore, binSize, bins, datasets };
+    return { totalScores: scores.length, minScore, maxScore, bins, datasets };
   }, [table]);
 
   const summary = useMemo(() => {
@@ -127,13 +129,13 @@ function HistogramChart({ table }: ChartProps) {
       };
     }
 
-    const { totalScores, minScore, maxScore, binSize, bins, datasets } = binnedData;
+    const { totalScores, minScore, maxScore, bins, datasets } = binnedData;
     const promptLabels = table.head.prompts.map((prompt, promptIdx) =>
       getPromptLabel(prompt, promptIdx),
     );
     const rows = bins.map((bin, binIdx) => {
       const isLastBin = binIdx === bins.length - 1;
-      const upperBound = Number.parseFloat((bin + binSize).toFixed(2));
+      const upperBound = bins[binIdx + 1];
       const range = isLastBin
         ? `${String(bin)} and above`
         : `${String(bin)} to ${String(upperBound)}`;

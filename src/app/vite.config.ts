@@ -172,7 +172,6 @@ export default {
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
-      all: true,
     },
   },
   define: {

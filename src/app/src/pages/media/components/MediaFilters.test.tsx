@@ -215,6 +215,16 @@ describe('MediaFilters', () => {
       expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
     });
 
+    it.each([false, true])('lets Tab leave the picker (shift %s)', async (shift) => {
+      const user = userEvent.setup();
+      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+      const trigger = screen.getByRole('button', { name: 'All Evaluations' });
+      await user.click(trigger);
+      await user.tab({ shift });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByLabelText('Search evaluations')).not.toBeInTheDocument();
+    });
+
     it('closes a keyboard-open eval filter with escape', async () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);

@@ -47,6 +47,9 @@ it('selects an evaluation with the keyboard and returns focus to the trigger', a
   await userEvent.keyboard('{ArrowDown}{Enter}');
   expect(onSelect).toHaveBeenCalledWith('eval-one');
   await expect.element(trigger).toHaveFocus();
+  await trigger.click();
+  await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+  await expect.element(page.getByRole('combobox', { name: 'Sort media' })).toHaveFocus();
 });
 
 it('keeps logical row positions while a large table scrolls', async () => {
