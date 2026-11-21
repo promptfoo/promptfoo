@@ -213,7 +213,7 @@ Example prompt template (`prompts/coding_assistant.json`):
 
 ## Cost Information
 
-Promptfoo estimates costs from token usage for text, per request for images, and per input character for Melo TTS. Confirm current inference rates with [Hyperbolic](https://docs.hyperbolic.ai/docs/general/support). You can override the text rates:
+Promptfoo estimates costs from token usage for text, per request for images, and per input character for Melo TTS. Confirm current inference rates in [Hyperbolic's inference catalog](https://www.hyperbolic.ai/inference). You can override the text rates:
 
 ```yaml
 providers:
