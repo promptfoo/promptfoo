@@ -42,7 +42,7 @@ import {
   stopOtlpReceiverIfNeeded,
 } from '../tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from '../tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from '../tracing/otelSdk';
+import { initializeOtel } from '../tracing/otelSdk';
 import { isCliEventSource } from '../types/eventSource';
 import {
   type Assertion,
@@ -4191,7 +4191,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-    let otelInitialized = false;
+    let releaseOtel: ReturnType<typeof initializeOtel>;
     let otlpReceiverAcquired = false;
 
     let evaluationError: unknown;
@@ -4206,8 +4206,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
         const otelConfig = getDefaultOtelConfig();
-        initializeOtel(otelConfig);
-        otelInitialized = true;
+        releaseOtel = initializeOtel(otelConfig);
       }
 
       return await this._runEvaluation(deadline);
@@ -4228,12 +4227,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       let cleanupError: unknown;
       try {
-        // Flush and shutdown OTEL SDK
-        if (otelInitialized) {
-          logger.debug('[Evaluator] Flushing OTEL spans...');
-          await flushOtel();
-          await shutdownOtel();
-        }
+        await releaseOtel?.();
 
         if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
           // Add a delay to allow providers to finish exporting spans

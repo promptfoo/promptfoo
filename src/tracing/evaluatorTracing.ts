@@ -6,10 +6,12 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import { isExternalTraceProvider } from './providers';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
+import type { trackLocalTrace } from './otelSdk';
 import type { OTLPReceiverTracePolicy } from './otlpReceiver';
 
 // Shared OTLP receiver lifecycle state: whether it is started, the in-flight start/stop
@@ -317,6 +319,13 @@ export interface EvaluationTraceContext {
   evaluationId?: string;
   testCaseId?: string;
   rootSpan?: Span;
+  localExport?: ReturnType<typeof trackLocalTrace>;
+  externalTraceCollected?: boolean;
+  traceEvidence?: { traceUnavailable: boolean; traceIncomplete: boolean };
+  setTraceEvidence?: (
+    evidence: 'complete' | 'partial' | 'unavailable',
+    captureSpanIds?: string[],
+  ) => Promise<void>;
 }
 
 interface TraceExecutionMetadata {
@@ -400,6 +409,12 @@ export async function generateTraceContextIfNeeded(
       evaluationId: evaluationId || '',
       testCaseId: testCaseId || '',
       metadata: {
+        // Only the evaluator can confirm that the row's spans were collected.
+        promptfooTraceEvidence: 'partial',
+        // A failed collection write must not expose later graders as target evidence.
+        ...(!isExternalTraceProvider(testSuite?.tracing?.provider) && {
+          promptfooTraceSpanIds: [],
+        }),
         testIdx,
         promptIdx,
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),
@@ -425,5 +440,7 @@ export async function generateTraceContextIfNeeded(
     evaluationId,
     testCaseId,
     ...(rootSpan && { rootSpan }),
+    setTraceEvidence: (evidence, captureSpanIds) =>
+      traceStore.setTraceEvidence(traceId, evidence, captureSpanIds),
   };
 }

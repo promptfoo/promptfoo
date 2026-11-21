@@ -225,20 +225,16 @@ Python snake_case fields are automatically mapped to camelCase:
 
 ## Using trace data
 
-When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+Promptfoo supplies spans in `context['trace']` when a trace is available. If your assertion requires trace evidence, fail when the trace is missing or empty. [Configure tracing](/docs/tracing/).
 
 ```py
-def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
-    # Check if trace data is available
-    if not hasattr(context, 'trace') or context.trace is None:
-        # Tracing not enabled, skip trace-based checks
-        return True
+def get_assert(output, context):
+    spans = (context.get('trace') or {}).get('spans', [])
+    if not spans:
+        return {'pass': False, 'score': 0, 'reason': 'No trace spans available'}
 
-    # Access trace spans
-    spans = context.trace['spans']
-
-    # Example: Check for errors in any span
-    error_spans = [s for s in spans if s.get('statusCode', 0) >= 400]
+    # OpenTelemetry span status 2 means ERROR.
+    error_spans = [s for s in spans if s.get('statusCode') == 2]
     if error_spans:
         return {
             'pass': False,
@@ -277,15 +273,10 @@ tests:
     assert:
       - type: python
         value: |
-          # Ensure retrieval happened before response generation
-          if context.trace:
-              spans = context.trace['spans']
-              retrieval_span = next((s for s in spans if 'retrieval' in s['name']), None)
-              generation_span = next((s for s in spans if 'generation' in s['name']), None)
-              
-              if retrieval_span and generation_span:
-                  return retrieval_span['startTime'] < generation_span['startTime']
-          return True
+          spans = (context.get('trace') or {}).get('spans', [])
+          retrieval = next((s for s in spans if 'retrieval' in s['name']), None)
+          generation = next((s for s in spans if 'generation' in s['name']), None)
+          return bool(retrieval and generation and retrieval['startTime'] < generation['startTime'])
 ```
 
 ## Overriding the Python binary

@@ -19,7 +19,7 @@ import {
 } from '../scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue } from '../scheduler/providerCallQueue';
 import { generateTraceContextIfNeeded } from '../tracing/evaluatorTracing';
-import { flushOtel } from '../tracing/otelSdk';
+import { flushOtel, trackLocalTrace } from '../tracing/otelSdk';
 import { isExternalTraceProvider } from '../tracing/providers';
 import { getActiveTraceparent } from '../tracing/spanRoles';
 import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from '../tracing/targetTracer';
@@ -610,6 +610,9 @@ async function collectExternalTraceAfterProviderCall({
       abortSignal,
     });
 
+    if (traceContext) {
+      traceContext.externalTraceCollected = !!trace?.spans.length;
+    }
     if (trace) {
       logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
     } else {
@@ -1067,6 +1070,47 @@ async function applyRunEvalResponseOutcome({
   });
 }
 
+async function finalizeRunEvalTrace(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>,
+  testSuite?: TestSuite,
+) {
+  if (traceContext?.traceEvidence) {
+    return traceContext.traceEvidence;
+  }
+  const traceId = getTraceId(traceContext);
+  const localExport = traceContext?.localExport;
+  const localCapture = !isExternalTraceProvider(testSuite?.tracing?.provider);
+  const captureSpanIds = localCapture ? (localExport?.seal?.() ?? []) : undefined;
+  const traceEvidence = {
+    traceUnavailable: localExport
+      ? !(await localExport.flush()) || localExport.isReliable?.() === false
+      : false,
+    traceIncomplete:
+      !!traceId &&
+      (localCapture
+        ? !localExport ||
+          // Local flushes cannot certify that remote OTLP exporters have finished.
+          !!testSuite?.tracing?.otlp?.http?.enabled ||
+          localExport.isComplete?.() === false ||
+          !!traceContext?.traceparent?.endsWith('-00')
+        : !traceContext?.externalTraceCollected),
+  };
+
+  await traceContext?.setTraceEvidence?.(
+    traceEvidence.traceUnavailable
+      ? 'unavailable'
+      : traceEvidence.traceIncomplete
+        ? 'partial'
+        : 'complete',
+    captureSpanIds,
+  );
+
+  if (traceContext) {
+    traceContext.traceEvidence = traceEvidence;
+  }
+  return traceEvidence;
+}
+
 async function gradeRunEvalResponse({
   abortSignal,
   deferGrading,
@@ -1117,13 +1161,7 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
-  if (
-    traceId &&
-    hasTraceAwareAssertions(test.assert) &&
-    !isExternalTraceProvider(testSuite?.tracing?.provider)
-  ) {
-    await flushOtel();
-  }
+  const traceEvidence = await finalizeRunEvalTrace(traceContext, testSuite);
 
   const assertionProviderResponse = {
     ...processedResponse,
@@ -1148,6 +1186,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          ...traceEvidence,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1169,6 +1208,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          ...traceEvidence,
         }),
     );
     applyGradingResult(ret, checkResult);
@@ -1396,6 +1436,10 @@ export async function runEvalInternal(
             repeatIndex,
           },
         );
+    const traceId = getTraceId(traceContext);
+    if (traceContext && traceId && !isExternalTraceProvider(testSuite?.tracing?.provider)) {
+      traceContext = { ...traceContext, localExport: trackLocalTrace(traceId) };
+    }
     const executionTraceContext = traceContext;
     const runExecution = () =>
       withTestCaseSpan(
@@ -1421,7 +1465,7 @@ export async function runEvalInternal(
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,
-          });
+          }).finally(() => finalizeRunEvalTrace(executionTraceContext, testSuite));
           providerCallCompleted = true;
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
@@ -1568,6 +1612,7 @@ export async function runEvalInternal(
       },
     ];
   } finally {
+    traceContext?.localExport?.release();
     await workspace?.remove();
   }
 }

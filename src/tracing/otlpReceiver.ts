@@ -591,7 +591,7 @@ export class OTLPReceiver {
           traceId,
           evaluationId: info.evaluationId,
           testCaseId: info.testCaseId,
-          metadata: this.getTraceMetadata(info),
+          metadata: { ...this.getTraceMetadata(info), promptfooTraceEvidence: 'partial' },
         });
       } catch (error) {
         // Trace might already exist, which is fine
