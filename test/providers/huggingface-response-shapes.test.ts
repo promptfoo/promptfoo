@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTokenExtractionProvider,
 } from '../../src/providers/huggingface';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -82,4 +83,64 @@ describe('Hugging Face task response compatibility', () => {
       'Fixture model unavailable',
     );
   });
+});
+
+describe('Hugging Face token classification labels', () => {
+  const tokens = new HuggingfaceTokenExtractionProvider('fixture/ner');
+
+  it.each([
+    {
+      shape: 'aggregated groups',
+      data: [
+        { entity_group: 'PER', score: 0.6 },
+        { entity_group: 'LOC', score: 0 },
+        { entity_group: 'PER', score: 0.9 },
+      ],
+      classification: { PER: 0.9, LOC: 0 },
+    },
+    {
+      shape: 'unaggregated tokens',
+      data: [
+        { entity: 'B-PER', score: 0.9 },
+        { entity: 'I-PER', score: 0 },
+        { entity: 'B-PER', score: 0.6 },
+      ],
+      classification: { 'B-PER': 0.9, 'I-PER': 0 },
+    },
+    {
+      shape: 'unaggregated tokens with a null entity_group',
+      data: [{ entity_group: null, entity: 'B-PER', score: 0.9 }],
+      classification: { 'B-PER': 0.9 },
+    },
+  ])('keeps the highest score per label for $shape', async ({ data, classification }) => {
+    reply(data);
+    expect(await tokens.callClassificationApi('Alice visits Paris')).toEqual({ classification });
+  });
+
+  it('preserves labels that are also object property names', async () => {
+    reply([
+      { entity: 'constructor', score: 0.8 },
+      { entity: '__proto__', score: 0.4 },
+    ]);
+    const { classification } = await tokens.callClassificationApi('Alice');
+    expect(Object.entries(classification ?? {})).toEqual([
+      ['constructor', 0.8],
+      ['__proto__', 0.4],
+    ]);
+  });
+
+  it('rejects a null response body', async () => {
+    reply(null);
+    expect(await tokens.callClassificationApi('Alice')).toEqual({
+      error: 'Malformed response data: null',
+    });
+  });
+
+  it.each([null, { label: 'PER', score: 0.9 }, { entity: 'PER', score: '0.9' }])(
+    'rejects malformed tokens: %j',
+    async (item) => {
+      reply([item]);
+      expect((await tokens.callClassificationApi('Alice')).error).toContain('Malformed response');
+    },
+  );
 });

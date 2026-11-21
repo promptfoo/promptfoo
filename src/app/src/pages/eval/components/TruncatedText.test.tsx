@@ -2,10 +2,14 @@ import React from 'react';
 
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import TruncatedText from './TruncatedText';
 
 describe('TruncatedText', () => {
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+    vi.restoreAllMocks();
+  });
   it('should display truncated text with ellipsis and toggle UI when the input text length exceeds maxLength', () => {
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
@@ -61,20 +65,16 @@ describe('TruncatedText', () => {
     expect(screen.getByText('Show less')).toBeInTheDocument();
   });
 
-  it("should collapse back to the truncated state when the user clicks the 'Show less' UI after expanding", () => {
-    const longText =
-      'This is a very long piece of text that is intended to be truncated by the component.';
-    const maxLength = 20;
-    const expectedTruncatedText = longText.slice(0, maxLength);
-
-    const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
-
-    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
-    expect(mainDiv).toBeInTheDocument();
-
-    expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
+  it('collapses again after expanding and clicking Show less', async () => {
+    const user = userEvent.setup();
+    const text = 'Long content that needs truncating to fit in the table cell.';
+    const { container } = render(<TruncatedText text={text} maxLength={20} />);
+    await user.click(container.querySelector('.truncation-toggler')!);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    await user.click(screen.getByText('Show less'));
+    expect(screen.queryByText(text)).not.toBeInTheDocument();
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
-    expect(screen.getByText('...')).toBeInTheDocument();
+    expect(container).toHaveTextContent(`${text.slice(0, 20)}...`);
   });
 
   it('should correctly truncate and render a React element input according to maxLength, preserving the element structure', () => {
@@ -555,33 +555,20 @@ describe('TruncatedText', () => {
     stopPropagationSpy.mockRestore();
   });
 
-  it('should not toggle truncation when text is selected within the truncated text area', () => {
-    const longText =
-      'This is a very long piece of text that is intended to be truncated by the component.';
-    const maxLength = 20;
-    const expectedTruncatedText = longText.slice(0, maxLength);
-
-    const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
-
-    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
-    expect(mainDiv).toBeInTheDocument();
-    expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
-
-    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
-    expect(truncationToggler).toBeInTheDocument();
-
-    const textToSelect = mainDiv?.firstChild;
-
-    if (textToSelect) {
-      const range = document.createRange();
-      range.selectNodeContents(textToSelect);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    }
-
-    expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
-    expect(screen.queryByText(longText)).not.toBeInTheDocument();
+  it('does not expand when clicking selected content outside the explicit toggle', async () => {
+    const user = userEvent.setup();
+    const text = 'Long content that needs truncating to fit in the table cell.';
+    const { container } = render(<TruncatedText text={text} maxLength={20} />);
+    const content = container.querySelector('[id^="eval-output-cell-text-"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(content.firstChild!);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(selection.toString()).not.toBe('');
+    await user.click(content);
+    expect(content).toHaveTextContent(`${text.slice(0, 20)}...`);
+    expect(screen.queryByText(text)).not.toBeInTheDocument();
   });
 
   it('should handle arrays containing null or undefined values as part of the text prop', () => {

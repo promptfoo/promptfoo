@@ -6,11 +6,11 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { formatPrice } from './useFourthwall';
 
-import type { FourthwallProduct } from './types';
+import type { FourthwallCatalogItem } from './types';
 
 interface ProductCardProps {
-  product: FourthwallProduct;
-  onClick: (product: FourthwallProduct) => void;
+  product: FourthwallCatalogItem;
+  onClick: (product: FourthwallCatalogItem) => void;
 }
 
 export function ProductCard({ product, onClick }: ProductCardProps) {
@@ -24,11 +24,13 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
 
   const lowestPrice = useMemo(
     () =>
-      product.variants.reduce(
-        (min, v) => (v.unitPrice.value < min.value ? v.unitPrice : min),
-        product.variants[0]?.unitPrice ?? { value: 0, currency: 'USD' },
-      ),
-    [product.variants],
+      product.type === 'BUNDLE'
+        ? product.price
+        : product.variants.reduce(
+            (min, v) => (v.unitPrice.value < min.value ? v.unitPrice : min),
+            product.variants[0]?.unitPrice ?? { value: 0, currency: 'USD' },
+          ),
+    [product],
   );
 
   return (
