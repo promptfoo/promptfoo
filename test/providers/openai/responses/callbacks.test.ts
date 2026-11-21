@@ -6,8 +6,6 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
-import { wrapProviderWithRateLimiting } from '../../../../src/scheduler/providerWrapper';
-import { RateLimitRegistry } from '../../../../src/scheduler/rateLimitRegistry';
 
 const createFunctionCallResponse = () => ({
   id: 'resp_abc123',

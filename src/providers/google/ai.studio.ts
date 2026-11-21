@@ -162,7 +162,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     if (usesGenerateContentApi(this.modelName)) {
-      return this.callGemini(prompt, context, options);
+      return this.callGemini(prompt, context);
     }
 
     // Legacy PaLM API path
@@ -194,7 +194,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         `${baseUrl}/v1beta3/models/${this.modelName}:generateMessage`,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
@@ -263,12 +262,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Gemini API specifically.
    */
-  async callGemini(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    options?.abortSignal?.throwIfAborted();
+  async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -296,7 +290,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
-      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
@@ -389,7 +382,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         endpoint,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
@@ -530,11 +522,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           toolsDisabled,
         );
       } catch (error) {
-        return {
-          ...response,
-          output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
-          error: String(error),
-        };
+        return { ...response, output: undefined, error: String(error) };
       }
       return response;
     } catch (err) {
@@ -627,7 +615,6 @@ export class AIStudioEmbeddingProvider
         endpoint,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(options?.abortSignal && { signal: options.abortSignal }),

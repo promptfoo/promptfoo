@@ -95,7 +95,6 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,

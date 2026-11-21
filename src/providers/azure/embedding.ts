@@ -43,7 +43,6 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         }`,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,

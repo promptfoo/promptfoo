@@ -1,6 +1,5 @@
 import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import logger from '../../logger';
-import { awaitWithAbort } from '../../util/abort';
 import { loadTransformModule } from '../transformUtils';
 import { McpClientSession } from './session';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
@@ -61,8 +60,8 @@ export class MCPProvider implements ApiProvider {
   private async initialize(signal?: AbortSignal): Promise<void> {
     this.mcpClient = await this.mcpSession.initialize(signal);
 
-    if (this.config.verbose && changed) {
-      const tools = this.mcpClient!.getAllTools();
+    if (this.config.verbose) {
+      const tools = this.mcpClient.getAllTools();
       console.log(
         'MCP Provider initialized with tools:',
         tools.map((t) => t.name),
@@ -146,23 +145,11 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      const transformContext = {
+      return this.transformToolResult(result, {
         toolName,
         toolArgs: finalArgs,
         originalPayload: toolCallData,
-      };
-      try {
-        return await this.transformToolResult(result, transformContext, options?.abortSignal);
-      } catch (error) {
-        if (!options?.abortSignal?.aborted) {
-          throw error;
-        }
-        return {
-          error: 'MCP Provider error: ' + (error instanceof Error ? error.message : String(error)),
-          raw: result.raw ?? result,
-          metadata: transformContext,
-        };
-      }
+      });
     } catch (error) {
       signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -223,19 +210,17 @@ export class MCPProvider implements ApiProvider {
   async getAvailableTools() {
     await this.initialize();
 
-    return this.mcpClient!.getAllTools();
+    return this.mcpClient.getAllTools();
   }
 
   private async transformToolResult(
     result: Awaited<ReturnType<MCPClient['callTool']>>,
     context: MCPTransformResponseContext,
-    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const transform = await awaitWithAbort(this.transformResponse, signal);
-    signal?.throwIfAborted();
-    const transformedResponse = await awaitWithAbort(
-      transform(result.raw ?? result, result.content, context),
-      signal,
+    const transformedResponse = await (await this.transformResponse)(
+      result.raw ?? result,
+      result.content,
+      context,
     );
 
     return {

@@ -152,10 +152,7 @@ describe('evaluate SIGINT/abort handling', () => {
         }),
     });
 
-    const mockAddResult = vi.fn().mockImplementation(async () => {
-      // A request timeout must not close provider-wide resources while rows are being written.
-      expect(slowProvider.cleanup).not.toHaveBeenCalled();
-    });
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
     const mockEvalRecord = {
       id: 'test-eval-timeout-123',
@@ -204,9 +201,9 @@ describe('evaluate SIGINT/abort handling', () => {
         }),
       );
 
-      // The timeout aborts its request; finishing the evaluation then releases its provider.
+      // Timeout should abort the in-flight call without invoking provider-wide cleanup
       expect(vi.mocked(slowProvider.callApi).mock.calls[0]?.[2]?.abortSignal?.aborted).toBe(true);
-      expect(slowProvider.cleanup).toHaveBeenCalledOnce();
+      expect(slowProvider.cleanup).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);

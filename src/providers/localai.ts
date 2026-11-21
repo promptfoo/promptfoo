@@ -122,7 +122,6 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
         `${this.apiBaseUrl}/embeddings`,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
           },

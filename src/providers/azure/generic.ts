@@ -1,6 +1,5 @@
 import { getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
-import { awaitWithAbort } from '../../util/abort';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { throwConfigurationError } from './util';
@@ -28,7 +27,7 @@ export class AzureGenericProvider<
 
   authHeaders?: Record<string, string>;
 
-  private authInitializationPromise: Promise<void> | null = null;
+  protected initializationPromise: Promise<void> | null = null;
   private authenticationPromise: Promise<void> | null = null;
 
   /**
@@ -72,12 +71,12 @@ export class AzureGenericProvider<
     this.id = id ? () => id : this.id;
 
     const initialization = this.initialize();
-    this.authInitializationPromise = initialization;
+    this.initializationPromise = initialization;
     // Authentication starts eagerly, but a failure must not poison later
     // requests or become an unhandled rejection before the first request.
     void initialization.catch(() => {
-      if (this.authInitializationPromise === initialization) {
-        this.authInitializationPromise = null;
+      if (this.initializationPromise === initialization) {
+        this.initializationPromise = null;
       }
     });
   }
@@ -93,17 +92,16 @@ export class AzureGenericProvider<
     return this.authenticationPromise;
   }
 
-  async ensureInitialized(signal?: AbortSignal) {
-    signal?.throwIfAborted();
-    if (this.authInitializationPromise != null) {
-      await awaitWithAbort(this.authInitializationPromise, signal);
+  async ensureInitialized() {
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
     }
-    // Retry authentication if its eager initialization failed.
+    // Subclasses can use initializationPromise for other setup (such as MCP).
+    // Always finish authentication, including a retry after an earlier failure.
     if (!this.authHeaders) {
-      await awaitWithAbort(this.initialize(), signal);
+      await this.initialize();
     }
-    await awaitWithAbort(this.refreshAuthTokenIfNeeded(), signal);
-    signal?.throwIfAborted();
+    await this.refreshAuthTokenIfNeeded();
   }
 
   /**

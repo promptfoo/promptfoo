@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
-import { setTimeout as sleepWithSignal } from 'node:timers/promises';
 import fs from 'fs';
 import path from 'path';
 
@@ -1061,7 +1060,6 @@ export async function fetchWithCache<T = unknown>(
   // Only share an active transport when its deadline works for both callers.
   const inflightCacheKey = `${timeoutMs}:${getAbortSignalScopedKey(cacheKey, signal)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
-  let responsePrepared = false;
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     const rateLimitBackoff: InflightFetchResponse['rateLimitBackoff'] = { observers: new Set() };

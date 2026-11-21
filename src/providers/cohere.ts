@@ -964,7 +964,6 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
         apiUrl,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,

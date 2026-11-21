@@ -101,7 +101,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         appendOpenAiApiPath(this.getApiUrl(), 'embeddings'),
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),

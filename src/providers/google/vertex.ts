@@ -8,7 +8,6 @@ import {
   type GenAISpanContext,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { awaitWithAbort } from '../../util/abort';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { loadYaml } from '../../util/yamlLoad';
@@ -382,21 +381,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
-      return this.callClaudeApi(prompt, context, options);
+      return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt, context, options);
     } else if (this.modelName.includes('llama')) {
-      return this.callLlamaApi(prompt, context, options);
+      return this.callLlamaApi(prompt, context);
     }
     return this.callPalm2Api(prompt, context);
   }
 
-  async callClaudeApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    options?.abortSignal?.throwIfAborted();
+  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Support YAML chat prompts (legacy format used by parseChatPrompt)
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
@@ -527,15 +521,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: ClaudeResponse;
     try {
-      options?.abortSignal?.throwIfAborted();
-      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
-      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       const url = `https://${apiHost}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
         url,
         method: 'POST',
-        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
@@ -558,7 +550,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
-    let response: ProviderResponse | undefined;
     try {
       // An empty completion is a valid answer that assertions can grade;
       // only a response without a content array is malformed.
@@ -599,7 +590,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         data.usage?.cache_read_input_tokens,
         data.usage?.cache_creation_input_tokens,
       );
-      response = {
+      const response = {
         cached: false,
         output,
         tokenUsage,
@@ -619,11 +610,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
-      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
-        ...response,
         error: `Claude API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
@@ -686,7 +675,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
-      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
@@ -849,7 +837,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             method: 'POST',
             headers: requestHeaders,
             body: JSON.stringify(body),
-            signal: getRequestSignal(options?.abortSignal),
+            signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
 
           if (!res.ok) {
@@ -865,19 +853,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
           responseHeaders = res.headers;
         } else {
           // Standard mode: use OAuth and full endpoint
-          options?.abortSignal?.throwIfAborted();
-          const client = await awaitWithAbort(
-            this.getClientWithCredentials(),
-            options?.abortSignal,
-          );
-          const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
+          const client = await this.getClientWithCredentials();
+          const projectId = await this.getProjectId();
           const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
           const res = await client.request({
             url,
             method: 'POST',
-            signal: options?.abortSignal,
             data: body,
             headers: requestHeaders,
             timeout: getRequestTimeoutMs(),
@@ -1113,10 +1096,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (cache && cacheKey) {
           await cache.set(cacheKey, JSON.stringify(response));
         }
-        options?.abortSignal?.throwIfAborted();
       } catch (err) {
         return {
-          ...response,
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
         };
       }
@@ -1132,14 +1113,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
               : promptBasePath,
         },
         toolsDisabled,
-        options?.abortSignal,
       );
     } catch (error) {
-      return {
-        ...response,
-        output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
-        error: String(error),
-      };
+      return { ...response, output: undefined, error: String(error) };
     }
     return response;
   }
@@ -1193,16 +1169,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: Palm2ApiResponse;
     try {
-      options?.abortSignal?.throwIfAborted();
-      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
-      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
       const res = await client.request({
         url,
         method: 'POST',
-        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1216,7 +1190,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
-    let response: ProviderResponse | undefined;
     try {
       if (data.error) {
         return {
@@ -1231,7 +1204,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
       const output = prediction.candidates[0].content;
 
-      response = {
+      const response = {
         output,
         cached: false,
       };
@@ -1240,11 +1213,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
-      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
-        ...response,
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
@@ -1341,16 +1312,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: LlamaResponse;
     try {
-      options?.abortSignal?.throwIfAborted();
-      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
-      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       // Llama models use a different endpoint format
       const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${region}/endpoints/openapi/chat/completions`;
 
       const res = await client.request({
         url,
         method: 'POST',
-        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
@@ -1386,7 +1355,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
-    let response: ProviderResponse | undefined;
     try {
       // Extract the completion text; an empty string is a valid completion.
       const output = data?.choices?.[0]?.message?.content;
@@ -1417,11 +1385,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
-      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
-        ...response,
         error: `Llama API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }

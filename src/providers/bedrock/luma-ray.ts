@@ -6,7 +6,6 @@
  */
 
 import logger from '../../logger';
-import { awaitWithAbort } from '../../util/abort';
 import { ellipsize } from '../../util/text';
 import { AwsBedrockGenericProvider, loadBedrockImageData } from './base';
 import { runBedrockVideoJob, storeBedrockVideo } from './videoJob';

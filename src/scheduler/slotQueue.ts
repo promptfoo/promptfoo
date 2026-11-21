@@ -99,10 +99,6 @@ export class SlotQueue {
       this.waiting.push(request);
       abortSignal?.addEventListener('abort', onAbort, { once: true });
 
-      signal?.addEventListener('abort', onAbort, { once: true });
-      if (signal?.aborted) {
-        onAbort();
-      }
       // Immediately try to process queue (synchronous, no race)
       this.processQueue();
       if (abortSignal?.aborted) {

@@ -57,7 +57,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    callApiOptions?.abortSignal?.throwIfAborted();
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -128,7 +127,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         traceparent: context?.traceparent,
         requestBody: prompt,
       },
-      () => this.callApiInternal(body, context, callApiOptions),
+      () => this.callApiInternal(body, context),
       extractProviderResponseAttributes,
     );
   }
@@ -136,7 +135,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   private async callApiInternal(
     body: Record<string, unknown>,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let data,
       cached = false,
@@ -146,7 +144,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         appendOpenAiApiPath(this.getApiUrl(), 'completions'),
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),

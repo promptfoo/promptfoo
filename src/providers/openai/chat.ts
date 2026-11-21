@@ -1,7 +1,6 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { awaitWithAbort } from '../../util/abort';
 import {
   DEFINITIVE_BILLING_ERROR_CODES,
   formatRateLimitErrorMessage,
@@ -18,7 +17,7 @@ import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
-import { McpClientSession } from '../mcp/session';
+import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import {
@@ -453,7 +452,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       abortSignal,
       callbacks: config.functionToolCallbacks,
       cache: this.loadedFunctionCallbacks,
-      signal,
     });
   }
 
@@ -834,11 +832,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     let prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>;
     try {
-      prepared = await awaitWithAbort(
-        this.getOpenAiBody(prompt, context, callApiOptions),
-        callApiOptions?.abortSignal,
-      );
-      callApiOptions?.abortSignal?.throwIfAborted();
+      prepared = await this.getOpenAiBody(prompt, context, callApiOptions);
     } catch (error) {
       return withGenAISpan(
         spanContext,
@@ -866,7 +860,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
     apiKey?: string,
   ): Promise<ProviderResponse> {
-    callApiOptions?.abortSignal?.throwIfAborted();
     const { body, config } = prepared;
     const getAuthHeaders = this.getRequestAuthentication();
     throwIfAborted(callApiOptions?.abortSignal);
@@ -1244,17 +1237,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
-      completedResponse = {
-        output,
-        tokenUsage: getTokenUsage(data, cached),
-        cached,
-        latencyMs,
-        logProbs,
-        ...(finishReason && { finishReason }),
-        cost,
-        guardrails: { flagged: contentFiltered },
-        metadata: providerMetadata,
-      };
+      // Executed MCP tool calls, published as `metadata.toolCalls` so assertions can
+      // check tool routing and arguments without wrapping the provider.
+      const mcpToolCalls: McpToolCallEntry[] = [];
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
@@ -1404,8 +1389,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         throwIfAborted(callApiOptions?.abortSignal);
         if (hasSuccessfulCallback && results.length > 0) {
           return {
-            ...completedResponse,
             output: results.join('\n'),
+            tokenUsage: getTokenUsage(data, cached),
+            cached,
+            latencyMs,
+            logProbs,
+            ...(finishReason && { finishReason }),
+            cost,
+            guardrails: { flagged: contentFiltered },
             metadata: {
               ...providerMetadata,
               http: {
@@ -1430,7 +1421,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       if (message.audio) {
         return {
-          ...completedResponse,
           output: message.audio.transcript || '',
           audio: {
             id: message.audio.id,
@@ -1439,6 +1429,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             transcript: message.audio.transcript,
             format: message.audio.format || body.audio?.format || 'wav',
           },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
+          logProbs,
+          ...(finishReason && { finishReason }),
+          cost,
+          guardrails: { flagged: contentFiltered },
           metadata: {
             ...providerMetadata,
             http: {
@@ -1454,8 +1451,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const citations = getChatSearchCitations(message.annotations, output);
 
       return {
-        ...completedResponse,
         output,
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        latencyMs,
+        logProbs,
+        ...(finishReason && { finishReason }),
+        cost,
+        guardrails: { flagged: contentFiltered },
         metadata: {
           ...providerMetadata,
           http: {
@@ -1479,10 +1482,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         await deleteFromCache?.();
       }
       return {
-        ...completedResponse,
-        ...(callApiOptions?.abortSignal?.aborted &&
-          results.length > 0 && { output: results.join('\n') }),
-        ...(completedResponse && { raw: data }),
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         ...(errorOrigin === 'tool' && completedModelAccounting),
         metadata: {

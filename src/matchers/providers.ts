@@ -110,6 +110,8 @@ export function callGradingProvider<T extends ProviderResponse>(
         createProviderRateLimitOptions(executionContext.abortSignal),
       );
     }
+
+    return callProvider();
   };
 
   return runProviderCallWithAbort(
@@ -269,7 +271,6 @@ export async function getGradingProvider(
       finalProvider = defaultProvider;
     }
   }
-  await providerRegistry.adopt(finalProvider);
   return finalProvider;
 }
 

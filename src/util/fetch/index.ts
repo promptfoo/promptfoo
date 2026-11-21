@@ -226,13 +226,11 @@ export async function fetchWithProxy(
   }
 
   // Combine abort signals: incoming abortSignal parameter + any signal in options
-  const requestSignal =
-    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   const combinedSignal = abortSignal
-    ? requestSignal
-      ? AbortSignal.any([requestSignal, abortSignal])
+    ? options.signal
+      ? AbortSignal.any([options.signal, abortSignal])
       : abortSignal
-    : requestSignal;
+    : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
@@ -296,15 +294,11 @@ export async function fetchWithProxy(
   };
 
   // Support custom CA certificates
-  combinedSignal?.throwIfAborted();
   const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, {
-        encoding: 'utf8',
-        signal: combinedSignal ?? undefined,
-      });
+      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
       if (logEnabled) {
         logger.debug(`Using custom CA certificate from ${resolvedPath}`);

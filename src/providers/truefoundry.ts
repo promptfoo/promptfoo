@@ -8,7 +8,6 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';

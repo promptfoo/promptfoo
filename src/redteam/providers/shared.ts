@@ -7,7 +7,6 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { providerRegistry } from '../../providers/providerRegistry';
 import {
   createProviderRateLimitOptions,
   getProviderCallExecutionContext,
@@ -191,8 +190,7 @@ class RedteamProviderManager {
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
-  private async wrapProvider(provider: ApiProvider): Promise<ApiProvider> {
-    await providerRegistry.adopt(provider);
+  private wrapProvider(provider: ApiProvider): ApiProvider {
     if (this.rateLimitRegistry) {
       return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
     }

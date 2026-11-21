@@ -123,9 +123,12 @@ export class ResponsesProcessor {
 
       if (processedOutput.isRefusal) {
         return {
-          ...response,
           output: processedOutput.refusal,
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
+          cached,
+          ...(cost === undefined ? {} : { cost }),
+          raw: data,
           metadata: extractMetadata(data, processedOutput),
           ...(finishReason && { finishReason }),
         };
@@ -146,8 +149,11 @@ export class ResponsesProcessor {
       }
 
       const result: ProviderResponse = {
-        ...response,
         output: finalOutput,
+        tokenUsage: getResponsesTokenUsage(data, cached),
+        cached,
+        ...(cost === undefined ? {} : { cost }),
+        raw: data,
         metadata: extractMetadata(data, processedOutput),
         ...(finishReason && { finishReason }),
       };
@@ -359,8 +365,6 @@ export class ResponsesProcessor {
       functionResult = await this.config.functionCallbackHandler.processCalls(
         item,
         context.config.functionToolCallbacks,
-        undefined,
-        { abortSignal: context.abortSignal },
       );
     }
 

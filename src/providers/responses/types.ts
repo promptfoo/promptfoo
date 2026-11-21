@@ -21,7 +21,6 @@ export interface ProcessorContext extends ResponseProcessingOptions {
 export interface ResponseProcessingOptions {
   multiAgent?: boolean;
   suppressReasoningOutput?: boolean;
-  abortSignal?: AbortSignal;
 }
 
 export interface ResponseOutputItem {

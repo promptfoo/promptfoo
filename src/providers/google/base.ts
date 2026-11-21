@@ -15,7 +15,6 @@
  */
 
 import logger from '../../logger';
-import { awaitWithAbort } from '../../util/abort';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
@@ -434,11 +433,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Make an API call with the given prompt.
    * Must be implemented by subclasses.
    */
-  abstract callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
+  abstract callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse>;
 
   /**
    * Get the API key for this provider.
@@ -509,7 +504,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   protected async getAllTools(
     context?: CallApiContextParams,
-    options: { skipExecutableToolFiles?: boolean; abortSignal?: AbortSignal } = {},
+    options: { skipExecutableToolFiles?: boolean } = {},
   ): Promise<Tool[]> {
     await this.initializeMCP();
     // Get MCP tools if client is available
@@ -557,9 +552,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     args: string,
     config: GoogleProviderConfig,
     callId?: string,
-    signal?: AbortSignal,
   ): Promise<any> {
-    signal?.throwIfAborted();
     try {
       const callbacks = config.functionToolCallbacks;
       const callbackRef =
@@ -613,7 +606,6 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     output: ProviderResponse['output'],
     config: GoogleProviderConfig,
     toolsDisabled: boolean,
-    signal?: AbortSignal,
   ): Promise<ProviderResponse['output']> {
     if (toolsDisabled) {
       return output;
@@ -702,21 +694,29 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     const results = [];
     for (const { functionName, args, callId } of preparedCalls) {
       try {
-        results.push(
-          await this.executeFunctionCallback(functionName, args, config, callId, signal),
-        );
+        results.push(await this.executeFunctionCallback(functionName, args, config, callId));
       } catch (error) {
-        throw new GoogleFunctionCallbackError(
+        throw new Error(
           `Function callback '${functionName}' failed after ${results.length} completed callback(s). ` +
             `Check for side effects before retrying: ${String(error)}`,
-          results.length ? joinCallbackResults(results) : undefined,
         );
       }
     }
     if (results.length === 1) {
       return results[0] ?? '';
     }
-    return joinCallbackResults(results);
+    return results
+      .map((result) => {
+        if (typeof result === 'string') {
+          return result;
+        }
+        try {
+          return JSON.stringify(result) ?? String(result);
+        } catch {
+          return String(result);
+        }
+      })
+      .join('\n');
   }
 
   /**

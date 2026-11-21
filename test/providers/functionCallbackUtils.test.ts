@@ -895,7 +895,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'list_resources', arguments: '{}' };
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (list_resources): Resource list: [file1.txt, file2.txt]',
         isError: false,
@@ -1013,7 +1013,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'shared_name', arguments: '{}' };
       const result = await handler.processCall(call, callbacks);
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('shared_name', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('shared_name', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (shared_name): MCP tool result',
         isError: false,
@@ -1045,7 +1045,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'no_args_tool', arguments: '' };
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('no_args_tool', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('no_args_tool', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (no_args_tool): success with no args',
         isError: false,
@@ -1063,7 +1063,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'missing_args_tool' }; // No arguments property
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('missing_args_tool', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('missing_args_tool', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (missing_args_tool): success with missing args',
         isError: false,
@@ -1140,11 +1140,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'direct_args_tool', arguments: { param: 'value' } }; // Direct object, not string
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith(
-        'direct_args_tool',
-        { param: 'value' },
-        undefined,
-      );
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('direct_args_tool', { param: 'value' });
       expect(result).toEqual({
         output: 'MCP Tool Result (direct_args_tool): success with direct args',
         isError: false,

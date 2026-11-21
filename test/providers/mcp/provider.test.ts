@@ -155,15 +155,11 @@ describe('MCPProvider', () => {
       createContext({ tool: 'lookup_user', args: { id: '123', user_role: 'admin' } }),
     );
 
-    expect(mcpClientMock.callTool).toHaveBeenCalledWith(
-      'lookup_user',
-      {
-        session_id: 'sess-1',
-        user_role: 'admin',
-        id: '123',
-      },
-      undefined,
-    );
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'sess-1',
+      user_role: 'admin',
+      id: '123',
+    });
   });
 
   it('keeps tool argument values out of debug logs and credentials out of saved metadata', async () => {
@@ -195,17 +191,13 @@ describe('MCPProvider', () => {
         createContext({ tool: 'lookup_user', args: { apiKey: promptKey, id: '123' } }),
       );
 
-      expect(mcpClientMock.callTool).toHaveBeenCalledWith(
-        'lookup_user',
-        {
-          sessionToken: configuredToken,
-          custom: customValue,
-          nested: { password: configuredPassword },
-          apiKey: promptKey,
-          id: '123',
-        },
-        undefined,
-      );
+      expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+        sessionToken: configuredToken,
+        custom: customValue,
+        nested: { password: configuredPassword },
+        apiKey: promptKey,
+        id: '123',
+      });
       expect(transform).toHaveBeenCalledOnce();
       expect(result.metadata).toEqual({
         toolName: 'lookup_user',
@@ -240,14 +232,10 @@ describe('MCPProvider', () => {
     });
     await provider.callApi('', createContext({ tool: 'lookup_user', args: { id: '123' } }));
 
-    expect(mcpClientMock.callTool).toHaveBeenCalledWith(
-      'lookup_user',
-      {
-        session_id: 'from-options',
-        id: '123',
-      },
-      undefined,
-    );
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'from-options',
+      id: '123',
+    });
   });
 
   it('applies defaults to direct tool calls and reports the arguments actually sent', async () => {
@@ -466,28 +454,6 @@ describe('MCPProvider', () => {
         toolName: 'lookup_user',
         toolArgs: { id: '123' },
       },
-    });
-  });
-
-  it('preserves completed tool evidence when response transformation is cancelled', async () => {
-    mcpClientMock.callTool.mockResolvedValue({ content: 'response' });
-    const provider = new MCPProvider({
-      config: {
-        enabled: true,
-        transformResponse: 'async () => new Promise(() => {})',
-      },
-    });
-    const controller = new AbortController();
-    const call = provider.callApi('', createContext({ tool: 'slow' }), {
-      abortSignal: controller.signal,
-    });
-    await vi.waitFor(() => expect(mcpClientMock.callTool).toHaveBeenCalledOnce());
-    controller.abort(new Error('cancelled transform'));
-
-    await expect(call).resolves.toMatchObject({
-      error: 'MCP Provider error: cancelled transform',
-      raw: { content: 'response' },
-      metadata: { toolName: 'slow', toolArgs: {} },
     });
   });
 

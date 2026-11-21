@@ -1,4 +1,3 @@
-import { setTimeout as delay } from 'node:timers/promises';
 import { EventEmitter } from 'events';
 
 import {
@@ -123,7 +122,6 @@ export class ProviderRateLimitState extends EventEmitter {
     callFn: (onResponseHeaders?: ResponseHeadersObserver) => Promise<T>,
     options: ProviderExecuteOptions<T>,
   ): Promise<T> {
-    options.abortSignal?.throwIfAborted();
     this.totalRequests++;
     let attempt = 0;
     const retryResults: T[] = [];

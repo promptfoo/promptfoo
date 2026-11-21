@@ -111,7 +111,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const result = await handler.processCall(toolCall, {});
 
     // Verify MCP tool was called
-    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {}, undefined);
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
 
     // Verify result format matches expected pattern (not [object Object])
     expect(result).toEqual({
@@ -180,7 +180,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const result = await handler.processCall(toolCall, functionCallbacks);
 
     // Should call MCP tool, not function callback
-    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {}, undefined);
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
     expect(functionCallbacks.list_resources).not.toHaveBeenCalled();
 
     // Result should be from MCP tool

@@ -404,11 +404,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       signal?.throwIfAborted();
       requestParams = withTurnContainer(requestParams, responses);
       const message = shouldStream
-        ? await awaitWithAbort(
-            finalMessageWithStreamedStopDetails(
-              await this.anthropic.messages.stream(requestParams, requestOptions),
-            ),
-            signal,
+        ? await finalMessageWithStreamedStopDetails(
+            await this.anthropic.messages.stream(requestParams, requestOptions),
           )
         : ((await this.anthropic.messages.create(
             requestParams,
@@ -511,87 +508,68 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let messages = params.messages;
     let executedMcpToolCalls = 0;
 
-    try {
-      for (let iteration = 0; iteration < maxToolCalls; iteration++) {
-        signal?.throwIfAborted();
-        const responseToolUses = response.content.filter(
-          (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
+    for (let iteration = 0; iteration < maxToolCalls; iteration++) {
+      signal?.throwIfAborted();
+      const responseToolUses = response.content.filter(
+        (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
+      );
+      const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
+
+      if (toolUses.length === 0) {
+        return { response: withMergedAnthropicUsage(response, responses), responses, toolCalls };
+      }
+
+      if (toolUses.length !== responseToolUses.length) {
+        logger.warn(
+          'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
         );
-        const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
+        return { response: withMergedAnthropicUsage(response, responses), responses, toolCalls };
+      }
 
-        if (toolUses.length === 0) {
-          return { response: withMergedAnthropicUsage(response, responses), responses, toolCalls };
-        }
-
-        if (toolUses.length !== responseToolUses.length) {
-          logger.warn(
-            'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
-          );
-          return { response: withMergedAnthropicUsage(response, responses), responses, toolCalls };
-        }
-
-        if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
-          return {
-            response: withMergedAnthropicUsage(response, responses),
-            responses,
-            error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
-            toolCalls,
-          };
-        }
-
-        executedMcpToolCalls += toolUses.length;
-        const completedToolCalls: McpToolCallEntry[] = [];
-        let toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[];
-        try {
-          toolResultBlocks = await Promise.all(
-            toolUses.map(async (toolUse, index) => {
-              const result = await this.callMcpToolForAnthropic(toolUse, signal);
-              completedToolCalls[index] = {
-                id: toolUse.id,
-                name: toolUse.name,
-                input: coerceMcpToolInput(toolUse.input),
-                output: result.content,
-                is_error: result.is_error ?? false,
-              };
-              return result;
-            }),
-          );
-        } finally {
-          // Keep completed tools in request order if another parallel call aborts.
-          toolCalls.push(...completedToolCalls.filter(Boolean));
-        }
-        signal?.throwIfAborted();
-
-        messages = [
-          ...messages,
-          {
-            role: 'assistant',
-            content: response.content as Anthropic.Messages.ContentBlockParam[],
-          },
-          {
-            role: 'user',
-            content: toolResultBlocks,
-          },
-        ];
-
-        response = await this.sendMessage(
-          getMcpContinuationParams(params, messages),
-          headers,
-          shouldStream,
+      if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
+        return {
+          response: withMergedAnthropicUsage(response, responses),
           responses,
-          signal,
-        );
+          error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+          toolCalls,
+        };
       }
-    } catch (error) {
-      if (!signal?.aborted) {
-        throw error;
-      }
-      return {
-        response: withMergedAnthropicUsage(response, responses),
+
+      executedMcpToolCalls += toolUses.length;
+      const toolResultBlocks = await Promise.all(
+        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
+      );
+
+      toolUses.forEach((toolUse, index) => {
+        const resultBlock = toolResultBlocks[index];
+        toolCalls.push({
+          id: toolUse.id,
+          name: toolUse.name,
+          input: coerceMcpToolInput(toolUse.input),
+          output: resultBlock.content,
+          is_error: resultBlock.is_error ?? false,
+        });
+      });
+
+      messages = [
+        ...messages,
+        {
+          role: 'assistant',
+          content: response.content as Anthropic.Messages.ContentBlockParam[],
+        },
+        {
+          role: 'user',
+          content: toolResultBlocks,
+        },
+      ];
+
+      response = await this.sendMessage(
+        getMcpContinuationParams(params, messages),
+        headers,
+        shouldStream,
         responses,
-        toolCalls,
-        error: error instanceof Error ? error.message : String(error),
-      };
+        signal,
+      );
     }
 
     const unresolvedToolUses = response.content.filter(
@@ -612,13 +590,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   private async callMcpToolForAnthropic(
     toolUse: Anthropic.Messages.ToolUseBlock,
-    signal?: AbortSignal,
   ): Promise<Anthropic.Messages.ToolResultBlockParam> {
     try {
       const result = await this.mcpClient!.callTool(
         toolUse.name,
         coerceMcpToolInput(toolUse.input),
-        signal,
       );
 
       if (isMcpErrorResult(result)) {
@@ -636,7 +612,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         content: normalizeMcpToolContent(result.content),
       };
     } catch (error) {
-      signal?.throwIfAborted();
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
@@ -948,11 +923,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Load and process tools from config (handles both external files and inline tool definitions)
-    const loadedTools =
-      (await awaitWithAbort(
-        maybeLoadToolsFromExternalFile(config.tools, context?.vars),
-        options?.abortSignal,
-      )) || [];
+    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
     // Transform tools to Anthropic format if needed
     const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
     const { processedTools: processedConfigTools, requiredBetaFeatures } =
@@ -1171,11 +1142,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     if (cache && cacheKey && ephemeralCacheKey) {
       // Try to get the cached response
-      const cachedResponse = await awaitWithAbort(
-        this.getCachedResponse(cache, cacheKey, ephemeralCacheKey, cacheClearGeneration),
-        options?.abortSignal,
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
       );
-      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         try {
           // Stays inside this try: the catch below is the legacy plain-string cache fallback,
@@ -1197,7 +1169,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     const responses: Anthropic.Messages.Message[] = [];
-    let completedResponse: ProviderResponse | undefined;
     try {
       const signal = options?.abortSignal;
       const initialMessage = await this.sendMessage(
@@ -1278,31 +1249,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         processedOutputFormat,
         false,
       );
-      completedResponse = mcpMetadata
+      return mcpMetadata
         ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
         : response;
-      if (shouldUseResponseCache && message.stop_reason !== 'pause_turn') {
-        try {
-          options?.abortSignal?.throwIfAborted();
-          await awaitWithAbort(
-            this.setCachedResponse(
-              cache,
-              cacheKey,
-              ephemeralCacheKey,
-              cacheClearGeneration,
-              getCacheTtlMs(),
-              JSON.stringify(message),
-            ),
-            options?.abortSignal,
-          );
-        } catch (err) {
-          options?.abortSignal?.throwIfAborted();
-          logger.error(`Failed to cache response: ${String(err)}`);
-        }
-      }
-
-      options?.abortSignal?.throwIfAborted();
-      return completedResponse;
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
@@ -1314,9 +1263,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
       const lastResponse = responses[responses.length - 1];
       return {
-        ...completedResponse,
         error,
-        ...(!completedResponse && lastResponse
+        ...(lastResponse
           ? {
               tokenUsage: getTokenUsage(withMergedAnthropicUsage(lastResponse, responses), false),
               cost: this.calculateMessageCosts(config, responses),

@@ -601,23 +601,6 @@ describe('OllamaChatProvider', () => {
     vi.resetAllMocks();
   });
 
-  it('stops waiting when tool loading is cancelled', async () => {
-    const loader = vi
-      .spyOn(util, 'maybeLoadToolsFromExternalFile')
-      .mockImplementationOnce(() => new Promise(() => {}));
-    const controller = new AbortController();
-    const provider = new OllamaChatProvider('llama3.3', { config: { tools: [] } });
-    try {
-      const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
-      await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
-      controller.abort(new Error('cancelled tool loader'));
-      await expect(call).rejects.toThrow('cancelled tool loader');
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    } finally {
-      loader.mockRestore();
-    }
-  });
-
   it('should construct with model name and options', () => {
     const provider = new OllamaChatProvider('llama3.3', createCustomProviderOptions());
     expect(provider.modelName).toBe('llama3.3');

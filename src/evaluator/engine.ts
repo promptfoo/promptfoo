@@ -70,7 +70,6 @@ import { warnEmptyFilterRange } from '../util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
-  GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from '../util/gradingProvider';
@@ -1007,49 +1006,6 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
-function getScopedProviders(testSuite: TestSuite): Set<ApiProvider> {
-  const providers = new Set(testSuite.providers);
-  const addProvider = (candidate: unknown) => {
-    if (isApiProvider(candidate)) {
-      providers.add(candidate);
-    } else if (candidate && typeof candidate === 'object') {
-      for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-        const nested = (candidate as Record<string, unknown>)[type];
-        if (isApiProvider(nested)) {
-          providers.add(nested);
-        }
-      }
-    }
-  };
-  const addAssertions = (assertions: AssertionOrSet[] | undefined) => {
-    for (const assertion of assertions ?? []) {
-      if (assertion.type === 'assert-set') {
-        addAssertions(assertion.assert);
-      } else {
-        addProvider(assertion.provider);
-      }
-    }
-  };
-  const addTest = (test: AtomicTestCase) => {
-    addProvider(test.provider);
-    addProvider(test.options?.provider);
-    addAssertions(test.assert);
-  };
-  const defaultTest = getDefaultTest(testSuite);
-  if (defaultTest) {
-    addTest(defaultTest as AtomicTestCase);
-  }
-  for (const test of testSuite.tests ?? []) {
-    addTest(test as AtomicTestCase);
-  }
-  for (const scenario of testSuite.scenarios ?? []) {
-    for (const test of [...(scenario.tests ?? []), ...scenario.config]) {
-      addTest(test as AtomicTestCase);
-    }
-  }
-  return providers;
-}
-
 function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   const tests = getInitialTests(testSuite);
   if (!testSuite.scenarios?.length) {
@@ -1550,7 +1506,6 @@ function createRunEvalOption({
     isRedteam: testSuite.redteam != null,
     concurrency,
     abortSignal: providerAbortSignal,
-    gradingAbortSignal: providerAbortSignal,
     evalId,
     rateLimitRegistry,
   };
@@ -1911,7 +1866,6 @@ function adjustConcurrencyForSerialFeatures({
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
   onRowsReady?: () => void;
-  onTargetResponse?: (row: EvaluateResult) => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
   shouldSkipStaleRows?: () => boolean;
@@ -2447,7 +2401,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading = false,
       onRowsReady,
-      onTargetResponse,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -2463,7 +2416,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             deferGrading,
             deferredGradingAbortSignal: context.deferredGradingAbortSignal,
             onRowsReady,
-            onTargetResponse,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
@@ -2482,14 +2434,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       deferGrading,
       deferredGradingAbortSignal,
       onRowsReady,
-      onTargetResponse,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       deferredGradingAbortSignal?: AbortSignal;
       onRowsReady?: () => void;
-      onTargetResponse?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -2519,10 +2469,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     for (const row of rows) {
-      if (
-        shouldSkipStaleRows?.() ||
-        (this.store.persisted && context.options.abortSignal?.aborted && !row.response)
-      ) {
+      if (shouldSkipStaleRows?.()) {
         return;
       }
 
@@ -2664,14 +2611,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     let timeoutId: NodeJS.Timeout | undefined;
-    let timeoutFallback: NodeJS.Immediate | undefined;
     let didTimeout = false;
-    let completedTarget: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
-      if (timeoutFallback) {
-        clearImmediate(timeoutFallback);
-        timeoutFallback = undefined;
-      }
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
@@ -2679,67 +2620,31 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     try {
-      const rows = await Promise.race([
+      return await Promise.race([
         this.processEvalStep(
           evalStepWithSignal,
           index,
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
-            onTargetResponse: (row) => {
-              if (!didTimeout) {
-                completedTarget = row;
-              }
-            },
             providerCallQueue,
-            shouldSkipStaleRows: () => didTimeout || abortController.signal.aborted,
+            shouldSkipStaleRows: () => didTimeout,
           },
           context,
         ),
         new Promise<void>((_, reject) => {
           timeoutId = setTimeout(() => {
-            const error = new DOMException(
-              `Evaluation timed out after ${timeoutMs}ms`,
-              'AbortError',
-            );
-            abortController.abort(error);
-            // Allow cancellation-aware providers to return completed billing before the
-            // fallback for legacy providers that never settle after abort.
-            timeoutFallback = setImmediate(() => {
-              didTimeout = true;
-              reject(error);
-            });
+            didTimeout = true;
+            abortController.abort();
+            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
           }, timeoutMs);
         }),
       ]);
-      if (abortController.signal.aborted) {
-        didTimeout = true;
-        throw abortController.signal.reason;
-      }
-      return rows;
     } catch (error) {
       if (!didTimeout) {
         throw error;
       }
-      if (completedTarget) {
-        await this.processEvalRows(
-          evalStep,
-          index,
-          [
-            {
-              ...completedTarget,
-              error: `Evaluation timed out after ${timeoutMs}ms`,
-              success: false,
-              score: 0,
-              failureReason: ResultFailureReason.ERROR,
-            },
-          ],
-          undefined,
-          context,
-        );
-      } else {
-        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
-      }
+      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();

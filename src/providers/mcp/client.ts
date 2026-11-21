@@ -140,7 +140,6 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
-  private pendingConnections = new Set<() => Promise<void>>();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: McpConfigParsed;
   private transports: Map<
@@ -217,8 +216,7 @@ export class MCPClient {
       name: 'promptfoo-MCP',
       version: '1.0.0',
       description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
-    };
-    let client = new Client(clientInfo);
+    });
 
     let transport:
       | StdioClientTransport
@@ -242,7 +240,6 @@ export class MCPClient {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         signal.throwIfAborted();
         // NPM package or other command execution
-        signal?.throwIfAborted();
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args ?? [],
@@ -320,7 +317,6 @@ export class MCPClient {
           await client.connect(transport, requestOptions);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
-          signal?.throwIfAborted();
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
@@ -534,26 +530,6 @@ export class MCPClient {
     }
 
     throw new Error(`Tool ${name} not found in any connected MCP server`);
-  }
-
-  private async closeConnection(
-    client?: Client,
-    transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
-  ): Promise<void> {
-    // Start both closes so a stalled transport cannot prevent client teardown.
-    await Promise.all(
-      [transport, client].map(async (resource) => {
-        try {
-          await resource?.close();
-        } catch (error) {
-          if (this.isDebugEnabled) {
-            logger.error(
-              `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        }
-      }),
-    );
   }
 
   async cleanup(): Promise<void> {

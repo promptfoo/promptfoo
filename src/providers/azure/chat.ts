@@ -6,7 +6,6 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { awaitWithAbort } from '../../util/abort';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -278,10 +277,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const loadedTools = config.tools
-      ? (await awaitWithAbort(
-          maybeLoadToolsFromExternalFile(config.tools, context?.vars),
-          callApiOptions?.abortSignal,
-        )) || []
+      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
     // Transform tools to OpenAI format if needed
     const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
@@ -464,7 +460,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
-    callApiOptions?.abortSignal?.throwIfAborted();
 
     let data;
     let cached = false;
@@ -489,7 +484,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         url,
         {
           method: 'POST',
-          signal: callApiOptions?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
@@ -547,46 +541,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let logProbs: any;
     let finishReason: string;
 
-    let completedResponse: ProviderResponse | undefined;
     try {
-      completedResponse = {
-        tokenUsage: cached
-          ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
-          : {
-              total: data.usage?.total_tokens,
-              prompt: data.usage?.prompt_tokens,
-              completion: data.usage?.completion_tokens,
-              ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
-                cached: data.usage.prompt_tokens_details.cached_tokens,
-              }),
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
-            },
-        cached,
-        latencyMs,
-        cost: calculateAzureCost(
-          config.modelName ?? this.deploymentName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-          data.usage?.prompt_tokens_details?.cached_tokens,
-          data.usage?.prompt_tokens_details?.audio_tokens,
-          data.usage?.completion_tokens_details?.audio_tokens,
-          data.usage?.prompt_tokens_details?.image_tokens,
-          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
-          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
-          data.usage?.completion_tokens_details?.image_tokens,
-        ),
-      };
       if (data.error) {
         // Was the input prompt deemed inappropriate?
         if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
@@ -652,15 +607,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               allCalls.push(functionCall);
             }
 
-            completedResponse.output = allCalls.length === 1 ? allCalls[0] : allCalls;
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
-              undefined,
-              callApiOptions,
             );
-            completedResponse.output = output;
-            callApiOptions?.abortSignal?.throwIfAborted();
           } else {
             // No callbacks configured, return raw tool/function calls
             // A confirmed content-filter block is intentionally empty, not a
@@ -686,7 +636,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       const completionDetails = data.usage && getOpenAICompletionTokenDetails(data.usage);
       return {
-        ...completedResponse,
         output,
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
@@ -725,7 +674,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     } catch (err) {
       return {
-        ...completedResponse,
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }

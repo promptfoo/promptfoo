@@ -118,8 +118,7 @@ export interface CallApiContextParams {
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
   /**
-   * Request-scoped cancellation, forwarded to supported transports, retries, and polling.
-   * Legacy/custom providers may ignore this optional option; it does not cancel an accepted remote job.
+   * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
   /**
@@ -179,11 +178,7 @@ export interface ApiProvider extends MinimalApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
 }
 
 /** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */
@@ -197,12 +192,7 @@ export interface CancellableEmbeddingProvider extends ApiEmbeddingProvider {
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
-  callSimilarityApi: (
-    reference: string,
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderSimilarityResponse>;
+  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
 }
 
 export interface ApiClassificationProvider extends ApiProvider {

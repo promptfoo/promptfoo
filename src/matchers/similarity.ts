@@ -1,14 +1,12 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
-import { awaitWithAbort } from '../util/abort';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callEmbeddingProvider,
   callGradingProvider,
   getAndCheckProvider,
   getRemoteGradingContext,
-  isGradingCancellation,
   shouldUseRemoteGrading,
 } from './providers';
 import {

@@ -232,7 +232,6 @@ export async function getOAuthTokenWithExpiry(
     }
     tokenUrl = await discoverTokenEndpoint(serverUrl, signal);
   }
-  signal?.throwIfAborted();
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);

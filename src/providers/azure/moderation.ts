@@ -3,7 +3,6 @@ import crypto from 'node:crypto';
 import { getCache, isCacheEnabled } from '../../cache';
 import { type EnvVarKey, getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
-import { awaitWithAbort } from '../../util/abort';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
@@ -12,8 +11,6 @@ import { AzureGenericProvider } from './generic';
 
 import type {
   ApiModerationProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types/index';
@@ -205,11 +202,8 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   async callModerationApi(
     _userPrompt: string,
     assistantResponse: string,
-    _context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
-    options?.abortSignal?.throwIfAborted();
-    await this.ensureInitialized(options?.abortSignal);
+    await this.ensureInitialized();
 
     const apiKey =
       this.configWithHeaders.apiKey || this.getContentSafetyApiKey() || this.getApiKeyOrThrow();
@@ -245,9 +239,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         assistantResponse,
       );
       const cache = await getCache();
-      options?.abortSignal?.throwIfAborted();
-      const cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
-      options?.abortSignal?.throwIfAborted();
+      const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
@@ -255,7 +247,6 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       }
     }
 
-    let completedResponse: ProviderModerationResponse | undefined;
     try {
       const cleanEndpoint = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
       const url = `${cleanEndpoint}/contentsafety/text:analyze?api-version=${this.apiVersion}`;
@@ -275,12 +266,17 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         ...(this.configWithHeaders.passthrough || {}),
       };
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+
       const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: getRequestSignal(options?.abortSignal),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -307,19 +303,15 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
       const data = await response.json();
       const result = parseAzureModerationResponse(data);
-      completedResponse = result;
 
       if (useCache && cacheKey) {
-        options?.abortSignal?.throwIfAborted();
         const cache = await getCache();
-        options?.abortSignal?.throwIfAborted();
-        await awaitWithAbort(cache.set(cacheKey, result), options?.abortSignal);
+        await cache.set(cacheKey, result);
       }
 
-      options?.abortSignal?.throwIfAborted();
       return result;
     } catch (err) {
-      return { ...completedResponse, ...handleApiError(err) };
+      return handleApiError(err);
     }
   }
 }

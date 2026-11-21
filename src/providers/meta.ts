@@ -662,13 +662,12 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   override async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(missingMetaApiKeyMessage(this.config as MetaMessagesConfig));
     }
 
-    const response = await super.callApi(prompt, context, options);
+    const response = await super.callApi(prompt, context);
 
     // The base class bills usage-bearing errors (e.g. an MCP loop that
     // exceeded max_tool_calls), so preserve that completed work's cost.
