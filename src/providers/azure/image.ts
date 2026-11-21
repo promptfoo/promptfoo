@@ -30,7 +30,6 @@ import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import invariant from '../../util/invariant';
 import { renderVarsInObject } from '../../util/render';
-import { isCredentialHeader } from '../../util/sanitizer';
 import { getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
 import {
   DEFAULT_AZURE_MAI_IMAGE_API_PATH,
@@ -146,35 +145,6 @@ export async function loadMaiEditImage(
 /** Form values are strings; serialize passthrough booleans, numbers and objects. */
 function toFormValue(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
-}
-
-/**
- * Cache key for a multipart edit request, which `fetchWithCache` can't derive from
- * a FormData body. It covers the URL, every form field and each image's bytes
- * (by hash), plus custom headers. Authentication headers, and custom headers
- * that look like credentials, are left out so no secret reaches the cache.
- */
-export function getMaiImageEditCacheKey(
-  url: string,
-  fields: [string, string][],
-  images: MaiEditImage[],
-  headers: Record<string, string> = {},
-): string {
-  const sortEntries = (entries: [string, string][]) =>
-    [...entries].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  const cacheHeaders = sortEntries(
-    Object.entries(headers)
-      .filter(([name, value]) => !isCredentialHeader(name, value))
-      .map(([name, value]): [string, string] => [name.toLowerCase(), value]),
-  );
-  return `azure-mai-image-edit:${sha256(
-    JSON.stringify({
-      url,
-      fields: sortEntries(fields),
-      images: images.map(({ bytes, mimeType }) => [mimeType, sha256(bytes)]),
-      headers: cacheHeaders,
-    }),
-  )}`;
 }
 
 /**
@@ -298,12 +268,23 @@ async function buildMaiImageEditRequest(
   const customHeaders = Object.fromEntries(
     Object.entries(config.headers ?? {}).filter(([name]) => name.toLowerCase() !== 'content-type'),
   );
+  // Gateway routes and custom settings can carry credentials or select another tenant.
+  const bust =
+    shouldBustProviderCache(context) ||
+    url !== `${URL.parse(url)?.origin}${DEFAULT_AZURE_MAI_IMAGE_EDIT_API_PATH}` ||
+    Object.keys(customHeaders).length > 0 ||
+    Object.keys(config.passthrough ?? {}).length > 0;
   return {
     requestInit: { method: 'POST', headers: { ...authHeaders, ...customHeaders }, body: form },
-    cacheOptions: {
-      bust: shouldBustProviderCache(context),
-      cacheKey: getMaiImageEditCacheKey(url, fields, images, customHeaders),
-    },
+    // The built-in form fields have a fixed order. Hash the files, not a random boundary.
+    cacheOptions: bust
+      ? { bust }
+      : {
+          bust,
+          cacheKey: `azure-mai-image-edit:${sha256(
+            JSON.stringify([url, fields, images.map(({ bytes }) => sha256(bytes))]),
+          )}`,
+        },
   };
 }
 

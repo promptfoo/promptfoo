@@ -7,7 +7,6 @@ import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import {
   AzureImageProvider,
-  getMaiImageEditCacheKey,
   loadMaiEditImage,
   summarizeImageResponse,
   validateMaiImageDimensions,
@@ -630,23 +629,38 @@ describe('AzureImageProvider edits', () => {
     ]);
   });
 
-  it('busts the cache on request and keeps Content-Type out of the cache key', async () => {
+  it.each([
+    { headers: { 'Ocp-Apim-Subscription-Key': 'gateway-key' } },
+    { apiPath: '/mai/v1/images/edits?subscription-key=gateway-key' },
+    { passthrough: { session: 'private' } },
+  ])('bypasses the cache for custom edit settings %o', async (config) => {
     mockSuccess();
-    mockSuccess();
-    const plain = makeProvider({ basePath: tempDir, images: ['file://source.png'] });
-    await plain.callApi('Edit it', { prompt: { raw: 'x', label: 'x' }, bustCache: true } as any);
-    const first = lastFetchCall().cacheOptions;
-    expect(first.bust).toBe(true);
+    await makeProvider({ basePath: tempDir, images: ['file://source.png'], ...config }).callApi(
+      'Edit',
+    );
+    expect(lastFetchCall().cacheOptions).toEqual({ bust: true });
+  });
 
-    const withContentType = makeProvider({
-      basePath: tempDir,
-      images: ['file://source.png'],
-      headers: { 'content-type': 'application/json' },
-    });
-    await withContentType.callApi('Edit it');
-    const second = lastFetchCall().cacheOptions;
-    expect(second.bust).toBe(false);
-    expect(second.cacheKey).toBe(first.cacheKey);
+  it('keys edits by URL, form fields and ordered image bytes, excluding credentials', async () => {
+    const images = ['file://source.png', 'file://style.jpg'];
+    const cacheKey = async (config = {}, prompt = 'Edit', bustCache = false) => {
+      mockSuccess();
+      const provider = makeProvider({ basePath: tempDir, images, ...config });
+      await provider.callApi(prompt, { prompt: { raw: 'x', label: 'x' }, vars: {}, bustCache });
+      return lastFetchCall().cacheOptions.cacheKey;
+    };
+    const key = await cacheKey();
+    expect(key).toMatch(/^azure-mai-image-edit:[0-9a-f]{64}$/);
+    expect(
+      await cacheKey({ apiKey: 'different', headers: { 'Content-Type': 'application/json' } }),
+    ).toBe(key);
+    expect(await cacheKey({}, 'Edit', true)).toBeUndefined();
+    expect(await cacheKey({ images: [...images].reverse() })).not.toBe(key);
+    expect(await cacheKey({ width: 1536 })).not.toBe(key);
+    expect(await cacheKey({}, 'Another edit')).not.toBe(key);
+    expect(await cacheKey({ apiHost: 'other.services.ai.azure.com' })).not.toBe(key);
+    fs.appendFileSync(path.join(tempDir, 'source.png'), 'changed');
+    expect(await cacheKey()).not.toBe(key);
   });
 
   it('reports a cached edit with zero cost', async () => {
@@ -689,65 +703,5 @@ describe('loadMaiEditImage', () => {
       `data:application/octet-stream;base64,${JPEG_BYTES.toString('base64')}`,
     );
     expect(jpeg).toEqual({ bytes: JPEG_BYTES, mimeType: 'image/jpeg' });
-  });
-});
-
-describe('getMaiImageEditCacheKey', () => {
-  const url = 'https://res.services.ai.azure.com/mai/v1/images/edits';
-  const fields: [string, string][] = [
-    ['model', 'mai-image-2-7-flash'],
-    ['prompt', 'Make the circle red'],
-  ];
-  const png = { bytes: PNG_BYTES, mimeType: 'image/png' as const };
-  const jpeg = { bytes: JPEG_BYTES, mimeType: 'image/jpeg' as const };
-
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('is stable across field order and depends on every input', () => {
-    const key = getMaiImageEditCacheKey(url, fields, [png]);
-    expect(getMaiImageEditCacheKey(url, [...fields].reverse(), [png])).toBe(key);
-    expect(getMaiImageEditCacheKey(url, fields, [jpeg])).not.toBe(key);
-    expect(getMaiImageEditCacheKey(url, fields, [png, jpeg])).not.toBe(key);
-    expect(getMaiImageEditCacheKey(url, fields, [jpeg, png])).not.toBe(
-      getMaiImageEditCacheKey(url, fields, [png, jpeg]),
-    );
-    expect(getMaiImageEditCacheKey(url, [...fields, ['width', '1536']], [png])).not.toBe(key);
-    expect(getMaiImageEditCacheKey(url.replace('res.', 'other.'), fields, [png])).not.toBe(key);
-    expect(getMaiImageEditCacheKey(url, fields, [png], { 'x-route': 'b' })).not.toBe(key);
-  });
-
-  it('leaves credentials out of the key', () => {
-    const key = getMaiImageEditCacheKey(url, fields, [png]);
-    expect(
-      getMaiImageEditCacheKey(url, fields, [png], {
-        'api-key': 'secret-one',
-        Authorization: 'Bearer secret-two',
-        'x-custom-token': 'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789',
-        'Ocp-Apim-Subscription-Key': '0123456789abcdef0123456789abcdef',
-        'x-functions-key': 'plain-function-key',
-      }),
-    ).toBe(key);
-  });
-
-  it('gives the same key for requests that differ only in their API key', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mai-edit-key-'));
-    try {
-      fs.writeFileSync(path.join(tempDir, 'source.png'), PNG_BYTES);
-      const keys: string[] = [];
-      for (const apiKey of ['first-key', 'second-key']) {
-        vi.mocked(fetchWithCache).mockReset();
-        mockSuccess();
-        const provider = makeProvider({ apiKey, basePath: tempDir, images: ['file://source.png'] });
-        await provider.callApi('Edit it');
-        const { cacheKey } = lastFetchCall().cacheOptions as { cacheKey: string };
-        expect(cacheKey).not.toContain(apiKey);
-        keys.push(cacheKey);
-      }
-      expect(keys[0]).toBe(keys[1]);
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 });
