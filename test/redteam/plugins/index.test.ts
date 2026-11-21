@@ -315,6 +315,7 @@ describe('Plugins', () => {
     it.each([
       { maxCharsPerMessage: 10 },
       {
+        examples: ['color'],
         modifiers: {
           maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
         },
@@ -328,7 +329,7 @@ describe('Plugins', () => {
           error: undefined,
         })
         .mockResolvedValueOnce({
-          output: 'Prompt: short',
+          output: 'Prompt: tiny\nPrompt: short',
           error: undefined,
         });
 
@@ -350,6 +351,28 @@ describe('Plugins', () => {
         ),
       );
       expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    });
+
+    it('retains distinct multi-input rows with the same injected value across batches', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({ output: '<Prompt>{"text":"same","color":"red"}</Prompt>' })
+        .mockResolvedValueOnce({ output: '<Prompt>{"text":"same","color":"blue"}</Prompt>' });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'text',
+        n: 2,
+        config: { maxCharsPerMessage: 4, inputs: { text: 'Label', color: 'Color' } },
+        delayMs: 0,
+      });
+      expect(result?.map((test) => test.vars)).toEqual([
+        { text: 'same', color: 'red' },
+        { text: 'same', color: 'blue' },
+      ]);
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
     });
 
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {

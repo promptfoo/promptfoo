@@ -299,12 +299,12 @@ function buildMaxCharsRetryInstructions(count: number, longest: number, limit: n
   `.trim();
 }
 
-// Generators that choose among candidates can check lengths before selection.
+// Local single-input generators can discard oversize and previously accepted candidates.
 // Keep this callback out of plugin configuration and remote requests.
 interface LocalPluginFactory extends PluginFactory {
   action: (
     params: PluginActionParams,
-    acceptPrompt?: (text: string) => boolean,
+    acceptSingleInput?: (text: string) => boolean,
   ) => Promise<TestCase[]>;
 }
 
@@ -320,6 +320,7 @@ function withMaxCharsRetries(pluginFactory: LocalPluginFactory): PluginFactory {
       let retryInstructions: string | undefined;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
+        const previous = new Set(currentTestCases.map((test) => test.vars?.[params.injectVar]));
         const accepted = new Set<string>();
         let rejected = 0;
         let longest = 0;
@@ -338,7 +339,7 @@ function withMaxCharsRetries(pluginFactory: LocalPluginFactory): PluginFactory {
         };
         const generatedTestCases = await pluginFactory.action(
           { ...params, n: Math.max(params.n - currentTestCases.length, 0), config: retryConfig },
-          acceptPrompt,
+          (text) => !previous.has(text) && acceptPrompt(text),
         );
         const validTestCases = generatedTestCases
           .filter((test) => acceptPrompt(String(test.vars?.[params.injectVar] ?? '')))
@@ -594,7 +595,7 @@ const pluginFactories: PluginFactory[] = [
 
 const piiPlugins = PII_PLUGINS.map<LocalPluginFactory>((category) => ({
   key: category,
-  action: async (params, acceptPrompt) => {
+  action: async (params, acceptSingleInput) => {
     if (shouldGenerateRemote()) {
       const pluginId = getShortPluginId(category);
       const testCases = await fetchRemoteTestCases(
@@ -609,7 +610,7 @@ const piiPlugins = PII_PLUGINS.map<LocalPluginFactory>((category) => ({
       return addPluginMetadata(testCases, pluginId, () => params.config);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    const testCases = await getPiiLeakTestsForCategory(params, category, acceptPrompt);
+    const testCases = await getPiiLeakTestsForCategory(params, category, acceptSingleInput);
     return testCases.map((testCase) => ({
       ...testCase,
       metadata: {
