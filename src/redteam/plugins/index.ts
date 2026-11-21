@@ -358,7 +358,12 @@ function withMaxCharsRetries(pluginFactory: LocalPluginFactory): PluginFactory {
         dedupeTestCases,
       );
 
-      return testCases.map(stripRetryModifier);
+      // Local PII can return a surplus of multi-input rows for full-key deduplication.
+      const results =
+        testCases.length > params.n && piiPlugins.includes(pluginFactory) && !shouldGenerateRemote()
+          ? testCases.slice(0, params.n)
+          : testCases;
+      return results.map(stripRetryModifier);
     },
   };
 }

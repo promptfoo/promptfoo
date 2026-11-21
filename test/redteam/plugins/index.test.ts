@@ -357,7 +357,14 @@ describe('Plugins', () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.spyOn(mockProvider, 'callApi')
         .mockResolvedValueOnce({ output: '<Prompt>{"text":"same","color":"red"}</Prompt>' })
-        .mockResolvedValueOnce({ output: '<Prompt>{"text":"same","color":"blue"}</Prompt>' });
+        .mockResolvedValueOnce({
+          output: JSON.stringify([
+            { text: 'too long', color: 'gray' },
+            { text: 'same', color: 'red' },
+            { text: 'same', color: 'blue' },
+            { text: 'ok', color: 'green' },
+          ]),
+        });
 
       const plugin = Plugins.find((p) => p.key === 'pii:direct');
       const result = await plugin?.action({
