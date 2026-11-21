@@ -209,6 +209,26 @@ describe('skill-used assertion', () => {
     expect(result.reason).toContain('Forbidden skill(s) were used or attempted: forbidden-skill');
   });
 
+  it('reports overlapping evidence once while keeping successful call counts', async () => {
+    const call = { name: 'lookup', source: 'tool' };
+    const providerResponse = {
+      output: 'Done',
+      metadata: { skillCalls: [call, call], attemptedSkillCalls: [call] },
+    };
+    const denied = await runAssertion({
+      assertion: { type: 'not-skill-used', value: 'lookup' },
+      test: testCase,
+      providerResponse,
+    });
+    expect(denied.reason.split('Actual skills: ')[1]).toBe('lookup (tool)');
+    const required = await runAssertion({
+      assertion: { type: 'skill-used', value: { name: 'lookup', min: 2 } },
+      test: testCase,
+      providerResponse,
+    });
+    expect(required.pass).toBe(true);
+  });
+
   it('does not count attempted-only skill metadata as satisfying skill-used assertions', async () => {
     const result = await runAssertion({
       assertion: {

@@ -202,7 +202,7 @@ function handleCountSkillAssertion(
 
 export function handleSkillUsed(params: AssertionParams): GradingResult {
   const skillCalls = getSkillCalls(params);
-  const actualSkills = skillCalls.map(formatSkillCall);
+  const actualSkills = [...new Set(skillCalls.map(formatSkillCall))];
   const expected = resolveSkillMatchers(params.renderedValue ?? params.assertion.value);
 
   if (expected.kind === 'list') {
