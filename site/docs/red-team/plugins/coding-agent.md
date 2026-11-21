@@ -153,6 +153,10 @@ The top-level manifest is copied into each plugin's generation config unless tha
 sets `config.targetManifest`. Use plugin-level manifests when one plugin needs a different source,
 sink, or command than the rest of the scan.
 
+Coding-agent generators supply a literal prompt. A remote test must contain exactly one string in `vars`, under the configured injection variable. Promptfoo discards remote metadata and an optional declarative assertion for the same plugin. It rebuilds the assertion and grading metadata from your local settings. Other test controls and extra variables are rejected. Expand collections locally or select an individual plugin when calling a generation endpoint.
+
+When you declare `inputs` for local generation, Promptfoo decodes the input map and checks that it contains exactly those fields before materialization. Each value must be a literal string. In both generation modes, literal text cannot contain file or package references or template openers, or begin with `{` or `[` after trimming whitespace. Explicit local verifier settings remain authoritative.
+
 Treat the purpose, examples, target manifest, input descriptions and generation modifiers as public. Local providers and the remote generation service receive these fields. Promptfoo excludes recognized verifier fields and rejects public text that repeats known private values. This check cannot detect every transformation or the contents of files referenced by path. Generated tests retain verifier inputs for grading. The [privacy checks](/docs/red-team/plugins/coding-agent/trace-redaction/#privacy-and-evidence) also limit what Promptfoo saves and shares for the two redaction plugins. Use disposable synthetic values and review test files before sharing them.
 
 ## How Promptfoo grades these plugins
