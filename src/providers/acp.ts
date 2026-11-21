@@ -1,0 +1,648 @@
+import { createHmac, randomBytes } from 'node:crypto';
+
+import { SpanStatusCode } from '@opentelemetry/api';
+import { z } from 'zod';
+import cliState from '../cliState';
+import logger from '../logger';
+import {
+  emitTurnMarkerSpan,
+  getGenAITracer,
+  getTraceparent,
+  withGenAISpan,
+} from '../tracing/genaiTracer';
+import {
+  cacheResponse,
+  getCachedResponse,
+  initializeAgenticCache,
+  resolveAgenticWorkingDir,
+} from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
+import { providerRegistry } from './providerRegistry';
+import { shouldBustProviderCache } from './shared';
+
+import type { EnvOverrides } from '../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../types/index';
+import type { CacheCheckResult } from './agentic-utils';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface AcpProviderConfig {
+  /** Command to spawn the ACP agent (e.g. "kiro-cli acp", "codex-acp") */
+  command?: string | string[];
+
+  /** Working directory for the agent */
+  working_dir?: string;
+  copy_working_dir?: boolean | 'git' | 'copy';
+  basePath?: string;
+
+  /** Per-session timeout in seconds (default: 300) */
+  timeout?: number;
+
+  /** Model to request (passed via ACP set_config_option) */
+  model?: string;
+
+  /** Permission handling: auto_approve or deny (default) */
+  permission_mode?: 'auto_approve' | 'deny';
+
+  /** Extra environment variables for the agent subprocess */
+  env?: Record<string, string>;
+
+  /** Forward full process env to agent (default: false) */
+  inherit_process_env?: boolean;
+
+  /** Propagate OTEL TRACEPARENT into agent process (default: false) */
+  deep_tracing?: boolean;
+}
+
+/** Represents a single tool call captured during an ACP session. */
+export interface AcpToolCallEntry {
+  id: string;
+  name: string;
+  is_error?: boolean;
+  startTime: number;
+  endTime?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Config Validation
+// ---------------------------------------------------------------------------
+
+const configCacheKey = randomBytes(32);
+
+const AcpConfigSchema = z.strictObject({
+  basePath: z.string().optional(),
+  linkedTargetId: z.string().optional(),
+  copy_working_dir: z.union([z.boolean(), z.enum(['git', 'copy'])]).optional(),
+  command: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+  working_dir: z.string().optional(),
+  timeout: z.number().positive().optional(),
+  model: z.string().optional(),
+  permission_mode: z.enum(['auto_approve', 'deny']).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  inherit_process_env: z.boolean().optional(),
+  deep_tracing: z.boolean().optional(),
+});
+
+function parseAcpConfig(config: AcpProviderConfig | undefined): AcpProviderConfig {
+  if (!config) {
+    throw new Error(
+      "ACP provider requires a 'command' config option. " +
+        'Example: command: ["kiro-cli", "acp"] or command: "codex-acp"',
+    );
+  }
+  try {
+    return AcpConfigSchema.parse(config);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const issues = error.issues
+        .map((issue) => {
+          const pathLabel = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+          return `${pathLabel}: ${issue.message}`;
+        })
+        .join('; ');
+      throw new Error(`Invalid ACP provider config: ${issues}`);
+    }
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provider Class
+// ---------------------------------------------------------------------------
+
+export class AcpProvider implements ApiProvider {
+  public config: AcpProviderConfig;
+  private providerId: string;
+  private readonly activeCalls = new Set<AbortController>();
+
+  constructor(options: { id?: string; config?: AcpProviderConfig; env?: EnvOverrides }) {
+    this.config = parseAcpConfig(options.config);
+    this.providerId = options.id || 'acp';
+    providerRegistry.register(this);
+  }
+
+  id(): string {
+    return this.providerId;
+  }
+
+  async cleanup(): Promise<void> {
+    for (const call of this.activeCalls) {
+      call.abort();
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    await this.cleanup();
+    providerRegistry.unregister(this);
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const lifecycle = new AbortController();
+    const signal = options?.abortSignal
+      ? AbortSignal.any([options.abortSignal, lifecycle.signal])
+      : lifecycle.signal;
+    this.activeCalls.add(lifecycle);
+    try {
+      return await this.callWithSignal(prompt, context, signal);
+    } finally {
+      this.activeCalls.delete(lifecycle);
+    }
+  }
+
+  private async callWithSignal(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    signal: AbortSignal,
+  ): Promise<ProviderResponse> {
+    if (signal.aborted) {
+      return { output: '', error: 'ACP call aborted' };
+    }
+    const workspaceConfig = {
+      working_dir: context?.prompt?.config?.working_dir ?? this.config.working_dir,
+      copy_working_dir: context?.prompt?.config?.copy_working_dir ?? this.config.copy_working_dir,
+    };
+    let isolated: boolean;
+    try {
+      isolated = assertIsolatedWorkingDir(workspaceConfig);
+    } catch (error) {
+      return { error: String(error) };
+    }
+    const workingDir =
+      resolveAgenticWorkingDir(
+        workspaceConfig.working_dir,
+        this.config.basePath ?? cliState.basePath,
+      ) || process.cwd();
+
+    // Check cache
+    const { cached, cacheResult } = isolated
+      ? {}
+      : await this.checkCache(prompt, workingDir, shouldBustProviderCache(context));
+    if (signal.aborted) {
+      return { output: '', error: 'ACP call aborted' };
+    }
+    if (cached) {
+      return cached;
+    }
+
+    // Wrap in GenAI span for tracing
+    return withGenAISpan(
+      {
+        system: 'acp',
+        operationName: 'invoke_agent',
+        model: this.config.model || 'ACP',
+        agentName: 'ACP',
+        providerId: this.id(),
+        traceparent: context?.traceparent,
+        requestBody: prompt,
+      },
+      async () => {
+        const startTime = Date.now();
+
+        let result: ProviderResponse;
+        try {
+          result = await this.executeAcp(prompt, workingDir, isolated, signal);
+        } catch (err: unknown) {
+          const error = err instanceof Error ? err.message : String(err);
+          result = {
+            output: '',
+            error: `ACP provider error: ${error}`,
+            metadata: { durationMs: Date.now() - startTime },
+          };
+        }
+
+        // Enrich with timing
+        if (result.metadata) {
+          result.metadata.durationMs = result.metadata.durationMs || Date.now() - startTime;
+        }
+
+        // Emit tool spans
+        this.emitToolSpans(result.metadata?.toolCalls || []);
+
+        // Emit turn marker (single turn)
+        const now = Date.now();
+        emitTurnMarkerSpan({
+          tracer: getGenAITracer(),
+          index: 1,
+          startTime: startTime,
+          endTime: now,
+          attributes: { 'gen_ai.turn.index': 1 },
+          errorMessage: result.error,
+          logLabel: 'ACP',
+        });
+
+        // Write cache
+        if (!result.error && cacheResult) {
+          await cacheResponse(cacheResult, result);
+        }
+
+        return result;
+      },
+      (response) => ({
+        tokenUsage: response.tokenUsage,
+        responseId: response.sessionId,
+        responseBody: typeof response.output === 'string' ? response.output : undefined,
+      }),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // ACP Execution
+  // ---------------------------------------------------------------------------
+  private async executeAcp(
+    prompt: string,
+    workingDir: string,
+    isolated: boolean,
+    abortSignal?: AbortSignal,
+  ): Promise<ProviderResponse> {
+    const startTime = Date.now();
+    const timeout = (this.config.timeout || 300) * 1000;
+    const command = this.resolveCommand();
+
+    // Dynamically import the ACP SDK and child_process
+    let acpSdk: any;
+    try {
+      // @ts-ignore - optional dependency, may not have type declarations
+      acpSdk = await import('@agentclientprotocol/sdk');
+    } catch {
+      return {
+        output: '',
+        error:
+          'The @agentclientprotocol/sdk package is required for the ACP provider. ' +
+          'Install it with: npm install @agentclientprotocol/sdk',
+      };
+    }
+
+    const { spawn } = await import('node:child_process');
+    const { Writable, Readable } = await import('node:stream');
+
+    // Build environment
+    const agentEnv = this.buildEnv();
+    if (isolated) {
+      clearRepositoryEnv(agentEnv);
+    }
+
+    // Collect results
+    const textChunks: string[] = [];
+    const toolMap = new Map<string, AcpToolCallEntry>();
+
+    let sessionId = '';
+    let stopReason = '';
+
+    // Declare outside try so finally can kill it
+    let agentProcess: ReturnType<typeof spawn> | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let abortHandler: (() => void) | undefined;
+
+    try {
+      // Spawn the agent process
+      agentProcess = spawn(command[0], command.slice(1), {
+        stdio: ['pipe', 'pipe', 'ignore'],
+        cwd: workingDir,
+        env: agentEnv,
+      });
+
+      const processError = new Promise<never>((_, reject) => {
+        agentProcess!.once('error', reject);
+      });
+      const input = Writable.toWeb(agentProcess.stdin!);
+      const output = Readable.toWeb(agentProcess.stdout!);
+      const stream = acpSdk.ndJsonStream(input, output);
+
+      // Build the client with handlers and connect
+      const clientBuilder = acpSdk.client({ name: 'promptfoo-acp' });
+
+      // Permission handler
+      if (this.config.permission_mode === 'auto_approve') {
+        clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, (ctx: any) => {
+          const opts = ctx.params.options || [];
+          const first = opts.find((o: any) => o.kind === 'allow_once' || o.kind === 'allow_always');
+          return {
+            outcome: first?.optionId
+              ? { outcome: 'selected', optionId: first.optionId }
+              : { outcome: 'cancelled' },
+          };
+        });
+      } else {
+        clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, () => ({
+          outcome: { outcome: 'cancelled' },
+        }));
+      }
+
+      // Session update notification handler
+      clientBuilder.onNotification(acpSdk.methods.client.session.update, (ctx: any) => {
+        const update = ctx.params.update;
+
+        // Collect text
+        if (update.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
+          textChunks.push(update.content.text);
+        }
+
+        // Collect tool calls
+        if (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') {
+          const tcId = update.toolCallId || '';
+          if (tcId) {
+            let tc = toolMap.get(tcId);
+            if (!tc) {
+              tc = { id: tcId, name: '', startTime: Date.now() };
+              toolMap.set(tcId, tc);
+            }
+            if (update.title && !tc.name) {
+              tc.name = update.title;
+            }
+            if (update.status === 'completed' || update.status === 'failed') {
+              tc.endTime = Date.now();
+            }
+            if (update.status === 'failed') {
+              tc.is_error = true;
+            }
+          }
+        }
+      });
+
+      // Connect and execute
+      const promptResult = await Promise.race([
+        processError,
+        clientBuilder.connectWith(stream, async (ctx: any) => {
+          // Initialize
+          await ctx.request(acpSdk.methods.agent.initialize, {
+            protocolVersion: acpSdk.PROTOCOL_VERSION,
+            clientCapabilities: {},
+          });
+
+          // Create session and run turns
+          return ctx.buildSession(workingDir).withSession(async (session: any) => {
+            sessionId = session.sessionId || '';
+
+            // Set model if configured
+            if (this.config.model) {
+              try {
+                await ctx.request(acpSdk.methods.agent.session.setConfigOption, {
+                  sessionId,
+                  configId: 'model',
+                  value: this.config.model,
+                });
+              } catch {
+                throw new Error('The ACP agent rejected the configured model');
+              }
+            }
+
+            // Send prompt and collect response
+            session.prompt(prompt);
+
+            // Read updates until stop
+            for (;;) {
+              const message = await session.nextUpdate();
+              if (message.kind === 'stop') {
+                stopReason = message.response?.stopReason || '';
+                break;
+              }
+            }
+
+            return { stopReason };
+          });
+        }),
+        new Promise<never>((_, reject) => {
+          const err = new Error(`ACP session timed out after ${this.config.timeout || 300}s`);
+          err.name = 'AcpTimeoutError';
+          timeoutId = setTimeout(() => reject(err), timeout);
+        }),
+        ...(abortSignal
+          ? [
+              new Promise<never>((_, reject) => {
+                abortHandler = () => {
+                  const err = new Error('ACP call aborted');
+                  err.name = 'AcpAbortError';
+                  reject(err);
+                };
+                abortSignal.addEventListener('abort', abortHandler, { once: true });
+                if (abortSignal.aborted) {
+                  abortHandler();
+                }
+              }),
+            ]
+          : []),
+      ]);
+
+      if (typeof promptResult === 'object' && promptResult !== null) {
+        stopReason = (promptResult as any).stopReason || stopReason;
+      }
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      const errorName = err instanceof Error ? err.name : '';
+      const isOurs = errorName === 'AcpTimeoutError' || errorName === 'AcpAbortError';
+      const catchStopReason =
+        errorName === 'AcpTimeoutError'
+          ? 'timeout'
+          : errorName === 'AcpAbortError'
+            ? 'aborted'
+            : 'error';
+      return {
+        output: textChunks.join('').trim(),
+        error: isOurs ? error : `ACP execution failed: ${error}`,
+        sessionId: sessionId || undefined,
+        metadata: {
+          sessionId,
+          stopReason: catchStopReason,
+          durationMs: Date.now() - startTime,
+          toolCalls: [...toolMap.values()],
+        },
+      };
+    } finally {
+      // Clean up resources to prevent leaks
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (abortSignal && abortHandler) {
+        abortSignal.removeEventListener('abort', abortHandler);
+      }
+      if (agentProcess?.pid && agentProcess.exitCode === null && agentProcess.signalCode === null) {
+        const child = agentProcess;
+        // ACP agents are per-call processes. Give them a chance to exit cleanly,
+        // then terminate an unresponsive agent so cancellation cannot hang the eval.
+        const forceExit = setTimeout(() => {
+          if (child.exitCode === null && child.signalCode === null) {
+            child.kill('SIGKILL');
+          }
+        }, 1000);
+        forceExit.unref();
+        child.once('exit', () => clearTimeout(forceExit));
+        child.kill();
+      }
+    }
+
+    return {
+      output: textChunks.join('').trim(),
+      sessionId: sessionId || undefined,
+      metadata: {
+        sessionId,
+        stopReason,
+        durationMs: Date.now() - startTime,
+        toolCalls: [...toolMap.values()],
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  private emitToolSpans(toolCalls: AcpToolCallEntry[]): void {
+    try {
+      const tracer = getGenAITracer();
+      for (const tc of toolCalls) {
+        const attributes: Record<string, string | number | boolean> = {
+          'gen_ai.operation.name': 'execute_tool',
+          'gen_ai.tool.name': tc.name || 'unknown',
+          'tool.name': tc.name || 'unknown',
+          'gen_ai.turn.index': 1,
+        };
+        if (tc.id) {
+          attributes['gen_ai.tool.call.id'] = tc.id;
+        }
+        if (tc.is_error) {
+          attributes['tool.is_error'] = true;
+        }
+
+        const span = tracer.startSpan(`tool ${tc.name || 'unknown'}`, {
+          startTime: tc.startTime,
+          attributes,
+        });
+        span.setStatus({
+          code: tc.is_error ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+        });
+        span.end(tc.endTime ?? Date.now());
+      }
+    } catch (err) {
+      logger.debug(`[ACP] Failed to emit tool spans: ${err}`);
+    }
+  }
+
+  private resolveCommand(): string[] {
+    const cmd = this.config.command;
+    if (!cmd) {
+      throw new Error(
+        "ACP provider requires a 'command' config option specifying the agent binary to spawn. " +
+          'Example: command: ["kiro-cli", "acp"] or command: "codex-acp"',
+      );
+    }
+    if (Array.isArray(cmd)) {
+      return cmd;
+    }
+    if (/["']/.test(cmd)) {
+      throw new Error(
+        'Use a command array for ACP executable paths or arguments containing quotes or spaces',
+      );
+    }
+    return cmd.trim().split(/\s+/);
+  }
+
+  private buildEnv(): Record<string, string> {
+    const base: Record<string, string> = {};
+
+    if (this.config.inherit_process_env) {
+      Object.assign(base, process.env);
+    } else {
+      // Minimal shell env
+      for (const key of [
+        'PATH',
+        'HOME',
+        'SHELL',
+        'USER',
+        'LANG',
+        'TERM',
+        'TMPDIR',
+        'SystemRoot',
+        'ComSpec',
+        'PATHEXT',
+        'USERPROFILE',
+        'TEMP',
+        'TMP',
+      ]) {
+        if (process.env[key]) {
+          base[key] = process.env[key]!;
+        }
+      }
+    }
+
+    // Apply provider-specific env
+    if (this.config.env) {
+      Object.assign(base, this.config.env);
+    }
+
+    // Propagate only the current trace, and only when opted in.
+    delete base.TRACEPARENT;
+    if (this.config.deep_tracing) {
+      const traceparent = getTraceparent();
+      if (traceparent) {
+        base['TRACEPARENT'] = traceparent;
+      }
+    }
+
+    return Object.keys(base).length > 0 ? base : { PATH: process.env.PATH || '' };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Caching
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Looks up a cached response and, on a miss, returns the cache handle the caller
+   * should use to write the live response back. Returning the handle (rather than
+   * stashing it on the instance) keeps concurrent callApi invocations independent.
+   */
+  private async checkCache(
+    prompt: string,
+    workingDir: string,
+    bustCache: boolean,
+  ): Promise<{ cached?: ProviderResponse; cacheResult?: CacheCheckResult }> {
+    if (this.config.inherit_process_env) {
+      return {};
+    }
+    try {
+      // Command arguments and environment values can carry credentials. Keep the
+      // configuration fingerprint usable only within this Promptfoo process.
+      const { env, ...config } = this.config;
+      const configFingerprint = createHmac('sha256', configCacheKey)
+        .update(JSON.stringify({ ...config, env: env && Object.entries(env).sort() }))
+        .digest('hex');
+      const cacheResult = await initializeAgenticCache(
+        { cacheKeyPrefix: 'acp', workingDir, bustCache },
+        { prompt, workingDir, configFingerprint },
+      );
+      const cached = await getCachedResponse(cacheResult);
+      if (cached) {
+        return { cached: { ...cached, cached: true } };
+      }
+      return { cacheResult };
+    } catch {
+      // Cache miss or error, continue without caching
+      return {};
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Factory (for registry)
+// ---------------------------------------------------------------------------
+
+export function createAcpProvider(
+  providerPath: string,
+  options: { id?: string; config?: AcpProviderConfig; env?: EnvOverrides },
+): AcpProvider {
+  return new AcpProvider({
+    id: options.id || providerPath,
+    config: options.config,
+    env: options.env,
+  });
+}
