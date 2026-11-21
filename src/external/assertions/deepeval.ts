@@ -16,6 +16,32 @@ const DEFAULT_WINDOW_SIZE = 5;
 // DeepEval's default pass threshold for the conversation relevancy metric.
 const DEFAULT_THRESHOLD = 0.5;
 
+function getNonEmptyTokenUsage(tokensUsed: ReturnType<typeof createEmptyTokenUsage>) {
+  return tokensUsed.total > 0 ? tokensUsed : undefined;
+}
+
+function getConversationMessages({
+  outputString,
+  prompt,
+  test,
+}: Pick<AssertionParams, 'outputString' | 'prompt' | 'test'>): Message[] {
+  if (test.vars?._conversation && (test.vars._conversation as Message[]).length > 0) {
+    return test.vars._conversation as Message[];
+  }
+
+  invariant(
+    typeof outputString === 'string',
+    'conversational-relevance assertion type must have a string value',
+  );
+  invariant(prompt, 'conversational-relevance assertion type must have a prompt');
+  return [
+    {
+      input: prompt,
+      output: outputString,
+    },
+  ];
+}
+
 export const handleConversationRelevance = async ({
   assertion,
   inverse,
@@ -24,22 +50,7 @@ export const handleConversationRelevance = async ({
   providerCallContext,
   test,
 }: AssertionParams): Promise<GradingResult> => {
-  let messages: Message[] = [];
-  if (test.vars?._conversation && (test.vars._conversation as Message[]).length > 0) {
-    messages = test.vars?._conversation as Message[];
-  } else {
-    invariant(
-      typeof outputString === 'string',
-      'conversational-relevance assertion type must have a string value',
-    );
-    invariant(prompt, 'conversational-relevance assertion type must have a prompt');
-    messages = [
-      {
-        input: prompt,
-        output: outputString,
-      },
-    ];
-  }
+  const messages = getConversationMessages({ outputString, prompt, test });
   const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
   const threshold = assertion.threshold ?? DEFAULT_THRESHOLD;
   let relevantCount = 0;
@@ -67,7 +78,7 @@ export const handleConversationRelevance = async ({
       return {
         ...result,
         assertion,
-        tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
+        tokensUsed: getNonEmptyTokenUsage(tokensUsed),
       };
     }
 
@@ -137,6 +148,6 @@ export const handleConversationRelevance = async ({
     pass,
     score: inverse ? 1 - score : score,
     reason,
-    tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
+    tokensUsed: getNonEmptyTokenUsage(tokensUsed),
   };
 };

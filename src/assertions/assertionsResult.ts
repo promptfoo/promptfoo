@@ -49,6 +49,31 @@ function mergeMetadata(
   };
 }
 
+function getUnexpectedXFailPassReason(result: GradingResult): string | undefined {
+  const pending = [result];
+  const visited = new Set<GradingResult>();
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    if (
+      !current.pass &&
+      current.assertion?.xfail &&
+      current.metadata?.xfail?.expected === true &&
+      current.metadata.xfail.originalPass === true
+    ) {
+      return current.reason;
+    }
+    const children = current.componentResults ?? [];
+    for (let index = children.length - 1; index >= 0; index--) {
+      pending.push(children[index]);
+    }
+  }
+  return undefined;
+}
+
 function normalizeAssertionTokenUsage(result: GradingResult) {
   const tokensUsed = result.tokensUsed;
   if (!tokensUsed) {
@@ -233,6 +258,7 @@ export class AssertionsResult {
   private namedScoreWeights: Record<string, number> = Object.create(null);
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
+  private unexpectedXFailPassReason: string | undefined;
 
   constructor({
     threshold,
@@ -267,8 +293,15 @@ export class AssertionsResult {
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
 
-    if (isRedteamGuardrail && !result.pass) {
+    const guardrailPass = result.assertion?.xfail
+      ? (result.metadata?.xfail?.originalPass ?? result.pass)
+      : result.pass;
+    if (isRedteamGuardrail && !guardrailPass) {
       this.failedContentSafetyChecks = true;
+    }
+    const unexpectedXFailPassReason = getUnexpectedXFailPassReason(result);
+    if (unexpectedXFailPassReason) {
+      this.unexpectedXFailPassReason = unexpectedXFailPassReason;
     }
 
     // Zero-weight assertions collect measurements without affecting the aggregate score.
@@ -334,6 +367,10 @@ export class AssertionsResult {
     if (this.failedContentSafetyChecks) {
       pass = true;
       reason = GUARDRAIL_BLOCKED_REASON;
+    }
+    if (this.unexpectedXFailPassReason) {
+      pass = false;
+      reason = this.unexpectedXFailPassReason;
     }
 
     // Flatten nested component results, and copy the assertion into the child results.
@@ -406,6 +443,10 @@ export class AssertionsResult {
             ),
           }),
         };
+        if (this.unexpectedXFailPassReason && this.result.pass) {
+          this.result.pass = false;
+          this.result.reason = this.unexpectedXFailPassReason;
+        }
       } catch (err) {
         this.result.pass = false;
         this.result.score = 0;

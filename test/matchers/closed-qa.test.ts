@@ -164,6 +164,27 @@ describe('matchesClosedQa', () => {
     expect(isJson).toBeTruthy();
   });
 
+  it('should mark malformed grader responses as grader errors', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Maybe',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Model grader produced a malformed response:\nMaybe',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
