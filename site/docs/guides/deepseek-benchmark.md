@@ -5,11 +5,7 @@ description: Compare DeepSeek V3.2 vs GPT-5 vs Llama 4 Maverick performance with
 
 # DeepSeek vs GPT vs O3 vs Llama: Run a Custom Benchmark
 
-DeepSeek is a model family known for strong reasoning and coding performance.
-
-When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare DeepSeek V3.2, OpenAI's GPT-5 and o3-mini, and Llama 4 Maverick for your specific needs.
-
-In this guide, we'll create a practical comparison that results in a detailed side-by-side analysis view.
+Compare DeepSeek V3.2, OpenAI's GPT-5 and o3-mini, and Llama 4 Maverick on your own test cases. Promptfoo displays their outputs and assertion results side by side.
 
 ## Requirements
 
@@ -64,7 +60,7 @@ export OPENAI_API_KEY=your_openai_api_key
 
 ## Step 3: Design Your Test Cases
 
-Let's create a comprehensive test suite that evaluates the models across different dimensions:
+Add test cases for the tasks you want to compare:
 
 ```yaml
 tests:
