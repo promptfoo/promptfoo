@@ -137,6 +137,15 @@ describe('FrameworkCard', () => {
     expect(screen.getAllByText('rbac').length).toBeGreaterThan(0);
   });
 
+  it('shows AIUC control names and the unsupported accountability control even when untested rows are hidden', () => {
+    renderFrameworkCard({ framework: 'aiuc:1', isCompliant: false, showUntestedPlugins: false });
+    expect(screen.getByText('A009. Data and privacy')).toBeInTheDocument();
+    expect(screen.getByText('E018. Accountability')).toBeInTheDocument();
+    expect(screen.getByText('No built-in tests')).toBeInTheDocument();
+    expect(screen.getByText('Partial coverage')).toBeInTheDocument();
+    expect(document.querySelector('.icon-compliant')).not.toBeInTheDocument();
+  });
+
   it('should render principle names for the DoD AI ethics framework', () => {
     renderFrameworkCard({
       framework: 'dod:ai:ethics',
