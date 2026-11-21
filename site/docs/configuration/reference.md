@@ -52,6 +52,11 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.maxEvalTimeMs   | number                                                                                                                                                | No                             | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                                             | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
 
+Evaluation timeout options must be finite, nonnegative numbers. `timeoutMs: 0` disables the
+per-test timer even when `PROMPTFOO_EVAL_TIMEOUT_MS` is set. Likewise, `maxEvalTimeMs: 0`
+overrides `PROMPTFOO_MAX_EVAL_TIME_MS`. Without an explicit option or environment variable,
+both limits remain disabled. Durations longer than 2,147,483,647 milliseconds are supported.
+
 ### Test Case
 
 A test case represents a single example input that is fed into all prompts and providers. A row containing only a nonempty `description` runs with the configured defaults.
