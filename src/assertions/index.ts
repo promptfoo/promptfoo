@@ -898,7 +898,7 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
-      result,
+      result: applyAssertionWeight(result, weight),
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });
