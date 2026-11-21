@@ -81,5 +81,6 @@ describe('MITRE ATLAS framework mapping', () => {
     );
     expect(MITRE_ATLAS_MAPPING['mitre:atlas:command-and-control'].plugins).toContain('mcp');
     expect(MITRE_ATLAS_MAPPING['mitre:atlas:impact'].plugins).toContain('reasoning-dos');
+    expect(MITRE_ATLAS_MAPPING['mitre:atlas:impact'].plugins).toContain('resource-exhaustion');
   });
 });
