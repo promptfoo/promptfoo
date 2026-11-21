@@ -58,13 +58,15 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 When `config-path` is omitted, the Action generates a temporary config from its severity, diff-scope, and guidance inputs. When `config-path` is set, that file supplies those settings and any corresponding Action inputs are ignored with a warning. The `api-host` input remains workflow-controlled in both modes.
 
-SARIF output requires a scanner response with `skippedFiles: 0`. If an older CLI omits this field, the Action withholds SARIF and fails when SARIF was requested; PR comment reporting still works.
+SARIF output requires a scanner response with `skippedFiles: 0`. If the scanner skips the run or an older CLI omits this field, the action withholds SARIF and fails when SARIF was requested. PR comment reporting still works.
+
+Run the action in a clean job on a trusted runner before any pull request code executes. Check out the pull request head with `fetch-depth: 0` and `persist-credentials: false`. The action uses the base commit reported by GitHub. It never fetches through a credentialed Git remote. Git must be installed at `/usr/bin/git` on Linux or macOS, or in the default Git for Windows location. If the pull request changes during the scan, the action fails before writing SARIF or posting fallback comments.
 
 Only select config content from a trusted workflow or base revision. A config read from the pull request checkout can let the pull request weaken its own scan policy. For example, a workflow can materialize the file from the trusted base SHA before invoking the Action:
 
 ```yaml
 - name: Checkout code
-  uses: actions/checkout@v6
+  uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
   with:
     ref: ${{ github.event.pull_request.head.sha || github.ref }}
     fetch-depth: 0
@@ -72,10 +74,9 @@ Only select config content from a trusted workflow or base revision. A config re
 
 - name: Load trusted Code Scan config
   env:
-    BASE_REF: ${{ github.base_ref }}
+    BASE_SHA: ${{ github.event.pull_request.base.sha }}
   run: |
-    config_ref="$(git rev-parse "origin/${BASE_REF}")"
-    git worktree add --detach "${RUNNER_TEMP}/promptfoo-code-scan-base" "${config_ref}"
+    git worktree add --detach "${RUNNER_TEMP}/promptfoo-code-scan-base" "${BASE_SHA}"
 
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v0
@@ -120,28 +121,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
         run: |
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || exit 1
           head_sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the requested PR head
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Verify workspace HEAD matches the requested PR head
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.inputs.pr_number }}
-          EXPECTED_SHA: ${{ steps.pr.outputs.head_sha }}
-        run: |
-          actual_sha="$(git rev-parse HEAD)"
-          live_sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
-          if [ "$actual_sha" != "$EXPECTED_SHA" ] || [ "$actual_sha" != "$live_sha" ]; then
-            echo "::error::Workspace HEAD ($actual_sha) does not match requested PR head ($live_sha); refusing to scan the wrong ref"
-            exit 1
-          fi
 
       - name: Run Promptfoo Code Scan
         uses: promptfoo/code-scan-action@v0
