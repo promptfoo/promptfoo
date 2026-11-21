@@ -211,3 +211,7 @@ Inside the evals view, you can review the grader reasoning for each result, modi
 False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
 
 The best way to reduce false positives is by adding additional context to your target `Purpose`. If you find that false positives are higher for specific plugins, then consider creating custom graders at the plugin level to specify your requirements.
+
+## Mixed refusals
+
+The standard grading shortcut recognizes short, standalone refusals. Answers with an explanation, a continuation or embedded content proceed to normal grading. This can increase grading calls. Plugin-specific grading policies still apply. When a trace-aware red team assertion requests a live trace, the evaluator disables target caching and regrades saved strategy results if the trace contains spans. Local verifiers can inspect the original assertion trace. The standard red team judge summary includes step types, order, counts and status codes. It omits commands, search terms, span names and status messages. For coding-agent assertions, completed command steps are checked locally. A trace with commands, tools, searches or unclassified spans remains incomplete if local checks cannot establish a violation. This can leave benign actions or unfamiliar provider traces inconclusive. The judge never receives these action details through the summary.

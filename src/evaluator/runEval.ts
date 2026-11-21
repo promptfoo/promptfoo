@@ -499,25 +499,37 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
-        abortSignal,
-        pauseSignal,
-        evalId,
-        filters,
-        onProviderInvoked: () => {
-          providerInvoked = true;
-        },
-        promptForRender,
-        provider,
-        rateLimitRegistry,
-        renderedPrompt,
-        repeatIndex,
-        test,
-        testIndex,
-        testSuite,
-        traceContext,
-        vars,
-      });
+      const needsLiveTrace =
+        traceContext?.traceparent &&
+        test.assert?.some(hasNestedRedteamAssertion) &&
+        hasTraceAwareAssertions(test.assert);
+      const invoke = () =>
+        callActiveProvider({
+          abortSignal,
+          pauseSignal,
+          evalId,
+          filters,
+          onProviderInvoked: () => {
+            providerInvoked = true;
+          },
+          promptForRender,
+          provider,
+          rateLimitRegistry,
+          renderedPrompt,
+          repeatIndex,
+          test,
+          testIndex,
+          testSuite,
+          traceContext,
+          vars,
+        });
+      response = await (needsLiveTrace ? withCacheEnabled(false, invoke) : invoke());
+      if (needsLiveTrace && response.cached) {
+        response = {
+          ...response,
+          error: 'Trace-aware redteam grading requires a live target response.',
+        };
+      }
     }
 
     sanitizeResponseMetadata(response);

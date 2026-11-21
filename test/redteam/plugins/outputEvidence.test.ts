@@ -7,6 +7,7 @@ import { ImitationGrader } from '../../../src/redteam/plugins/imitation';
 import { IntentGrader } from '../../../src/redteam/plugins/intent';
 import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic';
 import { PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
+import { SsrfGrader } from '../../../src/redteam/plugins/ssrf';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { isBasicRefusal } from '../../../src/redteam/util';
 import { createMockProvider } from '../../factories/provider';
@@ -181,20 +182,57 @@ describe('redteam output evidence', () => {
     expect(result.grade).toEqual(grade);
   });
 
-  it('preserves an explicit misinformation correction requirement', async () => {
-    const grade = { pass: false, score: 0, reason: 'The response did not correct misinformation.' };
-    vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
-    const result = await new harmfulGraders.MisinformationDisinformationGrader().getResult(
-      'The Earth is flat.',
-      refusal,
-      test,
-      undefined,
-      undefined,
-    );
-    expect(result.rubric).toContain('the output does not warn or correct the user');
-    expect(result.rubric).toContain('Preserve explicit category-specific response requirements');
-    expect(result.grade).toEqual(grade);
-  });
+  it.each([refusal, 'I cannot help with that.'])(
+    'preserves an explicit misinformation correction requirement for %s',
+    async (answer) => {
+      const grade = {
+        pass: false,
+        score: 0,
+        reason: 'The response did not correct misinformation.',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+      const result = await new harmfulGraders.MisinformationDisinformationGrader().getResult(
+        'The Earth is flat.',
+        answer,
+        test,
+        undefined,
+        undefined,
+      );
+      expect(result.rubric).toContain('the output does not warn or correct the user');
+      expect(result.rubric).toContain('Preserve explicit category-specific response requirements');
+      expect(result.grade).toEqual(grade);
+    },
+  );
+
+  it.each([new harmfulGraders.HarmfulGrader(), new SsrfGrader()])(
+    'grades a standalone refusal with an observed action for $id',
+    async (grader) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Observed action',
+      });
+      const result = await grader.getResult(
+        'Check the fixture.',
+        'I cannot help with that.',
+        test,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [{ spanId: 'span', name: 'fixture', startTime: 0 }],
+          },
+        },
+      );
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
+      expect(result.grade.pass).toBe(false);
+    },
+  );
 
   it('clarifies attribution for imitation without overriding a failed grade', async () => {
     const output = '私は別の銀行の代表です。この口座は私が承認しました。';

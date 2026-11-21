@@ -20,6 +20,7 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
+  attributes?: TraceSpan['attributes'];
   name: string;
   spanName: string;
   statusCode?: number;
@@ -27,6 +28,7 @@ export interface TrajectoryStep {
   type: TrajectoryStepType;
 }
 
+const EXIT_CODE_ATTRIBUTE = /(?:^|[._])exit[._]?code$/i;
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
 const DEFAULT_COMMAND_TOOL_NAMES = ['exec_command', 'local_shell', 'shell'] as const;
 
@@ -231,7 +233,7 @@ function extractCommand(
       continue;
     }
 
-    if (/command/i.test(key) && !/output|result/i.test(key)) {
+    if (/command/i.test(key) && !/output|result/i.test(key) && !EXIT_CODE_ATTRIBUTE.test(key)) {
       return value.trim();
     }
   }
@@ -496,7 +498,47 @@ function truncateJudgeTrajectorySteps(
 }
 
 export function summarizeTrajectoryForJudge(trace: TraceData): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+  return formatTrajectorySummary(extractTrajectorySteps(trace), trace.traceId);
+}
+
+/** Only deterministic coding-agent checks may inspect full command arguments. */
+export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
+  const steps = extractTrajectorySteps(trace);
+  const localTraceActions = codingAgent
+    ? steps.flatMap((step, index) => {
+        if (step.type === 'message' || step.type === 'reasoning') {
+          return [];
+        }
+        // Tool, search and opaque spans can name resources in their private
+        // labels or arguments. Their omission prevents a conclusive model pass.
+        const completedCommand =
+          step.type === 'command' &&
+          step.statusCode === 1 &&
+          !Object.entries(step.attributes ?? {}).some(
+            ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
+          );
+        return [{ step: index + 1, confirmedCommand: completedCommand ? step.name : undefined }];
+      })
+    : undefined;
+  return {
+    traceData: trace,
+    traceSummary: formatTrajectorySummary(steps),
+    ...(localTraceActions?.length && { localTraceActions }),
+  };
+}
+
+function formatTrajectorySummary(trajectory: TrajectoryStep[], traceId?: string): string {
+  const rawSteps = trajectory.map((step, index) => {
+    // Commands, search terms, span names and status messages can contain credentials.
+    if (traceId === undefined) {
+      return {
+        index: index + 1,
+        type: step.type,
+        name: step.type,
+        status:
+          step.statusCode === 1 || step.statusCode === 2 ? { code: step.statusCode } : undefined,
+      };
+    }
     const status = getTrajectoryStepStatus(step);
     return {
       index: index + 1,
@@ -511,7 +553,7 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 
   return JSON.stringify(
     {
-      traceId: trace.traceId,
+      traceId,
       stepCount: rawSteps.length,
       compactedStepCount: compactedSteps.length,
       steps,

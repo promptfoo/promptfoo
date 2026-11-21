@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getAssertionBaseType,
   isAssertionInverse,
+  runAssertion,
   runAssertions,
 } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
@@ -125,6 +126,131 @@ describe('redteam strategy result grading', () => {
         reason: storedResult.reason,
         tokensUsed: storedResult.tokensUsed,
       });
+    },
+  );
+
+  it.each([
+    { statusCode: 1, exit: 0, confirmed: true },
+    { statusCode: 1, exit: '0', confirmed: true },
+    { statusCode: 1, exit: 1, confirmed: false },
+    { statusCode: 2, exit: 0, confirmed: false },
+    { statusCode: undefined, exit: undefined, confirmed: false },
+    { statusCode: 1, exit: undefined, confirmed: false, kind: 'tool' },
+    { statusCode: 1, exit: undefined, confirmed: false, kind: 'search' },
+    { statusCode: 1, exit: undefined, confirmed: false, kind: 'opaque' },
+  ])('protects trace action details (case %#)', async ({ statusCode, exit, confirmed, kind }) => {
+    const getResult = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockRejectedValue(new Error('Private commands must remain local'));
+    const marker = 'private-fixture-only';
+    const result = await runAssertion({
+      assertion: { type: 'promptfoo:redteam:coding-agent:secret-env-read' },
+      prompt: 'Describe the fixture',
+      test: { vars: { secretEnvValue: marker } },
+      providerResponse: { output: 'I cannot help with that.' },
+      traceId: 'trace',
+      traceData: {
+        traceId: 'trace',
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: [
+          {
+            spanId: 'one',
+            name: marker,
+            startTime: 1,
+            statusCode,
+            attributes:
+              kind === 'tool'
+                ? { 'tool.name': 'read_file', 'tool.arguments': { path: marker } }
+                : kind === 'search'
+                  ? { 'search.query': marker }
+                  : kind === 'opaque'
+                    ? {}
+                    : {
+                        'tool.name': 'local_shell',
+                        'tool.arguments': { cmd: marker },
+                        'command.exit_code': exit,
+                      },
+          },
+        ],
+      },
+    });
+    expect(getResult).not.toHaveBeenCalled();
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toMatchObject(
+      confirmed
+        ? { deterministicFailureKind: 'sensitive-value-observed' }
+        : { graderError: true, gradingIncomplete: true },
+    );
+    expect(JSON.stringify(result)).not.toContain(marker);
+  });
+
+  it.each([false, true])(
+    'regrades saved text when fresh trace actions exist (%s)',
+    async (hasActions) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Observed action' },
+        rubric: 'New rubric',
+      });
+      const providerResponse = {
+        output,
+        metadata: { redteamFinalPrompt: attackPrompt, storedGraderResult: storedResult },
+      };
+      const trace = {
+        traceId: 'trace',
+        evaluationId: 'eval',
+        testCaseId: 'test',
+        metadata: { commandToolNames: ['bash'] },
+        spans: hasActions
+          ? [
+              {
+                spanId: 'one',
+                name: 'private-fixture-label',
+                startTime: 1,
+                statusCode: 1,
+                statusMessage: 'private-fixture-status',
+                attributes: {
+                  'tool.name': 'bash',
+                  'tool.arguments': { cmd: 'private-fixture-value' },
+                },
+              },
+            ]
+          : [],
+      };
+      const result = await handleRedteam({
+        assertion: piiAssertion,
+        baseType: getAssertionBaseType(piiAssertion),
+        assertionValueContext: {
+          prompt: originalPrompt,
+          vars: {},
+          test,
+          providerResponse,
+          trace,
+          logProbs: [],
+          provider: undefined,
+        },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output,
+        outputString: output,
+        prompt: originalPrompt,
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      });
+      expect(result.pass).toBe(!hasActions);
+      expect(getResult).toHaveBeenCalledTimes(Number(hasActions));
+      if (hasActions) {
+        const context = getResult.mock.calls[0][7];
+        expect(context?.traceData).toBe(trace);
+        expect(context?.traceSummary).toContain('command');
+        expect(context?.traceSummary).not.toContain('private-fixture');
+      }
+      expect(result.tokensUsed?.total).toBe(storedResult.tokensUsed.total);
     },
   );
 

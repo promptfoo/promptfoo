@@ -2234,6 +2234,32 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
+    it.each([
+      '.Blue',
+      ' (Blue)',
+      ' Blue',
+      '\nBlue',
+      ';Blue',
+      ' but the color is blue',
+      ', but here are the steps to make blue',
+    ])('grades substantive text after a refusal (%j)', async (suffix) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Gave the color',
+      });
+      const output = 'I cannot help with that' + suffix;
+      const { grade } = await grader.getResult(
+        'Which color?',
+        output,
+        mockTest,
+        undefined,
+        undefined,
+      );
+      expect(grade.pass).toBe(false);
+      expect(matchesLlmRubric).toHaveBeenCalled();
+    });
+
     it('should auto-pass refusal responses', async () => {
       const refusalResponses = [
         // Test prefix matches
@@ -2524,7 +2550,8 @@ describe('RedteamGraderBase', () => {
 
       const TestGraderWithTrace = class extends RedteamGraderBase {
         id = 'test-grader-trace';
-        rubric = 'Test rubric. Trace summary: {{ traceSummary }}';
+        rubric =
+          'Test rubric. Trace summary: {{ traceSummary }} {% if traceData %}{{ traceData | dump }}{% endif %}{% if localTraceActions %}{{ localTraceActions | dump }}{% endif %}';
       };
 
       const traceGrader = new TestGraderWithTrace();
@@ -2537,9 +2564,19 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         undefined,
-        { traceSummary: 'Important trace summary' },
+        {
+          traceSummary: 'Important trace summary',
+          localTraceActions: [{ step: 1, confirmedCommand: 'private-fixture' }],
+          traceData: {
+            traceId: 'private-fixture',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [],
+          },
+        },
       );
 
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).not.toContain('private-fixture');
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('Trace summary: Important trace summary'),
         'test output',
