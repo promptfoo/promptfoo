@@ -876,31 +876,18 @@ function credentialOption(arg: string, curl: boolean, property: boolean): string
   return undefined;
 }
 
-// A command array may represent a shell chain. Recognize the conventional
-// switch from a request URL to a file command. Other argv separators can be
-// literal option operands, so keep curl authentication masking active.
-function startsFileCommand(argv: unknown[], index: number) {
-  const previous = argv[index - 1];
-  const next = argv[index + 1];
-  return (
-    typeof previous === 'string' &&
-    /^https?:\/\//i.test(previous) &&
-    typeof next === 'string' &&
-    (next === 'git' || FILE_COMMAND.test(next))
-  );
-}
-
-function argumentRedactor(context?: AttributeContext, argv?: unknown[]) {
+function argumentRedactor(context?: AttributeContext, native = false) {
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
   let maskNext = false;
   let property = false;
-  return (word: unknown, index = 0) => {
+  return (word: unknown) => {
+    // In native argv, even a standalone shell operator can be a literal
+    // operand. Never let it clear an active credential context.
     if (
       typeof word === 'string' &&
       /^[;&|\r\n]+$/.test(word) &&
-      (!argv ||
-        (!maskNext && mode !== 'expanded' && (mode !== 'curl' || startsFileCommand(argv, index))))
+      (!native || (!maskNext && mode !== 'expanded' && mode !== 'curl'))
     ) {
       mode = 'start';
       maskNext = false;
@@ -1186,10 +1173,10 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     charge(array ? source.length : 0);
     const target = array ? new Array<unknown>(source.length) : {};
     const inherited = array && (context === 'headers' || context === 'env') ? context : undefined;
-    const redactArgument = array ? argumentRedactor(context, source) : undefined;
+    const redactArgument = array ? argumentRedactor(context, true) : undefined;
     for (const [key, value] of structuredAttributeEntries(source)) {
       charge(1, key.length + (typeof value === 'string' ? value.length : 0));
-      const entry = redactArgument?.(value, Number(key)) ?? value;
+      const entry = redactArgument?.(value) ?? value;
       const nested = inherited ?? attributeContext(key, array ? undefined : source);
       const sensitive =
         isCredentialAttributeKey(key, context === 'env') ||

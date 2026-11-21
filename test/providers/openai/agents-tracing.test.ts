@@ -375,10 +375,13 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)('preserves unrelated command options after curl in %s', async (format) => {
-    const cmd = 'curl https://example.test && rg curl -u src ; git push -u origin main'.split(' ');
+    const cmd = ['rg', 'curl', '-u', 'src'];
+    const shell = 'curl https://example.test && rg curl -u src ; git push -u origin main';
     const { attributes, payload } = await exportCustomData(
       {
         cmd,
+        shell,
+        literal: ['curl', 'https://example.test', '&&', 'git', 'push', '-u', 'bot:opaque', 'main'],
         chained: 'curl -u "bot:opaque;value" https://host;git push -u origin main',
         lines: 'curl https://host\ngit push -u origin main',
       },
@@ -387,6 +390,7 @@ describe('OTLPTracingExporter', () => {
     expect(JSON.stringify(payload)).not.toContain('opaque');
     expect(attributes.cmd).toEqual(wireStrings(...cmd));
     expect(attributes.command).toBe(cmd.join(' '));
+    expect(attributes.shell).toBe(shell);
     expect(attributes.chained).toBe('curl -u <redacted> https://host;git push -u origin main');
     expect(attributes.lines).toContain('git push -u origin main');
   });
