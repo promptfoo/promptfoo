@@ -3,6 +3,8 @@ const { createLoggerModuleWithLevel } = await vi.hoisted(
 );
 
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
@@ -3677,6 +3679,77 @@ describe('redteam generate command with target option', () => {
         config: {},
       },
     ]);
+  });
+
+  it('writes the cloud config to a uniquely named file with exclusive, owner-only create', async () => {
+    const cloudConfig = { prompts: ['Test prompt'], providers: [{ id: 'test-provider' }] };
+    vi.mocked(getConfigFromCloud).mockResolvedValue(cloudConfig as any);
+    fsMocks.writeFileSync.mockReset();
+    mockReadFileSync(cloudConfig);
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
+
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--config',
+      '12345678-1234-1234-1234-123456789012',
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    const [[filename, contents, options]] = fsMocks.writeFileSync.mock.calls;
+    expect(path.dirname(String(filename))).toBe('.');
+    expect(path.basename(String(filename))).toMatch(/^redteam-generate-[0-9a-f-]{36}\.yaml$/);
+    expect(yaml.load(String(contents))).toEqual(cloudConfig);
+    expect(options).toEqual({ flag: 'wx', mode: 0o600 });
+    expect(configModule.resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ config: [filename] }),
+      expect.anything(),
+    );
+    expect(process.exitCode).toBe(0);
+  });
+
+  it('keeps each cloud config when two generate runs start in the same millisecond', async () => {
+    const disk = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    const directory = await disk.mkdtemp(path.join(os.tmpdir(), 'promptfoo-redteam-generate-'));
+    const onDisk = (file: unknown) => path.join(directory, String(file));
+    using _clock = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    fsMocks.writeFileSync.mockImplementation((file, contents, options) =>
+      disk.writeFile(onDisk(file), contents, options),
+    );
+    fsMocks.readFileSync.mockImplementation((file, encoding) =>
+      disk.readFile(onDisk(file), encoding),
+    );
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
+
+    const first = { description: 'first run', prompts: ['Test prompt'] };
+    const second = { description: 'second run', prompts: ['Test prompt'] };
+    const resolved = {
+      basePath: '/mock/path',
+      testSuite: { providers: [mockProvider], prompts: [], tests: [] },
+      config: { redteam: {} },
+    };
+    // Finish the second run before the first run reads its config file.
+    vi.mocked(configModule.resolveConfigs)
+      .mockImplementationOnce(async ({ config }) => {
+        await doGenerateRedteam({ configFromCloud: second, output: 'second.yaml', write: false });
+        expect(yaml.load(await disk.readFile(onDisk(config![0]), 'utf8'))).toEqual(first);
+        return resolved;
+      })
+      .mockImplementationOnce(async ({ config }) => {
+        expect(yaml.load(await disk.readFile(onDisk(config![0]), 'utf8'))).toEqual(second);
+        return resolved;
+      });
+
+    try {
+      await doGenerateRedteam({ configFromCloud: first, output: 'first.yaml', write: false });
+      expect(configModule.resolveConfigs).toHaveBeenCalledTimes(2);
+    } finally {
+      fsMocks.writeFileSync.mockReset();
+      fsMocks.readFileSync.mockReset();
+      await disk.rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('should throw error when target is not a UUID but config is', async () => {
