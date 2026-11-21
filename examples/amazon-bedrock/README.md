@@ -6,4 +6,4 @@ Examples for using promptfoo with [Amazon Bedrock](https://aws.amazon.com/bedroc
 
 - [models](./models/) - Model evaluations: Claude, Llama, Mistral, Nova, DeepSeek, Qwen, Grok, and more
 - [agents](./agents/) - Bedrock Agents with tool use and knowledge bases
-- [video](./video/) - Video generation with Amazon Nova Reel
+- [video](./video/) - Video generation with Luma Ray 2 and a historical Nova Reel configuration

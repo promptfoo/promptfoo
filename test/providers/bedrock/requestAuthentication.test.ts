@@ -3,6 +3,7 @@ import { fetchWithCache, withCacheEnabled } from '../../../src/cache';
 import { createBedrockAnthropicMessagesProvider } from '../../../src/providers/bedrock/anthropicMessages';
 import { createBedrockMantleChatProvider } from '../../../src/providers/bedrock/mantleChat';
 import { createBedrockOpenAiResponsesProvider } from '../../../src/providers/bedrock/openaiResponses';
+import { BedrockRuntimeChatProvider } from '../../../src/providers/bedrock/runtimeOpenai';
 import { monkeyPatchFetch } from '../../../src/util/fetch/monkeyPatchFetch';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -145,6 +146,46 @@ describe('Bedrock authentication at the HTTP attempt boundary', () => {
       ).toBe(true);
     },
   );
+
+  it('fetches Runtime Chat again after truncated streams when caching is enabled', async () => {
+    const callback = vi.fn().mockResolvedValue('Paris');
+    const provider = new BedrockRuntimeChatProvider('us.xai.grok-4.7', {
+      config: { apiKey: 'fixture', stream: true, functionToolCallbacks: { lookup: callback } },
+    });
+    const chunk = {
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'lookup-1',
+                type: 'function',
+                function: { name: 'lookup', arguments: '{}' },
+              },
+            ],
+          },
+          finish_reason: 'tool_calls',
+        },
+      ],
+    };
+    const partial = `data: ${JSON.stringify(chunk)}\n\n`;
+    vi.mocked(monkeyPatchFetch)
+      .mockResolvedValueOnce(new Response(partial))
+      .mockResolvedValueOnce(new Response(partial))
+      .mockResolvedValueOnce(new Response(`${partial}data: [DONE]\n\n`));
+    await withCacheEnabled(true, async () => {
+      const failures = await Promise.all([provider.callApi('Lookup'), provider.callApi('Lookup')]);
+      for (const result of failures) {
+        expect(result.error).toContain('ended before a complete response');
+      }
+      expect(callback).not.toHaveBeenCalled();
+      expect((await provider.callApi('Lookup')).output).toBe('Paris');
+    });
+    expect(monkeyPatchFetch).toHaveBeenCalledTimes(3);
+    expect(callback).toHaveBeenCalledOnce();
+  });
 
   it('refreshes auth for retries within background Responses polling', async () => {
     vi.useFakeTimers();

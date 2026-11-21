@@ -1,7 +1,7 @@
 ---
 sidebar_label: GOAT
 title: GOAT Jailbreaking Strategy
-description: Apply GOAT (Generative Offensive Agent Tester) for sophisticated multi-turn jailbreaking using adversarial agent dialogues
+description: Use GOAT (Generative Offensive Agent Tester) to run adaptive multi-turn jailbreak conversations against an LLM target. Configure turns and review results.
 ---
 
 # GOAT Technique for Jailbreaking LLMs
