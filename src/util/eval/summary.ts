@@ -1,5 +1,6 @@
 import chalk from 'chalk';
-import { formatDuration } from '../../util/formatDuration';
+import { formatDuration } from '../formatDuration';
+import { sanitizeProviderIdForLog } from '../provider';
 
 import type { RepeatStabilitySummary, TokenUsage } from '../../types/index';
 
@@ -293,7 +294,7 @@ function getProviderUsageLines(providerUsage: ReadonlyMap<string, TokenUsage>): 
     }
 
     const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
-    const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
+    const displayId = sanitizeProviderIdForLog(id.split(' (', 1)[0]);
     const details = buildUsageDetails(usage, displayTotal);
     const requestInfo = `${usage.numRequests || 0} requests`;
     const separator = details.length > 0 ? '; ' : '';

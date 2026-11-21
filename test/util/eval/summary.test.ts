@@ -589,7 +589,7 @@ describe('generateEvalSummary', () => {
   });
 
   describe('provider breakdown', () => {
-    it('should show provider breakdown with request counts', () => {
+    it('shows provider request counts without leaking URL credentials', () => {
       providerUsage.set('openai:gpt-4', {
         total: 1500,
         prompt: 600,
@@ -597,7 +597,7 @@ describe('generateEvalSummary', () => {
         cached: 0,
         numRequests: 5,
       });
-      providerUsage.set('anthropic:claude-3', {
+      providerUsage.set('https://user:private-password@model.example?api_key=private-key (Model)', {
         total: 800,
         prompt: 300,
         completion: 500,
@@ -628,7 +628,8 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Providers:');
       expect(output).toContain('openai:gpt-4');
       expect(output).toContain('1,500 (5 requests; 600 prompt, 900 completion)');
-      expect(output).toContain('anthropic:claude-3');
+      expect(output).toContain('model.example');
+      expect(output).not.toMatch(/private-password|private-key|\(Model\)/);
       expect(output).toContain('800 (3 requests; 300 prompt, 500 completion)');
     });
 
