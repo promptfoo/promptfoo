@@ -214,6 +214,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
       return {
+        tokenUsage: { numRequests: 0 },
         error: dedent`
           Remote generation is disabled. This red team strategy requires Promptfoo's task-specific models.
 
@@ -255,6 +256,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       );
 
       const data = await response.json();
+      const cacheStatus = typeof data.cached === 'boolean' ? { cached: data.cached } : {};
 
       // Only Cloud's explicit upstream request classification can stop Meta iterations.
       // Missing results and unstructured error text may be refusals or transient failures.
@@ -275,6 +277,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
               code: 'invalid_json',
             },
           },
+          ...cacheStatus,
           ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
@@ -284,6 +287,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         return {
           error: data.error,
           ...(data.isRefusal === true ? { isRefusal: true } : {}),
+          ...cacheStatus,
           ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
@@ -295,6 +299,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         return {
           error: 'LLM did not return a result, likely refusal',
           ...(data.isRefusal === true ? { isRefusal: true } : {}),
+          ...cacheStatus,
           ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
@@ -305,6 +310,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         materializedVars: data.materializedVars,
         output: data.result,
         ...(data.isRefusal === true ? { isRefusal: true } : {}),
+        ...cacheStatus,
         tokenUsage: data.tokenUsage,
       };
     } catch (err) {
@@ -420,9 +426,11 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
         result: string;
         task: string;
         tokenUsage: TokenUsage;
+        cached?: boolean;
       };
       return {
         output: data.result,
+        ...(typeof data.cached === 'boolean' && { cached: data.cached }),
         tokenUsage: data.tokenUsage,
       };
     } catch (err) {
