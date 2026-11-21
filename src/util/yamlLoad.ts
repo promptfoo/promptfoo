@@ -20,14 +20,34 @@ const legacySetTag = yaml.defineMappingTag<LegacyYamlSet>('tag:yaml.org,2002:set
  * DEFAULT_SCHEMA accepted. Its built-in setTag also constructs a JavaScript
  * Set, while v4 returned an object whose keys map to null.
  */
-const YAML_LOAD_SCHEMA = yaml.CORE_SCHEMA.withTags(
+const LEGACY_COLLECTION_SCHEMA = yaml.CORE_SCHEMA.withTags(
   yaml.mergeTag,
   yaml.binaryTag,
-  yaml.timestampTag,
   yaml.omapTag,
   yaml.pairsTag,
   legacySetTag,
 );
+
+const YAML_LOAD_SCHEMA = LEGACY_COLLECTION_SCHEMA.withTags(yaml.timestampTag);
+
+const timestampStringTag = yaml.defineScalarTag<string>(yaml.timestampTag.tagName, {
+  ...yaml.timestampTag,
+  identify: () => false,
+  resolve(source, isExplicit, tagName) {
+    const value = yaml.timestampTag.resolve(source, isExplicit, tagName);
+    if (value === yaml.NOT_RESOLVED) {
+      return value;
+    }
+    // Date-only literals and midnight timestamps represent different inputs.
+    return /^\d{4}-\d{2}-\d{2}$/.test(source) ? source : value.toISOString();
+  },
+});
+
+const CONFIG_YAML_SCHEMA = LEGACY_COLLECTION_SCHEMA.withTags(timestampStringTag);
+
+export function loadConfigYaml(content: string): unknown {
+  return loadYaml(content, { schema: CONFIG_YAML_SCHEMA });
+}
 
 /**
  * Load a single YAML document with js-yaml v4-compatible semantics:

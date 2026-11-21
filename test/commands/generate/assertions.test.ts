@@ -23,7 +23,10 @@ const fsMocks = vi.hoisted(() => ({
 vi.mock('fs', createFsModuleFactory(fsMocks));
 
 vi.mock('fs/promises', createGeneratorFsPromisesFactory(fsMocks));
-vi.mock('js-yaml');
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn() };
+});
 vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/assertions/synthesis');
 vi.mock('../../../src/util/config/load', () => ({
