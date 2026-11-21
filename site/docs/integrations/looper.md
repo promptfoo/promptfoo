@@ -10,7 +10,7 @@ This guide shows you how to integrate **Promptfoo** evaluations into a Looper CI
 ## Prerequisites
 
 - A working Looperinstallation with workflow execution enabled
-- A build image (or declared tools) that provides **Node.js `>=22.22.0`** (Node.js 24 LTS recommended) and **jq 1.6+**
+- A build image (or declared tools) that provides a [supported Node.js version](/docs/installation#nodejs-runtime-support) and **jq 1.6+**
 - `promptfooconfig.yaml` and your prompt fixtures (`prompts/**/*.json`) committed to the repository
 
 ## Create `.looper.yml`

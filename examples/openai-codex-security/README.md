@@ -10,7 +10,7 @@ cd openai-codex-security
 npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
-Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`. Installing both packages together ensures Promptfoo can load the SDK from its own installation. Authenticate with an existing Codex login or set `OPENAI_API_KEY` or `CODEX_API_KEY` before running the local CLI:
+Use Node.js `^22.22.2 || ^24.15.0 || ^26.0.0`. Installing both packages together ensures Promptfoo can load the SDK from its own installation. Authenticate with an existing Codex login or set `OPENAI_API_KEY` or `CODEX_API_KEY` before running the local CLI:
 
 ```bash
 npx promptfoo eval --no-cache
