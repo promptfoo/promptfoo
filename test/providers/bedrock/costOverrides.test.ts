@@ -94,21 +94,33 @@ describe('Bedrock cost override integration', () => {
     },
   );
 
-  it('keeps response-cache hits free of fresh InvokeModel charges', async () => {
-    const provider = new AwsBedrockCompletionProvider(model, { config: rates });
-    vi.mocked(isCacheEnabled).mockReturnValue(true);
-    vi.mocked(getCache).mockResolvedValue({
-      get: vi
-        .fn()
-        .mockResolvedValue(JSON.stringify({ content: [{ type: 'text', text: 'Cached hello' }] })),
-    } as never);
-    const getInstance = vi.spyOn(provider, 'getBedrockInstance');
-    const result = await provider.callApi('Say hello');
-    expect(result.cached).toBe(true);
-    expect(result.cost).toBeUndefined();
-    expect(result.tokenUsage?.numRequests).toBe(0);
-    expect(getInstance).not.toHaveBeenCalled();
-  });
+  it.each(['InvokeModel', 'Converse'])(
+    'counts response-cache hits as cached usage in %s',
+    async (api) => {
+      const invoke = api === 'InvokeModel';
+      const provider = invoke
+        ? new AwsBedrockCompletionProvider(model, { config: rates })
+        : new AwsBedrockConverseProvider(model, { config: rates });
+      const cached = invoke
+        ? {
+            content: [{ type: 'text', text: 'Hello' }],
+            usage: { input_tokens: 10, output_tokens: 20 },
+          }
+        : {
+            output: { message: { role: 'assistant', content: [{ text: 'Hello' }] } },
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn().mockResolvedValue(JSON.stringify(cached)),
+      } as never);
+      const getInstance = vi.spyOn(provider, 'getBedrockInstance');
+      const result = await provider.callApi('Say hello');
+      expect(result).toMatchObject({ cached: true, cost: 0, output: 'Hello' });
+      expect(result.tokenUsage).toEqual({ total: 30, cached: 30, numRequests: 0 });
+      expect(getInstance).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([false, true])('applies rates to Converse streaming=%s', async (streaming) => {
     const provider = new AwsBedrockConverseProvider(model, { config: { ...rates, streaming } });

@@ -59,6 +59,18 @@ describe('ConfigModal', () => {
     expect(textarea.value).toBe(expectedYaml);
   });
 
+  it('leaves the saved base path out of the displayed config', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { ...sampleConfig, basePath: '/home/user/project' },
+    } as ReturnType<typeof useTableStore>);
+
+    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(textarea.value).toBe(yaml.dump(sampleConfig));
+    expect(textarea.value).not.toContain('basePath');
+  });
+
   it('textarea is read-only', () => {
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
@@ -103,7 +115,7 @@ describe('ConfigModal', () => {
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
 
-  it('downloads config as YAML file when download button is clicked', async () => {
+  it('downloads config as a YAML file with the expected filename', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
@@ -112,14 +124,6 @@ describe('ConfigModal', () => {
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
-  });
-
-  it('sets the config download filename', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
-
-    await user.click(getDownloadButton());
-
     const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock
       .contexts[0] as HTMLAnchorElement;
     expect(anchor.download).toBe('config.yaml');
