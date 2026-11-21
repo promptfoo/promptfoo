@@ -49,11 +49,20 @@ function getNovaTokenUsage(responseJson: any): TokenUsage {
     return missingBedrockTokenUsage();
   }
 
+  const input = coerceStrToNum(usage.inputTokens);
+  const cacheReadInputTokens = coerceStrToNum(usage.cacheReadInputTokenCount);
+  const cacheCreationInputTokens = coerceStrToNum(usage.cacheWriteInputTokenCount);
   return {
-    prompt: coerceStrToNum(usage.inputTokens),
+    prompt:
+      input === undefined
+        ? undefined
+        : input + (cacheReadInputTokens ?? 0) + (cacheCreationInputTokens ?? 0),
     completion: coerceStrToNum(usage.outputTokens),
     total: coerceStrToNum(usage.totalTokens),
     numRequests: 1,
+    ...(cacheReadInputTokens !== undefined || cacheCreationInputTokens !== undefined
+      ? { completionDetails: { cacheReadInputTokens, cacheCreationInputTokens } }
+      : {}),
   };
 }
 
@@ -2952,7 +2961,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      // Claude's displayed prompt count includes cache reads and writes. Billing
+      // Claude and Nova prompt counts include cache reads and writes. Billing
       // needs the API's uncached input count because cache tokens are priced separately.
       const cacheReadInputTokens =
         tokenUsage.completionDetails?.cacheReadInputTokens ??
@@ -2962,9 +2971,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const billablePromptTokens =
         model === BEDROCK_MODEL.CLAUDE_MESSAGES
           ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
-            ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
-            : tokenUsage.prompt;
+          : model === BEDROCK_MODEL.AMAZON_NOVA || model === BEDROCK_MODEL.AMAZON_NOVA_2
+            ? coerceStrToNum(output.usage?.inputTokens)
+            : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
+              ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
+              : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
         billablePromptTokens,
