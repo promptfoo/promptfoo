@@ -1,3 +1,4 @@
+import { SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -110,6 +111,15 @@ describe('synthesize', () => {
 
     expect(provider.callApi).toHaveBeenCalledOnce();
     expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('stops the progress bar if provider setup fails', async () => {
+    const stop = vi.spyOn(SingleBar.prototype, 'stop');
+    vi.mocked(loadApiProvider).mockRejectedValueOnce(new Error('setup failed'));
+    await expect(
+      synthesize({ provider: 'fixture-provider', prompts: ['Hello'], tests: [] }),
+    ).rejects.toThrow('setup failed');
+    expect(stop).toHaveBeenCalledOnce();
   });
 
   it('reports a cleanup failure after successful synthesis', async () => {

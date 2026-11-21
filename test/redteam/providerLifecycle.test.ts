@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { SingleBar } from 'cli-progress';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { synthesize } from '../../src/redteam/index';
@@ -124,14 +125,17 @@ describe('generation provider cleanup ownership', () => {
       started.resolve();
       return release.promise;
     });
+    const stop = vi.spyOn(SingleBar.prototype, 'stop');
     const result = synthesize({
       ...options,
+      showProgressBar: true,
       abortSignal: controller.signal,
       provider: providerOptions({ cleanup, call }),
     }).catch((error: unknown) => error);
     try {
       await started.promise;
       controller.abort();
+      expect(stop).toHaveBeenCalledOnce();
       await vi.advanceTimersByTimeAsync(1000);
       expect(await result).toMatchObject({ message: 'Operation cancelled' });
       expect(cleanup).toHaveBeenCalledOnce();

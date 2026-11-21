@@ -1343,8 +1343,9 @@ async function synthesizeInternal(
     }
   }
 
-  // Start the progress bar
+  checkAbort();
   let progressBar: cliProgress.SingleBar | null = null;
+  const stopProgress = () => progressBar?.stop();
   const isWebUI = Boolean(cliState.webUI);
 
   const showProgressBar =
@@ -1360,7 +1361,7 @@ async function synthesizeInternal(
       },
       cliProgress.Presets.shades_classic,
     );
-    // Use totalTests to include both plugin and strategy tests in progress tracking
+    abortSignal?.addEventListener('abort', stopProgress, { once: true });
     progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
 
@@ -1712,9 +1713,7 @@ async function synthesizeInternal(
   // Apply retry strategy first if it exists
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   if (retryStrategy) {
-    if (showProgressBar) {
-      progressBar?.update({ task: 'Applying retry strategy' });
-    }
+    progressBar?.update({ task: 'Applying retry strategy' });
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
       targetIds: redteamGenerationContext.providerTargetIds,
@@ -1733,10 +1732,7 @@ async function synthesizeInternal(
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
-    // Update progress bar with retry strategy tests generated
-    if (showProgressBar) {
-      progressBar?.increment(retryTestCases.length);
-    }
+    progressBar?.increment(retryTestCases.length);
   }
 
   // Check for abort signal or apply non-basic strategies
@@ -1771,7 +1767,8 @@ async function synthesizeInternal(
   checkAbort();
 
   progressBar?.update({ task: 'Done.' });
-  progressBar?.stop();
+  abortSignal?.removeEventListener('abort', stopProgress);
+  stopProgress();
   if (progressBar) {
     // Newline after progress bar to avoid overlap
     logger.info('');
