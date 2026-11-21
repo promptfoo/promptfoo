@@ -200,8 +200,8 @@ function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
 }
 
 function stripProviderOrigin(
-  metadata: NonNullable<TestCase['metadata']>,
-): NonNullable<TestCase['metadata']> {
+  metadata: NonNullable<TestCaseWithVarsFile['metadata']>,
+): NonNullable<TestCaseWithVarsFile['metadata']> {
   if (!metadata.__promptfoo) {
     return metadata;
   }
