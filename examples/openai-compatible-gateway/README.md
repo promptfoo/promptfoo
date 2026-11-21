@@ -38,3 +38,16 @@ Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Complet
 - Uses the OpenAI Chat Completions API shape only.
 
 See the [connection settings](https://www.promptfoo.dev/docs/providers/openai/#connection-settings) section of the OpenAI provider documentation for the full list of base URL and credential options.
+
+## IteraCompute
+
+The [classification example](./promptfooconfig.iteracompute.yaml) uses the full model ID, including the `z-ai/` prefix. It sets `showThinking: false` so the exact-match assertions grade only the answer.
+
+Set your IteraCompute API key and run the example.
+
+```bash
+export ITERACOMPUTE_API_KEY=your_iteracompute_api_key
+npx promptfoo@latest eval -c promptfooconfig.iteracompute.yaml
+```
+
+Live compatibility with the IteraCompute endpoint is unverified.
