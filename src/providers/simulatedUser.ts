@@ -351,7 +351,7 @@ export class SimulatedUser implements ApiProvider {
       messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
     }
 
-    for (let i = 0; i < maxTurns; i++) {
+    for (let i = 0; i < maxTurns && !agentResponse?.conversationEnded; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // The simulated-user provider generates the next attack turn and may signal completion.

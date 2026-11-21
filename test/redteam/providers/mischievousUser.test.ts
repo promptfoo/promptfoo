@@ -48,7 +48,12 @@ describe('RedteamMischievousUserProvider', () => {
     mockUserProviderCallApi.mockReset();
   });
 
-  it('separates simulated-user usage from target usage and probes', async () => {
+  it('retains final grading data and accounts for both turns when the target ends the conversation', async () => {
+    provider = new RedteamMischievousUserProvider({
+      injectVar: 'instructions',
+      maxTurns: 3,
+      stateful: true,
+    });
     mockUserProviderCallApi
       .mockResolvedValueOnce({
         output: 'user response 1',
@@ -61,15 +66,34 @@ describe('RedteamMischievousUserProvider', () => {
     targetProvider.callApi
       .mockResolvedValueOnce({
         output: 'target response 1',
+        conversationEnded: false,
         tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
       })
       .mockResolvedValueOnce({
         output: 'target response 2',
+        conversationEnded: true,
+        guardrails: { flagged: true },
+        sessionId: 'closed',
         tokenUsage: { prompt: 25, completion: 15, total: 40, numRequests: 1 },
       });
 
     const result = await provider.callApi('test prompt', context);
 
+    expect(mockUserProviderCallApi).toHaveBeenCalledTimes(2);
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      output: 'target response 2',
+      prompt: 'user response 2',
+      guardrails: { flagged: true },
+      sessionId: 'closed',
+      metadata: {
+        redteamFinalPrompt: 'user response 2',
+        redteamHistory: [
+          { prompt: 'user response 1', output: 'target response 1' },
+          { prompt: 'user response 2', output: 'target response 2' },
+        ],
+      },
+    });
     expect(result.tokenUsage).toMatchObject({
       prompt: 45,
       completion: 25,
