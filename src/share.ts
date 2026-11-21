@@ -12,8 +12,8 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import {
   getStripFlags,
-  projectPrompt,
   projectTracesForOutput,
+  sanitizePromptForArtifact,
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import {
@@ -281,7 +281,7 @@ async function sendEvalRecord(
     ...evalFields,
     config: redactedConfig,
     prompts: evalRecord.prompts.map((prompt) =>
-      stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
+      stripPromptPaths(sanitizePromptForArtifact(prompt, stripFlags)),
     ),
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
