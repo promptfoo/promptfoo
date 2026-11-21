@@ -23,9 +23,15 @@ import type {
   TokenUsage,
 } from '../types/index';
 
+function getOllamaBaseUrl(env: EnvOverrides | undefined): string {
+  return (resolveProviderEnv(env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434').replace(
+    /\/+$/,
+    '',
+  );
+}
+
 function getOllamaApiUrl(env: EnvOverrides | undefined, endpoint: 'generate' | 'chat' | 'embed') {
-  const baseUrl = resolveProviderEnv(env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434';
-  return `${baseUrl.replace(/\/+$/, '')}/api/${endpoint}`;
+  return `${getOllamaBaseUrl(env)}/api/${endpoint}`;
 }
 
 interface OllamaCompletionOptions {
@@ -495,6 +501,10 @@ export class OllamaCompletionProvider implements ApiProvider {
     this.config = config || {};
   }
 
+  getRateLimitContext() {
+    return { baseUrl: getOllamaBaseUrl(this.env) };
+  }
+
   id(): string {
     return `ollama:completion:${this.modelName}`;
   }
@@ -642,6 +652,10 @@ export class OllamaChatProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
+  }
+
+  getRateLimitContext() {
+    return { baseUrl: getOllamaBaseUrl(this.env) };
   }
 
   id(): string {
