@@ -589,7 +589,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         },
       });
       const callback = typeof resolved === 'function' ? resolved : await resolved;
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      logger.debug('Executing Google function', { name: functionName });
       return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
         callback(args),
       );
