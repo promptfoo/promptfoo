@@ -17,6 +17,11 @@ In this deployment, the scan runner is bundled with the Promptfoo service. Serve
 
 ## Before installing
 
+:::warning Protect first-time setup
+
+A fresh installation lets the first person who reaches setup create the administrator. Before starting Compose or applying Kubernetes resources, restrict access to the operator. Cover the application and authentication services, including direct access to published ports and NodePorts as well as ingress. Keep those restrictions until you finish setup and verify administrator sign-in.
+:::
+
 - Obtain the release bundle, image digests, registry access instructions, deployment key, and deployment-key verification public key from Promptfoo. Treat the deployment key as a secret; it can contain prefilled setup credentials. The verification public key is a separate value.
 - Install Docker Engine with the Compose plugin, Bash, and OpenSSL for the Compose installation.
 - Prepare application and authentication hostnames, DNS, and TLS for access beyond localhost.
@@ -40,10 +45,10 @@ In this deployment, the scan runner is bundled with the Promptfoo service. Serve
    ```bash
    docker compose ps
    curl -fsS http://localhost:3000/health
-   curl -fsS http://localhost:3000/version
+   curl -fsS http://localhost:3000/api/version
    ```
 
-   Use your configured application URL when it differs from the local default. In release 125, `/health` returns HTTP 200 with `{"status":"OK"}` when the HTTP handler is available; it does not test FusionAuth, login, inference, or target connectivity. Confirm the release at `/version`, complete an actual login, and run a small server scan.
+   Use your configured application URL when it differs from the local default. In release 125, `/health` returns HTTP 200 with `{"status":"OK"}` when the HTTP handler is available. Verify FusionAuth, login, inference, and target connectivity separately. Check that the `currentVersion` field in the `/api/version` response matches the application version supplied with your release. Complete an actual login and run a small server scan.
 
 ## Application URLs
 
@@ -202,7 +207,7 @@ Global provider configuration is documented under **Server Settings**; see **Get
 - Back up both databases and preserve the configuration and secrets needed to restore them. The bundled Compose database uses the `postgres_data` named volume; application logs use `promptfoo_logs`. Include any separately configured storage in your recovery plan.
 - Test upgrades and an isolated restore with your database administrator before changing production. Restoring only the Promptfoo database does not restore FusionAuth users and identity configuration. An image rollback alone does not reverse database migrations.
 - For existing installations, follow the release's **Upgrading Existing Installations** section in the bundled README before replacing either image. Release 125 retires legacy default FusionAuth credentials; verify an administrator login with a password you control and follow the documented bootstrap API-key cleanup before upgrading.
-- After a change, verify `/version`, `/health`, browser sign-in, and a small server scan.
+- After a change, verify `/api/version`, `/health`, browser sign-in, and a small server scan.
 
 ## Troubleshooting
 
