@@ -15,7 +15,15 @@ export function callerReviewTests(input, { instructionsVar, instructionsText } =
   if (Boolean(instructionsVar) === (instructionsText !== undefined)) {
     throw new Error('Choose exactly one explicit caller-instructions variable or file.');
   }
-  return rows.map((row, index) => {
+  const tests = [];
+  for (const [index, row] of rows.entries()) {
+    let conversation;
+    try {
+      conversation = listenerEvidence(undefined, { metadata: row?.response?.metadata });
+    } catch (error) {
+      console.warn(`Skipping row ${index + 1}. ${error.message}`);
+      continue;
+    }
     const instructions = instructionsText ?? row.testCase?.vars?.[instructionsVar];
     if (typeof instructions !== 'string' || !instructions.trim() || instructions.length > 65536) {
       throw new Error(
@@ -23,7 +31,6 @@ export function callerReviewTests(input, { instructionsVar, instructionsText } =
       );
     }
     const voice = row.response?.metadata?.voice;
-    const conversation = listenerEvidence(undefined, { metadata: row.response?.metadata });
     // These are permitted harness utterances, not evidence that their words were
     // heard. Only complete accepted clips qualify; never exempt other caller speech.
     const scripts = (voice.interventions ?? [])
@@ -39,7 +46,7 @@ export function callerReviewTests(input, { instructionsVar, instructionsText } =
           Number.isFinite(entry.completedAtMs),
       )
       .map((entry) => entry.text);
-    return {
+    tests.push({
       description: `Saved caller review, row ${index + 1}`,
       vars: {
         caller_instructions: instructions,
@@ -63,8 +70,12 @@ export function callerReviewTests(input, { instructionsVar, instructionsText } =
         conversationSha256: createHash('sha256').update(conversation).digest('hex'),
         evidenceScope: 'listener recognition only; validate disputes against delivered audio',
       },
-    };
-  });
+    });
+  }
+  if (!tests.length) {
+    throw new Error('No saved row has reviewable listener evidence.');
+  }
+  return tests;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

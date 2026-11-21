@@ -171,8 +171,7 @@ function transportEvidence(voice, track, durationMs) {
 
 /** Activity observations locate review regions; they do not prove semantic interruption success. */
 function interventionObservations(voice, target, caller, sampleRate) {
-  const targetActive = frameActivity(target, sampleRate);
-  const callerActive = frameActivity(caller, sampleRate);
+  const recordedActivity = frameActivity(target, sampleRate);
   const activityAfterQuiet = (quietAtMs, endMs) => {
     if (quietAtMs === null || quietAtMs + 200 >= endMs) {
       return null;
@@ -211,25 +210,33 @@ function interventionObservations(voice, target, caller, sampleRate) {
         reason: 'No valid complete audio interval.',
       };
     }
-    const startFrame = Math.floor(startMs / 20);
-    const endFrame = Math.min(targetActive.length, Math.ceil(endMs / 20));
-    let overlapFrames = 0;
-    let firstCallerFrame;
-    for (let frame = startFrame; frame < endFrame; frame++) {
-      if (callerActive[frame] && firstCallerFrame === undefined) {
-        firstCallerFrame = frame;
-      }
-      if (targetActive[frame] && callerActive[frame]) {
-        overlapFrames++;
+    // Evaluate both channels only inside the delivered interval, including a partial last frame.
+    const from = Math.round((startMs * sampleRate) / 1000);
+    const to = Math.round((endMs * sampleRate) / 1000);
+    const clipTarget = frameActivity(target.subarray(from, to), sampleRate);
+    const clipCaller = frameActivity(caller.subarray(from, to), sampleRate);
+    const frameSamples = Math.round(sampleRate * 0.02);
+    const startFrame = Math.floor(from / frameSamples);
+    const offset = from % frameSamples;
+    const targetActive = offset
+      ? frameActivity(target.subarray(offset), sampleRate)
+      : recordedActivity;
+    const fullFrames = Math.floor((target.length - offset) / frameSamples);
+    let overlapSamples = 0;
+    for (const [index, active] of clipCaller.entries()) {
+      if (active && clipTarget[index]) {
+        overlapSamples += Math.min(frameSamples, to - from - index * frameSamples);
       }
     }
+    const first = clipCaller.indexOf(true);
+    const firstCallerFrame = first < 0 ? undefined : startFrame + first;
     const preceding = targetActive.slice(Math.max(0, startFrame - 5), startFrame);
-    const activeBeforeCue = preceding.length > 0 && preceding.every(Boolean);
+    const activeBeforeCue = preceding.length === 5 && preceding.every(Boolean);
     const firstQuietAt = (frames) => {
       if (firstCallerFrame !== undefined) {
-        for (let frame = firstCallerFrame; frame + frames <= targetActive.length; frame++) {
+        for (let frame = firstCallerFrame; frame + frames <= fullFrames; frame++) {
           if (targetActive.slice(frame, frame + frames).every((value) => !value)) {
-            return frame * 20;
+            return startMs + (frame - startFrame) * 20;
           }
         }
       }
@@ -252,8 +259,8 @@ function interventionObservations(voice, target, caller, sampleRate) {
       activityThresholdDbfs: -40,
       frameMs: 20,
       targetActiveFor100MsBeforeCue: activeBeforeCue,
-      callerActivityOnsetMs: firstCallerFrame === undefined ? null : firstCallerFrame * 20,
-      overlapMs: overlapFrames * 20,
+      callerActivityOnsetMs: first < 0 ? null : startMs + first * 20,
+      overlapMs: (overlapSamples * 1000) / sampleRate,
       first100MsTargetQuietAtMs: firstQuietAt(5),
       first200MsTargetQuietAtMs,
       targetActivityAfterFirst200MsQuiet: activityAfterQuiet(first200MsTargetQuietAtMs, endMs),

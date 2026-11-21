@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderPrompt } from '../../src/evaluatorHelpers';
 
 const directory = path.resolve(__dirname, '../../examples/simulated-voice-user');
@@ -80,6 +80,23 @@ describe('independent simulated caller review', () => {
     });
     expect(test.vars.conversation).not.toContain('Your parcel arrives tomorrow.');
     expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('reports unreviewable rows and preserves the original index of the remaining calls', () => {
+    const valid = fixture().results.results[0];
+    const empty = fixture().results.results[0];
+    empty.response.metadata.voice.transcript = [];
+    const options = { instructionsVar: 'instructions' };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const tests = prepare({ results: { results: [empty, valid] } }, options);
+      expect(tests).toHaveLength(1);
+      expect(tests[0].metadata.originalRowIndex).toBe(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/row 1.*nonempty listener/));
+      expect(() => prepare({ results: { results: [empty] } }, options)).toThrow('No saved row');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('requires an explicitly selected real caller persona instead of inventing one', () => {

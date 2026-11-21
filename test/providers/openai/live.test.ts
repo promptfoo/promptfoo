@@ -2485,6 +2485,19 @@ describe('OpenAiLiveProvider', () => {
       url: 'wss://api.openai.com/v1/live/sessions',
       headers: { Authorization: 'Bearer ambient-openai-key', 'X-OpenAI-Originator': 'promptfoo' },
     });
+    expect(await connectWith(gateway, { apiHost: 'eu.api.openai.com' })).toMatchObject({
+      url: 'wss://eu.api.openai.com/v1/live/sessions',
+      headers: { Authorization: 'Bearer ambient-openai-key' },
+    });
+    for (const apiBaseUrl of [
+      'https://eu.api.openai.com.example/v1',
+      'http://eu.api.openai.com/v1',
+      'https://eu.api.openai.com:8443/v1',
+    ]) {
+      expect((await connectWith(gateway, { apiBaseUrl })).headers).not.toHaveProperty(
+        'Authorization',
+      );
+    }
     // The merged endpoint also decides ambient-key suppression, userinfo, and query rejection.
     expect(
       await connectWith(official, {

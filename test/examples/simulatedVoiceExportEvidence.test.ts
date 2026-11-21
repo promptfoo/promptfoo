@@ -505,6 +505,35 @@ describe('voice example portable evidence export', () => {
     },
   );
 
+  it.each([
+    [20, false, 0],
+    [85, false, 10],
+    [100, true, 10],
+    [200, true, 0],
+  ] as const)(
+    'measures only recorded activity around a 10 ms cue at %i ms',
+    async (cue, before, overlapMs) => {
+      const bytes = wav();
+      for (let frame = 0; frame < 12000; frame++) {
+        const during = frame >= cue * 24 && frame < (cue + 10) * 24;
+        bytes.writeInt16LE(during && !overlapMs ? 0 : 2000, 44 + frame * 4);
+        bytes.writeInt16LE(during ? -3000 : 0, 46 + frame * 4);
+      }
+      const input = fixture(bytes);
+      input.results.results[0].response.metadata.voice.interventions[0] = {
+        scheduledAtMs: cue,
+        firstFrameAtMs: cue,
+        completedAtMs: cue + 10,
+      };
+      const manifest = await run(input);
+      expect(manifest.rows[0].metrics.interventions[0]).toMatchObject({
+        targetActiveFor100MsBeforeCue: before,
+        callerActivityOnsetMs: cue,
+        overlapMs,
+      });
+    },
+  );
+
   it('exports a complete prepared utterance only after matching the recorded caller PCM hash', async () => {
     const input = fixture();
     const pcm = Buffer.alloc(9600);

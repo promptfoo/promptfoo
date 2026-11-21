@@ -6,7 +6,7 @@ import { isOpenAiCredentialHeader } from './credentialRedaction';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS, prepareLiveInput } from './liveInput';
 import { LIVE_FRAME_MS, LiveSession } from './liveSession';
-import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel, isOpenAiFirstPartyApiUrl } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -92,7 +92,8 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     if (url.hash) {
       throw new Error('GPT-Live session URLs do not accept fragments.');
     }
-    if (url.hostname === 'api.openai.com' && !this.modelName.startsWith('gpt-live-')) {
+    const firstParty = isOpenAiFirstPartyApiUrl(url.href);
+    if (firstParty && !this.modelName.startsWith('gpt-live-')) {
       throw new Error(
         'The OpenAI Live API requires a gpt-live-* model. Use the matching provider or configure a compatible apiBaseUrl.',
       );
@@ -118,7 +119,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
     const sendApiKey =
       Boolean(config.apiKey || config.apiKeyEnvar) ||
-      url.hostname.toLowerCase() === 'api.openai.com';
+      (firstParty && url.protocol === 'wss:' && !url.port && !userinfo);
     const authorization =
       apiKey && sendApiKey
         ? `Bearer ${apiKey}`
