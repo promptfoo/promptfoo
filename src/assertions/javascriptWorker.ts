@@ -117,7 +117,13 @@ await import(${JSON.stringify(workerEntry.href)});`;
     function onAbort(): void {
       void finish(new DOMException('Worker JavaScript assertion aborted', 'AbortError'));
     }
-    worker.on('error', (error) => void finish(error));
+    worker.on(
+      'error',
+      (error) =>
+        void finish(
+          error instanceof Error ? error : new Error('JavaScript assertion worker failed'),
+        ),
+    );
     worker.on('exit', (code) => {
       if (!settled) {
         void finish(new Error(`JavaScript assertion worker exited without a result (${code})`));
