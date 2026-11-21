@@ -4798,35 +4798,32 @@ describe('GoogleInteractionsProvider', () => {
 
     it('keeps resolved tool factories local to each concurrent response', async () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-tools-'));
+      const factory = path.join(root, 'tools.mjs');
       const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
-        config: { apiKey: 'test-key', tools: 'file://{{ factory }}:getTools' as any },
+        config: { apiKey: 'test-key', tools: `file://${factory}:{{ field }}` as any },
       });
       mockFetchWithCache.mockResolvedValue(functionCallResponse() as any);
       try {
-        const [valid, invalid] = await Promise.all(
-          ['city', 'country'].map(async (field) => {
-            const factory = path.join(root, field + '.mjs');
-            const tool = {
-              name: 'get_weather',
-              parameters: {
-                type: 'object',
-                properties: { [field]: { type: 'string' } },
-                required: [field],
-              },
-            };
-            fs.writeFileSync(
-              factory,
-              `export function getTools() { return { functionDeclarations: [${JSON.stringify(tool)}] } }`,
-            );
-            const response = await provider.callApi('Weather?', {
-              vars: { factory },
-              prompt: { raw: 'Weather?', label: 'Weather' },
-            });
-            fs.unlinkSync(factory);
-            expect(response.error).toBeUndefined();
-            return response;
-          }),
+        fs.writeFileSync(
+          factory,
+          `function tool(field) {
+            const parameters = { type: 'object', properties: { [field]: { type: 'string' } }, required: [field] };
+            return { functionDeclarations: [{ name: 'get_weather', parameters }] };
+          }
+          export const city = () => tool('city');
+          export const country = () => tool('country');`,
         );
+        const [valid, invalid] = await Promise.all(
+          ['city', 'country'].map((field) =>
+            provider.callApi('Weather?', {
+              vars: { field },
+              prompt: { raw: 'Weather?', label: 'Weather' },
+            }),
+          ),
+        );
+        fs.unlinkSync(factory);
+        expect(valid.error).toBeUndefined();
+        expect(invalid.error).toBeUndefined();
         expect(valid.output).toBe(invalid.output);
         expect(JSON.stringify(invalid)).not.toContain('country');
         expect(() =>
