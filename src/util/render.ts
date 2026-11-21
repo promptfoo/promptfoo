@@ -3,8 +3,7 @@ import logger from '../logger';
 import { preserveRemoteFields } from './remoteTestData';
 import { getNunjucksEngine } from './templates';
 
-import type { VarValue } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides, VarValue } from '../types';
 
 /**
  * Replaces every Nunjucks template `{{ ... }}` in `value`. A template runs from `{{` to the

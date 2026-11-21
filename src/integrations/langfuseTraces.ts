@@ -122,10 +122,21 @@ function extractTextBlocks(content: unknown[]): unknown {
   return extractTextBlocksIfPresent(content) ?? JSON.stringify(content);
 }
 
-function getMessageToolCalls(message: Record<string, unknown>): unknown {
-  return Array.isArray(message.tool_calls) && message.tool_calls.length > 0
-    ? message.tool_calls
-    : message.function_call;
+function extractAssistantOutput(message: Record<string, unknown>): unknown {
+  const { content, refusal, tool_calls, function_call } = message;
+  if (typeof refusal === 'string' && refusal) {
+    return refusal;
+  }
+  const calls = Array.isArray(tool_calls) && tool_calls.length > 0 ? tool_calls : function_call;
+  if (content == null) {
+    return calls ?? undefined;
+  }
+  if (calls) {
+    return message;
+  }
+  return Array.isArray(content) && content.every(isContentBlock)
+    ? extractTextBlocks(content)
+    : content;
 }
 
 function extractMessageContent(messagesInput: unknown[]): unknown | undefined {
@@ -161,22 +172,8 @@ function extractOutputItemText(item: unknown): unknown | undefined {
     return item.text;
   }
 
-  if (getMessageToolCalls(item) && item.content != null) {
-    return item;
-  }
-  if (Array.isArray(item.content)) {
-    return item.content.every(isContentBlock) ? extractTextBlocks(item.content) : item.content;
-  }
-
-  if (item.type === 'message' || item.role === 'assistant') {
-    if (item.content !== undefined && item.content !== null) {
-      return item.content;
-    }
-
-    const toolCall = getMessageToolCalls(item);
-    if (toolCall !== undefined && toolCall !== null) {
-      return toolCall;
-    }
+  if (item.type === 'message' || item.role === 'assistant' || Array.isArray(item.content)) {
+    return extractAssistantOutput(item);
   }
 
   return undefined;
@@ -211,27 +208,9 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
     return undefined;
   }
 
-  if (isRecord(choice.message)) {
-    if (typeof choice.message.refusal === 'string' && choice.message.refusal) {
-      return choice.message.refusal;
-    }
-    const content = choice.message.content;
-    if (content != null && getMessageToolCalls(choice.message)) {
-      return choice.message;
-    }
-    if (content !== undefined && content !== null) {
-      return Array.isArray(content) && content.every(isContentBlock)
-        ? extractTextBlocks(content)
-        : content;
-    }
-
-    const toolCall = getMessageToolCalls(choice.message);
-    if (toolCall !== undefined && toolCall !== null) {
-      return toolCall;
-    }
-  }
-
-  return choice.text;
+  return isRecord(choice.message)
+    ? (extractAssistantOutput(choice.message) ?? choice.text)
+    : choice.text;
 }
 
 function buildTraceUrl(baseUrl: string, htmlPath?: string | null): string | undefined {

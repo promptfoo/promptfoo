@@ -595,24 +595,23 @@ describe('langfuseTraces', () => {
     });
 
     it.each([null, 'Earlier assistant text'])(
-      'extracts chat refusal text when message content is %j',
+      'extracts recorded refusals from choices, direct messages and arrays with content %j',
       async (content) => {
         const refusal = 'I cannot answer that request.';
+        const message = { role: 'assistant', content, refusal };
+        const outputs = [{ choices: [{ message: { content, refusal } }] }, message, [message]];
         mockTraceList.mockResolvedValue({
-          data: [
-            {
-              id: 'refusal-trace',
-              timestamp: '2024-01-01T00:00:00Z',
-              input: 'A fixture question',
-              output: { choices: [{ message: { content, refusal } }] },
-            },
-          ],
+          data: outputs.map((output, index) => ({
+            id: 'refusal-' + index,
+            timestamp: '2024-01-01T00:00:00Z',
+            input: 'A fixture question',
+            output,
+          })),
           meta: { totalPages: 1 },
         });
 
-        const tests = await fetchLangfuseTraces('langfuse://traces?limit=1');
-
-        expect(tests[0].providerOutput).toBe(refusal);
+        const tests = await fetchLangfuseTraces('langfuse://traces?limit=3');
+        expect(tests.map((test) => test.providerOutput)).toEqual([refusal, refusal, refusal]);
       },
     );
 
