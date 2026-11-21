@@ -283,17 +283,14 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   protected override calculateResponseCost(
     { usage }: OpenAiChatCompletionCostData,
     config: OpenAiBillingConfig,
-    cached: boolean,
   ): number | undefined {
-    return cached
-      ? 0
-      : calculateHyperbolicCost(
-          this.getBillingModelName(config),
-          config,
-          usage?.prompt_tokens,
-          usage?.completion_tokens,
-          usage?.completion_tokens_details?.reasoning_tokens,
-        );
+    return calculateHyperbolicCost(
+      this.getBillingModelName(config),
+      config,
+      usage?.prompt_tokens,
+      usage?.completion_tokens,
+      usage?.completion_tokens_details?.reasoning_tokens,
+    );
   }
 }
 
