@@ -46,18 +46,36 @@ type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
+// A nested grading provider can be resolved long after the test loader returns.
+function selectsGrader(test: TestCase): boolean {
+  const assertions = new Set(test.assert);
+  for (const assertion of assertions) {
+    if (assertion.type === 'assert-set') {
+      for (const child of assertion.assert) {
+        assertions.add(child);
+      }
+    } else if (assertion.provider != null) {
+      return true;
+    }
+  }
+  return test.options?.provider != null;
+}
+
 // Saved remote rows must stay data when a config is serialized and replayed.
-function preserveRemoteTests(tests: TestCase[]): TestCase[] {
-  return tests.map((test) => {
-    validateTestCase(test);
-    return {
-      ...test,
-      metadata: {
-        ...test.metadata,
-        __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
-      },
-    };
-  });
+function preserveRemoteTest(test: TestCase): TestCase {
+  validateTestCase(test);
+  if (selectsGrader(test)) {
+    throw new Error(
+      'Remote test cases cannot select grading providers. Configure the grader locally in defaultTest.',
+    );
+  }
+  return {
+    ...test,
+    metadata: {
+      ...test.metadata,
+      __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
+    },
+  };
 }
 
 function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
@@ -122,11 +140,11 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
-    return preserveRemoteTests(await fetchHuggingFaceDataset(varsPath));
+    return (await fetchHuggingFaceDataset(varsPath)).map(preserveRemoteTest);
   }
 
   if (varsPath.startsWith('az://')) {
-    return preserveRemoteTests(await readAzureBlobStandaloneTestsFile(varsPath));
+    return (await readAzureBlobStandaloneTestsFile(varsPath)).map(preserveRemoteTest);
   }
 
   let rows: CsvRow[];
@@ -144,7 +162,7 @@ export async function readStandaloneTestsFile(
     return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
   }
 
-  return preserveRemoteTests(csvRowsToTestCases(rows));
+  return csvRowsToTestCases(rows).map(preserveRemoteTest);
 }
 
 async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestCase[]> {
@@ -502,7 +520,7 @@ async function readTestWithEnv(
   sourceBasePath = basePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
-    return test as TestCase;
+    return preserveRemoteTest(test as TestCase);
   }
   let testCase: TestCase;
   let effectiveBasePath = sourceBasePath;
@@ -632,7 +650,7 @@ async function loadTestsFromGlobWithEnv(
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
-    return preserveRemoteTests(await fetchHuggingFaceDataset(loadTestsGlob));
+    return (await fetchHuggingFaceDataset(loadTestsGlob)).map(preserveRemoteTest);
   }
 
   if (loadTestsGlob.startsWith('file://')) {
@@ -844,7 +862,7 @@ async function readTestsWithEnv(
         ret.push(...(await loadTestsFromGlobWithEnv(globOrTest, basePath, env, loadProviders)));
       }
     } else if (isRemoteTestCase(globOrTest as TestCase)) {
-      ret.push(globOrTest as TestCase);
+      ret.push(preserveRemoteTest(globOrTest as TestCase));
     } else if ('path' in globOrTest) {
       ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
     } else {
