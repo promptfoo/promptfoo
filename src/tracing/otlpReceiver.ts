@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { AddressInfo } from 'node:net';
 
 import express from 'express';
 import logger from '../logger';
@@ -518,7 +519,7 @@ export class OTLPReceiver {
         status: 'running',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        port: this.port || 4318,
+        port: this.port,
       });
     });
 
@@ -1028,32 +1029,18 @@ export class OTLPReceiver {
     }
   }
 
-  listen(port: number = 4318, host: string = '127.0.0.1'): Promise<void> {
-    this.port = port;
-    logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
-
+  /** Bind a TCP receiver and return its assigned port. */
+  listen(port: number = 4318, host: string = '127.0.0.1'): Promise<number> {
     return new Promise((resolve, reject) => {
-      let settled = false;
-      const server = this.app.listen(port, host, () => {
-        // Express invokes this callback even when the bind fails (e.g. EADDRINUSE), with
-        // `server.listening === false`. Only resolve once the socket is truly bound; otherwise
-        // let the 'error' handler reject so `failOnReceiverStartFailure` startup actually fails.
-        if (settled || !server.listening) {
-          return;
-        }
-        settled = true;
-        logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
-        logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
-        resolve();
-      });
+      const server = this.app.listen(port, host);
       this.server = server;
-
+      server.once('listening', () => {
+        this.port = (server.address() as AddressInfo).port;
+        logger.info(`[OtlpReceiver] Listening on http://${host}:${this.port}`);
+        resolve(this.port);
+      });
       server.on('error', (error: Error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        logger.error(`[OtlpReceiver] Failed to start: ${error}`);
+        logger.error(`[OtlpReceiver] Receiver error: ${error}`);
         reject(error);
       });
     });
@@ -1091,7 +1078,7 @@ export class OTLPReceiver {
 
 // Singleton instance and its pending or completed startup.
 let otlpReceiver: OTLPReceiver | null = null;
-let otlpReceiverStartPromise: Promise<void> | null = null;
+let otlpReceiverStartPromise: Promise<number> | null = null;
 let otlpReceiverStopPromise: Promise<void> | null = null;
 
 export async function startOTLPReceiver(
@@ -1103,24 +1090,23 @@ export async function startOTLPReceiver(
     redactAttributes?: string[];
     tracePolicy?: OTLPReceiverTracePolicy;
   },
-): Promise<void> {
+): Promise<number> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   while (otlpReceiverStopPromise) {
     await otlpReceiverStopPromise;
   }
-  if (otlpReceiver) {
+  if (otlpReceiver && otlpReceiverStartPromise) {
     // A later caller can add its evaluation policy without changing the active endpoint
     // or the fallback policy used for traces with no registered evaluation.
     otlpReceiver.registerTracePolicy(extra?.tracePolicy);
-    await otlpReceiverStartPromise;
-    return;
+    return otlpReceiverStartPromise;
   }
 
   const receiver = new OTLPReceiver({ acceptFormats, ...extra });
   otlpReceiver = receiver;
   try {
     otlpReceiverStartPromise = receiver.listen(port, host);
-    await otlpReceiverStartPromise;
+    return await otlpReceiverStartPromise;
   } catch (error) {
     // A receiver that never bound must not dictate options for a later retry.
     if (otlpReceiver === receiver) {
