@@ -722,6 +722,19 @@ describe('OAuth cancellation ownership', () => {
 });
 
 describe('sanitizeMcpToolData', () => {
+  it('keeps tool names and public words while inspecting their arguments', () => {
+    const args = { authors: ['Alice'], authorName: 'Alice', tokenizer: 'cl100k_base' };
+    expect(
+      sanitizeMcpToolData({
+        name: 'reset_password',
+        args: { ...args, authorAccessToken: 'private', authorization: 'private' },
+      }),
+    ).toEqual({
+      name: 'reset_password',
+      args: { ...args, authorAccessToken: '[REDACTED]', authorization: '[REDACTED]' },
+    });
+  });
+
   it.each([
     'basicAuth',
     'myAuth',
@@ -748,6 +761,8 @@ describe('sanitizeMcpToolData', () => {
     [
       { name: 'databasePassword', value: 'private-fixture' },
       { key: 'apiKey', value: 'private-fixture' },
+      { header: 'Authorization', values: ['private-fixture'] },
+      { name: 'authorAccessToken', fieldValue: 'private-fixture' },
       ['Authorization', 'private-fixture'],
       'Bearer private-fixture',
       ' urn:credential:private-fixture',

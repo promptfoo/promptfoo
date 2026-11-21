@@ -37,11 +37,16 @@ function isCredentialContainer(name: string): boolean {
   ) {
     return false;
   }
+  // Ignore public words, preserving credential compounds such as authorAccessToken.
+  const credentialWords = name
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b(?:authors?|tokeni[sz]ers?)\b/gi, '');
   // A credential map can contain secrets in its keys as well as its values.
   return (
     isSecretEnvVarName(name) ||
-    /(?:password|passwd|passphrase|pwd|secret|credential|dsn|token|auth(?!or$)|cookie|bearer|session|signature|(?:api|access|subscription|private|signing|encryption|cert|virtual)key)/.test(
-      compact,
+    /(?:password|passwd|passphrase|pwd|secret|credential|dsn|token|auth|cookie|bearer|session|signature|(?:api|access|subscription|private|signing|encryption|cert|virtual)key)/.test(
+      normalizeFieldName(credentialWords),
     )
   );
 }
@@ -96,6 +101,7 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
     // Header lists and form entries commonly identify a credential via a name
     // or key and put the credential itself in an otherwise innocuous sibling.
     if (
+      entries.some(([key]) => /(?:values?$|^(?:val|data|content|text|raw)$)/i.test(key)) &&
       entries.some(
         ([key, label]) =>
           /^(?:name|key|field|header|parameter)$/i.test(key) &&
