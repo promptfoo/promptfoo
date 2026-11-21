@@ -1693,14 +1693,14 @@ describe('JavaScript file references', () => {
   });
 
   it.each(['javascript', 'not-javascript'] as const)(
-    'preserves threshold getter ordering for %s numeric results',
+    'reads the threshold only during %s numeric grading',
     async (type) => {
       const reads: number[] = [];
       const assertion: Assertion = {
         type,
         value: () => 0.6,
         get threshold() {
-          const value = [0.7, 0.7, 0.7, 0.5][reads.length] ?? 0.5;
+          const value = [0.7, 0.7, 0.5][reads.length] ?? 0.5;
           reads.push(value);
           return value;
         },
@@ -1717,8 +1717,8 @@ describe('JavaScript file references', () => {
         score: 0.6,
         assertion: { type, threshold: 0.7, value: expect.any(String) },
       });
-      // The dispatcher serializes once, followed by metadata serialization and two comparisons.
-      expect(reads).toEqual([0.7, 0.7, 0.7, 0.5]);
+      // Grading reads the threshold for metadata and two comparisons.
+      expect(reads).toEqual([0.7, 0.7, 0.5]);
     },
   );
 
