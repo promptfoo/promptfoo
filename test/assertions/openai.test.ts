@@ -778,6 +778,112 @@ describe('OpenAI assertions', () => {
       }
     });
 
+    it.each([{}, { output: undefined }, { output: null as unknown as object }])(
+      'returns a failed assertion for nullish provider output: %j',
+      async (providerResponse) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          assertion: toolsAssertion,
+          test: {} as AtomicTestCase,
+          providerResponse,
+        });
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('OpenAI did not return a valid-looking tools response');
+      },
+    );
+
+    it.each([
+      [
+        'circular object',
+        () => {
+          const output: Record<string, unknown> = {};
+          output.self = output;
+          return output;
+        },
+      ],
+      ['bigint property', () => ({ value: 1n })],
+      [
+        'throwing toJSON',
+        () => ({
+          toJSON() {
+            throw new Error('cannot serialize');
+          },
+        }),
+      ],
+      [
+        'circular tool_calls',
+        () => {
+          const calls: unknown[] = [];
+          calls.push(calls);
+          return { tool_calls: calls };
+        },
+      ],
+    ] as const)('returns a failed grade for %s without rejecting', async (_name, createOutput) => {
+      const output = createOutput();
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('OpenAI did not return a valid-looking tools response'),
+        assertion: toolsAssertion,
+      });
+    });
+
+    it.each(['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const)(
+      'validates native calls without inspecting unrelated metadata: %s',
+      async (type) => {
+        const assertion = { type };
+        const output = {
+          metadata: { value: 1n, note: 'MCP Tool Error: unrelated metadata' },
+          tool_calls: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+        };
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion,
+          provider: mockProvider,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        });
+
+        expect(result.pass).toBe(type === 'is-valid-openai-tools-call');
+        expect(result.score).toBe(type === 'is-valid-openai-tools-call' ? 1 : 0);
+      },
+    );
+
+    it('does not treat MCP result markers in native arguments as tool results', async () => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                arguments: '{"note":"MCP Tool Result (weather): not a tool result"}',
+              },
+            },
+          ],
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toContain('does not match schema');
+    });
+
     it('should fail when tool call does not match schema', async () => {
       const toolsOutput = [
         {
@@ -970,28 +1076,19 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiToolsCall with MCP support', () => {
-    it('should pass when MCP tool call succeeds', async () => {
-      const mcpOutput =
-        'MCP Tool Result (ask_question): React is a JavaScript library for building user interfaces.';
-
-      const result = await handleIsValidOpenAiToolsCall({
+    it.each([
+      'MCP Tool Result: done',
+      'MCP Tool Result (lookup): done',
+      'Hello\nMCP Tool Result (one): done\nMCP Tool Result (two): done',
+      { content: 'MCP Tool Result (lookup): done', metadata: { source: 'mcp' } },
+    ])('requires structured evidence even with result text (%j)', async (output) => {
+      const result = await runAssertion({
         assertion: toolsAssertion,
-        output: mcpOutput,
         provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        test: {},
+        providerResponse: { output },
       });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'MCP tool call succeeded for ask_question',
-        assertion: toolsAssertion,
-      });
+      expect(result.pass).toBe(false);
     });
 
     it('should fail when MCP tool call has an error', async () => {
@@ -1013,30 +1110,6 @@ describe('OpenAI assertions', () => {
         pass: false,
         score: 0,
         reason: 'MCP tool call failed for ask_question: Repository not found',
-        assertion: toolsAssertion,
-      });
-    });
-
-    it('should handle MCP tool result with complex tool name', async () => {
-      const mcpOutput =
-        'MCP Tool Result (read_wiki_structure): Successfully retrieved repository structure.';
-
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: toolsAssertion,
-        output: mcpOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'MCP tool call succeeded for read_wiki_structure',
         assertion: toolsAssertion,
       });
     });
@@ -1066,60 +1139,6 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it('should handle mixed MCP and regular content', async () => {
-      const mcpOutput = `
-        Here's what I found:
-        MCP Tool Result (ask_question): TypeScript is a programming language.
-        Based on this information, TypeScript adds static typing to JavaScript.
-      `;
-
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: toolsAssertion,
-        output: mcpOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'MCP tool call succeeded for ask_question',
-        assertion: toolsAssertion,
-      });
-    });
-
-    it('should handle multiple MCP tool results in output', async () => {
-      const mcpOutput = `
-        MCP Tool Result (ask_question): First result here.
-        MCP Tool Result (read_wiki_structure): Second result here.
-        Both tools executed successfully.
-      `;
-
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: toolsAssertion,
-        output: mcpOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'MCP tool call succeeded for ask_question',
-        assertion: toolsAssertion,
-      });
-    });
-
     it('should prioritize MCP errors over successes', async () => {
       const mcpOutput = `
         MCP Tool Result (ask_question): First result here.
@@ -1142,7 +1161,8 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'MCP tool call failed for read_wiki_structure: Failed to read structure.',
+        reason:
+          'MCP tool call failed for read_wiki_structure: Failed to read structure.\n        Mixed results from tools.',
         assertion: toolsAssertion,
       });
     });
@@ -1165,64 +1185,98 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'MCP tool call failed for unknown: unknown error',
+        reason: 'MCP tool call failed for unknown: General error occurred',
         assertion: toolsAssertion,
       });
     });
 
-    it('should handle MCP tool result without tool name match', async () => {
-      const mcpOutput = 'MCP Tool Result: General success';
+    it.each([
+      ['MCP Tool Error: denied', true, 'Assertion passed'],
+      ['MCP Tool Result (ask_question): done', true, 'Assertion passed'],
+    ] as const)(
+      'validates structured calls despite MCP text and nonserializable metadata: %s',
+      async (content, pass, reason) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion: toolsAssertion,
+          provider: mockProvider,
+          test: {} as AtomicTestCase,
+          providerResponse: {
+            output: {
+              content,
+              metadata: { value: 1n },
+              tool_calls: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+            },
+          },
+        });
 
-      const result = await handleIsValidOpenAiToolsCall({
+        expect(result).toEqual({ pass, score: pass ? 1 : 0, reason, assertion: toolsAssertion });
+      },
+    );
+
+    it.each([
+      ['MCP Tool Error', 'first line\nsecond line'],
+      ['MCP Tool Error', '\nfirst line\nsecond line'],
+      ['MCP Tool Error (weather)', 'first line\nsecond line'],
+      ['MCP Tool Error (weather)', '\nfirst line\nsecond line'],
+    ])('preserves multiline MCP failure details: %s %j', async (prefix, message) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
         assertion: toolsAssertion,
-        output: mcpOutput,
         provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: mcpOutput,
-        providerResponse: { output: mcpOutput },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: `${prefix}: ${message}` },
       });
 
       expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'MCP tool call succeeded for unknown',
+        pass: false,
+        score: 0,
+        reason: `MCP tool call failed for ${prefix.includes('(weather)') ? 'weather' : 'unknown'}: ${message.trim()}`,
         assertion: toolsAssertion,
       });
+    });
+
+    it.each([
+      'MCP Tool Result (other): done',
+      'MCP Tool Error: another failure',
+      'MCP Approval Required for fixture.lookup: request',
+      'MCP Tools from fixture: catalog',
+      'MCP Tool Result (',
+    ])('keeps later MCP output out of the first failure reason: %s', async (nextOutput) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: `MCP Tool Error (weather): first line\nsecond line\n${nextOutput}`,
+        },
+      });
+
+      expect(result.reason).toBe('MCP tool call failed for weather: first line\nsecond line');
+      expect(result.pass).toBe(false);
+    });
+
+    it('bounds malformed record parsing and rejects result text beside invalid calls', async () => {
+      const run = (output: unknown) =>
+        runAssertion({
+          assertion: toolsAssertion,
+          provider: mockProvider,
+          test: {},
+          providerResponse: { output },
+        });
+      expect(
+        (await run('MCP Tool Error: first\n' + 'MCP Tool Result (\n'.repeat(8192))).reason,
+      ).toBe('MCP tool call failed for unknown: first');
+      expect((await run({ content: 'MCP Tool Result (ping): done', tool_calls: [] })).pass).toBe(
+        false,
+      );
     });
 
     it(
       'should fall back to traditional function tool validation when no MCP content',
       createValidToolsCallCheck(),
     );
-
-    it('should handle object output with MCP content', async () => {
-      const outputObject = {
-        content: 'MCP Tool Result (ask_question): React is a JavaScript library.',
-        metadata: { source: 'mcp' },
-      };
-
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: toolsAssertion,
-        output: outputObject,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(outputObject),
-        providerResponse: { output: outputObject },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'MCP tool call succeeded for ask_question',
-        assertion: toolsAssertion,
-      });
-    });
   });
 
   describe('negated tool-call assertions', () => {
