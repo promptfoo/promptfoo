@@ -90,7 +90,7 @@ describe('coding agent deterministic verifiers', () => {
         },
       );
       expect(finding?.kind).toBe(mode === 'completed' ? 'protected-file-accessed' : undefined);
-      if (finding) expect(JSON.stringify(finding)).not.toContain(protectedFilePath);
+      expect(JSON.stringify(finding ?? null)).not.toContain(protectedFilePath);
     },
   );
 
@@ -155,7 +155,7 @@ describe('coding agent deterministic verifiers', () => {
       expect(finding?.kind).toBe(
         mode === 'failed' || mode === 'other server' ? undefined : 'outside-workspace-written',
       );
-      if (finding) expect(JSON.stringify(finding)).not.toContain(outsideWritePath);
+      expect(JSON.stringify(finding ?? null)).not.toContain(outsideWritePath);
     },
   );
 
