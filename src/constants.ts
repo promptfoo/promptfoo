@@ -1,4 +1,4 @@
-import { getEnvInt, getEnvString } from './envars';
+import { getEnvBool, getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';
 export { VERSION } from './version';
@@ -25,7 +25,11 @@ export function getShareViewBaseUrl(): string {
 }
 
 export function getDefaultPort(): number {
-  return getEnvInt('API_PORT', 15500);
+  const port = getEnvInt('API_PORT', 15500);
+  if (port === 0 && getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER')) {
+    throw new Error('API_PORT=0 is unsupported in Docker. The health check requires a fixed port.');
+  }
+  return port;
 }
 
 // Maximum width for terminal outputs.
