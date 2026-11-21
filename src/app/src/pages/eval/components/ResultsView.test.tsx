@@ -872,24 +872,17 @@ describe('ResultsView Chart Rendering', () => {
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 
+  const ineligibleTable = {
+    ...createComparisonTable(),
+    body: [{ outputs: [{ score: 0 }, { score: 0 }] }],
+  };
+
   it('recomputes the default chart visibility when navigating between evals', async () => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
 
     let tableStoreValue = {
       author: 'Test Author',
-      table: {
-        head: {
-          prompts: [
-            {
-              label: 'Initial Prompt',
-              provider: 'openai:gpt-4',
-              raw: 'Initial prompt',
-            },
-          ],
-          vars: ['input'],
-        },
-        body: [{ outputs: [{ score: 0.8 }] }],
-      },
+      table: ineligibleTable,
       config: {
         description: 'Initial Evaluation',
         sharing: true,
@@ -991,10 +984,7 @@ describe('ResultsView Chart Rendering', () => {
 
     tableStoreValue = {
       ...tableStoreValue,
-      table: {
-        ...createComparisonTable(),
-        body: [{ outputs: [{ score: 0 }, { score: 0 }] }],
-      },
+      table: ineligibleTable,
       config: {
         description: 'Ineligible Evaluation',
         sharing: true,
