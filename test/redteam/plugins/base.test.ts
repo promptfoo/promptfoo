@@ -2058,7 +2058,7 @@ describe('RedteamGraderBase', () => {
         try {
           await expect(
             new ToolGrader().getResult('test prompt', 'test output', mockTest, agentsProvider),
-          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.14.1');
+          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.21.0');
           expect(mockLoadTools).not.toHaveBeenCalled();
         } finally {
           spy.mockRestore();

@@ -998,6 +998,34 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
     });
 
+    it('grades refusals before discarding evidence when the policy requires it', async () => {
+      mockGetGraderById.mockReturnValue({ ...mockGrader, useRefusalShortcut: false });
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Disclosure' },
+      });
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Synthetic question' });
+      mockIsBasicRefusal.mockReturnValue(true);
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'I cannot help. Example value.' });
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        stateful: false,
+        maxTurns: 2,
+        maxBacktracks: 1,
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test: {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { goal: 'test goal', pluginId: 'pii:social' },
+        },
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
+      expect(result.metadata?.storedGraderResult?.pass).toBe(false);
+    });
+
     it('should stop when max backtracks reached', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');

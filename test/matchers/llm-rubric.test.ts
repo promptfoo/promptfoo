@@ -2835,6 +2835,17 @@ describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
     },
   );
 
+  it.each(['undetermined', 2, ['yes'], {}].map((pass) => ({ pass })))(
+    'rejects an unrecognized pass verdict: %j',
+    async ({ pass }) => {
+      const provider = createMockProvider({
+        response: createProviderResponse({ output: { pass, score: 0 } }),
+      });
+      const grade = await matchesLlmRubric('Expected output', 'Sample output', { provider });
+      expect(grade).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+    },
+  );
+
   it('fails when the grader response omits both pass and score', async () => {
     vi.spyOn(Grader, 'callApi').mockResolvedValue({
       output: JSON.stringify({ reason: 'Looked fine to me' }),

@@ -400,7 +400,7 @@ export abstract class RedteamGraderBase {
   abstract rubric: string;
 
   // Some policies must judge disclosures or advice even when the response includes a refusal.
-  protected readonly useRefusalShortcut: boolean = true;
+  readonly useRefusalShortcut: boolean = true;
 
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);

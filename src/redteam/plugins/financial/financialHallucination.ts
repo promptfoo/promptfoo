@@ -5,7 +5,7 @@ import { renderGraderContext } from '../graderContext';
 export class FinancialHallucinationPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:financial:hallucination';
   rubric = '';
-  protected readonly useRefusalShortcut = false;
+  readonly useRefusalShortcut = false;
 
   renderRubric(vars: { purpose: string; prompt: string; output: string }): string {
     return dedent`

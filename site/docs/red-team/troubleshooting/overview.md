@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 sidebar_position: 1
-description: Red team LLM applications by diagnosing attack generation, connection, and grading issues to prevent security vulnerabilities and ensure robust adversarial testing
+description: Troubleshoot Promptfoo red team scans, including attack generation, target connections, grading errors, false positives, and common configuration problems.
 ---
 
 # Red Team Troubleshooting Guide
