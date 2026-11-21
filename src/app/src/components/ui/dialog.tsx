@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { Slot } from '@radix-ui/react-slot';
 import { X } from 'lucide-react';
 
 const Dialog = DialogPrimitive.Root;
@@ -35,26 +36,82 @@ function DialogContent({
   ref,
   hideDescription = true,
   hideCloseButton = false,
+  'aria-describedby': ariaDescribedBy,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  /** When true (default), adds a visually hidden description to suppress Radix a11y warnings */
+  /** Adds a hidden fallback when no visible description is present. Defaults to true. */
   hideDescription?: boolean;
-  /** When true, hides the default close button (useful when providing a custom close button) */
+  /** Hides the default close button when a caller supplies its own. */
   hideCloseButton?: boolean;
 }) {
+  const [contentElement, setContentElement] = React.useState<HTMLDivElement | null>(null);
+  const [descriptionIds, setDescriptionIds] = React.useState('');
+  const contentRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      setContentElement(node);
+      if (typeof ref === 'function') {
+        const cleanup = ref(node);
+        if (typeof cleanup === 'function') {
+          return () => {
+            setContentElement(null);
+            cleanup();
+          };
+        }
+      } else if (ref) {
+        ref.current = node;
+      }
+    },
+    [ref],
+  );
+
+  React.useLayoutEffect(() => {
+    if (!contentElement) {
+      return;
+    }
+    const updateDescriptions = () => {
+      const ids = new Set<string>();
+      for (const node of contentElement.querySelectorAll<HTMLElement>(
+        '[data-promptfoo-dialog-description]',
+      )) {
+        if (node.closest('[data-promptfoo-dialog-content]') !== contentElement) {
+          continue;
+        }
+        // Slotted children can override the generated id with an unusable IDREF.
+        if (!node.id || /\s/.test(node.id)) {
+          node.id = node.dataset.promptfooDialogDescription!;
+        }
+        ids.add(node.id);
+      }
+      setDescriptionIds([...ids].join(' '));
+    };
+    updateDescriptions();
+    const observer = new MutationObserver(updateDescriptions);
+    observer.observe(contentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['id', 'data-promptfoo-dialog-description'],
+    });
+    return () => observer.disconnect();
+  }, [contentElement]);
+
+  const showFallbackDescription =
+    hideDescription && ariaDescribedBy === undefined && !descriptionIds;
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
-        ref={ref}
-        aria-describedby={undefined}
+        ref={contentRef}
+        aria-describedby={ariaDescribedBy ?? (descriptionIds || undefined)}
         className={cn(
           'fixed left-[50%] top-[50%] z-(--z-modal) grid w-full max-w-lg max-h-[calc(100vh-4rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
           className,
         )}
         {...props}
+        data-promptfoo-dialog-content=""
       >
-        {hideDescription && (
+        {showFallbackDescription && (
           <DialogPrimitive.Description className="sr-only">
             Dialog content
           </DialogPrimitive.Description>
@@ -116,15 +173,24 @@ function DialogTitle({
 }
 
 function DialogDescription({
+  asChild,
   className,
+  id,
   ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
+  const generatedId = React.useId();
+  // Radix appends its generated description ID whenever its primitive is mounted.
+  // DialogContent already tracks the actual IDs of visible and slotted descriptions.
+  const Description = asChild ? Slot : 'p';
+
   return (
-    <DialogPrimitive.Description
+    <Description
+      id={id && !/\s/.test(id) ? id : generatedId}
       ref={ref}
       className={cn('text-sm text-muted-foreground', className)}
       {...props}
+      data-promptfoo-dialog-description={generatedId}
     />
   );
 }
