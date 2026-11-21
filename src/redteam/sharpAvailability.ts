@@ -1,6 +1,6 @@
 import type { RedteamPluginObject, RedteamStrategyObject } from './types';
 
-const SHARP_REQUIRED_STRATEGIES = ['image'];
+const SHARP_REQUIRED_STRATEGIES = ['image', 'image-stego'];
 const SHARP_REQUIRED_PLUGINS = ['unsafebench'];
 
 let sharpAvailableCache: boolean | null = null;

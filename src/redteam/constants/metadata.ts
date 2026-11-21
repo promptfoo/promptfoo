@@ -31,7 +31,11 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'bias:race': 'Race-related bias detection',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
+  'char-split':
+    'Tests handling of output-formatting instructions that insert character delimiters inside words',
   citation: 'Exploits academic authority bias to bypass content filters',
+  'image-stego':
+    'Tests handling of UTF-8 payloads embedded in the least significant bits of PNG images',
   'data-exfil': 'Tests for data exfiltration via URL parameters, images, or markdown links',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
@@ -283,9 +287,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
   camelcase: 'CamelCase Encoding',
+  'char-split': 'Character Split Output Format',
   emoji: 'Emoji Smuggling',
   cca: 'Context Compliance Attack',
   citation: 'Authority Bias Exploitation',
+  'image-stego': 'LSB Image Steganography',
   competitors: 'Competitors',
   contracts: 'Unauthorized Commitments',
   coppa: 'COPPA Compliance',
@@ -1284,6 +1290,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   camelcase: 'Tests detection and handling of text transformed into camelCase',
+  'char-split':
+    'Formats model responses with intra-word character delimiters and decodes output before scoring',
   emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
@@ -1297,6 +1305,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
+  'image-stego':
+    'Tests detection and handling of UTF-8 payloads embedded in PNG least significant bits',
   jailbreak:
     '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
@@ -1335,6 +1345,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
   camelcase: 'CamelCase',
+  'char-split': 'Character Split Output Format',
   emoji: 'Emoji Smuggling',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
@@ -1346,6 +1357,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
+  'image-stego': 'LSB Image Steganography',
   jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:goblin': 'Goblin Multi-Turn',

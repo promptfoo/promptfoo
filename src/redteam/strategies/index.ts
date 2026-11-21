@@ -22,9 +22,11 @@ import { addIterativeJailbreaks } from './iterative';
 import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
+import { addLsbStegoTestCases } from './lsbStego';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
+import { addCharSplit } from './outputFormat';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -77,6 +79,15 @@ export const Strategies: Strategy[] = [
     },
   },
   createEncodingStrategy('base64', 'Base64', () => addBase64Encoding),
+  {
+    id: 'char-split',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding CharSplit output format to ${testCases.length} test cases`);
+      const newTestCases = addCharSplit(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} CharSplit test cases`);
+      return newTestCases;
+    },
+  },
   createEncodingStrategy('homoglyph', 'Homoglyph', () => addHomoglyphs),
   createEncodingStrategy(
     'arabic-presentation-forms',
@@ -279,6 +290,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding image encoding to ${testCases.length} test cases`);
       const newTestCases = await addImageToBase64(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'image-stego',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding LSB image stego encoding to ${testCases.length} test cases`);
+      const newTestCases = await addLsbStegoTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} LSB image stego encoded test cases`);
       return newTestCases;
     },
   },
