@@ -438,6 +438,20 @@ export const OpenAiResponsesConfigInputSchema = ConversationFields.extend({
   stream: z.boolean().optional(),
   truncation: z.enum(['auto', 'disabled']).optional(),
   background: z.boolean().optional(),
+  background_options: z
+    .strictObject({
+      completion_window: z
+        .union([z.enum(['soonest', '2h', '8h']), Template])
+        .optional()
+        .describe(
+          'Discounted 2h and 8h windows require non-streaming Standard background requests',
+        ),
+      continuation_id: z
+        .string()
+        .optional()
+        .describe('Shared identifier for related background requests'),
+    })
+    .optional(),
   webhook_url: z.string().optional(),
 }).describe(
   'Serializable OpenAI Responses configuration; use max_output_tokens for the output limit',
