@@ -341,6 +341,21 @@ describe('envars', () => {
   });
 
   describe('getEnvBool', () => {
+    it.each(['process', 'file', 'suite', 'provider', 'none'])(
+      'respects the sharing restriction from %s',
+      (source) => {
+        const key = 'PROMPTFOO_DISABLE_SHARING';
+        mockProcessEnv({ [key]: source === 'process' ? '1' : 'false' });
+        setEnvOverridesProvider((layer) => ({ [key]: String(layer === source) }), {
+          providerLayer: true,
+        });
+        expect(getEnvBool(key)).toBe(source !== 'none');
+        if (source === 'process') {
+          expect(getProcessEnv()[key]).toBe('1');
+        }
+      },
+    );
+
     it('should return true for truthy string values', () => {
       ['1', 'true', 'yes', 'yup'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });

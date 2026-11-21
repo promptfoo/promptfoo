@@ -176,7 +176,7 @@ async function followRedirects(
         previousUrl.protocol === 'http:' &&
         nextUrl.protocol === 'https:' &&
         nextUrl.hostname === previousUrl.hostname &&
-        ((!previousUrl.port && !nextUrl.port) || nextUrl.port === previousUrl.port);
+        nextUrl.port === previousUrl.port;
       if (nextUrl.origin !== previousUrl.origin && !isHttpsUpgrade) {
         throw new Error('TargetLink HTTP probes do not follow cross-origin redirects');
       }

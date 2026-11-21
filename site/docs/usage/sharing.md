@@ -174,7 +174,7 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 Use `--no-share` to stop sharing for one eval or model-audit run. For evals, `sharing: false` disables automatic sharing unless `--share` or `commandLineOptions.share: true` explicitly enables it. To share later, sign in to Cloud or configure a self-hosted destination.
 
-To block all eval and model-audit sharing while a process runs, set `PROMPTFOO_DISABLE_SHARING=true`. This also prevents associated media from being uploaded. Media remains available locally and can be shared later if you remove the setting.
+Set `PROMPTFOO_DISABLE_SHARING=true` in the process environment to block eval, model-audit, and associated media uploads. Eval options and environment overrides cannot lift this restriction. Media remains available locally for sharing later.
 
 ### Disable for One Eval
 

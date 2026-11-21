@@ -229,41 +229,28 @@ describe('attachTargetLink', () => {
     });
   });
 
+  const url = 'https://example.test/start';
   it.each([
-    {
-      description: 'follows same-origin redirects',
-      url: 'https://example.test/start',
-      location: '/next',
-      success: true,
-    },
-    {
-      description: 'follows same-host HTTPS upgrades',
-      url: 'http://example.test/start',
-      location: 'https://example.test/next',
-      success: true,
-    },
-    {
-      description: 'rejects HTTPS upgrades that change an explicit port',
-      url: 'http://example.test:8080/start',
-      location: 'https://example.test/next',
-      success: false,
-    },
-    {
-      description: 'rejects cross-origin redirects',
-      url: 'https://example.test/start',
-      location: 'https://other.test/next',
-      success: false,
-    },
-  ])('$description', async ({ url, location, success }) => {
+    [301, url, '/a', 'GET'],
+    [302, url, '/b', 'GET'],
+    [303, url, '/c', 'GET'],
+    [307, url, '/d', 'POST'],
+    [308, 'http://example.test/start', url, 'POST'],
+    [307, 'http://example.test:8080/start', url, null],
+    [307, url, 'http://example.test/start', null],
+    [307, url, 'https://other.test/next', null],
+  ] as const)('handles %s from %s to %s', async (status, start, location, method) => {
+    const success = method !== null;
+    const next = new URL(location, start).href;
     vi.mocked(fetchWithProxy)
-      .mockResolvedValueOnce(new Response('', { status: 307, headers: { location } }))
+      .mockResolvedValueOnce(new Response('', { status, headers: { location } }))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
     const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
     attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
 
     fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
       requestId: 'redirect-fixture',
-      url,
+      url: start,
       body: 'fixture data',
     });
 
@@ -275,10 +262,26 @@ describe('attachTargetLink', () => {
         requestId: 'redirect-fixture',
         success,
         ...(success
-          ? { finalUrl: new URL(location, url).href }
+          ? { finalUrl: next }
           : { error: 'TargetLink HTTP probes do not follow cross-origin redirects' }),
       });
     });
     expect(fetchWithProxy).toHaveBeenCalledTimes(success ? 2 : 1);
+    expect(fetchWithProxy).toHaveBeenNthCalledWith(
+      1,
+      start,
+      expect.objectContaining({ redirect: 'manual' }),
+    );
+    if (success) {
+      expect(fetchWithProxy).toHaveBeenNthCalledWith(
+        2,
+        next,
+        expect.objectContaining({
+          redirect: 'manual',
+          method,
+          body: method === 'POST' ? 'fixture data' : undefined,
+        }),
+      );
+    }
   });
 });

@@ -63,7 +63,7 @@ In this document, the terms **Promptfoo-hosted feature** and **Cloud-backed feat
 
 A destination is configured for the data and credentials the user directly selected, invoked, signed into, or configured it to receive as part of the eval, reporting, sharing, hosted-feature, account, or Cloud path. Selecting a provider, grader, report, hosted feature, account login, sharing action, Cloud-backed feature, or other eval component for a run counts as configuring that destination for the data and credentials needed by that component in that path.
 
-A configured service may use its normal OAuth/OIDC endpoints, regional hosts, upload endpoints, or redirects. A redirect does not give an unrelated host permission to receive your credentials or eval data. If requests must stay on a particular origin, enforce that requirement with a proxy or network policy.
+A configured service may use OAuth/OIDC endpoints, regional hosts, upload endpoints, or redirects. Ordinary HTTP requests can follow cross-origin redirects. A 307 or 308 can forward the request body and custom headers, including credentials or eval data, to another origin. If requests must stay on a particular origin, enforce that requirement with a proxy or network policy.
 
 For example, an HTTP provider URL is configured to receive that provider's rendered request, and a grading provider is configured to receive prompts and runtime data needed by the selected model-graded assertion. A Promptfoo-hosted service endpoint, telemetry path, browser-loaded resource, or unrelated provider is a separate destination unless the user separately chose or configured it for that same eval path and data or credential.
 
