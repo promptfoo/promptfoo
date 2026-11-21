@@ -256,10 +256,11 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       delete (result.body as Record<string, unknown>).service_tier;
       return result;
     }
-    const supportsUltrafast = model === 'openai.gpt-6-astra' || model === 'openai.gpt-6.1-sol';
+    const ultrafastInUsEast1 = model === 'openai.gpt-6-astra' || model === 'openai.gpt-6.1-sol';
+    const supportsUltrafast = ultrafastInUsEast1 || model === 'openai.gpt-6.2-astra';
     if (serviceTier === 'ultrafast' && supportsUltrafast) {
       const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.bedrockRegion;
-      if (region !== 'us-east-1') {
+      if (ultrafastInUsEast1 && region !== 'us-east-1') {
         throw new Error(
           `Amazon Bedrock Mantle serves ${model} Ultrafast in us-east-1. Select the us-east-1 endpoint or use the default service tier.`,
         );

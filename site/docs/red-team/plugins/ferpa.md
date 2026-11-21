@@ -1,6 +1,6 @@
 ---
 sidebar_label: FERPA
-description: Test AI systems for FERPA compliance by detecting unauthorized disclosure of student education records and personally identifiable information to ensure compliance with US educational privacy regulations
+description: Test AI systems for unauthorized disclosure of student education records and sensitive personal information relevant to FERPA. Configure and review test cases.
 ---
 
 # FERPA

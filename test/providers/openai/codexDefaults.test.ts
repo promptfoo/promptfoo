@@ -118,7 +118,7 @@ describe('Codex default providers', () => {
     expect(hasCodexDefaultCredentials()).toBe(true);
   });
 
-  it.each(['0.165.0', '0.166.0'])(
+  it.each(['0.165.0', '0.166.0', '0.169.1'])(
     'selects SDK %s for implicit grading when signed in',
     async (version) => {
       vi.mocked(getPackageVersion).mockReturnValue(version);
@@ -151,7 +151,7 @@ describe('Codex default providers', () => {
     expect(hasCodexDefaultCredentials()).toBe(false);
   });
 
-  it.each(['0.156.0', '0.167.0', 'invalid', null])(
+  it.each(['0.156.0', '0.170.0', 'invalid', null])(
     'does not select an incompatible SDK (%s) for implicit grading',
     async (version) => {
       mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
