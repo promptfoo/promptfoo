@@ -274,6 +274,7 @@ export class PiProvider implements ApiProvider {
     const config = { ...this.config, ...row };
     const vendor = this.resolveProviderName(this.config);
     if (
+      (row.model && !vendor) ||
       this.resolveProviderName(config) !== vendor ||
       (row.model?.includes('/') && this.resolveProviderName(row) !== vendor)
     ) {

@@ -323,6 +323,16 @@ describe('PiProvider', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
+    it('requires a fixed vendor for model overrides on a shared login', async () => {
+      const provider = createProvider({ config: { agent_dir: os.tmpdir() } });
+      const result = await provider.callApi('hello', {
+        vars: {},
+        prompt: { label: 'test', raw: 'hello', config: { model: 'other' } },
+      });
+      expect(result.error).toContain('configured vendor');
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
     it('accepts same-vendor model and thinking overrides', async () => {
       mockPiRun(defaultEvents());
       const provider = createProvider({ config: { model: 'openai/fixture' } });
