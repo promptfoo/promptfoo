@@ -278,39 +278,43 @@ describe('RedteamGoatProvider', () => {
     }
   });
 
-  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
-    'rejects a cached response after a fresh %s grade',
-    async (pluginId) => {
-      mockGrader.id = `promptfoo:redteam:${pluginId}`;
-      mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
-      const unblock = vi
-        .spyOn(redteamProviderShared, 'tryUnblocking')
-        .mockResolvedValue({ success: false });
-      const target = createMockTargetProvider('Clean report');
-      target.callApi
-        .mockResolvedValueOnce({ output: 'Clean report' })
-        .mockResolvedValueOnce({ output: 'Clean cached report', cached: true });
-      try {
-        const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
-        await expect(
-          provider.callApi(
-            '',
-            createMockContext(
-              target,
-              { goal: 'Inspect report' },
-              {
-                assert: [{ type: `promptfoo:redteam:${pluginId}` }],
-              },
-            ),
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((id) =>
+      ['cached', 'failed'].map((kind) => [id, kind] as const),
+    ),
+  )('rejects a later unusable %s response (%s)', async (pluginId, kind) => {
+    mockGrader.id = `promptfoo:redteam:${pluginId}`;
+    mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+    const unblock = vi
+      .spyOn(redteamProviderShared, 'tryUnblocking')
+      .mockResolvedValue({ success: false });
+    const target = createMockTargetProvider('Clean report');
+    target.callApi.mockResolvedValueOnce({ output: 'Clean report' });
+    if (kind === 'failed') {
+      target.callApi.mockRejectedValueOnce(new Error('private fixture detail'));
+    } else {
+      target.callApi.mockResolvedValueOnce({ output: 'Clean cached report', cached: true });
+    }
+    try {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
+      await expect(
+        provider.callApi(
+          '',
+          createMockContext(
+            target,
+            { goal: 'Inspect report' },
+            {
+              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            },
           ),
-        ).rejects.toThrow('requires a fresh target call');
-        expect(target.callApi).toHaveBeenCalledTimes(2);
-        expect(mockGrader.getResult).toHaveBeenCalledOnce();
-      } finally {
-        unblock.mockRestore();
-      }
-    },
-  );
+        ),
+      ).rejects.toThrow(kind === 'failed' ? /^Private target request failed$/ : /fresh target/);
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(mockGrader.getResult).toHaveBeenCalledOnce();
+    } finally {
+      unblock.mockRestore();
+    }
+  });
 
   it('should initialize with required config', () => {
     const provider = new RedteamGoatProvider({

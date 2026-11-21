@@ -51,6 +51,7 @@ import {
   getLocalStrategyTest,
   getPrivateTargetContext,
   getProtectedAssertionValue,
+  getRedactionOutcome,
   REDACTED_PROMPT,
   requiresTraceRedaction,
   sanitizeRedactionGrade,
@@ -574,7 +575,7 @@ export function callTargetProvider(
             options?.abortSignal?.throwIfAborted();
             throw new DOMException('Private target request aborted', 'AbortError');
           }
-          throw new Error('Private target request failed');
+          throw new PrivateVerificationError('Private target request failed');
         }
       });
     }
@@ -667,8 +668,10 @@ export async function getTargetResponse(
     throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
-    // Re-throw abort errors to properly cancel the operation
-    if (isTargetCallAbortError(error, options?.abortSignal)) {
+    if (
+      error instanceof PrivateVerificationError ||
+      isTargetCallAbortError(error, options?.abortSignal)
+    ) {
       throw error;
     }
     return preserveResponseHeadersObserverError(options?.onResponseHeaders, error, {
@@ -822,11 +825,9 @@ export async function gradeRedactionResponse(
         ),
       );
       const verdict = sanitizeRedactionGrade(grade);
-      const incomplete =
-        verdict.metadata?.graderError ||
-        verdict.metadata?.gradingIncomplete ||
-        verdict.metadata?.codingAgentExploitStatus === 'evidence_missing';
-      if (results[index]?.pass !== false || incomplete) {
+      const { incomplete } = getRedactionOutcome(verdict);
+      const previous = results[index];
+      if (!previous || getRedactionOutcome(previous).pass || incomplete) {
         results[index] = {
           ...verdict,
           ...(incomplete && { pass: false, score: 0 }),
@@ -840,7 +841,14 @@ export async function gradeRedactionResponse(
     throw new PrivateVerificationError('Private target verification failed');
   }
   const grades = Object.values(results);
-  return grades.find((grade) => !grade.pass) ?? grades[0];
+  const selected = grades.find((grade) => !getRedactionOutcome(grade).pass) ?? grades[0];
+  if (!selected?.assertion?.type.startsWith('not-')) {
+    return selected;
+  }
+  // Strategies use the configured polarity. Only the indexed original can be trusted
+  // for final verification, where the assertion applies its own inversion.
+  const { pass } = getRedactionOutcome(selected);
+  return sanitizeRedactionGrade({ ...selected, pass, score: pass ? 1 : 0 });
 }
 
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */

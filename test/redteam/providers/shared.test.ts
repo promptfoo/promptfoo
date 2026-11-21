@@ -34,6 +34,7 @@ import {
 } from '../../../src/scheduler/providerCallExecutionContext';
 import { withPrivateEvaluation } from '../../../src/util/privateEvaluation';
 import { sleep } from '../../../src/util/time';
+import { TRUSTED_REDACTION_GRADER } from '../../../src/util/traceRedaction';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -2188,6 +2189,43 @@ describe('redteam history blob storage', () => {
     });
     expect(results[0].pass).toBe(true);
     expect(getResult).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    undefined,
+    { gradingIncomplete: true },
+    { graderError: true },
+    { codingAgentExploitStatus: 'evidence_missing' },
+  ])('preserves an inverse failure across turns with metadata %s', async (metadata) => {
+    const type = 'promptfoo:redteam:coding-agent:trace-redaction';
+    const inverse = `not-${type}`;
+    const test = { assert: [{ type }, { type: inverse }] } as AtomicTestCase;
+    const results: Record<number, GradingResult> = {};
+    const getResult = vi.fn();
+    vi.spyOn(await import('../../../src/redteam/graders'), 'getGraderById').mockReturnValue({
+      id: type,
+      getResult,
+    } as never);
+    const turn = async (fail: boolean) => {
+      getResult.mockResolvedValueOnce({ grade: { pass: true, score: 1 } });
+      getResult.mockResolvedValueOnce({
+        grade: { pass: fail && !metadata, score: 0, metadata: fail && metadata },
+      });
+      const response = await externalizeResponseForRedteamHistory({ output: 'Report' }, { test });
+      return gradeRedactionResponse('Inspect', response, test, results);
+    };
+
+    expect(await turn(false)).toMatchObject({ pass: true });
+    expect(await turn(true)).toMatchObject({ pass: false, score: 0 });
+    const summary = await turn(false);
+    expect(summary).toMatchObject({ pass: false, score: 0, assertion: { type: inverse } });
+    expect(results[1].pass).toBe(!metadata);
+    expect(
+      Object.getOwnPropertyDescriptor(results[1].assertion!, TRUSTED_REDACTION_GRADER)?.value,
+    ).toBe(true);
+    expect(
+      Object.getOwnPropertyDescriptor(summary!.assertion!, TRUSTED_REDACTION_GRADER),
+    ).toBeUndefined();
   });
 
   afterEach(() => vi.restoreAllMocks());

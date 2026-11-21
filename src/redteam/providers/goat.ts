@@ -751,6 +751,10 @@ export default class GoatProvider implements ApiProvider {
           break;
         }
         if (targetResponse.error) {
+          // Private error responses have already been inspected and accounted for above.
+          if (redactTrace) {
+            continue;
+          }
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
         const hasTargetImages = Boolean(targetResponse.images?.length);
@@ -934,6 +938,9 @@ export default class GoatProvider implements ApiProvider {
           isRemoteMaterializationUpgradeError(error)
         ) {
           throw error;
+        }
+        if (redactTrace) {
+          throw new PrivateVerificationError('Private target verification failed');
         }
         logger.error(
           `[GOAT] An error occurred in GOAT turn ${turn}.  The test will continue to the next turn in the conversation.`,

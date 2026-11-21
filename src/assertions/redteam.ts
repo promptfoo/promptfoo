@@ -14,6 +14,7 @@ import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import {
   getAssertionLeaves,
+  getRedactionOutcome,
   TRACE_REDACTION_ASSERTIONS,
   TRUSTED_REDACTION_GRADER,
 } from '../util/traceRedaction';
@@ -229,11 +230,7 @@ async function verifyRedaction({
     );
     verdict = grade;
   }
-  const incomplete =
-    verdict.metadata?.graderError ||
-    verdict.metadata?.gradingIncomplete ||
-    verdict.metadata?.codingAgentExploitStatus === 'evidence_missing';
-  const pass = !incomplete && (inverse ? !verdict.pass : verdict.pass);
+  const { pass } = getRedactionOutcome(verdict, inverse);
   return sanitizeRedactionGrade({ ...verdict, assertion, pass, score: pass ? 1 : 0 });
 }
 

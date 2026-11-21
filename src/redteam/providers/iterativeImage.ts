@@ -606,6 +606,9 @@ async function runRedteamConversation({
       ) {
         throw err;
       }
+      if (redactTrace) {
+        throw new PrivateVerificationError('Private target verification failed');
+      }
       logger.error(`Iteration ${i + 1} failed: ${err}`);
       continue;
     }

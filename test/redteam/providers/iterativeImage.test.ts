@@ -512,32 +512,43 @@ describe('RedteamIterativeImageProvider', () => {
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
-  it('cannot reuse a passing privacy grade after a cached image turn', async () => {
-    const actual = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
-      '../../../src/redteam/providers/shared',
-    );
-    const { gradeRedactionResponse } = await import('../../../src/redteam/providers/shared');
-    vi.mocked(gradeRedactionResponse)
-      .mockResolvedValueOnce({ pass: true, score: 1, reason: 'verified' })
-      .mockImplementationOnce(actual.gradeRedactionResponse);
-    mockRedteamProvider.callApi.mockResolvedValue({
-      output: JSON.stringify({ improvement: 'Review', prompt: 'Inspect report' }),
-    });
-    vi.mocked(getTargetResponse)
-      .mockResolvedValueOnce({ output: 'Report' })
-      .mockResolvedValueOnce({ output: 'Report', cached: true });
-    await expect(
-      new RedteamIterativeProvider({}).callApi('Inspect', {
-        originalProvider: mockTargetProvider,
-        vars: { goal: 'Inspect report' },
-        prompt: { label: 'Report', raw: '{{goal}}' },
-        test: {
-          assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
-        } as AtomicTestCase,
-      }),
-    ).rejects.toThrow(/fresh target/);
-    expect(getTargetResponse).toHaveBeenCalledTimes(2);
-  });
+  it.each(['cached', 'failed'])(
+    'cannot reuse a passing privacy grade after a %s image turn',
+    async (kind) => {
+      const actual = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      const { gradeRedactionResponse } = await import('../../../src/redteam/providers/shared');
+      vi.mocked(gradeRedactionResponse).mockResolvedValueOnce({
+        pass: true,
+        score: 1,
+        reason: 'verified',
+      });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Review', prompt: 'Inspect report' }),
+      });
+      vi.mocked(getTargetResponse).mockResolvedValueOnce({ output: 'Report' });
+      if (kind === 'failed') {
+        vi.mocked(getTargetResponse).mockRejectedValueOnce(new Error('private fixture detail'));
+      } else {
+        vi.mocked(getTargetResponse).mockResolvedValueOnce({ output: 'Report', cached: true });
+        vi.mocked(gradeRedactionResponse).mockImplementationOnce(actual.gradeRedactionResponse);
+      }
+      await expect(
+        new RedteamIterativeProvider({}).callApi('Inspect', {
+          originalProvider: mockTargetProvider,
+          vars: { goal: 'Inspect report' },
+          prompt: { label: 'Report', raw: '{{goal}}' },
+          test: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+          } as AtomicTestCase,
+        }),
+      ).rejects.toThrow(
+        kind === 'failed' ? /^Private target verification failed$/ : /fresh target/,
+      );
+      expect(getTargetResponse).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('grades private text probes and carries the local privacy verdict', async () => {
     const shared = await import('../../../src/redteam/providers/shared');

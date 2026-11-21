@@ -10,7 +10,13 @@ import {
   sanitizeCodingAgentVerifierInputs,
 } from './verifierPrivacy';
 
-import type { Assertion, AtomicTestCase, CallApiContextParams, ProviderResponse } from '../types';
+import type {
+  Assertion,
+  AtomicTestCase,
+  CallApiContextParams,
+  GradingResult,
+  ProviderResponse,
+} from '../types';
 
 export {
   configRequiresTraceRedaction,
@@ -153,6 +159,20 @@ export function sanitizeRedactionGradingInputs<TArgs extends unknown[]>(
 
 // Module-local identity. A target cannot authorize its own grade using Symbol.for or JSON.
 export const TRUSTED_REDACTION_GRADER = Symbol('promptfoo.trustedRedactionGrader');
+
+/** Inversion applies to verified outcomes only. */
+export function getRedactionOutcome(
+  grade: GradingResult,
+  inverse = grade.assertion?.type.startsWith('not-') === true,
+) {
+  const incomplete = Boolean(
+    grade.metadata?.graderError ||
+      grade.metadata?.gradingError ||
+      grade.metadata?.gradingIncomplete ||
+      grade.metadata?.codingAgentExploitStatus === 'evidence_missing',
+  );
+  return { incomplete, pass: !incomplete && (inverse ? !grade.pass : grade.pass) };
+}
 
 function hasMarkdownImage(text: string): boolean {
   if (!text.includes('![')) {
