@@ -97,6 +97,17 @@ function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) 
   };
 }
 
+// A native S3 reference identifies neither its current contents nor who may read them.
+export function hasBedrockS3Location(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || ArrayBuffer.isView(value)) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasBedrockS3Location);
+  }
+  return Object.hasOwn(value, 's3Location') || Object.values(value).some(hasBedrockS3Location);
+}
+
 export function createBedrockCacheKeyHash({
   config,
   params,

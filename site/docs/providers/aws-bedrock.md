@@ -299,6 +299,11 @@ produce eval errors and are not cached. Streaming also executes configured MCP
 tools and local `functionToolCallbacks` after a completed client tool request. Server-side tool
 blocks remain in the response and are not executed locally. Missing, interrupted,
 or failed tool streams produce an error before callbacks or cache writes.
+Cancellation prevents new tool calls from starting. A callback that already started may still finish.
+
+Converse bypasses the response cache for managed prompt ARNs and native S3
+locations, including files inside tool results. AWS checks access on every
+request. Responses with S3 locations also bypass the cache.
 Failed completed streams retain collected tool arguments, including raw arguments
 when the model emits invalid JSON.
 

@@ -54,6 +54,7 @@ export class ConverseStreamValidationError extends Error {
 /** Collect SDK events before executing any tools: a failed stream must never dispatch a tool. */
 export async function collectConverseStream(
   response: ConverseStreamCommandOutput,
+  abortSignal?: AbortSignal,
 ): Promise<ConverseCommandOutput> {
   if (!response.stream) {
     throw new Error('Bedrock returned no response stream');
@@ -74,6 +75,7 @@ export async function collectConverseStream(
   };
   try {
     for await (const event of response.stream) {
+      abortSignal?.throwIfAborted();
       for (const key of [
         'internalServerException',
         'modelStreamErrorException',
