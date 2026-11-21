@@ -101,6 +101,44 @@ describe('processCsvPrompts', () => {
     ]);
   });
 
+  it('should decode quoted fields in a single column CSV', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      prompt
+      "Reply with ""yes"" or ""no"": {{question}}"
+      "You are a support agent.
+      Answer the question: {{question}}"
+    `);
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result.map((prompt) => prompt.raw)).toEqual([
+      'Reply with "yes" or "no": {{question}}',
+      'You are a support agent.\nAnswer the question: {{question}}',
+    ]);
+  });
+
+  it('should read a file without a prompt header line by line when lines contain commas', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      Hello, {{name}}
+      Goodbye, {{name}}
+    `);
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result.map((prompt) => prompt.raw)).toEqual(['Hello, {{name}}', 'Goodbye, {{name}}']);
+  });
+
+  it('should match the prompt and label columns case-insensitively', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      Prompt,Label
+      "Hi {{name}}, how are you?",Greeting
+    `);
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toEqual([{ raw: 'Hi {{name}}, how are you?', label: 'Greeting' }]);
+  });
+
   it('should generate labels from prompt content when not provided', async () => {
     const csvContent = dedent`
       prompt
