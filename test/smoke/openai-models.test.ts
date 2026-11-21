@@ -12,13 +12,31 @@ import type { EvaluateResult } from '../../src/types/index';
 const repoRoot = path.resolve(__dirname, '../..');
 
 describe('OpenAI model CLI smoke tests', () => {
-  it('routes GPT-6.1 Sol and bills the returned Ultrafast service tier', async () => {
+  it('routes GPT-6 models and bills the returned service tier', async () => {
     const cases = [
+      { label: 'astra62-ultrafast', id: 'openai:gpt-6.2-astra', tier: 'ultrafast', cost: 0.007776 },
+      { label: 'astra62-chat', id: 'openai:chat:gpt-6.2-astra', cost: 0.001296 },
+      { label: 'sol62-responses', id: 'openai:gpt-6.2-sol', cost: 0.000324 },
+      {
+        label: 'sol62-ultrafast',
+        id: 'openai:chat:gpt-6.2-sol',
+        tier: 'ultrafast',
+        cost: 0.001944,
+      },
       { label: 'sol-responses', id: 'openai:gpt-6.1-sol', cost: 0.000324 },
       { label: 'sol-chat', id: 'openai:chat:gpt-6.1-sol', cost: 0.000324 },
-      { label: 'astra-ultrafast', id: 'openai:gpt-6-astra', cost: 0.00984 },
-      { label: 'astra-fallback', id: 'openai:gpt-6-astra', cost: 0.00164 },
+      { label: 'terra-responses', id: 'openai:gpt-6.1-terra', cost: 0.000162 },
+      { label: 'astra-ultrafast', id: 'openai:gpt-6-astra', tier: 'ultrafast', cost: 0.00984 },
+      {
+        label: 'astra-fallback',
+        id: 'openai:gpt-6-astra',
+        tier: 'ultrafast',
+        returnedTier: 'default',
+        cost: 0.00164,
+      },
     ];
+    // Responses created after the introductory GPT-6.2 Ultrafast price expires.
+    const createdAt = Date.parse('2027-03-01T08:00:00Z') / 1000;
     const requests: { label: string; url: string; body: Record<string, unknown> }[] = [];
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openai-models-'));
     const server = http.createServer(async (request, response) => {
@@ -28,15 +46,17 @@ describe('OpenAI model CLI smoke tests', () => {
       }
       const body = JSON.parse(text);
       const label = String(request.headers['x-smoke-case']);
+      const testCase = cases.find((entry) => entry.label === label);
       requests.push({ label, url: request.url!, body });
       response.setHeader('Content-Type', 'application/json');
       response.end(
         JSON.stringify({
           id: `response-${label}`,
           model: body.model,
-          service_tier: label === 'astra-ultrafast' ? 'ultrafast' : 'default',
+          service_tier: testCase?.returnedTier ?? testCase?.tier ?? 'default',
           ...(request.url === '/v1/chat/completions'
             ? {
+                created: createdAt,
                 choices: [{ message: { role: 'assistant', content: 'Ready.' } }],
                 usage: {
                   prompt_tokens: 100,
@@ -46,6 +66,7 @@ describe('OpenAI model CLI smoke tests', () => {
                 },
               }
             : {
+                created_at: createdAt,
                 status: 'completed',
                 output: [
                   {
@@ -74,7 +95,7 @@ describe('OpenAI model CLI smoke tests', () => {
         configPath,
         JSON.stringify({
           prompts: ['Say ready.'],
-          providers: cases.map(({ id, label }) => ({
+          providers: cases.map(({ id, label, tier }) => ({
             id,
             label,
             config: {
@@ -82,10 +103,10 @@ describe('OpenAI model CLI smoke tests', () => {
               apiKey: 'smoke-test-key',
               headers: { 'x-smoke-case': label },
               maxRetries: 0,
-              ...(label === 'sol-chat'
+              ...(id.startsWith('openai:chat:')
                 ? { reasoning_effort: 'high', max_completion_tokens: 128 }
                 : { reasoning: { effort: 'high' }, max_output_tokens: 128 }),
-              ...(label.startsWith('astra-') ? { service_tier: 'ultrafast' } : {}),
+              service_tier: tier,
               temperature: 0.7,
               top_p: 0.8,
               logprobs: true,
@@ -122,23 +143,25 @@ describe('OpenAI model CLI smoke tests', () => {
       );
 
       const exported = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-      expect(exported.results.stats).toMatchObject({ successes: 4, failures: 0, errors: 0 });
+      expect(exported.results.stats).toMatchObject({
+        successes: cases.length,
+        failures: 0,
+        errors: 0,
+      });
       expect(exported.shareableUrl).toBeNull();
       expect(exported.results.results).toHaveLength(cases.length);
       expect(requests).toHaveLength(cases.length);
-      for (const { label, cost } of cases) {
+      for (const { id, label, tier, cost } of cases) {
         const request = requests.find((entry) => entry.label === label)!;
-        const chat = label === 'sol-chat';
+        const chat = id.startsWith('openai:chat:');
         expect(request.url).toBe(chat ? '/v1/chat/completions' : '/v1/responses');
         expect(request.body).toMatchObject({
-          model: label.startsWith('sol-') ? 'gpt-6.1-sol' : 'gpt-6-astra',
+          model: id.split(':').at(-1),
           ...(chat
             ? { reasoning_effort: 'high', max_completion_tokens: 128 }
             : { reasoning: { effort: 'high' }, max_output_tokens: 128 }),
         });
-        expect(request.body.service_tier).toBe(
-          label.startsWith('astra-') ? 'ultrafast' : undefined,
-        );
+        expect(request.body.service_tier).toBe(tier);
         for (const option of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {
           expect(request.body).not.toHaveProperty(option);
         }

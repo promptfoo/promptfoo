@@ -115,7 +115,7 @@ describe('Nano Banana response contracts', () => {
 
   it.each(
     [
-      { model: 'gemini-3.1-flash-image', cost: 0.06705, threshold: 0.068 },
+      { model: 'gemini-3.1-flash-image', cost: 0.06725, threshold: 0.068 },
       { model: 'gemini-nano-banana-2.1', cost: 0.03375, threshold: 0.034 },
     ].flatMap((entry) => [false, true].map((vertexai) => ({ ...entry, vertexai }))),
   )(

@@ -172,6 +172,51 @@ describe('OpenRouter completed refusals during disk publication', () => {
     );
   });
 
+  it.each([false, true])('charges a coalesced refusal once (cancel=%s)', async (cancel) => {
+    const prompt = randomUUID();
+    const controller = new AbortController();
+    const abortSignal = controller.signal;
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ choices: [refusals[0].choice], usage }), { headers }),
+    );
+    const publication = holdPublication();
+    const first = provider.callApi(prompt, undefined, { abortSignal });
+    await publication.started;
+    const prepared = createDeferred<void>();
+    const second = provider.callApi(prompt, undefined, {
+      abortSignal,
+      onResponseHeaders: () => prepared.resolve(),
+    });
+    await prepared.promise;
+    if (cancel) {
+      controller.abort();
+    } else {
+      publication.release();
+    }
+    const [origin, joined] = await Promise.all([first, second]);
+    expect(origin).toMatchObject({ isRefusal: true, cost: 0.05, tokenUsage: { numRequests: 1 } });
+    expect(joined).toMatchObject({
+      isRefusal: true,
+      cached: true,
+      cost: 0,
+      tokenUsage: { cached: 5, numRequests: 0 },
+    });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('evicts a refusal in an object-shaped choices field', async () => {
+    const prompt = randomUUID();
+    const choice = refusals[0].choice;
+    for (const choices of [{ 0: choice }, [choice]]) {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices, usage }), { headers }),
+      );
+    }
+    expect((await provider.callApi(prompt)).error).toContain('Malformed response');
+    expect(await provider.callApi(prompt)).toMatchObject({ isRefusal: true, cached: false });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('still cancels ordinary output while cache publication is pending', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
       new Response(

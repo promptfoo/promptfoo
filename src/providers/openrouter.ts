@@ -217,7 +217,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   private getRefusalResponse(
     {
       data,
-      cached,
+      cached: cacheHit,
+      coalesced,
       status,
       statusText,
       headers,
@@ -225,6 +226,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     config: OpenAiBillingConfig,
     jsonSchemaFormat: boolean,
   ): ProviderResponse | undefined {
+    const cached = cacheHit || coalesced === true;
     const policy = getOpenAiPolicyRefusal(data, true);
     if (policy) {
       return {
@@ -234,7 +236,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             : getOpenAiPartialOutput(policy.partialOutput, jsonSchemaFormat),
         ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
         cached,
-        cost: this.calculateResponseCost(data, config),
+        cost: cached ? 0 : this.calculateResponseCost(data, config),
         isRefusal: true,
         guardrails: {
           flagged: true,
@@ -249,7 +251,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         },
       };
     }
-    const choice = data?.choices?.[0];
+    const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
     if (
       status < 200 ||
@@ -277,7 +279,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           : message.refusal || 'Content filtered by the model provider.',
       tokenUsage: getTokenUsageWithRequestCount(data, cached),
       cached,
-      cost: this.calculateResponseCost(data, config),
+      cost: cached ? 0 : this.calculateResponseCost(data, config),
       isRefusal: true,
       guardrails: { flagged: true },
       raw: data,
@@ -318,14 +320,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let completedRefusal: ProviderResponse | undefined;
 
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenRouterChatCompletionResponse>(
+      const response = await fetchWithCache<OpenRouterChatCompletionResponse>(
         appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
         {
           method: 'POST',
@@ -353,13 +348,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         callApiOptions?.onResponseHeaders
           ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
           : undefined,
-      ));
-
-      const refusal = this.getRefusalResponse(
-        { data, cached, status, statusText, headers: responseHeaders },
-        config,
-        jsonSchemaFormat,
       );
+      ({ data, cached, status, statusText, deleteFromCache, headers: responseHeaders } = response);
+
+      const refusal =
+        completedRefusal ?? this.getRefusalResponse(response, config, jsonSchemaFormat);
       if (refusal) {
         return refusal;
       }
