@@ -658,7 +658,15 @@ describe('provider cleanup across overlapping evaluations', () => {
             ).then((result) => {
               returnedB = result;
             })
-          : onChange!('ownership.mjs');
+          : // One watcher serializes its reruns. A separate CLI pipeline can still overlap.
+            doEval(
+              { write: false, table: false, share: false, cache: false },
+              {},
+              'ownership.mjs',
+              { maxConcurrency: 1, showProgressBar: false },
+            ).then((result) => {
+              returnedB = result;
+            });
         pending.push(runB);
         void runB.catch(() => {});
         await Promise.race([

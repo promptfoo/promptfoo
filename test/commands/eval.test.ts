@@ -59,7 +59,7 @@ import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { createEvaluateResult } from '../factories/eval';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type EvalResult from '../../src/models/evalResult';
 import type {
@@ -1025,9 +1025,11 @@ describe('evalCommand', () => {
     const installedSince = (before: Array<(signal: 'SIGINT') => void>) =>
       process.listeners('SIGINT').filter((listener) => !before.includes(listener));
 
+    let previousExitCode: typeof process.exitCode;
     let before: Array<(signal: 'SIGINT') => void>;
 
     beforeEach(() => {
+      previousExitCode = process.exitCode;
       before = process.listeners('SIGINT');
       started = [];
     });
@@ -1041,6 +1043,7 @@ describe('evalCommand', () => {
         listener('SIGINT');
       }
       await Promise.allSettled(started);
+      process.exitCode = previousExitCode;
       // Anything still registered after that is not going to settle; drop it so it
       // cannot fire during another test. vitest installs its own handler, so only
       // remove what this block added.
@@ -1074,6 +1077,50 @@ describe('evalCommand', () => {
       await pending;
 
       expect(installedSince(before)).toHaveLength(0);
+    });
+
+    it('drains the active rerun on SIGINT and keeps SIGTERM bounded until it settles', async () => {
+      const beforeSigterm = process.listenerCount('SIGTERM');
+      const { pending } = await startWatching({ eventSource: 'cli' });
+      const { resolve: releaseRun, promise: gate } = createDeferred<void>();
+      let rerunResult: Eval | undefined;
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        await gate;
+        rerunResult = record as Eval;
+        return rerunResult;
+      });
+      const onChange = chokidarMocks.handlers.get('change')!;
+      const active = onChange(defaultConfigPath);
+      await vi.waitFor(() => expect(evaluate).toHaveBeenCalledTimes(2));
+      const queued = onChange(defaultConfigPath);
+      const [onSignal] = installedSince(before);
+      onSignal('SIGINT');
+      try {
+        expect(process.listenerCount('SIGTERM')).toBeGreaterThan(beforeSigterm);
+        expect(await hasSettled(pending)).toBe(false);
+      } finally {
+        releaseRun();
+        await Promise.all([active, queued, pending]);
+      }
+      expect(evaluate).toHaveBeenCalledTimes(2);
+      expect(await pending).toBe(rerunResult);
+    });
+
+    it('reports an unrecovered rerun failure and clears it after a successful edit', async () => {
+      const { pending } = await startWatching({ eventSource: 'cli' });
+      try {
+        const onChange = chokidarMocks.handlers.get('change')!;
+        vi.mocked(evaluate).mockRejectedValueOnce(new Error('watch evaluation failed'));
+        await onChange(defaultConfigPath);
+        expect(process.exitCode).toBe(1);
+        vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+        await onChange(defaultConfigPath);
+        expect(process.exitCode).toBe(0);
+      } finally {
+        const [onSignal] = installedSince(before);
+        onSignal('SIGINT');
+        await pending;
+      }
     });
 
     it('still resolves immediately for library callers, which own their own lifetime', async () => {
@@ -1236,6 +1283,208 @@ describe('evalCommand', () => {
       loggerErrorSpy.mockRestore();
       process.exitCode = previousExitCode;
     }
+  });
+
+  describe('watch run isolation', () => {
+    const watchConfig = (provider: ApiProvider) => ({
+      config: {},
+      testSuite: { prompts: [], providers: [provider] },
+      basePath: path.resolve('/'),
+    });
+
+    beforeEach(() => {
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
+    afterEach(() => {
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(evaluate).mockReset();
+    });
+
+    it('cleans up each failed run and recovers after evaluation and config errors', async () => {
+      const providers = Array.from({ length: 3 }, (_, index) => ({
+        id: () => `provider-${index}`,
+        callApi: vi.fn(async () => ({ output: 'ok' })),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      }));
+      for (const provider of providers.slice(0, 2)) {
+        vi.mocked(resolveConfigs).mockResolvedValueOnce(watchConfig(provider));
+      }
+      vi.mocked(evaluate)
+        .mockImplementationOnce(async (_suite, record) => record as Eval)
+        .mockRejectedValueOnce(new Error('fixture-credential'))
+        .mockImplementationOnce(async (_suite, record) => record as Eval);
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      try {
+        await doEval({ watch: true, write: false }, {}, defaultConfigPath, {});
+        const onChange = chokidarMocks.handlers.get('change')!;
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(errorSpy).toHaveBeenCalledWith('Evaluation failed. Watching for the next change.');
+        expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('fixture-credential');
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+
+        // A failure before resolving providers must not reuse the previous run's suite.
+        vi.mocked(resolveConfigs).mockReset().mockRejectedValueOnce(new Error('invalid config'));
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+
+        vi.mocked(resolveConfigs).mockResolvedValueOnce(watchConfig(providers[2]));
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(evaluate).toHaveBeenCalledTimes(3);
+        for (const provider of providers) {
+          expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        }
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('waits for initial provider cleanup before processing file changes', async () => {
+      const { resolve: releaseCleanup, promise: cleanupGate } = createDeferred<void>();
+      const provider = {
+        id: () => 'initial-provider',
+        callApi: vi.fn(async () => ({ output: 'ok' })),
+        cleanup: vi.fn(() => cleanupGate),
+      };
+      vi.mocked(resolveConfigs)
+        .mockResolvedValueOnce(watchConfig(provider))
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(evaluate).mockImplementation(async (_suite, record) => record as Eval);
+      const initial = doEval({ watch: true, write: false }, {}, defaultConfigPath, {});
+      await vi.waitFor(() => expect(provider.cleanup).toHaveBeenCalledTimes(1));
+      const rerun = chokidarMocks.handlers.get('change')!(defaultConfigPath);
+      try {
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(resolveConfigs).toHaveBeenCalledTimes(1);
+      } finally {
+        releaseCleanup();
+        await Promise.all([initial, rerun]);
+      }
+      expect(evaluate).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([false, true])(
+      'coalesces changes until the active run and cleanup finish (failure: %s)',
+      async (failRun) => {
+        const { resolve: releaseRun, promise: runGate } = createDeferred<void>();
+        const { resolve: releaseCleanup, promise: cleanupGate } = createDeferred<void>();
+        const cleanup = vi.fn();
+        const providers = Array.from({ length: 3 }, (_, index) => ({
+          id: () => `provider-${index}`,
+          callApi: vi.fn(async () => ({ output: 'ok' })),
+          cleanup: index === 1 ? vi.fn(() => cleanupGate) : cleanup,
+        }));
+        for (const provider of providers) {
+          vi.mocked(resolveConfigs).mockResolvedValueOnce(watchConfig(provider));
+        }
+        vi.mocked(evaluate)
+          .mockImplementationOnce(async (_suite, record) => record as Eval)
+          .mockImplementationOnce(async (_suite, record) => {
+            await runGate;
+            if (failRun) {
+              throw new Error('queued watch failure');
+            }
+            return record as Eval;
+          })
+          .mockImplementationOnce(async (_suite, record) => record as Eval);
+
+        await doEval({ watch: true, write: false }, {}, defaultConfigPath, {});
+        const onChange = chokidarMocks.handlers.get('change')!;
+        const first = onChange(defaultConfigPath);
+        await vi.waitFor(() => expect(evaluate).toHaveBeenCalledTimes(2));
+        const second = onChange(defaultConfigPath);
+        const third = onChange(defaultConfigPath);
+        try {
+          await new Promise((resolve) => setImmediate(resolve));
+          expect(resolveConfigs).toHaveBeenCalledTimes(2);
+          releaseRun();
+          await vi.waitFor(() => expect(providers[1].cleanup).toHaveBeenCalledTimes(1));
+          expect(resolveConfigs).toHaveBeenCalledTimes(2);
+        } finally {
+          releaseRun();
+          releaseCleanup();
+          await Promise.all([first, second, third]);
+        }
+        expect(evaluate).toHaveBeenCalledTimes(3);
+        expect(resolveConfigs).toHaveBeenCalledTimes(3);
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('reloads removed options after a failed run and preserves caller cancellation', async () => {
+      const controller = new AbortController();
+      const initialOptions: Parameters<typeof doEval>[3] = {
+        repeat: 2,
+        maxConcurrency: 2,
+        eventSource: 'library',
+        generationEventId: 'caller-generation',
+        abortSignal: controller.signal,
+      };
+      vi.mocked(resolveConfigs)
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        })
+        .mockResolvedValueOnce({
+          config: {
+            evaluateOptions: {
+              repeat: 3,
+              maxConcurrency: 4,
+              delay: 5,
+              eventSource: 'cli',
+              generationEventId: 'config-generation',
+            } as Parameters<typeof doEval>[3],
+          },
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        })
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(evaluate)
+        .mockImplementationOnce(async (_suite, record) => record as Eval)
+        .mockRejectedValueOnce(new Error('hook failed'))
+        .mockImplementationOnce(async (_suite, record) => record as Eval);
+
+      await doEval({ watch: true, write: false }, {}, defaultConfigPath, initialOptions);
+      await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+      await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+
+      expect(evaluate).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ repeat: 3, maxConcurrency: 1, delay: 5 }),
+      );
+      expect(evaluate).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ repeat: 2, maxConcurrency: 2, delay: undefined }),
+      );
+      for (const [, , options] of vi.mocked(evaluate).mock.calls) {
+        expect(options).toMatchObject({
+          eventSource: 'library',
+          generationEventId: 'caller-generation',
+        });
+        expect(options?.abortSignal?.aborted).toBe(false);
+      }
+      expect(initialOptions.abortSignal).toBe(controller.signal);
+      expect(initialOptions.repeat).toBe(2);
+      controller.abort();
+      for (const [, , options] of vi.mocked(evaluate).mock.calls) {
+        expect(options?.abortSignal?.aborted).toBe(true);
+      }
+    });
   });
 
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
@@ -2726,6 +2975,7 @@ describe('evalCommand', () => {
   ])(
     'awaits owned-provider cleanup after evaluation %s when another cleanup %s',
     async (outcome, cleanupMode) => {
+      const warn = vi.spyOn(logger, 'warn');
       const cleanupError = new Error('MCP initialization failed');
       const evaluationError = new Error('primary evaluation failed');
       let startCleanup!: () => void;
@@ -2802,12 +3052,13 @@ describe('evalCommand', () => {
         }
         expect(failingProvider.cleanup).toHaveBeenCalledExactlyOnceWith();
         expect(slowProvider.cleanup).toHaveBeenCalledOnce();
-        expect(logger.warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
+        expect(warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
           error: cleanupError,
         });
       } finally {
         finishCleanup();
         await Promise.allSettled([evaluation]);
+        warn.mockClear();
         vi.mocked(evaluate).mockReset();
         vi.mocked(resolveConfigs).mockReset();
         vi.mocked(writeMultipleOutputs).mockReset();
@@ -2815,7 +3066,7 @@ describe('evalCommand', () => {
     },
   );
 
-  it('keeps overlapping watch runs tied to their own config, options and outputs', async () => {
+  it('keeps queued watch runs tied to their own config, options and outputs', async () => {
     const base = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: undefined });
     const environments = new Map<string, Record<string, string | undefined>>();
@@ -2864,14 +3115,8 @@ describe('evalCommand', () => {
     }
     vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
     vi.mocked(writeMultipleOutputs).mockReset().mockResolvedValue(undefined);
-    let startA!: () => void;
-    let releaseA!: () => void;
-    const startedA = new Promise<void>((resolve) => {
-      startA = resolve;
-    });
-    const heldA = new Promise<void>((resolve) => {
-      releaseA = resolve;
-    });
+    const { promise: startedA, resolve: startA } = createDeferred<void>();
+    const { promise: heldA, resolve: releaseA } = createDeferred<void>();
     vi.mocked(checkCloudPermissions).mockImplementation(async (config) => {
       if (config.description === 'watch-a') {
         startA();
@@ -2901,9 +3146,10 @@ describe('evalCommand', () => {
       const onChange = chokidarMocks.handlers.get('change')!;
       pendingA = Promise.resolve(onChange(defaultConfigPath));
       await startedA;
-      await onChange('second.yaml');
+      const pendingB = onChange('second.yaml');
+      expect(completed.has('watch-b')).toBe(false);
       releaseA();
-      await pendingA;
+      await Promise.all([pendingA, pendingB]);
       await onChange('third.yaml');
 
       for (const { name, timeoutMs } of runs.slice(1)) {
@@ -3360,10 +3606,14 @@ describe('checkCloudPermissions', () => {
 });
 
 describe('showRedteamProviderLabelMissingWarning', () => {
-  const mockWarn = vi.spyOn(logger, 'warn');
+  let mockWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mockWarn.mockClear();
+    mockWarn = vi.spyOn(logger, 'warn');
+  });
+
+  afterEach(() => {
+    mockWarn.mockRestore();
   });
 
   it('should show warning when provider has no label', () => {

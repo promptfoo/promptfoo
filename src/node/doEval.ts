@@ -160,20 +160,15 @@ function failEvalRun(
   throw new EvalRunError(message);
 }
 
-function handleRecoverableWatchError(error: unknown): boolean {
+function logWatchError(error: unknown) {
   if (error instanceof ConfigResolutionError) {
     logConfigResolutionError(error);
-    return true;
-  }
-  if (error instanceof EmailValidationError) {
-    // Account helpers already render these user-facing failures.
-    return true;
-  }
-  if (error instanceof EvalRunError || error instanceof PromptSuggestionsRejectedError) {
+  } else if (error instanceof EvalRunError || error instanceof PromptSuggestionsRejectedError) {
     logger.error(error.message);
-    return true;
+  } else if (!(error instanceof EmailValidationError)) {
+    // Provider errors may contain credentials. Account helpers report their own errors.
+    logger.error('Evaluation failed. Watching for the next change.');
   }
-  return false;
 }
 
 /**
@@ -190,13 +185,14 @@ function handleRecoverableWatchError(error: unknown): boolean {
  * Signal handlers are removed as soon as one fires, so a second Ctrl-C falls back to
  * Node's default behaviour and terminates immediately.
  */
-function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
+function watchUntilTerminated(watcher: FSWatcher, stop: () => void): Promise<void> {
   const signals = ['SIGINT', 'SIGTERM'] as const;
   return new Promise<void>((resolve) => {
     const onSignal = () => {
       for (const signal of signals) {
         process.removeListener(signal, onSignal);
       }
+      stop();
       logger.info('Stopping watch mode...');
       // Settle regardless: a watcher that fails to close must not wedge the CLI.
       watcher
@@ -358,6 +354,10 @@ async function doEvalWithEnv(
   // Set once watch mode starts watching; awaited before doEval returns so the CLI does
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
+  let rerun: Promise<void> | undefined;
+  let pending = false;
+  let stopped = false;
+  let latest: Eval | undefined;
 
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
@@ -1244,24 +1244,21 @@ async function doEvalWithEnv(
         });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
-          watchTermination = watchUntilTerminated(watcher);
+          watchTermination = watchUntilTerminated(watcher, () => {
+            stopped = true;
+          });
         }
 
         watcher
-          .on('change', async (path) => {
+          .on('change', (path) => {
+            if (stopped) {
+              return;
+            }
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            // Watch reruns have always reloaded CommonJS .js default configurations.
-            clearCjsModuleCache();
-            try {
-              await runEvaluation();
-            } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
-              }
-              throw error;
-            }
+            pending = true;
+            return (rerun ??= drainChanges());
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
@@ -1342,9 +1339,38 @@ async function doEvalWithEnv(
     }
   };
 
-  const result = await runEvaluation(true /* initialization */);
+  async function drainChanges(): Promise<void> {
+    try {
+      // Changes can arrive while the initial run still owns providers.
+      await initial;
+      while (pending && !stopped) {
+        pending = false;
+        if (isCliInvocation) {
+          process.exitCode = 0;
+        }
+        try {
+          clearCjsModuleCache();
+          latest = await runEvaluation();
+        } catch (error) {
+          if (isCliInvocation) {
+            process.exitCode = 1;
+          }
+          logWatchError(error);
+        }
+      }
+    } catch (error) {
+      // The initial caller receives setup errors. EventEmitter cannot await rejections.
+      logWatchError(error);
+    } finally {
+      rerun = undefined;
+    }
+  }
+
+  const initial = runEvaluation(true);
+  const result = await initial;
   if (watchTermination) {
     await watchTermination;
+    await rerun;
   }
-  return result;
+  return latest ?? result;
 }

@@ -1084,12 +1084,14 @@ export function resolveTestsWatchPaths(
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+      // Arrays starting with non-strings are literal values, as in generateVarCombinations.
+      return Object.values(entry.vars)
+        .flatMap((value) => (Array.isArray(value) && typeof value[0] !== 'string' ? [] : value))
+        .flatMap((value) =>
+          typeof value === 'string' && value.startsWith('file://')
+            ? resolveTestsFileReference(value, basePath)
+            : [],
+        );
     }
     return [];
   });

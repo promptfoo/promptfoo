@@ -136,7 +136,7 @@ describe('resolveTestsWatchPaths', () => {
     // invoking the generator, so editing them changes the generated cases.
     const watched = resolve({
       path: 'file://gen.py:make',
-      config: { data: 'file://dataset.yaml' },
+      config: { nested: { data: ['file://dataset.yaml'] } },
     } as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'gen.py'));
     expect(watched).toContain(path.join(base, 'dataset.yaml'));
@@ -294,6 +294,25 @@ describe('resolveTestsWatchPaths', () => {
   it('still handles the vars mapping form', () => {
     const watched = resolve([{ vars: { data: 'file://vars.csv' } }] as TestSuiteConfig['tests']);
     expect(watched).toEqual([path.join(base, 'vars.csv')]);
+  });
+
+  it('watches every reference of an array-valued var', () => {
+    // Each array string becomes a separate rendered case.
+    const watched = resolve([
+      { vars: { doc: ['file://tests/a.yaml', 'file://tests/b.yaml'] } },
+    ] as unknown as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'tests/a.yaml'));
+    expect(watched).toContain(path.join(base, 'tests/b.yaml'));
+  });
+
+  it.each([
+    { data: { path: 'file://vars.csv' } },
+    { data: [{ path: 'file://vars.csv' }] },
+    { data: [42, 'file://vars.csv'] },
+    { data: [null, 'file://vars.csv'] },
+    { data: [{ title: 'literal' }, 'file://vars.csv'] },
+  ])('ignores file-like strings inside literal var objects: %j', (vars) => {
+    expect(resolve([{ vars }] as TestSuiteConfig['tests'])).toEqual([]);
   });
 
   it('ignores remote references', () => {
