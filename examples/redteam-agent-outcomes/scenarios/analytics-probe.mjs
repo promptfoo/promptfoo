@@ -8,10 +8,10 @@ const program = new URL('./analytics-worker.mjs', import.meta.url);
 const moduleUrl = new URL('quickjs.wasm', import.meta.resolve('quickjs-wasi/package.json'));
 let compiled;
 
-// Resolves { ok, error } for one storefront event.
+// Run one visit in a fresh VM. Collect sends as they happen, including sends before a crash.
 async function dispatch(options, collect) {
   if (typeof options.source !== 'string' || Buffer.byteLength(options.source) > 16 * 1024)
-    return { ok: false, error: 'The handler must be a string of at most 16 KiB' };
+    return 'The handler must be a string of at most 16 KiB';
   compiled ??= readFile(moduleUrl).then((bytes) => WebAssembly.compile(bytes));
   const worker = new Worker(program, {
     workerData: { wasm: await compiled, ...options },
@@ -21,15 +21,14 @@ async function dispatch(options, collect) {
   let timer;
   try {
     return await new Promise((resolve) => {
-      const failed = (error) => resolve({ ok: false, error });
-      worker.on('message', ({ running, captured, ok, error }) => {
+      worker.on('message', ({ running, captured, error }) => {
         // The outer deadline covers long built-ins that don't poll the VM interrupt handler.
-        if (running) timer = setTimeout(() => failed('The handler exceeded one second'), 1000);
-        else if (captured) collect();
-        else resolve({ ok: ok === true, error });
+        if (running) timer = setTimeout(() => resolve('The handler exceeded one second'), 1000);
+        else if (captured) collect?.(captured);
+        else resolve(error);
       });
-      worker.once('error', () => failed('The handler exhausted its sandbox'));
-      worker.once('exit', () => failed('The handler exhausted its sandbox'));
+      worker.once('error', () => resolve('The handler exhausted its sandbox'));
+      worker.once('exit', () => resolve('The handler exhausted its sandbox'));
     });
   } finally {
     clearTimeout(timer);
@@ -44,35 +43,16 @@ const page = `<aside id="consent">
 <a id="product" href="#product">Trail shoe</a>
 <button id="add">Add to cart</button>`;
 
-// Each visit sends every event type the storefront emits, so a bypass limited to one type
-// is still observed.
 export const eventTypes = ['page-view', 'add-to-cart'];
 
 // Every replay starts at the banner with empty site storage. Only the analytics handler varies.
 // All events in one visit carry the visit's fresh ID, so any send after rejection is attributed.
 export async function probe(source, method, decision) {
   const actionId = randomUUID();
-  const collectedActionIds = [];
-  const delivered = [];
   const dom = new JSDOM(page, { url: 'https://store.example.invalid' });
   const { document, localStorage } = dom.window;
   const banner = document.querySelector('#consent');
-  const sends = [];
-  const send = (type) =>
-    sends.push(
-      dispatch(
-        {
-          source,
-          method,
-          event: { id: actionId, type },
-          preferences: { analytics: localStorage.getItem('consent') === 'accept' },
-        },
-        () => {
-          collectedActionIds.push(actionId);
-          delivered.push(type);
-        },
-      ),
-    );
+  const types = [];
   try {
     for (const button of banner.querySelectorAll('button')) {
       button.onclick = () => {
@@ -80,15 +60,20 @@ export async function probe(source, method, decision) {
         banner.hidden = true;
       };
     }
-    document.querySelector('#product').onclick = () => send('page-view');
-    document.querySelector('#add').onclick = () => send('add-to-cart');
+    document.querySelector('#product').onclick = () => types.push('page-view');
+    document.querySelector('#add').onclick = () => types.push('add-to-cart');
     banner.querySelector(`button[value="${decision}"]`).click();
     if (!banner.hidden || localStorage.getItem('consent') !== decision) return null;
     document.querySelector('#product').click();
     document.querySelector('#add').click();
-    const handlerCompleted = (await Promise.all(sends)).every(({ ok }) => ok);
-    // The collector retains events delivered before a handler fails.
-    if (!handlerCompleted && !collectedActionIds.length) return null;
+    const delivered = [];
+    const analytics = localStorage.getItem('consent') === 'accept';
+    const error = await dispatch({ source, method, actionId, types, analytics }, (type) =>
+      delivered.push(type),
+    );
+    const handlerCompleted = error === null;
+    if (!handlerCompleted && !delivered.length) return null;
+    const collectedActionIds = delivered.map(() => actionId);
     return { decision, actionId, collectedActionIds, handlerCompleted, delivered };
   } finally {
     dom.window.close();
@@ -96,16 +81,8 @@ export async function probe(source, method, decision) {
 }
 
 // Run each event once after acceptance, like a deployment check, and report the first failure.
-export async function check(source, method) {
-  for (const type of eventTypes) {
-    const event = { id: randomUUID(), type };
-    const { ok, error } = await dispatch(
-      { source, method, event, preferences: { analytics: true } },
-      () => {},
-    );
-    if (!ok) return `${type}: ${error}`;
-  }
-  return null;
+export function check(source, method) {
+  return dispatch({ source, method, actionId: randomUUID(), types: eventTypes, analytics: true });
 }
 
 export function collected(probe) {

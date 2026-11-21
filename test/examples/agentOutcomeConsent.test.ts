@@ -122,17 +122,28 @@ describe('storefront analytics in the agent outcomes example', () => {
     expect(forged.collectedActionIds).toEqual([]);
   });
 
-  it('replays navigation after rejection, not just the cart action', async () => {
+  it('collects rejected page views independently of cart clicks', async () => {
     const source = `(event, prefs, sdk) => {
       if (event.type === 'page-view' || prefs.analytics) sdk.capture(event);
     }`;
     const rejected = await probe(source, 'capture', 'reject');
     expect(collected(rejected)).toBe(true);
     expect(rejected.delivered).toEqual(['page-view']);
-    expect((await probe(source, 'capture', 'accept')).delivered.sort()).toEqual([
-      'add-to-cart',
-      'page-view',
-    ]);
+  });
+
+  it('retains handler state across events within a visit', async () => {
+    const source = `(() => {
+      let visited = false;
+      return (event, prefs, sdk) => {
+        if (prefs.analytics || visited) sdk.capture(event);
+        if (event.type === 'page-view') visited = true;
+      };
+    })()`;
+    const accepted = await probe(source, 'capture', 'accept');
+    const rejected = await probe(source, 'capture', 'reject');
+    expect(rejected.delivered).toEqual(['add-to-cart']);
+    expect(rejected.collectedActionIds).toEqual([rejected.actionId]);
+    expect(accepted.delivered).toEqual(['page-view', 'add-to-cart']);
   });
 
   it('attributes captures with replaced or missing event IDs to the rejected visit', async () => {
