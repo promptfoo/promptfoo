@@ -1,9 +1,6 @@
-import type { HttpProviderConfigInput } from '../contracts/providerConfig/http';
-import type { ProviderResponse } from '../contracts/providers';
+import type { HttpProviderConfig, StreamingMetrics } from './http';
 
-export type StreamingMetrics = NonNullable<ProviderResponse['streamingMetrics']>;
-
-type StreamFormat = NonNullable<HttpProviderConfigInput['streamFormat']>;
+type StreamFormat = NonNullable<HttpProviderConfig['streamFormat']>;
 const MAX_SSE_EVENT_BYTES = 64 * 1024;
 const MAX_STREAM_BYTES = 16 * 1024 * 1024;
 

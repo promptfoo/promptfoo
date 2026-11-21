@@ -53,11 +53,7 @@ import {
   type RenderedHttpMultipartBody,
   renderHttpMultipartBody,
 } from './httpMultipart';
-import {
-  estimateStreamingTokensPerSecond,
-  processStreamingResponse,
-  type StreamingMetrics,
-} from './httpStreaming';
+import { estimateStreamingTokensPerSecond, processStreamingResponse } from './httpStreaming';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -82,6 +78,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+
+export type StreamingMetrics = NonNullable<ProviderResponse['streamingMetrics']>;
 
 const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
 const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);
