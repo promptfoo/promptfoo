@@ -28,40 +28,37 @@ export async function withWebpackBundle<T>(
     } finally {
       await library.close();
     }
-    const compiler = webpack({
-      mode: 'development',
-      context: directory,
-      entry,
-      target: 'node',
-      externals: [
-        ({ request }, callback) => {
-          if (request && unavailablePackages.includes(request)) {
-            callback(new Error(`${request} is not installed in this consumer`));
-          } else if (request && !path.isAbsolute(request) && /^[a-z@]/i.test(request)) {
-            callback(null, `commonjs ${request}`);
-          } else {
-            callback();
-          }
-        },
-      ],
-      devtool: false,
-      output: { path: directory, filename: 'consumer.cjs', library: { type: 'commonjs2' } },
-    });
-    if (!compiler) {
-      throw new Error('Webpack did not create a compiler');
-    }
     await new Promise<void>((resolve, reject) => {
-      compiler.run((error, stats) => {
-        compiler.close((closeError) => {
-          if (error || closeError) {
-            reject(error || closeError);
+      webpack(
+        {
+          mode: 'development',
+          context: directory,
+          entry,
+          target: 'node',
+          externals: [
+            ({ request }, callback) => {
+              if (request && unavailablePackages.includes(request)) {
+                callback(new Error(`${request} is not installed in this consumer`));
+              } else if (request && !path.isAbsolute(request) && /^[a-z@]/i.test(request)) {
+                callback(null, `commonjs ${request}`);
+              } else {
+                callback();
+              }
+            },
+          ],
+          devtool: false,
+          output: { path: directory, filename: 'consumer.cjs', library: { type: 'commonjs2' } },
+        },
+        (error, stats) => {
+          if (error) {
+            reject(error);
           } else if (!stats || stats.hasErrors()) {
             reject(new Error(stats?.toString({ all: false, errors: true }) ?? 'No Webpack stats'));
           } else {
             resolve();
           }
-        });
-      });
+        },
+      );
     });
     // Only the deployment has peers. Delete the build tree to catch
     // accidentally embedded build-time paths before exercising the bundle.
