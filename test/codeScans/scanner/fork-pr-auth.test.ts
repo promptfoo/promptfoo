@@ -26,6 +26,8 @@ describe('Scanner fork PR auth rejection', () => {
     }));
     vi.doMock('../../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
+      countUncommittedFiles: vi.fn().mockResolvedValue(0),
+      getDefaultBaseBranch: vi.fn().mockResolvedValue('main'),
     }));
     vi.doMock('../../../src/codeScan/git/metadata', () => ({
       extractMetadata: vi.fn().mockResolvedValue({
@@ -51,11 +53,8 @@ describe('Scanner fork PR auth rejection', () => {
       })),
       resolveGuidance: vi.fn().mockReturnValue(undefined),
     }));
-    vi.doMock('simple-git', () => ({
-      simpleGit: vi.fn(() => ({
-        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
-        revparse: vi.fn().mockResolvedValue('abc123'),
-      })),
+    vi.doMock('../../../src/util/runCommand', () => ({
+      runCommand: vi.fn().mockResolvedValue({ stdout: 'abc123', stderr: '' }),
     }));
     vi.doMock('../../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({
@@ -82,7 +81,8 @@ describe('Scanner fork PR auth rejection', () => {
       createSpinner: vi.fn().mockReturnValue(undefined),
       displayScanResults: vi.fn(),
     }));
-    vi.doMock('../../../src/codeScan/scanner/request', () => ({
+    vi.doMock('../../../src/codeScan/scanner/request', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../../../src/codeScan/scanner/request')>()),
       buildScanRequest: vi.fn().mockReturnValue({ request: 'test' }),
       executeScanRequestWithRetry: vi
         .fn()

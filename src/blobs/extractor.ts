@@ -1,6 +1,7 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { assertCheckpointBounds } from '../util/checkpointMetadata';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
@@ -106,43 +107,7 @@ function parseBinary(
   }
 }
 
-async function maybeStore(
-  base64OrDataUrl: string,
-  defaultMimeType: string,
-  context: BlobContext,
-  location: string,
-  kind: BlobKind,
-  storageEnabled: boolean,
-  minSizeBytes = BLOB_MIN_SIZE,
-): Promise<BlobRef | null> {
-  const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
-  if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
-    return null;
-  }
-
-  if (!storageEnabled) {
-    return null;
-  }
-
-  const mimeType = parsed.mimeType || 'application/octet-stream';
-
-  // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
-  const { ref } = await storeBlob(parsed.buffer, mimeType, {
-    ...context,
-    location,
-    kind,
-  });
-
-  return ref;
-}
-
-/**
- * Per-response store-once function: returns the same `BlobRef` for byte-identical
- * payloads regardless of how the input is encoded (raw base64 vs. `data:` URL) or
- * which field it appeared under, so a single response that mirrors the same
- * audio/image across `output`, `images[]`, `metadata`, and `turns[]` triggers one
- * `storeBlob` write.
- */
+/** Reuse one write per media kind and decoded payload within a response. */
 type StoreOnce = (
   base64OrDataUrl: string,
   defaultMimeType: string,
@@ -160,15 +125,12 @@ function createStoreOnce(
   const cache = new Map<string, Promise<BlobRef | null>>();
   let resolvedPolicy: Promise<boolean> | undefined;
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
-    // Canonicalize the cache key on the parsed bytes (not the raw input string)
-    // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
-    // same cache slot when they decode to the same buffer.
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
     if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
       return null;
     }
 
-    const cacheKey = `${kind}:${parsed.buffer.toString('base64')}`;
+    const cacheKey = `${kind}:${sha256(parsed.buffer)}`;
     const existing = cache.get(cacheKey);
     if (existing) {
       return existing;
@@ -181,24 +143,24 @@ function createStoreOnce(
         typeof storageEnabled === 'function'
           ? await (resolvedPolicy ??= Promise.resolve().then(storageEnabled))
           : storageEnabled;
-      return maybeStore(
-        base64OrDataUrl,
-        defaultMimeType,
-        blobContext,
-        location,
-        kind,
-        enabled,
-        minSizeBytes,
+      if (!enabled) {
+        return null;
+      }
+      const { ref } = await storeBlob(
+        parsed.buffer,
+        parsed.mimeType || 'application/octet-stream',
+        {
+          ...blobContext,
+          location,
+          kind,
+        },
       );
+      return ref;
     })();
     cache.set(cacheKey, pendingStore);
 
     try {
-      const stored = await pendingStore;
-      if (!stored) {
-        cache.delete(cacheKey);
-      }
-      return stored;
+      return await pendingStore;
     } catch (error) {
       cache.delete(cacheKey);
       throw error;
@@ -293,19 +255,8 @@ async function externalizeDataUrls(
     if (!isDataUrl(value)) {
       return { value, mutated: false };
     }
-    const parsed = extractBase64(value);
-    if (!parsed) {
-      return { value, mutated: false };
-    }
-    // Pass the raw data-URL through `storeOnce` so it canonicalizes on the
-    // parsed bytes, sharing the per-response cache with `output` / `images[]`
-    // / `turns[]` / top-level audio.
-    const storedRef = await storeOnce(
-      value,
-      parsed.mimeType,
-      location,
-      getKindFromMimeType(parsed.mimeType),
-    );
+    const mimeType = value.slice(5, value.indexOf(';'));
+    const storedRef = await storeOnce(value, mimeType, location, getKindFromMimeType(mimeType));
     if (!storedRef) {
       return { value, mutated: false };
     }
@@ -368,10 +319,7 @@ async function externalizeMetadataAudio(
     return { value: metadata, mutated: false };
   }
 
-  // Routing through `storeOnce` (instead of calling `maybeStore` directly) means
-  // a metadata-mirrored audio payload reuses the blob written for any other
-  // path (`response.audio.data`, `turns[N].audio.data`, etc.) when the bytes
-  // match — one store.
+  // Reuse matching audio blobs already stored elsewhere in the response.
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),
@@ -548,19 +496,17 @@ async function extractResponseBinaryData(
 
   // Output data URL (images/audio) inside string
   if (typeof response.output === 'string' && isDataUrl(response.output)) {
-    const parsed = extractBase64(response.output);
-    if (parsed && shouldExternalize(parsed.buffer)) {
-      const stored = await storeOnce(
-        response.output,
-        parsed.mimeType,
-        `${location}.output`,
-        getKindFromMimeType(parsed.mimeType),
-      );
-      if (stored) {
-        next.output = stored.uri;
-        mutated = true;
-        logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
-      }
+    const mimeType = response.output.slice(5, response.output.indexOf(';'));
+    const stored = await storeOnce(
+      response.output,
+      mimeType,
+      `${location}.output`,
+      getKindFromMimeType(mimeType),
+    );
+    if (stored) {
+      next.output = stored.uri;
+      mutated = true;
+      logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
     }
   }
 
@@ -576,7 +522,6 @@ async function extractResponseBinaryData(
     try {
       const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
       if (Array.isArray(parsed.data)) {
-        let jsonMutated = false;
         const storedUris: string[] = [];
         for (const item of parsed.data) {
           if (item?.b64_json && typeof item.b64_json === 'string') {
@@ -587,9 +532,7 @@ async function extractResponseBinaryData(
               'image',
             );
             if (stored) {
-              item.b64_json = stored.uri;
               storedUris.push(stored.uri);
-              jsonMutated = true;
               mutated = true;
               logger.debug('[BlobExtractor] Stored image blob from b64_json', {
                 ...context,
@@ -598,15 +541,9 @@ async function extractResponseBinaryData(
             }
           }
         }
-        if (jsonMutated) {
+        if (storedUris.length > 0) {
           // Prefer a simple blob ref output so graders/UI don't have to parse JSON
-          if (storedUris.length === 1) {
-            next.output = storedUris[0];
-          } else if (storedUris.length > 1) {
-            next.output = JSON.stringify(storedUris);
-          } else {
-            next.output = JSON.stringify(parsed);
-          }
+          next.output = storedUris.length === 1 ? storedUris[0] : JSON.stringify(storedUris);
           next.metadata = {
             ...(response.metadata || {}),
             blobUris: storedUris,
@@ -654,6 +591,7 @@ export async function extractAndStoreBinaryData(
   response: ProviderResponse | null | undefined,
   context: BlobContext = {},
 ): Promise<ProviderResponse | null | undefined> {
+  assertCheckpointBounds(response?.metadata);
   const processed = await extractResponseBinaryData(
     response,
     context,
@@ -676,6 +614,8 @@ export async function extractAndStoreResultMedia<T>(
   context: BlobContext,
   storageEnabled: StoragePolicy = isBlobStorageEnabled(),
 ): Promise<{ response: ProviderResponse | null | undefined; metadata: T }> {
+  assertCheckpointBounds(fields.metadata);
+  assertCheckpointBounds(fields.response?.metadata);
   const storeOnce = createStoreOnce(context, storageEnabled);
   const response = await extractResponseBinaryData(fields.response, context, storeOnce, 'response');
   const metadata = await externalizeCompletedTargetResponses(

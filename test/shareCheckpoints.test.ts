@@ -488,6 +488,17 @@ describe('sharing interrupted checkpoints', () => {
     });
   });
 
+  it('inlines previously stored media when storage policy has changed', async () => {
+    vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+    const { record } = await createCheckpoint();
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');
+    vi.stubEnv('PROMPTFOO_SHARE_INLINE_BLOBS', 'true');
+    expect(await createShareableUrl(record, { silent: true })).toBeTruthy();
+    const audio = sentRow().metadata!.completedTargetResponses[0].response.turns[0].audio;
+    expect(audio.data).toBe(firstBytes.toString('base64'));
+    expect(audio.blobRef).toBeUndefined();
+  });
+
   it('includes inlined checkpoint bytes when choosing the self-hosted chunk size', async () => {
     vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
     const { record } = await createCheckpoint('both', undefined, Buffer.alloc(128 * 1024, 69));

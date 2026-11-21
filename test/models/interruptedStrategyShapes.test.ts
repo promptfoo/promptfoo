@@ -1010,3 +1010,36 @@ describe('interrupted checkpoint JSON and media shapes', () => {
     });
   });
 });
+
+describe('imported checkpoint boundaries', () => {
+  it('strips prompts independently of response shape and legacy metadata', () => {
+    const metadata = {
+      interruptedStrategy: true,
+      completedTargetResponses: [
+        { prompt: 'example input', response: null },
+        { response: { metadata: { redteamFinalPrompt: 'example input' } } },
+      ],
+    };
+    const result = legacyResult({ metadata }, metadata);
+    const stripped = sanitizeResultForJsonlArtifact(
+      result,
+      getStripFlags({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' }),
+    );
+    expect(JSON.stringify(stripped)).not.toContain('example input');
+    expect(JSON.stringify(result)).toContain('example input');
+  });
+
+  it('rejects excessively deep or wide checkpoint trees before sharing', () => {
+    let nested: unknown;
+    for (let i = 0; i < 40; i++) {
+      nested = {
+        interruptedStrategy: true,
+        completedTargetResponses: [{ response: { metadata: nested } }],
+      };
+    }
+    const wide = { interruptedStrategy: true, completedTargetResponses: Array(10_001).fill(null) };
+    for (const metadata of [nested, wide]) {
+      expect(() => sanitizeResultForJsonlArtifact({ metadata })).toThrow('checkpoint exceeds');
+    }
+  });
+});

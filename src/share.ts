@@ -3,7 +3,6 @@ import { URL } from 'url';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { isBlobStorageEnabled } from './blobs/extractor';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
@@ -564,6 +563,7 @@ async function prepareCheckpointMediaForShare(
   result: EvalResult,
   prepare: (response: ProviderResponse) => Promise<ProviderResponse>,
 ): Promise<void> {
+  // sanitizeResultForJsonlArtifact validates both trees before this traversal.
   result.metadata = await prepareCheckpointMetadata(result.metadata, prepare);
   if (result.response?.metadata) {
     result.response = {
@@ -649,8 +649,8 @@ async function sendChunkedResults(
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
-  const inlineBlobs =
-    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
+  // Storage preferences can change after a run externalizes its media.
+  const inlineBlobs = getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
   const remoteBlobUploadCache =
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
