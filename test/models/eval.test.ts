@@ -29,7 +29,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
@@ -2657,7 +2657,7 @@ describe('evaluator', () => {
       expect(testIndices).toEqual([0]);
     });
 
-    it('searches user metadata with filters while the unfiltered path searches responses only', async () => {
+    it('searches responses alone without a filter, and user metadata and variables with one', async () => {
       const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
       const metadataRows = [
         { model: 'metadata-scalar-needle', temperature: 0.7 },
@@ -2671,22 +2671,114 @@ describe('evaluator', () => {
           sql`UPDATE eval_results SET metadata = ${JSON.stringify(metadata)} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
         );
       }
-      for (const [searchQuery, expected] of [
+      await db.run(
+        sql`UPDATE eval_results SET test_case = json_set(test_case, '$.metadata.source', 'test-case-needle') WHERE eval_id = ${eval_.id} AND test_idx = 3`,
+      );
+      await db.run(
+        sql`UPDATE eval_results SET test_case = json_set(test_case, '$.vars.city', 'var-only-needle') WHERE eval_id = ${eval_.id} AND test_idx = 2`,
+      );
+      await db.run(
+        sql`UPDATE eval_results SET response = ${JSON.stringify({ output: 'response-needle' })} WHERE eval_id = ${eval_.id} AND test_idx = 1`,
+      );
+      const accuracyFilter = [JSON.stringify(createAccuracyFilter())];
+      for (const [searchQuery, expected, inResponse] of [
         ['metadata-scalar-needle', [0]],
         ['metadata-nested-needle', [1]],
         ['[101,202,303]', [1]],
+        ['test-case-needle', [3]],
+        ['var-only-needle', [2]],
+        ['response-needle', [1], true],
         ['absent-needle', []],
         ['private-only-needle', []],
       ] as const) {
-        const unfiltered = await eval_.getTablePage({ searchQuery });
-        expect(unfiltered.body).toEqual([]);
-        const page = await eval_.getTablePage({
-          searchQuery,
-          filters: [JSON.stringify(createAccuracyFilter())],
-        });
-        expect(page.body.map((row) => row.testIdx)).toEqual(expected);
-        expect(page.filteredCount).toBe(expected.length);
+        for (const filters of [[], accuracyFilter]) {
+          const opts = { searchQuery, filters };
+          const indices = filters.length || inResponse ? expected : [];
+          const page = await eval_.getTablePage(opts);
+          const [metrics] = await eval_.getFilteredMetrics(opts);
+          expect(page.body.map((row) => row.testIdx)).toEqual(indices);
+          expect(page.filteredCount).toBe(indices.length);
+          expect(metrics.testPassCount).toBe(indices.length);
+        }
       }
+    });
+
+    it('counts eligible outputs in each matching row across prompts', async () => {
+      const prompts = [
+        createCompletedPrompt('First {{topic}}', { label: 'first' }),
+        createCompletedPrompt('Second {{topic}}', { label: 'second' }),
+      ];
+      const eval_ = await Eval.create({}, prompts);
+      await eval_.addPrompts(prompts);
+      const outputs = [
+        ['response-needle', 'unrelated'],
+        ['other-row', 'unrelated'],
+      ];
+      for (const [testIdx, rowOutputs] of outputs.entries()) {
+        for (const [promptIdx, output] of rowOutputs.entries()) {
+          await eval_.addResult(
+            createEvaluateResult({
+              testIdx,
+              promptIdx,
+              prompt: prompts[promptIdx],
+              namedScores: { accuracy: 1, [promptIdx === 0 ? 'left' : 'right']: 1 },
+              response: { output },
+            }),
+          );
+        }
+      }
+
+      for (const [field, rows, counts] of [
+        [undefined, [0], [1, 1]],
+        ['accuracy', [0], [1, 1]], // A filter matching both cells changes nothing.
+        ['left', [0], [1, 0]], // Only eligible siblings count.
+        ['right', [], [0, 0]], // The matching output is ineligible.
+      ] as const) {
+        const filters = field
+          ? [JSON.stringify({ type: 'metric', operator: 'is_defined', field })]
+          : [];
+        const opts = { searchQuery: 'response-needle', filters };
+        const page = await eval_.getTablePage(opts);
+        const metrics = await eval_.getFilteredMetrics(opts);
+        expect(page.filteredCount).toBe(rows.length);
+        expect(page.body.map((row) => row.testIdx)).toEqual(rows);
+        expect(page.body.map((row) => row.outputs.map((cell) => cell?.text))).toEqual(
+          rows.map((idx) => outputs[idx]),
+        );
+        expect(metrics.map((prompt) => prompt.testPassCount)).toEqual(counts);
+      }
+
+      // A paused retry leaves both attempts in the same test row. Other rows still have exact counts.
+      await eval_.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          promptIdx: 0,
+          prompt: prompts[0],
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          response: { error: 'initial attempt failed' },
+          namedScores: { accuracy: 1, left: 1 },
+        }),
+      );
+      for (const opts of [
+        { searchQuery: 'initial attempt' },
+        { searchQuery: 'response-needle' },
+        { filterMode: 'errors' as const },
+      ]) {
+        expect((await eval_.getTablePage(opts)).filteredCount).toBe(1);
+        await expect(eval_.getFilteredMetrics(opts)).rejects.toThrow('overlapping attempts');
+      }
+      expect(
+        (await eval_.getFilteredMetrics({ searchQuery: 'other-row' })).map((m) => m.testPassCount),
+      ).toEqual([1, 1]);
+      const rightOnly = [
+        JSON.stringify({ type: 'metric', operator: 'is_defined', field: 'right' }),
+      ];
+      const eligibleSibling = await eval_.getFilteredMetrics({
+        searchQuery: 'unrelated',
+        filters: rightOnly,
+      });
+      expect(eligibleSibling.map((m) => m.testPassCount)).toEqual([0, 2]);
     });
 
     it('searches across response, grading, named scores, metadata, and vars', async () => {
