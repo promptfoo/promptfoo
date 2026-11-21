@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { generateSignature, HttpProvider } from '../../src/providers/http';
 import * as fips from '../../src/util/fips';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -90,26 +90,45 @@ describe('HTTP provider FIPS policy', () => {
     expect(fetchWithCache).toHaveBeenCalledOnce();
   });
 
-  it('reuses a dispatcher only while the CA file still contains the same certificate', async () => {
+  it('closes a rotated CA dispatcher only after its last fetch settles', async () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'promptfoo-ca-'));
     const caPath = join(dir, 'ca.pem');
     const provider = new HttpProvider('https://example.test', {
       config: { method: 'GET', tls: { caPath } },
     });
+    const entered = createDeferred<void>();
+    const resume = createDeferred<void>();
     try {
       await fs.writeFile(caPath, 'CA-A');
       await provider.callApi('first');
-      await provider.callApi('same CA');
+      const original = vi.mocked(Agent).mock.results[0].value;
+      vi.mocked(fetchWithCache).mockImplementationOnce(async (_url, options) => {
+        entered.resolve();
+        await resume.promise;
+        // A retry still dispatches through the options captured before rotation.
+        expect(options?.dispatcher).toBe(original);
+        expect(original.close).not.toHaveBeenCalled();
+        return vi.mocked(fetchWithCache).mock.results[0].value;
+      });
+      const active = provider.callApi('same CA');
+      await entered.promise;
       expect(Agent).toHaveBeenCalledOnce();
       await fs.writeFile(caPath, 'CA-B');
       await provider.callApi('new CA');
       expect(Agent).toHaveBeenCalledTimes(2);
       expect(Agent).toHaveBeenLastCalledWith({ connect: { ca: 'CA-B', rejectUnauthorized: true } });
-      expect(vi.mocked(Agent).mock.results[0].value.close).toHaveBeenCalledOnce();
+      expect(original.close).not.toHaveBeenCalled();
+      resume.resolve();
+      await active;
+      expect(original.close).toHaveBeenCalledOnce();
+      await fs.writeFile(caPath, 'CA-C');
+      await provider.callApi('rotate idle dispatcher');
+      expect(vi.mocked(Agent).mock.results[1].value.close).toHaveBeenCalledOnce();
       await fs.unlink(caPath);
       await expect(provider.callApi('missing CA')).rejects.toThrow('configured CA certificate');
-      expect(fetchWithCache).toHaveBeenCalledTimes(3);
+      expect(fetchWithCache).toHaveBeenCalledTimes(4);
     } finally {
+      resume.resolve();
       await fs.rm(dir, { force: true, recursive: true });
     }
   });
