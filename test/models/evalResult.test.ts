@@ -350,6 +350,29 @@ describe('EvalResult', () => {
     }
   });
 
+  it.each(['headers', 'authorization'])('contains an opaque %s source', async (field) => {
+    const get = vi.fn(() => {
+      throw new Error('fixture-only');
+    });
+    const source = { headers: {}, requestId: 'keep' };
+    Object.defineProperty(field === 'headers' ? source : source.headers, field, {
+      enumerable: true,
+      get,
+    });
+    const input = {
+      ...mockEvaluateResult,
+      response: { output: 'answer', metadata: source },
+      metadata: { headers: { authorization: 'fixture-only', language: 'en' } },
+    };
+    const saved = await EvalResult.createFromEvaluateResult('opaque-headers', input);
+    for (const row of [saved, sanitizeResultForJsonlArtifact(input)]) {
+      expect(row.response?.output).toBe('answer');
+      expect(row.response?.metadata?.requestId).toBe('keep');
+      expect(row.metadata.headers).toEqual({ authorization: '[REDACTED]', language: 'en' });
+    }
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it('does not invoke assertion accessors during artifact projection', () => {
     const readValue = vi.fn(() => 'fixture-only');
     const assertion = { type: 'equals' };

@@ -669,29 +669,26 @@ function isSensitiveRequestHeader(headerName: string): boolean {
 
 // Redact sensitive headers, but only when the value originates from `sourceHeaders` (the
 // transport headers). The provenance check matters for the legacy top-level `metadata.headers`
-// slot, which also holds arbitrary user metadata: a header is redacted only if it deep-equals
-// the value the transport actually sent. For the canonical `metadata.http.*` slots the source
+// slot, which also holds arbitrary user metadata. A masked source value has unknown
+// provenance, so conservatively mask the matching sensitive header. For the canonical `metadata.http.*` slots the source
 // is the slot itself, so the guard reduces to the plain name check.
 function redactSensitiveHeaders(
   headers: Record<string, unknown>,
   sourceHeaders: Record<string, unknown> = headers,
   isSensitiveHeader: (headerName: string) => boolean = isSensitiveResponseHeader,
 ): Record<string, unknown> | null {
-  let mutated = false;
-  const next: Record<string, unknown> = {};
+  let next: Record<string, unknown> | null = null;
   for (const [key, value] of Object.entries(headers)) {
     if (
+      isSensitiveHeader(key) &&
       Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
-      isDeepStrictEqual(sourceHeaders[key], value) &&
-      isSensitiveHeader(key)
+      (sourceHeaders[key] === REDACTED || isDeepStrictEqual(sourceHeaders[key], value))
     ) {
+      next ??= { ...headers };
       next[key] = REDACTED;
-      mutated = true;
-    } else {
-      next[key] = value;
     }
   }
-  return mutated ? next : null;
+  return next;
 }
 
 // Redact transport headers on a single metadata object. Providers populate
@@ -1018,17 +1015,27 @@ export function captureResponseFields<M>(
   response: ProviderResponse | null | undefined,
   metadata: M,
 ) {
+  let captured;
   try {
-    return { response: response && { ...response, toJSON: undefined }, metadata };
+    captured = response && { ...response, toJSON: undefined };
+    if (!captured?.metadata) {
+      return { response: captured, metadata };
+    }
+    captured.metadata = snapshotMetadata(captured.metadata);
+    const source = asRecord(captured.metadata);
+    if (source && source.headers !== REDACTED) {
+      return { response: captured, metadata };
+    }
   } catch {
-    // An unreadable response cannot establish which legacy headers are transport echoes.
-    return {
-      response: null,
-      metadata: redactHttpHeadersOnMetadata(snapshotMetadata(metadata), {
-        redactLegacyHeaders: true,
-      }),
-    };
+    captured = null;
   }
+  // If transport headers cannot be read, conservatively mask possible echoes.
+  return {
+    response: captured,
+    metadata: redactHttpHeadersOnMetadata(snapshotMetadata(metadata), {
+      redactLegacyHeaders: true,
+    }),
+  };
 }
 
 // Share response, grading, and metadata redaction between DB and JSONL writes.
@@ -1036,32 +1043,13 @@ function redactSensitiveResultFieldsForDb<
   R extends ProviderResponse | null | undefined,
   G,
   M,
->(fields: {
-  response: R;
-  gradingResult: G;
-  metadata: M;
-}): {
-  response: R;
-  gradingResult: G;
-  metadata: M;
-} {
-  const { response, metadata: resultMetadata } = captureResponseFields(
-    fields.response,
-    fields.metadata,
-  );
-  const metadata = response?.metadata;
-  if (response && metadata) {
-    response.metadata = snapshotMetadata(metadata);
-  }
-  const plainResponse = sanitizeForDb(response as R);
+>(fields: { response: R; gradingResult: G; metadata: M }) {
+  const { response, metadata } = captureResponseFields(fields.response, fields.metadata);
   return {
-    response: sanitizeResponseForDb(plainResponse),
+    response: sanitizeResponseForDb(sanitizeForDb(response as R)),
     gradingResult: sanitizeForDb(sanitizeGradingResultForDb(fields.gradingResult)),
-    metadata: redactHttpHeadersOnMetadata(snapshotMetadata(resultMetadata), {
-      // Match legacy result headers against their source before redaction.
+    metadata: redactHttpHeadersOnMetadata(snapshotMetadata(metadata), {
       legacyHeadersSource: response?.metadata,
-      // If even the metadata projection failed, treat sensitive legacy headers as echoes.
-      redactLegacyHeaders: Boolean(metadata && !asRecord(response?.metadata)),
     }),
   };
 }
