@@ -715,6 +715,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'model-graded-closedqa',
   'model-graded-factuality',
   'moderation',
+  'numeric',
   'perplexity',
   'perplexity-score',
   'python',
