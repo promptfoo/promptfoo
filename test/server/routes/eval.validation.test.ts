@@ -9,6 +9,10 @@ import { setupTestServer } from '../../util/testServer';
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
 vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
+vi.mock('../../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/cloud')>()),
+  getProviderFromCloud: vi.fn(),
+}));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
@@ -16,6 +20,7 @@ import { loadApiProviders } from '../../../src/providers/index';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
+import { getProviderFromCloud } from '../../../src/util/cloud';
 
 const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
@@ -294,7 +299,7 @@ describe('Eval Routes - Zod Validation', () => {
     it.each([
       {
         providers: 'echo',
-        expected: [{ id: 'echo', prompts: ['Replay'] }],
+        expected: ['echo'],
       },
       {
         providers: [
@@ -318,6 +323,7 @@ describe('Eval Routes - Zod Validation', () => {
       'replays the requested prompt with saved provider selection $providers',
       async ({ providers, expected }) => {
         const before = structuredClone(providers);
+        vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'echo' });
         mockFindById.mockResolvedValue({ config: { providers } });
         vi.mocked(evaluateWithSource).mockResolvedValue({
           toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),
@@ -359,6 +365,7 @@ describe('Eval Routes - Zod Validation', () => {
           "module.exports = class { id() { return 'replay-echo'; } async callApi(prompt) { return { output: prompt }; } };",
         );
         mockFindById.mockResolvedValue({
+          getPrompts: () => providers.map(({ label }) => ({ provider: label })),
           config: {
             providers:
               referenceKind === 'relative' ? 'file://./providers.json' : `file://${providerPath}`,
@@ -374,11 +381,12 @@ describe('Eval Routes - Zod Validation', () => {
           } as unknown as Eval;
         });
         try {
-          const response = await api.post('/api/eval/replay').send({
-            evaluationId: 'test-id',
-            prompt: 'Hello World',
-          });
+          const replay = { evaluationId: 'test-id', prompt: 'Hello World' };
+          const ambiguous = await api.post('/api/eval/replay').send(replay);
+          expect(ambiguous.status).toBe(400);
+          expect(evaluateWithSource).not.toHaveBeenCalled();
 
+          const response = await api.post('/api/eval/replay').send({ ...replay, promptIndex: 0 });
           expect(response.status).toBe(200);
           expect(response.body.output).toBe('Hello World');
           expect(evaluateWithSource).toHaveBeenCalledWith(
@@ -389,7 +397,6 @@ describe('Eval Routes - Zod Validation', () => {
                   prompts: ['Replay'],
                   config: { settings: { greeting: 'Hello' } },
                 },
-                { ...providers[1], prompts: ['Replay'] },
               ],
               basePath: directory,
             }),

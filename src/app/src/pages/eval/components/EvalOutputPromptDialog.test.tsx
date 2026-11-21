@@ -1,12 +1,14 @@
 import * as ReactDOM from 'react-dom/client';
 
 import { mockClipboard } from '@app/tests/browserMocks';
+import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import * as PromptEditorModule from './PromptEditor';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 
 // Mock the Citations component to verify it receives the correct props
@@ -184,6 +186,128 @@ describe('EvalOutputPromptDialog', () => {
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
     });
+  });
+
+  it('shows a Codex Security summary even when an operation error has no output', () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        provider="security comparison"
+        output={undefined}
+        metadata={{
+          codexSecurity: createCodexSecurityResult({
+            status: 'failed',
+            error: 'The operation did not finish.',
+          }),
+        }}
+      />,
+    );
+    expect(screen.getByRole('region', { name: 'Codex Security result' })).toBeInTheDocument();
+    expect(screen.getByText('Coverage').nextElementSibling).toHaveTextContent('unknown');
+    expect(screen.getByText('The operation did not finish.')).toBeInTheDocument();
+    expect(screen.queryByText('Original Output')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    undefined,
+    { version: 1 },
+    createCodexSecurityResult({ cost: { baselineUsd: -1, range: null, pricing: null } }),
+  ])(
+    'keeps ordinary raw output when the normalized contract is missing or invalid',
+    (codexSecurity) => {
+      renderWithProviders(
+        <EvalOutputPromptDialog
+          {...defaultProps}
+          provider="openai:codex-security"
+          output={'{"findings":{"findings":[]},"coverage":{"completeness":"complete"}}'}
+          metadata={{
+            providerType: 'codex-security',
+            operation: 'security-scan',
+            sdkVersion: 'legacy-sdk',
+            codexSecurity,
+          }}
+        />,
+      );
+      expect(
+        screen.queryByRole('region', { name: 'Codex Security result' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText('Original Output')).toBeInTheDocument();
+      expect(screen.queryByText('Findings')).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps explicit unscored quality visible beside execution details', () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        metadata={{ codexSecurity: createCodexSecurityResult({ status: 'completed' }) }}
+        gradingResults={[
+          {
+            pass: false,
+            score: 0,
+            reason: 'Not scored: The report does not match the reviewed findings.',
+            metadata: {
+              quality: {
+                status: 'not-scored',
+                reason: 'The report does not match the reviewed findings.',
+                curatedRecall: null,
+                precision: null,
+              },
+            },
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText('Quality: Not scored')).toBeInTheDocument();
+    expect(
+      screen.getByText('The report does not match the reviewed findings.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Completed');
+  });
+
+  it('preserves and copies the SDK report separately from transformed output', async () => {
+    const user = userEvent.setup();
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+    const raw = { reportMarker: 'preserved SDK evidence' };
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        output="Transformed assertion input"
+        rawOutput={raw}
+        metadata={{ codexSecurity: createCodexSecurityResult() }}
+      />,
+    );
+    expect(screen.getByText('Transformed assertion input')).toBeInTheDocument();
+    expect(screen.getByText('Original Output')).toBeInTheDocument();
+    expect(screen.getByText('SDK report')).toBeInTheDocument();
+    const report = screen.getByText(JSON.stringify(raw));
+    await user.hover(report.closest('.relative')!);
+    await user.click(screen.getByRole('button', { name: 'Copy sdk report' }));
+    expect(clipboard.writeText).toHaveBeenCalledWith(JSON.stringify(raw));
+  });
+
+  it.each([undefined, '{"report":true}', { report: true }])(
+    'does not duplicate the SDK report when raw data is absent or already displayed',
+    (rawOutput) => {
+      renderWithProviders(
+        <EvalOutputPromptDialog
+          {...defaultProps}
+          output={'{"report":true}'}
+          rawOutput={rawOutput}
+          metadata={{ codexSecurity: createCodexSecurityResult() }}
+        />,
+      );
+      expect(screen.getByText('Original Output')).toBeInTheDocument();
+      expect(screen.queryByText('SDK report')).not.toBeInTheDocument();
+    },
+  );
+
+  it('does not add the SDK report panel to unrelated provider output', () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog {...defaultProps} rawOutput={{ unprocessed: 'provider payload' }} />,
+    );
+    expect(screen.queryByText('SDK report')).not.toBeInTheDocument();
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
@@ -517,6 +641,63 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
   });
 
+  it.each(['sdk', 'saved-report'] as const)(
+    'keeps %s Codex Security results read-only when switching from an edited text prompt',
+    async (kind) => {
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
+      await user.click(screen.getByLabelText('Edit & Replay'));
+      expect(screen.getByRole('button', { name: 'Replay' })).toBeInTheDocument();
+
+      rerender(
+        <EvalOutputPromptDialog
+          {...defaultProps}
+          metadata={{
+            codexSecurity: createCodexSecurityResult({ source: { kind, mocked: false } }),
+          }}
+        />,
+      );
+
+      expect(screen.queryByLabelText('Edit & Replay')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Replay' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/Rerun Codex Security from the evaluation configuration/),
+      ).toBeVisible();
+      expect(screen.getByText('Test prompt')).toBeInTheDocument();
+      expect(mockReplayEvaluation).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['sdk', 'saved-report'] as const)(
+    'guards the replay callback for %s Codex Security even if the editor invokes it',
+    async (kind) => {
+      // Exercise the handler boundary independently of the editor's hidden controls.
+      const editor = vi
+        .spyOn(PromptEditorModule, 'PromptEditor')
+        .mockImplementation(({ onReplay }) => (
+          <button type="button" onClick={onReplay}>
+            Invoke replay callback
+          </button>
+        ));
+      try {
+        const user = userEvent.setup();
+        renderWithProviders(
+          <EvalOutputPromptDialog
+            {...defaultProps}
+            metadata={{
+              codexSecurity: createCodexSecurityResult({ source: { kind, mocked: false } }),
+            }}
+          />,
+        );
+        await user.click(screen.getByRole('button', { name: 'Invoke replay callback' }));
+        expect(mockReplayEvaluation).not.toHaveBeenCalled();
+      } finally {
+        editor.mockRestore();
+      }
+    },
+  );
+
   it('should transition PromptEditor from read-only to editable when readOnly prop changes', async () => {
     const { rerender } = renderWithProviders(
       <EvalOutputPromptDialog {...defaultProps} readOnly={true} />,
@@ -822,6 +1003,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     expect(customReplay).toHaveBeenCalledWith({
       evaluationId: 'test-eval-id',
       testIndex: undefined,
+      promptIndex: undefined,
       prompt: 'Test prompt',
       variables: undefined,
     });

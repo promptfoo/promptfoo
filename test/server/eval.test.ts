@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -7,6 +7,7 @@ import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 import { setupTestServer } from '../util/testServer';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -42,6 +43,28 @@ describe('eval routes', () => {
     testEvalIds.clear();
     vi.resetAllMocks();
   });
+
+  it.each([undefined, 0])(
+    'replays a saved environment-selected provider with prompt index %s',
+    async (promptIndex) => {
+      onTestFinished(mockProcessEnv({ REPLAY_FIXTURE_PROVIDER: 'echo' }));
+      const original = { raw: 'original', label: 'original' };
+      const saved = await Eval.create(
+        { providers: [{ id: '{{ env.REPLAY_FIXTURE_PROVIDER }}' }] },
+        [original],
+        { completedPrompts: [{ ...original, provider: 'echo' }] },
+      );
+      testEvalIds.add(saved.id);
+
+      const response = await api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        promptIndex,
+        prompt: 'edited replay',
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.output).toBe('edited replay');
+    },
+  );
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
     const originalStringify = JSON.stringify;

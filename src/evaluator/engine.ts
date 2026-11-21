@@ -118,6 +118,7 @@ import {
   deferredGradingPromises,
   getRepeatCacheNamespace,
   isGradingAbort,
+  prepareProviderSetup,
   promptUsesConversationVariable,
   runEvalInternal,
 } from './runEval';
@@ -2702,6 +2703,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -2719,10 +2721,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
     try {
+      // Setup shares interruption/finalization with execution and keeps the original step order.
+      await prepareProviderSetup(runEvalOptions, checkAbort);
       if (shouldGroupGradingByProvider) {
         await this.runGroupedEvalSteps({
           checkAbort,
@@ -2755,6 +2760,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
+        clearTimeout(globalTimeout);
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
         throw err;
       }
@@ -4053,6 +4059,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });

@@ -56,4 +56,77 @@ describe('ProvidersListSection', () => {
     expect(screen.getByText('Codex Security SDK')).toBeInTheDocument();
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
   });
+
+  it('identifies saved reports without presenting retained SDK settings as report facts', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          {
+            id: 'openai:codex-security:gpt-5.6-sol',
+            label: 'Left report',
+            config: {
+              report_file: '/reports/left.json',
+              operation: 'deep-security-scan',
+              model_reasoning_effort: 'high',
+            },
+          },
+          { id: 'openai:codex-security', config: { report_file: '' } },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.getByText('Saved report · /reports/left.json')).toBeInTheDocument();
+    expect(screen.getByText('Saved report · Select a report file')).toBeInTheDocument();
+    expect(screen.queryByText(/Deep security scan/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/high reasoning/)).not.toBeInTheDocument();
+  });
+
+  it('distinguishes security comparisons with the same model and label', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          {
+            id: 'openai:codex-security:gpt-5.6-sol',
+            label: 'Codex Security SDK',
+            config: { operation: 'security-scan', model_reasoning_effort: 'high' },
+          },
+          {
+            id: 'openai:codex-security:gpt-5.6-sol',
+            label: 'Codex Security SDK',
+            config: { operation: 'deep-security-scan', model_reasoning_effort: 'max' },
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(
+      screen.getByText('Standard security scan · gpt-5.6-sol · high reasoning'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Deep security scan · gpt-5.6-sol · max reasoning'),
+    ).toBeInTheDocument();
+  });
+
+  it('summarizes shorthand defaults and legacy model/reasoning settings accurately', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          { id: 'openai:codex-security' },
+          {
+            id: 'openai:codex-security',
+            config: { operation: 'validation', model: 'gpt-5.6-sol', reasoning_effort: 'low' },
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(
+      screen.getByText('Standard security scan · SDK default model · SDK default reasoning'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Validate a finding · gpt-5.6-sol · low reasoning'),
+    ).toBeInTheDocument();
+  });
 });

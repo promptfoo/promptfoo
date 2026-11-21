@@ -8,6 +8,15 @@ import {
 import type { ProviderResponse } from '../../src/types/providers';
 
 describe('isProviderResponseRateLimited', () => {
+  it.each<ProviderResponse>([
+    { error: 'Historical 429 rate limit' },
+    { metadata: { rateLimitKind: 'rate_limit' } },
+    { metadata: { http: { status: 429, statusText: 'Too Many Requests' } } },
+  ])('honors an explicit response retry opt-out before rate-limit detection: %j', (response) => {
+    expect(isProviderResponseRateLimited({ ...response, retryable: false }, undefined)).toBe(false);
+    expect(isProviderResponseRateLimited({ ...response, retryable: true }, undefined)).toBe(true);
+  });
+
   describe('HTTP status detection', () => {
     it('should detect 429 status in metadata.http.status', () => {
       const result: ProviderResponse = {
