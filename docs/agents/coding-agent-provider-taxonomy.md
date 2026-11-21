@@ -362,25 +362,16 @@ Status: implemented and documented.
 
 Provider IDs: `pi` and `pi:<provider>/<model>`, with an optional `:<thinking>` suffix.
 
-- Starts Pi 0.99.1 or later with `--mode rpc --no-session` for each call. Prompts
-  travel through stdin unchanged; `agent_settled` marks completion.
-- Resolves the CLI from an absolute `pi_path` or a package under the current project
-  directory or its parents. Supports Linux and macOS.
-- Uses a temporary directory with tools disabled by default. A configured
-  `working_dir` enables `read`, `grep`, `find`, and `ls`.
-- Disables resource discovery and project trust by default. Execution settings
-  come from provider configuration; test rows may override `model` and `thinking`.
-- Returns assistant text, concrete model, stop reason, tool metadata, and the final
-  attempt's token usage and cost. Discarded retry attempts are not included.
-- Emits one GenAI span per call. Pi's internal operations have no native OTEL spans.
+- Runs a trusted, external Pi 0.99.1+ executable once per test on Linux or macOS.
+  Prompts travel through stdin over RPC. Each run must emit `agent_settled` and exit cleanly.
+- Forwards one vendor's process key in an isolated profile, or uses an explicit trusted profile.
+- Disables all tools by default. Enabling even file reads requires a tool list,
+  a working directory and `allow_unsafe_tools: true`. Pi cannot confine a tool to that directory.
+- Allows test rows to select a model within the configured vendor and change thinking level.
+- Reports the final assistant response, usage, cost and tool names in one GenAI span.
 
-Pi runs with the user's privileges and inherited environment. Its working directory
-is not a sandbox; use an isolated environment for untrusted prompts with tools enabled.
-The default agent directory is `~/.pi/agent`, preserving Pi's stored credentials and
-custom models. Set `agent_dir` to use separate runtime configuration.
-
-Calls do not share sessions or cached responses. Automatic `copy_working_dir` and
-`agent-rubric` workspace handoff are unsupported; use an explicitly isolated directory.
+Pi supports evaluation as a target. It does not support copying a workspace for grading,
+grading with `agent-rubric`, session reuse, or result caching.
 
 See `site/docs/providers/pi.md` and `examples/provider-pi/` for configuration and examples.
 
