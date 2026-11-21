@@ -766,10 +766,11 @@ export function formatStructuredImageOutput(
   _outputFormat?: string,
   images?: ImageOutput[],
 ): string | { error: string } {
-  if (!images && data?.data?.length > 1) {
+  const items = Array.isArray(data?.data) ? data.data : [];
+  if (!images && items.length > 1) {
     return { error: 'One or more generated images could not be downloaded safely.' };
   }
-  const first = data?.data?.[0];
+  const first = items[0];
   if (responseFormat === 'b64_json' && (typeof first?.b64_json !== 'string' || !first.b64_json)) {
     return { error: 'No base64 image data found in response' };
   }
