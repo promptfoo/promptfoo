@@ -1,7 +1,7 @@
 import { ExportResultCode } from '@opentelemetry/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
@@ -59,7 +59,6 @@ describe('LocalSpanExporter', () => {
         traceFlags: 1,
         isRemote: false,
       }),
-      // OpenTelemetry SDK 2.x uses parentSpanContext instead of parentSpanId
       parentSpanContext: overrides.parentSpanId
         ? { traceId, spanId: overrides.parentSpanId, traceFlags: 1, isRemote: false }
         : undefined,
@@ -267,6 +266,7 @@ describe('LocalSpanExporter', () => {
           'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
           'gen_ai.usage.input_tokens': 100,
+          payload: [{ bytes: new Uint8Array([0, 255]) }],
         },
       });
 
@@ -281,6 +281,7 @@ describe('LocalSpanExporter', () => {
               'gen_ai.provider.name': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
+              payload: [{ bytes: 'AP8=' }],
             },
           }),
         ],
