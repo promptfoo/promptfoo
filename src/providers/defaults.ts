@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -54,7 +54,7 @@ async function getDefaultEmbeddingProvider(
   }
 
   const embeddingDeploymentName =
-    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ??
+    getProviderEnvString(env, 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ??
     getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME');
   // A deployment alone can use the Azure CLI. Explicitly cleared scoped
   // credentials must not fall through to ambient credentials.
@@ -64,8 +64,12 @@ async function getDefaultEmbeddingProvider(
     'AZURE_CLIENT_ID',
     'AZURE_CLIENT_SECRET',
     'AZURE_TENANT_ID',
-  ].some((key) => env?.[key] === '');
-  if (embeddingDeploymentName && !azureCredentialCleared) {
+  ].some((key) => {
+    const value =
+      getProviderEnvString(env, key) ?? getEnvOverrides()?.[key] ?? getEnvOverrides('file')?.[key];
+    return value?.trim() === '';
+  });
+  if (embeddingDeploymentName?.trim() && !azureCredentialCleared) {
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
   }
 

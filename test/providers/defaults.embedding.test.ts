@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
@@ -151,6 +152,26 @@ describe('automatic embedding requests', () => {
       initialize.mockRestore();
     }
   });
+
+  it.each(['suite', 'file'])(
+    'respects blank %s Azure credentials without an explicit env argument',
+    async (layer) => {
+      const run =
+        layer === 'suite'
+          ? cliState.withEnv.bind(cliState)
+          : cliState.withEnvFileOverrides.bind(cliState);
+      const { embeddingProvider } = await run(
+        {
+          ANTHROPIC_API_KEY: 'fixture-grader',
+          MISTRAL_API_KEY: 'fixture-embedding',
+          AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'vectors',
+          AZURE_CLIENT_SECRET: ' ',
+        },
+        () => getDefaultProviders(),
+      );
+      expect(embeddingProvider.id()).toBe('mistral:embedding:mistral-embed');
+    },
+  );
 
   it.each(['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'])(
     'skips Azure embeddings when scoped %s is cleared',
