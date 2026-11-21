@@ -396,21 +396,23 @@ Protobuf is more efficient for serialization and produces smaller payloads. Pyth
 
 ### Environment Variables
 
-You can also configure tracing via environment variables:
+Set these variables to send Promptfoo spans to a local collector:
 
 ```bash
 # Enable tracing
 export PROMPTFOO_TRACING_ENABLED=true
 
-# Configure OTLP endpoint (for providers)
+# OTLP/HTTP collector
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 
 # Set service name
-export OTEL_SERVICE_NAME="my-rag-application"
+export PROMPTFOO_OTEL_SERVICE_NAME="my-rag-application"
 
 # Authentication headers (if needed)
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 ```
+
+Promptfoo uses `PROMPTFOO_OTEL_ENDPOINT` first, then `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. Both specify the full traces URL. With only `OTEL_EXPORTER_OTLP_ENDPOINT`, a bare origin such as `http://localhost:4318` exports to `/v1/traces`. A non-root path is used as written. For a collector behind a path prefix, include the full path, such as `/collector/v1/traces`.
 
 ### Forwarding to External Collectors
 
