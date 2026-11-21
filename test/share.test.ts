@@ -423,7 +423,12 @@ describe('model audit sharing', () => {
     const result = await hasModelAuditBeenShared(mockAudit);
 
     expect(result).toBe(true);
-    expect(makeRequest).toHaveBeenCalledWith('model-audits/scan-123?teamId=team-456', 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      'model-audits/scan-123?teamId=team-456',
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 });
 
@@ -605,7 +610,12 @@ describe('createShareableUrl', () => {
     await createShareableUrl(mockEval, { cloudTeam });
 
     expect(resolveCloudTeam).not.toHaveBeenCalled();
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=runtime-b'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=runtime-b'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
     expect(checkCloudPermissions).toHaveBeenCalledWith(
       mockEval.config,
       cloudTeam,
@@ -1911,7 +1921,12 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
     // Verify teamId is passed in the request URL
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=team-456'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 
   it('checks the runtime team for a server-issued unified config', async () => {
@@ -1930,8 +1945,18 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
 
     expect(result).toBe(true);
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=runtime-team'), 'GET');
-    expect(makeRequest).not.toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=runtime-team'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
+    expect(makeRequest).not.toHaveBeenCalledWith(
+      expect.stringContaining('teamId=team-456'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 
   it('ignores unverified metadata team context', async () => {
@@ -1949,10 +1974,17 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
 
     expect(result).toBe(true);
-    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining('teamId=team-456'),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
     expect(makeRequest).not.toHaveBeenCalledWith(
       expect.stringContaining('teamId=unverified-team'),
       'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
     );
   });
 
@@ -1981,6 +2013,11 @@ describe('hasEvalBeenShared', () => {
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
     // Verify request is made without teamId
-    expect(makeRequest).toHaveBeenCalledWith(expect.not.stringContaining('teamId='), 'GET');
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.not.stringContaining('teamId='),
+      'GET',
+      undefined,
+      cloudConfig.getRequestConfig(),
+    );
   });
 });

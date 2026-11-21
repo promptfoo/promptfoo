@@ -892,7 +892,7 @@ export async function hasEvalBeenShared(
     const url = effectiveTeamId
       ? `results/${eval_.id}?teamId=${encodeURIComponent(effectiveTeamId)}`
       : `results/${eval_.id}`;
-    const res = await makeCloudRequest(url, 'GET');
+    const res = await makeCloudRequest(url, 'GET', undefined, request);
     assertSameCloudSession(request);
     switch (res.status) {
       // 200: Eval already exists in the effective team.
@@ -927,9 +927,9 @@ export async function hasModelAuditBeenShared(
     assertTeamSession(team, request);
     const currentTeamId = team?.id;
     const url = currentTeamId
-      ? `model-audits/${audit.id}?teamId=${currentTeamId}`
+      ? `model-audits/${audit.id}?teamId=${encodeURIComponent(currentTeamId)}`
       : `model-audits/${audit.id}`;
-    const res = await makeCloudRequest(url, 'GET');
+    const res = await makeCloudRequest(url, 'GET', undefined, request);
     assertSameCloudSession(request);
     switch (res.status) {
       // 200: Model audit already exists i.e. it has been shared before.

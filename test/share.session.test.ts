@@ -258,19 +258,28 @@ describe('share session consistency', () => {
     expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
-  it('does not accept prior-share results after a login change', async () => {
-    const cloudTeam = { id: 'team-a', sessionId: cloudConfig.getRequestConfig().sessionId };
+  it.each(['results', 'model-audits'])('pins %s lookups to the original login', async (kind) => {
+    const request = cloudConfig.getRequestConfig();
+    const cloudTeam = { id: 'team-a', sessionId: request.sessionId };
+    const check = () =>
+      kind === 'results'
+        ? hasEvalBeenShared(buildEval(), cloudTeam)
+        : hasModelAuditBeenShared({ id: 'audit' } as ModelAudit, cloudTeam);
     vi.mocked(makeRequest).mockImplementation(async () => {
       setSession(cloudB);
       return new Response(null, { status: 200 });
     });
-    await expect(hasEvalBeenShared(buildEval(), cloudTeam)).resolves.toBe(false);
-    expect(makeRequest).toHaveBeenCalledOnce();
-    vi.mocked(makeRequest).mockClear();
-    await expect(hasModelAuditBeenShared({ id: 'audit' } as ModelAudit, cloudTeam)).resolves.toBe(
-      false,
+
+    await expect(check()).resolves.toBe(false);
+    expect(makeRequest).toHaveBeenCalledWith(
+      expect.stringContaining(`${kind}/`),
+      'GET',
+      undefined,
+      request,
     );
-    expect(makeRequest).not.toHaveBeenCalled();
+    // A second lookup with the old team must stop before issuing another request.
+    await expect(check()).resolves.toBe(false);
+    expect(makeRequest).toHaveBeenCalledOnce();
   });
 
   it('retains an explicit browser URL override without moving the upload', async () => {

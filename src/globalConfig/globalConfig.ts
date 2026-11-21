@@ -92,6 +92,29 @@ function restrictLegacyConfig(fd: number): void {
   }
 }
 
+/** Read the latest configuration before applying this caller's changes. */
+export function updateGlobalConfig(update: (config: GlobalConfig) => void): void {
+  const config = readGlobalConfig();
+  update(config);
+  writeGlobalConfig(config);
+}
+
+/** Reset email verification whenever the address changes. */
+export function updateAccountEmail(config: GlobalConfig, email?: string): void {
+  const account = (config.account ??= {});
+  if (email) {
+    if (account.email !== email) {
+      account.emailValidated = false;
+      account.emailNeedsValidation = true;
+    }
+    account.email = email;
+  } else {
+    delete account.email;
+    delete account.emailValidated;
+    delete account.emailNeedsValidation;
+  }
+}
+
 /**
  * Merges the top-level keys into existing config.
  * @param partialConfig New keys to merge into the existing config.

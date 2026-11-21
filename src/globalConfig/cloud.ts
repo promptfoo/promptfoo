@@ -63,6 +63,16 @@ const CloudTokenValidationSchema = z.object({
 type CloudTokenValidation = z.infer<typeof CloudTokenValidationSchema>;
 type CloudConfigState = NonNullable<GlobalConfig['cloud']>;
 
+interface LoginOptions {
+  token: string;
+  apiHost: string;
+  authHeaderName?: string;
+  organizationId?: string;
+  // Undefined preserves a remembered preference when discovery fails. Null clears it.
+  teamId?: string | null;
+  expectedSelection?: ReturnType<CloudConfig['getTeamSelection']>;
+}
+
 function parseTokenValidation(response: unknown): CloudTokenValidation {
   const result = CloudTokenValidationSchema.safeParse(response);
   if (!result.success) {
@@ -376,20 +386,45 @@ export class CloudConfig {
     });
   }
 
-  /** Commit a validated login only after organization/team selection has completed. */
+  /** Save an interactive login or the positional credentials used by Cloud workers. */
   saveValidatedApiToken(
-    session: CloudTokenValidation & {
-      token: string;
-      apiHost: string;
-      authHeaderName?: string;
-      organizationId?: string;
-      // Undefined preserves a remembered preference after discovery fails; null clears it.
-      teamId?: string | null;
-      expectedSelection?: ReturnType<CloudConfig['getTeamSelection']>;
-    },
+    ...args:
+      | [session: CloudTokenValidation & LoginOptions]
+      | [
+          token: string,
+          apiHost: string,
+          user: Pick<CloudTokenValidation['user'], 'id' | 'name' | 'email' | 'createdAt'> & {
+            updatedAt?: Date | string;
+          },
+          app: CloudTokenValidation['app'],
+          hasActiveLicense?: boolean,
+          authHeaderName?: string,
+        ]
   ): void {
-    const { user, organization, app, hasActiveLicense } = parseTokenValidation(session);
-    const organizationId = session.organizationId ?? organization.id;
+    let session: Omit<CloudTokenValidation, 'organization'> & LoginOptions;
+    if (args.length === 1) {
+      const validated = parseTokenValidation(args[0]);
+      session = {
+        ...args[0],
+        ...validated,
+        organizationId: args[0].organizationId ?? validated.organization.id,
+      };
+    } else {
+      const [token, apiHost, user, app, hasActiveLicense, authHeaderName] = args;
+      const validated = CloudTokenValidationSchema.omit({ organization: true }).safeParse({
+        user,
+        app,
+        hasActiveLicense,
+      });
+      if (!validated.success) {
+        throw new Error('Invalid Cloud login response');
+      }
+      session = { ...validated.data, token, apiHost, authHeaderName };
+    }
+    const { user, app, hasActiveLicense, organizationId } = session;
+    if (!session.token || !session.apiHost) {
+      throw new Error('Invalid Cloud credentials');
+    }
     const isPublicCloud = isPromptfooCloudHost(session.apiHost) || isPromptfooCloudHost(app.url);
     const isGrandfathered =
       user.createdAt != null && new Date(user.createdAt) < SHARING_CUTOFF_DATE;
@@ -408,15 +443,25 @@ export class CloudConfig {
         cloud.authHeaderName = session.authHeaderName;
       }
       cloud.sharing = !isPublicCloud || hasActiveLicense === true || isGrandfathered;
-      cloud.currentOrganizationId = organizationId;
       delete cloud.selectionContext;
-      if (session.teamId !== undefined) {
+      if (organizationId) {
+        cloud.currentOrganizationId = organizationId;
+        if (session.teamId !== undefined) {
+          delete cloud.currentTeamId;
+        }
+        if (session.teamId) {
+          (cloud.teams ??= {})[organizationId] = { currentTeamId: session.teamId };
+        } else if (session.teamId === null && cloud.teams) {
+          delete cloud.teams[organizationId];
+        }
+      } else {
+        // Worker credentials cannot inherit another login's active destinations.
+        delete cloud.currentOrganizationId;
         delete cloud.currentTeamId;
-      }
-      if (session.teamId) {
-        (cloud.teams ??= {})[organizationId] = { currentTeamId: session.teamId };
-      } else if (session.teamId === null && cloud.teams) {
-        delete cloud.teams[organizationId];
+        delete cloud.teams;
+        if (!session.authHeaderName) {
+          delete cloud.authHeaderName;
+        }
       }
       updateAccountEmail(config, user.email);
     });
