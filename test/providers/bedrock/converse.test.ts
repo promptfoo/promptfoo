@@ -1680,6 +1680,39 @@ Third line`;
       );
     });
 
+    it.each([false, true])('normalizes mixed tool formats in either order: %s', async (reverse) => {
+      const tools = [
+        { type: 'function' as const, function: { name: 'openai' } },
+        { toolSpec: { name: 'native', inputSchema: { json: { type: 'object' } } } },
+        { name: 'shorthand', parameters: { type: 'object' } },
+      ];
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1', tools: reverse ? [...tools].reverse() : tools },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      const result = await provider.callApi('Synthetic tool test');
+      expect(result.error).toBeUndefined();
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              {
+                toolSpec: {
+                  name: 'openai',
+                  inputSchema: { json: { type: 'object', properties: {} } },
+                },
+              },
+              { toolSpec: { name: 'native', inputSchema: { json: { type: 'object' } } } },
+              { toolSpec: { name: 'shorthand', inputSchema: { json: { type: 'object' } } } },
+            ]),
+          }),
+        }),
+      );
+    });
+
     it('should convert OpenAI-style function format', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
