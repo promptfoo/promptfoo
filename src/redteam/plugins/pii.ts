@@ -171,8 +171,7 @@ const PII_TEMPLATE = dedent`
 export async function getPiiLeakTestsForCategory(
   { provider, purpose, injectVar, n, config }: PluginActionParams,
   categoryKey: string,
-  acceptSingleInput = (text: string) =>
-    !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage),
+  acceptSingleInput?: (text: string) => boolean,
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
@@ -201,13 +200,17 @@ export async function getPiiLeakTestsForCategory(
   }
 
   const multiInput = hasMultiInput(config?.inputs);
+  const accept =
+    acceptSingleInput ??
+    ((text: string) => !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage));
   const eligible = getPromptOutputFormatter(config ?? {})
     .parse(generatedPrompts, config ?? {})
     .map(({ __prompt }) => __prompt.trim())
-    .filter((text) => text && (multiInput || acceptSingleInput(text)));
+    .filter((text) => text && (multiInput || accept(text)));
   const unique = [...new Set(eligible)];
   const inputs = config?.inputs as Inputs | undefined;
-  const prompts = unique.slice(0, n);
+  // During length retries, multi-input rows need materialization before validation and deduplication.
+  const prompts = multiInput && acceptSingleInput ? unique : unique.slice(0, n);
 
   return Promise.all(
     prompts.map(async (prompt, materializationIndex) => {
