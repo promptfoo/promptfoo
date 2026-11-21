@@ -270,7 +270,7 @@ describe('automatic redteam provider call environment', () => {
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
     const provider = await redteamProviderManager.getProvider({});
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).not.toContain('codex-sdk');
+    expect(hasCodexDefaultCredentials).not.toHaveBeenCalled();
   });
 
   it('preserves explicit and cached provider instances and their call methods', async () => {

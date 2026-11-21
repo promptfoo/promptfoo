@@ -163,7 +163,9 @@ async function loadRedteamProvider({
 
   const env = { ...getEnvOverrides() };
   const { getDefaultProviders } = await import('../../providers/defaults');
-  const defaults = await cliState.withEnv(env, () => getDefaultProviders(env));
+  const defaults = await cliState.withEnv(env, () =>
+    getDefaultProviders(env, { allowCodex: false }),
+  );
   const configuredDefault = jsonOnly
     ? (defaults.redteamJsonProvider ?? defaults.redteamProvider)
     : defaults.redteamProvider;

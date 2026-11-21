@@ -695,7 +695,7 @@ describe('shared redteam provider utilities', () => {
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(defaultRedteamProvider);
-        expect(mockedGetDefaultProviders).toHaveBeenCalledWith(env);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledWith(env, { allowCodex: false });
         expect(mockOpenAiInstances.length).toBe(0);
       });
 

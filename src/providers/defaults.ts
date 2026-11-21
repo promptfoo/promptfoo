@@ -84,7 +84,8 @@ interface DefaultProviderPreferences {
 }
 
 async function getDefaultProviderPreferences(
-  env?: EnvOverrides,
+  env: EnvOverrides | undefined,
+  allowCodex: boolean,
 ): Promise<DefaultProviderPreferences> {
   const hasAnthropicCredentials = Boolean(
     resolveProviderApiKey(undefined, env, ['ANTHROPIC_API_KEY']),
@@ -119,6 +120,7 @@ async function getDefaultProviderPreferences(
     : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =
+    allowCodex &&
     useNonGoogleFallbackDefaults &&
     !hasMistralCredentials &&
     !hasXAICredentials &&
@@ -148,7 +150,10 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+export async function getDefaultProviders(
+  env?: EnvOverrides,
+  { allowCodex = true } = {},
+): Promise<DefaultProviders> {
   const {
     preferAnthropic,
     azureDeployment,
@@ -157,7 +162,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     useGoogleVertexDefaults,
     useMistralDefaults,
     useXAIDefaults,
-  } = await getDefaultProviderPreferences(env);
+  } = await getDefaultProviderPreferences(env, allowCodex);
 
   const openAiProviders = getOpenAiProviders(env);
 
