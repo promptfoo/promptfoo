@@ -3,6 +3,7 @@ import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extrac
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
+  captureResponseFields,
   getStripFlags,
   mapGradingResultProviderRefs,
   persistRepeatMetadata,
@@ -75,7 +76,8 @@ export default class EvalResult {
       evaluationId,
     );
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
+    const captured = captureResponseFields(result.response, persistedMetadata);
+    const processedResponse = await extractAndStoreBinaryData(captured.response, {
       evalId,
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
@@ -83,7 +85,7 @@ export default class EvalResult {
     // A null field from the persistence projection is final. Retrying the original
     // value could run a serializer that bypasses transport and credential redaction.
     const fields = persist
-      ? sanitizeResultFieldsForDb({ ...result, response: processedResponse }, persistedMetadata)
+      ? sanitizeResultFieldsForDb({ ...result, response: processedResponse }, captured.metadata)
       : {
           testCase: sanitizeTestCaseForDb(testCase),
           prompt: sanitizePromptForDb(prompt),
@@ -93,7 +95,7 @@ export default class EvalResult {
           ),
           namedScores: sanitizeForDb(namedScores),
           provider: sanitizeProvider(provider),
-          metadata: sanitizeForDb(persistedMetadata),
+          metadata: sanitizeForDb(captured.metadata),
         };
     const args = {
       ...fields,
@@ -126,15 +128,17 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
+      const captured = captureResponseFields(result.response, result.metadata);
       const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
+        ? await extractAndStoreBinaryData(captured.response, {
             evalId,
             testIdx: result.testIdx,
             promptIdx: result.promptIdx,
           })
-        : result.response;
+        : captured.response;
       processedResults.push({
         ...result,
+        metadata: captured.metadata,
         response: processedResponse ?? undefined,
       });
     }

@@ -1013,6 +1013,24 @@ export function surfaceTraceMetadata(metadata: Record<string, unknown> | null | 
   };
 }
 
+// Read live response accessors once, before media extraction or serialization.
+export function captureResponseFields<M>(
+  response: ProviderResponse | null | undefined,
+  metadata: M,
+) {
+  try {
+    return { response: response && { ...response, toJSON: undefined }, metadata };
+  } catch {
+    // An unreadable response cannot establish which legacy headers are transport echoes.
+    return {
+      response: null,
+      metadata: redactHttpHeadersOnMetadata(snapshotMetadata(metadata), {
+        redactLegacyHeaders: true,
+      }),
+    };
+  }
+}
+
 // Share response, grading, and metadata redaction between DB and JSONL writes.
 function redactSensitiveResultFieldsForDb<
   R extends ProviderResponse | null | undefined,
@@ -1027,8 +1045,10 @@ function redactSensitiveResultFieldsForDb<
   gradingResult: G;
   metadata: M;
 } {
-  // Capture metadata once, before serializing any part of the response.
-  const response = fields.response && { ...fields.response, toJSON: undefined };
+  const { response, metadata: resultMetadata } = captureResponseFields(
+    fields.response,
+    fields.metadata,
+  );
   const metadata = response?.metadata;
   if (response && metadata) {
     response.metadata = snapshotMetadata(metadata);
@@ -1037,7 +1057,7 @@ function redactSensitiveResultFieldsForDb<
   return {
     response: sanitizeResponseForDb(plainResponse),
     gradingResult: sanitizeForDb(sanitizeGradingResultForDb(fields.gradingResult)),
-    metadata: redactHttpHeadersOnMetadata(snapshotMetadata(fields.metadata), {
+    metadata: redactHttpHeadersOnMetadata(snapshotMetadata(resultMetadata), {
       // Match legacy result headers against their source before redaction.
       legacyHeadersSource: response?.metadata,
       // If even the metadata projection failed, treat sensitive legacy headers as echoes.

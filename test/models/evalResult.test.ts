@@ -328,6 +328,28 @@ describe('EvalResult', () => {
     expect(result.metadata?.headers).toEqual({ authorization: '[REDACTED]' });
   });
 
+  it('contains an unreadable response and redacts potential header echoes', async () => {
+    const input = {
+      ...mockEvaluateResult,
+      response: {
+        get metadata(): never {
+          throw new Error('fixture-only');
+        },
+      },
+      metadata: { headers: { authorization: 'fixture-only', language: 'en' } },
+    };
+    const rows = [
+      sanitizeResultForJsonlArtifact(input),
+      await EvalResult.createFromEvaluateResult('unreadable-response', input),
+      ...(await EvalResult.createManyFromEvaluateResult([input], 'unreadable-batch')),
+    ];
+    for (const row of rows) {
+      expect(row.response).toBeFalsy();
+      expect(row.metadata.headers).toEqual({ authorization: '[REDACTED]', language: 'en' });
+      expect(row.score).toBe(input.score);
+    }
+  });
+
   it('does not invoke assertion accessors during artifact projection', () => {
     const readValue = vi.fn(() => 'fixture-only');
     const assertion = { type: 'equals' };
