@@ -354,7 +354,7 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
-  it.each(formats)('uses environment rules only in environment maps in %s', async (format) => {
+  it.each(formats)('checks environment maps and multiline dumps in %s', async (format) => {
     const env = { DBPWD: 'opaque', VENDOR_CERTKEY: 'opaque', KEY: 'opaque', MAX_TOKENS: '128' };
     const { attributes, payload } = await exportCustomData(
       {
@@ -363,14 +363,21 @@ describe('OTLPTracingExporter', () => {
         'process.env.DBPWD': 'opaque',
         'environmentVariables._DBPWD': 'opaque',
         environment: [{ name: 'APP_ENCRYPTIONKEY', value: 'opaque' }],
-        envVars: ['DBPWD=opaque', 'REGION=west'],
+        'process.env': 'HOME=/tmp\nDBPWD=opaque\nKEY=opaque',
+        envVars: [
+          'DBPWD=opaque',
+          'HOME=/tmp\r\nexport KEY = "first\r\nopaque"',
+          'REGION=west\nMAX_TOKENS=128',
+        ],
         key: 'item',
       },
       format,
     );
     expect(JSON.stringify(payload)).not.toContain('opaque');
     expect(JSON.parse(attributes.env as string).MAX_TOKENS).toBe('128');
-    expect(attributes.envVars).toEqual(wireStrings('<redacted>', 'REGION=west'));
+    expect(attributes.envVars).toEqual(
+      wireStrings('<redacted>', '<redacted>', 'REGION=west\nMAX_TOKENS=128'),
+    );
     expect(attributes.key).toBe('item');
   });
 
@@ -1259,6 +1266,39 @@ describe('OTLPTracingExporter', () => {
       expect(JSON.stringify(payload)).not.toContain('private-');
     },
   );
+
+  it.each(formats)('checks credential siblings before flattening records in %s', async (format) => {
+    const records = [
+      { kty: 'oct', k: 'opaque', kid: 'visible' },
+      { kty: 'RSA', p: 'opaque', n: 'visible' },
+      { kty: 'EC', d: 'opaque', x: 'visible' },
+      { name: 'Authorization', value: 'opaque', region: 'visible' },
+      { ...createJwe(), ciphertext: 'opaque' },
+    ];
+    const payload = await exportSpans(
+      format,
+      records.flatMap((data) => [
+        { spanData: { type: 'custom', data }, traceMetadata: { value: 'public metadata' } },
+        {
+          spanData: { type: 'synthetic', ...data },
+          traceMetadata: { ...data, 'evaluation.id': 'eval123', 'test.case.id': 'test123' },
+        },
+      ]),
+    );
+    const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+    expect(spans).toHaveLength(records.length * 2);
+    expect(JSON.stringify(payload)).not.toContain('opaque');
+    expect(getAttributes(spans[0])).toMatchObject({ k: '<redacted>', kid: 'visible' });
+    expect(getAttributes(spans[1])).toMatchObject({
+      'agent.kid': 'visible',
+      'trace.metadata.kid': 'visible',
+    });
+    expect(getAttributes(spans[6])['trace.metadata.value']).toBe('public metadata');
+    expect(getAttributes(spans.at(-1))).toMatchObject({
+      'evaluation.id': 'eval123',
+      'test.case.id': 'test123',
+    });
+  });
 
   it.each(formats)(
     'bounds deeply nested native attributes before normalization in %s',

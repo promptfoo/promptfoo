@@ -260,12 +260,15 @@ export class OTLPTracingExporter implements TracingExporter {
         break;
     }
 
-    for (const [key, value] of Object.entries(span.traceMetadata ?? {})) {
+    for (const [key, value] of flattenedAttributes(
+      span.traceMetadata ?? {},
+      TRACE_LINKAGE_ATTRIBUTE_KEYS,
+    )) {
       if (INTERNAL_TRACE_METADATA_KEYS.has(key)) {
         continue;
       }
 
-      if (key === 'evaluation.id' || key === 'test.case.id') {
+      if (TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key)) {
         attributes[key] = value;
       } else {
         attributes[`trace.metadata.${key}`] = value;
@@ -334,7 +337,7 @@ export class OTLPTracingExporter implements TracingExporter {
       return;
     }
 
-    for (const [key, value] of structuredAttributeEntries(data.data)) {
+    for (const [key, value] of flattenedAttributes(data.data)) {
       attributes[key] = value;
     }
 
@@ -355,7 +358,7 @@ export class OTLPTracingExporter implements TracingExporter {
     data: Exclude<SpanData, { type: 'custom' }>,
     attributes: Record<string, unknown>,
   ): void {
-    for (const [key, value] of Object.entries(data)) {
+    for (const [key, value] of flattenedAttributes(data)) {
       if (key === 'type') {
         continue;
       }
@@ -595,9 +598,6 @@ function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext)
   if (context && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
     return '<redacted>'; // A truncated header or argument list can still contain credentials.
   }
-  if (context === 'env' && isCredentialProperty(value, true)) {
-    return '<redacted>';
-  }
   return sanitizeCredentialText(value, true, context);
 }
 
@@ -698,6 +698,15 @@ function sanitizeCredentialText(
 ): string {
   if (value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES || mustWithholdCredentialText(value)) {
     return '<redacted>';
+  }
+
+  // Withhold mixed environment dumps as a unit. A value can span multiple lines.
+  if (context === 'env') {
+    for (const [, name] of value.matchAll(/\b([A-Za-z_]\w*)["']?\s*[:=]/g)) {
+      if (isCredentialAttributeKey(name, true)) {
+        return '<redacted>';
+      }
+    }
   }
 
   const command = value.replace(/\\\r?\n/g, '');
@@ -842,9 +851,9 @@ function classifyExecutable(word: string, arg = unquoteShellWord(word)) {
 
 const PROPERTY_OPTIONS = new Set(['-D', '-P', '--define', '--project-prop', '--system-prop']);
 
-function isCredentialProperty(assignment: string, env = false) {
+function isCredentialProperty(assignment: string) {
   const field = /^\s*([^\s=]+)=/.exec(assignment)?.[1];
-  return field !== undefined && isCredentialAttributeKey(field, env);
+  return field !== undefined && isCredentialAttributeKey(field);
 }
 
 function credentialOption(arg: string, curl: boolean, property: boolean): string | undefined {
@@ -1045,11 +1054,7 @@ function attributeContext(key: string, source?: Record<string, unknown>): Attrib
   return context;
 }
 
-function isCredentialPairValue(
-  source: Record<string, unknown> | unknown[],
-  key: string,
-  context: AttributeContext,
-) {
+function isCredentialParameter(source: StructuredValue, key: string, context?: AttributeContext) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
     if (typeof option !== 'string') {
@@ -1064,20 +1069,13 @@ function isCredentialPairValue(
     }
     return /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) && isCredentialAttributeKey(option);
   }
-  return (
-    key.toLowerCase() === 'value' &&
-    Object.entries(source).some(
+  if (key.toLowerCase() === 'value') {
+    return Object.entries(source).some(
       ([field, name]) =>
         /^(name|key)$/i.test(field) &&
         typeof name === 'string' &&
         isCredentialAttributeKey(name, context === 'env'),
-    )
-  );
-}
-
-function isPrivateJwkParameter(source: Record<string, unknown> | unknown[], key: string): boolean {
-  if (Array.isArray(source)) {
-    return false;
+    );
   }
   if (source.kty === 'RSA') {
     return ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth'].includes(key);
@@ -1180,8 +1178,7 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
       const nested = inherited ?? attributeContext(key, array ? undefined : source);
       const sensitive =
         isCredentialAttributeKey(key, context === 'env') ||
-        isCredentialPairValue(source, key, context) ||
-        isPrivateJwkParameter(source, key);
+        isCredentialParameter(source, key, context);
       Object.defineProperty(target, sanitizeSerializedAttribute(key), {
         configurable: true,
         enumerable: true,
@@ -1200,6 +1197,23 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
   } catch {
     // A malformed or oversized value must not discard other spans in the batch.
     return '<redacted>';
+  }
+}
+
+// Check siblings in their original record before flattening and prefixing attribute names.
+function* flattenedAttributes(
+  source: Record<string, unknown>,
+  linkage?: Set<string>,
+): Generator<[string, unknown]> {
+  try {
+    const fields = Object.fromEntries(structuredAttributeEntries(source));
+    const encrypted = isJwe(fields, { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES });
+    for (const [key, value] of Object.entries(fields)) {
+      const sensitive = encrypted ? !linkage?.has(key) : isCredentialParameter(fields, key);
+      yield [key, sensitive ? '<redacted>' : value];
+    }
+  } catch {
+    // An unreadable envelope cannot be safely flattened.
   }
 }
 
