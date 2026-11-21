@@ -137,10 +137,8 @@ const DIAGNOSTIC_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'<>]+/gi;
 const CREDENTIAL_FIELD =
   /(?<![\w.\\-])(\\{0,8}["']?)([A-Za-z_][\w.-]{0,63})\1\s*[:=]\s*(\\{0,8}["'])?/g;
 const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
-  '"': /(?<!\\)"|[\r\n]/g,
-  "'": /(?<!\\)'|[\r\n]/g,
-  // An escaped value has no reliable end: its own quotes can be escaped once more.
-  escaped: /[\r\n]/g,
+  '"': /(?<!\\)"/g,
+  "'": /(?<!\\)'/g,
   // Authorization values can span several tokens and comma-separated parameters; cookie values
   // span `;`-separated pairs but cannot contain a comma.
   authorization: /[;\r\n]/g,
@@ -159,17 +157,19 @@ export function redactDiagnosticText(text: string, credentials: Iterable<string>
   for (const match of source.matchAll(CREDENTIAL_FIELD)) {
     const [field, , name, quote] = match;
     const start = match.index + field.length;
-    if (match.index < copied || source.startsWith(REDACTED, start) || !isCredentialName(name)) {
+    if (match.index < copied || !isCredentialName(name)) {
       continue;
+    }
+    redacted += source.slice(copied, start) + REDACTED;
+    // Repeatedly escaped quotes have no reliable closing delimiter.
+    if (quote && quote.length > 1) {
+      return redacted;
     }
     const end =
       CREDENTIAL_FIELD_END[
-        (quote && quote.length > 1 ? 'escaped' : quote) ??
-          name.match(/authorization|cookie/i)?.[0].toLowerCase() ??
-          'bare'
+        quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? 'bare'
       ];
-    end.lastIndex = start;
-    redacted += source.slice(copied, start) + REDACTED;
+    end.lastIndex = source.startsWith(REDACTED, start) ? start + REDACTED.length : start;
     copied = end.exec(source)?.index ?? source.length;
   }
   return redacted + source.slice(copied);

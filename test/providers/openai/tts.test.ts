@@ -131,6 +131,19 @@ describe('OpenAiTtsProvider', () => {
     });
   });
 
+  it.each([{ stream_format: 'sse' } as const, { passthrough: { stream_format: 'sse' } }])(
+    'rejects a speech event stream before caching it as audio',
+    async (options) => {
+      const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {
+        config: { apiKey: 'test-key', ...options },
+      });
+      await expect(provider.callApi('Hello')).resolves.toEqual({
+        error: 'The OpenAI TTS provider requires binary speech output. Use stream_format: audio.',
+      });
+      expect(mockedFetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('wraps PCM returned from a passthrough response_format override as playable WAV', async () => {
     mockedFetch.mockResolvedValue(audioResponse(new Uint8Array([1, 0, 2, 0])));
     const provider = new OpenAiTtsProvider('gpt-4o-mini-tts', {

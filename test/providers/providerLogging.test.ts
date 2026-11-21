@@ -121,6 +121,12 @@ describe('redactDiagnosticText', () => {
       'URL userinfo and query',
       'GET https://upstream-1:upstream-2@api.test/v1?access_token=upstream-3',
     ],
+    [
+      'multiline quoted fields',
+      'token="upstream-1\nupstream-2"; api_key=\'upstream-3\r\nupstream-4\'',
+    ],
+    ['multiline escaped fields', 'password=\\"upstream-1\nupstream-2\\"'],
+    ['partly redacted fields', 'password="' + REDACTED + 'upstream-1"'],
     ['unterminated quoted values', 'Authorization: "Token upstream-1'],
   ])('redacts upstream-only %s', (_label, text) => {
     const redacted = redactDiagnosticText(`${text} useful context`, []);

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultProvider, getProviderEditorType } from './providerCatalog';
+import { createDefaultProvider, getProviderEditorType, isModelProviderId } from './providerCatalog';
 
 // Defaults belong to each new target: editing one must not change the next target.
 describe('provider catalog', () => {
+  it.each(['exec:script.sh', 'file://provider.py', 'unknown:model', 'openai:'])(
+    'excludes %s from model provider shorthands',
+    (id) => expect(isModelProviderId(id)).toBe(false),
+  );
+
   it('creates independent nested configurations for each target', () => {
     const http = createDefaultProvider('http', 'First');
     http.config.headers!['Content-Type'] = 'text/plain';

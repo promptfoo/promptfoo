@@ -3872,6 +3872,8 @@ describe('OpenCodeSDKProvider', () => {
 
       it.each([
         { baseUrl: 'https://q7x9@example.test' },
+        { baseUrl: 'https://example.test/v1?q7x9' },
+        { baseUrl: 'https://example.test/v1#%717x9' },
         {
           mcp: {
             tool: { type: 'remote' as const, url: 'https://q7x9@example.test', enabled: false },

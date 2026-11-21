@@ -805,9 +805,10 @@ function addOpenCodeUrlCredentials(value: unknown, add: (value: unknown) => void
     add(part);
     add(safeDecodeURIComponent(part));
   }
-  for (const parameter of parameters.split(/[?#&;]/).filter((item) => item.includes('='))) {
+  for (const parameter of parameters.split(/[?#&;]/).filter(Boolean)) {
     const parameterValue = parameter.slice(parameter.indexOf('=') + 1);
     add(parameterValue);
+    add(safeDecodeURIComponent(parameterValue));
     add(safeDecodeURIComponent(parameterValue.replace(/\+/g, ' ')));
   }
 }
