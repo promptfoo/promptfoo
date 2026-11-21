@@ -2688,7 +2688,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       timeoutMs,
       error,
     );
-    retainTimedOutWork(timeoutResult, completedWork);
+    // A pending transform or extension may redact provider output. Never persist
+    // raw payloads if their normal publication path has unfinished processing.
+    const preservePayload = !(
+      evalStep.provider.transform ||
+      (isApiProvider(evalStep.test.provider) && evalStep.test.provider.transform) ||
+      evalStep.test.options?.transform ||
+      evalStep.test.options?.postprocess ||
+      context.testSuite.extensions?.length
+    );
+    retainTimedOutWork(timeoutResult, completedWork, preservePayload);
     this.trackFinalJsonlResult(timeoutResult);
     await this.store.appendResult(timeoutResult);
     this.trackRowStats(timeoutResult);

@@ -484,7 +484,11 @@ function summarizeCompletedTargets(
   };
 }
 
-export function retainTimedOutWork(row: EvaluateResult, work: CompletedRunWork) {
+export function retainTimedOutWork(
+  row: EvaluateResult,
+  work: CompletedRunWork,
+  preservePayload: boolean,
+) {
   const partial = work.targets.length ? summarizeCompletedTargets(work.targets) : undefined;
   const completed = work.response ? normalizeCachedTargetResponse(work.response) : partial;
   if (!completed) {
@@ -493,9 +497,12 @@ export function retainTimedOutWork(row: EvaluateResult, work: CompletedRunWork) 
   // Keep media and output in their normal, strippable fields. A deadline
   // doesn't authorize copying private prompts or arbitrary strategy metadata.
   row.response = {
-    output: completed.output,
-    audio: completed.audio,
-    images: completed.images,
+    ...(preservePayload && {
+      output: completed.output,
+      audio: completed.audio,
+      images: completed.images,
+      video: completed.video,
+    }),
     cached: completed.cached,
     tokenUsage: completed.tokenUsage ?? partial?.tokenUsage,
     cost: completed.cost ?? partial?.cost,

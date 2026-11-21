@@ -794,7 +794,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it.each([false, true])('does not block timeout rows (nested=%s)', async (hasTargets) => {
+  it.each(['none', 'nested', 'redacted'])('handles timeout rows (%s)', async (mode) => {
     useEvaluationTimers();
 
     const providerStarted = createDeferred<void>();
@@ -803,11 +803,12 @@ describeEvaluator('evaluator execution control', () => {
     const hangingProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('hanging-provider'),
       callApi: vi.fn().mockImplementation(async () => {
-        if (hasTargets) {
+        if (mode !== 'none') {
           const target = {
             id: () => 'fixture',
             callApi: async (prompt: string) => ({
               output: prompt === 'first' ? 'one' : 'two',
+              video: { id: 'sample-frame' },
               cost: 0.25,
               tokenUsage: { total: 5, numRequests: 1 },
               metadata: { privateContext: 'PRIVATE_FIXTURE' },
@@ -852,7 +853,7 @@ describeEvaluator('evaluator execution control', () => {
     const testSuite: TestSuite = {
       providers: [hangingProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{}],
+      tests: mode === 'redacted' ? [{ options: { transform: '"public"' } }] : [{}],
     };
 
     try {
@@ -862,18 +863,19 @@ describeEvaluator('evaluator execution control', () => {
       await evalPromise;
 
       const [row] = mockAddResult.mock.calls[0];
-      if (hasTargets) {
+      if (mode === 'none') {
+        expect(row.response).toBeUndefined();
+      } else {
         expect(row).toMatchObject({
           cost: 0.5,
           tokenUsage: { total: 10, numRequests: 2 },
           response: {
-            output: 'two',
             metadata: { interruptedStrategy: true, completedTargetCount: 2 },
           },
         });
+        expect(row.response.output).toBe(mode === 'redacted' ? undefined : 'two');
+        expect(row.response.video?.id).toBe(mode === 'redacted' ? undefined : 'sample-frame');
         expect(JSON.stringify(row)).not.toContain('PRIVATE_FIXTURE');
-      } else {
-        expect(row.response).toBeUndefined();
       }
       expect(hangingProvider.cleanup).not.toHaveBeenCalled();
       expect(mockAddResult).toHaveBeenCalledWith(
