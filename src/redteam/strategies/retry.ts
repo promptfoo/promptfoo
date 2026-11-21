@@ -155,13 +155,10 @@ async function getFailedTestCases(
       .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
 
     allTestCases.push(...localTestCases);
-
-    // Deduplicate combined results from both cloud and local
-    return deduplicateTests(allTestCases);
   } catch (error) {
     logger.error(`Error retrieving failed test cases: ${error}`);
-    return [];
   }
+  return allTestCases;
 }
 
 export async function addRetryTestCases(
