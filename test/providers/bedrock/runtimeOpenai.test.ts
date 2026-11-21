@@ -2059,13 +2059,13 @@ describe('Runtime Responses terminal stream policy', () => {
   it.each([
     ['OpenAI', OpenAiResponsesProvider, 'gpt-4.1'],
     ['Mantle', BedrockOpenAiResponsesProvider, 'openai.gpt-5.6-sol'],
-  ] as const)('rejects unconfirmed %s deltas on EOF', async (_name, Provider, model) => {
+  ] as const)('keeps the existing %s delta fallback unchanged', async (_name, Provider, model) => {
     mockStream([delta]);
     const result = await new Provider(model, {
       config: { apiKey: 'fixture', stream: true },
     }).callApi('hello');
-    expect(result.error).toContain('before a terminal response event');
-    expect(result.output).toBeUndefined();
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('READY');
   });
 });
 
