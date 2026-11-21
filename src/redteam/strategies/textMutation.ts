@@ -259,7 +259,7 @@ export function transformStrategyInput(
     if (!isAttackableTextInput(definition)) {
       continue;
     }
-    if (!Object.hasOwn(envelope, key)) {
+    if (!Object.prototype.hasOwnProperty.call(envelope, key)) {
       throw new Error(`${strategy} strategy requires all declared multi-input fields`);
     }
     // Materialization can stringify numeric companions. The original JSON
