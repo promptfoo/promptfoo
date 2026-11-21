@@ -13,6 +13,7 @@ import { getProjectPathCheck, resolveAgentExecutable } from './agentExecutable';
 import { resolveAgenticWorkingDir } from './agentic-utils';
 import { isAgentWorkspace } from './agentWorkspace';
 import { hasAgentEnvOverride } from './env';
+import { getProviderPromptOverrides } from './promptOverrides';
 import { providerRegistry } from './providerRegistry';
 
 import type {
@@ -269,15 +270,7 @@ export class MuseCodeProvider implements ApiProvider {
     }
     let config: MuseCodeConfig;
     try {
-      // Only turn settings can come from test data. Promptfoo also attaches
-      // an optional live provider instance, which must never be rendered.
-      const {
-        provider: _provider,
-        prefix: _prefix,
-        suffix: _suffix,
-        working_dir,
-        ...overrides
-      } = context?.prompt?.config ?? {};
+      const { working_dir, ...overrides } = getProviderPromptOverrides(context?.prompt?.config);
       if (
         working_dir !== undefined &&
         !(context?.isGrading && typeof working_dir === 'string' && isAgentWorkspace(working_dir))

@@ -9,6 +9,7 @@ import {
   CodexAppServerConfigSchema,
   OpenAICodexAppServerProvider,
 } from './openai/codex-app-server';
+import { getProviderPromptOverrides } from './promptOverrides';
 import { providerRegistry } from './providerRegistry';
 
 import type { EnvOverrides } from '../types/env';
@@ -21,23 +22,6 @@ import type {
 import type { CodexAppServerConfig, CodexAppServerRequestPolicy } from './openai/codex-app-server';
 
 const MAX_INLINE_IMAGE_CHARS = 5_000_000;
-const FRAMEWORK_PROMPT_OPTION_KEYS = new Set([
-  'prefix',
-  'suffix',
-  'postprocess',
-  'transform',
-  'transformVars',
-  'storeOutputAs',
-  'rubricPrompt',
-  'provider',
-  'factuality',
-  'disableVarExpansion',
-  'disableConversationVar',
-  'disableDefaultAsserts',
-  'runSerially',
-  'repeat',
-  'redteamGraderExamples',
-]);
 const NUMERIC_PROMPT_OPTION_KEYS = new Set([
   'thread_pool_size',
   'request_timeout_ms',
@@ -219,11 +203,7 @@ function parseOpenInterpreterPromptConfig(
     return parseOpenInterpreterConfig(config as OpenInterpreterConfig);
   }
 
-  const renderableConfig = Object.fromEntries(
-    Object.entries(config).filter(
-      ([key]) => !stripFrameworkOptions || !FRAMEWORK_PROMPT_OPTION_KEYS.has(key),
-    ),
-  );
+  const renderableConfig = stripFrameworkOptions ? getProviderPromptOverrides(config) : config;
   const providerConfig = Object.fromEntries(
     Object.entries(renderVarsInObject(renderableConfig, vars)).map(([key, value]) => [
       key,

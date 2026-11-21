@@ -227,7 +227,15 @@ describe('MuseCodeProvider', () => {
       prompt: {
         raw: '{{prompt}}',
         label: 'review',
-        config: { model: '{{model}}', provider: circularProvider, prefix: '', suffix: '' },
+        config: {
+          model: '{{model}}',
+          provider: circularProvider,
+          prefix: '',
+          suffix: '',
+          runSerially: true,
+          storeOutputAs: 'lastAnswer',
+          disableConversationVar: true,
+        },
       },
       vars: { model: 'muse-spark-1.2' },
       evaluationId: 'eval-muse',
