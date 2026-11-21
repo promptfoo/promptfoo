@@ -63,6 +63,13 @@ describe('ReportDownloadButton', () => {
         result: { vars: { query: 'original query', prompt: 'original prompt' } },
         expected: 'original query',
       },
+      {
+        result: {
+          vars: { prompt: 'original prompt', query: 'auxiliary query' },
+          response: { output: 'answer', prompt: 'executed prompt' },
+        },
+        expected: 'executed prompt',
+      },
       { result: {}, expected: 'seed prompt' },
       { result: { response: { output: 'answer', prompt: '' } }, expected: 'seed prompt' },
       { result: { vars: {} }, expected: 'rendered prompt' },

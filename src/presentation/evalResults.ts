@@ -27,11 +27,12 @@ export function getExecutedPrompt(result: Pick<EvaluateResult, 'response' | 'met
 }
 
 /** Build display-only variables without changing stored evaluation results. */
-export function getDisplayVars(
+function projectDisplayVars(
   result: Pick<EvaluateResult, 'vars' | 'response' | 'metadata'>,
   injectVar = 'prompt',
 ) {
   let displayVars = result.vars ? { ...result.vars } : undefined;
+  let promptKey = injectVar;
   const actualPrompt = getExecutedPrompt(result);
   if (displayVars && actualPrompt) {
     const keys = Object.keys(displayVars);
@@ -41,13 +42,11 @@ export function getDisplayVars(
         : [injectVar, 'prompt', 'query', 'question'].find(
             (key) => keys.includes(key) && displayVars?.[key],
           );
-    if (
-      target &&
-      target !== 'harmCategory' &&
-      displayVars[target] &&
-      displayVars[target] !== '[prompt stripped]'
-    ) {
-      displayVars[target] = actualPrompt;
+    if (target && target !== 'harmCategory' && displayVars[target]) {
+      promptKey = target;
+      if (displayVars[target] !== '[prompt stripped]') {
+        displayVars[target] = actualPrompt;
+      }
     }
   }
 
@@ -84,13 +83,13 @@ export function getDisplayVars(
     }
   }
 
-  return displayVars;
+  return { displayVars, promptKey };
 }
 
-export function getReportPrompt(result: EvaluateResult, injectVar = 'prompt'): string {
-  const vars = getDisplayVars(result, injectVar);
+export function getReportPrompt(result: EvaluateResult, injectVar?: string): string {
+  const { displayVars: vars, promptKey } = projectDisplayVars(result, injectVar);
   return (
-    promptText(vars?.[injectVar]) ||
+    promptText(vars?.[promptKey]) ||
     promptText(vars?.query) ||
     promptText(vars?.prompt) ||
     promptText(result.prompt.raw)
@@ -131,7 +130,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       test: result.testCase,
     };
 
-    const displayVars = getDisplayVars(result, eval_.config?.redteam?.injectVar);
+    const { displayVars } = projectDisplayVars(result, eval_.config?.redteam?.injectVar);
     for (const varName of Object.keys(displayVars || {})) {
       varsForHeader.add(varName);
     }
