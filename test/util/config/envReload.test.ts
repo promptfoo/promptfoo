@@ -1498,21 +1498,31 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('retains scenario vars references before loading them', async () => {
-    const configPath = writeConfig('scenario-watch', {
+  it('loads and watches scenario vars dependencies in the declaring config directory', async () => {
+    const first = writeConfig('first-scenario', {
+      scenarios: [{ config: [{}], tests: [{ vars: { source: 'inline' } }] }],
+    });
+    const second = writeConfig('second-scenario', {
       scenarios: [{ config: [{}], tests: [{ vars: 'file://scenario-vars.yaml' }] }],
     });
-    const varsPath = path.join(path.dirname(configPath), 'scenario-vars.yaml');
-    fs.writeFileSync(varsPath, 'source: scenario');
+    const varsPath = path.join(path.dirname(second), 'scenario-vars.yaml');
+    const context = path.join(path.dirname(second), 'context.txt');
+    const other = path.join(path.dirname(first), 'context.txt');
+    fs.writeFileSync(varsPath, 'source: file://context.txt');
+    fs.writeFileSync(context, 'scenario');
+    fs.writeFileSync(other, 'wrong-first');
 
-    const resolved = await resolveConfigs({ config: [configPath] }, {});
+    const resolved = await resolveConfigs({ config: [first, second] }, {});
 
-    expect(resolved.testSuite.scenarios?.[0].tests[0].vars).toEqual({ source: 'scenario' });
-    expect(
-      resolved.watchSources?.flatMap((source) =>
-        resolveTestsWatchPaths(source.tests, source.basePath),
-      ),
-    ).toContain(varsPath);
+    expect(resolved.testSuite.scenarios?.map((scenario) => scenario.tests[0].vars)).toEqual([
+      { source: 'inline' },
+      { source: 'scenario' },
+    ]);
+    const watched = resolved.watchSources?.flatMap((source) =>
+      resolveTestsWatchPaths(source.tests, source.basePath),
+    );
+    expect(watched).toEqual(expect.arrayContaining([varsPath, context]));
+    expect(watched).not.toContain(other);
   });
 
   it('evaluates normalized file-backed defaults and merges non-overlapping command options', async () => {
