@@ -24,6 +24,22 @@ describe('DatasetsPage', () => {
     vi.clearAllMocks();
   });
 
+  it('returns keyboard focus to the dataset action after closing the dialog', async () => {
+    const user = userEvent.setup();
+    callApiMock.mockResolvedValueOnce({ ok: true, json: async () => ({ data: datasets }) });
+    render(
+      <MemoryRouter>
+        <DatasetsPage />
+      </MemoryRouter>,
+    );
+    const [action] = await screen.findAllByRole('button', { name: /View dataset/ });
+    action.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(action).toHaveFocus());
+  });
+
   it('fetches datasets and opens the first one matching the URL prefix', async () => {
     callApiMock.mockResolvedValueOnce({ ok: true, json: async () => ({ data: datasets }) });
 

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -56,9 +57,24 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
       {
         accessorKey: 'id',
         header: 'ID',
-        cell: ({ getValue }) => (
-          <span className="font-mono text-sm">{getValue<string>().slice(0, 6)}</span>
-        ),
+        cell: ({ getValue, row }) => {
+          const id = getValue<string>();
+          return (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 font-mono text-sm"
+              aria-label={`View dataset ${row.original.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedIndex(row.index);
+              }}
+            >
+              {id.slice(0, 6)}
+            </Button>
+          );
+        },
         size: 100,
       },
       {

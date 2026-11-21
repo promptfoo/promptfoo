@@ -9,6 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  useDialogReturnFocus,
 } from '@app/components/ui/dialog';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { Link } from 'react-router';
@@ -27,6 +28,7 @@ const PromptDialog = ({
   selectedPrompt,
   showDatasetColumn = true,
 }: PromptDialogProps) => {
+  const focus = useDialogReturnFocus();
   const sortedEvals = useMemo(
     () =>
       [...(selectedPrompt?.evals || [])]
@@ -53,7 +55,7 @@ const PromptDialog = ({
 
   return (
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
+      <DialogContent {...focus} className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex min-w-0 flex-col items-start gap-2 text-left sm:flex-row sm:items-center">
             <span className="min-w-0 break-words">

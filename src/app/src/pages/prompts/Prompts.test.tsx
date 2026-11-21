@@ -136,6 +136,20 @@ describe('Prompts', () => {
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
   });
 
+  it('should expose an explicit row action that opens prompt details', async () => {
+    const user = userEvent.setup();
+    renderWithProviders({ data: mockPrompts });
+
+    const promptAction = screen.getByRole('button', {
+      name: 'This is the second sample prompt.',
+    });
+    expect(promptAction).toHaveTextContent('This is the second sample prompt.');
+    await user.click(promptAction);
+
+    const dialog = await screen.findByTestId('mock-prompt-dialog');
+    expect(within(dialog).getByText('This is the second sample prompt.')).toBeInTheDocument();
+  });
+
   it('should open the PromptDialog with the correct prompt details when a later virtualized row is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders({ data: mockPromptsLarge });
@@ -304,6 +318,7 @@ describe('Prompts', () => {
     const fallbackLabel = matchingCells.find((cell) => cell.classList.contains('line-clamp-2'));
 
     expect(fallbackLabel).toHaveClass('line-clamp-2', 'break-words');
+    expect(screen.getByRole('button', { name: longRawPrompt })).toHaveClass('whitespace-normal');
   });
 
   it('should render the Label column in DataGrid on very narrow viewport widths', () => {

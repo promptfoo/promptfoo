@@ -8,6 +8,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  useDialogReturnFocus,
 } from '@app/components/ui/dialog';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import * as yaml from 'js-yaml';
@@ -24,6 +25,7 @@ interface DatasetDialogProps {
 const ROWS_PER_PAGE = 10;
 
 export default function DatasetDialog({ openDialog, handleClose, testCase }: DatasetDialogProps) {
+  const focus = useDialogReturnFocus();
   const [page, setPage] = useState(1);
 
   const sortedPrompts = useMemo(() => {
@@ -57,7 +59,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
 
   return (
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
+      <DialogContent {...focus} className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Dataset Details
