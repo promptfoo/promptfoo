@@ -835,20 +835,17 @@ describe('EvalResult', () => {
     expect(reads).toBe(0);
   });
 
-  it('fails closed for throwing grading metadata accessors', () => {
-    const metadata: Record<string, unknown> = {};
-    Object.defineProperty(metadata, 'http', {
-      enumerable: true,
-      get() {
-        throw new Error('fixture metadata getter');
-      },
+  it('redacts grading metadata accessors without reading them or dropping other fields', () => {
+    const get = vi.fn(() => {
+      throw new Error('fixture metadata getter');
     });
-
+    const metadata = Object.defineProperty({ ordinal: 1 }, 'http', { enumerable: true, get });
     const result = sanitizeResultForJsonlArtifact({
       gradingResult: { pass: true, score: 1, reason: 'ok', metadata },
     });
 
-    expect(result.gradingResult.metadata).toEqual({});
+    expect(result.gradingResult.metadata).toEqual({ ordinal: 1, http: '[REDACTED]' });
+    expect(get).not.toHaveBeenCalled();
   });
 
   it('reads option accessors once while preserving ordinary prompt text', () => {
