@@ -14,7 +14,7 @@ import {
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
-import { fetchWithRetries } from '../../util/fetch/index';
+import { fetchWithRetries, readBoundedErrorBody } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
@@ -1546,12 +1546,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 },
               );
             } else {
-              const text = await response.text();
-              try {
-                responseData = JSON.parse(text);
-              } catch {
-                responseData = text as OpenAIResponsesResponse;
-              }
+              responseData = (await readBoundedErrorBody(
+                response,
+                controller.signal,
+              )) as OpenAIResponsesResponse;
             }
             return {
               data: responseData,
@@ -1606,12 +1604,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               classifyError: classifyOpenAiGatewayStreamError,
             });
           } else {
-            const text = await response.text();
-            try {
-              data = JSON.parse(text);
-            } catch {
-              data = text as OpenAIResponsesResponse;
-            }
+            data = (await readBoundedErrorBody(response, signal)) as OpenAIResponsesResponse;
           }
         } catch (err) {
           if (controller.signal.aborted) {

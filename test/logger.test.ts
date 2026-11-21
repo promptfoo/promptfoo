@@ -914,9 +914,7 @@ describe('logger', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        clone: vi.fn().mockReturnValue({
-          text: vi.fn().mockResolvedValue('{"success": true}'),
-        }),
+        clone: () => new Response('{"success": true}'),
       };
     });
 
@@ -1036,10 +1034,37 @@ describe('logger', () => {
       expect(loggedMessage).toContain('success');
     });
 
-    it('should handle response text extraction errors', async () => {
-      mockResponse.clone = vi.fn().mockReturnValue({
-        text: vi.fn().mockRejectedValue(new Error('Failed to read response')),
+    it('never tees an event stream for logging', async () => {
+      const response = new Response('data: private', {
+        headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
       });
+      const clone = vi.spyOn(response, 'clone');
+      await logger.logRequestResponse({
+        url: 'https://api.example.com',
+        requestBody: null,
+        requestMethod: 'GET',
+        response,
+      });
+      expect(clone).not.toHaveBeenCalled();
+      expect(mockLogger.debug.mock.calls[0][0].message).not.toContain('private');
+    });
+
+    it('bounds mislabeled response bodies without waiting for the other tee reader', async () => {
+      const response = new Response('a'.repeat(64 * 1024) + 'private-tail');
+      await logger.logRequestResponse({
+        url: 'https://api.example.com',
+        requestBody: null,
+        requestMethod: 'GET',
+        response,
+      });
+      expect(mockLogger.debug.mock.calls[0][0].message).not.toContain('private-tail');
+      expect(await response.text()).toContain('private-tail');
+    });
+
+    it('should handle response text extraction errors', async () => {
+      mockResponse.clone = () => {
+        throw new Error('Failed to read response');
+      };
 
       await logger.logRequestResponse({
         url: 'https://api.example.com/test',
@@ -1210,9 +1235,7 @@ describe('logger', () => {
     });
 
     it('should handle response with empty body', async () => {
-      mockResponse.clone = vi.fn().mockReturnValue({
-        text: vi.fn().mockResolvedValue(''),
-      });
+      mockResponse.clone = () => new Response('');
 
       await logger.logRequestResponse({
         url: 'https://api.example.com/test',
@@ -1227,9 +1250,7 @@ describe('logger', () => {
     });
 
     it('should handle response with whitespace-only body', async () => {
-      mockResponse.clone = vi.fn().mockReturnValue({
-        text: vi.fn().mockResolvedValue('   \n\t  '),
-      });
+      mockResponse.clone = () => new Response('   \n\t  ');
 
       await logger.logRequestResponse({
         url: 'https://api.example.com/test',
@@ -1452,9 +1473,7 @@ describe('logger', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        clone: vi.fn().mockReturnValue({
-          text: vi.fn().mockResolvedValue('{"success": true}'),
-        }),
+        clone: () => new Response('{"success": true}'),
       };
       customLogger = createLoggerModule().default;
       // Set custom logger to test structured logging behavior

@@ -91,6 +91,49 @@ describe('Responses stream transport', () => {
     },
   );
 
+  it('rejects an unconfirmed snapshot even without text deltas', async () => {
+    const payload = `data: ${JSON.stringify({ response: { ...completed, status: 'in_progress' } })}\n\ndata: {\n\n`;
+    await expect(readResponsesStream(new Response(payload), 'fixture', logger)).rejects.toThrow(
+      'malformed SSE data',
+    );
+  });
+
+  it('preserves a standalone policy refusal without leaking unconfirmed output', async () => {
+    const payload = [
+      'data: {"type":"response.output_text.delta","delta":"private"}',
+      'data: {"response":{"status":"in_progress","output_text":"private"}}',
+      'data: {',
+      'data: {"type":"error","message":"blocked","error_type":"content_policy_violation"}',
+    ].join('\n\n');
+    const result = await readResponsesStream(new Response(payload), 'fixture', logger, undefined, {
+      preserveFailedOutput: true,
+      classifyError: () => 'content_policy_violation',
+    });
+    expect(result).toMatchObject({ status: 'failed', error_type: 'content_policy_violation' });
+    expect(JSON.stringify(result)).not.toContain('private');
+  });
+
+  it('delivers a CR-terminated creation frame before polling the stream again', async () => {
+    const onResponse = vi.fn();
+    const body = new ReadableStream(
+      {
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"type":"response.created","response":{"id":"job"}}\r\r',
+            ),
+          );
+        },
+        pull(controller) {
+          expect(onResponse).toHaveBeenCalledWith({ id: 'job' });
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    await readResponsesStream(new Response(body), 'fixture', logger, onResponse);
+  });
+
   it.each(['wrapped', 'top-level'])(
     'preserves a completed %s response after malformed data',
     async (form) => {
@@ -203,7 +246,7 @@ describe('Responses stream transport', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it.each(['reads', 'events'])(
+  it.each(['reads', 'events', 'bytes'])(
     'yields during repeated %s so cancellation can run',
     async (mode) => {
       const controller = new AbortController();
@@ -211,7 +254,12 @@ describe('Responses stream transport', () => {
       vi.mocked(setImmediate).mockImplementationOnce(async () => {
         controller.abort();
       });
-      const payload = mode === 'reads' ? ':' : ': keepalive\n\n'.repeat(512);
+      const payload =
+        mode === 'bytes'
+          ? ':'.repeat(1024 * 1024)
+          : mode === 'reads'
+            ? ':'
+            : ': keepalive\n\n'.repeat(512);
       const response = new Response(
         new ReadableStream({
           pull(stream) {

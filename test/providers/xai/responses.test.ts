@@ -1184,6 +1184,32 @@ describe('XAIResponsesProvider', () => {
     expect(result.output).toBe('final answer');
   });
 
+  it.each([200, 400])('stops reading the %s stream on caller cancellation', async (status) => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream(
+        {
+          pull() {
+            controller.abort();
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      { status },
+    );
+    mockFetchWithProxy.mockResolvedValueOnce(response);
+    const provider = new XAIResponsesProvider(DEFAULT_TEST_MODEL, {
+      config: { apiKey: 'test-key', stream: true },
+    });
+    await expect(
+      provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
+
   it('aborts the owned transport after a parser error without changing that error', async () => {
     let signal: AbortSignal | undefined;
     const response = new Response(
