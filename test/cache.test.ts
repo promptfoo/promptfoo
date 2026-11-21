@@ -407,7 +407,12 @@ describe('fetchWithCache', () => {
       mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/fixture-ca.pem' });
       vi.mocked(fsPromises.readFile).mockImplementation(() => new Promise<never>(() => {}));
       const url = 'https://example.test/fips-cache';
-      await expect(fetchWithCache(url, {}, 20)).rejects.toThrow('Request timed out after 20 ms');
+      vi.useFakeTimers();
+      const timeout = expect(fetchWithCache(url, {}, 20)).rejects.toThrow(
+        'Request timed out after 20 ms',
+      );
+      await vi.advanceTimersByTimeAsync(20);
+      await timeout;
       const controller = new AbortController();
       const pending = fetchWithCache(url, { signal: controller.signal }, 1000);
       controller.abort(new Error('cancelled'));
