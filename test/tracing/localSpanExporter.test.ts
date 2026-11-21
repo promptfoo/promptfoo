@@ -11,7 +11,8 @@ const mockTraceStore = {
   addSpans: mockAddSpans,
 };
 
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: vi.fn(() => mockTraceStore),
 }));
 
@@ -384,6 +385,46 @@ describe('LocalSpanExporter', () => {
     await expect(exporter.forceFlush('affected')).resolves.toBeUndefined();
     releaseFresh();
     releaseHealthy();
+  });
+
+  it('does not let an untracked span hide a tracked span that was never dispatched', async () => {
+    const release = exporter.trackTrace('same-trace');
+    const queued = createMockSpan({ traceId: 'same-trace', spanId: 'queued' });
+    const earlier = createMockSpan({ traceId: 'same-trace', spanId: 'earlier' });
+    exporter.trackSpan(queued);
+    await exportSpans([earlier]);
+    await expect(exporter.forceFlush('same-trace')).resolves.toBeUndefined();
+    expect(exporter.isComplete('same-trace')).toBe(false);
+    await exportSpans([queued]);
+    await expect(exporter.forceFlush('same-trace')).resolves.toBeUndefined();
+    expect(exporter.isComplete('same-trace')).toBe(true);
+    release();
+  });
+
+  it('does not require dispatch for an intentionally unsampled span', async () => {
+    const release = exporter.trackTrace('unsampled');
+    const span = createMockSpan({ traceId: 'unsampled' });
+    const spanContext = span.spanContext();
+    vi.spyOn(span, 'spanContext').mockReturnValue({ ...spanContext, traceFlags: 0 });
+    exporter.trackSpan(span);
+    await expect(exporter.forceFlush('unsampled')).resolves.toBeUndefined();
+    expect(mockAddSpans).not.toHaveBeenCalled();
+    release();
+  });
+
+  it('bounds captured membership and withholds completeness after overflow', async () => {
+    const release = exporter.trackTrace('large-trace');
+    const spans = Array.from({ length: 10_001 }, (_, index) =>
+      createMockSpan({ traceId: 'large-trace', spanId: `span-${index}` }),
+    );
+    for (const span of spans) {
+      exporter.trackSpan(span);
+    }
+    await exportSpans(spans);
+    await expect(exporter.forceFlush('large-trace')).resolves.toBeUndefined();
+    expect(exporter.sealTrace('large-trace')).toHaveLength(10_000);
+    expect(exporter.isComplete('large-trace')).toBe(false);
+    release();
   });
 
   it('withholds only unfinished trace groups when one batch times out', async () => {

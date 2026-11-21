@@ -168,8 +168,6 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern                       |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal               |
 
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, inspect imported spans in the results viewer. Built-in trace and trajectory assertions report unavailable evidence. The provider documentation shows how to check completed tool calls from response metadata.
-
 Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, consume a generator's yielded result, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
 
 :::tip
@@ -558,12 +556,12 @@ Each derived metric requires:
 - **value**: A mathematical expression or JavaScript function
 
 :::tip
-Derived metrics are initialized to 0 and calculated per prompt. Errors are logged at debug level.
+Unsupported formula syntax stops the evaluation before any test cases run. During scoring, errors such as a missing input score are logged at debug level.
 :::
 
 ### Mathematical expressions
 
-Use [mathjs](https://mathjs.org/) syntax for calculations:
+String formulas support numeric literals, named scores, `__count`, parentheses, and the arithmetic operators `+`, `-`, `*`, and `/`. Use numeric comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`) and `condition ? a : b` to handle cases such as a zero denominator. For a range check, write `score > 0 ? (score < 1 ? 1 : 0) : 0`. Chained comparisons such as `0 < score < 1` are rejected. Each formula can contain up to 1,024 characters. Function calls, property access, and assignments are rejected.
 
 ```yaml
 derivedMetrics:
@@ -576,19 +574,18 @@ derivedMetrics:
 
 ### JavaScript functions
 
-For complex logic:
+In a trusted JavaScript configuration, pass a function value for more complex logic:
 
-```yaml
-derivedMetrics:
-  - name: 'adaptive_score'
-    value: |
-      function(namedScores, evalStep) {
-        const { accuracy = 0, speed = 0 } = namedScores;
-        if (evalStep.tokensUsed?.total > 1000) {
-          return accuracy * 0.8; // Penalize verbose responses
-        }
-        return accuracy * 0.6 + speed * 0.4;
-      }
+```js
+export default {
+  derivedMetrics: [
+    {
+      name: 'adaptive_score',
+      value: ({ accuracy = 0, speed = 0 }, evalStep) =>
+        evalStep.tokensUsed?.total > 1000 ? accuracy * 0.8 : accuracy * 0.6 + speed * 0.4,
+    },
+  ],
+};
 ```
 
 ### Example: F1 score
@@ -654,16 +651,7 @@ The `__count` variable contains the number of test evals for the current prompt-
 - Each test case produces a value that gets summed (like error metrics)
 - You want to display the average instead of the total
 
-For JavaScript functions, `__count` is available in the `namedScores` object:
-
-```yaml
-derivedMetrics:
-  - name: 'average_error'
-    value: |
-      function(namedScores, evalStep) {
-        return namedScores.total_error / namedScores.__count;
-      }
-```
+JavaScript callbacks receive the same count as `namedScores.__count`.
 
 ### Notes
 
@@ -680,7 +668,6 @@ See also:
 
 - [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics) - Basic named metrics usage
 - [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) - Complete F1 score implementation
-- [MathJS documentation](https://mathjs.org/docs/expressions/syntax.html) - Expression syntax reference
 
 ## Running assertions directly on outputs
 

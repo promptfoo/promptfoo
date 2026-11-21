@@ -36,7 +36,8 @@ vi.mock('../../src/logger', () => ({
 }));
 
 // Mock the trace store
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: vi.fn(() => ({
     createTrace: mockCreateTrace,
   })),

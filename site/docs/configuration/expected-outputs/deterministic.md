@@ -770,8 +770,6 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, built-in trace and trajectory assertions report unavailable evidence. Inspect the imported spans in **Traces**, or grade the returned answer and the root turn’s completed tool calls.
-
 Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
 
 Example:
@@ -1013,6 +1011,8 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
+When the provider does not supply latency, Promptfoo measures elapsed provider-call time with a monotonic clock, so wall-clock adjustments do not affect it. Provider-reported latency is used unchanged.
+
 Example:
 
 ```yaml
@@ -1129,12 +1129,10 @@ assert:
 The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
 
 :::note
-Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
+Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions. Completed local captures use the same target-call span set for live and saved-trace grading; the stored timeline retains later evaluator and grading activity.
 
 If no spans arrive for a traced row, the assertion fails. A partial trace can prove a positive minimum count. An upper bound, including `max: 0`, requires complete collection. [Trace collection and grading](/docs/tracing/#concurrent-programmatic-evaluations)
 :::
-
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target that requested hosted spans, use the **Traces** tab to inspect the import. Raw span counts, durations, and error budgets report unavailable evidence.
 
 Example:
 
@@ -1535,20 +1533,9 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores an output against reference text using exact word matches, Porter stemming, and WordNet synonyms. It combines precision and recall with a penalty for fragmented word order.
 
-**What makes METEOR special:**
-
-- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
-- **Handles word forms**: Knows that "running" and "ran" are the same verb
-- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
-- **Balanced scoring**: Combines precision, recall, AND word order into a single score
-
-**When to use METEOR:**
-
-- **High-quality translation**: When semantic accuracy matters more than exact wording
-- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
-- **Flexible matching**: When there are many valid ways to express the same idea
+Use it for translation or other tasks where a reference answer exists and some wording variation is acceptable. METEOR measures lexical overlap, not factual accuracy or general semantic understanding.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
@@ -1556,7 +1543,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.1.2
+npm install natural@^8.2.6
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
@@ -1667,7 +1654,7 @@ F-score (also F1 score) is used for measuring classification accuracy when you n
 
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
-- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+- **Precision and recall**: When both false positives and false negatives matter
 
 See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 

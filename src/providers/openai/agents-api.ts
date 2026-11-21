@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import logger from '../../logger';
 import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
+import { markHostedRequest } from '../../tracing/otlpOwnership';
 import { HOSTED_ERROR_STATUS_COMPLETE, HOSTED_ERROR_STATUS_VERSION } from '../../tracing/spanError';
 import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
@@ -80,6 +81,8 @@ interface Session {
 
 interface Turn {
   id: string;
+  created_at?: number;
+  started_at?: number | null;
   subagent_id: string | null;
   status: 'queued' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
   error?: { code?: string; message: string } | null;
@@ -136,8 +139,9 @@ const CREDENTIAL_NAME =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
 
 async function digestArtifact(response: Response | undefined, expectedSize: number) {
-  if (!response?.body) {
-    throw new Error('Missing artifact content');
+  if (!response?.body || response.redirected) {
+    void response?.body?.cancel().catch(() => {});
+    throw new Error('Missing or redirected artifact content');
   }
   const reader = response.body.getReader();
   const hash = createHash('sha256');
@@ -651,6 +655,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           signal,
           // A redirect must not forward gateway headers or credentials in the session body.
           restrictCloudAuthRedirects: true,
+          // Artifact evidence belongs to this exact resource, even within one origin.
+          ...(endpoint.endsWith('/content') && { redirect: 'manual' as const }),
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         },
         30_000,
@@ -790,7 +796,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   ): Promise<string[]> {
     const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
     return subagents.map(({ id }) => {
-      if (typeof id !== 'string' || !id) {
+      if (!isResourceId(id)) {
         throw new Error('Agents API returned an invalid subagent');
       }
       return id;
@@ -1013,7 +1019,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         (span) => {
           let parent: SpanContext | undefined;
           if (config.hostedTrace && context?.traceparent && span.isRecording()) {
-            span.setAttribute('promptfoo.openai.hosted_trace_requested', true);
+            markHostedRequest(span, context.traceparent);
             parent = span.spanContext();
           }
           return callProvider.runSession(prompt, options, parent);
@@ -1107,7 +1113,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     headers.set('x-promptfoo-silent', 'true');
 
     const timeoutMs = this.config.timeoutMs ?? 300_000;
-    const deadline = Date.now() + timeoutMs;
+    const startedAt = Date.now();
+    const deadline = startedAt + timeoutMs;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const signal = options?.abortSignal
@@ -1162,20 +1169,20 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         signal,
         options?.abortSignal,
       );
-      const {
-        session: finished,
-        usage,
-        usageMetadata,
-      } = await this.waitForFinalUsage(
-        completedSession,
-        turn,
-        endpoint,
-        headers,
-        signal,
-        deadline,
-        hasSubagents,
-        options?.abortSignal,
-      );
+      // Accounting may use the rest of the deadline. Start downloads first.
+      const [artifacts, { session: finished, usage, usageMetadata }] = await Promise.all([
+        this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal),
+        this.waitForFinalUsage(
+          completedSession,
+          turn,
+          endpoint,
+          headers,
+          signal,
+          deadline,
+          hasSubagents,
+          options?.abortSignal,
+        ),
+      ]);
       const subagentUsageMetadata = hasSubagents
         ? await this.getSubagentUsageMetadata(endpoint, headers, signal, options?.abortSignal)
         : {};
@@ -1186,6 +1193,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
           apiUrl: this.getApiUrl(),
+          createdAt: turn.started_at ?? turn.created_at,
           serviceTier: finished.agent.service_tier ?? this.config.agent?.service_tier,
         });
       }
@@ -1198,8 +1206,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...toolActivity,
         ...usageMetadata,
         ...subagentUsageMetadata,
-        ...(await this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal)),
+        ...artifacts,
       });
+      // Optional trace publication and session cleanup can take several more seconds.
+      result.latencyMs = Date.now() - startedAt;
       if (this.config.hostedTrace) {
         metadata.hostedTrace = await this.importHostedTrace(
           session.id,
@@ -1271,15 +1281,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             artifact?.session_id !== sessionId ||
             artifact.turn_id !== turnId ||
             artifact.path !== path ||
-            typeof artifact.id !== 'string' ||
-            !/^[A-Za-z0-9_-]+$/.test(artifact.id) ||
+            !isResourceId(artifact.id) ||
             !isNonNegativeSafeInteger(artifact.size_bytes) ||
             artifact.size_bytes > MAX_ARTIFACT_BYTES
           ) {
             return { ...evidence, status: 'unavailable' };
           }
           const response = await this.requestRaw(
-            `${collection}/${artifact.id}/content`,
+            `${collection}/${encodeURIComponent(artifact.id)}/content`,
             'GET',
             headers,
             artifactSignal,

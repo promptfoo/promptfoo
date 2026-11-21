@@ -2,19 +2,18 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isRateLimitOrQuotaMessage,
+} from '../../util/fetch/errors';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getRequestTimeoutMs, toTitleCase } from '../shared';
-import {
-  formatContentFilterResponse,
-  isContentFilterError,
-  isRateLimitError,
-  isServiceError,
-} from './errors';
+import { formatContentFilterResponse, isContentFilterError, isServiceError } from './errors';
 import { AzureGenericProvider } from './generic';
 
 import type {
@@ -403,7 +402,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     ) {
       return { error: `Error in Azure Assistant API call: ${errorMessage}` };
     }
-    if (isRateLimitError(errorMessage)) {
+    if (isRateLimitOrQuotaMessage(errorMessage)) {
       return { error: `Rate limit exceeded: ${errorMessage}` };
     }
     if (isServiceError(errorMessage)) {
