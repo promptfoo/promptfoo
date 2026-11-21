@@ -676,17 +676,17 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
     return '<redacted>';
   }
 
-  // Backslash runs inside keys must end in a non-quote character. A run before
-  // a quote belongs only to the closing delimiter, avoiding overlapping matches.
-  for (const [, encodedKey] of value.matchAll(
-    /(?<!\\)\\+"((?:[^"\\]|\\+[^"\\]){0,4096})\\+"\s*:/g,
+  // Embedded JSON can escape the delimiters, the key, or both. Decode key
+  // characters for classification only. The surrounding text isn't trusted JSON.
+  for (const [, escapes, encodedKey] of value.matchAll(
+    /(?<!\\)(\\*)"((?:[^"\\]|\\+[^"\\])*)\\*"\s*:/g,
   )) {
-    let key = encodedKey;
-    try {
-      key = JSON.parse(`"${encodedKey}"`);
-    } catch {
-      // Malformed embedded JSON falls through to the remaining text masks.
+    if (!escapes && !encodedKey.includes('\\')) {
+      continue;
     }
+    const key = encodedKey.replace(/(?<!\\)\\+u([\da-f]{4})/gi, (_, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    );
     if (isCredentialAttributeKey(key)) {
       return '<redacted>';
     }
@@ -695,8 +695,8 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
   const command = value.replace(/\\\r?\n/g, '');
-  const redactCurl = curlArgumentRedactor(command);
-  if (redactCurl) {
+  if (/\bcurl\b/i.test(command)) {
+    const redactCurl = curlArgumentRedactor();
     value = command.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
   }
   let match: RegExpExecArray | null;
@@ -799,29 +799,9 @@ function hasEncodedCredential(raw: string): boolean {
 // Keep adjacent quoted and escaped fragments in the same shell argument.
 const COMMAND_WORDS = /(?:[^\s"'\\]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"?|'[^']*'?)+/g;
 
-function isCurlCommand(command: string | unknown[]): boolean {
-  const words = typeof command === 'string' ? (command.match(COMMAND_WORDS) ?? []) : command;
-  for (let index = 0; index < words.length; index++) {
-    const word = words[index];
-    if (typeof word !== 'string' || word.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
-      return false;
-    }
-    const arg = word.replace(/^(["'])(.*)\1$/, '$2');
-    if (
-      /^(?:[\w]+=[\s\S]*|-i|--ignore-environment|--|command|exec|(?:\/usr\/bin\/)?env)$/.test(arg)
-    ) {
-      continue;
-    }
-    return /(?:^|[/\\])curl(?:\.exe)?$/i.test(arg);
-  }
-  return false;
-}
-
-// Share curl option handling between text and native argv. Scan wrappers once per command.
-function curlArgumentRedactor(command: string | unknown[]) {
-  if (!isCurlCommand(command)) {
-    return;
-  }
+// Recognize curl after wrappers and command separators in a single pass.
+function curlArgumentRedactor() {
+  let curl = false;
   let maskNext = false;
   return (word: unknown) => {
     if (maskNext) {
@@ -832,6 +812,16 @@ function curlArgumentRedactor(command: string | unknown[]) {
       return;
     }
     const arg = word.replace(/^(["'])(.*)\1$/s, '$2');
+    if (/\bcurl\b/i.test(arg)) {
+      // A quoted shell program can hide both the option and its operand in one word.
+      if (/\s/.test(arg) && arg.includes('-')) {
+        return '<redacted>';
+      }
+      curl = true;
+    }
+    if (!curl) {
+      return;
+    }
     // curl permits short options without operands before the credential flag.
     const flag =
       /^(?:-[#0-46:aBfgGiIjJklLMnNOpqRsSvVZ]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
@@ -1167,7 +1157,7 @@ function sanitizeStructuredAttributeValue(
       }
       (target as unknown[]).length = source.length;
     }
-    const redactCurl = Array.isArray(source) ? curlArgumentRedactor(source) : undefined;
+    const redactCurl = Array.isArray(source) ? curlArgumentRedactor() : undefined;
     for (const [key, value] of structuredAttributeEntries(source)) {
       if (
         --budget.remaining < 0 ||

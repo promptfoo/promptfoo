@@ -247,6 +247,39 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(['json', 'protobuf'] as const)(
+    'masks curl credentials in command chains and nested shell programs in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          command: 'echo public&&/usr/bin/curl -u bot:opaque/value https://host',
+          nested: "sh -c 'curl --proxy-user bot:opaque/value https://host'",
+          args: ['bash', '-lc', 'echo public\ncurl -ubot:opaque/value https://host'],
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque/value');
+      expect(attributes.command).toBe('echo public&&/usr/bin/curl -u <redacted> https://host');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'withholds embedded JSON containing escaped credential keys in %s',
+    async (format) => {
+      const publicText = 'Reply: {"st\\u0061tus":"ok"}';
+      const { attributes, payload } = await exportCustomData(
+        {
+          text: 'Request failed: {"pass\\u0077ord":"opaque/value"}',
+          array: 'Received {"\\u0061pi_key":["opaque/value"]}',
+          publicText,
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque/value');
+      expect(attributes.publicText).toBe(publicText);
+    },
+  );
+
   it('scans native curl wrappers once, independent of the number of options', async () => {
     const args = ['env', ...Array(2000).fill('-i'), 'curl', '-u', 'bot:opaque/password'];
     let reads = 0;
