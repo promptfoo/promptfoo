@@ -2873,10 +2873,13 @@ function workflowBinding(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  if (WORKFLOW_SECRET_REFERENCE.test(value)) {
-    return PROTECTED_WORKFLOW_BINDING;
+  // Preserve literal destinations, but never interpolate a secret name or value.
+  const references = new RegExp(WORKFLOW_SECRET_REFERENCE, 'gi');
+  const literal = value.replace(references, '_');
+  if (/^https?:\/\/[^\s'"$`\\]+$/i.test(literal)) {
+    return value.replace(references, PROTECTED_WORKFLOW_BINDING);
   }
-  return /^https?:\/\/[^\s'"$`\\]+$/i.test(value) ? value : undefined;
+  return literal === value ? undefined : PROTECTED_WORKFLOW_BINDING;
 }
 
 function resolveWorkflowBindings(script: string, scopes: unknown[]): string {

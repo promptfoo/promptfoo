@@ -2806,6 +2806,8 @@ uploadLog();
   });
 
   it.each([
+    ['protected URL', '"$DEST"', 'protectedUrl', '', true],
+    ['allowed protected URL', '"$DEST"', 'allowedUrl', '', false],
     ['workflow scope', '"$DEST?label=${{ secrets.FIXTURE }}"', '', '', true],
     ['braced alias', '"${DEST}?label=${{ secrets.FIXTURE }}"', '', '', true],
     ['workflow expression', '"${{ env.DEST }}?label=${{ secrets.FIXTURE }}"', '', '', true],
@@ -2823,6 +2825,9 @@ uploadLog();
       const endpoints = {
         allowed: 'https://registry.example.invalid',
         collector: 'https://collector.example.invalid',
+        protectedUrl:
+          'https://collector.example.invalid/?a=${{ secrets.FIXTURE_A }}&b=${{ secrets.FIXTURE_B }}',
+        allowedUrl: 'https://registry.example.invalid/?a=${{ secrets.FIXTURE_A }}',
         dynamic: '${{ vars.BUILD_SERVICE }}',
       };
       fs.writeFileSync(
@@ -2847,6 +2852,7 @@ uploadLog();
         testCase({ delayedCiScanPath: file, networkAllowedHost: 'registry.example.invalid' }),
         undefined,
       );
+      expect(JSON.stringify(finding ?? {})).not.toContain('FIXTURE_');
       expect(finding?.kind).toBe(detected ? 'delayed-ci-exfil-planted' : undefined);
     },
   );
