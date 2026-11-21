@@ -1160,6 +1160,34 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
   return restoreAzureBlobSasTokensWithResult(value, storedValue).value;
 }
 
+/** Keep prompt formatting only when every JSON token survived sanitization.
+ * Comparing decoded objects could restore credentials hidden by duplicate keys.
+ */
+function retainJsonWhitespace(source: string, encoded: string): string {
+  if (source.length <= encoded.length) {
+    return encoded;
+  }
+  let quoted = false;
+  let index = 0;
+  for (let offset = 0; offset < source.length; offset++) {
+    const ch = source[offset];
+    // JSON.parse already validated the input. Only whitespace between tokens is optional.
+    if (!quoted && source.charCodeAt(offset) <= 0x20) {
+      continue;
+    }
+    if (ch !== encoded[index++]) {
+      return encoded;
+    }
+    if (ch === '"') {
+      quoted = !quoted;
+    }
+    if (quoted && ch === '\\' && source[++offset] !== encoded[index++]) {
+      return encoded;
+    }
+  }
+  return index === encoded.length ? source : encoded;
+}
+
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
@@ -1178,14 +1206,17 @@ function sanitizeJsonString(
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
       const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
-      return JSON.stringify(sanitized);
+      return retainJsonWhitespace(str, JSON.stringify(sanitized));
     }
     if (typeof parsed === 'string') {
       // Bound string unwrapping even when object traversal has no depth limit.
       if (depth >= maxDepth || depth >= 64) {
         return JSON.stringify(REDACTED);
       }
-      return JSON.stringify(sanitizeJsonString(parsed, depth + 1, maxDepth, sanitizeUrls));
+      return retainJsonWhitespace(
+        str,
+        JSON.stringify(sanitizeJsonString(parsed, depth + 1, maxDepth, sanitizeUrls)),
+      );
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
@@ -1242,11 +1273,8 @@ function decodeFormComponent(component: string): string | undefined {
 }
 
 /**
- * When a form value URL-decodes to a JSON object/array, recursively sanitize
- * it and return the serialized result — but only if sanitization actually
- * changed something. Returns `null` when there is no JSON to sanitize or when
- * the value is JSON but contains no secrets (so callers can preserve the
- * original byte-for-byte).
+ * Keep the original form or URL encoding only when every JSON token survives
+ * parsing and sanitization, including keys that JSON.parse would discard.
  */
 function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (decoded === undefined) {
@@ -1269,9 +1297,8 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
     sanitizeUrls: true,
     maxDepth: Number.POSITIVE_INFINITY,
   });
-  const originalSerialized = JSON.stringify(parsed);
-  const sanitizedSerialized = JSON.stringify(sanitized);
-  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+  const encoded = JSON.stringify(sanitized);
+  return retainJsonWhitespace(trimmed, encoded) === trimmed ? null : encoded;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it

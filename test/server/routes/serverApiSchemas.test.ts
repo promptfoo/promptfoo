@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import { setupTestServer } from '../../util/testServer';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
@@ -103,8 +104,10 @@ const mockedReadResult = vi.mocked(readResult);
 
 describe('inline server API DTO validation', () => {
   const api = setupTestServer(createApp);
+  let restoreEnv: () => void;
 
   beforeEach(() => {
+    restoreEnv = mockProcessEnv();
     vi.resetAllMocks();
     // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
     // by one test cannot leak into another.
@@ -112,8 +115,113 @@ describe('inline server API DTO validation', () => {
   });
 
   afterEach(() => {
+    restoreEnv();
     promptCacheService.invalidate();
     vi.resetAllMocks();
+  });
+
+  describe('viewer CORS', () => {
+    const config = {
+      providers: [{ id: 'echo', label: 'Local fixture' }],
+    };
+
+    beforeEach(() => {
+      mockedReadResult.mockResolvedValue({ result: { config } } as never);
+      mockedGetEvalSummaries.mockResolvedValue([]);
+      mockedEval.findById.mockResolvedValue({
+        config,
+        getTablePage: vi.fn().mockResolvedValue({
+          head: { prompts: [], vars: [] },
+          body: [],
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+        version: () => 3,
+        getStats: () => ({ successes: 0, failures: 0, errors: 0, tokenUsage: {} }),
+      } as never);
+    });
+
+    it.each(['/api/results', '/api/results/eval-1', '/api/eval/eval-1/table'])(
+      'does not let an untrusted browser origin read %s',
+      async (url) => {
+        const response = await api.get(url).set('Origin', 'https://untrusted.example');
+        expect(response.status).toBe(200);
+        expect(response.headers['access-control-allow-origin']).toBeUndefined();
+      },
+    );
+
+    it.each([
+      'null',
+      'not-an-origin',
+      'https://localhost.attacker.example',
+      'https://user@localhost',
+      'ftp://localhost',
+      'https://attacker.example',
+    ])('does not grant CORS access to %s or trust X-Forwarded-Host', async (origin) => {
+      const response = await api
+        .get('/api/results/eval-1')
+        .set('Origin', origin)
+        .set('X-Forwarded-Host', 'attacker.example');
+      expect(response.status).toBe(200);
+      expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    });
+
+    it.each([
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://[::1]:3000',
+      'http://local.promptfoo.app:3000',
+    ])('preserves local config for the trusted viewer at %s', async (origin) => {
+      const response = await api.get('/api/results/eval-1').set('Origin', origin);
+      expect(response.status).toBe(200);
+      expect(response.headers['access-control-allow-origin']).toBe(origin);
+      expect(response.headers.vary).toContain('Origin');
+      expect(response.body.data.config).toEqual(config);
+    });
+
+    it('preserves same-host frontends and explicitly allowed remote origins', async () => {
+      const restoreAllowedOrigins = mockProcessEnv({
+        PROMPTFOO_CSRF_ALLOWED_ORIGINS: ' https://trusted.example, https://second.example ',
+      });
+      try {
+        for (const origin of ['https://viewer.example:3000', 'https://trusted.example']) {
+          const response = await api
+            .get('/api/results/eval-1')
+            .set('Host', 'viewer.example:15500')
+            .set('Origin', origin);
+          expect(response.headers['access-control-allow-origin']).toBe(origin);
+          expect(response.body.data.config).toEqual(config);
+        }
+      } finally {
+        restoreAllowedOrigins();
+      }
+    });
+
+    it('preserves headerless clients and cross-site navigation without granting CORS access', async () => {
+      for (const headers of [{}, { 'Sec-Fetch-Site': 'cross-site' }]) {
+        const response = await api.get('/api/results/eval-1').set(headers);
+        expect(response.status).toBe(200);
+        expect(response.body.data.config).toEqual(config);
+        expect(response.headers['access-control-allow-origin']).toBeUndefined();
+      }
+    });
+
+    it('grants preflight permission only to trusted origins', async () => {
+      for (const origin of ['http://localhost:3000', 'https://untrusted.example']) {
+        const response = await api
+          .options('/api/eval/eval-1')
+          .set('Origin', origin)
+          .set('Access-Control-Request-Method', 'PATCH')
+          .set('Access-Control-Request-Headers', 'content-type');
+        if (origin === 'http://localhost:3000') {
+          expect(response.status).toBe(204);
+          expect(response.headers['access-control-allow-origin']).toBe(origin);
+          expect(response.headers['access-control-allow-methods']).toContain('PATCH');
+        } else {
+          expect(response.headers['access-control-allow-origin']).toBeUndefined();
+        }
+      }
+    });
   });
 
   it('validates and parses remote health responses', async () => {
