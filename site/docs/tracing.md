@@ -376,8 +376,8 @@ For traces created by an evaluation, Promptfoo stores the evaluation's redaction
 another's results — each trace is redacted with its own policy, not the active receiver's.
 Traces created only when spans arrive at the receiver (no evaluation row) use the
 registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
-startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
-and is not changed by an overlapping evaluation.
+startup defaults, which remain fixed until the receiver stops. Similarly, `acceptFormats`
+configures the active HTTP receiver endpoint and is not changed by an overlapping evaluation.
 
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
@@ -838,7 +838,7 @@ async function compareModels(prompt, context) {
 
 ## Red Team Tracing
 
-When running [red team tests](/docs/red-team/), tracing provides a powerful capability: **traces from your application's internal operations can be fed back to adversarial attack strategies**, allowing them to craft more sophisticated attacks based on what they observe.
+During [red team tests](/docs/red-team/), attack strategies can use application traces to adapt their next attempt based on observed model calls, tool executions, guardrails, and errors.
 
 This creates a feedback loop where:
 
