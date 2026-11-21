@@ -66,6 +66,14 @@ describe('verified native result evidence', () => {
       { providerResponse },
     );
 
+  const command = {
+    type: 'command_execution',
+    id: call.id,
+    command: 'fixture',
+    status: 'completed',
+    exit_code: 1,
+    aggregated_output: marker,
+  };
   const mcp = (isError: boolean) => ({
     raw: {
       items: [
@@ -99,6 +107,7 @@ describe('verified native result evidence', () => {
   it.each([
     { metadata: { toolCalls: [call] } },
     { raw: { messages: [use, result] } },
+    { raw: { items: [command] } },
     mcp(false),
     openCode('assistant', 'completed'),
   ])('checks text returned by a completed call without exposing the marker', async (response) => {
@@ -117,6 +126,9 @@ describe('verified native result evidence', () => {
     { raw: { messages: [result] } },
     { raw: { messages: [use, use, result] } },
     { raw: { messages: [use, { ...result, parent_tool_use_id: 'another' }] } },
+    { raw: { items: [{ ...command, command: marker, aggregated_output: '' }] } },
+    { raw: { items: [{ ...command, status: 'failed' }] } },
+    { raw: { items: [command], permission_denials: [{ tool_use_id: command.id }] } },
     mcp(true),
     openCode('assistant', 'error'),
     openCode('assistant', 'completed', 1),

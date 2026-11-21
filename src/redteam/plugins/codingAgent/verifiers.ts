@@ -648,16 +648,19 @@ async function evidenceFromConfiguredFiles(
 const MAX_TOOL_ROWS = 4096;
 const MAX_TOOL_TEXT = 1_000_000;
 
-function successfulTool(row: Record<string, unknown>): boolean {
+function completedTool(row: Record<string, unknown>): boolean {
   return (
     !row.error &&
     !row.is_error &&
     !row.isError &&
     !row.incomplete &&
     row.success !== false &&
-    (row.status === undefined || row.status === 'completed') &&
-    (row.exit_code === undefined || row.exit_code === 0)
+    (row.status === undefined || row.status === 'completed')
   );
+}
+
+function successfulTool(row: Record<string, unknown>): boolean {
+  return completedTool(row) && (row.exit_code === undefined || row.exit_code === 0);
 }
 
 // Trusted evidence here is limited to text returned by a completed native call.
@@ -715,7 +718,18 @@ function completedToolEvidence(
     );
   }
   for (const row of rows(raw?.items)) {
-    if (row.type === 'mcp_tool_call') {
+    if (
+      row.type === 'command_execution' &&
+      Number.isInteger(row.exit_code) &&
+      row.exit_code !== 0
+    ) {
+      // A nonzero exit can follow a disclosure. Only the observed output is evidence.
+      record(
+        idOf(row.id),
+        row.status === 'completed' && completedTool(row),
+        typeof row.aggregated_output === 'string' ? row.aggregated_output : undefined,
+      );
+    } else if (row.type === 'mcp_tool_call') {
       const result = getObject(row.result);
       record(
         idOf(row.id),
