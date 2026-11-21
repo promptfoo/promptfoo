@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import chalk from 'chalk';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -152,7 +152,7 @@ function retryTestIdentity(testCase: AtomicTestCase) {
   return { vars: {}, assert: [], options: {}, metadata: {}, ...saved };
 }
 
-export function trackRetryResults(evalId: string, errorIds: string[]) {
+export function trackRetryResults(evalId: string, errorIds: string[], usingSavedConfig = true) {
   const captured = new Set(errorIds);
   const replaced = new Set<string>();
   const providerIdentity = (provider: Parameters<typeof sanitizeProvider>[0]) => {
@@ -171,53 +171,84 @@ export function trackRetryResults(evalId: string, errorIds: string[]) {
       'Cannot retry because a saved test or provider changed position or content. Existing ERROR results were preserved. Start a new evaluation.',
     );
   return {
-    async prepare(steps: RunEvalOptions[], hasExtensions: boolean) {
+    async prepare(steps: RunEvalOptions[], hasExtensions = false) {
       const db = await getDb();
+      const r = evalResultsTable;
+      // A paused retry can leave both the original error and a completed row.
+      // Load only cells with errors, including their possible replacements.
       const rows = await db
         .select({
-          id: evalResultsTable.id,
-          testIdx: evalResultsTable.testIdx,
-          promptIdx: evalResultsTable.promptIdx,
-          test: evalResultsTable.testCase,
-          provider: evalResultsTable.provider,
+          sequence: sql<number>`rowid`,
+          id: r.id,
+          testIdx: r.testIdx,
+          promptIdx: r.promptIdx,
+          test: r.testCase,
+          provider: r.provider,
+          failureReason: r.failureReason,
+          error: r.error,
+          latencyMs: r.latencyMs,
         })
-        .from(evalResultsTable)
+        .from(r)
         .where(
           and(
-            eq(evalResultsTable.evalId, evalId),
-            eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+            eq(r.evalId, evalId),
+            sql`(${r.testIdx}, ${r.promptIdx}) IN (
+          SELECT ${r.testIdx}, ${r.promptIdx} FROM ${r}
+          WHERE ${r.evalId} = ${evalId} AND ${r.failureReason} = ${ResultFailureReason.ERROR}
+        )`,
           ),
         )
         .all();
+      const byCell: Record<string, typeof rows> = {};
       for (const row of rows) {
-        if (!captured.has(row.id)) {
-          continue;
-        }
-        const key = getResultIndexKey(row);
-        const expected = identity(row.test, row.provider);
-        const cell = cells.get(key);
-        if (cell) {
-          if (!isDeepStrictEqual(cell.identity, expected)) {
-            throw mismatch();
-          }
-          cell.ids.push(row.id);
-        } else {
-          cells.set(key, { ids: [row.id], identity: expected });
-        }
+        (byCell[getResultIndexKey(row)] ??= []).push(row);
       }
       return steps.filter((step) => {
-        const cell = cells.get(getResultIndexKey(step));
-        if (!cell) {
+        const key = getResultIndexKey(step);
+        const group = byCell[key];
+        const errors = group?.filter((row) => captured.has(row.id));
+        if (!errors?.length) {
           return false;
         }
-        // Saved tests include beforeEach edits. Check the provider up front
-        // and compare the edited test before dispatch when hooks are present.
+
+        const savedIdentity = (row: (typeof rows)[number]) => {
+          // Step timeouts omit test.provider. Only the saved configuration
+          // can supply the missing override. Never infer it from --config.
+          const restoreOverride =
+            usingSavedConfig &&
+            step.test.provider &&
+            !row.test.provider &&
+            row.latencyMs &&
+            row.error?.startsWith(`Evaluation timed out after ${row.latencyMs}ms: `);
+          return identity(
+            restoreOverride ? { ...row.test, provider: step.test.provider } : row.test,
+            row.provider,
+          );
+        };
+        const expected = savedIdentity(errors[0]);
         if (
-          !isDeepStrictEqual(cell.identity.provider, providerIdentity(step.provider)) ||
-          (!hasExtensions && !isDeepStrictEqual(cell.identity.test, retryTestIdentity(step.test)))
+          errors.slice(1).some((row) => !isDeepStrictEqual(expected, savedIdentity(row))) ||
+          !isDeepStrictEqual(expected.provider, providerIdentity(step.provider)) ||
+          (!hasExtensions && !isDeepStrictEqual(expected.test, retryTestIdentity(step.test)))
         ) {
           throw mismatch();
         }
+
+        const ids = errors.map((row) => row.id);
+        if (
+          group.some(
+            (row) =>
+              row.failureReason !== ResultFailureReason.ERROR &&
+              errors.every((old) => row.sequence > old.sequence) &&
+              isDeepStrictEqual(expected, identity(row.test, row.provider)),
+          )
+        ) {
+          for (const id of ids) {
+            replaced.add(id);
+          }
+          return false;
+        }
+        cells.set(key, { ids, identity: expected });
         return true;
       });
     },
@@ -259,14 +290,18 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   }
 
   const db = await getDb();
+  const staleErrors = and(
+    eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+    inArray(evalResultsTable.id, resultIds),
+  );
   const affectedEvals = await db
     .selectDistinct({ evalId: evalResultsTable.evalId })
     .from(evalResultsTable)
-    .where(inArray(evalResultsTable.id, resultIds))
+    .where(staleErrors)
     .all();
 
   // Use batch delete with inArray for better performance
-  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
+  await db.delete(evalResultsTable).where(staleErrors).run();
 
   for (const { evalId } of affectedEvals) {
     notifyEvaluationChanged(evalId);
@@ -484,7 +519,7 @@ async function retryWithConfig(
   }
 
   // Set up evaluation options
-  const retryResults = trackRetryResults(evalId, errorResultIds);
+  const retryResults = trackRetryResults(evalId, errorResultIds, !cmdObj.config);
   const evaluateOptions: InternalEvaluateOptions = {
     retryResults,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,

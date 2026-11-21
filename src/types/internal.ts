@@ -15,7 +15,7 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   restorePromptColumns?: boolean;
   /** CLI retry verifies the planned cells and records durable replacements. */
   retryResults?: {
-    prepare(steps: RunEvalOptions[], hasExtensions: boolean): Promise<RunEvalOptions[]>;
+    prepare(steps: RunEvalOptions[], hasExtensions?: boolean): Promise<RunEvalOptions[]>;
     validate(step: RunEvalOptions): void;
     saved(row: Pick<EvaluateResult, 'provider' | 'testCase' | 'testIdx' | 'promptIdx'>): void;
   };

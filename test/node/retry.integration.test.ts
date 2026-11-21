@@ -148,68 +148,121 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
-    it.each(['reordered', 'omitted', 'extra', 'different provider', 'stable hook', 'changed hook'])(
-      'protects %s saved errors on retry',
-      async (change) => {
-        const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
-        const tests = ['one', 'two'].map((name) => ({ vars: { name } }));
-        const hooked = change.endsWith('hook');
-        const extension = path.join(os.tmpdir(), `retry-${randomUUID()}.cjs`);
-        if (hooked) {
-          fs.writeFileSync(
-            extension,
-            "exports.beforeEach = ({test}) => ({test: {...test, description: 'updated'}});",
-          );
-          onTestFinished(() => fs.unlinkSync(extension));
-        }
+    it.each([
+      'reordered',
+      'omitted',
+      'extra',
+      'provider',
+      'stable hook',
+      'changed hook',
+      'timeout',
+    ])('protects %s saved errors on retry', async (change) => {
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const tests = ['one', 'two'].map((name) => ({ vars: { name } }));
+      const hooked = change.endsWith('hook');
+      const extension = path.join(os.tmpdir(), `retry-${randomUUID()}.cjs`);
+      if (hooked) {
+        fs.writeFileSync(
+          extension,
+          "exports.beforeEach = ({test}) => ({test: {...test, description: 'updated'}});",
+        );
+        onTestFinished(() => fs.unlinkSync(extension));
+      }
+      const record = await Eval.create(
+        {
+          prompts: [prompt.raw],
+          providers: ['echo'],
+          defaultTest: change === 'timeout' ? { provider: 'echo' } : undefined,
+          extensions: hooked ? [`file://${extension}:beforeEach`] : [],
+          tests:
+            change === 'reordered'
+              ? [...tests].reverse()
+              : change === 'extra'
+                ? [...tests, { vars: { name: 'never' } }]
+                : tests.slice(0, 1),
+        },
+        [prompt],
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const ids = [randomUUID(), randomUUID()];
+      await db.insert(evalResultsTable).values(
+        tests.map((testCase, testIdx) => ({
+          id: ids[testIdx],
+          evalId: record.id,
+          promptIdx: 0,
+          testIdx,
+          prompt,
+          testCase: change === 'stable hook' ? { ...testCase, description: 'updated' } : testCase,
+          provider:
+            change === 'provider'
+              ? { id: 'echo', config: { url: 'https://example.org' } }
+              : { id: 'echo' },
+          success: false,
+          error: change === 'timeout' ? 'Evaluation timed out after 100ms: deadline' : 'offline',
+          latencyMs: 100,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        })),
+      );
+      if (change === 'timeout') {
+        // An override file is not authority for a missing historical selector.
+        const config = path.join(os.tmpdir(), `retry-${randomUUID()}.json`);
+        fs.writeFileSync(config, JSON.stringify(record.config));
+        onTestFinished(() => fs.unlinkSync(config));
+        await expect(retryCommand(record.id, { config })).rejects.toThrow('saved test or provider');
+        expect(new Set(await getErrorResultIds(record.id))).toEqual(new Set(ids));
+      }
+      if (change === 'reordered' || change === 'provider' || change === 'changed hook') {
+        await expect(retryCommand(record.id, {})).rejects.toThrow('saved test or provider');
+        expect(new Set(await getErrorResultIds(record.id))).toEqual(new Set(ids));
+      } else {
+        await retryCommand(record.id, {});
+        expect(await getErrorResultIds(record.id)).toEqual(change === 'extra' ? [] : [ids[1]]);
+      }
+      expect(await record.getResults()).toHaveLength(2);
+    });
+
+    it.each(['matching', 'older', 'different'])(
+      'checks %s rows after a paused retry',
+      async (kind) => {
+        const prompt = { raw: 'hello', label: 'hello' };
         const record = await Eval.create(
-          {
-            prompts: [prompt.raw],
-            providers: ['echo'],
-            extensions: hooked ? [`file://${extension}:beforeEach`] : [],
-            tests:
-              change === 'reordered'
-                ? [...tests].reverse()
-                : change === 'extra'
-                  ? [...tests, { vars: { name: 'never' } }]
-                  : tests.slice(0, 1),
-          },
+          { prompts: [prompt.raw], providers: ['echo'], tests: [{ vars: {} }] },
           [prompt],
           { id: uniqueEvalId() },
         );
+        const error = {
+          id: randomUUID(),
+          evalId: record.id,
+          testIdx: 0,
+          promptIdx: 0,
+          testCase: {},
+          provider: { id: 'echo' },
+          prompt,
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+          score: 0,
+          namedScores: {},
+        };
+        const saved = {
+          ...error,
+          id: randomUUID(),
+          success: true,
+          score: 1,
+          testCase: kind === 'different' ? { description: 'other' } : {},
+          failureReason: ResultFailureReason.NONE,
+        };
         const db = await getDb();
-        const ids = [randomUUID(), randomUUID()];
-        await db.insert(evalResultsTable).values(
-          tests.map((testCase, testIdx) => ({
-            id: ids[testIdx],
-            evalId: record.id,
-            promptIdx: 0,
-            testIdx,
-            prompt,
-            testCase: change === 'stable hook' ? { ...testCase, description: 'updated' } : testCase,
-            provider:
-              change === 'different provider'
-                ? { id: 'echo', config: { url: 'https://example.org' } }
-                : { id: 'echo' },
-            success: false,
-            error: 'offline',
-            score: 0,
-            failureReason: ResultFailureReason.ERROR,
-            namedScores: {},
-          })),
-        );
-        if (
-          change === 'reordered' ||
-          change === 'different provider' ||
-          change === 'changed hook'
-        ) {
-          await expect(retryCommand(record.id, {})).rejects.toThrow('saved test or provider');
-          expect(new Set(await getErrorResultIds(record.id))).toEqual(new Set(ids));
-        } else {
-          await retryCommand(record.id, {});
-          expect(await getErrorResultIds(record.id)).toEqual(change === 'extra' ? [] : [ids[1]]);
-        }
-        expect(await record.getResults()).toHaveLength(2);
+        await db
+          .insert(evalResultsTable)
+          .values(kind === 'older' ? [saved, error] : [error, saved]);
+        await retryCommand(record.id, {});
+        const ids = (await record.getResults()).map((row) => row.id);
+        expect(ids).toContain(saved.id);
+        expect(ids).toHaveLength(kind === 'matching' ? 1 : 2);
+        expect(await getErrorResultIds(record.id)).toEqual(kind === 'matching' ? [] : [error.id]);
       },
     );
 
@@ -651,8 +704,8 @@ describe('retry command', () => {
         },
       ]);
 
-      // Delete only the first result
-      await deleteErrorResults([`${evalRecord.id}-del-1`]);
+      // A row regraded during the retry must survive even when its ID was captured.
+      await deleteErrorResults([`${evalRecord.id}-del-1`, `${evalRecord.id}-del-2`]);
 
       // Verify first result is deleted
       const remaining = await db
