@@ -365,6 +365,7 @@ describe('Eval Routes - Zod Validation', () => {
           "module.exports = class { id() { return 'replay-echo'; } async callApi(prompt) { return { output: prompt }; } };",
         );
         mockFindById.mockResolvedValue({
+          getPrompts: () => providers.map(({ label }) => ({ provider: label })),
           config: {
             providers:
               referenceKind === 'relative' ? 'file://./providers.json' : `file://${providerPath}`,
@@ -380,11 +381,12 @@ describe('Eval Routes - Zod Validation', () => {
           } as unknown as Eval;
         });
         try {
-          const response = await api.post('/api/eval/replay').send({
-            evaluationId: 'test-id',
-            prompt: 'Hello World',
-          });
+          const replay = { evaluationId: 'test-id', prompt: 'Hello World' };
+          const ambiguous = await api.post('/api/eval/replay').send(replay);
+          expect(ambiguous.status).toBe(400);
+          expect(evaluateWithSource).not.toHaveBeenCalled();
 
+          const response = await api.post('/api/eval/replay').send({ ...replay, promptIndex: 0 });
           expect(response.status).toBe(200);
           expect(response.body.output).toBe('Hello World');
           expect(evaluateWithSource).toHaveBeenCalledWith(
@@ -395,7 +397,6 @@ describe('Eval Routes - Zod Validation', () => {
                   prompts: ['Replay'],
                   config: { settings: { greeting: 'Hello' } },
                 },
-                { ...providers[1], prompts: ['Replay'] },
               ],
               basePath: directory,
             }),
