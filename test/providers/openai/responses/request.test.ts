@@ -2991,6 +2991,32 @@ describe('OpenAiResponsesProvider request building', () => {
     }
   });
 
+  it('keeps dynamic credentials out of shared background polling and billing claims', async () => {
+    class Gateway extends OpenAiResponsesProvider {
+      protected override getRequestAuthentication() {
+        return async () => ({ Authorization: this.id() });
+      }
+    }
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, request) => {
+      const account = new Headers(await request!.getAuthHeaders!()).get('authorization')!;
+      return createMockFetchResponse(
+        request?.method === 'POST'
+          ? { id: 'job', status: 'queued' }
+          : { ...createCompletedResponse(account, 5, 15), id: 'job' },
+      );
+    });
+    const claim = vi.spyOn(cache, 'claimBackgroundUsageOnce');
+    const accounts = ['first', 'second'];
+    const results = await Promise.all(
+      accounts.map((id) =>
+        new Gateway('gpt-4.1', { id, ...createTenantBackgroundOptions() }).callApi('Hello'),
+      ),
+    );
+    expect(results.map((result) => result.output)).toEqual(accounts);
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(4);
+    expect(claim).not.toHaveBeenCalled();
+  });
+
   it('delivers billed usage if cancellation races an irreversible commit', async () => {
     mockBackgroundCreateAndPoll('resp_commit', 'Completed task', {
       input_tokens: 10,

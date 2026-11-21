@@ -249,6 +249,11 @@ function getBackgroundCacheIdentity(
   request: BackgroundRequest,
   responseId?: string,
 ): { key: string; cacheable: boolean; coalescable: boolean } {
+  // Request-time credentials do not identify a principal here. Gate creation,
+  // polling and billing together, even when a gateway reuses a job ID.
+  if (request.getAuthHeaders) {
+    return { key: '', cacheable: false, coalescable: false };
+  }
   const headerEntries = Object.entries(request.headers);
   const cacheHeaders = headerEntries
     .filter(
