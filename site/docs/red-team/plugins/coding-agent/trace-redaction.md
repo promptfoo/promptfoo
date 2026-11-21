@@ -43,6 +43,7 @@ The verifier also checks `ProviderResponse.raw` locally. It recognizes base64 an
 These rules apply to `coding-agent:trace-redaction` and `harness:artifact-redaction`, including nested and inverse assertions.
 
 - Configure inline synthetic values or receipt files. Receipt files must be regular UTF-8 text files under the working directory or the system temporary directory, from 16 bytes to 64 KiB. Public artifact paths are visible to generation providers.
+- Declare privacy assertions in the initial configuration for every protected test. Promptfoo can save the prompt catalog and dataset before setup runs. It rejects hooks that change which tests have privacy checks. An error cannot retract earlier public writes.
 - Trust your configuration, target, and setup hooks. Local `beforeAll` and `beforeEach` hooks can initialize or change receipt locations. The verifier captures receipt values before the target runs.
 - The trusted target receives the rendered task as written, including any synthetic values you put in it. Promptfoo masks known verifier fields, receipt paths and aliases in the surrounding test, prompt configuration and variables before direct and adaptive calls. A stateful target can receive its own session ID on later turns.
 - Output transforms and privacy-assertion transforms fail verification. Every response must be fresh and inspectable. Best-of-N is excluded because the selected answer cannot account for discarded responses.
