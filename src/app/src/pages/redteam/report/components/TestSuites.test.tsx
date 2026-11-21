@@ -439,9 +439,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
 describe('TestSuites Component CSV Export - Special Characters', () => {
   const mockNavigate = vi.fn();
 
-  const evalId = 'test-eval-123';
-  const plugins: any[] = [];
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
@@ -457,30 +454,32 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     const user = userEvent.setup();
     const specialDescription = 'This is a test description with "quotes", commas, and\nnewlines.';
 
-    const categoryStatsWithSpecialChars = {
-      'harmful:hate': {
+    const policyId = '0123456789ab';
+    const categoryStats = {
+      [policyId]: {
         pass: 8,
         total: 10,
         passWithFilter: 9,
         failCount: 2,
-        description: specialDescription,
       },
     };
 
-    const mockRef = {
-      current: null,
-    } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-
     renderWithProviders(
       <TestSuites
-        evalId={evalId}
-        categoryStats={categoryStatsWithSpecialChars}
-        plugins={plugins}
-        vulnerabilitiesDataGridRef={mockRef}
+        evalId="test-eval-123"
+        categoryStats={categoryStats}
+        plugins={[
+          {
+            id: 'policy',
+            config: { policy: { id: policyId, name: 'CSV export', text: specialDescription } },
+          },
+        ]}
+        vulnerabilitiesDataGridRef={{ current: null }}
       />,
     );
 
-    const exportButton = screen.getByText('Export vulnerabilities to CSV');
+    await screen.findByRole('cell', { name: 'Policy: CSV export' });
+    const exportButton = screen.getByRole('button', { name: 'Export vulnerabilities to CSV' });
     await user.click(exportButton);
 
     const mockCreateObjectURL = vi.mocked(URL.createObjectURL);
@@ -488,14 +487,16 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
 
     const blob = mockCreateObjectURL.mock.calls[0][0] as Blob;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const csvContent = reader.result as string;
+    const csvContent = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
 
-      const expectedEscapedDescription = `"This is a test description with ""quotes"", commas, and\nnewlines."`;
-      expect(csvContent).toContain(expectedEscapedDescription);
-    };
-    reader.readAsText(blob);
+    expect(csvContent).toContain(
+      `"This is a test description with ""quotes"", commas, and\nnewlines."`,
+    );
   });
 });
 
