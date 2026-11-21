@@ -774,7 +774,9 @@ describe('JavaScript file references', () => {
     });
 
     // Verify the mock was called with both parameters
-    expect(importModule).toHaveBeenCalledWith('/path/to/assert.js', 'customFunction');
+    expect(importModule).toHaveBeenCalledWith('/path/to/assert.js', 'customFunction', {
+      bindToModule: true,
+    });
     expect(mockFn).toHaveBeenCalledWith(output, {
       prompt: 'Some prompt',
       vars: {},
@@ -858,7 +860,9 @@ describe('JavaScript file references', () => {
       providerResponse,
     });
 
-    expect(importModule).toHaveBeenCalledWith('/path/to/assert.js', undefined);
+    expect(importModule).toHaveBeenCalledWith('/path/to/assert.js', undefined, {
+      bindToModule: true,
+    });
     expect(mockFn).toHaveBeenCalledWith(output, {
       prompt: 'Some prompt',
       vars: {},
@@ -899,7 +903,9 @@ describe('JavaScript file references', () => {
       providerResponse,
     });
 
-    expect(importModule).toHaveBeenCalledWith('/path/to/assert.js', undefined);
+    expect(importModule).toHaveBeenCalledWith('/path/to/assert.js', undefined, {
+      bindToModule: true,
+    });
     expect(mockFn).toHaveBeenCalledWith(output, {
       prompt: 'Some prompt',
       vars: {},

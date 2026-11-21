@@ -18,6 +18,10 @@ Promptfoo pass/fail scores.
 - JavaScript, Python, Ruby, webhook, and file/package assertion values can execute or
   load user-controlled code. Keep sandboxing, path resolution, and error messages
   explicit.
+- File grader methods must retain their exporting object as `this`. Exercise the real
+  module loader in regression tests; a mocked module object bypasses export selection.
+- Transpiled `__esModule` wrappers do not own standalone default functions. Cover them
+  with the compiled CLI: test-runner interop can unwrap those wrappers before loading.
 - Do not include raw secrets or full provider payloads in assertion reasons. Use the
   logger with sanitized object context for diagnostics.
 - Redteam guardrail assertions have special aggregation behavior in
