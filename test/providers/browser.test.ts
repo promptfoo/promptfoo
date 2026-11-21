@@ -375,49 +375,63 @@ describe('BrowserProvider', () => {
     expect(result.error).toBeUndefined();
   });
 
-  it('scopes string cookies to the rendered first navigation URL', async () => {
+  it('renders the first navigation once for both cookie scope and the actual request', async () => {
+    const directory = vi.fn().mockReturnValueOnce('chat').mockReturnValue('other');
     const provider = new BrowserProvider('test', {
       config: {
         cookies: 'session=abc==',
         steps: [
           {
             action: 'navigate',
-            args: { url: 'https://{{host}}/chat/start?secret=unused#fragment' },
+            args: { url: 'https://tenant.example.com/{{route.path}}/start?secret=unused#fragment' },
           },
         ],
       },
     });
     const result = await provider.callApi('test', {
       prompt: { raw: '', label: '' },
-      vars: { host: 'tenant.example.com' },
+      vars: {
+        route: {
+          get path() {
+            return directory();
+          },
+        },
+      },
     });
     const context = await mockBrowser.newContext.mock.results[0].value;
     expect(result.error).toBeUndefined();
     expect(context.addCookies).toHaveBeenCalledExactlyOnceWith([
       { name: 'session', value: 'abc==', url: 'https://tenant.example.com/chat/start' },
     ]);
+    expect(directory).toHaveBeenCalledOnce();
+    expect(mockPage.goto).toHaveBeenCalledExactlyOnceWith(
+      'https://tenant.example.com/chat/start?secret=unused#fragment',
+    );
   });
 
-  it.each([undefined, '/relative', 'ftp://example.com', 'data:text/html,hello'])(
-    'rejects unscoped string cookies for navigation %s',
-    async (url) => {
-      const provider = new BrowserProvider('test', {
-        config: {
-          cookies: 'secret=value',
-          steps: url ? [{ action: 'navigate', args: { url } }] : [],
-        },
-      });
-      const result = await provider.callApi('test');
-      const context = await mockBrowser.newContext.mock.results[0].value;
-      expect(result.error).toContain(
-        'String browser cookies require a first navigate step with an absolute HTTP(S) URL',
-      );
-      expect(result.error).not.toContain('secret=value');
-      expect(context.addCookies).not.toHaveBeenCalled();
-      expect(context.newPage).not.toHaveBeenCalled();
-      expect(mockBrowser.close).toHaveBeenCalledOnce();
-    },
-  );
+  it.each([
+    undefined,
+    '/relative',
+    'ftp://example.com',
+    'data:text/html,hello',
+    'https://{{prompt}}/chat',
+  ])('rejects unscoped string cookies for navigation %s', async (url) => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        cookies: 'secret=value',
+        steps: url ? [{ action: 'navigate', args: { url } }] : [],
+      },
+    });
+    const result = await provider.callApi('test');
+    const context = await mockBrowser.newContext.mock.results[0].value;
+    expect(result.error).toContain(
+      'String browser cookies require a first navigate step with an absolute HTTP(S) URL',
+    );
+    expect(result.error).not.toContain('secret=value');
+    expect(context.addCookies).not.toHaveBeenCalled();
+    expect(context.newPage).not.toHaveBeenCalled();
+    expect(mockBrowser.close).toHaveBeenCalledOnce();
+  });
 
   it.each(['missing-value', '=secret'])(
     'rejects malformed cookie pairs without exposing their contents',
@@ -779,6 +793,39 @@ describe('BrowserProvider lifecycle', () => {
     expect(mockBrowser.close).toHaveBeenCalledTimes(2);
   });
 
+  it('serializes overlapping first turns without a cancelled waiter releasing the page', async () => {
+    const provider = new BrowserProvider('test', {
+      config: { persistSession: true, steps: [{ ...createNavigateStep(), runOnce: true }] },
+    });
+    const started = createDeferred<void>();
+    const resume = createDeferred<void>();
+    mockPage.content.mockImplementationOnce(async () => {
+      started.resolve();
+      await resume.promise;
+      return 'first';
+    });
+    const controller = new AbortController();
+    const first = provider.callApi('first');
+    const cancelled = provider.callApi('cancel', undefined, { abortSignal: controller.signal });
+    const second = provider.callApi('second');
+    try {
+      await started.promise;
+      controller.abort();
+      await expect(cancelled).rejects.toBe(controller.signal.reason);
+      expect(mockPage.content).toHaveBeenCalledOnce();
+      resume.resolve();
+      expect((await first).output).toBe('first');
+      expect((await second).error).toBeUndefined();
+      expect(mockBrowser.newContext).toHaveBeenCalledOnce();
+      expect(mockPage.goto).toHaveBeenCalledOnce();
+      expect(mockPage.content).toHaveBeenCalledTimes(2);
+    } finally {
+      resume.resolve();
+      await Promise.allSettled([first, second, cancelled]);
+      await provider.cleanup();
+    }
+  });
+
   it('retains a reused session between turns in overlapping evaluation scopes', async () => {
     const provider = new BrowserProvider('test', {
       config: { persistSession: true, steps: [{ ...createNavigateStep(), runOnce: true }] },
@@ -896,18 +943,10 @@ describe('BrowserProvider lifecycle', () => {
         return browser as never;
       });
     }
-    const provider = new BrowserProvider('test', { config: { persistSession: true, steps: [] } });
+    const provider = new BrowserProvider('test', { config: { steps: [] } });
     const calls = Promise.all([provider.callApi('first'), provider.callApi('second')]);
-    let responses;
-    try {
-      await vi.waitFor(() => expect(chromium.launch).toHaveBeenCalledTimes(2));
-    } finally {
-      finishLaunch.resolve();
-      loadDependencies.mockRestore();
-      responses = await calls;
-    }
-    expect(responses.every((response) => !response.error)).toBe(true);
-
+    await vi.waitFor(() => expect(chromium.launch).toHaveBeenCalledTimes(2));
+    loadDependencies.mockRestore();
     const failure = new Error('First browser could not close');
     sessions[0].browser.close.mockRejectedValueOnce(failure);
     const finishSecond = createDeferred<void>();
@@ -918,6 +957,7 @@ describe('BrowserProvider lifecycle', () => {
     let settled = false;
     let reportedError: unknown;
     const cleanup = provider.cleanup();
+    finishLaunch.resolve();
     const observed = cleanup.then(
       () => {
         settled = true;
@@ -939,7 +979,7 @@ describe('BrowserProvider lifecycle', () => {
       expect(sessions[1].page.isClosed()).toBe(true);
     } finally {
       finishSecond.resolve();
-      await Promise.allSettled([cleanup, observed]);
+      await Promise.allSettled([cleanup, observed, calls]);
       await provider.cleanup();
     }
     expect(sessions[0].page.isClosed()).toBe(true);

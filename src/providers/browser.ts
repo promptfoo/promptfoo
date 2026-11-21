@@ -79,6 +79,11 @@ export function createTransformResponse(
   return (_extracted, finalHtml) => ({ output: finalHtml });
 }
 
+interface CookieNavigation {
+  step: BrowserAction;
+  args: Record<string, any>;
+}
+
 interface BrowserSession {
   browser?: Browser;
   context?: BrowserContext;
@@ -101,6 +106,7 @@ export class BrowserProvider implements ApiProvider {
   private headless: boolean;
 
   private persistedSession?: BrowserSession;
+  private pendingTurn?: Promise<void>;
   private sessions = new Set<BrowserSession>();
   private cleanupPromise?: Promise<void>;
   private cleanupGeneration = 0;
@@ -136,7 +142,30 @@ export class BrowserProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     return providerRegistry.withProvider(
       this,
-      () => this.runBrowser(prompt, context, options?.abortSignal),
+      () => {
+        const signal = options?.abortSignal;
+        const run = () => this.runBrowser(prompt, context, signal);
+        if (!this.config.persistSession) {
+          return run();
+        }
+        const previous = this.pendingTurn;
+        const generation = this.cleanupGeneration;
+        const turn = previous
+          ? waitForPromiseWithAbort(previous, signal).then(() =>
+              generation === this.cleanupGeneration
+                ? run()
+                : { error: 'Browser session was closed during cleanup' },
+            )
+          : run();
+        // A cancelled waiter must not let the next turn race the still-active page.
+        const finished = Promise.allSettled([previous, turn]).then(() => {
+          if (this.pendingTurn === finished) {
+            this.pendingTurn = undefined;
+          }
+        });
+        this.pendingTurn = finished;
+        return turn;
+      },
       options?.abortSignal,
     );
   }
@@ -164,12 +193,17 @@ export class BrowserProvider implements ApiProvider {
         }
       }
       const isNewSession = !session;
+      const step =
+        isNewSession && typeof this.config.cookies === 'string'
+          ? this.config.steps.find((step) => step.action === 'navigate')
+          : undefined;
+      const navigation = step && { step, args: this.renderArgs(step.args ?? {}, vars) };
       if (!session) {
         session = { ownsBrowser: !this.config.connectOptions, ownsContext: false, closed: false };
         this.sessions.add(session);
         // Register before async launch so process shutdown also owns pending initialization.
         providerRegistry.register(this);
-        session.initialization = this.initializeSession(session, vars);
+        session.initialization = this.initializeSession(session, navigation);
         await session.initialization;
         if (session.closed) {
           throw new Error('Browser session was closed during initialization');
@@ -180,7 +214,7 @@ export class BrowserProvider implements ApiProvider {
         }
       }
 
-      const result = await this.executeSteps(session.page!, vars, isNewSession);
+      const result = await this.executeSteps(session.page!, vars, isNewSession, navigation);
       if (!this.config.persistSession || result.error) {
         try {
           await this.closeSession(session);
@@ -210,7 +244,7 @@ export class BrowserProvider implements ApiProvider {
 
   private async initializeSession(
     session: BrowserSession,
-    vars: Record<string, any>,
+    navigation?: CookieNavigation,
   ): Promise<void> {
     const { chromium, stealth } = await loadBrowserProviderDependencies();
     if (session.closed) {
@@ -235,7 +269,7 @@ export class BrowserProvider implements ApiProvider {
       return;
     }
     if (this.config.cookies) {
-      await this.setCookies(session.context, vars);
+      await this.setCookies(session.context, navigation);
     }
     if (!session.closed) {
       session.page = await session.context.newPage();
@@ -307,6 +341,7 @@ export class BrowserProvider implements ApiProvider {
     page: Page,
     vars: Record<string, any>,
     isNewSession: boolean,
+    navigation?: CookieNavigation,
   ): Promise<ProviderResponse> {
     const extracted: Record<string, any> = {};
 
@@ -315,7 +350,9 @@ export class BrowserProvider implements ApiProvider {
         logger.debug(`[Browser] Skipping runOnce step: ${step.action}`);
         continue;
       }
-      await this.executeAction(page, step, vars, extracted);
+      const args =
+        step === navigation?.step ? navigation.args : this.renderArgs(step.args ?? {}, vars);
+      await this.executeAction(page, step, args, extracted);
     }
 
     const finalHtml = await page.content();
@@ -329,7 +366,7 @@ export class BrowserProvider implements ApiProvider {
 
   private async setCookies(
     browserContext: BrowserContext,
-    vars: Record<string, any>,
+    navigation?: CookieNavigation,
   ): Promise<void> {
     if (typeof this.config.cookies === 'string') {
       const cookieString = maybeLoadFromExternalFile(this.config.cookies);
@@ -345,15 +382,17 @@ export class BrowserProvider implements ApiProvider {
         return;
       }
 
-      const navigation = this.config.steps.find((step) => step.action === 'navigate');
-      const target = this.renderArgs(navigation?.args || {}, vars).url;
       let url: URL;
       try {
-        url = new URL(target);
+        url = new URL(navigation?.args.url);
+        invariant(
+          url.origin === new URL(navigation?.step.args?.url).origin,
+          'Dynamic cookie origin',
+        );
         invariant(url.protocol === 'http:' || url.protocol === 'https:', 'Unsupported cookie URL');
       } catch {
         throw new Error(
-          'String browser cookies require a first navigate step with an absolute HTTP(S) URL. ' +
+          'String browser cookies require a first navigate step with an absolute HTTP(S) URL and a fixed origin. ' +
             'Otherwise, use cookie objects with an explicit url or domain/path scope.',
         );
       }
@@ -430,11 +469,10 @@ export class BrowserProvider implements ApiProvider {
   private async executeAction(
     page: Page,
     action: BrowserAction,
-    vars: Record<string, any>,
+    renderedArgs: Record<string, any>,
     extracted: Record<string, any>,
   ): Promise<void> {
     const { action: actionType, args = {}, name } = action;
-    const renderedArgs = this.renderArgs(args, vars);
 
     logger.debug(`Executing headless action: ${actionType}`);
 
@@ -450,7 +488,6 @@ export class BrowserProvider implements ApiProvider {
             `    url: 'https://example.com'\n\n` +
             `Current action args: ${safeJsonStringify(args)}`,
         );
-        logger.debug(`Navigating to ${renderedArgs.url}`);
         await page.goto(renderedArgs.url);
         break;
       case 'click':
