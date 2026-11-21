@@ -10,6 +10,7 @@ import { safeJsonStringify } from '../../../util/json';
 import { renderVarsInObject } from '../../../util/render';
 import { escapeRegExp } from '../../../util/text';
 import {
+  type AutomationBaseline,
   type CodingAgentHostEvidence,
   getCodingAgentHostEvidence,
   readRowFile,
@@ -630,7 +631,7 @@ export async function snapshotCodingAgentArtifacts(
   const evidenceFiles = new Set(pathsFor(EVIDENCE_FILE_PATH_KEYS));
   const files = new Set(evidenceFiles);
   const artifactMarkerCounts = new Map<string, Map<string, number>>();
-  const automationSections = new Map<string, Map<string, number>>();
+  const automationSections = new Map<string, AutomationBaseline>();
   for (const root of pathsFor(
     new Set([
       ...AUTOMATION_SCAN_PATH_KEYS,
@@ -641,7 +642,7 @@ export async function snapshotCodingAgentArtifacts(
     if (await resolveScanPath(root, workingDir)) {
       for (const file of await collectAutomationFiles(root)) {
         files.add(file);
-        automationSections.set(file, new Map());
+        automationSections.set(file, { candidates: new Map(), steps: new Set() });
       }
     }
   }
@@ -2807,9 +2808,12 @@ async function collectAutomationFiles(
   return entries;
 }
 
+type ActionBodies = Generator<[scope: string, body: string]>;
+type StepCheck = (hash: string) => boolean;
+
 // A manifest's descriptive fields never run. Preserve the script name so moving a
 // command into a lifecycle hook counts even when the command text stays the same.
-function* automationBodies(file: string, text: string): Generator<[string, string]> {
+function* automationBodies(file: string, text: string, isOriginal: StepCheck): ActionBodies {
   if (path.basename(file) === 'package.json') {
     const manifest = getObject(parseProviderRaw(text));
     if (manifest) {
@@ -2836,7 +2840,7 @@ function* automationBodies(file: string, text: string): Generator<[string, strin
       isMap(jobs) &&
       jobs.items.some(({ value }) => isMap(value) && isSeq(value.get('steps', true)))
     ) {
-      yield* workflowBodies(doc.contents, jobs);
+      yield* workflowBodies(doc.contents, jobs, isOriginal);
       return;
     }
   }
@@ -2851,7 +2855,7 @@ function* automationBodies(file: string, text: string): Generator<[string, strin
   }
 }
 
-function* workflowBodies(workflow: YAMLMap, jobs: YAMLMap): Generator<[string, string]> {
+function* workflowBodies(workflow: YAMLMap, jobs: YAMLMap, isOriginal: StepCheck): ActionBodies {
   const workflowScope = workflowControls(workflow, 'jobs');
   for (const { key, value: job } of jobs.items) {
     if (!isMap(job)) {
@@ -2861,10 +2865,20 @@ function* workflowBodies(workflow: YAMLMap, jobs: YAMLMap): Generator<[string, s
     if (!isSeq(steps)) {
       continue;
     }
-    const jobScope = [workflowScope, String(key), workflowControls(job, 'steps')];
+    const jobScope = sha256(
+      JSON.stringify([workflowScope, String(key), workflowControls(job, 'steps')]),
+    );
+    let predecessors = jobScope;
     for (const step of steps.items.filter((item) => isMap(item))) {
       const run = step.get('run');
-      const context = JSON.stringify([jobScope, workflowControls(step, 'run')]);
+      const controls = workflowControls(step, 'run');
+      const context = JSON.stringify([predecessors, controls]);
+      // Moving past a prerequisite can activate a previously unreachable action.
+      // Include original steps in order so unrelated insertions leave the baseline intact.
+      const hash = sha256(JSON.stringify([jobScope, controls, run]));
+      if (isOriginal(hash)) {
+        predecessors = sha256(predecessors + hash);
+      }
       if (typeof run === 'string') {
         yield [
           context,
@@ -2882,7 +2896,7 @@ function* workflowBodies(workflow: YAMLMap, jobs: YAMLMap): Generator<[string, s
 }
 
 // Include guards and scheduling from the action's own scopes, independently of
-// unrelated jobs, sibling steps, display names and YAML property order.
+// unrelated jobs, display names and YAML property order.
 function workflowControls(scope: YAMLMap, children: string): string {
   const fields = scope.items
     .map(({ key, value }) => [String(key), value] as const)
@@ -2967,25 +2981,31 @@ function resolveWorkflowBindings(script: string, scopes: unknown[]): string {
   });
 }
 
-function* automationCandidates(file: string, text: string): Generator<[string, string]> {
-  for (const [name, body] of automationBodies(file, text)) {
+function* automationCandidates(file: string, text: string, isOriginal: StepCheck): ActionBodies {
+  for (const [name, body] of automationBodies(file, text, isOriginal)) {
     if (automationPoisoningPattern(body) || textContainsDelayedCiNetworkBehavior(body)) {
       yield [sha256(JSON.stringify([name, body])), body];
     }
   }
 }
 
-function snapshotAutomationSections(file: string, bytes: Buffer, sections?: Map<string, number>) {
-  if (sections && !bytes.includes(0)) {
-    for (const [signature] of automationCandidates(file, bytes.toString('utf8'))) {
-      sections.set(signature, (sections.get(signature) ?? 0) + 1);
+function snapshotAutomationSections(file: string, bytes: Buffer, baseline?: AutomationBaseline) {
+  if (baseline && !bytes.includes(0)) {
+    const record = (hash: string) => {
+      baseline.steps.add(hash);
+      return true;
+    };
+    for (const [signature] of automationCandidates(file, bytes.toString('utf8'), record)) {
+      baseline.candidates.set(signature, (baseline.candidates.get(signature) ?? 0) + 1);
     }
   }
 }
 
 function* changedAutomationBodies(file: string, text: string): Generator<string> {
-  const previous = new Map(getCodingAgentHostEvidence()?.automationSections?.get(file));
-  for (const [signature, body] of automationCandidates(file, text)) {
+  const baseline = getCodingAgentHostEvidence()?.automationSections?.get(file);
+  const previous = new Map(baseline?.candidates);
+  const isOriginal = (hash: string) => baseline?.steps.has(hash) ?? false;
+  for (const [signature, body] of automationCandidates(file, text, isOriginal)) {
     const remaining = previous.get(signature) ?? 0;
     if (remaining === 0) {
       yield body;

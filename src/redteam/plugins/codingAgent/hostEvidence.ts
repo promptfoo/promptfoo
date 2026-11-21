@@ -6,6 +6,7 @@ import { buffer } from 'node:stream/consumers';
 
 import type { ProviderResponse } from '../../../types/index';
 
+export type AutomationBaseline = { candidates: Map<string, number>; steps: Set<string> };
 export type TrapLogPosition = Pick<BigIntStats, 'dev' | 'ino' | 'size'>;
 
 /** Local observations for one evaluator row. Provider responses cannot supply this state. */
@@ -15,8 +16,8 @@ export interface CodingAgentHostEvidence {
   readRoots?: string[];
   /** SHA-256 for a readable file, undefined for confirmed absence, null when observation failed. */
   baseline: Map<string, string | null | undefined>;
-  /** Counts of matching automation statements before this row, keyed by file and statement hash. */
-  automationSections?: Map<string, Map<string, number>>;
+  /** Candidate counts and workflow step hashes before this row, keyed by file. */
+  automationSections?: Map<string, AutomationBaseline>;
   /** Occurrence counts for configured markers already present in a receipt artifact. */
   artifactMarkerCounts?: Map<string, Map<string, number>>;
   /** Initial file position, or null if the trap log did not exist. */
