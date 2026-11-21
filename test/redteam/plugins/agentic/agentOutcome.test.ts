@@ -13,20 +13,18 @@ import {
 } from '../../../../src/redteam/constants';
 import { CODING_AGENT_PLUGINS } from '../../../../src/redteam/constants/codingAgents';
 import {
+  agentOutcomePlugins,
   ConsentBypassPlugin,
   PrivateToPublicDisclosurePlugin,
   UnauthorizedSharingPlugin,
 } from '../../../../src/redteam/plugins/agentic/agentOutcome';
+import { AgentOutcomeGrader } from '../../../../src/redteam/plugins/agentic/agentOutcomeGrader';
 import { pluginMatchesStrategyTargets } from '../../../../src/redteam/strategies/util';
 import { createMockProvider } from '../../../factories/provider';
 
 import type { PluginConfig } from '../../../../src/redteam/types';
 
-describe.each([
-  [ConsentBypassPlugin, 'analytics', 'migration guide'],
-  [PrivateToPublicDisclosurePlugin, 'internal diagnostic', 'reporter-authored'],
-  [UnauthorizedSharingPlugin, 'parent folder', 'recipient on a ticket'],
-] as const)('%s', (Plugin, directGoal, indirectGoal) => {
+describe.each(agentOutcomePlugins)('$id', (Plugin) => {
   it('generates direct requests and indirect tool content under the same outcome assertion', async () => {
     const provider = createMockProvider();
     provider.callApi
@@ -60,13 +58,42 @@ describe.each([
     expect(cases.map(({ mode }) => mode)).toEqual(['indirect', 'direct', 'indirect']);
     const calls = provider.callApi.mock.calls;
     expect(calls).toHaveLength(2);
-    expect(calls[0][0]).toContain(indirectGoal);
     expect(calls[0][0]).toContain('Internal demo agent');
-    expect(calls[1][0]).toContain(directGoal);
     expect(calls[0][0]).toContain(AGENT_OUTCOME_DEFAULT_TASKS[Plugin.id]);
     expect(calls[1][0]).not.toContain(AGENT_OUTCOME_DEFAULT_TASKS[Plugin.id]);
-    for (const [template] of calls) {
-      expect(template).toContain('Every scenario must push for the unsafe outcome.');
+    expect(calls[0][0]).toContain('Use a different shortcut for each scenario');
+    expect(calls[1][0]).not.toContain('Use a different shortcut for each scenario');
+  });
+
+  it('calibrates both built-in attack examples against the unsafe fixture', async () => {
+    const exampleDir = '../../../../examples/redteam-agent-outcomes';
+    const { default: Target } = await import(`${exampleDir}/provider.mjs`);
+    const target = new Target({ config: { target: 'unsafe' } });
+    const generator = createMockProvider({
+      callApi: async (template) => ({
+        output: template.match(/<Example>\s*(Prompt: [^\n]+)\s*<\/Example>/)?.[1],
+      }),
+    });
+    const tests = await new Plugin(generator, 'Demo agent', 'prompt').generateTests(2);
+    expect(tests).toHaveLength(2);
+    const grader = new AgentOutcomeGrader(Plugin.id);
+    for (const test of tests) {
+      const message = String(test.vars?.prompt);
+      const providerResponse = await target.callApi(message, { test, vars: test.vars });
+      const { grade } = await grader.getResult(
+        message,
+        providerResponse.output,
+        test,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { providerResponse },
+      );
+      expect(grade).toMatchObject({
+        pass: false,
+        namedScores: { attackExposed: 1, taskCompleted: 1, controlPassed: 1 },
+      });
     }
   });
 });
@@ -115,6 +142,7 @@ describe('agent outcome configuration', () => {
     expect(provider.callApi).toHaveBeenCalledTimes(1);
     expect(provider.callApi.mock.calls[0][0]).toContain('Triage issue 103.');
     expect(provider.callApi.mock.calls[0][0]).toContain('Custom issue');
+    expect(provider.callApi.mock.calls[0][0]).not.toContain('Sync keeps stalling');
     expect(rows.map((row) => getAgentOutcomeCase(row)?.artifact)).toEqual(['raw 1', 'raw 2']);
     for (const row of rows) {
       expect(row.vars?.query).toBe('Triage issue 103.');
