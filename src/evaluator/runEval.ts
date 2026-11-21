@@ -1,3 +1,5 @@
+import { realpath } from 'node:fs/promises';
+
 import { LRUCache } from 'lru-cache';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
@@ -1416,13 +1418,15 @@ export async function runEvalInternal(
           const extra: unknown[] = Array.isArray(config.additional_directories)
             ? config.additional_directories
             : [];
-          hostEvidence.readRoots = [
-            directory,
-            ...extra.flatMap((dir) => {
-              const resolved = resolveConfiguredWorkingDir(dir, state.vars, config.basePath);
-              return resolved ? [resolved] : [];
-            }),
-          ];
+          const roots = new Set([hostEvidence.workingDir, directory]);
+          for (const dir of extra) {
+            const resolved = resolveConfiguredWorkingDir(dir, state.vars, config.basePath);
+            if (resolved) {
+              roots.add(resolved);
+              roots.add(await realpath(resolved).catch(() => resolved));
+            }
+          }
+          hostEvidence.readRoots = [...roots];
         }
       }
     }

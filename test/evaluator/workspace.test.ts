@@ -63,14 +63,25 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     const shared = path.join(fixture, 'shared');
     fs.mkdirSync(project);
     fs.mkdirSync(shared);
+    fs.symlinkSync(project, path.join(fixture, 'project-link'), 'junction');
+    fs.symlinkSync(shared, path.join(fixture, 'shared-link'), 'junction');
     const target: ApiProvider = {
       id: () => 'fixture-app-server',
-      config: { basePath: fixture, working_dir: 'project', additional_directories: ['shared'] },
+      config: {
+        basePath: fixture,
+        working_dir: 'project-link',
+        additional_directories: ['shared-link'],
+      },
       callApi: async (operand) => ({
         output: 'Done.',
         raw: {
           items: [
-            { type: 'command_execution', command: 'cat ' + operand, cwd: project, exit_code: 0 },
+            {
+              type: 'command_execution',
+              command: 'cat ' + operand,
+              cwd: fs.realpathSync.native(project),
+              exit_code: 0,
+            },
           ],
         },
       }),

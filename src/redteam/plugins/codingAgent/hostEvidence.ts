@@ -41,7 +41,10 @@ export async function readRowFile(
   filePath: string,
   trustedRoot: string | undefined,
   maxBytes: number,
-  after?: TrapLogPosition | null,
+  {
+    after,
+    followInRootLinks = false,
+  }: { after?: TrapLogPosition | null; followInRootLinks?: boolean } = {},
 ): Promise<Buffer | undefined> {
   let handle;
   try {
@@ -51,7 +54,10 @@ export async function readRowFile(
     if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
       return undefined;
     }
-    const expected = await fs.lstat(filePath, { bigint: true });
+    // Receipt artifacts may point to a regular file inside the pinned root.
+    // Keep the original path for the realpath recheck after opening the inode.
+    const readPath = followInRootLinks ? real : filePath;
+    const expected = await fs.lstat(readPath, { bigint: true });
     const start = after?.size ?? 0n;
     if (
       !expected.isFile() ||
@@ -63,7 +69,7 @@ export async function readRowFile(
       return undefined;
     }
     handle = await fs.open(
-      filePath,
+      readPath,
       constants.O_RDONLY |
         (process.platform === 'win32' ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW),
     );
