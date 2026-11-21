@@ -7,39 +7,15 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CLI_PATH, ROOT_DIR, runCli } from './runCli';
 
-// Path to the built CLI binary
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const CONFIGS_DIR = path.resolve(FIXTURES_DIR, 'configs');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-filters');
-
-/**
- * Helper to run the CLI and capture output
- */
-function runCli(
-  args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
-): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('Count-Based Filter Tests', () => {
   beforeAll(() => {
@@ -433,6 +409,68 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results.length).toBe(1);
     expect(parsed.results.results[0].response.output).toContain('Alice');
   });
+
+  it('1.8.3.4b - comma-separated --filter-metadata values use OR logic within one key', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-or-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth,profile',
+        '--filter-metadata',
+        'priority=high,medium',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    const results: {
+      response: { output: string };
+      success: boolean;
+      score: number;
+      error?: string;
+    }[] = parsed.results.results;
+
+    // Alice and Bob match both filters. Charlie and Eve fail category;
+    // Diana matches category but fails priority.
+    expect(results.map((result) => result.response.output).sort()).toEqual([
+      'Hello Alice, you are a admin',
+      'Hello Bob, you are a user',
+    ]);
+    for (const result of results) {
+      expect(result).toMatchObject({ success: true, score: 1 });
+      expect(result.error).toBeFalsy();
+    }
+  });
+
+  it.each(['category=,auth', 'category=auth,', 'category=auth,,profile'])(
+    '--filter-metadata rejects an empty alternative in %s',
+    (filter) => {
+      const { exitCode, stdout, stderr } = runCli([
+        'eval',
+        '-c',
+        path.join(CONFIGS_DIR, 'multi-test.yaml'),
+        '--no-cache',
+        '--filter-metadata',
+        filter,
+      ]);
+
+      expect(exitCode).not.toBe(0);
+      expect(`${stdout}${stderr}`).toContain('--filter-metadata has an empty value');
+      expect(`${stdout}${stderr}`).toContain(filter);
+    },
+  );
 
   it('1.8.3.5 - multiple --filter-metadata returns empty when no tests match all conditions', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');

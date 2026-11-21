@@ -1,10 +1,13 @@
 import logger from '../logger';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
+import { executeCallback, resolveCallback } from './functionCallbackExecutor';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
+import { throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -35,18 +38,8 @@ export async function loadProviderCallbackFromFileUrl(
 }
 
 /**
- * Load, cache, and invoke one `functionToolCallbacks` entry, returning the string a
- * tool-result message expects.
- *
- * Shared by the two providers that implement function-tool callbacks directly on the
- * provider class — Bedrock Converse and OpenAI Chat — whose copies were identical apart
- * from log prefixes. Keeping one implementation is what stops them drifting: the
- * path-traversal guard is a worked example of a fix that reached one copy of this logic
- * and not the others.
- *
- * The remaining providers with a `loadedFunctionCallbacks` cache (Azure Foundry, Google
- * base and live) have genuinely different loading and caching behaviour — Azure preloads,
- * Google Live gates on a shared-cache flag — so they deliberately keep their own.
+ * Run a direct provider callback with strict file exports and string output.
+ * Google retains raw values; FunctionCallbackHandler allows fallback file exports.
  */
 export async function executeProviderFunctionCallback({
   functionName,
@@ -55,6 +48,7 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
+  abortSignal,
 }: {
   functionName: string;
   args: string;
@@ -64,33 +58,32 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
+  /** Stops this caller's wait without stopping callback code that has already started. */
+  abortSignal?: AbortSignal;
 }): Promise<string> {
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
-    let callback = cache[functionName];
-
-    if (!callback) {
-      const callbackRef = callbacks?.[functionName];
-
-      if (callbackRef && typeof callbackRef === 'string') {
-        callback = callbackRef.startsWith('file://')
-          ? await loadProviderCallbackFromFileUrl(callbackRef, logPrefix)
-          : new Function('return ' + callbackRef)();
-        cache[functionName] = callback;
-      } else if (typeof callbackRef === 'function') {
-        callback = callbackRef;
-        cache[functionName] = callback;
-      }
-    }
-
-    if (!callback) {
-      throw new Error(`No callback found for function '${functionName}'`);
-    }
-
+    throwIfAborted(abortSignal);
+    const resolved = resolveCallback({
+      name: functionName,
+      reference:
+        callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
+          ? callbacks[functionName]
+          : undefined,
+      cache,
+      loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
+    });
+    const callback =
+      typeof resolved === 'function'
+        ? resolved
+        : await waitForPromiseWithAbort(resolved, abortSignal);
+    throwIfAborted(abortSignal);
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-      callback(args),
-    );
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
+      throwIfAborted(abortSignal);
+      return waitForPromiseWithAbort(Promise.resolve(callback(args)), abortSignal);
+    });
+    throwIfAborted(abortSignal);
 
     if (result === undefined || result === null) {
       return '';
@@ -105,6 +98,9 @@ export async function executeProviderFunctionCallback({
     }
     return String(result);
   } catch (error: any) {
+    if (isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
+      throwIfAborted(abortSignal);
+    }
     logger.error(
       `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
     );
@@ -113,10 +109,7 @@ export async function executeProviderFunctionCallback({
   }
 }
 
-/**
- * Handles function callback execution for AI providers.
- * Provides a unified way to execute function callbacks across different provider formats.
- */
+/** Adapts configured callbacks and MCP tools to provider function-call formats. */
 export class FunctionCallbackHandler {
   private loadedCallbacks: Record<string, FunctionCallback> = {};
   private mcpToolNames: Set<string> | null = null;
@@ -151,7 +144,12 @@ export class FunctionCallbackHandler {
       }
     }
 
-    if (!functionInfo || !callbacks || !callbacks[functionInfo.name]) {
+    if (
+      !functionInfo ||
+      !callbacks ||
+      !Object.prototype.hasOwnProperty.call(callbacks, functionInfo.name) ||
+      !callbacks[functionInfo.name]
+    ) {
       // No callback available - return stringified original
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
@@ -287,34 +285,21 @@ export class FunctionCallbackHandler {
     context?: any,
     callId?: string,
   ): Promise<string> {
-    return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
-      // Get or load the callback
-      let callback = this.loadedCallbacks[functionName];
-
-      if (!callback) {
-        const callbackConfig = callbacks[functionName];
-
-        if (typeof callbackConfig === 'string') {
-          // String callback - either file reference or inline code
-          if (callbackConfig.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackConfig);
-          } else {
-            // Inline function string
-            callback = new Function('return ' + callbackConfig)() as FunctionCallback;
-          }
-        } else if (typeof callbackConfig === 'function') {
-          callback = callbackConfig;
-        } else {
-          throw new Error(`Invalid callback configuration for ${functionName}`);
-        }
-
-        // Cache for future use
-        this.loadedCallbacks[functionName] = callback;
-      }
-
-      const result = await callback(args, context);
-      return typeof result === 'string' ? result : JSON.stringify(result);
+    const execution = await executeCallback({
+      name: functionName,
+      args,
+      callId,
+      reference: callbacks[functionName],
+      cache: this.loadedCallbacks,
+      context,
+      passContext: true,
+      transformOutput: (output) => (typeof output === 'string' ? output : JSON.stringify(output)),
+      loadFile: (reference) => this.loadExternalFunction(reference),
     });
+    if (execution.isError) {
+      throw execution.error;
+    }
+    return execution.output as string;
   }
 
   /**

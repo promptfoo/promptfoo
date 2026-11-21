@@ -87,7 +87,9 @@ describe('automatic embedding requests', () => {
       const env = {
         [key]: 'scoped-fixture-key',
         [endpointKey]: 'https://scoped.example',
-        AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'vectors',
+        ...(key === 'AZURE_OPENAI_API_KEY' && {
+          AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'vectors',
+        }),
       } as EnvOverrides;
       const providers = await getDefaultProviders(env);
       expect(providers.embeddingProvider.id()).toBe(id);
@@ -134,6 +136,20 @@ describe('automatic embedding requests', () => {
     mockProcessEnv({ [key]: 'ambient-fixture' });
     const providers = await getDefaultProviders({ ...fallback, [key]: '' });
     expect(providers.embeddingProvider.id()).toBe(id);
+  });
+
+  it('keeps an explicit Azure embedding deployment eligible for Azure CLI authentication', async () => {
+    const initialize = vi.spyOn(AzureEmbeddingProvider.prototype, 'initialize').mockResolvedValue();
+    try {
+      const { embeddingProvider } = await getDefaultProviders({
+        ANTHROPIC_API_KEY: 'fixture-grader',
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'vectors',
+      });
+      expect(embeddingProvider).toBeInstanceOf(AzureEmbeddingProvider);
+      expect(embeddingProvider.id()).toContain('vectors');
+    } finally {
+      initialize.mockRestore();
+    }
   });
 
   it.each(['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'])(
