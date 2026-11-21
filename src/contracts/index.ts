@@ -45,6 +45,7 @@ export {
   AzureSharedConfigInputJsonSchema,
   AzureSharedConfigInputSchema,
 } from './providerConfig/azure.js';
+export * from './providerConfig/google.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
