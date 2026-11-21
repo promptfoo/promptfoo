@@ -75,6 +75,13 @@ function normalizeSourceRoot(repoRoot: string, root: unknown): string {
   if (relative === '..' || relative.startsWith('../')) {
     throw new Error(`Architecture root "${root}" must be inside the repository.`);
   }
+  let current = repoRoot;
+  for (const segment of relative.split('/').filter(Boolean)) {
+    current = path.join(current, segment);
+    if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error(`Architecture root "${root}" must not traverse a symbolic link.`);
+    }
+  }
   return relative || '.';
 }
 
@@ -479,6 +486,9 @@ export function resolveInternalModule(
   aliases: Record<string, string> = {},
   additionalRoots: string[] = [],
 ): string | undefined {
+  if (isBuiltin(specifier)) {
+    return undefined;
+  }
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
     .find((alias) => specifier === alias || specifier.startsWith(`${alias}/`));

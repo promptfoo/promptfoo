@@ -280,6 +280,11 @@ describe('resolveInternalModule', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', 'node:fs')).toBeUndefined();
     });
 
+    it('keeps Node builtins external when their name also identifies a source file', () => {
+      write('fs.ts');
+      expect(resolveInternalModule(repoRoot, 'src/foo.ts', 'fs', {}, ['.'])).toBeUndefined();
+    });
+
     it('resolves configured source aliases', () => {
       write('src/core/util.ts');
       expect(
@@ -666,6 +671,21 @@ describe('readLayerConfig', () => {
   it.each(['', ' ', '..', '../outside', '/absolute'])('rejects invalid source root %j', (root) => {
     writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer({ roots: [root] })] });
     expect(() => readLayerConfig(repoRoot)).toThrow('root');
+  });
+
+  it('rejects a symlink in any source-root ancestor', () => {
+    const sibling = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-repo-'));
+    try {
+      fs.mkdirSync(path.join(sibling, 'external'));
+      fs.symlinkSync(sibling, path.join(repoRoot, 'alias'), 'junction');
+      writeConfig({
+        publicFacade: 'src/index.ts',
+        layers: [coreLayer({ roots: ['alias/external'] })],
+      });
+      expect(() => readLayerConfig(repoRoot)).toThrow('symbolic link');
+    } finally {
+      fs.rmSync(sibling, { recursive: true, force: true });
+    }
   });
 
   it('rejects missing layer roots', () => {

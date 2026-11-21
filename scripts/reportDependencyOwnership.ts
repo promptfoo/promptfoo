@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync } from 'glob';
 import { minimatch } from 'minimatch';
 import { type Comment, type Node, parseSync, Visitor } from 'oxc-parser';
 import { z } from 'zod';
@@ -83,27 +83,17 @@ function consumeJSDocName(body: string, start: number): number {
   if (body[start] !== '[') {
     return body.slice(start).match(/^[\w.$]+[ \t]+(?=\{)/)?.[0].length ?? 0;
   }
-  let depth = 0;
-  for (let index = start; index < body.length; index++) {
-    if (body[index] === '[') {
-      depth++;
-    }
-    if (body[index] === ']' && --depth === 0) {
-      const suffix = body.slice(index + 1).match(/^[ \t]+(?=\{)/);
-      return suffix ? index + 1 - start + suffix[0].length : 0;
-    }
-    if (body[index] === '\n' || body[index] === '\r') {
-      return 0;
-    }
-  }
-  return 0;
+  const end = balancedEnd(body, start, '[', ']');
+  const suffix = body.slice(end).match(/^[ \t]+(?=\{)/);
+  return suffix ? end - start + suffix[0].length : 0;
 }
 
 function takeJSDocType(source: string): string {
   const start = source.indexOf('{');
-  if (start === -1) {
-    return source;
-  }
+  return start === -1 ? source : source.slice(0, balancedEnd(source, start, '{', '}'));
+}
+
+function balancedEnd(source: string, start: number, open: string, close: string): number {
   let depth = 0;
   let quote: string | undefined;
   let escaped = false;
@@ -119,13 +109,13 @@ function takeJSDocType(source: string): string {
       }
     } else if (character === "'" || character === '"') {
       quote = character;
-    } else if (character === '{') {
+    } else if (character === open) {
       depth++;
-    } else if (character === '}' && --depth === 0) {
-      return source.slice(0, index + 1);
+    } else if (character === close && --depth === 0) {
+      return index + 1;
     }
   }
-  return source;
+  return source.length;
 }
 
 function getShadowRanges(
@@ -278,6 +268,11 @@ function getShadowRanges(
         ranges.push(scopeFor(node.start, lexicalScopes));
       }
     },
+    TSEnumDeclaration(node) {
+      if (!node.declare && node.id.name === name) {
+        ranges.push(scopeFor(node.start, lexicalScopes));
+      }
+    },
     ClassDeclaration(node) {
       if (!node.declare && node.id?.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
@@ -360,12 +355,17 @@ function manifestFor(file: string, manifests: string[]): string {
   );
 }
 
-function nearestManifest(repoRoot: string, file: string): string {
+function nearestManifest(repoRoot: string, file: string, emitted = false): string {
   let directory = path.posix.dirname(file);
   while (directory !== '.' && path.posix.dirname(directory) !== directory) {
     const manifest = `${directory}/package.json`;
     if (fs.existsSync(path.join(repoRoot, manifest))) {
-      return manifest;
+      // Emitted type-only package markers select ESM or CJS. Other nested
+      // manifests define a package boundary even inside a dist directory.
+      const pkg = emitted && JSON.parse(fs.readFileSync(path.join(repoRoot, manifest), 'utf8'));
+      if (!pkg || Object.keys(pkg).length !== 1 || !['module', 'commonjs'].includes(pkg.type)) {
+        return manifest;
+      }
     }
     directory = path.posix.dirname(directory);
   }
@@ -434,13 +434,16 @@ function discoverFiles(
 ) {
   const files = new Set<string>();
   const declarationFiles = new Set<string>();
-  const configuredIgnores = ignoredRoots.flatMap((root) => [root, `${root}/**`]);
+  const configuredIgnores = ignoredRoots
+    .map((root) => escapeGlob(root))
+    .flatMap((root) => [root, `${root}/**`]);
   const sourceIgnores = (root: string) => [
     ...ignored.map((pattern) => `${root}${pattern}`),
     ...configuredIgnores,
   ];
   for (const manifest of manifests) {
-    const root = manifest === 'package.json' ? '' : `${path.posix.dirname(manifest)}/`;
+    const directory = manifest === 'package.json' ? '' : `${path.posix.dirname(manifest)}/`;
+    const root = escapeGlob(directory);
     for (const pattern of [
       `${root}*.${extensions}`,
       `${root}src/**/*.${extensions}`,
@@ -465,7 +468,7 @@ function discoverFiles(
       nodir: true,
       ignore: ['**/node_modules/**', ...configuredIgnores],
     }).map(normalizePath)) {
-      if (manifestFor(file, manifests) !== manifest || isTestFile(file.slice(root.length))) {
+      if (manifestFor(file, manifests) !== manifest || isTestFile(file.slice(directory.length))) {
         continue;
       }
       files.add(file);
@@ -474,14 +477,15 @@ function discoverFiles(
   }
 
   for (const root of configuredRoots) {
-    for (const file of globSync([root, `${root}/**/*.${extensions}`], {
+    const pattern = escapeGlob(root);
+    for (const file of globSync([pattern, `${pattern}/**/*.${extensions}`], {
       cwd: repoRoot,
       dot: true,
       nodir: true,
       ignore: sourceIgnores(
         manifestFor(`${root}/`, manifests) === 'package.json'
           ? ''
-          : `${path.posix.dirname(manifestFor(`${root}/`, manifests))}/`,
+          : `${escapeGlob(path.posix.dirname(manifestFor(`${root}/`, manifests)))}/`,
       ),
     }).map(normalizePath)) {
       if (/\.(?:[cm]?[jt]s|[jt]sx)$/.test(file)) {
@@ -491,16 +495,21 @@ function discoverFiles(
   }
 
   for (const file of files) {
-    // Package markers within dist belong to the package that emitted the declarations.
-    if (!declarationFiles.has(file) && !manifests.includes(nearestManifest(repoRoot, file))) {
+    if (!manifests.includes(nearestManifest(repoRoot, file, declarationFiles.has(file)))) {
       files.delete(file);
+      declarationFiles.delete(file);
     }
   }
   return { files, declarationFiles };
 }
 
-function leadingTypeReferences(comments: Comment[], firstStatement: number, file: string) {
-  const references: Array<{ start: number; specifier: string; dependency: string }> = [];
+function leadingReferences(comments: Comment[], firstStatement: number, file: string) {
+  const references: Array<{
+    start: number;
+    specifier: string;
+    dependency: string;
+    kind: 'type' | 'value';
+  }> = [];
   // TypeScript directives are leading line comments, not AST imports. Ignore
   // lookalikes in strings/block comments and comments after the first statement.
   for (const comment of comments) {
@@ -524,10 +533,14 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
     if (!name) {
       continue;
     }
-    const typesPackage =
-      attributeName === 'path'
-        ? name
-        : `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
+    if (attributeName === 'path') {
+      const dependency = getPackageName(specifier);
+      if (dependency) {
+        references.push({ start: comment.start, specifier, dependency, kind: 'value' });
+      }
+      continue;
+    }
+    const typesPackage = `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
     const typesSpecifier = typesPackage + specifier.slice(name.length);
     const hasInstalledTypes = (createRequire(file).resolve.paths(typesSpecifier) ?? []).some(
       (directory) => {
@@ -545,6 +558,7 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
     references.push({
       start: comment.start,
       specifier,
+      kind: 'type',
       dependency: name === 'node' || hasInstalledTypes ? typesPackage : name,
     });
   }
@@ -559,10 +573,15 @@ function addJSDocReferences(
     return;
   }
   // Keep offsets intact while removing JSDoc line prefixes.
-  const body = comment.value.replace(
-    /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
-    (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
-  );
+  const body = comment.value
+    .replace(
+      /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
+      (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
+    )
+    .replace(/^[ \t]*@(?!example\b)\w+\b.*$/gm, (line) =>
+      // Adjacent tags also separate annotations. Replacing one character preserves offsets.
+      line.replace(/[ \t](?=@\w+\b)/g, '\n'),
+    );
   for (const tag of body.matchAll(
     /(?:^|[\r\n\u2028\u2029])[ \t]*@import\b(?:(?![\r\n\u2028\u2029][ \t]*@)[\s\S])*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
   )) {
@@ -798,12 +817,12 @@ export function reportDependencyOwnership(
         add(node, specifier, kind);
       }
     };
-    for (const reference of leadingTypeReferences(
+    for (const reference of leadingReferences(
       result.comments,
       result.program.body[0]?.start ?? source.length,
       path.resolve(repoRoot, file),
     )) {
-      add(reference, reference.specifier, 'type', reference.dependency);
+      add(reference, reference.specifier, reference.kind, reference.dependency);
     }
     if (/\.(?:jsx?|mjs|cjs)$/.test(file)) {
       for (const comment of result.comments) {
@@ -811,6 +830,7 @@ export function reportDependencyOwnership(
       }
     }
     const externalModule =
+      /\.[cm]ts$/.test(file) ||
       result.module.hasModuleSyntax ||
       result.program.sourceType !== 'script' ||
       result.program.body.some(

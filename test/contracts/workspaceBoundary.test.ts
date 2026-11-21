@@ -88,6 +88,18 @@ function findBoundaryViolations(sourceText: string, filePath: string): string[] 
     }
   }
 
+  // TypeScript recognizes these leading comments even without an AST import.
+  const first = parsed.program.body[0]?.start ?? sourceText.length;
+  for (const comment of parsed.comments) {
+    if (
+      comment.type === 'Line' &&
+      comment.start < first &&
+      /^\/\s*<(reference|amd-dependency)\b/i.test(comment.value)
+    ) {
+      violations.push('Triple-slash dependencies are not allowed in portable contracts');
+    }
+  }
+
   new Visitor({
     ImportDeclaration(node) {
       checkSpecifier(node.source, node);
@@ -156,6 +168,18 @@ describe('contracts workspace dependency boundary', () => {
 
   describe('boundary scanner', () => {
     const fixturePath = path.join(contractsSourceDir, 'nested', 'fixture.ts');
+
+    it.each(['types="defu"', 'path="../outside.d.ts"', 'lib="dom"'])(
+      'rejects a leading %s dependency',
+      (attribute) => {
+        expect(
+          findBoundaryViolations(`/// <reference ${attribute} />\nexport {};`, fixturePath),
+        ).toHaveLength(1);
+        expect(
+          findBoundaryViolations(`export {};\n/// <reference ${attribute} />`, fixturePath),
+        ).toEqual([]);
+      },
+    );
 
     it('accepts static runtime and type imports within the leaf and exactly zod', () => {
       expect(

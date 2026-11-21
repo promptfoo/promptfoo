@@ -40,6 +40,20 @@ describe('package TypeScript coverage', () => {
     execFileSync('git', ['add', '--', relativePath], { cwd: repositoryRoot });
   }
 
+  it('credits a root-level reference only for product sources', () => {
+    write('packages/lib/index.ts', 'export {};');
+    write('scripts/build.ts', 'export {};');
+    write('tsconfig.products.json', {
+      compilerOptions: { composite: true },
+      include: ['packages', 'scripts'],
+    });
+    write('tsconfig.json', {
+      include: ['src'],
+      references: [{ path: './tsconfig.products.json' }],
+    });
+    expect(findMissingRootTypeScriptFiles(repositoryRoot)).toEqual(['scripts/build.ts']);
+  });
+
   it('requires new package sources to be covered even when they have a standalone tsconfig', () => {
     write('packages/contracts/src/index.ts', 'export {};');
     write('packages/contracts/tsconfig.json', {

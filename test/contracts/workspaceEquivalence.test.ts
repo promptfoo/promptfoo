@@ -2,16 +2,20 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as workspaceApiCommon from '../../packages/contracts/src/api/common';
 import * as workspaceApiUser from '../../packages/contracts/src/api/user';
 import * as workspaceBlobs from '../../packages/contracts/src/blobs';
+import * as workspaceCompletionDetails from '../../packages/contracts/src/completionDetails';
 import * as workspaceEnv from '../../packages/contracts/src/env';
 import * as workspaceIndex from '../../packages/contracts/src/index';
 import * as workspacePrompts from '../../packages/contracts/src/prompts';
+import * as workspaceAnthropic from '../../packages/contracts/src/providerConfig/anthropic';
 import * as workspaceAuth from '../../packages/contracts/src/providerConfig/auth';
+import * as workspaceAzure from '../../packages/contracts/src/providerConfig/azure';
 import * as workspaceHttp from '../../packages/contracts/src/providerConfig/http';
 import * as workspaceHttpAuth from '../../packages/contracts/src/providerConfig/httpAuth';
 import * as workspaceHttpMultipart from '../../packages/contracts/src/providerConfig/httpMultipart';
 import * as workspaceHttpSignature from '../../packages/contracts/src/providerConfig/httpSignature';
 import * as workspaceHttpTls from '../../packages/contracts/src/providerConfig/httpTls';
 import * as workspaceMcp from '../../packages/contracts/src/providerConfig/mcp';
+import * as workspaceProviderShared from '../../packages/contracts/src/providerConfig/shared';
 import * as workspaceProviders from '../../packages/contracts/src/providers';
 import * as workspaceShared from '../../packages/contracts/src/shared';
 import * as workspaceTraceProviderEndpoint from '../../packages/contracts/src/traceProviderEndpoint';
@@ -22,16 +26,20 @@ import * as contracts from '../../src/contracts';
 import * as contractsApiCommon from '../../src/contracts/api/common';
 import * as contractsApiUser from '../../src/contracts/api/user';
 import * as contractsBlobs from '../../src/contracts/blobs';
+import * as contractsCompletionDetails from '../../src/contracts/completionDetails';
 import * as contractsEnv from '../../src/contracts/env';
 import * as contractsIndex from '../../src/contracts/index';
 import * as contractsPrompts from '../../src/contracts/prompts';
+import * as contractsAnthropic from '../../src/contracts/providerConfig/anthropic';
 import * as contractsAuth from '../../src/contracts/providerConfig/auth';
+import * as contractsAzure from '../../src/contracts/providerConfig/azure';
 import * as contractsHttp from '../../src/contracts/providerConfig/http';
 import * as contractsHttpAuth from '../../src/contracts/providerConfig/httpAuth';
 import * as contractsHttpMultipart from '../../src/contracts/providerConfig/httpMultipart';
 import * as contractsHttpSignature from '../../src/contracts/providerConfig/httpSignature';
 import * as contractsHttpTls from '../../src/contracts/providerConfig/httpTls';
 import * as contractsMcp from '../../src/contracts/providerConfig/mcp';
+import * as contractsProviderShared from '../../src/contracts/providerConfig/shared';
 import * as contractsProviders from '../../src/contracts/providers';
 import * as contractsShared from '../../src/contracts/shared';
 import * as contractsTraceProviderEndpoint from '../../src/contracts/traceProviderEndpoint';
@@ -42,6 +50,10 @@ import * as contractsValidatorShared from '../../src/contracts/validators/shared
 describe('contracts workspace compatibility', () => {
   const pairs: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
     ['public barrel', contracts, workspaceIndex],
+    ['completionDetails', contractsCompletionDetails, workspaceCompletionDetails],
+    ['providerConfig/anthropic', contractsAnthropic, workspaceAnthropic],
+    ['providerConfig/azure', contractsAzure, workspaceAzure],
+    ['providerConfig/shared', contractsProviderShared, workspaceProviderShared],
     ['index', contractsIndex, workspaceIndex],
     ['providerConfig/mcp', contractsMcp, workspaceMcp],
     ['providerConfig/httpTls', contractsHttpTls, workspaceHttpTls],

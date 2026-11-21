@@ -7,5 +7,6 @@ export default defineConfig({
   platform: 'neutral',
   fixedExtension: false,
   dts: true,
-  deps: { neverBundle: ['zod'] },
+  // Keep bare imports external so build dependencies cannot hide undeclared runtime imports.
+  deps: { neverBundle: /^[a-z@][^:]*/ },
 });

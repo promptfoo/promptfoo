@@ -324,10 +324,39 @@ describe('dependency ownership report', () => {
     expect(report.runtimeDeclarationGaps).toEqual([]);
   });
 
+  it('reads adjacent tags and quoted brackets in an optional JSDoc default', () => {
+    write(
+      'src/index.js',
+      "/** @param [arg=']'] {import('input').Value} @returns {import('output').Value} */",
+    );
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.map((item) => item.dependency),
+    ).toEqual(['input', 'output']);
+  });
+
+  it('scans literal configured roots and excludes separate packages inside dist', () => {
+    write('lib/[id]/index.ts', "import 'real';");
+    write('lib/i/index.ts', "import 'wrong';");
+    json('dist/vendor/package.json', { name: 'foreign' });
+    json('dist/vendor/nested/package.json', { type: 'module' });
+    write(
+      'dist/vendor/nested/index.d.ts',
+      "export type External = import('foreign-only').External;",
+    );
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      layers: [...config.layers, { name: 'lib', roots: ['lib/[id]'], allowedDependencies: [] }],
+    });
+    expect(report.undeclaredUsages.map((item) => item.dependency)).toEqual(['real']);
+  });
+
   it('records leading AMD dependency directives', () => {
     write('src/index.ts', '/// <amd-dependency path="legacy-driver" />\nexport {};');
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
-      expect.objectContaining({ dependency: 'legacy-driver' }),
+      expect.objectContaining({
+        dependency: 'legacy-driver',
+        references: [expect.objectContaining({ kind: 'value' })],
+      }),
     ]);
   });
 
@@ -1179,6 +1208,14 @@ ${call}('external');`,
     write('src/import-equals.ts', "import require = require('./local'); require('local-equals');");
     write('src/local.js', 'export default () => {};');
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it.each(['module', 'require'])('bounds an enum %s loader binding to its scope', (name) => {
+    const call = name === 'module' ? '(module as any).require' : '(require as any).resolve';
+    write('src/index.ts', `{ enum ${name} { A }; ${call}('local'); } ${call}('external');`);
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.map((item) => item.dependency),
+    ).toEqual(['external']);
   });
 
   it.each(['module', 'require'])('recognizes namespace %s loader bindings', (name) => {
