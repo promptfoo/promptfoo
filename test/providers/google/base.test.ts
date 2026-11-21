@@ -451,8 +451,8 @@ describe('GoogleGenericProvider', () => {
       );
 
       expect(mockCallback).toHaveBeenCalledWith('{"arg": "value"}');
-      expect(logger.debug).toHaveBeenCalledWith("Executing function 'test_function'", {
-        args: '{"arg": "value"}',
+      expect(logger.debug).toHaveBeenCalledWith('Executing Google function', {
+        name: 'test_function',
       });
       expect(result).toEqual({ result: 'success' });
     });
@@ -501,6 +501,7 @@ describe('GoogleGenericProvider', () => {
       await expect(
         provider['executeFunctionCallback']('missing_function', '{}', config),
       ).rejects.toThrow("No callback found for function 'missing_function'");
+      expect(withGenAIToolSpan).not.toHaveBeenCalled();
     });
 
     it.each(['toString', 'constructor', 'valueOf'])(
