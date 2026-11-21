@@ -315,11 +315,11 @@ providers:
 
 ### Embeddings API
 
-This method uses the `apiKey` set by the constructor above.
+Add the following field and method to your provider class. The method uses the `apiKey` set by the constructor above.
 
 To stop embedding grading when an eval is cancelled, set `supportsEmbeddingCancellation` to `true` and pass the third argument's `abortSignal` to your request. Without this flag, promptfoo calls `callEmbeddingApi` with only the input.
 
-```javascript title="embeddingProvider.js"
+```javascript
 supportsEmbeddingCancellation = true;
 
 async callEmbeddingApi(text, _context, { abortSignal } = {}) {
