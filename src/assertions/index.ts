@@ -141,38 +141,35 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
-const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
-  'javascript',
-  'python',
-  'ruby',
-  'trace-error-spans',
-  'trace-span-count',
-  'trace-span-duration',
-  'trajectory:goal-success',
-  'trajectory:step-count',
-  'trajectory:tool-args-match',
-  'trajectory:tool-sequence',
-  'trajectory:tool-used',
-]);
+const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+
+export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionRequiresTrace);
+  }
+  const type = getAssertionBaseType(assertion);
+  return (
+    type.startsWith('trace-') ||
+    type.startsWith('trajectory:') ||
+    type.startsWith('promptfoo:redteam:coding-agent:')
+  );
+}
 
 export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   if (assertion.type === 'assert-set') {
     return assertion.assert.some(assertionUsesTrace);
   }
-
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  return (
+    SCRIPT_RESULT_ASSERTIONS.has(getAssertionBaseType(assertion)) ||
+    assertionRequiresTrace(assertion)
+  );
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
-  if (assertionUsesTrace(assertion)) {
-    return true;
-  }
-
   if (assertion.type === 'assert-set') {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
-
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  if (assertionUsesTrace(assertion)) {
     return true;
   }
 
@@ -573,7 +570,6 @@ async function runAssertionInternal({
   // Centralized script output resolution
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
-  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
   const baseType = getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {

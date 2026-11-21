@@ -771,6 +771,31 @@ describe('evaluator trace integration', () => {
       );
     });
 
+    it.each(['missing', 'rejected', 'cached'])(
+      'fails trace-dependent grading with %s external evidence and preserves the target response',
+      async (state) => {
+        const provider = createMockProvider({
+          response: { output: 'Target output', cost: 0.01, cached: state === 'cached' },
+        });
+        const options = createRunOptions(provider);
+        options.test.assert = [
+          { type: 'assert-set', assert: [{ type: 'not-trajectory:tool-used', value: 'lookup' }] },
+        ];
+        if (state === 'rejected') {
+          mockFetchTraceContext.mockRejectedValueOnce(new Error('Rejected trace'));
+        } else if (state === 'missing') {
+          mockFetchTraceContext.mockResolvedValueOnce(null);
+        }
+        const [result] = await runEval(options);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Required external trace is unavailable');
+        expect(result.response?.output).toBe('Target output');
+        if (state !== 'cached') {
+          expect(result.cost).toBe(0.01);
+        }
+      },
+    );
+
     it('distinguishes missing external traces from successful fetches', async () => {
       const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
       const provider = createMockProvider({ response: { output: 'Target output' } });
