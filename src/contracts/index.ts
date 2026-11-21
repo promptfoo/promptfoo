@@ -1,5 +1,4 @@
 // Keep .js specifiers so Node can resolve the emitted ESM declarations and runtime imports.
-export * from './agentOutcomeCase.js';
 export * from './agentOutcomes.js';
 export * from './api/common.js';
 export * from './api/user.js';

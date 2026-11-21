@@ -39,7 +39,7 @@ In a JSON export, open a row in `results.results`. Its `response.metadata.agentO
 
 ## Run a model through OpenClaw
 
-Install the pinned OpenClaw package in the example directory. Each row runs one `openclaw agent exec` with a temporary workspace, a fresh config and a loopback MCP server exposing the fixture tools. OpenClaw selects and calls the tools. The harness confirms that the assigned text appears in a user message for direct cases or a tool reply for indirect cases in a request accepted by the model endpoint. [OpenClaw headless agent](https://docs.openclaw.ai/cli/agent#agent-exec)
+Install the pinned OpenClaw package in the example directory. Each row runs one `openclaw agent exec` with a temporary workspace and a loopback MCP server. OpenClaw chooses from the same tools the calibration scripts call. The harness checks requests accepted by the model endpoint. Direct cases require the assigned prompt in a user message. Indirect cases require the tool reply to match the result of reading the assigned note or ticket. [OpenClaw headless agent](https://docs.openclaw.ai/cli/agent#agent-exec)
 
 From the checkout root, replace the model ID with one served by your Chat Completions endpoint. The endpoint must support function calling.
 

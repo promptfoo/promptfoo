@@ -39,6 +39,7 @@ import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
+import { processConfigField } from '../../validation/literalVars';
 import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
@@ -742,7 +743,9 @@ async function prepareCombinedConfig(
             ? resolveConfigPath(basePath, source.vars)
             : Array.isArray(source.vars)
               ? source.vars.map((value) => resolveConfigPath(basePath, value))
-              : resolveNestedFileReferences(basePath, source.vars),
+              : processConfigField(source, 'vars', source.vars, (value) =>
+                  resolveNestedFileReferences(basePath, value),
+                ),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {

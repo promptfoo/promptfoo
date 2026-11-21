@@ -48,6 +48,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
+import { getLiteralVarNames } from '../validation/literalVars';
 import type winston from 'winston';
 
 import type {
@@ -269,7 +270,7 @@ function createRunEvalState({
   promptIndex: number;
 }): RunEvalState {
   const vars = structuredClone(test.vars || {});
-  const fileMetadata = collectFileMetadata(vars);
+  const fileMetadata = collectFileMetadata(vars, getLiteralVarNames(test));
   // Provider identifiers and prompt ids can both collide, but every result-table
   // column has a unique index. Encode the components as a tuple because identifiers
   // can contain separators that would make concatenated keys ambiguous.
@@ -407,9 +408,10 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
+  const literalVars = getLiteralVarNames(test);
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+    ? [getRedteamInjectVar(test, promptForRender, testSuite), ...(literalVars ?? [])]
+    : literalVars;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,

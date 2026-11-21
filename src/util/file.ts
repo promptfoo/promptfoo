@@ -15,6 +15,7 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { processConfigField } from '../validation/literalVars';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
@@ -340,7 +341,9 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = processConfigField(config, key, config[key], (child) =>
+        maybeLoadConfigFromExternalFile(child, childContext),
+      );
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {

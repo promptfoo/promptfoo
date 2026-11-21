@@ -1,6 +1,5 @@
-import { isAgentOutcomePlugin } from '../contracts/agentOutcomeCase';
 import logger from '../logger';
-import { MULTI_INPUT_VAR } from '../redteam/constants';
+import { AGENT_OUTCOME_PLUGINS, MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
   getGradingAssertionHash,
@@ -230,8 +229,8 @@ export const handleRedteam = async (
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   // The stored grade hash binds prompt and response text. Outcome assertions also
   // need measurements from the current target response.
-  const needsOutcomeEvidence = isAgentOutcomePlugin(
-    assertion.type.slice('promptfoo:redteam:'.length),
+  const needsOutcomeEvidence = AGENT_OUTCOME_PLUGINS.some(
+    (id) => assertion.type === `promptfoo:redteam:${id}`,
   );
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);

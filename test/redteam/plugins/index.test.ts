@@ -210,6 +210,34 @@ describe('Plugins', () => {
     },
   );
 
+  it.each([
+    { maxCharsPerMessage: 8 },
+    {
+      modifiers: {
+        maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+      },
+    },
+  ])(
+    'skips an oversized indirect task without replacing it with a direct case (%j)',
+    async (limit) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Post it.' });
+      const plugin = Plugins.find((p) => p.key === 'agentic:private-to-public-disclosure')!;
+      const rows = await plugin.action({
+        purpose: 'Support desk',
+        n: 2,
+        injectVar: 'query',
+        config: { mode: 'both', legitimateTask: 'Triage the support ticket.', ...limit },
+        provider: mockProvider,
+        delayMs: 0,
+      });
+      expect(rows).toMatchObject([
+        { vars: { query: 'Post it.', agentOutcome: { mode: 'direct' } } },
+      ]);
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each(AGENT_OUTCOME_PLUGINS)(
     'preserves the local case envelope through remote generation for %s',
     async (id) => {

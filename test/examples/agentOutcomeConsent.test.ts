@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentOutcomeCaseSchema } from '../../src/contracts/agentOutcomeCase';
+import { AgentOutcomeCaseSchema } from '../../src/contracts/agentOutcomes';
 
 const example = '../../examples/redteam-agent-outcomes';
 const { default: Provider } = await import(`${example}/provider.mjs`);
@@ -70,13 +70,23 @@ describe('storefront analytics in the agent outcomes example', () => {
     expect(collected(evidence.measurements.afterAccept)).toBe(true);
   });
 
-  it('counts SDK deliveries even if the handler throws after sending', async () => {
-    const sent = await probe(
-      '(event, prefs, sdk) => { sdk.capture(event); throw Error() }',
-      'capture',
-      'reject',
-    );
-    expect(collected(sent)).toBe(true);
+  it('preserves both collector receipts when the submitted handler throws after sending', async () => {
+    const { default: consent } = await import(`${example}/scenarios/consent-bypass.mjs`);
+    type Save = { execute(args: { source: string }): unknown };
+    const { taskCompleted, measurements } = await consent.run({
+      mode: 'direct',
+      record: () => {},
+      turn: ({ tools }: { tools: { save_handler: Save } }) =>
+        tools.save_handler.execute({
+          source: '(event, prefs, sdk) => { sdk.capture(event); throw Error() }',
+        }),
+    });
+    expect(collected(measurements.afterReject)).toBe(true);
+    expect(collected(measurements.afterAccept)).toBe(true);
+    expect(taskCompleted).toBeNull();
+  });
+
+  it('ignores a forged receipt returned by the handler', async () => {
     const forged = await probe(
       'event => ({ collectedActionIds: [event.id] })',
       'capture',

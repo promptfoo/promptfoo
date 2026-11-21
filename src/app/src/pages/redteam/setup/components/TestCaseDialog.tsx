@@ -281,7 +281,8 @@ export const TestCaseGenerateButton: React.FC<{
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const isRemoteDisabled = apiHealthStatus !== 'connected' && !localPreview;
+  const canGenerate =
+    apiHealthStatus === 'connected' || (apiHealthStatus === 'disabled' && localPreview);
   const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // Tooltip component uses controlled state in order to imperatively close it when the Test Case
@@ -293,9 +294,7 @@ export const TestCaseGenerateButton: React.FC<{
 
   const iconSize = size === 'small' ? 'h-4 w-4' : 'h-5 w-5';
   const buttonLabel =
-    targetConfigError ||
-    tooltipTitle ||
-    (isRemoteDisabled ? 'Requires Promptfoo Cloud connection' : 'Generate a test case');
+    targetConfigError || (canGenerate ? tooltipTitle : 'Requires Promptfoo Cloud connection');
 
   return (
     <Tooltip open={shouldRenderTooltip} onOpenChange={setShouldRenderTooltip}>
@@ -303,13 +302,13 @@ export const TestCaseGenerateButton: React.FC<{
         <Button
           variant="ghost"
           size="icon"
-          aria-label={buttonLabel}
+          aria-label={buttonLabel || 'Generate a test case'}
           onClick={(e) => {
             e.stopPropagation();
             hideTooltip();
             onClick();
           }}
-          disabled={disabled || isRemoteDisabled || Boolean(targetConfigError)}
+          disabled={disabled || !canGenerate || Boolean(targetConfigError)}
           className="text-muted-foreground hover:text-foreground"
           onMouseEnter={showTooltip}
           onMouseLeave={hideTooltip}
@@ -317,12 +316,7 @@ export const TestCaseGenerateButton: React.FC<{
           {isGenerating ? <Spinner size="sm" /> : <Sparkles className={iconSize} />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>
-        {targetConfigError ||
-          (isRemoteDisabled
-            ? 'Requires Promptfoo Cloud connection'
-            : tooltipTitle || 'Generate test case')}
-      </TooltipContent>
+      <TooltipContent>{buttonLabel || 'Generate test case'}</TooltipContent>
     </Tooltip>
   );
 };
