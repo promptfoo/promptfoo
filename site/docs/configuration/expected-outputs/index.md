@@ -112,6 +112,9 @@ tests:
 | threshold | number           | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25 |
 | weight    | number           | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                       |
 | metric    | string           | No       | Metric name for this assertion set within the test                                                                   |
+| config    | object           | No       | Shared config passed into every assertion in the set                                                                 |
+
+Set-level `config` supplies defaults for each child's `context.config`. Child config takes precedence by key. The merge is shallow: a child object or array replaces the entire shared value for that key.
 
 ## Assertion types
 
