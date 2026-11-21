@@ -22,6 +22,8 @@ export CDP_DOMAIN=your-domain-here
 export CDP_TOKEN=your-token-here
 ```
 
+For per-provider connections, set `config.domain` and `config.apiKey` together. An explicit `config.apiKey` takes precedence over a provider `env.CDP_TOKEN`, which takes precedence over eval or process tokens.
+
 ## Basic Usage
 
 Here's a basic example of how to use the Cloudera provider:

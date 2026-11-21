@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
-import { resolveProviderApiKey } from '../credentials';
+import { resolveSelectedApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { GoogleAuthManager } from './auth';
@@ -38,7 +38,7 @@ import type {
 import type { GoogleProviderConfig } from './types';
 
 interface GeminiImageOptions {
-  config?: GoogleProviderConfig;
+  config?: GoogleProviderConfig & { apiKeyEnvar?: string };
   id?: string;
   env?: EnvOverrides;
 }
@@ -133,7 +133,7 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: GoogleProviderConfig;
+  config: GoogleProviderConfig & { apiKeyEnvar?: string };
   env?: EnvOverrides;
   private providerId: string;
 
@@ -141,7 +141,7 @@ export class GeminiImageProvider implements ApiProvider {
     this.modelName = modelName;
     this.config = options.config || {};
     this.env = options.env;
-    this.providerId = options.id ?? `google:${modelName}`;
+    this.providerId = options.id || `google:${modelName}`;
     GoogleAuthManager.validateAndWarn(
       {
         ...this.config,
@@ -166,7 +166,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+    return resolveSelectedApiKey(this.config, this.env, [
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',
@@ -175,7 +175,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getVertexApiKey(): string | undefined {
-    return GoogleAuthManager.getApiKey(this.config, this.env, true).apiKey;
+    return resolveSelectedApiKey(this.config, this.env, ['VERTEX_API_KEY', 'GOOGLE_API_KEY']);
   }
 
   /**
@@ -292,9 +292,10 @@ export class GeminiImageProvider implements ApiProvider {
         this.env?.GOOGLE_CLOUD_PROJECT ||
         (providerScopedRegion && providerScopedRegion !== 'global'),
     );
+    const selectedKey = this.config.apiKey !== undefined || this.config.apiKeyEnvar !== undefined;
     const explicitlyRequestedExpress =
       this.config.expressMode === true ||
-      Boolean(this.config.apiKey) ||
+      selectedKey ||
       (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
         !hasProviderScopedOAuthConfig);
     const effectiveRegion =
@@ -308,11 +309,13 @@ export class GeminiImageProvider implements ApiProvider {
     );
     const usesVertexExpress =
       isVertexMode &&
-      Boolean(vertexApiKey) &&
       this.config.expressMode !== false &&
       !hasOAuthConfig &&
       (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig);
 
+    if (usesVertexExpress && selectedKey && !vertexApiKey) {
+      return { error: 'The selected Vertex Express API key is empty or missing.' };
+    }
     if (usesVertexExpress && vertexApiKey) {
       const region = effectiveRegion || 'global';
       if (region !== 'global') {

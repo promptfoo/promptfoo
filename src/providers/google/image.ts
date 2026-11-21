@@ -2,7 +2,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
-import { resolveProviderApiKey } from '../credentials';
+import { resolveSelectedApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import {
@@ -18,7 +18,7 @@ import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../
 import type { GoogleProviderConfig } from './types';
 
 interface GoogleImageOptions {
-  config?: GoogleProviderConfig;
+  config?: GoogleProviderConfig & { apiKeyEnvar?: string };
   id?: string;
   env?: EnvOverrides;
 }
@@ -74,7 +74,7 @@ const IMAGEN_COSTS: Record<string, number> = {
 
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
-  config: GoogleProviderConfig;
+  config: GoogleProviderConfig & { apiKeyEnvar?: string };
   env?: EnvOverrides;
   maxRetries: number = 3;
   baseRetryDelay: number = 1000; // 1 second
@@ -82,6 +82,10 @@ export class GoogleImageProvider implements ApiProvider {
   constructor(modelName: string, options: GoogleImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
     this.env = options.env;
   }
 
@@ -129,6 +133,13 @@ export class GoogleImageProvider implements ApiProvider {
     // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
     const isVertexMode = determineGoogleVertexMode(this.config, this.env);
 
+    if (
+      isVertexMode &&
+      !apiKey &&
+      (this.config.apiKey !== undefined || this.config.apiKeyEnvar !== undefined)
+    ) {
+      return { error: 'The selected Google image API key is empty or missing.' };
+    }
     if (isVertexMode) {
       // Use Vertex AI if project ID is available
       return this.callVertexApi(prompt);
@@ -368,7 +379,7 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+    return resolveSelectedApiKey(this.config, this.env, [
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',

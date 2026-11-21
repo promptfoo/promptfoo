@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
-import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
+import { resolveSelectedApiKey } from './credentials';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
@@ -32,10 +32,13 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   config: any;
   env?: any;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, config: any = {}, env?: any, id?: string) {
     this.modelName = modelName;
     this.config = config;
     this.env = env;
+    if (id) {
+      this.id = () => id;
+    }
   }
 
   id() {
@@ -47,16 +50,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
-        getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey ||
-      (namedKey ??
-        getProviderEnvString(this.env, 'VOYAGE_API_KEY') ??
-        getEnvString('VOYAGE_API_KEY'))
-    );
+    return resolveSelectedApiKey(this.config, this.env, ['VOYAGE_API_KEY']);
   }
 
   getApiUrl(): string {
@@ -76,7 +70,8 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    if (!this.getApiKey()) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       throw new Error('Voyage API key must be set for similarity comparison');
     }
 
@@ -97,7 +92,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            Authorization: `Bearer ${apiKey}`,
             ...this.config.headers,
           },
           body: JSON.stringify(body),

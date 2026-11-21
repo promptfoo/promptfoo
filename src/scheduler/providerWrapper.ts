@@ -23,17 +23,13 @@ import type {
 } from '../types/providers';
 import type { RateLimitRegistry } from './rateLimitRegistry';
 
-/**
- * Symbol to mark providers that have already been wrapped.
- * Prevents double-wrapping which could cause issues.
- */
 const WRAPPED_SYMBOL = Symbol.for('promptfoo.rateLimitWrapped');
+const DELEGATE_SYMBOL = Symbol.for('promptfoo.capabilityDelegate');
 
-/**
- * Type to represent a provider with the rate limit wrapper symbol.
- * Uses the specific WRAPPED_SYMBOL for type safety.
- */
-type WrappedApiProvider = ApiProvider & { [WRAPPED_SYMBOL]: boolean };
+type WrappedApiProvider = ApiProvider & {
+  [WRAPPED_SYMBOL]?: true;
+  [DELEGATE_SYMBOL]?: ApiProvider;
+};
 
 const TOKEN_USAGE_FIELDS = ['prompt', 'completion', 'cached', 'total'] as const;
 const COMPLETION_DETAIL_FIELDS = [
@@ -86,6 +82,13 @@ function accumulateRetryTokenUsage(target: Partial<TokenUsage>, response: Provid
  */
 export function isRateLimitWrapped(provider: ApiProvider): boolean {
   return (provider as WrappedApiProvider)[WRAPPED_SYMBOL] === true;
+}
+
+/**
+ * Get the underlying provider for protocol detection without bypassing wrapped calls.
+ */
+export function getOriginalProvider(provider: ApiProvider): ApiProvider {
+  return (provider as WrappedApiProvider)[DELEGATE_SYMBOL] ?? provider;
 }
 
 /**
@@ -224,8 +227,9 @@ export function wrapProviderWithRateLimiting(
     },
   };
 
-  // Mark as wrapped to prevent double-wrapping
+  // Keep the original provider private while also preventing double-wrapping.
   (wrappedProvider as WrappedApiProvider)[WRAPPED_SYMBOL] = true;
+  Object.defineProperty(wrappedProvider, DELEGATE_SYMBOL, { value: provider });
 
   return wrappedProvider;
 }
