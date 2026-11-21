@@ -154,7 +154,10 @@ export function projectOutputMetadata<T>(
       }),
     ) as T;
   }
-  if (options.stripPromptText && Object.hasOwn(asRecord(projected) ?? {}, 'redteamFinalPrompt')) {
+  if (
+    options.stripPromptText &&
+    Object.prototype.hasOwnProperty.call(asRecord(projected) ?? {}, 'redteamFinalPrompt')
+  ) {
     projected = { ...projected, redteamFinalPrompt: '[prompt stripped]' };
   }
   const childOptions = metadataIsMedia ? { ...options, inheritedMediaOutput: true } : options;
@@ -186,7 +189,10 @@ export function projectOutputMetadata<T>(
       };
     },
     (value) => {
-      if (options.stripPromptText && Object.hasOwn(asRecord(value) ?? {}, 'prompt')) {
+      if (
+        options.stripPromptText &&
+        Object.prototype.hasOwnProperty.call(asRecord(value) ?? {}, 'prompt')
+      ) {
         value = { ...asRecord(value), prompt: '[prompt stripped]' };
       }
       if (!options.stripOutput) {
