@@ -1711,6 +1711,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    isCustomModule: true,
     test: (providerPath: string) => isJavascriptFile(providerPath),
     create: async (
       providerPath: string,

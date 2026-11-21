@@ -1,6 +1,10 @@
 import cliState from '../cliState';
 import logger from '../logger';
-import { loadApiProvider } from '../providers/index';
+import {
+  createGradingConfigTransform,
+  loadApiProvider,
+  loadMappedGradingProvider,
+} from '../providers/index';
 import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
@@ -17,6 +21,7 @@ import type {
   CallApiOptionsParams,
   CancellableEmbeddingProvider,
   GradingConfig,
+  LoadApiProviderContext,
   ProviderOptions,
   ProviderResponse,
   ProviderType,
@@ -189,6 +194,7 @@ export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
+  configTransform?: LoadApiProviderContext['configTransform'],
 ): Promise<ApiProvider | null> {
   if (Array.isArray(provider)) {
     throw new Error(
@@ -196,10 +202,14 @@ export async function getGradingProvider(
     );
   }
 
+  const transformContext = configTransform ? { configTransform } : {};
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
+    finalProvider = await loadApiProvider(provider, {
+      basePath: cliState.basePath,
+      ...transformContext,
+    });
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -216,25 +226,37 @@ export async function getGradingProvider(
         finalProvider = await loadApiProvider(typeValue, {
           basePath: cliState.basePath,
           env: cliState.env,
+          ...transformContext,
         });
       } else if (typeof typeValue.id === 'string') {
         finalProvider = await loadApiProvider(typeValue.id, {
           options: typeValue as ProviderOptions,
           basePath: cliState.basePath,
           env: cliState.env,
+          ...transformContext,
         });
       } else {
-        finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+        finalProvider = await getGradingProvider(type, typeValue, defaultProvider, configTransform);
       }
     } else if ('id' in provider && typeof provider.id === 'string' && provider.id) {
       finalProvider = await loadApiProvider(provider.id, {
         options: provider,
         basePath: cliState.basePath,
+        ...transformContext,
       });
     } else {
-      throw new Error(
-        `Invalid provider definition for output type '${type}'. Set a provider id or configure the '${type}' entry in the grading provider map.`,
-      );
+      const mappedProvider = configTransform
+        ? await loadMappedGradingProvider(provider, {
+            basePath: cliState.basePath,
+            ...transformContext,
+          })
+        : undefined;
+      if (!mappedProvider) {
+        throw new Error(
+          `Invalid provider definition for output type '${type}'. Set a provider id or configure the '${type}' entry in the grading provider map.`,
+        );
+      }
+      finalProvider = mappedProvider;
     }
   } else {
     // No provider specified - check defaultTest providers as fallback
@@ -261,7 +283,7 @@ export async function getGradingProvider(
 
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
-      finalProvider = await getGradingProvider(type, cfg, defaultProvider);
+      finalProvider = await getGradingProvider(type, cfg, defaultProvider, configTransform);
       if (finalProvider) {
         logger.debug('[Grading] Using provider from defaultTest fallback', {
           providerId: finalProvider.id(),
@@ -272,6 +294,13 @@ export async function getGradingProvider(
     }
   }
   return finalProvider;
+}
+
+export function getAgentRubricGradingProvider(
+  provider: GradingConfig['provider'],
+  ...template: Parameters<typeof createGradingConfigTransform>
+): Promise<ApiProvider | null> {
+  return getGradingProvider('text', provider, null, createGradingConfigTransform(...template));
 }
 
 export async function getAndCheckProvider(
