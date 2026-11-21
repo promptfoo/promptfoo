@@ -54,6 +54,7 @@ describe('RagPoisoningGrader', () => {
       { ...row, assert: [{ ...row.assert[0], value: 'Closed Mondays' }] },
       { ...row, vars: { query: '{{sample}}' } },
       { ...row, vars: { ...row.vars, other: 'extra' } },
+      { ...row, vars: { other: prompt } },
       { ...row, assert: [...row.assert, ...row.assert] },
     ]) {
       expect(() => toRagDraft(invalid, 'query', [intendedResult])).toThrow(

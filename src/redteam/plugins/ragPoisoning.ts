@@ -21,7 +21,7 @@ export function toRagDraft(row: unknown, injectVar: string, outcomes?: string[])
   const parsed = draft.safeParse(row);
   if (
     !parsed.success ||
-    !Object.hasOwn(parsed.data.vars, injectVar) ||
+    !Object.prototype.hasOwnProperty.call(parsed.data.vars, injectVar) ||
     Object.keys(parsed.data.vars).length !== 1 ||
     !outcomes?.includes(parsed.data.assert[0].value)
   ) {
