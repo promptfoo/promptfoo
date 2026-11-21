@@ -15,7 +15,8 @@ vi.mock('../../../src/matchers/llmGrading', () => ({
   matchesLlmRubric: vi.fn(),
 }));
 
-vi.mock('../../../src/redteam/providers/shared', () => ({
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/redteam/providers/shared')>()),
   redteamProviderManager: {
     getProvider: vi.fn(),
     getGradingProvider: vi.fn().mockResolvedValue({}),

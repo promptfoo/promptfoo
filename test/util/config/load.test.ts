@@ -1171,6 +1171,26 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('normalizes graderProvider aliases in each config before merging defaultTest options', async () => {
+    const config1 = {
+      defaultTest: { options: { provider: 'legacy-grader' } },
+    };
+    const config2 = {
+      defaultTest: { options: { graderProvider: 'explicit-grader' } },
+    };
+
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.defaultTest).toMatchObject({
+      options: { provider: 'explicit-grader' },
+    });
+    expect(result.defaultTest).not.toHaveProperty('options.graderProvider');
+  });
+
   it('should handle undefined defaultTest in configs', async () => {
     const config = {
       providers: ['provider1'],

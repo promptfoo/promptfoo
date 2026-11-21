@@ -2072,6 +2072,25 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should use graderProvider from test options for direct assertion calls', async () => {
+    const graderCall = vi.fn<ApiProvider['callApi']>(async () => ({
+      output: JSON.stringify({ pass: true, score: 1, reason: 'Alias grader used' }),
+    }));
+    const graderProvider = createMockProvider({ id: 'graderProvider', callApi: graderCall });
+    const assertion: Assertion = { type: 'llm-rubric', value: 'Expected output' };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion,
+      test: { options: { graderProvider } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+
+    expect(result).toMatchObject({ pass: true, reason: 'Alias grader used' });
+    expect(graderCall).toHaveBeenCalled();
+  });
+
   // Test for levenshtein assertion
   const levenshteinAssertion: Assertion = {
     type: 'levenshtein',

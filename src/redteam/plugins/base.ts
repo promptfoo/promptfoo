@@ -10,7 +10,7 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
-import { redteamProviderManager } from '../providers/shared';
+import { getTextGradingProvider, redteamProviderManager } from '../providers/shared';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
@@ -467,6 +467,7 @@ export abstract class RedteamGraderBase {
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
+      useTestGradingProvider,
       ...templateGradingContext
     } = gradingContext ?? {};
 
@@ -574,12 +575,23 @@ export abstract class RedteamGraderBase {
       typeof cliState.config?.defaultTest === 'object'
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
+    const testGraderProvider = getTextGradingProvider(
+      useTestGradingProvider
+        ? (test.options?.provider ?? test.options?.graderProvider)
+        : test.options?.graderProvider,
+    );
     const hasConfiguredGradingProvider = Boolean(
-      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+      testGraderProvider ||
+        cliState.config?.redteam?.provider ||
+        defaultTest?.options?.provider ||
+        defaultTest?.options?.graderProvider,
     );
     const grading = {
       ...test.options,
-      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+      provider: await redteamProviderManager.getGradingProvider({
+        provider: testGraderProvider,
+        jsonOnly: true,
+      }),
     };
     if (!hasConfiguredGradingProvider) {
       Object.defineProperty(grading, '__promptfooPreferRemote', {

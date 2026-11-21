@@ -577,6 +577,38 @@ describe('shared redteam provider utilities', () => {
         expect(mockedLoadApiProviders).toHaveBeenCalledWith(['from-defaultTest-provider']);
       });
 
+      it.each(['provider', 'graderProvider'])(
+        'prefers the defaultTest.options.%s text grader over the target',
+        async (key) => {
+          redteamProviderManager.clearProvider();
+          const grader = createMockProvider({ id: 'configured-grader' });
+          mockedLoadApiProviders.mockResolvedValue([grader]);
+          setCliStateConfig({
+            defaultTest: { provider: 'target', options: { [key]: { text: 'configured-grader' } } },
+          });
+          expect(await redteamProviderManager.getGradingProvider()).toBe(grader);
+          expect(mockedLoadApiProviders).toHaveBeenCalledWith(['configured-grader']);
+        },
+      );
+
+      it.each(['provider', 'graderProvider'])(
+        'falls back to defaultTest.provider when defaultTest.options.%s has no text provider',
+        async (key) => {
+          redteamProviderManager.clearProvider();
+          const target = createMockProvider({ id: 'configured-target' });
+          mockedLoadApiProviders.mockResolvedValue([target]);
+          setCliStateConfig({
+            defaultTest: {
+              provider: 'configured-target',
+              options: { [key]: { embedding: 'local-embedding' } },
+            },
+          });
+
+          expect(await redteamProviderManager.getGradingProvider()).toBe(target);
+          expect(mockedLoadApiProviders).toHaveBeenCalledWith(['configured-target']);
+        },
+      );
+
       it('falls back to redteam provider when grading not set', async () => {
         redteamProviderManager.clearProvider();
         setCliStateConfig({}); // no defaultTest

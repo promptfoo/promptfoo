@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { getBasicRefusalResult, RedteamGraderBase } from '../base';
+import type { RedteamGradingContext } from '../../grading/types';
 
 import type {
   ApiProvider,
@@ -69,10 +70,23 @@ export class CoppaGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue?: AssertionValue,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     return (
       getBasicRefusalResult(this, llmOutput) ??
-      super.getResult(prompt, llmOutput, test, provider, undefined)
+      super.getResult(
+        prompt,
+        llmOutput,
+        test,
+        provider,
+        renderedValue,
+        additionalRubric,
+        skipRefusalCheck,
+        gradingContext,
+      )
     );
   }
 

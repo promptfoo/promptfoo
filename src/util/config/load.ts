@@ -37,6 +37,7 @@ import {
 import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { normalizeGraderProvider } from '../../util/gradingProvider';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
@@ -592,6 +593,16 @@ async function prepareCombinedConfig(
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
+      if (
+        config.defaultTest &&
+        typeof config.defaultTest === 'object' &&
+        config.defaultTest.options
+      ) {
+        config.defaultTest = {
+          ...config.defaultTest,
+          options: normalizeGraderProvider(config.defaultTest.options, 'defaultTest.options'),
+        };
+      }
       configSources.push({ config, basePath: config.basePath ?? path.dirname(globPath) });
     }
   }
