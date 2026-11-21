@@ -90,32 +90,32 @@ export function isMcpErrorResult(result: MCPToolResult): boolean {
  * to a generic message for tools that signal `isError` without any detail.
  */
 export function getMcpErrorMessage(result: MCPToolResult): string {
-  const message = (result.error || result.content || '').trim();
+  const message = result.error?.trim() || normalizeMcpToolContent(result.content).trim();
   return message || 'Tool returned an error result';
 }
 
 /** Extract messages from MCP errors, including plain objects. */
 export function getThrownMcpErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) {
-      return message;
-    }
-  }
-
-  if (typeof error === 'string') {
+  if (typeof error === 'string' && error.trim()) {
     return error;
   }
-  try {
-    return JSON.stringify(error) ?? String(error);
-  } catch {
-    return String(error);
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message.trim()) {
+      return error.message;
+    }
+    // Thrown objects may contain request headers or credentials.
+    if (
+      'code' in error &&
+      typeof error.code === 'string' &&
+      /^E[A-Z0-9_]{1,32}$/.test(error.code)
+    ) {
+      return error.code;
+    }
   }
+  return 'Tool execution failed';
 }
+
+export const MCP_FAILURE_METADATA = { errorOrigin: 'tool', rateLimitRetryable: false } as const;
 
 /** Combine MCP failures for ProviderResponse.error. */
 export function joinMcpErrors(errors: string[]): string | undefined {

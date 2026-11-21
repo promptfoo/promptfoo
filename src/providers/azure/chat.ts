@@ -22,7 +22,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { joinMcpErrors } from '../mcp/util';
+import { joinMcpErrors, MCP_FAILURE_METADATA } from '../mcp/util';
 import {
   applyGpt6RequestRules,
   getGpt6ChatReasoningEffort,
@@ -641,7 +641,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const completionDetails = data.usage && getOpenAICompletionTokenDetails(data.usage);
       return {
         output,
-        ...(mcpError ? { error: mcpError, metadata: { rateLimitRetryable: false } } : {}),
+        ...(mcpError ? { error: mcpError, metadata: { ...MCP_FAILURE_METADATA } } : {}),
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {

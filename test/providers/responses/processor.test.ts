@@ -170,7 +170,10 @@ describe('ResponsesProcessor', () => {
         ],
         usage: { input_tokens: 30, output_tokens: 15 },
       };
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('tool output');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'tool output',
+        mcpErrors: [],
+      });
       const result = await processor.processResponseOutput(data, {}, false, { multiAgent: true });
       expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
         subagentCall,
@@ -254,9 +257,10 @@ describe('ResponsesProcessor', () => {
     it.each(['completed', undefined])(
       'should process function calls with status %s',
       async (status) => {
-        mockFunctionCallbackHandler.processCalls.mockResolvedValue(
-          'Function executed successfully',
-        );
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+          output: 'Function executed successfully',
+          mcpErrors: [],
+        });
 
         const mockData = {
           output: [
@@ -283,7 +287,10 @@ describe('ResponsesProcessor', () => {
     it.each(['incomplete', 'in_progress'])(
       'should retain %s function calls without invoking callbacks',
       async (status) => {
-        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+          output: 'Unexpected callback',
+          mcpErrors: [],
+        });
         const item = {
           id: 'fc_unfinished',
           call_id: 'call_unfinished',
@@ -327,7 +334,10 @@ describe('ResponsesProcessor', () => {
     it.each(['incomplete', 'in_progress'])(
       'uses the enclosing %s response status for a status-less function call',
       async (status) => {
-        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+          output: 'Unexpected callback',
+          mcpErrors: [],
+        });
         const item = { type: 'function_call', name: 'lookup', arguments: '{"value":"partial"}' };
         const data = {
           status,
@@ -408,7 +418,10 @@ describe('ResponsesProcessor', () => {
     ])(
       'uses the nearest status for $type (response: $responseStatus, message: $messageStatus, call: $callStatus)',
       async ({ type, responseStatus, messageStatus, callStatus, execute }) => {
-        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Callback output');
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+          output: 'Callback output',
+          mcpErrors: [],
+        });
         const item = {
           type,
           name: 'lookup',
@@ -439,7 +452,10 @@ describe('ResponsesProcessor', () => {
     it.each([true, false])(
       'should retain partial text and execute completed siblings (unfinished first: %s)',
       async (unfinishedFirst) => {
-        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Completed call result');
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+          output: 'Completed call result',
+          mcpErrors: [],
+        });
         const completed = {
           type: 'function_call',
           name: 'test_function',
@@ -565,7 +581,10 @@ describe('ResponsesProcessor', () => {
       ['tool_use', 'incomplete'],
       ['tool_use', 'in_progress'],
     ])('should retain unfinished nested %s (%s) and partial text', async (type, status) => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Unexpected callback',
+        mcpErrors: [],
+      });
       const item = {
         type,
         name: 'test_function',
@@ -614,7 +633,10 @@ describe('ResponsesProcessor', () => {
       ['tool_use', 'completed', '{}'],
       ['tool_use', undefined, '{"param":"value"}'],
     ])('should still dispatch nested %s with status %s and args %s', async (type, status, args) => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Completed call result');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Completed call result',
+        mcpErrors: [],
+      });
       const item = {
         type,
         name: 'test_function',
@@ -813,6 +835,25 @@ describe('ResponsesProcessor', () => {
         expect(result.metadata?.responseId).toBe('resp_unfinished_tool');
       },
     );
+
+    it('retains tool failure when a multi-agent response filters intermediate output', async () => {
+      const data = {
+        output: [
+          { type: 'mcp_call', name: 'lookup', error: '429 rate limit' },
+          {
+            type: 'message',
+            agent: { agent_name: '/root' },
+            role: 'assistant',
+            phase: 'final_answer',
+            content: [{ type: 'output_text', text: 'Recovered' }],
+          },
+        ],
+      };
+      const result = await processor.processResponseOutput(data, {}, false, { multiAgent: true });
+      expect(result.output).toBe('Recovered');
+      expect(result.error).toBe('MCP Tool Error (lookup): 429 rate limit');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+    });
 
     it('preserves legacy hosted MCP output when no status is supplied', async () => {
       const result = await processor.processResponseOutput(

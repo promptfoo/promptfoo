@@ -33,8 +33,9 @@ export type FunctionCallbackConfig = Record<string, FunctionCallback | string>;
  * Result of processing function calls
  */
 export interface FunctionCallResult {
-  output: string | any;
+  output: any;
   isError: boolean;
+  isMcpError?: true;
 }
 
 /** A callback result before conversion to a provider's tool-result wire format. */

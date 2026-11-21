@@ -25,6 +25,7 @@ import {
   getThrownMcpErrorMessage,
   isMcpErrorResult,
   joinMcpErrors,
+  MCP_FAILURE_METADATA,
   normalizeMcpToolContent,
 } from '../mcp/util';
 import {
@@ -1296,7 +1297,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                   });
                   if (callApiOptions?.abortSignal?.aborted) {
                     return {
-                      error: `MCP Tool Error (${functionName}): ${errorMessage}`,
+                      error: message,
                       tokenUsage: getTokenUsage(data, cached),
                       cached,
                       latencyMs,
@@ -1306,7 +1307,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                       guardrails: { flagged: contentFiltered },
                       metadata: {
                         ...providerMetadata,
-                        errorOrigin: 'tool',
+                        ...MCP_FAILURE_METADATA,
                         http: {
                           status,
                           statusText,
@@ -1342,8 +1343,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                   errorOrigin = 'tool';
                   throw error;
                 }
-                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                results.push(`MCP Tool Error (${functionName}): ${error}`);
+                const errorMessage = getThrownMcpErrorMessage(error);
+                results.push(formatMcpToolError(functionName, errorMessage));
                 mcpToolCalls.push({
                   id: toolCallId,
                   name: functionName,
@@ -1395,7 +1396,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         }
         throwIfAborted(callApiOptions?.abortSignal);
-        if (hasSuccessfulCallback && results.length > 0) {
+        const mcpError = joinMcpErrors(
+          mcpToolCalls
+            .filter((call) => call.is_error)
+            .map((call) => formatMcpToolError(call.name, String(call.output))),
+        );
+        if (mcpError || hasSuccessfulCallback) {
           return {
             // A regular callback failure retains the original tool-call output.
             output: hasSuccessfulCallback ? results.join('\n') : output,
@@ -1415,7 +1421,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 headers: responseHeaders ?? {},
               },
               ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
-              ...(mcpError && { rateLimitRetryable: false }),
+              ...(mcpError && MCP_FAILURE_METADATA),
             },
           };
         }

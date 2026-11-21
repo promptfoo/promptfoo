@@ -186,8 +186,9 @@ describe('getThrownMcpErrorMessage', () => {
     expect(getThrownMcpErrorMessage({ message: 'connection lost' })).toBe('connection lost');
   });
 
-  it('serializes thrown objects without message text', () => {
-    expect(getThrownMcpErrorMessage({ code: 'ECONNRESET' })).toBe('{"code":"ECONNRESET"}');
+  it('preserves known error codes without serializing request details', () => {
+    expect(getThrownMcpErrorMessage({ code: 'ECONNRESET', secret: 'private' })).toBe('ECONNRESET');
+    expect(getThrownMcpErrorMessage({ secret: 'private' })).toBe('Tool execution failed');
   });
 });
 

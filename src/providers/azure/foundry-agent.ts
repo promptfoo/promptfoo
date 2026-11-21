@@ -1055,7 +1055,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       };
     }
     if (result.error && outputText) {
-      return { ...result, error: undefined, output: outputText, raw: response, metadata };
+      const error = result.metadata?.errorOrigin === 'tool' ? result.error : undefined;
+      return { ...result, error, output: outputText, raw: response, metadata };
     }
     return { ...result, metadata };
   }

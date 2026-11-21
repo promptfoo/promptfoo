@@ -6,7 +6,13 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { executeCallback, resolveCallback } from './functionCallbackExecutor';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getMcpErrorMessage,
+  getThrownMcpErrorMessage,
+  isMcpErrorResult,
+} from './mcp/util';
 import { throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
@@ -225,35 +231,23 @@ export class FunctionCallbackHandler {
       callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
 
-    const mcpErrors = results.filter((r) => r.isError && r.isMcpError).map((r) => String(r.output));
-
-    // If any callback succeeded, or any MCP tool failed, return processed
-    // results. MCP failures are intentional user-facing output, unlike regular
-    // callback failures that preserve the original tool calls.
-    const hasSuccess = results.some(
-      (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
-    );
-
-    if (hasSuccess || mcpErrors.length > 0) {
-      const outputs = results.map((r) => r.output);
-      // For single call with successful callback, return just the output
-      if (!isArray && outputs.length === 1) {
-        return { output: outputs[0], mcpErrors };
-      }
-      // For multiple calls, join string results
-      return {
-        output: outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs,
-        mcpErrors,
-      };
-    }
-
-    // All failed or no callbacks - return stringified results
-    if (!isArray && results.length === 1) {
+    const mcpErrors = results.filter((r) => r.isMcpError).map((r) => String(r.output));
+    if (!isArray) {
       return { output: results[0].output, mcpErrors };
     }
 
-    // For arrays, return the original array
-    return { output: calls, mcpErrors };
+    // Keep the original array when no callback or MCP tool handled the calls.
+    const hasSuccess = results.some(
+      (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
+    );
+    if (!hasSuccess && mcpErrors.length === 0) {
+      return { output: calls, mcpErrors };
+    }
+    const outputs = results.map((r) => r.output);
+    return {
+      output: outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs,
+      mcpErrors,
+    };
   }
 
   /**

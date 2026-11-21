@@ -41,6 +41,7 @@ import {
   getThrownMcpErrorMessage,
   isMcpErrorResult,
   joinMcpErrors,
+  MCP_FAILURE_METADATA,
   normalizeMcpToolContent,
 } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -1617,7 +1618,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Model output errors take precedence over tool failures.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
       if (mcpErrors.length > 0) {
-        metadata.rateLimitRetryable = false;
+        Object.assign(metadata, MCP_FAILURE_METADATA);
       }
       return {
         output: dispatchResults.join('\n'),
@@ -1834,7 +1835,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Model output errors take precedence over tool failures.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
       if (mcpErrors.length > 0) {
-        metadata.rateLimitRetryable = false;
+        Object.assign(metadata, MCP_FAILURE_METADATA);
       }
 
       return {

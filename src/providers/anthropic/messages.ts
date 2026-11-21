@@ -27,6 +27,7 @@ import {
   getThrownMcpErrorMessage,
   isMcpErrorResult,
   joinMcpErrors,
+  MCP_FAILURE_METADATA,
   normalizeMcpToolContent,
 } from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
@@ -1201,7 +1202,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       });
       const cost = this.calculateMessageCosts(config, responses);
 
-      const mcpMetadata = toolCalls.length > 0 ? { toolCalls } : undefined;
+      const mcpError = joinMcpErrors(
+        toolCalls.filter((call) => call.is_error).map((call) => String(call.output)),
+      );
+      const mcpMetadata =
+        toolCalls.length > 0 ? { toolCalls, ...(mcpError && MCP_FAILURE_METADATA) } : undefined;
 
       if (error) {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
@@ -1253,22 +1258,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         processedOutputFormat,
         false,
       );
-      const mcpError = joinMcpErrors(
-        toolCalls.filter((call) => call.is_error).map((call) => String(call.output)),
-      );
-      return {
-        ...response,
-        ...(mcpMetadata
-          ? {
-              metadata: {
-                ...response.metadata,
-                ...mcpMetadata,
-                ...(mcpError && { rateLimitRetryable: false }),
-              },
-            }
-          : {}),
-        ...(mcpError ? { error: mcpError } : {}),
-      };
+      if (mcpMetadata) {
+        response.metadata = { ...response.metadata, ...mcpMetadata };
+      }
+      if (mcpError) {
+        response.error ??= mcpError;
+      }
+      return response;
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,

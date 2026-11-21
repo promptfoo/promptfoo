@@ -1006,11 +1006,11 @@ describe('FunctionCallbackHandler', () => {
       );
 
       expect(result.output).toBe(
-        'MCP Tool Error (read_file): Path traversal not allowed\nMCP Tool Error (write_file): {"code":"EACCES"}',
+        'MCP Tool Error (read_file): Path traversal not allowed\nMCP Tool Error (write_file): EACCES',
       );
       expect(result.mcpErrors).toEqual([
         'MCP Tool Error (read_file): Path traversal not allowed',
-        'MCP Tool Error (write_file): {"code":"EACCES"}',
+        'MCP Tool Error (write_file): EACCES',
       ]);
     });
 

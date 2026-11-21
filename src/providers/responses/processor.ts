@@ -1,5 +1,12 @@
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getThrownMcpErrorMessage,
+  joinMcpErrors,
+  MCP_FAILURE_METADATA,
+} from '../mcp/util';
 import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 import { isRootFinalAnswer } from './stream';
 
@@ -18,8 +25,8 @@ import type {
  */
 function extractMetadata(data: any, processedOutput?: ProcessedOutput): Record<string, any> {
   const metadata: Record<string, any> = {};
-  if (processedOutput.mcpError) {
-    metadata.rateLimitRetryable = false;
+  if (processedOutput?.mcpError) {
+    Object.assign(metadata, MCP_FAILURE_METADATA);
   }
 
   // Response ID - for linking to OpenAI dashboard
@@ -124,24 +131,11 @@ export class ResponsesProcessor {
         data,
       );
 
-      if (processedOutput.isRefusal) {
-        return {
-          output: processedOutput.refusal,
-          tokenUsage: getResponsesTokenUsage(data, cached),
-          isRefusal: true,
-          cached,
-          ...(cost === undefined ? {} : { cost }),
-          ...(processedOutput.mcpError ? { error: processedOutput.mcpError } : {}),
-          raw: data,
-          metadata: extractMetadata(data, processedOutput),
-          ...(finishReason && { finishReason }),
-        };
-      }
+      const { isRefusal, mcpError } = processedOutput;
+      let finalOutput = isRefusal ? processedOutput.refusal : processedOutput.result;
 
-      let finalOutput: string | any = processedOutput.result;
-
-      // Handle JSON schema parsing
       if (
+        !isRefusal &&
         requestConfig.response_format?.type === 'json_schema' &&
         typeof finalOutput === 'string'
       ) {
@@ -157,7 +151,8 @@ export class ResponsesProcessor {
         tokenUsage: getResponsesTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
-        ...(processedOutput.mcpError ? { error: processedOutput.mcpError } : {}),
+        ...(mcpError && { error: mcpError }),
+        ...(isRefusal && { isRefusal: true }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
         ...(finishReason && { finishReason }),
@@ -165,7 +160,7 @@ export class ResponsesProcessor {
 
       // Add annotations if present (for deep research citations)
       // This maintains backwards compatibility for code reading result.raw.annotations
-      if (processedOutput.annotations && processedOutput.annotations.length > 0) {
+      if (!isRefusal && processedOutput.annotations?.length) {
         result.raw = { ...data, annotations: processedOutput.annotations };
       }
 
@@ -209,6 +204,10 @@ export class ResponsesProcessor {
       }
 
       const processed = await this.processOutputItem(item, context);
+      if (processed.mcpError) {
+        mcpErrors.push(processed.mcpError);
+      }
+
       // A turn can pause for tools before the root produces a final answer.
       if (context.multiAgent && !isRootFinalAnswer(item)) {
         if (item.type === 'function_call' && processed.content) {
@@ -231,10 +230,6 @@ export class ResponsesProcessor {
       // Collect annotations
       if (processed.annotations) {
         annotations.push(...processed.annotations);
-      }
-
-      if (processed.mcpError) {
-        mcpErrors.push(processed.mcpError);
       }
     }
 
@@ -322,15 +317,14 @@ export class ResponsesProcessor {
       }
 
       case 'mcp_call': {
-        let content: string;
-
-        if (item.error) {
-          content = `MCP Tool Error (${item.name}): ${item.error}`;
-        } else {
-          content = `MCP Tool Result (${item.name}): ${item.output}`;
+        if (item.error || (item.status != null && item.status !== 'completed')) {
+          const detail = item.error
+            ? getThrownMcpErrorMessage(item.error)
+            : `tool call ${item.status}`;
+          const mcpError = formatMcpToolError(item.name, detail);
+          return Promise.resolve({ content: mcpError, mcpError });
         }
-
-        return Promise.resolve({ content });
+        return Promise.resolve({ content: formatMcpToolResult(item.name, item.output) });
       }
 
       case 'mcp_approval_request': {
@@ -355,8 +349,6 @@ export class ResponsesProcessor {
     if (status === 'incomplete' || status === 'in_progress') {
       return { content: JSON.stringify(item) };
     }
-
-    let functionResult: string;
 
     // Check if this is a meaningful function call or just a status update
     if (
@@ -420,14 +412,19 @@ export class ResponsesProcessor {
       } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
         const status = contentItem.status ?? item.status ?? context.data.status;
         const incomplete = ['incomplete', 'in_progress'].includes(status);
-        const toolOutput = incomplete
-          ? content + JSON.stringify(contentItem)
-          : await this.config.functionCallbackHandler.processCalls(
-              contentItem,
-              context.config.functionToolCallbacks,
-            );
+        if (incomplete) {
+          if (!context.multiAgent) {
+            content += JSON.stringify(contentItem);
+          }
+          continue;
+        }
+        const { output, mcpErrors } = await this.config.functionCallbackHandler.processCalls(
+          contentItem,
+          context.config.functionToolCallbacks,
+        );
+        messageMcpErrors.push(...mcpErrors);
         if (!context.multiAgent) {
-          content = toolOutput;
+          content = output;
         }
       } else if (contentItem.type === 'refusal') {
         refusal = contentItem.refusal;
