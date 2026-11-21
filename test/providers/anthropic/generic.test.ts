@@ -5,6 +5,7 @@ import logger from '../../../src/logger';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { loadApiProvider } from '../../../src/providers/index';
+import { checkProviderApiKeys } from '../../../src/util/provider';
 import { mockProcessEnv } from '../../util/utils';
 
 const { createProxyAgentFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
@@ -260,6 +261,8 @@ describe('AnthropicGenericProvider', () => {
     let restoreEnv: (() => void) | undefined;
 
     beforeEach(() => {
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
+      claudeCodeAuthMocks.isCredentialExpired.mockReset();
       restoreEnv = mockProcessEnv({
         ANTHROPIC_API_KEY: undefined,
         ANTHROPIC_AUTH_TOKEN: undefined,
@@ -284,6 +287,7 @@ describe('AnthropicGenericProvider', () => {
 
       expect(provider.usingClaudeCodeOAuth).toBe(true);
       expect(provider.requiresApiKey()).toBe(false);
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
       expect(provider.apiKey).toBeUndefined();
       // Bearer auth should be configured via the underlying Anthropic SDK.
       expect(provider.anthropic).toBeInstanceOf(Anthropic);
@@ -332,21 +336,28 @@ describe('AnthropicGenericProvider', () => {
 
       expect(provider.usingClaudeCodeOAuth).toBe(false);
       expect(provider.apiKey).toBe('config-key');
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
       // With an explicit key we should not have loaded a credential at all.
       expect(claudeCodeAuthMocks.loadClaudeCodeCredential).not.toHaveBeenCalled();
     });
 
-    it('leaves usingClaudeCodeOAuth false when no credential is found', () => {
-      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
+    it.each([undefined, 'https://custom.anthropic.api'])(
+      'reports missing credentials during preflight with base URL %s',
+      (apiBaseUrl) => {
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
 
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
-        config: { apiKeyRequired: false },
-      });
+        const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+          config: { apiKeyRequired: false, apiBaseUrl },
+        });
 
-      expect(provider.usingClaudeCodeOAuth).toBe(false);
-      expect(provider.apiKey).toBeUndefined();
-      expect(provider.anthropic.authToken).toBeNull();
-    });
+        expect(provider.usingClaudeCodeOAuth).toBe(false);
+        expect(provider.apiKey).toBeUndefined();
+        expect(provider.anthropic.authToken).toBeNull();
+        expect(checkProviderApiKeys([provider])).toEqual(
+          new Map([['ANTHROPIC_API_KEY', [provider.id()]]]),
+        );
+      },
+    );
 
     it('warns and stashes an expired credential so subclasses can throw at request time', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);

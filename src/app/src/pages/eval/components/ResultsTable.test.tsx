@@ -175,7 +175,8 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
   };
 }
 
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./store')>()),
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
@@ -971,10 +972,11 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('250')).toBeInTheDocument();
   });
 
-  it('renders object provider IDs and request/assert metrics in the prompt header', () => {
+  it('renders object provider IDs and total request/assert metrics in a filtered prompt header', () => {
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
         inComparisonMode: false,
+        filteredMetrics: [{ assertPassCount: 0, assertFailCount: 5 }],
         table: {
           body: [
             {
@@ -1019,6 +1021,21 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('Asserts:')).toBeInTheDocument();
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['zero', { assertPassCount: 0, assertFailCount: 0 }],
+    ['error-only', { testErrorCount: 3 }],
+  ])('omits assertion counts for a prompt with %s metrics', (_name, metrics) => {
+    mockHeaderTable({
+      head: { prompts: [{ provider: 'test-provider', metrics }], vars: [] },
+      body: [],
+    });
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('test-provider')).toBeInTheDocument();
+    expect(screen.queryByText('Asserts:')).not.toBeInTheDocument();
   });
 
   it('keeps the prompt header divider visible above streamed result rows', () => {
@@ -2516,6 +2533,57 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
 
 describe('ResultsTable Pagination', () => {
   const defaultProps = createDefaultProps();
+
+  it('uses the initial request limit when switching from a small eval to a larger one', async () => {
+    let count = 5;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({ table: createEmptyTable(), filteredResultsCount: count, fetchEvalData }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    count = 120;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, pageSize: 50 }),
+    );
+  });
+
+  it('keeps the current page after a rating changes the count, and clamps only when needed', async () => {
+    let count = 220;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table: createEmptyTable(),
+        filteredResultsCount: count,
+        totalResultsCount: 220,
+        fetchEvalData,
+      }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Results per page'));
+    await user.click(screen.getByRole('option', { name: '100' }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+
+    fetchEvalData.mockClear();
+    count = 219;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+    expect(fetchEvalData).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(3);
+    count = 200;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText('Go to page')).toHaveValue(2));
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, pageSize: 100 }),
+    );
+  });
 
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
     vi.mocked(useTableStore).mockImplementation(() =>

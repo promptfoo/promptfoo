@@ -130,6 +130,11 @@ async function readReportFile(file: string, signal?: AbortSignal): Promise<Buffe
 
 function payloadSummary(raw: unknown, source: CodexSecurityResult['source']) {
   const isScan = raw !== null && typeof raw === 'object' && 'manifest' in raw;
+  if (isScan && 'operation' in raw && raw.operation === 'validation') {
+    throw new Error(
+      'Codex Security report_file scan metadata disagrees with validation operation.',
+    );
+  }
   const scan = isScan ? ScanReportSchema.safeParse(raw) : null;
   const validation = isScan ? null : ValidationReportSchema.safeParse(raw);
   if (!(scan?.success || validation?.success)) {

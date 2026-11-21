@@ -157,6 +157,9 @@ describe('Codex Security replay evidence validation', () => {
   it('rejects scan payloads labeled as validation even when the SDK omits the operation', async () => {
     const envelope = replay();
     envelope.result.operation = 'validation';
+    await expect(load({ ...scanPayload(), operation: 'validation' })).rejects.toThrow(
+      'metadata disagrees',
+    );
 
     await expect(load(envelope)).rejects.toThrow('metadata disagrees');
   });

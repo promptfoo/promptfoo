@@ -26,11 +26,46 @@ const responseData = {
   },
 };
 
+describe('GPT-6.2 background Responses billing', () => {
+  it.each([
+    { returnedWindow: undefined, multiplier: 0.6 },
+    { returnedWindow: '2h', multiplier: 0.7 },
+    { returnedWindow: 'soonest', multiplier: 1 },
+  ])(
+    'uses the effective completion window ($returnedWindow)',
+    async ({ returnedWindow, multiplier }) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          ...responseData,
+          id: `resp_background_${returnedWindow ?? 'omitted'}`,
+          model: 'gpt-6.2-sol',
+          background: true,
+          background_options: returnedWindow ? { completion_window: returnedWindow } : undefined,
+          service_tier: 'default',
+          output: [...responseData.output, { type: 'file_search_call', status: 'completed' }],
+        }),
+      );
+      const result = await new OpenAiResponsesProvider('gpt-6.2-sol', {
+        config: {
+          apiKey: 'test-key',
+          background: true,
+          passthrough: { background_options: { completion_window: '8h' } },
+        },
+      }).callApi('Say ready.');
+
+      expect(result.error).toBeUndefined();
+      const standardTokenCost = (1250 * 2 + 500 * 0.1 + 250 * 2.5 + 1000 * 10) / 1e6;
+      expect(result.cost).toBeCloseTo(standardTokenCost * multiplier + 0.0025, 10);
+    },
+  );
+});
+
 describe('GPT-6.1 Sol Responses with Ultrafast', () => {
   it.each([
     { reported: 'ultrafast', cost: 0.018 },
     { reported: undefined, cost: 0.018 },
     { reported: 'default', cost: 0.003 },
+    { reported: 'fast', cost: 0.006 },
   ])('forwards Ultrafast and bills the actual tier $reported', async ({ reported, cost }) => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       cached: false,
@@ -62,6 +97,43 @@ describe('GPT-6.1 Sol Responses with Ultrafast', () => {
     expect(result.output).toBe('Ready.');
     expect(result.cost).toBeCloseTo(cost, 10);
   });
+
+  it.each(['us', 'eu'])(
+    'routes Sol Ultrafast to the %s residency endpoint and bills regional cache rates',
+    async (region) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        data: { ...responseData, model: 'gpt-6.1-sol', service_tier: 'ultrafast' },
+      });
+      const result = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: `https://${region}.api.openai.com/v1`,
+          service_tier: 'ultrafast',
+        },
+      }).callApi('Say ready.');
+
+      const [url, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      expect(url).toBe(`https://${region}.api.openai.com/v1/responses`);
+      expect(JSON.parse(options?.body as string)).toMatchObject({
+        model: 'gpt-6.1-sol',
+        service_tier: 'ultrafast',
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Ready.');
+      expect(result.cost).toBeCloseTo(
+        ((1250 * 12 + 500 * 0.6 + 250 * 15 + 1000 * 60) / 1e6) * 1.1,
+        10,
+      );
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 2000,
+        completion: 1000,
+        completionDetails: { cacheReadInputTokens: 500, cacheCreationInputTokens: 250 },
+      });
+    },
+  );
 
   it('surfaces a model or account rejection of Ultrafast from Responses', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
@@ -734,9 +806,14 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
     },
   );
 
-  it.each(['gpt-6-sol', 'gpt-6-luna'])(
-    'uses reported OpenRouter Responses billing and preserves BYOK uncertainty for %s',
-    async (model) => {
+  it.each([
+    ['gpt-6-sol', 'openrouter.ai'],
+    ['gpt-6-luna', 'openrouter.ai'],
+    ['gpt-6.2-astra', 'eu.openrouter.ai'],
+    ['gpt-6.2-sol', 'us.openrouter.ai'],
+  ])(
+    'uses reported OpenRouter Responses billing and preserves BYOK uncertainty for %s at %s',
+    async (model, host) => {
       const counts = { input_tokens: 1_000, output_tokens: 100, total_tokens: 1_100 };
       for (const { usage, config, cached, expected } of [
         {
@@ -788,7 +865,7 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           },
         });
         const result = await new OpenAiResponsesProvider(`openai/${model}`, {
-          config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1', ...config },
+          config: { apiKey: 'test-key', apiBaseUrl: `https://${host}/api/v1`, ...config },
         }).callApi('Say ready.');
         expect(result.error).toBeUndefined();
         expect(result.output).toContain('Ready.');
@@ -1015,36 +1092,90 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   it.each([
     ['gpt-5.6-terra', 0.014],
     ['gpt-5.6-luna', 0.0014],
-  ] as const)('applies GovCloud rates for %s only on In-Region Mantle', async (model, baseCost) => {
-    const usage = {
-      input_tokens: 1_000,
-      output_tokens: 1_000,
-      total_tokens: 2_000,
-      cache_write_input_tokens: 0,
-    };
-    const runtimeUrl = 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1';
-    const callApi = async (wireModel: string, apiBaseUrl: string) => {
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        data: { ...responseData, model: wireModel, usage },
-      });
-      const result = await new OpenAiResponsesProvider(wireModel, {
-        config: { apiKey: 'test-key', apiBaseUrl },
-      }).callApi('Say ready.');
-      expect(result.error).toBeUndefined();
-      return result.cost;
-    };
+  ] as const)(
+    'applies GovCloud rates for %s on Mantle and regional Runtime profiles',
+    async (model, baseCost) => {
+      const usage = {
+        input_tokens: 1_000,
+        output_tokens: 1_000,
+        total_tokens: 2_000,
+        cache_write_input_tokens: 0,
+      };
+      const runtimeUrl = 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1';
+      const callApi = async (wireModel: string, apiBaseUrl: string) => {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: { ...responseData, model: wireModel, usage },
+        });
+        const result = await new OpenAiResponsesProvider(wireModel, {
+          config: { apiKey: 'test-key', apiBaseUrl },
+        }).callApi('Say ready.');
+        expect(result.error).toBeUndefined();
+        return result.cost;
+      };
 
-    // AWS lists GovCloud for these models only on Mantle; Runtime has no GovCloud profile.
-    expect(
-      await callApi(`openai.${model}`, 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1'),
-    ).toBeCloseTo(baseCost * 1.1 * 1.2, 10);
-    expect(await callApi(`us.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost * 1.1, 10);
-    expect(await callApi(`global.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost, 10);
-    expect(await callApi(`us-gov.openai.${model}`, runtimeUrl)).toBeUndefined();
-  });
+      expect(
+        await callApi(`openai.${model}`, 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1'),
+      ).toBeCloseTo(baseCost * 1.35, 10);
+      expect(await callApi(`us.openai.${model}`, runtimeUrl)).toBeUndefined();
+      expect(await callApi(`global.openai.${model}`, runtimeUrl)).toBeUndefined();
+      expect(await callApi(`us-gov.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost * 1.35, 10);
+    },
+  );
+
+  it.each([
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.openai.gpt-6.2-sol',
+      'bedrock-runtime.us-east-1.amazonaws.com',
+      0.0132,
+    ],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6.2-sol',
+      'bedrock-runtime.us-east-1.amazonaws.com',
+      undefined,
+    ],
+    ['in.openai.gpt-5.6-terra', 'bedrock-runtime.ap-south-1.amazonaws.com', 0.0154],
+    ['in.openai.gpt-5.6-luna', 'bedrock-runtime.ap-south-2.amazonaws.com', 0.00154],
+    [
+      'us-gov.openai.gpt-5.6-luna',
+      'vpce-abcd.bedrock-runtime-fips.us-gov-east-1.vpce.amazonaws.com',
+      0.00189,
+    ],
+    ['in.openai.gpt-5.6-terra', 'bedrock-runtime.us-east-1.amazonaws.com', undefined],
+    ['in.openai.gpt-6.1-terra', 'bedrock-runtime.ap-south-1.amazonaws.com', undefined],
+    ['us-gov.openai.gpt-5.6-terra', 'bedrock-runtime.us-east-1.amazonaws.com', undefined],
+    ['us-gov.openai.gpt-5.4', 'bedrock-runtime.us-gov-west-1.amazonaws.com', undefined],
+  ] as const)(
+    'uses exact Geo CRIS prices for passthrough model %s on %s',
+    async (model, host, expected) => {
+      const usage = { input_tokens: 1000, output_tokens: 1000, cache_write_input_tokens: 0 };
+      for (const explicitCost of [undefined, 0.0001]) {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: { ...responseData, model, usage },
+        });
+        const result = await new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: `https://${host}/openai/v1`,
+            cost: explicitCost,
+            passthrough: { model },
+          },
+        }).callApi('Say ready.');
+        expect(result.error).toBeUndefined();
+        const expectedCost = explicitCost === undefined ? expected : 0.2;
+        if (expectedCost === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expectedCost, 10);
+        }
+      }
+    },
+  );
 
   it.each([
     ['gpt-6-sol', 0.012, 0.0132],

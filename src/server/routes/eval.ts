@@ -658,9 +658,25 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     };
     let replayProviders;
     try {
-      const resolved = resolveProviderConfigs(providers, { basePath: eval_.config.basePath });
+      const sources = Array.isArray(providers) ? providers : [providers];
+      const column = promptIndex === undefined ? undefined : eval_.getPrompts()[promptIndex];
+      if (promptIndex === undefined ? sources.length !== 1 : !column) {
+        throw new Error('Ambiguous replay request');
+      }
+      const resolved = sources.flatMap((source) => {
+        try {
+          const definitions = resolveProviderConfigs([source], { basePath: eval_.config.basePath });
+          return Array.isArray(definitions) ? definitions : [definitions];
+        } catch (error) {
+          // An unavailable file cannot supply a target. Require one positive column match below.
+          if (column && normalizeProviderRef(source).kind === 'file') {
+            return [];
+          }
+          throw error;
+        }
+      });
       // Replay replaces saved prompt-routing filters, while retaining local options.
-      const candidates = (Array.isArray(resolved) ? resolved : [resolved]).map((provider) => {
+      const candidates = resolved.map((provider) => {
         const ref = normalizeProviderRef(provider);
         if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
           return provider;
@@ -703,6 +719,15 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
             };
           }
         }
+        if (options?.label && /\{[{%#]/.test(options.label)) {
+          const key = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(options.label)?.[1];
+          const label =
+            key && options.env && Object.hasOwn(options.env, key) ? options.env[key] : undefined;
+          if (!label || /\{[{%#]/.test(label) || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+            throw new Error('Cannot identify the replay provider safely');
+          }
+          options = { ...options, label };
+        }
         if (ref.kind === 'map') {
           return {
             [providerPath]: {
@@ -722,19 +747,22 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
           cloudProviders.set(cloudKey(id, options), await getProviderFromCloud(id, options));
         }
       }
-      if (promptIndex === undefined) {
-        // Older callers replayed all configured providers and returned the first result.
-        replayProviders = candidates;
-      } else {
-        const column = eval_.getPrompts()[promptIndex];
-        replayProviders = column
-          ? candidates.filter((candidate) => {
-              const ref = normalizeProviderRef(candidate);
-              const resolvedRef = normalizeProviderRef(inspectedProvider(candidate));
-              return (ref.label || resolvedRef.label || resolvedRef.id) === column.provider;
-            })
-          : [];
-      }
+      replayProviders = column
+        ? candidates.filter((candidate) => {
+            const ref = normalizeProviderRef(candidate);
+            const target = normalizeProviderRef(inspectedProvider(candidate));
+            const label = ref.label || target.label;
+            if (label) {
+              return label === column.provider;
+            }
+            // HttpProvider.id() returns config.url even if its loader path is a different URL.
+            const url =
+              'loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)
+                ? target.loadOptions.config?.url
+                : undefined;
+            return (url || target.id) === column.provider;
+          })
+        : candidates;
     } catch (error) {
       sendError(
         res,
@@ -744,11 +772,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       );
       return;
     }
-    if (
-      !Array.isArray(replayProviders) ||
-      replayProviders.length === 0 ||
-      (promptIndex !== undefined && replayProviders.length !== 1)
-    ) {
+    if (replayProviders.length !== 1) {
       res
         .status(400)
         .json({ error: 'Cannot resolve the replay provider. Rerun using the eval configuration.' });

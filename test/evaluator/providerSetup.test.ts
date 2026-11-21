@@ -8,7 +8,7 @@ import {
   type InMemoryEvaluation,
   InMemoryEvaluationStore,
 } from '../../src/evaluator/inMemoryStore';
-import { checkProviderSetup } from '../../src/evaluator/providerSetup';
+import { checkProviderSetup, waitForProviderSetup } from '../../src/evaluator/providerSetup';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { sleep } from '../../src/util/time';
@@ -834,3 +834,23 @@ describeEvaluator('provider batch preflight', () => {
     expect((await record.toEvaluateSummary()).stats.errors).toBe(1);
   });
 });
+
+it.each([true, false])(
+  'preserves the pause reason during provider setup (already paused %s)',
+  async (alreadyPaused) => {
+    const controller = new AbortController();
+    const reason = new Error('pause requested');
+    if (alreadyPaused) {
+      controller.abort(reason);
+    }
+    const operation = waitForProviderSetup(
+      () => new Promise<never>(() => {}),
+      { abortSignal: controller.signal },
+      () => {
+        throw new Error('unexpected timeout');
+      },
+    );
+    controller.abort(reason);
+    await expect(operation).rejects.toBe(reason);
+  },
+);

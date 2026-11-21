@@ -244,6 +244,36 @@ describe('POST /api/eval/replay provider boundary', () => {
     },
   );
 
+  it('does not replay multiple providers for legacy requests', async () => {
+    storedConfig(['echo', 'openai:chat:example-model']);
+    expect((await replay()).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('matches the effective HTTP URL instead of a different target with that loader path', async () => {
+    const selected = { id: 'http', config: { url: 'https://a.invalid' } };
+    storedConfig(
+      [selected, { id: 'https://a.invalid', config: { url: 'https://b.invalid' } }],
+      undefined,
+      ['https://a.invalid'],
+    );
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual([{ ...selected, prompts: ['Replay'] }]);
+  });
+
+  it('resolves a provider-scoped label even if an unrelated provider file is missing', async () => {
+    storedConfig(
+      [
+        `file://${path.join(directory, 'missing.json')}`,
+        { id: 'echo', label: '{{ env.DISPLAY }}', env: { DISPLAY: 'Baseline' } },
+      ],
+      undefined,
+      ['Baseline'],
+    );
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toMatchObject([{ id: 'echo', label: 'Baseline' }]);
+  });
+
   it('rejects ambiguous provider identities instead of guessing a target', async () => {
     storedConfig([
       { id: 'echo', label: 'same' },

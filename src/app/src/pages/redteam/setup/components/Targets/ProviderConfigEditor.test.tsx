@@ -114,10 +114,10 @@ vi.mock('./FoundationModelConfiguration', () => ({
     <div data-testid="fm-config">
       {providerType === 'bedrock' && (
         <button
-          data-testid="switch-bedrock-invoke"
+          data-testid="update-bedrock-id"
           onClick={() => updateCustomTarget('id', 'bedrock:anthropic.claude-3-5-sonnet')}
         >
-          Switch Bedrock InvokeModel
+          Update Bedrock ID
         </button>
       )}
     </div>
@@ -2251,38 +2251,15 @@ describe('ProviderConfigEditor', () => {
     },
   );
 
-  it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
-    const mockSetProvider = vi.fn();
-
-    renderWithProviders(
-      <ProviderConfigEditor
-        provider={{
-          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {
-            mcp: {
-              enabled: true,
-              servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
-            },
-          },
-        }}
-        setProvider={mockSetProvider}
-        providerType="bedrock"
-      />,
-    );
-
-    act(() => {
-      screen.getByTestId('switch-bedrock-invoke').click();
-    });
-
-    expect(mockSetProvider).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'bedrock:anthropic.claude-3-5-sonnet',
-        config: {},
-      }),
-    );
-  });
-
-  it('should preserve Bedrock MCP config when provider is already using InvokeModel id format', () => {
+  it.each([
+    'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'bedrock:runtime:chat:qwen.qwen3-coder-next',
+    'bedrock:mantle:openai.gpt-oss-120b',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
+    'bedrock:anthropic.claude-3-5-sonnet',
+    // This legacy Converse-shaped ID resolves to Responses, which has no client MCP.
+    'bedrock:converse:openai.gpt-5.5',
+  ])('preserves MCP during an ID edit from %s; the API selector owns cleanup', (id) => {
     const mockSetProvider = vi.fn();
     const mcpConfig = {
       enabled: true,
@@ -2292,7 +2269,7 @@ describe('ProviderConfigEditor', () => {
     renderWithProviders(
       <ProviderConfigEditor
         provider={{
-          id: 'bedrock:anthropic.claude-3-5-sonnet',
+          id,
           config: {
             mcp: mcpConfig,
           },
@@ -2303,7 +2280,7 @@ describe('ProviderConfigEditor', () => {
     );
 
     act(() => {
-      screen.getByTestId('switch-bedrock-invoke').click();
+      screen.getByTestId('update-bedrock-id').click();
     });
 
     expect(mockSetProvider).toHaveBeenCalledWith(

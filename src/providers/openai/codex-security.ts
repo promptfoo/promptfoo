@@ -911,6 +911,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
     const model = result.turnResult?.model ?? cost?.model ?? config.model;
     const raw = result.toJSON();
+    const review =
+      (raw.manifest as { scan?: { review?: unknown } } | undefined)?.scan?.review ?? raw.review;
     const coverage = 'coverage' in result ? result.coverage : undefined;
     const summary = normalizeCodexSecurityResult(raw, {
       source: { kind: 'sdk' },
@@ -955,7 +957,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
               coveragePath: 'coveragePath' in result ? result.coveragePath : undefined,
             }
           : {}),
-        ...(raw.review ? { review: raw.review } : {}),
+        ...(review && typeof review === 'object' && !Array.isArray(review) ? { review } : {}),
         scanDir: result.scanDir,
         reportPath: result.reportPath,
         manifestPath: result.manifestPath,

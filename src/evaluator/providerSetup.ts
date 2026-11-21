@@ -25,9 +25,7 @@ export async function waitForProviderSetup<T>(
   { abortSignal, timeoutMs }: SetupWaitOptions,
   onTimeout: (message: string) => T,
 ): Promise<T> {
-  if (abortSignal?.aborted) {
-    throw new Error('Operation cancelled');
-  }
+  abortSignal?.throwIfAborted();
   const setupTimeoutMs =
     timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30_000;
   const controller = new AbortController();
@@ -36,7 +34,7 @@ export async function waitForProviderSetup<T>(
   const interrupted = new Promise<T>((resolve, reject) => {
     onAbort = () => {
       controller.abort(abortSignal?.reason);
-      reject(new Error('Operation cancelled'));
+      reject(controller.signal.reason);
     };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
     timer = setTimeout(() => {
@@ -49,9 +47,7 @@ export async function waitForProviderSetup<T>(
     // Attach rejection handlers before invoking third-party code; late settlements are consumed.
     return await Promise.race([
       Promise.resolve().then(() => {
-        if (controller.signal.aborted) {
-          throw new Error('Operation cancelled');
-        }
+        controller.signal.throwIfAborted();
         return operation(controller.signal);
       }),
       interrupted,
