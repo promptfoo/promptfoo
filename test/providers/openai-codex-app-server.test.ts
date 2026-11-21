@@ -2587,7 +2587,15 @@ describe('OpenAICodexAppServerProvider', () => {
       { type: 'mention', name: 'plugin', path: 'plugin://my-plugin' },
     ];
     const text = { type: 'text', text: 'Review these inputs' };
-    expect((await provider.callApi(JSON.stringify([text, ...attachments]))).error).toBeUndefined();
+    const spans = installSpanRecorder();
+    const prompt = JSON.stringify([text, ...attachments]);
+    expect(
+      (await provider.callApi(prompt, { vars: {}, prompt: { raw: prompt, label: prompt } })).error,
+    ).toBeUndefined();
+    const recorded = JSON.stringify(spans);
+    expect(recorded).toContain(text.text);
+    expect(recorded).not.toContain('iVBORw0');
+    expect(recorded).not.toContain('mcp://receipt');
     expect(server.messages().find((msg) => msg.method === 'turn/start').params.input).toEqual([
       { ...text, text_elements: [] },
       ...attachments,

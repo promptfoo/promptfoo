@@ -403,6 +403,17 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'summary' });
   });
 
+  it('rejects disabled local inputs without disclosing whether the requested path exists', async () => {
+    const provider = new OpenInterpreterProvider({ config: { environment_access: false } });
+    const read = (path: string) =>
+      provider.callApi(JSON.stringify([{ type: 'local_image', path }]));
+    const existing = await read(process.execPath);
+    const missing = await read(process.execPath + '.missing');
+    expect(existing.error).toContain('environment_access: false');
+    expect(missing.error).toBe(existing.error);
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
   it('allows structured local inputs inside configured roots and rejects traversal and symlink escapes', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-inputs-'));
@@ -431,6 +442,7 @@ describe('OpenInterpreterProvider', () => {
         { type: 'text', text: 'Review these inputs.' },
         { type: 'local_image', path: 'inside.png' },
         { type: 'skill', name: 'fixture', path: path.join(extra, 'skill.md') },
+        { type: 'mention', name: 'reader', path: 'mcp://inventory' },
         { type: 'mention', name: 'connector', path: 'app://connector-id' },
         { type: 'mention', name: 'plugin', path: 'plugin://plugin-name@marketplace' },
       ]),
@@ -440,6 +452,7 @@ describe('OpenInterpreterProvider', () => {
       { type: 'text', text: 'Review these inputs.', text_elements: [] },
       { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
       { type: 'skill', name: 'fixture', path: fs.realpathSync(path.join(extra, 'skill.md')) },
+      { type: 'mention', name: 'reader', path: 'mcp://inventory' },
       { type: 'mention', name: 'connector', path: 'app://connector-id' },
       { type: 'mention', name: 'plugin', path: 'plugin://plugin-name@marketplace' },
     ]);

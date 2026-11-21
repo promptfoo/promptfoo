@@ -1416,15 +1416,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
 
+    const promptInput = this.parsePromptInput(prompt);
+    const cacheBasis = context?.prompt?.raw ?? prompt;
     return withGenAISpan(
-      this.buildSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config, cleanupGeneration),
+      this.buildSpanContext(promptInput, context, requestedModel),
+      () => this.callApiInternal(promptInput, cacheBasis, callOptions, config, cleanupGeneration),
       (response) => this.extractSpanResult(response, requestedModel),
     );
   }
 
   private buildSpanContext(
-    prompt: string,
+    input: CodexAppServerUserInput[],
     context: CallApiContextParams | undefined,
     requestedModel: string | undefined,
   ): GenAISpanContext {
@@ -1439,9 +1441,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         typeof context?.test?.vars?.__testIdx === 'number'
           ? context.test.vars.__testIdx
           : undefined,
-      promptLabel: context?.prompt?.label,
+      // Auto-generated labels may contain the full prompt, including attachment data.
+      promptLabel: input.every((item) => item.type === 'text') ? context?.prompt?.label : undefined,
       traceparent: context?.traceparent,
-      requestBody: prompt,
+      requestBody: input
+        .map((item) => (item.type === 'text' ? item.text : `[${item.type}]`))
+        .join('\n'),
     };
   }
 
@@ -1478,8 +1483,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private async callApiInternal(
-    prompt: string,
-    context: CallApiContextParams | undefined,
+    promptInput: CodexAppServerUserInput[],
+    promptCacheBasis: string,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: CodexAppServerConfig,
     cleanupGeneration: number,
@@ -1513,7 +1518,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const currentTraceparent = getTraceparent();
     const apiKey = this.getApiKey(resolvedConfig);
     const env = this.prepareEnvironment(resolvedConfig, currentTraceparent, apiKey);
-    const promptInput = this.parsePromptInput(prompt);
     if (resolvedConfig.environment_access === false) {
       const unsupported = promptInput.find((item) => !this.canSendWithoutEnvironment(item));
       if (unsupported) {
@@ -1541,7 +1545,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         localConnection = connection;
       }
 
-      const promptCacheBasis = context?.prompt?.raw ?? prompt;
       const explicitThreadQueueKey = resolvedConfig.thread_id
         ? `thread_id:${resolvedConfig.thread_id}`
         : undefined;
@@ -2147,21 +2150,19 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       const staleConnection =
         this.connections.get(stale.connectionKey) ??
         (stale.connectionKey === connectionKey ? connection : undefined);
-      if (staleConnection) {
-        try {
-          await staleConnection.request(
-            'thread/unsubscribe',
-            { threadId: stale.threadId },
-            { timeoutMs: this.getRequestTimeoutMs(config) },
-          );
-        } catch (error) {
-          logger.warn('[CodexAppServer] Failed to unsubscribe stale explicit thread variant', {
-            error,
-            threadId: stale.threadId,
-          });
-          if (staleConnection === connection && connection.isClosed()) {
-            throw new StaleExplicitThreadConnectionClosedError();
-          }
+      try {
+        await staleConnection?.request(
+          'thread/unsubscribe',
+          { threadId: stale.threadId },
+          { timeoutMs: this.getRequestTimeoutMs(config) },
+        );
+      } catch (error) {
+        logger.warn('[CodexAppServer] Failed to unsubscribe stale explicit thread variant', {
+          error,
+          threadId: stale.threadId,
+        });
+        if (staleConnection === connection && connection.isClosed()) {
+          throw new StaleExplicitThreadConnectionClosedError();
         }
       }
     }
@@ -2736,25 +2737,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       default:
         return false;
     }
-  }
-
-  private formatPromptInputForTrace(input: CodexAppServerUserInput[]): string {
-    return input
-      .map((item) => {
-        switch (item.type) {
-          case 'text':
-            return item.text;
-          case 'image':
-            return `[image: ${item.url}]`;
-          case 'localImage':
-            return `[local_image: ${item.path}]`;
-          case 'skill':
-            return `[skill: ${item.name} ${item.path}]`;
-          case 'mention':
-            return `[mention: ${item.name} ${item.path}]`;
-        }
-      })
-      .join('\n');
   }
 
   private createTurnState(

@@ -401,7 +401,9 @@ function isWithinDirectory(root: string, candidate: string): boolean {
 
 function isVirtualMention(item: Record<string, unknown>): boolean {
   return (
-    item.type === 'mention' && typeof item.path === 'string' && /^(app|plugin):\/\//.test(item.path)
+    item.type === 'mention' &&
+    typeof item.path === 'string' &&
+    /^(app|mcp|plugin):\/\//.test(item.path)
   );
 }
 
@@ -443,34 +445,8 @@ function normalizePrompt(
   let inlineImageChars = 0;
 
   for (const item of parsed) {
-    if (!isRecord(item) || typeof item.type !== 'string') {
+    if (!isRecord(item) || typeof item.type !== 'string' || isVirtualMention(item)) {
       continue;
-    }
-
-    if (isVirtualMention(item)) {
-      continue;
-    }
-
-    if (
-      ['local_image', 'localImage', 'skill', 'mention'].includes(item.type) &&
-      typeof item.path === 'string'
-    ) {
-      let candidate: string;
-      try {
-        candidate = fs.realpathSync(path.resolve(workingDir, item.path));
-      } catch {
-        return {
-          prompt,
-          error: 'Open Interpreter structured input path does not exist or is not accessible.',
-        };
-      }
-      if (!roots.some((root) => isWithinDirectory(root, candidate))) {
-        return {
-          prompt,
-          error: 'Open Interpreter structured input path is outside the configured workspace.',
-        };
-      }
-      item.path = candidate;
     }
 
     if (item.type === 'image' && typeof item.url === 'string') {
@@ -489,6 +465,35 @@ function normalizePrompt(
         };
       }
     }
+
+    if (
+      !['local_image', 'localImage', 'skill', 'mention'].includes(item.type) ||
+      typeof item.path !== 'string'
+    ) {
+      continue;
+    }
+    if (config.environment_access === false) {
+      return {
+        prompt,
+        error: 'Open Interpreter cannot use local attachments with environment_access: false.',
+      };
+    }
+    let candidate: string;
+    try {
+      candidate = fs.realpathSync(path.resolve(workingDir, item.path));
+    } catch {
+      return {
+        prompt,
+        error: 'Open Interpreter structured input path does not exist or is not accessible.',
+      };
+    }
+    if (!roots.some((root) => isWithinDirectory(root, candidate))) {
+      return {
+        prompt,
+        error: 'Open Interpreter structured input path is outside the configured workspace.',
+      };
+    }
+    item.path = candidate;
   }
 
   return { prompt: JSON.stringify(parsed) };
