@@ -1122,6 +1122,7 @@
         "javascript",
         "latency",
         "levenshtein",
+        "llama-guard",
         "llm-rubric",
         "pi",
         "meteor",
