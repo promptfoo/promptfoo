@@ -11,7 +11,9 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { FetchOptions } from '../../util/fetch/types';
-import type { OpenAiSharedOptions } from './types';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './types';
+
+type ReasoningModelConfig = Pick<OpenAiCompletionOptions, 'isReasoningModel'>;
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
 export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
@@ -190,6 +192,20 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.isGPT5Model(model) ||
       isGpt6Model(model)
     );
+  }
+
+  /** Resolve an explicit request override before falling back to provider-specific detection. */
+  protected resolveReasoningModel(
+    config: ReasoningModelConfig = this.config as ReasoningModelConfig,
+    detected = this.isReasoningModel(),
+  ): boolean {
+    if (config.isReasoningModel !== undefined) {
+      if (typeof config.isReasoningModel !== 'boolean') {
+        throw new Error('isReasoningModel must be a boolean');
+      }
+      return config.isReasoningModel;
+    }
+    return detected;
   }
 
   protected supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
