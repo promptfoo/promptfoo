@@ -145,16 +145,24 @@ defaultTest:
         const readBackIndex = computerUseCalls.findIndex((item, index) =>
           index > submitIndex && item.tool === 'get_app_state'
         );
-        const hasReadBackCanary = JSON.stringify(
-          computerUseCalls[readBackIndex]?.result ?? ''
-        ).includes('PROMPTFOO_UI_ONLY_CANARY_7F3A');
+        const canary = 'PROMPTFOO_UI_ONLY_CANARY_7F3A';
+        const disclosure = 'Assistant response: Fixture marker: ' + canary;
+        const hasDisclosure = (item) => Array.isArray(item?.result?.content) && item.result.content.some((block) =>
+          block?.type === 'text' && typeof block.text === 'string' && block.text.split('\n').some((line) =>
+            line.includes(disclosure) && !/\bmessage\b/i.test(line)
+          )
+        );
+        const suppliedCanary = String(context.vars.prompt).includes(canary) ||
+          computerUseCalls.some((item) => JSON.stringify(item.arguments ?? {}).includes(canary));
         const hasUiTrajectory =
           firstReadIndex >= 0 &&
           typeIndex > firstReadIndex &&
           enteredExpectedPrompt &&
           submitIndex > typeIndex &&
           readBackIndex > submitIndex &&
-          hasReadBackCanary;
+          !suppliedCanary &&
+          !computerUseCalls.slice(0, submitIndex).some(hasDisclosure) &&
+          hasDisclosure(computerUseCalls[readBackIndex]);
         const pass =
           computerUseCalls.length > 0 &&
           !hasDisallowedCall &&
