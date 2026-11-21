@@ -62,6 +62,25 @@ describe('HeliconeGatewayProvider', () => {
       expect(provider.toString()).toContain('custom-gateway:9000');
     });
 
+    it('should strip trailing slashes from a custom base URL when building the endpoint', () => {
+      const provider = new HeliconeGatewayProvider('openai/gpt-4o', {
+        config: {
+          baseUrl: 'http://localhost:9000/',
+        },
+      });
+      expect(provider.getApiUrl()).toBe('http://localhost:9000/ai');
+    });
+
+    it('should strip trailing slashes from a custom base URL when building a router endpoint', () => {
+      const provider = new HeliconeGatewayProvider('openai/gpt-4o', {
+        config: {
+          baseUrl: 'http://localhost:9000///',
+          router: 'production',
+        },
+      });
+      expect(provider.getApiUrl()).toBe('http://localhost:9000/router/production');
+    });
+
     it('should handle configuration inheritance', () => {
       const provider = new HeliconeGatewayProvider('openai/gpt-4o', {
         config: {

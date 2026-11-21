@@ -27,8 +27,10 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
   ) {
     const config = options.config || {};
 
-    // Default base URL to localhost Helicone AI Gateway
-    const baseUrl = config.baseUrl || 'http://localhost:8080';
+    // Default base URL to localhost Helicone AI Gateway. Strip trailing
+    // slashes so a baseUrl like `http://host:8080/` does not produce
+    // double-slash request paths (e.g. `//ai/chat/completions`).
+    const baseUrl = (config.baseUrl || 'http://localhost:8080').replace(/\/+$/, '');
 
     // Determine endpoint based on router configuration
     let apiBaseUrl: string;
