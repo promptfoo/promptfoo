@@ -194,6 +194,9 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
     // Check if modelaudit is installed
     const { installed, version: scannerVersion } = await checkModelAuditInstalled();
+    if (res.destroyed) {
+      return;
+    }
     if (!installed) {
       res.status(400).json({
         error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
@@ -276,6 +279,10 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       persist,
     });
 
+    if (res.destroyed) {
+      return;
+    }
+
     // Run the scan
     const modelAudit = spawn('modelaudit', args, { env: getModelAuditDelegationEnv() });
     let stdout = '';
@@ -283,6 +290,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     const stdoutDecoder = new StringDecoder('utf8');
     const stderrDecoder = new StringDecoder('utf8');
     let responded = false; // Prevent double-response
+    let aborted = false;
 
     // Helper to safely send response (prevents double-response if both error and close fire).
     //
@@ -293,7 +301,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     // parse fails, fall back to a hand-built error envelope so the client
     // still receives a valid response.
     const safeRespond = (statusCode: number, body: object) => {
-      if (responded) {
+      if (responded || aborted) {
         return;
       }
       responded = true;
@@ -331,13 +339,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       }
     };
 
-    // Handle client disconnect (request abort)
-    req.on('close', () => {
-      if (!responded) {
+    // Request close also fires when the body finishes; response close tracks
+    // clients that disconnect while they are waiting for the scan result.
+    res.once('close', () => {
+      if (!responded && !res.writableEnded) {
+        aborted = true;
         cleanup();
       }
     });
-
     modelAudit.stdout.on('data', (data) => {
       stdout += stdoutDecoder.write(data);
     });
@@ -347,6 +356,9 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     });
 
     modelAudit.on('error', (error) => {
+      if (aborted) {
+        return;
+      }
       logger.error(`Failed to start modelaudit: ${error.message}`);
 
       let errorMessage = 'Failed to start model scan';
@@ -374,7 +386,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
     modelAudit.on('close', async (code, signal) => {
       // If client already disconnected, don't process results
-      if (responded) {
+      if (responded || aborted) {
         return;
       }
       stdout += stdoutDecoder.end();
