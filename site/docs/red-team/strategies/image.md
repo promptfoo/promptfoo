@@ -62,7 +62,7 @@ redteam:
 ```
 
 :::note
-For an image-only target, disable `basic` so it does not receive unencoded text. To transform attacks before rendering them, use a [layer](/docs/red-team/strategies/layer/) with `image` last. For PDF upload targets, use the [PDF strategy](/docs/red-team/strategies/pdf/).
+You should only disable all other strategies when using the image strategy. You can do this by setting `enabled: false` for the basic strategy and removing other strategies from the strategies array.
 :::
 
 Your prompt.json file should look like this:
@@ -109,6 +109,6 @@ npm i sharp
 - [Audio Jailbreaking](audio.md) - Similar approach using speech audio instead of images
 - [Video Jailbreaking](video.md) - Similar approach using video instead of images
 - [Base64 Encoding](base64.md) - Similar encoding technique using text-to-base64 conversion
-- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
+- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Test multi-modal models
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

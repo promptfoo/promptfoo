@@ -1,9 +1,7 @@
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { LocalFileSystemProvider } from '../../../src/storage/localFileSystemProvider';
+import { setupTestServer } from '../../util/testServer';
 import { createTempDir, removeTempDir } from '../../util/utils';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
@@ -24,33 +22,21 @@ const mockedMediaExists = vi.mocked(mediaExists);
 const mockedRetrieveMedia = vi.mocked(retrieveMedia);
 
 describe('Media Routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
   describe('GET /api/media?key=...', () => {
-    const opaqueKeys = [
+    beforeEach(() => {
+      mockedGetMediaStorage.mockReturnValue({
+        providerId: 'custom',
+        allowOpaqueMediaKeys: true,
+      } as MediaStorageProvider);
+    });
+
+    const unsafeKeys = [
       '../private.pdf',
       'document/../../private.pdf',
       '/private.pdf',
@@ -71,12 +57,7 @@ describe('Media Routes', () => {
         });
         mockedMediaExists.mockImplementation((key) => provider.exists(key));
         mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
-        for (const key of [
-          'hash-index.json',
-          'document/../hash-index.json',
-          `${ref.key}.meta.json`,
-          ...opaqueKeys,
-        ]) {
+        for (const key of ['hash-index.json', `${ref.key}.meta.json`]) {
           const response = await api.get('/api/media').query({ key });
           expect(response.status).toBe(404);
           expect(response.text).not.toContain('Private review notes');
@@ -121,7 +102,6 @@ describe('Media Routes', () => {
       'document/abcdef123456.pdf',
       'tenant/invoice ?#&%2F.pdf',
       '09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
-      ...opaqueKeys,
     ])('serves the exact provider-defined key %s', async (key) => {
       const data = Buffer.from('%PDF-1.7 test');
       mockedMediaExists.mockResolvedValue(true);
@@ -136,15 +116,34 @@ describe('Media Routes', () => {
       expect(mockedRetrieveMedia).toHaveBeenCalledWith(key);
     });
 
-    it.each([undefined, '', 'file\0.pdf', 'a'.repeat(2049), ['first.pdf', 'second.pdf']])(
-      'rejects invalid keys before touching storage: %j',
-      async (key) => {
-        const response = await api.get('/api/media').query({ key });
-        expect(response.status).toBe(400);
-        expect(mockedMediaExists).not.toHaveBeenCalled();
-        expect(mockedRetrieveMedia).not.toHaveBeenCalled();
-      },
-    );
+    it('uses persisted MIME metadata for a provider-defined key', async () => {
+      mockedGetMediaStorage.mockReturnValue({
+        providerId: 'custom',
+        allowOpaqueMediaKeys: true,
+        retrieveWithMetadata: vi
+          .fn()
+          .mockResolvedValue({ data: Buffer.from('PNG'), contentType: 'image/png' }),
+      } as unknown as MediaStorageProvider);
+      mockedMediaExists.mockResolvedValue(true);
+      const response = await api.get('/api/media').query({ key: 'tenant/opaque' });
+      expect(response.headers['content-type']).toBe('image/png');
+      expect(response.headers['cache-control']).toBe('private, no-cache');
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ...unsafeKeys,
+      undefined,
+      '',
+      'file\0.pdf',
+      'a'.repeat(2049),
+      ['first.pdf', 'second.pdf'],
+    ])('rejects invalid keys before touching storage: %j', async (key) => {
+      const response = await api.get('/api/media').query({ key });
+      expect(response.status).toBe(400);
+      expect(mockedMediaExists).not.toHaveBeenCalled();
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+    });
 
     it('returns 404 for a missing provider key', async () => {
       mockedMediaExists.mockResolvedValue(false);
@@ -236,13 +235,16 @@ describe('Media Routes', () => {
       expect(response.body.error).toContain('type');
     });
 
-    it('should return 400 when path segments resolve to invalid type and filename', async () => {
-      // Express resolves ../../ before routing, so params become { type: 'etc', filename: 'passwd' }
-      const response = await api.get('/api/media/info/audio/../../etc/passwd');
+    it('should return 400 for a path traversal filename before accessing storage', async () => {
+      // Encode separators so the traversal reaches filename validation as one route parameter.
+      const response = await api.get('/api/media/info/audio/..%2F..%2Fetc%2Fpasswd');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('filename');
+      expect(mockedMediaExists).not.toHaveBeenCalled();
+      expect(mockedGetMediaStorage).not.toHaveBeenCalled();
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
     });
 
     it('should return 400 for filename without hex prefix', async () => {

@@ -5,7 +5,7 @@ import { GetBlobParamsSchema } from './blobs';
 
 export const MediaParamsSchema = z.object({
   type: z.enum(['audio', 'image', 'video', 'document']),
-  filename: z.string().regex(/^[a-f0-9]{12}\.[a-z0-9]+$/i, 'Invalid media filename'),
+  filename: z.string().regex(/^[A-Fa-f0-9]{12}\.[A-Za-z0-9]+$/, 'Invalid media filename'),
 });
 
 export const MediaRouteParamsSchema = z.discriminatedUnion('type', [
@@ -19,13 +19,13 @@ export const MediaRouteParamsSchema = z.discriminatedUnion('type', [
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
 
 // GET /api/media?key=... supports provider-defined storage keys.
-// Filesystem path validation belongs to LocalFileSystemProvider.
+// Providers may opt in to non-hash keys. Never accept path aliases or absolute paths.
 const MediaQuerySchema = z.object({
   key: z
     .string()
     .min(1)
     .max(2048)
-    .refine((key) => !key.includes('\0'), 'Invalid media key'),
+    .regex(/^(?!\/|[a-zA-Z]:)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^\\\x00-\x1f]+$/, 'Invalid media key'),
 });
 
 // GET /api/media/stats

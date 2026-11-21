@@ -15,16 +15,6 @@ import { safeResolve } from './util/pathUtils';
 export type WrapperType = 'python' | 'ruby' | 'golang';
 
 /**
- * Mapping of wrapper types to their subdirectory names.
- * These correspond to the directory structure under src/ and dist/src/.
- */
-const WRAPPER_SUBDIRS: Record<WrapperType, string> = {
-  python: 'python',
-  ruby: 'ruby',
-  golang: 'golang',
-};
-
-/**
  * Cache for wrapper directory paths to avoid repeated path construction.
  */
 const wrapperDirCache: Partial<Record<WrapperType, string>> = {};
@@ -62,7 +52,7 @@ export function getWrapperDir(type: WrapperType): string {
   }
 
   const baseDir = getDirectory();
-  const result = path.join(baseDir, WRAPPER_SUBDIRS[type]);
+  const result = path.join(baseDir, type);
   wrapperDirCache[type] = result;
 
   logger.debug(`Resolved ${type} wrapper directory: ${result}`);
@@ -145,13 +135,12 @@ declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
 
 let tsxLoaderPromise: Promise<unknown> | undefined;
 
-async function ensureTypescriptLoader(modulePath: string): Promise<void> {
+export async function ensureTypescriptLoader(modulePath: string): Promise<void> {
   if (!/\.[cm]?ts$/.test(modulePath)) {
     return;
   }
 
   if (!tsxLoaderPromise) {
-    logger.debug('TypeScript module detected, registering tsx loader');
     // Use the same loader entrypoint as `NODE_OPTIONS=--import tsx` so package-less
     // providers can resolve extensionless transitive TypeScript imports.
     // @ts-ignore: tsx's loader entrypoint does not publish declaration files.
@@ -240,7 +229,11 @@ export function getDirectory(): string {
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
  */
-export async function importModule(modulePath: string, functionName?: string) {
+export async function importModule(
+  modulePath: string,
+  functionName?: string,
+  options?: { cacheCjsFallback?: boolean },
+) {
   const loadPath = await normalizeModuleExtension(modulePath);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
@@ -282,14 +275,16 @@ export async function importModule(modulePath: string, functionName?: string) {
 
       try {
         const resolvedPath = safeResolve(loadPath);
-        const mod = loadCjsModule(resolvedPath);
+        const mod = loadCjsModule(resolvedPath, options?.cacheCjsFallback);
         logger.debug(
           `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
         );
 
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
-          return mod[functionName];
+          return options?.cacheCjsFallback
+            ? Promise.resolve(mod).then((value) => value[functionName])
+            : mod[functionName];
         }
         return mod;
       } catch (cjsErr) {
@@ -368,6 +363,21 @@ export function isCjsInEsmError(message: string): boolean {
   return cjsPatterns.some((pattern) => message.includes(pattern));
 }
 
+// Default config discovery preserves successful executable module instances.
+// Other fallback callers keep their existing uncached behavior.
+const cjsFallbackModules = new Map<string, unknown>();
+
+export function clearCjsModuleCache(entry?: { path: string; exports: unknown }): void {
+  if (!entry) {
+    cjsFallbackModules.clear();
+    return;
+  }
+  const modulePath = safeResolve(entry.path);
+  if (cjsFallbackModules.get(modulePath) === entry.exports) {
+    cjsFallbackModules.delete(modulePath);
+  }
+}
+
 /**
  * Loads a CommonJS module by executing it in a vm context with proper CJS globals.
  * This bypasses Node.js's module type detection which is based on package.json "type" field.
@@ -379,7 +389,11 @@ export function isCjsInEsmError(message: string): boolean {
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: This is actually loading a user space module that can be anything
-function loadCjsModule(modulePath: string): any {
+function loadCjsModule(modulePath: string, cache = false): any {
+  if (cache && cjsFallbackModules.has(modulePath)) {
+    return cjsFallbackModules.get(modulePath);
+  }
+
   const code = fs.readFileSync(modulePath, 'utf-8');
   const dirname = path.dirname(modulePath);
   const filename = modulePath;
@@ -503,5 +517,24 @@ function loadCjsModule(modulePath: string): any {
   // Execute the code in the context
   vm.runInContext(code, context, { filename: modulePath });
 
+  if (cache) {
+    // Assimilate promises and thenables while deduplicating in-flight initialization.
+    const pending = Promise.resolve(moduleObj.exports).then(
+      (value) => {
+        if (cjsFallbackModules.get(modulePath) === pending) {
+          cjsFallbackModules.set(modulePath, value);
+        }
+        return value;
+      },
+      (error) => {
+        if (cjsFallbackModules.get(modulePath) === pending) {
+          cjsFallbackModules.delete(modulePath);
+        }
+        throw error;
+      },
+    );
+    cjsFallbackModules.set(modulePath, pending);
+    return pending;
+  }
   return moduleObj.exports;
 }

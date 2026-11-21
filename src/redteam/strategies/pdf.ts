@@ -21,7 +21,13 @@ const ConfigSchema = z.object({
   mode: z.enum(['text', 'scanned']).default('text'),
 });
 
-async function readTemplate(filename: string): Promise<Buffer> {
+async function readTemplate(source: string): Promise<Buffer> {
+  const filename = path.resolve(
+    cliState.basePath ?? process.cwd(),
+    /^file:\/\/(?:\/|localhost\/)/.test(source)
+      ? fileURLToPath(source)
+      : source.replace(/^file:\/\//, ''),
+  );
   if (!(await fs.stat(filename)).isFile()) {
     throw new Error('PDF template must be a regular file');
   }
@@ -54,6 +60,33 @@ async function readTemplate(filename: string): Promise<Buffer> {
   }
 }
 
+// Only resolve paths from the current target. Generated output supplies digests, never filenames.
+export async function matchPdfTemplates(tests: TestCase[], inputs?: Inputs): Promise<boolean> {
+  const hashes = new Map<string, string>();
+  for (const test of tests) {
+    const pdf = test.metadata?.pdf;
+    if (!pdf) {
+      continue;
+    }
+    const input = inputs?.[pdf.input];
+    const template = input && typeof input === 'object' ? input.config?.template : undefined;
+    if (template?.source !== 'file') {
+      const previous = test.metadata?.pluginConfig?.inputs?.[pdf.input];
+      if (typeof previous === 'object' && previous?.config?.template?.source === 'file') {
+        return false;
+      }
+      continue;
+    }
+    if (!hashes.has(template.path)) {
+      hashes.set(template.path, 'sha256:' + sha256(await readTemplate(template.path)));
+    }
+    if (hashes.get(template.path) !== pdf.templateHash) {
+      return false;
+    }
+  }
+  return true;
+}
+
 async function savePdf(bytes: Buffer, filename: string, text?: string) {
   if (!isMediaStorageEnabled()) {
     return undefined;
@@ -74,13 +107,7 @@ async function prepareTemplate(
 ) {
   let bytes: Buffer;
   if (config.source === 'file') {
-    const filename = path.resolve(
-      cliState.basePath ?? process.cwd(),
-      /^file:\/\/(?:\/|localhost\/)/.test(config.path)
-        ? fileURLToPath(config.path)
-        : config.path.replace(/^file:\/\//, ''),
-    );
-    bytes = await readTemplate(filename);
+    bytes = await readTemplate(config.path);
   } else {
     const provider = await getStrategyGenerationProvider({
       runtimeContext,

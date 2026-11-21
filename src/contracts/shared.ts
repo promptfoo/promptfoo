@@ -69,6 +69,14 @@ export const PdfTemplateSchema = z.discriminatedUnion('source', [
   z.object({ source: z.literal('generated'), description: z.string().min(1).max(4000) }),
 ]);
 
+// Exhaustive mapping keeps runtime validation and portable structural variants in sync.
+const InputPlacementSchemas = {
+  text: z.string().min(1),
+  pdf: DocumentMediaInjectionPlacementSchema,
+  docx: DocxInjectionPlacementSchema,
+  image: DocumentMediaInjectionPlacementSchema,
+} satisfies Record<InputType, z.ZodType<string>>;
+
 export const InputConfigSchema = z.object({
   template: PdfTemplateSchema.optional(),
   benign: z.boolean().optional(),
@@ -85,50 +93,46 @@ export const InputConfigSchema = z.object({
 });
 export type InputConfig = z.infer<typeof InputConfigSchema>;
 
-export const InputDefinitionObjectSchema = z
-  .object({
-    config: InputConfigSchema.optional(),
-    description: z.string().min(1, {
-      error: 'Input descriptions must be non-empty strings',
-    }),
-    type: InputTypeSchema.optional(),
-  })
-  .superRefine((input, ctx) => {
-    const inputType = input.type ?? 'text';
-    if (input.config?.template && inputType !== 'pdf') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['config', 'template'],
-        message: 'Templates are supported only for PDF inputs',
-      });
-    }
-    const injectionPlacements = input.config?.injectionPlacements ?? [];
+const InputDefinitionFieldsSchema = z.object({
+  config: InputConfigSchema.optional(),
+  description: z.string().min(1, {
+    error: 'Input descriptions must be non-empty strings',
+  }),
+  type: InputTypeSchema.optional(),
+});
 
-    if (inputType === 'text' || injectionPlacements.length === 0) {
-      return;
-    }
+export const InputDefinitionObjectSchema = InputDefinitionFieldsSchema.superRefine((input, ctx) => {
+  const inputType = input.type ?? 'text';
+  const injectionPlacements = input.config?.injectionPlacements ?? [];
 
-    const placementSchema =
-      inputType === 'docx' ? DocxInjectionPlacementSchema : DocumentMediaInjectionPlacementSchema;
-    const placementValues =
-      inputType === 'docx' ? DocxInjectionPlacementValues : DocumentMediaInjectionPlacementValues;
-    const invalidPlacements = injectionPlacements.filter(
-      (placement) => !placementSchema.safeParse(placement).success,
-    );
+  if (input.config?.template && inputType !== 'pdf') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'template'],
+      message: 'Templates are supported only for PDF inputs',
+    });
+  }
+  if (inputType === 'text' || injectionPlacements.length === 0) {
+    return;
+  }
 
-    if (invalidPlacements.length > 0) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['config', 'injectionPlacements'],
-        message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
-      });
-    }
-  })
-  // JSON Schema cannot infer superRefine's PDF-only template restriction.
-  .meta({
-    if: { properties: { type: { const: 'pdf' } }, required: ['type'] },
-    else: { properties: { config: { properties: { template: false } } } },
-  });
+  const placementSchema = InputPlacementSchemas[inputType];
+  const placementValues = InputPlacementSchemas[inputType].options;
+  const invalidPlacements = injectionPlacements.filter(
+    (placement) => !placementSchema.safeParse(placement).success,
+  );
+
+  if (invalidPlacements.length > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'injectionPlacements'],
+      message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
+    });
+  }
+}).meta({
+  if: { properties: { type: { const: 'pdf' } }, required: ['type'] },
+  else: { properties: { config: { properties: { template: false } } } },
+});
 
 export const InputDefinitionSchema = z.union([
   z.string().min(1, {
@@ -157,39 +161,6 @@ export function normalizeInputDefinition(input: InputDefinition): NormalizedInpu
     description: input.description,
     type: input.type ?? 'text',
   };
-}
-
-/** Include alternate file encodings retained in a serialized multi-input prompt. */
-export function getInputRepresentations(
-  vars: Record<string, unknown>,
-  inputs: Inputs | undefined,
-  fileInput?: string,
-): [string, unknown][] {
-  const entries = Object.entries(vars);
-  if (typeof vars.__prompt === 'string') {
-    try {
-      const envelope = JSON.parse(vars.__prompt);
-      if (envelope && typeof envelope === 'object' && !Array.isArray(envelope)) {
-        for (const [key, value] of Object.entries(envelope)) {
-          const input = inputs?.[key];
-          if (
-            value !== vars[key] &&
-            (key === fileInput ||
-              (input && typeof input === 'object' && input.type && input.type !== 'text'))
-          ) {
-            entries.push([key, value]);
-          }
-        }
-      }
-    } catch {
-      // Plain task prompts do not contain serialized input fields.
-    }
-  }
-  // Replace whole data URIs before shorter raw encodings of the same file.
-  return entries.sort(
-    ([, a], [, b]) =>
-      (typeof b === 'string' ? b.length : 0) - (typeof a === 'string' ? a.length : 0),
-  );
 }
 
 export function normalizeInputs(
@@ -235,6 +206,36 @@ export function buildInputPromptDescription(input: InputDefinition): string {
 const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
   error: 'Input variable names must be valid identifiers (start with letter or underscore)',
 });
+
+const NonPdfInputConfigSchema = InputConfigSchema.omit({ template: true }).strict();
+
+function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
+  return InputDefinitionFieldsSchema.strict().extend({
+    type: z.literal(type),
+    config: (type === 'pdf' ? InputConfigSchema.strict() : NonPdfInputConfigSchema)
+      .extend({
+        injectionPlacements: z.array(InputPlacementSchemas[type]).min(1).optional(),
+      })
+      .optional(),
+  });
+}
+
+// The exhaustive keys also preserve each type's placement literals in inferred types.
+const StructuralInputDefinitions = {
+  text: InputDefinitionFieldsSchema.strict().extend({
+    type: z.literal('text').optional(),
+    config: NonPdfInputConfigSchema.optional(),
+  }),
+  pdf: documentInputSchema('pdf'),
+  docx: documentInputSchema('docx'),
+  image: documentInputSchema('image'),
+} satisfies Record<InputType, z.ZodType>;
+
+/** Strict serializable input definitions; runtime schemas retain stripping and diagnostics. */
+export const InputsInputSchema = z.record(
+  InputVariableNameSchema,
+  z.union([InputDefinitionSchema.options[0], ...Object.values(StructuralInputDefinitions)]),
+);
 
 // Inputs schema for multi-variable test case generation.
 // Keys are variable names, values are descriptions or typed definitions for what the variable should contain.

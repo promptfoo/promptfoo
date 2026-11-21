@@ -202,6 +202,43 @@ describe('A2AProvider', () => {
     expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
   });
 
+  it.each(['send', 'stream'])('sends templated JSON metadata in %s mode', async (mode) => {
+    const response = { message: { role: 'ROLE_AGENT', parts: [{ text: 'hello from a2a' }] } };
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      mode === 'stream' ? sseResponse([response]) : jsonResponse(response),
+    );
+    const value = 'quoted "value"\n日本語';
+    const metadata = {
+      field: '{{value}}',
+      nested: { prompt: '{{prompt}}' },
+      values: [false, 0, null, '{{value}}'],
+    };
+    const result = await provider({
+      mode,
+      message: { role: 'ROLE_USER', parts: [{ text: 'Question: {{prompt}}' }] },
+      metadata,
+    }).callApi('hi', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      vars: { value },
+      testCaseId: 'case-1',
+    });
+    expect(result.output).toBe('hello from a2a');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      `https://agent.example.com/a2a/v1/message:${mode}`,
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+    );
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
+    expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
+    expect(requestBody.message.parts).toEqual([{ text: 'Question: hi' }]);
+    expect(requestBody.metadata).toEqual({
+      field: value,
+      nested: { prompt: 'hi' },
+      values: [false, 0, null, value],
+    });
+    expect(metadata.field).toBe('{{value}}');
+  });
+
   it('sends standards-compliant default A2A messages', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(jsonResponse(createAgentMessageEvent()));
 
@@ -384,12 +421,24 @@ describe('A2AProvider', () => {
     expect(requestBody.message.parts).toEqual([{ text: 'Custom question text' }]);
   });
 
+  const lastRequest = () =>
+    JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+  const mockReply = (text: string) =>
+    vi
+      .mocked(fetchWithTimeout)
+      .mockResolvedValueOnce(jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text }] } }));
+  const expectedPdf = (version: string, raw: string) =>
+    version === '0.3.0'
+      ? {
+          kind: 'file',
+          file: { fileWithBytes: raw, mimeType: 'application/pdf', name: 'promptfoo-document.pdf' },
+        }
+      : { filename: 'promptfoo-document.pdf', mediaType: 'application/pdf', raw };
+
   it.each(['1.0', '0.3.0'])('delivers PDF inputs in default A2A %s messages', async (version) => {
     const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
     for (const input of ['document', 'invoiceAttachment', 'prompt', 'question']) {
-      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-      );
+      mockReply('pdf ok');
       const result = await provider({ protocolVersion: version }).callApi('Read the invoice.', {
         prompt: { raw: '{{question}}', label: 'question' },
         test: {
@@ -406,25 +455,13 @@ describe('A2AProvider', () => {
         },
       });
       expect(result.output).toBe('pdf ok');
-      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
-      expect(body.message.parts).toEqual(
+      const body = lastRequest();
+      expect(body.message.parts).toEqual([
         version === '0.3.0'
-          ? [
-              { kind: 'text', text: 'Read the invoice.' },
-              {
-                kind: 'file',
-                file: {
-                  fileWithBytes: raw,
-                  mimeType: 'application/pdf',
-                  name: 'promptfoo-document.pdf',
-                },
-              },
-            ]
-          : [
-              { text: 'Read the invoice.' },
-              { filename: 'promptfoo-document.pdf', mediaType: 'application/pdf', raw },
-            ],
-      );
+          ? { kind: 'text', text: 'Read the invoice.' }
+          : { text: 'Read the invoice.' },
+        expectedPdf(version, raw),
+      ]);
       expect(JSON.stringify(body.message)).not.toContain('Hidden PDF instructions');
     }
   });
@@ -443,9 +480,7 @@ describe('A2AProvider', () => {
       ];
       for (const vars of cases) {
         vi.mocked(fetchWithTimeout).mockReset();
-        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'No document' }] } }),
-        );
+
         const result = await provider(config).callApi(`Read the invoice: ${document}`, {
           prompt: { raw: '{{invoice}}', label: 'Invoice' },
           vars,
@@ -491,9 +526,7 @@ describe('A2AProvider', () => {
   it.each(['1.0', '0.3.0'])(
     'sends explicitly configured PDF companion files in A2A %s',
     async (version) => {
-      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'Both files received' }] } }),
-      );
+      mockReply('Both files received');
       const legacy = version === '0.3.0';
       const filePart = (name: string, mimeType: string, value: string) =>
         legacy
@@ -524,7 +557,7 @@ describe('A2AProvider', () => {
       });
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('Both files received');
-      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+      const body = lastRequest();
       expect(body.message.parts).toEqual([
         filePart('document.pdf', 'application/pdf', 'JVBERi0x'),
         filePart('reference.png', 'image/png', 'UE5H'),
@@ -546,9 +579,7 @@ describe('A2AProvider', () => {
         'UE5H',
       ]) {
         vi.mocked(fetchWithTimeout).mockReset();
-        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'Invalid PDF' }] } }),
-        );
+
         const result = await provider(config).callApi('Read the invoice.', {
           prompt: { raw: '{{question}}', label: 'Question' },
           vars: { document },
@@ -569,28 +600,15 @@ describe('A2AProvider', () => {
       ` data:APPLICATION/PDF;base64,${raw} `,
       `\nDATA:APPLICATION/PDF;BASE64,${raw}\n`,
     ]) {
-      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'PDF received' }] } }),
-      );
+      mockReply('PDF received');
       const result = await provider({ protocolVersion }).callApi('Read the invoice.', {
         prompt: { raw: '{{question}}', label: 'Question' },
         vars: { document },
         test: { metadata: { strategyId: 'pdf', pdf: { input: 'document' } } },
       });
       expect(result.output).toBe('PDF received');
-      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
-      expect(body.message.parts.at(-1)).toEqual(
-        protocolVersion === '0.3.0'
-          ? {
-              kind: 'file',
-              file: {
-                fileWithBytes: raw,
-                mimeType: 'application/pdf',
-                name: 'promptfoo-document.pdf',
-              },
-            }
-          : { filename: 'promptfoo-document.pdf', mediaType: 'application/pdf', raw },
-      );
+      const body = lastRequest();
+      expect(body.message.parts.at(-1)).toEqual(expectedPdf(protocolVersion, raw));
     }
   });
 
@@ -636,9 +654,7 @@ describe('A2AProvider', () => {
           : `data:${mime};base64,${raw}`;
       };
       for (const authoredTask of [false, true]) {
-        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-        );
+        mockReply('pdf ok');
         const envelope = {
           document: encode(raw, 'application/pdf', true),
           question: 'What is the total?',
@@ -669,7 +685,7 @@ describe('A2AProvider', () => {
           },
         });
         expect(result.error).toBeUndefined();
-        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const body = lastRequest();
         const text = body.message.parts[0].text;
         if (authoredTask) {
           expect(JSON.parse(JSON.parse(text).task)).toEqual({
@@ -697,9 +713,7 @@ describe('A2AProvider', () => {
     bytes.write('%PDF-1.7');
     const raw = bytes.toString('base64');
     for (const document of [raw, raw.replace(/=+$/, '')]) {
-      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'PDF received' }] } }),
-      );
+      mockReply('PDF received');
       const result = await provider().callApi('Read the invoice.', {
         prompt: { raw: 'Read the invoice.', label: 'Question' },
         vars: { document },
@@ -723,9 +737,7 @@ describe('A2AProvider', () => {
         { companions, includeInvoice: true },
         { companions, includeInvoice: false },
       ])) {
-        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-        );
+        mockReply('pdf ok');
         const inputs: Inputs = {
           invoice: { type: 'pdf', description: 'An invoice' },
           ...Object.fromEntries(Object.keys(companions).map((key) => [key, 'A text input'])),
@@ -755,14 +767,13 @@ describe('A2AProvider', () => {
           vars,
         });
         expect(result.output).toBe('pdf ok');
-        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const body = lastRequest();
         const textParts = body.message.parts.filter((part: { text?: string }) => part.text);
         const values = Object.values(companions);
         expect(textParts.map((part: { text: string }) => part.text)).toEqual(
           values.length === 0 ? [] : [values.length === 1 ? values[0] : JSON.stringify(companions)],
         );
-        const filePart = body.message.parts.at(-1);
-        expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);
+        expect(body.message.parts.at(-1)).toEqual(expectedPdf(version, raw));
         for (const omitted of [
           vars.question,
           vars.apiKey,
@@ -786,9 +797,7 @@ describe('A2AProvider', () => {
         { question: 'What is the total?', locale: 'en' },
       ];
       for (const companions of cases) {
-        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'PDF received' }] } }),
-        );
+        mockReply('PDF received');
         const values = Object.values(companions);
         const result = await provider({ protocolVersion }).callApi(values[0], {
           prompt: { raw: `{{${Object.keys(companions)[0]}}}`, label: 'Companion task' },
@@ -807,7 +816,7 @@ describe('A2AProvider', () => {
           },
         });
         expect(result.output).toBe('PDF received');
-        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const body = lastRequest();
         const text = body.message.parts.filter((part: { text?: string }) => part.text);
         expect(text.map((part: { text: string }) => part.text)).toEqual([
           values.length === 1 ? values[0] : JSON.stringify(companions),
@@ -830,9 +839,7 @@ describe('A2AProvider', () => {
         { inputs: undefined, question: 'A'.repeat(100) },
         { inputs: {}, question: 'data:image/png;base64,UE5H' },
       ]) {
-        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-        );
+        mockReply('pdf ok');
         await provider({ protocolVersion: version }).callApi(document, {
           prompt: { raw: '{{document}}', label: 'PDF' },
           vars: { document, question },
@@ -840,7 +847,7 @@ describe('A2AProvider', () => {
             metadata: { strategyId: 'pdf', pdf: { input: 'document' }, pluginConfig: { inputs } },
           },
         });
-        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const body = lastRequest();
         expect(
           body.message.parts
             .filter((part: { text?: string }) => part.text)
@@ -853,9 +860,7 @@ describe('A2AProvider', () => {
   it.each(['1.0', '0.3.0'])(
     'includes declared companions alongside a static PDF task in A2A %s',
     async (version) => {
-      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-      );
+      mockReply('pdf ok');
       const document = 'data:application/pdf;base64,JVBERi0x';
       await provider({ protocolVersion: version }).callApi(`Summarize ${document}`, {
         prompt: { raw: `Summarize ${document}`, label: 'PDF task' },
@@ -879,7 +884,7 @@ describe('A2AProvider', () => {
           },
         },
       });
-      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+      const body = lastRequest();
       const text = body.message.parts.find((part: { text?: string }) => part.text).text;
       expect(JSON.parse(text)).toEqual({
         task: 'Summarize [PDF attachment]',
@@ -913,9 +918,7 @@ describe('A2AProvider', () => {
           const prompt = plain
             ? `Read ${vars.document}. References: ${vars.scan} and ${vars.secretFile}. ${question}`
             : JSON.stringify(vars);
-          vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-            jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-          );
+          mockReply('pdf ok');
           await provider({ protocolVersion: version }).callApi(prompt, {
             prompt: { raw: prompt, label: 'PDF task with attachments' },
             vars,
@@ -932,7 +935,7 @@ describe('A2AProvider', () => {
               },
             },
           });
-          const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+          const body = lastRequest();
           const text = body.message.parts.find((part: { text?: string }) => part.text).text;
           expect(JSON.parse(text)).toEqual({
             task: plain
@@ -948,8 +951,7 @@ describe('A2AProvider', () => {
           for (const bytes of [raw, scan, secret]) {
             expect(text).not.toContain(bytes);
           }
-          const filePart = body.message.parts.at(-1);
-          expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);
+          expect(body.message.parts.at(-1)).toEqual(expectedPdf(version, raw));
         }
       }
     },
@@ -1008,9 +1010,7 @@ describe('A2AProvider', () => {
               : {}),
           },
         ]) {
-          vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-            jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
-          );
+          mockReply('pdf ok');
           await provider({ protocolVersion: version }).callApi(prompt, {
             prompt: { raw: prompt, label: 'PDF task' },
             vars: {
@@ -1023,7 +1023,7 @@ describe('A2AProvider', () => {
               metadata: { strategyId: 'pdf', pdf: { input: 'document' }, pluginConfig: { inputs } },
             },
           });
-          const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+          const body = lastRequest();
           const textParts = body.message.parts.filter((part: { text?: string }) => part.text);
           expect(textParts.map((part: { text: string }) => part.text)).toEqual(
             expected
@@ -1034,8 +1034,7 @@ describe('A2AProvider', () => {
                 ]
               : [],
           );
-          const filePart = body.message.parts.at(-1);
-          expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);
+          expect(body.message.parts.at(-1)).toEqual(expectedPdf(version, raw));
           expect(JSON.stringify(textParts)).not.toContain(raw);
           expect(JSON.stringify(textParts)).not.toContain('Private credential');
         }

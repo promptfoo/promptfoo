@@ -2,10 +2,15 @@ import crypto from 'node:crypto';
 
 import logger from '../../logger';
 import {
+  getInputRepresentations,
+  isBase64Attachment,
+  MAX_PDF_BYTES,
+  omitAttachmentData,
+} from '../../types/attachments';
+import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  getInputRepresentations,
   type Inputs,
   normalizeInputDefinition,
   type ProviderOptions,
@@ -372,30 +377,7 @@ function getPdfPromptText(
   } catch {
     // A plain-text prompt can contain instructions around the attachment.
   }
-  let text = prompt;
-  for (const [key, input] of entries) {
-    const value = nonEmptyString(input);
-    if (
-      !value ||
-      (key !== mediaVarName &&
-        inputs?.[key] &&
-        normalizeInputDefinition(inputs[key]).type === 'text')
-    ) {
-      continue;
-    }
-    const attachment = value.trim().match(/^data:[^,]+;base64,(.+)$/is);
-    if (attachment || key === mediaVarName || inputs?.[key]) {
-      const placeholder = key === mediaVarName ? '[PDF attachment]' : '[Attachment]';
-      for (const part of attachment ? [value, attachment[0], attachment[1]] : [value]) {
-        text = text
-          .split(part)
-          .join(placeholder)
-          .split(JSON.stringify(part).slice(1, -1))
-          .join(placeholder);
-      }
-    }
-  }
-  return text;
+  return omitAttachmentData(prompt, entries, inputs, mediaVarName);
 }
 
 function getDefaultTextPart(
@@ -479,14 +461,12 @@ function getDefaultMedia(
   let mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
   if (strategyId === 'pdf') {
     raw = raw.replace(/\s/g, '');
-    if (Buffer.byteLength(raw, 'base64') > 5 * 1024 * 1024) {
+    if (Buffer.byteLength(raw, 'base64') > MAX_PDF_BYTES) {
       throw new Error(`PDF strategy input "${varName}" exceeds the 5 MiB limit`);
     }
     if (
       (parsedDataUrl && parsedDataUrl.mediaType.toLowerCase() !== 'application/pdf') ||
-      !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) ||
-      raw.length % 4 === 1 ||
-      (raw.includes('=') && raw.length % 4 !== 0) ||
+      !isBase64Attachment(raw) ||
       Buffer.from(raw.slice(0, 8), 'base64').subarray(0, 5).toString() !== '%PDF-'
     ) {
       throw new Error(
@@ -822,6 +802,9 @@ export class A2AProvider implements ApiProvider {
         message,
         ...(this.config.configuration
           ? { configuration: renderTemplate(this.config.configuration, vars, context) }
+          : {}),
+        ...(this.config.metadata
+          ? { metadata: renderTemplate(this.config.metadata, vars, context) }
           : {}),
       };
 

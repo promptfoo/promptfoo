@@ -1,4 +1,4 @@
-import { degrees, PDFDocument } from 'pdf-lib';
+import { degrees, PDFDocument, PDFName, PDFNumber } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { createPdf, inspectPdf, MAX_PDF_BYTES, scanPdf } from '../../src/redteam/pdf';
 
@@ -61,6 +61,16 @@ describe('PDF rendering', () => {
     page.setRotation(degrees(90));
     const scanned = await PDFDocument.load(await scanPdf(await original.save()));
     expect(scanned.getPage(0).getSize()).toEqual({ width: 700, height: 500 });
+  });
+
+  it('bounds the effective page dimensions before allocating a canvas', async () => {
+    const doc = await PDFDocument.create();
+    const { node } = doc.addPage([306, 396]);
+    node.set(PDFName.of('UserUnit'), PDFNumber.of(2));
+    const scanned = await PDFDocument.load(await scanPdf(await doc.save()));
+    expect(scanned.getPage(0).getSize()).toEqual({ width: 612, height: 792 });
+    node.set(PDFName.of('UserUnit'), PDFNumber.of(4));
+    await expect(scanPdf(await doc.save())).rejects.toThrow('20 inches');
   });
 
   it('rejects overflowing or unsupported text instead of dropping content', async () => {

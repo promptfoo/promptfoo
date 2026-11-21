@@ -9,7 +9,7 @@ import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { createPdf, inspectPdf, MAX_PDF_BYTES } from '../../../src/redteam/pdf';
-import { addPdfTestCases } from '../../../src/redteam/strategies/pdf';
+import { addPdfTestCases, matchPdfTemplates } from '../../../src/redteam/strategies/pdf';
 import { getStrategyGenerationProvider } from '../../../src/redteam/strategies/types';
 import {
   getMediaStorage,
@@ -48,6 +48,16 @@ describe('PDF strategy', () => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
     await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  it('invalidates generated cases if a template changes in place', async () => {
+    const input = testCase();
+    const tests = await addPdfTestCases([input], '__prompt', {});
+    const inputs = input.metadata.pluginConfig?.inputs;
+    expect(await matchPdfTemplates(tests, inputs)).toBe(true);
+    await fs.writeFile(path.join(directory, 'invoice.pdf'), await createPdf('Revised invoice'));
+    expect(await matchPdfTemplates(tests, inputs)).toBe(false);
+    expect(await matchPdfTemplates(tests)).toBe(false);
   });
 
   it('rejects non-regular template paths before reading', async () => {

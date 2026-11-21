@@ -210,7 +210,6 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/image',
-          'red-team/strategies/pdf',
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],
@@ -310,7 +309,6 @@ const redTeamSidebar = [
         label: 'Multi-Modal Red Teaming',
         id: 'guides/multimodal-red-team',
       },
-      { type: 'doc', label: 'PDF Upload Red Teaming', id: 'guides/pdf-red-team' },
       {
         type: 'doc',
         label: 'Foundation Model Red Teaming',
@@ -351,6 +349,11 @@ const sidebars = {
     {
       type: 'doc',
       id: 'installation',
+    },
+    {
+      type: 'link',
+      label: 'Local Server API',
+      href: '/docs/local-server-api-reference/',
     },
     {
       type: 'category',
@@ -542,6 +545,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'enterprise/index' },
         { type: 'doc', id: 'enterprise/authentication' },
+        { type: 'doc', id: 'enterprise/sso' },
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },

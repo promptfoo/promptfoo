@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -12,295 +14,134 @@ import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator transforms', () => {
-  it.each(
-    ['default', 'test'].flatMap((scope) =>
-      ['remove-pdf', 'remove-companion', 'empty-envelope', 'unchanged', 'plain-task'].map(
-        (scenario) => ({ scope, scenario }),
-      ),
-    ),
-  )(
-    'validates PDF attachment presence after a $scope transform: $scenario',
-    async ({ scope, scenario }) => {
-      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
-      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
-      const reference = 'data:image/png;base64,T3JpZ2luYWw=';
-      const inputs = { document, reference, question: 'What is the total?' };
-      const envelope: Record<string, string> = { ...inputs };
-      if (scenario === 'remove-pdf') {
-        delete envelope.document;
-      } else if (scenario === 'remove-companion') {
-        delete envelope.reference;
-      }
-      const transformedPrompt =
-        scenario === 'plain-task'
-          ? inputs.question
-          : JSON.stringify(scenario === 'empty-envelope' ? {} : envelope);
-      const transformVars = `({ ...vars, __prompt: ${JSON.stringify(transformedPrompt)} })`;
-      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
-        ...(vars as Record<string, unknown>),
-        __prompt: transformedPrompt,
-      }));
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('{{__prompt}}')],
-        defaultTest: scope === 'default' ? { options: { transformVars } } : undefined,
-        tests: [
-          {
-            vars: { ...inputs, __prompt: JSON.stringify(inputs) },
-            metadata: {
-              strategyId: 'pdf',
-              pluginConfig: {
-                inputs: {
-                  document: { type: 'pdf', description: 'Invoice' },
-                  reference: { type: 'image', description: 'Reference' },
-                  optional: { type: 'pdf', description: 'Optional attachment' },
-                  question: 'Question',
-                },
-              },
-              pdf: {
-                input: 'document',
-                contentHash: `sha256:${sha256(bytes)}`,
-                companionHashes: { reference: `sha256:${sha256('Original')}`, optional: null },
+  const invoice = Buffer.from('%PDF-1.7\nOriginal invoice');
+  const reference = Buffer.from('Fixture');
+  const inputs = {
+    document: `data:application/pdf;base64,${invoice.toString('base64')}`,
+    reference: `data:image/png;base64,${reference.toString('base64')}`,
+    question: 'What is the total?',
+  };
+
+  async function transformPdf(
+    changes: Record<string, string | undefined>,
+    defaultTransform = false,
+  ) {
+    const options = { transformVars: '({ ...vars })' };
+    vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+      ...(vars as Record<string, unknown>),
+      ...changes,
+    }));
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{__prompt}}')],
+      defaultTest: defaultTransform ? { options } : undefined,
+      tests: [
+        {
+          vars: { ...inputs, __prompt: JSON.stringify(inputs) },
+          options: defaultTransform ? undefined : options,
+          metadata: {
+            strategyId: 'pdf',
+            pluginConfig: {
+              inputs: {
+                document: { type: 'pdf', description: 'Invoice' },
+                reference: { type: 'image', description: 'Reference' },
+                optional: { type: 'pdf', description: 'Optional attachment' },
+                question: 'Question',
               },
             },
-            options: scope === 'default' ? undefined : { transformVars },
+            pdf: {
+              input: 'document',
+              contentHash: `sha256:${sha256(invoice)}`,
+              companionHashes: { reference: `sha256:${sha256(reference)}`, optional: null },
+            },
           },
-        ],
-      };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
-      const summary = await evalRecord.toEvaluateSummary();
-      if (scenario === 'unchanged' || scenario === 'plain-task') {
-        expect(summary.results[0].error).toBeUndefined();
-        expect(summary.results[0].success).toBe(true);
-        expect(mockApiProvider.callApi).toHaveBeenCalledExactlyOnceWith(
-          transformedPrompt,
-          expect.objectContaining({ vars: expect.objectContaining(inputs) }),
-          expect.objectContaining({ onResponseHeaders: expect.any(Function) }),
-        );
-      } else {
-        expect(summary.results[0].error).toContain('PDF attachment differs');
-        expect(summary.results[0].success).toBe(false);
-        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+        },
+      ],
+    };
+    const evaluation = new Eval({});
+    await evaluate(suite, evaluation, {});
+    return (await evaluation.toEvaluateSummary()).results[0];
+  }
+
+  const changedInvoice = Buffer.from('%PDF-1.7\nChanged').toString('base64');
+  const changes = {
+    replaceDocument: { document: changedInvoice },
+    removeDocument: { document: undefined },
+    changeReference: { reference: 'Q2hhbmdlZA==' },
+    removeReference: { reference: undefined },
+    addFile: { optional: changedInvoice },
+  };
+  it.each(
+    ['default', 'test'].flatMap((scope) =>
+      Object.entries(changes).map(([name, patch]) => ({ scope, name, patch })),
+    ),
+  )(
+    'rejects $name in variables and in the envelope after a $scope transform',
+    async ({ scope, patch }) => {
+      for (const update of [patch, { __prompt: JSON.stringify({ ...inputs, ...patch }) }]) {
+        const row = await transformPdf(update, scope === 'default');
+        expect(row.error).toContain('PDF attachment differs from its generated artifact');
+        expect(row.success).toBe(false);
       }
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['default', 'test', 'envelope'])(
-    'rejects changed PDF attachments before calling the target: %s transform',
-    async (scope) => {
-      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
-      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
-      const changed = `data:application/pdf;base64,${Buffer.from('%PDF-1.7\nChanged invoice').toString('base64')}`;
-      const transformVars =
-        scope === 'envelope'
-          ? `({ ...vars, __prompt: JSON.stringify({ document: ${JSON.stringify(changed)} }) })`
-          : `({ ...vars, document: ${JSON.stringify(changed)} })`;
-      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
-        ...(vars as Record<string, unknown>),
-        ...(scope === 'envelope'
-          ? { __prompt: JSON.stringify({ document: changed }) }
-          : { document: changed }),
-      }));
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('{{__prompt}}')],
-        defaultTest: scope === 'default' ? { options: { transformVars } } : undefined,
-        tests: [
-          {
-            vars: { document, __prompt: JSON.stringify({ document }) },
-            metadata: {
-              strategyId: 'pdf',
-              pdf: {
-                input: 'document',
-                contentHash: `sha256:${sha256(bytes)}`,
-                text: 'Original invoice',
-              },
-            },
-            options: scope === 'default' ? undefined : { transformVars },
-          },
-        ],
-      };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(summary.results[0].error).toContain(
-        'PDF attachment differs from its generated artifact',
-      );
-      expect(summary.results[0].success).toBe(false);
+  it.each([true, false])(
+    'checks serialized and plain tasks for a default transform of %s',
+    async (useDefault) => {
+      expect((await transformPdf({ __prompt: '{}' }, useDefault)).success).toBe(false);
       expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      for (const __prompt of [JSON.stringify(inputs), inputs.question]) {
+        const row = await transformPdf({ __prompt }, useDefault);
+        expect(row.success).toBe(true);
+        expect(mockApiProvider.callApi).toHaveBeenLastCalledWith(
+          __prompt,
+          expect.objectContaining({ vars: expect.objectContaining(inputs) }),
+          expect.objectContaining({ onResponseHeaders: expect.any(Function) }),
+        );
+      }
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     },
   );
 
   it.each(['padded', 'unpadded', 'whitespace'])(
-    'allows companion text transforms and equivalent attachment encodings: %s',
+    'allows edited text and equivalent attachment encodings: %s',
     async (encoding) => {
-      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
-      const raw = bytes.toString('base64');
-      const document = `data:application/pdf;base64,${raw}`;
-      const encode = (value: string) =>
-        encoding === 'unpadded'
-          ? value.replace(/=+$/, '')
+      const encode = (bytes: Buffer) => {
+        const raw = bytes.toString('base64');
+        return encoding === 'unpadded'
+          ? raw.replace(/=+$/, '')
           : encoding === 'whitespace'
-            ? `\n${value.replace(/.{8}/g, '$&\n')}\n`
-            : value;
-      const transformedDocument = encode(raw);
-      const transformedReference = encode('T3JpZ2luYWw=');
-      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
-        ...(vars as Record<string, unknown>),
-        document: transformedDocument,
-        reference: transformedReference,
-        question: 'Explain the payment terms.',
-        __prompt: JSON.stringify({
-          document: transformedDocument,
-          reference: transformedReference,
-          question: 'Explain the payment terms.',
-        }),
-      }));
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('{{__prompt}}')],
-        tests: [
-          {
-            vars: {
-              document,
-              reference: 'data:image/png;base64,T3JpZ2luYWw=',
-              __prompt: JSON.stringify({ document }),
-            },
-            metadata: {
-              strategyId: 'pdf',
-              pdf: {
-                input: 'document',
-                contentHash: `sha256:${sha256(bytes)}`,
-                text: 'Original invoice',
-                companionHashes: { reference: `sha256:${sha256('Original')}` },
-              },
-            },
-            options: {
-              transformVars:
-                '({ ...vars, document: vars.document.split(",")[1], question: "Explain the payment terms." })',
-            },
-          },
-        ],
+            ? `\n${raw.replace(/.{8}/g, '$&\n')}\n`
+            : raw;
       };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(summary.results[0].error).toBeUndefined();
-      expect(summary.results[0].success).toBe(true);
+      const updated = {
+        document: encode(invoice),
+        reference: encode(reference),
+        question: 'Explain the payment terms.',
+      };
+      const row = await transformPdf({ ...updated, __prompt: JSON.stringify(updated) });
+      expect(row.success).toBe(true);
       expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
     },
   );
 
-  it.each(
-    ['document', 'reference'].flatMap((input) =>
-      ['vars', 'envelope'].flatMap((scope) =>
-        ['alphabet', 'extra-padding', 'partial-padding'].map((malformed) => ({
-          input,
-          scope,
-          malformed,
-        })),
-      ),
-    ),
-  )(
-    'rejects malformed $input base64 in $scope: $malformed',
-    async ({ input, scope, malformed }) => {
-      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
-      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
-      const reference = `data:image/png;base64,${Buffer.from('Fixture').toString('base64')}`;
-      const inputs = { document, reference };
-      const original = input === 'document' ? document : reference;
-      const changed =
-        malformed === 'alphabet'
-          ? `${original}!`
-          : malformed === 'extra-padding'
-            ? `${original}===`
-            : original.slice(0, -1);
-      // Node's permissive decoder accepts each malformed value as the same bytes.
-      expect(Buffer.from(changed.split(',')[1], 'base64')).toEqual(
-        Buffer.from(original.split(',')[1], 'base64'),
-      );
-      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
-        ...(vars as Record<string, unknown>),
-        ...(scope === 'envelope'
-          ? { __prompt: JSON.stringify({ ...inputs, [input]: changed }) }
-          : { [input]: changed }),
-      }));
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('{{__prompt}}')],
-        tests: [
-          {
-            vars: { ...inputs, __prompt: JSON.stringify(inputs) },
-            metadata: {
-              strategyId: 'pdf',
-              pdf: {
-                input: 'document',
-                contentHash: `sha256:${sha256(bytes)}`,
-                companionHashes: { reference: `sha256:${sha256('Fixture')}` },
-              },
-            },
-            options: { transformVars: '({ ...vars })' },
-          },
-        ],
-      };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(summary.results[0].success).toBe(false);
-      expect(summary.results[0].error).toContain(
-        `PDF attachment contains invalid base64 (${input})`,
-      );
-      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['vars', 'envelope', 'added', 'removed'])(
-    'rejects changed PDF companion evidence before target delivery: %s',
-    async (scenario) => {
-      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
-      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
-      const original = 'data:application/octet-stream;base64,T3JpZ2luYWw=';
-      const changed = 'data:application/octet-stream;base64,Q2hhbmdlZA==';
-      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
-        ...(vars as Record<string, unknown>),
-        ...(scenario === 'envelope'
-          ? { __prompt: JSON.stringify({ document, reference: changed }) }
-          : { reference: scenario === 'removed' ? undefined : changed }),
-      }));
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('{{__prompt}}')],
-        tests: [
-          {
-            vars: {
-              document,
-              ...(scenario === 'added' ? {} : { reference: original }),
-              __prompt: JSON.stringify({
-                document,
-                ...(scenario === 'added' ? {} : { reference: original }),
-              }),
-            },
-            metadata: {
-              strategyId: 'pdf',
-              pdf: {
-                input: 'document',
-                contentHash: `sha256:${sha256(bytes)}`,
-                companionHashes: {
-                  reference: scenario === 'added' ? null : `sha256:${sha256('Original')}`,
-                },
-              },
-              inputVars: { reference: 'Original readable evidence' },
-            },
-            options: { transformVars: '({ ...vars })' },
-          },
-        ],
-      };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(summary.results[0].error).toContain('PDF attachment differs');
-      expect(summary.results[0].success).toBe(false);
+  it.each(['document', 'reference'] as const)(
+    'rejects malformed %s even if Node decodes it',
+    async (key) => {
+      const raw = inputs[key].split(',')[1];
+      for (const invalid of [`${raw}!`, `${raw}===`, raw.slice(0, -1)]) {
+        expect(Buffer.from(invalid, 'base64')).toEqual(Buffer.from(raw, 'base64'));
+        for (const update of [
+          { [key]: invalid },
+          { __prompt: JSON.stringify({ ...inputs, [key]: invalid }) },
+        ]) {
+          const row = await transformPdf(update);
+          expect(row.error).toContain(`PDF attachment contains invalid base64 (${key})`);
+          expect(row.success).toBe(false);
+        }
+      }
       expect(mockApiProvider.callApi).not.toHaveBeenCalled();
     },
   );
@@ -392,10 +233,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Transformed: ${output}`',
     };
 
@@ -546,10 +384,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`ProviderTransformed: ${output}`',
     };
 
@@ -602,10 +437,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with multiple transforms', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -639,10 +471,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -680,10 +509,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 

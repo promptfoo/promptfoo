@@ -43,7 +43,7 @@ redteam:
     - id: coding-agent:core
 ```
 
-Use the full collection for comprehensive coverage across all coding-agent plugin IDs:
+Use the full collection to run all coding-agent plugin IDs:
 
 ```yaml
 redteam:
@@ -160,8 +160,6 @@ Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homogly
 ## How Promptfoo Grades These Plugins
 
 Promptfoo uses a three-tier grading pipeline, from cheapest to most expensive:
-
-When using the [PDF strategy](/docs/red-team/strategies/pdf/), deterministic verifiers still receive original test variables, including undeclared canaries and file-hash evidence. The model grader receives sanitized document context without those verifier-only values.
 
 **1. Deterministic canary/receipt checks** — When the test supplies synthetic values:
 

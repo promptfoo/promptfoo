@@ -42,7 +42,7 @@ export type BlobLike =
     };
 
 function normalizePath(path: string): string {
-  return path.replace(/^\//, '');
+  return path.replace(/^\/+/, '');
 }
 
 function withApiBase(apiPath: string): string {
@@ -79,18 +79,28 @@ function resolveMediaUrl(url?: string | null): string | undefined {
   return undefined;
 }
 
+export function isMediaRef(
+  value: unknown,
+): value is `${typeof BLOB_URI_PREFIX}${string}` | `${typeof STORAGE_REF_PREFIX}${string}` {
+  return (
+    typeof value === 'string' &&
+    (value.startsWith(BLOB_URI_PREFIX) || value.startsWith(STORAGE_REF_PREFIX))
+  );
+}
+
 export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
   }
 
   if (uri.startsWith(BLOB_URI_PREFIX)) {
-    return withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
+    const hash = uri.slice(BLOB_URI_PREFIX.length);
+    return hash && !/^\/+$/u.test(hash) ? withApiBase(`/api/blobs/${hash}`) : undefined;
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
     const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return withApiBase(`/api/media/${path}`);
+    return path ? withApiBase(`/api/media/${path}`) : undefined;
   }
 
   // Only allow safe internal paths and data URIs
@@ -101,6 +111,19 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   }
 
   return undefined;
+}
+
+export function resolveDocumentUrl(key: unknown, attachment?: unknown): string | undefined {
+  const inline = typeof attachment === 'string' ? attachment.trim() : '';
+  if (/^data:application\/pdf;base64,./i.test(inline)) {
+    return inline;
+  }
+  if (typeof key !== 'string' || !key || key.length > 2048) {
+    return undefined;
+  }
+  return /^(document\/[a-f0-9]{12}\.pdf|blob\/[a-f0-9]{64})$/i.test(key)
+    ? resolveBlobUri(STORAGE_REF_PREFIX + key)
+    : withApiBase(`/api/media?${new URLSearchParams({ key })}`);
 }
 
 export function resolveBlobRef(blobRef?: BlobLike | null): string | undefined {

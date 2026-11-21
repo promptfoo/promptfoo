@@ -113,42 +113,21 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
 
 async function serveMedia(key: string, res: Response, contentAddressed: boolean): Promise<void> {
   try {
-    logger.debug('[Media API] Serving media', { key });
-
-    const exists = await mediaExists(key);
-    if (!exists) {
+    const storage = getMediaStorage();
+    const [type, filename, extra] = key.split('/');
+    if (
+      (!contentAddressed &&
+        !storage.allowOpaqueMediaKeys &&
+        (extra !== undefined || !MediaRouteParamsSchema.safeParse({ type, filename }).success)) ||
+      !(await mediaExists(key))
+    ) {
       res.status(404).json({ error: 'Media not found' });
       return;
     }
 
-    if (key.startsWith('blob/')) {
-      const storage = getMediaStorage();
-      const { data, contentType } = storage.retrieveWithMetadata
-        ? await storage.retrieveWithMetadata(key)
-        : { data: await storage.retrieve(key), contentType: undefined };
-      const mimeType =
-        typeof contentType === 'string' && /^[a-z]+\/[a-z0-9_+-]+$/i.test(contentType)
-          ? contentType
-          : 'application/octet-stream';
-      res.setHeader('Content-Type', mimeType);
-      if (!isSafeInlineBlobMimeType(mimeType)) {
-        res.setHeader('Content-Disposition', 'attachment');
-      }
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Length', data.length);
-      res.setHeader(
-        'Cache-Control',
-        mimeType === 'application/octet-stream'
-          ? 'no-store'
-          : mimeType === 'application/pdf' || !contentAddressed
-            ? 'private, no-cache'
-            : 'public, max-age=31536000, immutable',
-      );
-      res.send(data);
-      return;
-    }
-
-    const data = await retrieveMedia(key);
+    const { data, contentType } = storage.retrieveWithMetadata
+      ? await storage.retrieveWithMetadata(key)
+      : { data: await retrieveMedia(key), contentType: undefined };
 
     // Determine content type from filename
     const extension = key.split('.').pop()?.toLowerCase() || '';
@@ -167,21 +146,31 @@ async function serveMedia(key: string, res: Response, contentAddressed: boolean)
       ogv: 'video/ogg',
     };
 
-    const contentType =
-      data.subarray(0, 5).toString('ascii') === '%PDF-'
+    const mimeType =
+      data.subarray(0, 5).toString() === '%PDF-'
         ? 'application/pdf'
-        : contentTypes[extension] || 'application/octet-stream';
-
-    res.setHeader('Content-Type', contentType);
+        : contentType && /^[a-z]+\/[a-z0-9.+_-]+$/i.test(contentType)
+          ? contentType.toLowerCase()
+          : Object.hasOwn(contentTypes, extension)
+            ? contentTypes[extension]
+            : 'application/octet-stream';
+    res.setHeader('Content-Type', mimeType);
+    if (!isSafeInlineBlobMimeType(mimeType)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
     res.setHeader('Content-Length', data.length);
+    const immutable =
+      contentAddressed &&
+      type !== 'document' &&
+      mimeType !== 'application/pdf' &&
+      (type === 'blob' || storage.hasImmutableKeys === true);
     res.setHeader(
       'Cache-Control',
-      contentAddressed &&
-        !key.startsWith('document/') &&
-        contentType !== 'application/pdf' &&
-        getMediaStorage().hasImmutableKeys === true
-        ? 'public, max-age=31536000, immutable'
-        : 'private, no-cache',
+      mimeType === 'application/octet-stream' && type === 'blob'
+        ? 'no-store'
+        : immutable
+          ? 'public, max-age=31536000, immutable'
+          : 'private, no-cache',
     );
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(data);

@@ -64,7 +64,7 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
@@ -321,7 +321,10 @@ async function doGenerateRedteamInternal(
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Skip generation when a YAML output already matches the current config hash.
+  const unchanged =
+    'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)';
+  let previousPdfOutput: { config: Partial<UnifiedConfig>; tests: TestCase[] } | undefined;
+  // File-based templates can change without changing the configuration hash.
   if (
     !options.force &&
     !options.configFromCloud &&
@@ -337,10 +340,17 @@ async function doGenerateRedteamInternal(
     const currentHash = await getConfigHash(configPath, options);
 
     if (storedHash === currentHash) {
-      logger.warn(
-        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-      );
-      return redteamContent;
+      const tests = Array.isArray(redteamContent.tests)
+        ? redteamContent.tests.filter((t): t is TestCase =>
+            Boolean(t && typeof t === 'object' && 'metadata' in t && t.metadata?.pdf),
+          )
+        : [];
+      if (tests.length) {
+        previousPdfOutput = { config: redteamContent, tests };
+      } else {
+        logger.warn(unchanged);
+        return redteamContent;
+      }
     }
   }
 
@@ -366,6 +376,14 @@ async function doGenerateRedteamInternal(
       ...resolved.config,
       providers: selectedProviderConfigs,
     });
+
+    if (previousPdfOutput) {
+      const { matchPdfTemplates } = await import('../strategies/pdf');
+      if (await matchPdfTemplates(previousPdfOutput.tests, testSuite.providers[0]?.inputs)) {
+        logger.warn(unchanged);
+        return previousPdfOutput.config;
+      }
+    }
 
     // Warn if both tests section and redteam config are present
     if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {

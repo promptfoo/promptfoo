@@ -4,7 +4,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { sampleArray } from '../../util/generation';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, PluginConfig, TestCase } from '../../types/index';
 
@@ -302,12 +302,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'Harmbench',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'Harmbench')];
   }
 }
 

@@ -27,7 +27,7 @@ process.stdout.write(String(pdf.getPageCount()));`,
     ],
     {
       cwd: fileURLToPath(new URL('.', import.meta.url)),
-      env: { ...process.env, NODE_OPTIONS: '' },
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, NODE_OPTIONS: '' },
       timeout: 15000,
       killSignal: 'SIGKILL',
       stdio: ['pipe', 'pipe', 'pipe'],

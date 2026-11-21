@@ -3,8 +3,10 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { getDirectory } from '../esm';
+import { MAX_PDF_BYTES } from '../types/attachments';
 
-export const MAX_PDF_BYTES = 5 * 1024 * 1024;
+export { MAX_PDF_BYTES };
+
 const MAX_PDF_TEXT_CHARS = 50_000;
 
 function validatePdfBytes(bytes: Uint8Array): void {
@@ -55,7 +57,7 @@ async function processPdf<T>(
       const input = JSON.parse(Buffer.concat(chunks).toString());
       const bytes = input.bytes ? Buffer.from(input.bytes, 'base64') : undefined;
       const { text } = input;
-      const { PDFDocument, StandardFonts } = require(process.argv[1]);
+      const { PDFDocument, PDFName, PDFNumber, StandardFonts } = require(process.argv[1]);
       const document = bytes
         ? await PDFDocument.load(bytes, { updateMetadata: false })
         : await PDFDocument.create();
@@ -63,12 +65,15 @@ async function processPdf<T>(
       if (bytes && (pages.length < 1 || pages.length > 10)) {
         throw new Error('PDF must contain between 1 and 10 pages');
       }
+      function validateSize(width, height) {
+        if (![width, height].every(size => Number.isFinite(size) && size >= 72 && size <= 1440)) {
+          throw new Error('PDF pages must be between 1 and 20 inches in each dimension');
+        }
+      }
       for (const page of pages) {
+        const unit = page.node.lookupMaybe(PDFName.of('UserUnit'), PDFNumber)?.asNumber() ?? 1;
         for (const { width, height } of [page.getSize(), page.getCropBox()]) {
-          if (!Number.isFinite(width) || !Number.isFinite(height) ||
-              width < 72 || height < 72 || width > 1440 || height > 1440) {
-            throw new Error('PDF pages must be between 1 and 20 inches in each dimension');
-          }
+          validateSize(width * unit, height * unit);
         }
       }
       if (process.argv[3] === 'create') {
@@ -136,14 +141,13 @@ async function processPdf<T>(
           const scanned = await PDFDocument.create();
           scanned.setCreationDate(new Date(0));
           scanned.setModificationDate(new Date(0));
-          for (let index = 0; index < pages.length; index++) {
-            const page = pages[index];
-            const crop = page.getCropBox();
-            const rotated = page.getRotation().angle % 180 !== 0;
-            const width = rotated ? crop.height : crop.width;
-            const height = rotated ? crop.width : crop.height;
+          // Use the renderer's viewport, including rotation, clipping and UserUnit.
+          const info = await parser.getInfo({ parsePageInfo: true });
+          if (info.pages.length !== pages.length) throw new Error('Inconsistent PDF page count');
+          for (const { width, height, pageNumber } of info.pages) {
+            validateSize(width, height);
             const screenshot = await parser.getScreenshot({
-              partial: [index + 1], scale: Math.min(1200 / width, 1600 / height),
+              partial: [pageNumber], scale: Math.min(1200 / width, 1600 / height),
               imageDataUrl: false, imageBuffer: true,
             });
             const image = await scanned.embedPng(screenshot.pages[0].data);
@@ -174,7 +178,8 @@ async function processPdf<T>(
       operation,
     ],
     {
-      env: { ...process.env, NODE_OPTIONS: '' },
+      // The parser only needs the runtime and its resolved libraries.
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, NODE_OPTIONS: '' },
       stdio: ['pipe', 'ignore', 'ignore', 'ipc'],
       windowsHide: true,
     },

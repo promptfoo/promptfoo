@@ -1,8 +1,16 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { registerTracerProvider } from '../../../src/tracing/tracerProvider';
+import { mockProcessEnv } from '../../util/utils';
 
 const servers: Server[] = [];
 
@@ -60,6 +68,36 @@ afterEach(async () => {
 });
 
 describe('Anthropic Messages SDK transport', () => {
+  const exporter = new InMemorySpanExporter();
+  const tracerProvider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
+  });
+  let restoreEnv: () => void;
+
+  beforeAll(() => {
+    registerTracerProvider(tracerProvider);
+  });
+
+  beforeEach(() => {
+    exporter.reset();
+    // An inherited SDK opt-out must not hide duplicate instrumentation.
+    restoreEnv = mockProcessEnv({ ANTHROPIC_OPEN_TELEMETRY: 'true' });
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  afterAll(async () => {
+    try {
+      await tracerProvider.shutdown();
+    } finally {
+      trace.disable();
+      context.disable();
+      propagation.disable();
+    }
+  });
+
   it('sends a request and parses a response through the installed SDK', async () => {
     const { baseUrl, requests } = await createMessagesServer(200);
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
@@ -80,6 +118,19 @@ describe('Anthropic Messages SDK transport', () => {
       },
     ]);
     expect(result).toMatchObject({ output: 'pong', tokenUsage: { prompt: 3, completion: 1 } });
+    await tracerProvider.forceFlush();
+    expect(exporter.getFinishedSpans()).toMatchObject([
+      {
+        name: 'chat claude-sonnet-4-6',
+        instrumentationScope: { name: 'promptfoo.providers' },
+        attributes: {
+          'promptfoo.provider.id': provider.id(),
+          'gen_ai.usage.input_tokens': 3,
+          'gen_ai.usage.output_tokens': 1,
+        },
+        status: { code: SpanStatusCode.OK },
+      },
+    ]);
   });
 
   it('returns an authentication error from the installed SDK', async () => {
@@ -94,5 +145,17 @@ describe('Anthropic Messages SDK transport', () => {
     expect(result.error).toContain('bad key');
     expect(result.error).not.toContain('local-qa-key');
     expect(result.output).toBeUndefined();
+    await tracerProvider.forceFlush();
+    expect(exporter.getFinishedSpans()).toMatchObject([
+      {
+        name: 'chat claude-sonnet-4-6',
+        instrumentationScope: { name: 'promptfoo.providers' },
+        attributes: {
+          'promptfoo.provider.id': provider.id(),
+          'error.type': 'provider_error',
+        },
+        status: { code: SpanStatusCode.ERROR },
+      },
+    ]);
   });
 });

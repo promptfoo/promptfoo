@@ -84,6 +84,7 @@ context, similar to how the MCP provider uses discovered tools.
 | `polling.timeoutMs`  | number                       | `300000` | Maximum time to wait for task completion                                    |
 | `message`            | object                       | -        | Custom A2A message template                                                 |
 | `configuration`      | object                       | -        | A2A message configuration sent with each request                            |
+| `metadata`           | object                       | -        | JSON metadata sent with each message request                                |
 | `transformResponse`  | string \| Function           | -        | JavaScript transform for reshaping the final provider response              |
 | `timeoutMs`          | number                       | -        | Per-request HTTP timeout. Defaults to promptfoo's provider request timeout. |
 
@@ -219,18 +220,7 @@ The provider supports stream events containing `message`, `task`, `statusUpdate`
 ## Custom Messages
 
 By default, promptfoo sends a `ROLE_USER` message with a single text part containing `{{prompt}}`.
-
-For audio, image, and video redteam strategies, the default message includes the generated file and uses `question` as companion text when present.
-
-For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Instructions surrounding the PDF in your prompt are preserved, with the file value replaced by `[PDF attachment]`. For example, `Summarize {{document}}` becomes `Summarize [PDF attachment]` alongside the file part. The task prompt can also contain text alone; the selected PDF is still attached separately.
-
-When the prompt contains only the PDF or a JSON object made from declared input fields, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Other rendered fields, such as an `instruction` variable, stay in the prompt. Without declared inputs, the provider uses `question` when no rendered task text is available. With declared inputs, include `question` as a text input to send it as a companion.
-
-When a PDF task has both rendered instructions and declared text companions, the text part is a JSON object with `task` and `inputs` fields. This preserves companions even when the prompt does not interpolate them.
-
-If the target declares other non-text inputs alongside the selected PDF, configure `config.message` with a file part for every attachment. The default rejects these mixed-file inputs before agent-card discovery or delivery to prevent silently omitting companion files.
-
-Custom message templates replace this default. Include any required file parts in `config.message`:
+You can provide a custom message template:
 
 ```yaml
 providers:
@@ -242,9 +232,11 @@ providers:
           - text: '{{prompt}}'
       configuration:
         returnImmediately: false
+      metadata:
+        metadata_field: '{{metadata_field_value}}'
 ```
 
-Promptfoo renders Nunjucks variables in `message`, `auth`, `headers`, `agentCardUrl`, `url`, and
+Promptfoo renders Nunjucks variables in `message`, `auth`, `headers`, `agentCardUrl`, `url`, `metadata`, and
 `configuration`. It also adds a stable `messageId` and uses `sessionId` as the A2A `contextId` when
 available.
 

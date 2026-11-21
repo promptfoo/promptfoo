@@ -1,3 +1,4 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
 import { getEventListeners } from 'node:events';
@@ -21,6 +22,31 @@ import * as fileExtensions from '../../src/util/fileExtensions';
 import { sleep } from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
+const createEmptyEvaluationConfig = () => ({
+  providers: [],
+  prompts: [],
+});
+
+const createAsciiSmugglingMetadata = () => ({
+  pluginId: 'ascii-smuggling',
+});
+
+const createInitialRunOptions = () => ({
+  delay: 0,
+  testIdx: 0,
+  promptIdx: 0,
+  repeatIndex: 0,
+  isRedteam: false,
+});
+
+const createCappedRedteamConfig = () => ({
+  providers: [],
+  prompts: [],
+  redteam: {
+    maxCharsPerMessage: 10,
+  },
+});
+
 describe('runEval', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,19 +67,10 @@ describe('runEval', () => {
 
   const mockProvider: ApiProvider = {
     id: vi.fn().mockReturnValue('test-provider'),
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Test output',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    }),
+    callApi: vi.fn().mockResolvedValue(createTokenOutput()),
   };
 
-  const defaultOptions = {
-    delay: 0,
-    testIdx: 0,
-    promptIdx: 0,
-    repeatIndex: 0,
-    isRedteam: false,
-  };
+  const defaultOptions = createInitialRunOptions();
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
@@ -412,6 +429,91 @@ describe('runEval', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves separate native conversation output for cached=%s',
+    async (cached) => {
+      const parts = [
+        { text: 'Signed text', thoughtSignature: 'signature' },
+        {
+          inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' },
+          thoughtSignature: 'image-signature',
+        },
+      ];
+      const original = structuredClone(parts);
+      const conversations = {} as Record<string, any>;
+      const provider: ApiProvider = {
+        id: () => 'native-history',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Display text',
+          conversationOutput: parts,
+          cached,
+          tokenUsage: { total: 3, prompt: 1, completion: 2, numRequests: 1 },
+        }),
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'native-history' },
+        test: { options: { transform: 'output + "-test"' } },
+        conversations,
+        registers: {},
+      });
+      expect(result.success).toBe(true);
+      expect(result.response?.output).toBe('Display text-test');
+      expect(result.response?.conversationOutput).toEqual(parts);
+      expect(Object.values(conversations)[0][0].output).toEqual(parts);
+      expect(parts).toEqual(original);
+    },
+  );
+
+  it.each([
+    { native: '', expected: '' },
+    { native: undefined, expected: 'Display text' },
+  ])(
+    'honors explicit empty conversation output and legacy fallback: %j',
+    async ({ native, expected }) => {
+      const conversations = {} as Record<string, any>;
+      const provider: ApiProvider = {
+        id: () => 'history-fallback',
+        callApi: vi.fn().mockResolvedValue({ output: 'Display text', conversationOutput: native }),
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: '{{ _conversation | dump }}', label: 'history-fallback' },
+        test: {},
+        conversations,
+        registers: {},
+      });
+      expect(result.success).toBe(true);
+      expect(Object.values(conversations)[0][0].output).toBe(expected);
+    },
+  );
+
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        error: 'Provider failed',
+        conversationOutput: [{ text: 'Incomplete' }],
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 
@@ -767,13 +869,7 @@ describe('runEval', () => {
     };
 
     // Define defaultOptions locally for this test
-    const defaultOptions = {
-      delay: 0,
-      testIdx: 0,
-      promptIdx: 0,
-      repeatIndex: 0,
-      isRedteam: false,
-    };
+    const defaultOptions = createInitialRunOptions();
 
     const results = await runEval({
       ...defaultOptions,
@@ -984,13 +1080,7 @@ describe('runEval', () => {
           prompt: 'this is too long',
         },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: true,
@@ -1260,13 +1350,7 @@ describe('runEval', () => {
       },
       prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
       test: {},
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1341,14 +1425,9 @@ describe('runEval', () => {
           prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1382,10 +1461,7 @@ describe('runEval', () => {
         },
         options: { provider: mockGradingApiProviderPasses },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1405,14 +1481,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1437,14 +1508,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1469,14 +1535,9 @@ describe('runEval', () => {
             assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
           },
         ],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1496,14 +1557,9 @@ describe('runEval', () => {
           name: 'Alice',
           query: 'Hello {{name}}',
         },
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1573,10 +1629,7 @@ describe('runEval', () => {
           // on a real timer.
           await Promise.resolve();
           vi.advanceTimersByTime(50);
-          return {
-            output: 'Test output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-          };
+          return createTokenOutput();
         }),
       };
 
@@ -1597,6 +1650,64 @@ describe('runEval', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it.each([
+      { output: 'Test output' },
+      { output: 'Cached output', cached: true },
+      { error: 'Provider error' },
+    ])('measures elapsed latency across wall-clock rollback for %j', async (response) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+      const provider: ApiProvider = {
+        id: () => 'clock-rollback-provider',
+        callApi: async () => {
+          await Promise.resolve();
+          vi.setSystemTime(Date.now() - 5000);
+          vi.advanceTimersByTime(50);
+          return response;
+        },
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(50);
+      expect(results[0].success).toBe(!('error' in response));
+      expect(results[0].error).toBe('error' in response ? response.error : undefined);
+    });
+
+    it('reports measured latency in whole milliseconds', async () => {
+      vi.useFakeTimers();
+
+      const provider: ApiProvider = {
+        id: () => 'fractional-latency-provider',
+        callApi: async () => {
+          await Promise.resolve();
+          // performance.now() is fractional; shared results are stored as integers.
+          vi.advanceTimersByTime(12.6);
+          return { output: 'Test output' };
+        },
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(13);
+      expect(Number.isInteger(results[0].latencyMs)).toBe(true);
     });
 
     it('should respect provider latencyMs of 0', async () => {

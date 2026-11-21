@@ -1,4 +1,4 @@
-import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../../contracts/traceProviderEndpoint';
+import { hasTraceCredentialPath } from '../../contracts/traceProviderEndpoint';
 import logger from '../../logger';
 import { TraceProviderError } from './types';
 
@@ -14,13 +14,7 @@ export function validateTraceProviderEndpoint(endpoint: string, providerName: st
     throw new Error(`${providerName} provider endpoint must be a valid HTTP or HTTPS URL`);
   }
 
-  const hasCredentialPath = url.pathname.split('/').some((segment) => {
-    try {
-      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
-    } catch {
-      return true;
-    }
-  });
+  const hasCredentialPath = hasTraceCredentialPath(url.pathname);
   if (
     !['http:', 'https:'].includes(url.protocol) ||
     url.username ||
@@ -48,6 +42,19 @@ export async function readLimitedResponse(
   providerName: string,
   maxResponseBytes = MAX_TRACE_RESPONSE_BYTES,
 ): Promise<string> {
+  if (!response.ok) {
+    await releaseResponse(response, providerName);
+    throw new TraceProviderError(`${providerName} returned HTTP ${response.status}`, {
+      statusCode: response.status,
+      retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+    });
+  }
+
+  if (Number(response.headers.get('content-length')) > maxResponseBytes) {
+    await releaseResponse(response, providerName);
+    throw new TraceProviderError(`${providerName} trace exceeds the maximum response size`);
+  }
+
   const reader = response.body?.getReader();
   if (!reader) {
     return '';

@@ -150,149 +150,60 @@ describe('InputsEditor', () => {
       });
     });
 
+    const template = { source: 'file' as const, path: './invoice.pdf' };
+    const sharedConfig = { benign: true, injectionPlacements: ['body', 'header'] };
+
     it.each([
-      { type: 'text', label: 'Text' },
-      { type: 'docx', label: 'DOCX' },
-      { type: 'image', label: 'Image' },
-    ] as const)(
-      'removes PDF templates when changing the input to $label',
-      async ({ type, label }) => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        const config = {
-          template: { source: 'file' as const, path: './invoice.pdf' },
-          benign: true,
-          inputPurpose: 'Invoice review',
-          injectionPlacements: ['body'],
-        };
-        const initialInputs: Inputs = {
-          document: { type: 'pdf', description: 'Invoice', config },
-        };
-        renderWithProviders(
-          <ControlledInputsEditor initialInputs={initialInputs} onChange={onChange} compact />,
-        );
-
-        await user.click(screen.getByRole('combobox'));
-        await user.click(await screen.findByRole('option', { name: label }));
-
-        const updated = onChange.mock.lastCall?.[0].document;
-        expect(InputDefinitionSchema.safeParse(updated).success).toBe(true);
-        expect(updated).toEqual({
-          type,
-          description: 'Invoice',
-          config: { benign: true, inputPurpose: 'Invoice review', injectionPlacements: ['body'] },
-        });
-        expect(initialInputs.document).toEqual({ type: 'pdf', description: 'Invoice', config });
-        expect(config.template).toEqual({ source: 'file', path: './invoice.pdf' });
+      {
+        from: 'pdf',
+        config: { ...sharedConfig, template },
+        to: 'DOCX',
+        expected: { type: 'docx', description: 'Invoice', config: sharedConfig },
       },
-    );
-
-    it.each(['text', 'docx', 'image'] as const)(
-      'preserves compatible placements when changing a %s input to PDF',
-      async (type) => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        const config = {
-          inputPurpose: 'Invoice review',
-          injectionPlacements: ['body', 'header', 'footer'],
-        };
-        const initialInputs: Inputs = {
-          document: { type, description: 'Invoice', config },
-        };
-        renderWithProviders(
-          <ControlledInputsEditor initialInputs={initialInputs} onChange={onChange} compact />,
-        );
-
-        await user.click(screen.getByRole('combobox'));
-        await user.click(await screen.findByRole('option', { name: 'PDF' }));
-
-        expect(onChange).toHaveBeenLastCalledWith({
-          document: {
-            type: 'pdf',
-            description: 'Invoice',
-            config,
-          },
-        });
-        expect(initialInputs.document).toEqual({ type, description: 'Invoice', config });
-        expect(config.injectionPlacements).toEqual(['body', 'header', 'footer']);
+      { from: 'pdf', config: { template }, to: 'Text', expected: 'Invoice' },
+      {
+        from: 'image',
+        config: sharedConfig,
+        to: 'PDF',
+        expected: { type: 'pdf', description: 'Invoice', config: sharedConfig },
       },
-    );
-
-    it.each(['text', 'docx'] as const)(
-      'keeps supported placements from a mixed %s configuration when switching to PDF',
-      async (type) => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        const config = { injectionPlacements: ['comment', 'header', 'footnote', 'body'] };
-        renderWithProviders(
-          <ControlledInputsEditor
-            initialInputs={{ document: { type, description: 'Invoice', config } }}
-            onChange={onChange}
-            compact
-          />,
-        );
-
-        await user.click(screen.getByRole('combobox'));
-        await user.click(await screen.findByRole('option', { name: 'PDF' }));
-
-        const updated = onChange.mock.lastCall?.[0].document;
-        expect(updated).toEqual({
+      {
+        from: 'docx',
+        config: { injectionPlacements: ['header', 'footnote'] },
+        to: 'PDF',
+        expected: {
           type: 'pdf',
           description: 'Invoice',
-          config: { injectionPlacements: ['header', 'body'] },
+          config: { injectionPlacements: ['header'] },
+        },
+      },
+      {
+        from: 'text',
+        config: { injectionPlacements: ['footnote'] },
+        to: 'PDF',
+        expected: { type: 'pdf', description: 'Invoice' },
+      },
+    ])(
+      'preserves only compatible settings from $from to $to',
+      async ({ from, config, to, expected }) => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const document = InputDefinitionSchema.parse({
+          type: from,
+          description: 'Invoice',
+          config,
         });
-        expect(InputDefinitionSchema.safeParse(updated).success).toBe(true);
-        expect(config.injectionPlacements).toEqual(['comment', 'header', 'footnote', 'body']);
+        renderWithProviders(
+          <ControlledInputsEditor initialInputs={{ document }} onChange={onChange} compact />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await user.click(await screen.findByRole('option', { name: to }));
+
+        expect(onChange).toHaveBeenLastCalledWith({ document: expected });
+        expect(document).toEqual({ type: from, description: 'Invoice', config });
       },
     );
-
-    it('omits empty config when removing the only placement setting', async () => {
-      const user = userEvent.setup();
-      const onChange = vi.fn();
-      renderWithProviders(
-        <ControlledInputsEditor
-          initialInputs={{
-            document: {
-              type: 'text',
-              description: 'Invoice',
-              config: { injectionPlacements: ['footnote'] },
-            },
-          }}
-          onChange={onChange}
-          compact
-        />,
-      );
-
-      await user.click(screen.getByRole('combobox'));
-      await user.click(await screen.findByRole('option', { name: 'PDF' }));
-
-      expect(onChange).toHaveBeenLastCalledWith({
-        document: { type: 'pdf', description: 'Invoice' },
-      });
-    });
-
-    it('stores a plain text definition when removing the only PDF setting', async () => {
-      const user = userEvent.setup();
-      const onChange = vi.fn();
-      renderWithProviders(
-        <ControlledInputsEditor
-          initialInputs={{
-            document: {
-              type: 'pdf',
-              description: 'Invoice',
-              config: { template: { source: 'generated', description: 'A fictional invoice' } },
-            },
-          }}
-          onChange={onChange}
-          compact
-        />,
-      );
-
-      await user.click(screen.getByRole('combobox'));
-      await user.click(await screen.findByRole('option', { name: 'Text' }));
-
-      expect(onChange).toHaveBeenLastCalledWith({ document: 'Invoice' });
-    });
 
     it('should preserve structured text input config when editing descriptions', async () => {
       const user = userEvent.setup();

@@ -81,6 +81,9 @@ export interface MediaStorageProvider {
   /** Provider identifier (e.g., 'local', 's3') */
   readonly providerId: string;
 
+  /** Enable only for an access-controlled, media-only namespace. */
+  readonly allowOpaqueMediaKeys?: boolean;
+
   /** Whether a stored key always identifies the same bytes. Enables immutable media caching. */
   readonly hasImmutableKeys?: boolean;
 

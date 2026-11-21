@@ -9,8 +9,9 @@ import {
 } from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies/indirectWebPwn';
+import { getInputRepresentations, omitAttachmentData } from '../types/attachments';
 import { isApiProvider, isProviderOptions } from '../types/providers';
-import { getInputRepresentations, normalizeInputDefinition } from '../types/shared';
+import { getInputType } from '../types/shared';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
@@ -31,7 +32,12 @@ import type {
  * Returns whether some (but not all) turns have grader errors.
  * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
  */
-function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
+function analyzeGraderErrors(
+  redteamHistory:
+    | Array<{ graderError?: string; prompt?: string; output?: string; gradingInputHash?: string }>
+    | undefined,
+  coveredTurn?: { prompt: string; output: string; gradingInputHash: string },
+): {
   hasAnyErrors: boolean;
   allTurnsHaveErrors: boolean;
 } {
@@ -40,7 +46,16 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   }
 
   const turnsWithErrors = redteamHistory.filter(
-    (turn) => turn.graderError && turn.graderError.length > 0,
+    (turn, index) =>
+      turn?.graderError &&
+      turn.graderError.length > 0 &&
+      !(
+        coveredTurn &&
+        index === redteamHistory.length - 1 &&
+        (turn.gradingInputHash
+          ? turn.gradingInputHash === coveredTurn.gradingInputHash
+          : turn.prompt === coveredTurn.prompt && turn.output === coveredTurn.output)
+      ),
   );
   const hasAnyErrors = turnsWithErrors.length > 0;
   const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
@@ -148,27 +163,14 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
   }
   // Grade the actual document contents and legitimate task without sending binary data.
   const inputs = test.metadata?.pluginConfig?.inputs as Inputs | undefined;
-  let renderedPrompt = targetPrompt;
-  for (const [key, value] of getInputRepresentations(test.vars ?? {}, inputs, pdf.input)) {
-    if (
-      typeof value !== 'string' ||
-      !value ||
-      (key !== pdf.input && inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
-    ) {
-      continue;
-    }
-    const attachment = value.trim().match(/^data:[^,]+;base64,(.+)$/is);
-    if (attachment || key === pdf.input || inputs?.[key]) {
-      const placeholder = key === pdf.input ? '[PDF attachment]' : '[Attachment]';
-      for (const part of attachment ? [value, attachment[0], attachment[1]] : [value]) {
-        renderedPrompt = renderedPrompt
-          ?.split(part)
-          .join(placeholder)
-          .split(JSON.stringify(part).slice(1, -1))
-          .join(placeholder);
-      }
-    }
-  }
+  const renderedPrompt =
+    targetPrompt &&
+    omitAttachmentData(
+      targetPrompt,
+      getInputRepresentations(test.vars ?? {}, inputs, pdf.input),
+      inputs,
+      pdf.input,
+    );
   const inputNames = Object.keys(inputs ?? {});
   const vars: NonNullable<AtomicTestCase['vars']> = {
     ...Object.fromEntries(
@@ -179,10 +181,7 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
     [pdf.input]: pdf.text,
   };
   for (const [key, value] of Object.entries(vars)) {
-    if (
-      key === pdf.input ||
-      (inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
-    ) {
+    if (key === pdf.input || (inputs?.[key] && getInputType(inputs[key]) === 'text')) {
       continue;
     }
     const materialized = test.metadata?.inputMaterialization?.[key];
@@ -415,6 +414,22 @@ export const handleRedteam = async (
       );
     }
 
+    // A fresh verdict resolves only the matching final turn, not earlier ungraded attempts.
+    const { hasAnyErrors } = analyzeGraderErrors(
+      isAttackProvider(providerId ?? '') ? providerResponse.metadata?.redteamHistory : undefined,
+      grade.metadata?.graderError === true
+        ? undefined
+        : {
+            prompt: effectivePrompt,
+            output: outputString,
+            gradingInputHash: getGradingInputHash(
+              effectivePrompt,
+              outputString,
+              undefined,
+              test.metadata?.pluginId,
+            ),
+          },
+    );
     const gradeWithUsage = tokensUsed ? withGradingUsage(grade, tokensUsed) : grade;
     return {
       ...gradeWithUsage,
@@ -431,9 +446,18 @@ export const handleRedteam = async (
         // Pass through all test metadata for redteam
         ...test.metadata,
         ...gradeWithUsage.metadata,
+        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
     };
   } catch (error) {
+    // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
+    if (
+      providerId === 'promptfoo:redteam:iterative:meta' ||
+      providerId === 'promptfoo:redteam:hydra' ||
+      providerId === 'promptfoo:redteam:goblin'
+    ) {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as
