@@ -17,7 +17,7 @@ import { awsProviderFactories } from '../../../src/providers/families/aws';
 const factory = awsProviderFactories.find((candidate) => candidate.test('bedrock:'))!;
 
 describe('Bedrock Runtime model compatibility', () => {
-  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3', 'moonshotai.kimi-k3.1'])(
     'rejects the bare %s ID before constructing a Converse provider',
     async (model) => {
       await expect(factory.create(`bedrock:converse:${model}`, {}, {} as never)).rejects.toThrow(
@@ -40,7 +40,7 @@ describe('Bedrock Runtime model compatibility', () => {
     expect(getHandlerForModel(`us.${model}`)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
-  it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3'])(
+  it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3', 'moonshotai.kimi-k3.1'])(
     'keeps application profile resources opaque for %s',
     (model) => {
       const prefix = 'arn:aws:bedrock:us-east-1:123456789012:';
@@ -53,7 +53,7 @@ describe('Bedrock Runtime model compatibility', () => {
     },
   );
 
-  it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3'])(
+  it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3', 'moonshotai.kimi-k3.1'])(
     'rejects the foundation-model ARN for %s before constructing a Converse provider',
     async (model) => {
       const arn = `arn:aws:bedrock:us-east-1::foundation-model/${model}`;
@@ -169,6 +169,9 @@ describe('Bedrock Runtime model compatibility', () => {
     'us.moonshotai.kimi-k3',
     'global.moonshotai.kimi-k3',
     'in.moonshotai.kimi-k3',
+    'us.moonshotai.kimi-k3.1',
+    'global.moonshotai.kimi-k3.1',
+    'in.moonshotai.kimi-k3.1',
   ])('uses the OpenAI request and response contract for %s', async (model) => {
     const handler = getHandlerForModel(model);
     expect(handler).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
@@ -191,7 +194,7 @@ describe('Bedrock Runtime model compatibility', () => {
     });
   });
 
-  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3'])(
+  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3', 'moonshotai.kimi-k3.1'])(
     'explains why the bare %s model cannot use on-demand InvokeModel',
     (model) => {
       expect(() => getHandlerForModel(model)).toThrow(`bedrock:us.${model}`);
@@ -199,9 +202,12 @@ describe('Bedrock Runtime model compatibility', () => {
   );
 });
 
-it('includes the India Kimi profile in the bare-ID correction', () => {
-  expect(() => getHandlerForModel('moonshotai.kimi-k3')).toThrow('bedrock:in.moonshotai.kimi-k3');
-});
+it.each(['moonshotai.kimi-k3', 'moonshotai.kimi-k3.1'])(
+  'includes the India Kimi profile in the bare-ID correction for %s',
+  (model) => {
+    expect(() => getHandlerForModel(model)).toThrow(`bedrock:in.${model}"`);
+  },
+);
 
 describe('Bedrock Runtime pricing', () => {
   it.each([
@@ -211,6 +217,8 @@ describe('Bedrock Runtime pricing', () => {
     ['global.xai.grok-4.7', 2, 6, 0.5, 0],
     ['us.moonshotai.kimi-k3', 3.3, 16.5, 0.33, 4.125],
     ['global.moonshotai.kimi-k3', 3, 15, 0.3, 3.75],
+    ['us.moonshotai.kimi-k3.1', 4.4, 22, 0.22, 5.5],
+    ['global.moonshotai.kimi-k3.1', 4, 20, 0.2, 5],
   ] as const)('prices %s cache usage and service tiers', (model, input, output, read, write) => {
     for (const [type, multiplier] of [
       ['default', 1],
@@ -251,6 +259,9 @@ describe('Bedrock Runtime pricing', () => {
     'us.moonshotai.kimi-k3',
     'global.moonshotai.kimi-k3',
     'in.moonshotai.kimi-k3',
+    'us.moonshotai.kimi-k3.1',
+    'global.moonshotai.kimi-k3.1',
+    'in.moonshotai.kimi-k3.1',
     'a1b2c3d4e5',
   ])('does not infer catalog pricing from application profile resource %s', async (resource) => {
     const arn = `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${resource}`;
@@ -269,10 +280,17 @@ describe('Bedrock Runtime pricing', () => {
   });
 
   it.each([
-    'in.moonshotai.kimi-k3',
-    'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3',
-  ])('prices published India Kimi usage for %s', (model) => {
-    const expected = (800 * 3.3 + 500 * 16.5 + 200 * 0.33 + 100 * 4.125) / 1e6;
+    ['in.moonshotai.kimi-k3', (800 * 3.3 + 500 * 16.5 + 200 * 0.33 + 100 * 4.125) / 1e6],
+    [
+      'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3',
+      (800 * 3.3 + 500 * 16.5 + 200 * 0.33 + 100 * 4.125) / 1e6,
+    ],
+    ['in.moonshotai.kimi-k3.1', (800 * 4.4 + 500 * 22 + 200 * 0.22 + 100 * 5.5) / 1e6],
+    [
+      'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3.1',
+      (800 * 4.4 + 500 * 22 + 200 * 0.22 + 100 * 5.5) / 1e6,
+    ],
+  ])('prices published India Kimi usage for %s', (model, expected) => {
     for (const region of ['ap-south-1', 'ap-south-2']) {
       expect(calculateBedrockCost(model, 800, 500, 200, 100, region)).toBeCloseTo(expected, 12);
       expect(
@@ -287,10 +305,10 @@ describe('Bedrock Runtime pricing', () => {
     ).toBeUndefined();
   });
 
-  it.each(['us', 'in', 'global'])(
-    'sends a configured Kimi K3 InvokeModel tier on the %s profile',
-    async (geo) => {
-      const id = geo + '.moonshotai.kimi-k3';
+  it.each(['us', 'in', 'global'].flatMap((geo) => [`${geo}.kimi-k3`, `${geo}.kimi-k3.1`]))(
+    'sends a configured Kimi InvokeModel tier on the %s profile',
+    async (profile) => {
+      const id = profile.replace('.', '.moonshotai.');
       const handler = getHandlerForModel(id);
       const config = { service_tier: 'flex' as const, region: 'us-east-1' };
       expect(await handler.params(config, 'Hello', [], id)).toMatchObject({ service_tier: 'flex' });

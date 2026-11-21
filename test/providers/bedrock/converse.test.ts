@@ -2917,6 +2917,28 @@ Third line`;
       expect((await provider.callApi('Test')).cost).toBeCloseTo(0.006, 12);
     });
 
+    it('prices Kimi K3.1 Converse cache usage at the US profile rates', async () => {
+      const provider = new AwsBedrockConverseProvider('us.moonshotai.kimi-k3.1', {
+        config: { region: 'us-east-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: {
+            inputTokens: 1000,
+            outputTokens: 200,
+            totalTokens: 1600,
+            cacheReadInputTokens: 300,
+            cacheWriteInputTokens: 100,
+          },
+        }),
+      );
+      // US CRIS: $4.40 input, $22 output, $0.22 cache read, $5.50 cache write per 1M tokens.
+      expect((await provider.callApi('Test')).cost).toBeCloseTo(
+        (1000 * 4.4 + 200 * 22 + 300 * 0.22 + 100 * 5.5) / 1e6,
+        12,
+      );
+    });
+
     it('passes region and service tier through to the shared cost calculator', async () => {
       const provider = new AwsBedrockConverseProvider('minimax.minimax-m2.1', {
         config: { region: 'eu-west-1', serviceTier: { type: 'priority' } },
@@ -3718,6 +3740,24 @@ Third line`;
         ]),
       });
       expect((await provider.callApiStreaming('Test')).cost).toBeCloseTo(0.003, 12);
+    });
+
+    it('prices Kimi K3.1 using the tier in Converse stream metadata', async () => {
+      const provider = new AwsBedrockConverseProvider('global.moonshotai.kimi-k3.1', {
+        config: { region: 'us-east-1', serviceTier: { type: 'priority' }, streaming: true },
+      });
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream([
+          {
+            metadata: {
+              usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+              serviceTier: { type: 'flex' },
+            },
+          },
+        ]),
+      });
+      // Global Flex: (1000 * $4 + 200 * $20) / 1M * 0.5.
+      expect((await provider.callApiStreaming('Test')).cost).toBeCloseTo(0.004, 12);
     });
 
     it('should include prompt cache reads and writes in streaming cost', async () => {

@@ -512,6 +512,15 @@ const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
   'openai.gpt-oss-',
 ] as const;
 
+// Standard global-profile rates per 1M tokens; the US and India profiles bill 10% more.
+const KIMI_RUNTIME_RATES: Record<
+  string,
+  { input: number; output: number; read: number; write: number }
+> = {
+  'kimi-k3': { input: 3, output: 15, read: 0.3, write: 3.75 },
+  'kimi-k3.1': { input: 4, output: 20, read: 0.2, write: 5 },
+};
+
 /** The documented US and global Grok 4.6/4.7 Runtime inference profiles. */
 export function isBedrockGrokRuntimeProfile(modelId: string): boolean {
   return /(?:^|:inference-profile\/)(?:us|global)\.xai\.grok-4\.[67]$/.test(modelId.toLowerCase());
@@ -611,7 +620,7 @@ export function calculateBedrockCost(
   // AWS model cards publish separate geo/global cache rates for these Runtime
   // profiles. Converse inputTokens excludes the separately reported cache tokens.
   const grok47 = /(?:^|:inference-profile\/)(us|global)\.xai\.grok-4\.7$/.exec(normalizedModelId);
-  const kimi3 = /(?:^|:inference-profile\/)(us|in|global)\.moonshotai\.kimi-k3$/.exec(
+  const kimi3 = /(?:^|:inference-profile\/)(us|in|global)\.moonshotai\.(kimi-k3(?:\.1)?)$/.exec(
     normalizedModelId,
   );
   const glm53 = /(?:^|:inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
@@ -636,7 +645,7 @@ export function calculateBedrockCost(
     const rates = grok47
       ? { input: 2, output: 6, read: 0.5, write: 0 }
       : kimi3
-        ? { input: 3, output: 15, read: 0.3, write: 3.75 }
+        ? KIMI_RUNTIME_RATES[kimi3[2]]
         : { input: 1.68, output: 5.28, read: 0.312, write: 2.1 };
     const multiplier =
       (globalProfile ? 1 : govCloudGrok ? 1.32 : 1.1) *

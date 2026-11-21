@@ -39,11 +39,13 @@ export function getBedrockRuntimeModelError(
   ) {
     return 'GLM 5.3 on Bedrock Runtime requires a system inference profile, such as us.zai.glm-5.3 or global.zai.glm-5.3.';
   }
+  const kimiVersion = /^(?:[^:/]+\.)?moonshotai\.kimi-k3(\.1)?$/.exec(profileModel);
   if (
-    /^(?:[^:/]+\.)?moonshotai\.kimi-k3$/.test(profileModel) &&
-    (isFoundationModelArn || !/^(?:us|in|global)\.moonshotai\.kimi-k3$/.test(profileModel))
+    kimiVersion &&
+    (isFoundationModelArn || !/^(?:us|in|global)\.moonshotai\.kimi-k3(?:\.1)?$/.test(profileModel))
   ) {
-    return 'Kimi K3 on Bedrock Runtime requires a system inference profile, such as us.moonshotai.kimi-k3, in.moonshotai.kimi-k3, or global.moonshotai.kimi-k3.';
+    const model = `moonshotai.kimi-k3${kimiVersion[1] ?? ''}`;
+    return `Kimi K3${kimiVersion[1] ?? ''} on Bedrock Runtime requires a system inference profile, such as us.${model}, in.${model}, or global.${model}.`;
   }
   if (
     /^(?:[^:/]+\.)?xai\.grok-4\.[67]$/.test(profileModel) &&
