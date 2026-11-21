@@ -66,6 +66,16 @@ export function isOtlpReceiverStarted(): boolean {
   return otlpReceiverStarted;
 }
 
+export function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
+  return (
+    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+    testSuite.tracing?.enabled === true ||
+    (typeof testSuite.defaultTest === 'object' &&
+      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true
+  );
+}
+
 async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
   // Default retention is only materialized on parsed configs. Keep ad-hoc suites
   // opt-in so tests and programmatic callers do not prune unexpectedly.
@@ -118,12 +128,7 @@ export async function startOtlpReceiverIfNeeded(
 
   const httpTracing = testSuite.tracing?.otlp?.http;
   const commandToolNames = testSuite.tracing?.commandToolNames;
-  const tracingEnabled =
-    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-    testSuite.tracing?.enabled === true ||
-    (typeof testSuite.defaultTest === 'object' &&
-      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
-    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true;
+  const tracingEnabled = isTracingEnabledForSuite(testSuite);
   if (tracingEnabled) {
     await pruneTraceStoreIfNeeded(testSuite);
   }
