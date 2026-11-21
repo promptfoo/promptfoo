@@ -59,7 +59,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
-  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+  SOURCE_REF: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.sha }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
@@ -70,13 +70,9 @@ jobs:
   test:
     # Bot-authored releases are already handled by release-please.yml after npm publish.
     # The release event path is for human-published fallback releases and backfills.
-    # release-please.yml also builds the image for a release commit, so the push of that
-    # commit is skipped. The call from release-please.yml has the same push event; it is
-    # told apart by its tag input and must always run.
-    if: >-
-      (github.event_name != 'release' || github.event.release.author.type != 'Bot') &&
-      !(github.event_name == 'push' && !inputs.tag_name &&
-      startsWith(github.event.head_commit.message, 'chore(main): release '))
+    if: github.event_name != 'release' || github.event.release.author.type != 'Bot'
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     name: test (${{ matrix.platforms.platform }})
     strategy:
       fail-fast: false
@@ -287,10 +283,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ env.SOURCE_REF }}
+          ref: ${{ needs.test.outputs.source_sha }}
           persist-credentials: false
 
-      # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - *resolve-source-commit
 
       - name: Set up QEMU
