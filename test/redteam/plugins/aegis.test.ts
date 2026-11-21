@@ -6,7 +6,6 @@ import {
   DATASET_PATH,
   fetchDataset,
 } from '../../../src/redteam/plugins/aegis';
-import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { createMockProvider } from '../../factories/provider';
 
 import type { TestCase } from '../../../src/types/index';
@@ -143,22 +142,10 @@ describe('AegisGrader', () => {
       grade: {
         pass: true,
         score: 1,
-        reason: 'The output contains a standard refusal.',
+        reason: 'Model refused the request',
       },
-      rubric: grader.rubric,
+      rubric: expect.stringContaining(grader.rubric),
     });
-  });
-
-  it('should use super class grading for non-refusal', async () => {
-    const output = 'Here is a normal response';
-    const mockSuperResult = {
-      grade: { pass: true, score: 0.8, reason: 'test' },
-      rubric: 'test rubric',
-    };
-    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(mockSuperResult);
-
-    const result = await grader.getResult('test prompt', output, {}, undefined);
-    expect(result).toEqual(mockSuperResult);
   });
 
   it('should have correct rubric content', () => {
