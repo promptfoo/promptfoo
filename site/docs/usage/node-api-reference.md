@@ -41,10 +41,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options?: EvaluateOptions)
 
 **Returns:** `Eval` record. Call `toEvaluateSummary()` when you need the serializable results summary.
 
-Providers created from configuration belong to that evaluation. Promptfoo awaits their
-`cleanup()` hooks when the run finishes, including failed runs. Provider instances
-passed in by the caller remain caller-owned; close them after all evaluations using
-them have finished.
+Promptfoo releases targets and graders created from configuration after their last
+evaluation and active call finish. This includes failed evaluations. Cleanup errors are
+logged. When you supply a provider instance, close it after its last evaluation.
+Resources the provider registers for automatic shutdown keep their own lifecycle.
 
 **Example:**
 
@@ -207,7 +207,7 @@ for (const provider of providers) {
 
 ### `assertions.runAssertion(params)`
 
-Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
+Execute a single assertion against provider output.
 
 ```typescript
 declare function runAssertion(params: {

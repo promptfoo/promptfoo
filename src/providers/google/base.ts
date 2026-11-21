@@ -21,23 +21,19 @@ import {
   resolveCallbackPath,
   wrapError,
 } from '../../util/functions/loadFunction';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { MCPClient } from '../mcp/client';
+import { resolveCallback } from '../functionCallbackExecutor';
+import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { getVertexModelDefaultRegion } from './shared';
-import {
-  normalizeTools,
-  resolveGoogleToolConfig,
-  stripExecutableToolFileReferences,
-  validateFunctionCall,
-} from './util';
+import { loadGoogleTools, resolveGoogleToolConfig, validateFunctionCall } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { MCPClient } from '../mcp/client';
 import type {
   CompletionOptions,
   GoogleProviderConfig,
@@ -346,18 +342,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   /** MCP client for tool integration */
   protected mcpClient: MCPClient | null = null;
-
-  /** Promise that resolves when MCP initialization is complete */
+  private mcpSession?: McpClientSession;
+  /** Preserves the eager MCP startup contract for subclasses and callers. */
   protected initializationPromise: Promise<void> | null = null;
 
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
-
-  /** References used to populate the callback cache, for prompt-level overrides. */
-  protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
-
-  /** Effective owning directories for cached file callbacks, including CLI/cwd fallback. */
-  protected loadedFunctionCallbackBasePaths: Record<string, string | undefined> = {};
 
   /** Custom provider ID function */
   protected customId?: () => string;
@@ -392,9 +382,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       this.customId = () => id;
     }
 
-    // Initialize MCP if configured
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
+      void this.initializationPromise.catch(() => undefined);
     }
   }
 
@@ -498,12 +488,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /**
    * Initialize the MCP client for tool integration.
    */
-  protected async initializeMCP(): Promise<void> {
-    if (!this.config.mcp) {
+  protected async initializeMCP(signal?: AbortSignal): Promise<void> {
+    if (!this.config.mcp?.enabled) {
       return;
     }
-    this.mcpClient = new MCPClient(this.config.mcp);
-    await this.mcpClient.initialize();
+    this.mcpSession ??= new McpClientSession(this.config.mcp);
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   /**
@@ -516,6 +506,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     context?: CallApiContextParams,
     options: { skipExecutableToolFiles?: boolean } = {},
   ): Promise<Tool[]> {
+    await this.initializeMCP();
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -523,20 +514,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // This allows per-prompt tool overrides in test cases
     const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
     const configTools = promptConfig?.tools ?? this.config.tools;
-    const requestTools = options.skipExecutableToolFiles
-      ? stripExecutableToolFileReferences(configTools, context?.vars)
-      : configTools;
-    const loadedTools = requestTools
-      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
-      : [];
-
-    // Transform tools to Google format if needed
-    const transformedTools = Array.isArray(loadedTools)
-      ? (transformTools(loadedTools, 'google') as Tool[])
-      : loadedTools
-        ? [loadedTools]
-        : [];
-    const normalizedTools = normalizeTools(transformedTools);
+    const normalizedTools = await loadGoogleTools(configTools, context?.vars, options);
 
     // Combine all tools
     const allTools = [...mcpTools, ...normalizedTools];
@@ -585,70 +563,36 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         typeof callbackRef === 'string' && callbackRef.startsWith('file://')
           ? resolveCallbackPath('.', config.basePath)
           : undefined;
-      let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
-        this.loadedFunctionCallbacks,
-        functionName,
-      )
-        ? this.loadedFunctionCallbacks[functionName]
-        : undefined;
-
-      if (
-        this.loadedFunctionCallbackRefs[functionName] !== callbackRef ||
-        this.loadedFunctionCallbackBasePaths[functionName] !== callbackBasePath
-      ) {
-        callback = undefined;
-      }
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr, callbackBasePath);
-          } else {
-            // Inline function string (backward compatibility with existing behavior)
-            // This uses Function constructor which has security implications
-            logger.warn(
-              `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
-                `Use 'file://path/to/module.js:functionName' for better security.`,
-            );
-            try {
-              // eslint-disable-next-line no-new-func
-              callback = new Function('return ' + callbackStr)();
-              if (typeof callback !== 'function') {
-                throw new Error(`Expression did not return a function`);
-              }
-            } catch (err) {
-              throw new Error(
-                `Failed to parse inline function for '${functionName}': ${err}. ` +
-                  `Consider using 'file://' prefix to reference an external file.`,
-              );
+      const resolved = resolveCallback({
+        name: functionName,
+        reference: callbackRef,
+        cache: this.loadedFunctionCallbacks,
+        cacheScope: callbackBasePath,
+        loadFile: (reference) => this.loadExternalFunction(reference, callbackBasePath),
+        loadInline: (expression) => {
+          logger.warn(
+            `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
+              `Use 'file://path/to/module.js:functionName' for better security.`,
+          );
+          try {
+            const callback = new Function('return ' + expression)();
+            if (typeof callback !== 'function') {
+              throw new Error('Expression did not return a function');
             }
+            return callback;
+          } catch (err) {
+            throw new Error(
+              `Failed to parse inline function for '${functionName}': ${err}. ` +
+                `Consider using 'file://' prefix to reference an external file.`,
+            );
           }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
-          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
-          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
+        },
+      });
+      const callback = typeof resolved === 'function' ? resolved : await resolved;
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+      return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
         callback(args),
       );
-
-      return result;
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error;
@@ -780,12 +724,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Should be called when the provider is no longer needed.
    */
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      if (this.initializationPromise != null) {
-        await this.initializationPromise;
-      }
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+    try {
+      await this.mcpSession?.cleanup();
+    } finally {
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 

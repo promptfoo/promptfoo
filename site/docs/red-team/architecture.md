@@ -182,13 +182,13 @@ The following sequence diagram illustrates the runtime communication between Pro
 
 The data flow follows a three-phase approach:
 
-**Phase 1: Initial Attack Generation**: The Promptfoo Client requests an attack from the cloud service, which leverages AI models to generate adversarial payloads. These attacks are based on the configured plugins and strategies.
+**Phase 1: Initial Attack Generation**: The Promptfoo Client requests an attack from the cloud service, which uses AI models to generate adversarial payloads. These attacks are based on the configured plugins and strategies.
 
 **Phase 2: Iterative Refinement** - The client executes attacks against the target system and evaluates responses. If a vulnerability is detected, testing concludes. Otherwise, the client generates follow-up attacks, providing context from previous attempts.
 
-This feedback loop generates increasingly sophisticated attacks, applying different strategies and attack vectors until either a vulnerability is found or the maximum attempt limit is reached.
+The strategy uses previous responses to choose follow-up attacks until the grader reports a vulnerability or the attempt limit is reached.
 
-**Phase 3: Results Reporting**: Upon completion, the client produces a comprehensive test summary.
+**Phase 3: Results Reporting**: Upon completion, the client reports test results.
 
 ```mermaid
 sequenceDiagram

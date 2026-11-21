@@ -1,6 +1,6 @@
 ---
 sidebar_label: Select Best
-description: 'Leverage AI models to automatically select and rank the best outputs from multiple LLM responses for quality optimization'
+description: Use an LLM judge to compare outputs from multiple prompts or providers in one test case. Select the response that best meets your criterion and mark the winner.
 ---
 
 # Select Best
