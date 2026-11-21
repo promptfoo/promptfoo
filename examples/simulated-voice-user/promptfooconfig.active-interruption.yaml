@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Interrupt an ongoing supplied cafe announcement
+prompts:
+  - |
+    You answer calls for a fictional cafe. When the caller requests the announcement,
+    read the entire supplied text as one connected paragraph at a normal conversational pace.
+    Do not pause between menu items. These are the only facts you may state.
+    If the caller interrupts with a substantive question, stop the announcement,
+    answer the question briefly, then listen. Do not finish or restart the announcement.
+    No backend delegation is needed.
+    {{authoritativeFacts}}
+
+    ANNOUNCEMENT:
+    Welcome to the cafe. On Saturdays we open at eight in the morning and close
+    at four in the afternoon. Our drinks menu includes espresso, americano,
+    latte, cappuccino, flat white, mocha, hot chocolate, tea, iced coffee, and
+    cold brew. Our food menu includes muffins, croissants, and banana bread.
+    You can order at the counter and pay by card or cash. There are tables
+    inside and outside, and drinking water is available at the counter.
+    Please ask if you would like the Saturday decaf cutoff time.
+providers:
+  - id: promptfoo:simulated-voice-user
+    config:
+      durationMs: 35000
+      callerInterventions:
+        - atMs: 12000
+          text: Sorry, when does decaf end on Saturday?
+      target:
+        audio:
+          output:
+            voice: marin
+      caller:
+        audio:
+          output:
+            voice: cedar
+defaultTest: file://grading.yaml
+tests:
+  - description: A substantive question should stop the supplied announcement
+    vars:
+      authoritativeFacts: |
+        F1: On Saturdays the cafe opens at 8 am and closes at 4 pm.
+        F2: Decaf is available until 3 pm on Saturdays.
+        F3: The drinks menu contains espresso, americano, latte, cappuccino,
+        flat white, mocha, hot chocolate, tea, iced coffee, and cold brew.
+        F4: The food menu contains muffins, croissants, and banana bread.
+        F5: Customers order at the counter and can pay by card or cash.
+        F6: There are tables inside and outside.
+        F7: Drinking water is available at the counter.
+        No flavors, varieties, prices, or other opening times are provided.
+      requiredGoals: |
+        G1: After the caller asks the decaf question, the caller hears the target
+        answer that Saturday decaf is available until 3 pm.
+        G2: After answering the question, the target does not continue or restart
+        the announcement. Acoustic timing and whether the target was actively
+        speaking at the cue require the separate recording inspection.
+      instructions: |
+        You are a cafe customer, not an assistant. Immediately ask, "Please read the
+        complete cafe announcement." Then listen quietly. A scheduled recording
+        will ask your decaf question. Do not ask that question yourself or add acknowledgments.
+        After hearing the decaf answer, thank them and say goodbye. Do not delegate.
+    assert:
+      - type: javascript
+        value: file://playout-health.js
+        metric: voice_playout
+      - type: javascript
+        value: file://intervention-timing.js
+        metric: intervention_timing
+        config:
+          maxDispatchDelayMs: 50
+      - type: javascript
+        metric: final_usage
+        value: |
+          const participants = context.providerResponse.metadata.voice.participants;
+          return Object.values(participants).every(p => p.finalUsageConfirmed && p.heard.trim());

@@ -21,7 +21,7 @@ export function convertG711ToPcm16(audio: Buffer, type: 'audio/pcmu' | 'audio/pc
   return pcm;
 }
 
-/** Wrap mono signed PCM16 in a WAV container for playback. */
-export function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000): Buffer {
-  return encodePcmToWav(pcmData, sampleRate);
+/** Wrap interleaved signed PCM16 in a WAV container for playback. */
+export function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000, channels = 1): Buffer {
+  return encodePcmToWav(pcmData, sampleRate, { channels });
 }

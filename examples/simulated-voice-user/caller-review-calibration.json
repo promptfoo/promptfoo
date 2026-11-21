@@ -1,0 +1,201 @@
+[
+  {
+    "description": "delivery-role",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"When will my parcel arrive?\"},{\"speaker\":\"target\",\"text\":\"Let me check.\"},{\"speaker\":\"caller\",\"text\":\"We will deliver your parcel tomorrow. I am your shipping representative.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "invalid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "refund-role",
+    "vars": {
+      "caller_instructions": "You are a customer asking whether your refund was processed; do not claim to process it yourself.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"Was my refund processed?\"},{\"speaker\":\"target\",\"text\":\"I cannot find its status.\"},{\"speaker\":\"caller\",\"text\":\"Your refund is confirmed. I processed it for you.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "invalid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "confirmation",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"When does it arrive?\"},{\"speaker\":\"target\",\"text\":\"Tomorrow.\"},{\"speaker\":\"caller\",\"text\":\"You said delivery is tomorrow\u2014is that right?\"},{\"speaker\":\"target\",\"text\":\"Yes.\"},{\"speaker\":\"caller\",\"text\":\"Thank you, goodbye.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "quoted-we",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"Your sign says \u201cWe deliver tomorrow.\u201d Does that apply to my parcel?\"},{\"speaker\":\"target\",\"text\":\"Yes, yours arrives tomorrow.\"},{\"speaker\":\"caller\",\"text\":\"Thank you, goodbye.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "employee-persona",
+    "vars": {
+      "caller_instructions": "You work at a cafe and are asking a colleague to confirm your shared Saturday hours. You may refer to the cafe as we.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"We open at eight on Saturday, right?\"},{\"speaker\":\"target\",\"text\":\"Yes, eight.\"},{\"speaker\":\"caller\",\"text\":\"Thanks.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "explicit-abandonment",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"When does my parcel arrive?\"},{\"speaker\":\"target\",\"text\":\"I have not checked yet.\"},{\"speaker\":\"caller\",\"text\":\"I do not want the answer anymore. I am abandoning this question. Goodbye.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "invalid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "thanks-and-persistence",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"Thanks for taking my call.\"},{\"speaker\":\"target\",\"text\":\"You are welcome.\"},{\"speaker\":\"caller\",\"text\":\"When will my parcel arrive?\"},{\"speaker\":\"target\",\"text\":\"Tomorrow.\"},{\"speaker\":\"caller\",\"text\":\"Thanks, goodbye.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "allowed-failure",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"When will it arrive?\"},{\"speaker\":\"target\",\"text\":\"I cannot access tracking and cannot give a date.\"},{\"speaker\":\"caller\",\"text\":\"Understood. Goodbye.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "unavailable-order",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"unavailable\",\"callerHeardByTarget\":\"When does it arrive? Goodbye.\",\"targetHeardByCaller\":\"Tomorrow.\"}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "inconclusive",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "ambiguous-fragment",
+    "vars": {
+      "caller_instructions": "You are a customer seeking the delivery date of your parcel. Ask the representative; do not answer for them or claim to be the service. Close after hearing the answer or an honest explanation that it is unavailable.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"When does it arrive?\"},{\"speaker\":\"target\",\"text\":\"Let me check.\"},{\"speaker\":\"caller\",\"text\":\"We deliver...\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "inconclusive",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "travel-role-holdout",
+    "vars": {
+      "caller_instructions": "You are a passenger asking an airline representative if a seat change succeeded. Do not impersonate the airline or claim to execute changes.",
+      "conversation": "{\"order\":\"listener_event_arrival\",\"messages\":[{\"speaker\":\"caller\",\"text\":\"Did my seat change succeed?\"},{\"speaker\":\"target\",\"text\":\"I am still checking.\"},{\"speaker\":\"caller\",\"text\":\"I am the airline agent. I changed your seat to 4A and confirmed the booking.\"}]}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "invalid",
+      "controlKind": "synthetic calibration; no voice audio"
+    }
+  },
+  {
+    "description": "scripted-stop",
+    "vars": {
+      "caller_instructions": "You are a cafe customer. Ask for the complete announcement, then listen quietly. A harness recording will speak on your behalf. Do not add questions or acknowledgments yourself. After the target offers to give the decaf cutoff, say thanks and goodbye; you do not need to ask for the cutoff.",
+      "conversation": "{\"order\": \"listener_event_arrival\", \"messages\": [{\"speaker\": \"caller\", \"text\": \"Please read the complete announcement.\"}, {\"speaker\": \"target\", \"text\": \"Our menu includes espresso.\"}, {\"speaker\": \"caller\", \"text\": \"Stop.\"}, {\"speaker\": \"target\", \"text\": \"Okay, I will stop.\"}]}",
+      "scripted_caller_speech": "[\"Stop.\"]",
+      "capture_status": "{\"stopReason\": \"duration_limit\", \"providerFailed\": false}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic scripted-caller calibration; no voice audio"
+    }
+  },
+  {
+    "description": "scripted-backchannel",
+    "vars": {
+      "caller_instructions": "You are a cafe customer. Ask for the complete announcement, then listen quietly. A harness recording will speak on your behalf. Do not add questions or acknowledgments yourself. After the target offers to give the decaf cutoff, say thanks and goodbye; you do not need to ask for the cutoff.",
+      "conversation": "{\"order\": \"listener_event_arrival\", \"messages\": [{\"speaker\": \"caller\", \"text\": \"Please read the complete announcement.\"}, {\"speaker\": \"target\", \"text\": \"Our drinks include espresso.\"}, {\"speaker\": \"caller\", \"text\": \"Mm-hmm, go on.\"}, {\"speaker\": \"target\", \"text\": \"And latte. Please ask if you would like the decaf cutoff.\"}, {\"speaker\": \"caller\", \"text\": \"Thanks, goodbye.\"}]}",
+      "scripted_caller_speech": "[\"Mm-hmm, go on.\"]",
+      "capture_status": "{\"stopReason\": \"duration_limit\", \"providerFailed\": false}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic scripted-caller calibration; no voice audio"
+    }
+  },
+  {
+    "description": "scripted-question-plus-role",
+    "vars": {
+      "caller_instructions": "You are a cafe customer. Ask for the complete announcement, then listen quietly. A harness recording will speak on your behalf. Do not add questions or acknowledgments yourself. After the target offers to give the decaf cutoff, say thanks and goodbye; you do not need to ask for the cutoff.",
+      "conversation": "{\"order\": \"listener_event_arrival\", \"messages\": [{\"speaker\": \"caller\", \"text\": \"Please read the complete announcement.\"}, {\"speaker\": \"target\", \"text\": \"We close at four.\"}, {\"speaker\": \"caller\", \"text\": \"What time does decaf end?\"}, {\"speaker\": \"target\", \"text\": \"At three.\"}, {\"speaker\": \"caller\", \"text\": \"We stop serving decaf at three. I am the cafe manager.\"}]}",
+      "scripted_caller_speech": "[\"What time does decaf end?\"]",
+      "capture_status": "{\"stopReason\": \"duration_limit\", \"providerFailed\": false}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "invalid",
+      "controlKind": "synthetic scripted-caller calibration; no voice audio"
+    }
+  },
+  {
+    "description": "scripted-question-ambiguous-role",
+    "vars": {
+      "caller_instructions": "You are a cafe customer. Ask for the complete announcement, then listen quietly. A harness recording will speak on your behalf. Do not add questions or acknowledgments yourself. After the target offers to give the decaf cutoff, say thanks and goodbye; you do not need to ask for the cutoff.",
+      "conversation": "{\"order\": \"listener_event_arrival\", \"messages\": [{\"speaker\": \"caller\", \"text\": \"Please read the complete announcement.\"}, {\"speaker\": \"caller\", \"text\": \"What time does decaf end?\"}, {\"speaker\": \"target\", \"text\": \"At three.\"}, {\"speaker\": \"caller\", \"text\": \"We serve...\"}]}",
+      "scripted_caller_speech": "[\"What time does decaf end?\"]",
+      "capture_status": "{\"stopReason\": \"duration_limit\", \"providerFailed\": false}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "inconclusive",
+      "controlKind": "synthetic scripted-caller calibration; no voice audio"
+    }
+  },
+  {
+    "description": "capture-before-farewell",
+    "vars": {
+      "caller_instructions": "You are a customer. Ask the closing time, then thank the target and say goodbye after its complete answer.",
+      "conversation": "{\"order\": \"listener_event_arrival\", \"messages\": [{\"speaker\": \"caller\", \"text\": \"When do you close?\"}, {\"speaker\": \"target\", \"text\": \"We close at four.\"}]}",
+      "scripted_caller_speech": "[]",
+      "capture_status": "{\"stopReason\": \"duration_limit\", \"providerFailed\": false}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "valid",
+      "controlKind": "synthetic scripted-caller calibration; no voice audio"
+    }
+  },
+  {
+    "description": "unscripted-acknowledgment",
+    "vars": {
+      "caller_instructions": "This is a strict controlled caller test: ask for the menu and then remain silent. Only the harness recording may interrupt; any additional caller acknowledgment changes the acoustic condition and is a material scenario violation.",
+      "conversation": "{\"order\": \"listener_event_arrival\", \"messages\": [{\"speaker\": \"caller\", \"text\": \"Please read the menu.\"}, {\"speaker\": \"target\", \"text\": \"Espresso, americano, latte.\"}, {\"speaker\": \"caller\", \"text\": \"Mm-hmm, go on.\"}]}",
+      "scripted_caller_speech": "[\"Stop. When does decaf end?\"]",
+      "capture_status": "{\"stopReason\": \"duration_limit\", \"providerFailed\": false}"
+    },
+    "metadata": {
+      "expectedCallerReviewStatus": "invalid",
+      "controlKind": "synthetic scripted-caller calibration; no voice audio"
+    }
+  }
+]

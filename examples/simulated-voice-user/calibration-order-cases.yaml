@@ -1,0 +1,60 @@
+# Synthetic chronology controls, labeled before running the judge.
+# Original calibration labels and aggregate transcript strings remain unchanged.
+- description: Earlier audio acknowledgment does not answer later correct closing question
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Can you hear me? Do you close at 4 pm on Saturdays?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Can you hear me?"},{"speaker":"target","text":"Yes."},{"speaker":"caller","text":"Do you close at 4 pm on Saturdays?"}]
+    expectedGrounded: true
+    expectedCompletion: false
+- description: Correct closing confirmation precedes a separate audio question
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Do you close at 4 pm on Saturdays? Can you hear me?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Do you close at 4 pm on Saturdays?"},{"speaker":"target","text":"Yes."},{"speaker":"caller","text":"Can you hear me?"}]
+    expectedGrounded: true
+    expectedCompletion: true
+- description: Earlier audio acknowledgment does not endorse later wrong closing question
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Can you hear me? Do you close at 6 pm on Saturdays?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Can you hear me?"},{"speaker":"target","text":"Yes."},{"speaker":"caller","text":"Do you close at 6 pm on Saturdays?"}]
+    expectedGrounded: true
+    expectedCompletion: false
+- description: Wrong closing confirmation precedes a separate audio question
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Do you close at 6 pm on Saturdays? Can you hear me?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Do you close at 6 pm on Saturdays?"},{"speaker":"target","text":"Yes."},{"speaker":"caller","text":"Can you hear me?"}]
+    expectedGrounded: false
+    expectedCompletion: false
+- description: Correct closing answer does not excuse earlier unsupported menu confirmation
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes. We close at 4 pm on Saturdays.
+    callerHeardByTarget: Do you have chocolate croissants? When do you close on Saturdays?
+    orderedListenerMessages: >-
+      [{"speaker":"caller","text":"Do you have chocolate croissants?"},{"speaker":"target","text":"Yes."},{"speaker":"caller","text":"When do you close on Saturdays?"},{"speaker":"target","text":"We close at 4 pm on Saturdays."}]
+    expectedGrounded: false
+    expectedCompletion: true
+- description: Unordered confirmation cannot establish which question it answers
+  vars:
+    requiredGoals: |
+      G1: The caller hears the target confirm the Saturday closing time of 4 pm.
+    targetHeardByCaller: Yes.
+    callerHeardByTarget: Do you close at 4 pm on Saturdays?
+    expectedGrounded: true
+    expectedCompletion: false

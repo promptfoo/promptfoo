@@ -1,5 +1,9 @@
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import {
+  extractAndStoreBinaryData,
+  extractAndStoreResultMetadataAudio,
+  isBlobStorageEnabled,
+} from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
@@ -40,6 +44,23 @@ import {
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
+/**
+ * Externalize the legacy result-level audio mirror before storing or streaming a
+ * row. Provider metadata is copied before response media extraction, so processing
+ * only `response.metadata.audio` otherwise leaves a second inline recording in
+ * `metadata.audio`. Keep unrelated metadata and the caller's input unchanged.
+ */
+export async function externalizeResultMetadata(
+  result: Pick<EvaluateResult, 'metadata' | 'testIdx' | 'promptIdx'>,
+  evalId: string,
+): Promise<EvaluateResult['metadata']> {
+  return extractAndStoreResultMetadataAudio(result.metadata, {
+    evalId,
+    testIdx: result.testIdx,
+    promptIdx: result.promptIdx,
+  });
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -69,7 +90,11 @@ export default class EvalResult {
     // Persist trace and repeat linkage inside a private metadata namespace so they
     // survive EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
+      persistRepeatMetadata(
+        await externalizeResultMetadata({ ...result, metadata }, evalId),
+        repeatIndex,
+        repeatGroupId,
+      ),
       traceId,
       evaluationId,
     );
@@ -140,6 +165,7 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: await externalizeResultMetadata(result, evalId),
       });
     }
 
