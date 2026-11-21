@@ -441,6 +441,15 @@ export abstract class RedteamGraderBase {
     }
   }
 
+  protected canPassRefusal(context?: RedteamGradingContext, skip?: boolean): boolean {
+    return (
+      !skip &&
+      !context?.traceData?.spans?.length &&
+      !context?.traceContext?.spans?.length &&
+      !(context?.imageOutputs ?? context?.providerResponse?.images)?.length
+    );
+  }
+
   getSuggestions({}: {
     test: AtomicTestCase;
     rawPrompt: string;
@@ -560,9 +569,7 @@ export abstract class RedteamGraderBase {
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
 
     if (
-      !skipRefusalCheck &&
-      !gradingContext?.traceData?.spans?.length &&
-      !imagesForGrading?.length &&
+      this.canPassRefusal(gradingContext, skipRefusalCheck) &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput, 'grading'))
     ) {
       return {
