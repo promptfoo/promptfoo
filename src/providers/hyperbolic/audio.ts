@@ -1,5 +1,4 @@
-import { getEnvString, getProviderEnvString } from '../../envars';
-import { requestHyperbolicJson } from './transport';
+import { getHyperbolicApiKey, requestHyperbolicJson } from './transport';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -40,18 +39,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    if (this.config?.apiKey) {
-      return this.config.apiKey;
-    }
-    const namedKey = this.config.apiKeyEnvar
-      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
-        getEnvString(this.config.apiKeyEnvar))
-      : undefined;
-    return (
-      namedKey ||
-      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') ||
-      getEnvString('HYPERBOLIC_API_KEY')
-    );
+    return getHyperbolicApiKey(this);
   }
 
   getApiUrl(): string {
