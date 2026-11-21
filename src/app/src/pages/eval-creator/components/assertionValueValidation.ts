@@ -96,13 +96,13 @@ const REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES = new Set<AssertionType>([
   'icontains',
   'not-contains',
   'not-icontains',
+  'starts-with',
+  'not-starts-with',
 ]);
 
 const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
-  'starts-with',
   'regex',
   'webhook',
-  'not-starts-with',
   'not-regex',
   'not-webhook',
   'context-recall',
