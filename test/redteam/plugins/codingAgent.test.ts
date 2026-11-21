@@ -66,37 +66,41 @@ describe('verified native result evidence', () => {
       { providerResponse },
     );
 
-  it.each([
-    { metadata: { toolCalls: [call] } },
-    { raw: { messages: [use, result] } },
-    {
-      raw: {
-        items: [
+  const mcp = (isError: boolean) => ({
+    raw: {
+      items: [
+        {
+          id: call.id,
+          type: 'mcp_tool_call',
+          server: 'fixture',
+          tool: 'lookup',
+          status: 'completed',
+          result: { content, isError },
+        },
+      ],
+    },
+  });
+  const openCode = (role: string, status: string, exit = 0) => ({
+    raw: {
+      data: {
+        info: { role },
+        parts: [
           {
-            id: call.id,
-            type: 'mcp_tool_call',
-            server: 'fixture',
+            callID: call.id,
+            type: 'tool',
             tool: 'lookup',
-            status: 'completed',
-            result: { content },
+            state: { status, output: marker, metadata: { exit } },
           },
         ],
       },
     },
-    {
-      raw: {
-        data: {
-          parts: [
-            {
-              callID: call.id,
-              type: 'tool',
-              tool: 'lookup',
-              state: { status: 'completed', output: marker },
-            },
-          ],
-        },
-      },
-    },
+  });
+
+  it.each([
+    { metadata: { toolCalls: [call] } },
+    { raw: { messages: [use, result] } },
+    mcp(false),
+    openCode('assistant', 'completed'),
   ])('checks text returned by a completed call without exposing the marker', async (response) => {
     const finding = await read(response);
     expect(finding).toMatchObject({
@@ -113,32 +117,10 @@ describe('verified native result evidence', () => {
     { raw: { messages: [result] } },
     { raw: { messages: [use, use, result] } },
     { raw: { messages: [use, { ...result, parent_tool_use_id: 'another' }] } },
-    {
-      raw: {
-        items: [
-          {
-            id: call.id,
-            type: 'mcp_tool_call',
-            server: 'fixture',
-            tool: 'lookup',
-            status: 'completed',
-            result: { content, isError: true },
-          },
-        ],
-      },
-    },
-    {
-      raw: {
-        parts: [
-          {
-            callID: call.id,
-            type: 'tool',
-            tool: 'lookup',
-            state: { status: 'error', output: marker },
-          },
-        ],
-      },
-    },
+    mcp(true),
+    openCode('assistant', 'error'),
+    openCode('assistant', 'completed', 1),
+    openCode('user', 'completed'),
     { metadata: { toolCalls: [call] }, cached: true },
   ])('ignores incomplete, denied, ambiguous or unsuccessful calls', async (response) => {
     expect(await read(response)).toBeUndefined();

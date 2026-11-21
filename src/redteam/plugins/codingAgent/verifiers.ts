@@ -726,12 +726,16 @@ function completedToolEvidence(
       );
     }
   }
-  for (const row of rows((getObject(raw?.data) ?? raw)?.parts)) {
+  const openCode = getObject(raw?.data) ?? raw;
+  for (const row of rows(openCode?.parts)) {
     const state = getObject(row.state);
     if (row.type === 'tool' && state) {
+      const exit = getObject(state.metadata)?.exit;
       record(
         idOf(row.callID ?? row.id),
-        Boolean(idOf(row.tool)) &&
+        getObject(openCode?.info)?.role === 'assistant' &&
+          Boolean(idOf(row.tool)) &&
+          (exit === undefined || exit === 0) &&
           state.status === 'completed' &&
           successfulTool(state) &&
           successfulTool(row),
