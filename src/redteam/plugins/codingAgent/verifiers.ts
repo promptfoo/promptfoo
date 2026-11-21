@@ -912,7 +912,7 @@ function matchTransformedSensitiveValue(
   for (const item of evidence) {
     const compact = compactDisclosure(item.text);
     for (const value of values) {
-      if (compact !== item.text && compact.includes(value)) {
+      if (!item.text.includes(value) && compact.includes(value)) {
         return { evidence: item, transform: 'fragmented', transformedValue: value, value };
       }
       for (const variant of transformedSensitiveValueVariants(value)) {

@@ -24,10 +24,12 @@ export { sanitizeCodingAgentVerifierInputs } from './verifierPrivacy';
 export function sanitizeConfigForPersistence(
   config: Partial<UnifiedConfig>,
 ): Partial<UnifiedConfig> {
+  const protectedSuite = configRequiresTraceRedaction(config);
   const safe = sanitizeCodingAgentVerifierInputs(sanitizeTracingConfigForPersistence(config), {
     source: config,
+    preservePaths: !protectedSuite,
   });
-  if (!configRequiresTraceRedaction(config)) {
+  if (!protectedSuite) {
     return safe;
   }
 

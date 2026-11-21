@@ -1191,10 +1191,7 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
           'Binary, image, audio, and video redaction cannot be verified; provide a text-only report.',
       };
     }
-    privateRedactionResponses.set(
-      sanitized,
-      response.raw === undefined ? response : { ...response, raw: undefined },
-    );
+    privateRedactionResponses.set(sanitized, response);
     return sanitized;
   }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {

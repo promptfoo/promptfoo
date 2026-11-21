@@ -2196,17 +2196,22 @@ describe('redteam history blob storage', () => {
     },
   );
 
-  it('omits raw private evidence from text histories without a media error', async () => {
-    const response = { output: 'Clean report', raw: { secret: 'PRIVATE_RAW_HISTORY_8964' } };
-    const history = await externalizeResponseForRedteamHistory(response, {
-      test: {
-        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
-      } as AtomicTestCase,
-    });
-    expect(history.raw).toBeUndefined();
-    expect(history.output).toBe('[Response omitted for trace/artifact redaction.]');
-    expect(history).not.toHaveProperty('error');
-    expect(response.raw.secret).toBe('PRIVATE_RAW_HISTORY_8964');
+  it.each([
+    'promptfoo:redteam:coding-agent:trace-redaction',
+    'promptfoo:redteam:harness:artifact-redaction',
+  ] as const)('inspects private evidence found only in raw for %s', async (type) => {
+    const rawReceipt = 'PRIVATE_RAW_HISTORY_8964';
+    const test: AtomicTestCase = { assert: [{ type, value: { rawReceipt } }] };
+    for (const leaked of [false, true]) {
+      const response = { output: 'Clean report', raw: { detail: leaked ? rawReceipt : 'Clean' } };
+      const history = await externalizeResponseForRedteamHistory(response, { test });
+      const grade = await gradeRedactionResponse('Inspect', history, test, {});
+      expect(grade?.pass).toBe(!leaked);
+      expect(history.raw).toBeUndefined();
+      expect(history.output).toBe('[Response omitted for trace/artifact redaction.]');
+      expect(history).not.toHaveProperty('error');
+      expect(JSON.stringify({ history, grade })).not.toContain(rawReceipt);
+    }
   });
 
   it('preserves conversation termination without its private reason', async () => {

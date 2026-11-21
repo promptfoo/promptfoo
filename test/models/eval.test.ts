@@ -2057,7 +2057,10 @@ describe('evaluator', () => {
         expect(JSON.stringify(persisted?.config)).not.toContain(secret);
         expect(JSON.stringify((await evaluation.toResultsFile()).config)).not.toContain(secret);
         expect(evaluation.config).toEqual(config);
-        expect(JSON.stringify(persisted?.config)).toContain('fixtures/receipt.txt');
+        expect(JSON.stringify(persisted?.config)).not.toContain('fixtures/receipt.txt');
+        expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(
+          'fixtures/receipt.txt',
+        );
       },
     );
 
@@ -3205,13 +3208,8 @@ describe('evaluator', () => {
   });
 
   describe('getTraces', () => {
-    beforeEach(() => {
-      vi.resetModules();
-    });
-
     afterEach(() => {
       vi.restoreAllMocks();
-      vi.doUnmock('../../src/tracing/store');
     });
 
     it.each([false, true])(
@@ -3314,20 +3312,11 @@ describe('evaluator', () => {
         },
       ];
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
-      };
+      const fetchTraces = vi
+        .spyOn(TraceStore.prototype, 'getTracesByEvaluation')
+        .mockResolvedValue(mockTraces);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      // Force reload the module to use the mock
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toHaveLength(1);
       expect(traces[0]).toMatchObject({
@@ -3337,28 +3326,20 @@ describe('evaluator', () => {
         metadata: { test: 'value' },
       });
       expect(traces[0].spans).toHaveLength(1);
-      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(eval_.id);
+      expect(fetchTraces).toHaveBeenCalledWith(eval_.id);
     });
 
     it('should return empty array when no traces exist', async () => {
       const eval_ = await EvalFactory.create();
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue([]),
-      };
+      const fetchTraces = vi
+        .spyOn(TraceStore.prototype, 'getTracesByEvaluation')
+        .mockResolvedValue([]);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toEqual([]);
-      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(eval_.id);
+      expect(fetchTraces).toHaveBeenCalledWith(eval_.id);
     });
 
     it('should handle spans with missing endTime', async () => {
@@ -3375,26 +3356,15 @@ describe('evaluator', () => {
               spanId: 'span-no-end',
               name: 'Incomplete Span',
               startTime: 1000000000,
-              endTime: null,
               statusCode: 0,
             },
           ],
         },
       ];
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
-      };
+      vi.spyOn(TraceStore.prototype, 'getTracesByEvaluation').mockResolvedValue(mockTraces);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toHaveLength(1);
       expect(traces[0].spans[0]).toHaveProperty('spanId', 'span-no-end');
@@ -3435,48 +3405,29 @@ describe('evaluator', () => {
         },
       ];
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
-      };
+      vi.spyOn(TraceStore.prototype, 'getTracesByEvaluation').mockResolvedValue(mockTraces);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces[0].spans).toHaveLength(3);
-      // Note: The actual status mapping logic may vary based on implementation
-      expect(traces[0].spans[0].spanId).toBe('span-ok');
-      expect(traces[0].spans[1].spanId).toBe('span-error');
-      expect(traces[0].spans[2].spanId).toBe('span-unset');
+      expect(traces[0].spans).toMatchObject([
+        { spanId: 'span-ok', status: { code: 'ok' } },
+        { spanId: 'span-error', status: { code: 'error' } },
+        { spanId: 'span-unset', status: { code: 'unset' } },
+      ]);
     });
 
     it('should handle errors gracefully and return empty array', async () => {
       const eval_ = await EvalFactory.create();
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockRejectedValue(new Error('Database error')),
-      };
+      vi.spyOn(TraceStore.prototype, 'getTracesByEvaluation').mockRejectedValue(
+        new Error('Database error'),
+      );
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toEqual([]);
-      await expect(evalInstance.getTraces({ throwOnError: true })).rejects.toThrow(
-        'Database error',
-      );
+      await expect(eval_.getTraces({ throwOnError: true })).rejects.toThrow('Database error');
     });
   });
 

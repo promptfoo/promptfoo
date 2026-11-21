@@ -67,7 +67,7 @@ describe('evaluation database writes', () => {
             assert: [
               {
                 type,
-                value: { rawReceipt: secret },
+                value: { rawReceipt: secret, rawReceiptPath: 'receipts/fixture.txt' },
               },
             ],
           },
@@ -89,6 +89,8 @@ describe('evaluation database writes', () => {
       expect(index?.id).toBe(datasetId);
       expect(JSON.stringify(index)).not.toContain(secret);
       expect(JSON.stringify(dataset.tests)).not.toContain(secret);
+      const reference = JSON.stringify([dataset.tests, evaluation.config]);
+      expect(reference.includes('receipts/fixture.txt')).toBe(!type.endsWith('trace-redaction'));
       expect(dataset.createdAt).toBe(123);
       expect(dataset.tests).toMatchObject([
         {
