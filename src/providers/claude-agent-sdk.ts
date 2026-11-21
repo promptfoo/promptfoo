@@ -335,16 +335,16 @@ function taskNotificationTaskId(content: unknown): string | undefined {
 
 interface WorkflowTurn {
   /** Workflow completions the turn was given as it started. */
-  given: number;
+  given: string[];
   /** Completions handed to the turn while it ran. They get no result of their own. */
-  read: number;
+  read: string[];
   /** Empty results written ahead of this turn's answer, one for each other completion in its batch. */
   placeholders: number;
 }
 
 interface WorkflowSession {
   /** Workflow completions reported and not yet given to a turn. */
-  queued: number;
+  queued: Set<string>;
   /** Turns that have started and not yet produced a result, oldest first. */
   turns: WorkflowTurn[];
   /** What a batch's empty results pass on to the turn that carries the batch's answer. */
@@ -362,8 +362,6 @@ interface WorkflowSession {
  */
 class WorkflowAnswers {
   private readonly tasks = new Map<string, { sessionId: string; status: string }>();
-  /** Workflow tasks whose completion has been handed to a running turn. */
-  private readonly handed = new Set<string>();
   private readonly sessions = new Map<string, WorkflowSession>();
   /** Only replayed user messages show a completion being handed to a running turn. */
   private replaysUserMessages = false;
@@ -377,7 +375,7 @@ class WorkflowAnswers {
   private session(sessionId: string): WorkflowSession {
     let session = this.sessions.get(sessionId);
     if (!session) {
-      session = { queued: 0, turns: [] };
+      session = { queued: new Set(), turns: [] };
       this.sessions.set(sessionId, session);
     }
     return session;
@@ -395,8 +393,8 @@ class WorkflowAnswers {
       session.turns.push(session.carried);
       session.carried = undefined;
     } else {
-      session.turns.push({ given: session.queued, read: 0, placeholders: 0 });
-      session.queued = 0;
+      session.turns.push({ given: [...session.queued], read: [], placeholders: 0 });
+      session.queued.clear();
     }
   }
 
@@ -412,7 +410,7 @@ class WorkflowAnswers {
     const task = this.tasks.get(taskId);
     if (task?.sessionId === sessionId && task.status === 'running') {
       task.status = status;
-      this.session(sessionId).queued++;
+      this.session(sessionId).queued.add(taskId);
       this.answerOwed = true;
     }
   }
@@ -422,17 +420,9 @@ class WorkflowAnswers {
     this.replaysUserMessages = true;
     const session = this.session(sessionId);
     const running = session.turns[session.turns.length - 1];
-    if (
-      running &&
-      taskId !== undefined &&
-      this.tasks.get(taskId)?.sessionId === sessionId &&
-      !this.handed.has(taskId) &&
-      session.queued > 0
-    ) {
-      // A completion is handed over once, however often its id is seen.
-      this.handed.add(taskId);
-      session.queued--;
-      running.read++;
+    if (running && taskId !== undefined && session.queued.delete(taskId)) {
+      // A replay can only hand over this task's unassigned completion.
+      running.read.push(taskId);
     }
   }
 
@@ -465,24 +455,25 @@ class WorkflowAnswers {
       msg.structured_output === undefined
     ) {
       session.carried = {
-        given: turn.given + session.queued,
+        given: [...turn.given, ...session.queued],
         read: turn.read,
         placeholders: turn.placeholders + 1,
       };
-      session.queued = 0;
+      session.queued.clear();
       return false;
     }
-    const answersWorkflow = isSessionTask && turn.given + turn.read > 0;
+    const answersWorkflow = isSessionTask && turn.given.length + turn.read.length > 0;
     if (isBackgroundTaskResult && !answersWorkflow) {
       // Not an answer, so what the turn was given still needs one.
-      session.queued += turn.given + turn.read;
+      session.queued = new Set([...turn.given, ...turn.read, ...session.queued]);
       return false;
     }
     this.answerOwed = false;
     // An answer covers the completion it was written for and one for each empty result
     // before it. Any other completion the turn started with gets a turn of its own.
-    const covered = answersWorkflow ? turn.placeholders + 1 : turn.given;
-    session.queued += Math.max(0, turn.given - covered);
+    if (answersWorkflow && turn.given.length > turn.placeholders + 1) {
+      session.queued = new Set([...turn.given.slice(turn.placeholders + 1), ...session.queued]);
+    }
     return true;
   }
 
@@ -500,9 +491,9 @@ class WorkflowAnswers {
     const unanswered = this.replaysUserMessages
       ? [...this.sessions.values()].some(
           (session) =>
-            session.queued > 0 ||
+            session.queued.size > 0 ||
             [...session.turns, ...(session.carried ? [session.carried] : [])].some(
-              (turn) => turn.given + turn.read > 0,
+              (turn) => turn.given.length + turn.read.length > 0,
             ),
         )
       : this.answerOwed;

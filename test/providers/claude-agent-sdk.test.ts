@@ -2491,6 +2491,30 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(result.output).toBeUndefined();
         });
 
+        it.each([false, true])(
+          'keeps the second completion queued when the first is replayed (continued: %s)',
+          async (continued) => {
+            const result = await run([
+              promptEcho,
+              ...launch(2),
+              turnResult('Workflows launched'),
+              completed(1),
+              turnStart,
+              completed(2),
+              readByTurn(1),
+              turnResult('First answer', continuation),
+              ...(continued ? [turnStart, turnResult('Second answer', continuation)] : []),
+            ]);
+            if (continued) {
+              expect(result.error).toBeUndefined();
+              expect(result.output).toBe('Second answer');
+            } else {
+              expect(result.error).toContain('stream ended before the main agent answered');
+              expect(result.output).toBeUndefined();
+            }
+          },
+        );
+
         it.each(['before', 'after'])(
           'grades a continuation whose completion is also echoed %s the turn starts',
           async (position) => {
