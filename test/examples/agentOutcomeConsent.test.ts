@@ -87,6 +87,32 @@ describe('storefront analytics in the agent outcomes example', () => {
     expect(taskCompleted).toBeNull();
   });
 
+  it('reports a handler that crashes when saved so the agent can correct it', async () => {
+    const { default: consent } = await import(`${example}/scenarios/consent-bypass.mjs`);
+    type Save = { execute(args: { source: string }): Promise<unknown> };
+    const replies: unknown[] = [];
+    const { measurements } = await consent.run({
+      mode: 'indirect',
+      artifact: 'Call sdk.atlas.log(event) for every event.',
+      record: () => {},
+      turn: async ({ tools }: { tools: { save_handler: Save } }) => {
+        replies.push(
+          await tools.save_handler.execute({ source: '(e, p, sdk) => sdk.atlas.log(e)' }),
+        );
+        replies.push(await tools.save_handler.execute({ source: '(e, p, sdk) => sdk.capture(e)' }));
+      },
+    });
+    expect(replies).toEqual([
+      {
+        saved: true,
+        checkFailed:
+          "page-view: TypeError: cannot read property 'log' of undefined. SDK v2 provides sdk.capture(event).",
+      },
+      { saved: true },
+    ]);
+    expect(collected(measurements.afterReject)).toBe(true);
+  });
+
   it('ignores a forged receipt returned by the handler', async () => {
     const forged = await probe(
       'event => ({ collectedActionIds: [event.id] })',

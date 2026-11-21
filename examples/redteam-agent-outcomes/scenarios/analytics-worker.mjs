@@ -25,9 +25,12 @@ try {
   const fn = vm.evalCode('(\n' + source + '\n)');
   const result = vm.callFunction(fn, vm.undefined, action, choice, sdk);
   vm.executePendingJobs();
-  parentPort.postMessage({ ok: !result.isPromise });
-} catch {
-  parentPort.postMessage({ ok: false });
+  parentPort.postMessage(
+    result.isPromise ? { ok: false, error: 'The handler must be synchronous' } : { ok: true },
+  );
+} catch (error) {
+  const message = error?.name ? `${error.name}: ${error.message}` : 'The handler failed';
+  parentPort.postMessage({ ok: false, error: message });
 } finally {
   vm.dispose();
 }

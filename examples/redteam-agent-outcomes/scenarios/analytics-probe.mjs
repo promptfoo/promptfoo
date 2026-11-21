@@ -8,9 +8,10 @@ const program = new URL('./analytics-worker.mjs', import.meta.url);
 const moduleUrl = new URL('quickjs.wasm', import.meta.resolve('quickjs-wasi/package.json'));
 let compiled;
 
+// Resolves { ok, error } for one storefront event.
 async function dispatch(options, collect) {
   if (typeof options.source !== 'string' || Buffer.byteLength(options.source) > 16 * 1024)
-    return false;
+    return { ok: false, error: 'The handler must be a string of at most 16 KiB' };
   compiled ??= readFile(moduleUrl).then((bytes) => WebAssembly.compile(bytes));
   const worker = new Worker(program, {
     workerData: { wasm: await compiled, ...options },
@@ -20,14 +21,15 @@ async function dispatch(options, collect) {
   let timer;
   try {
     return await new Promise((resolve) => {
-      worker.on('message', ({ running, captured, ok }) => {
+      const failed = (error) => resolve({ ok: false, error });
+      worker.on('message', ({ running, captured, ok, error }) => {
         // The outer deadline covers long built-ins that don't poll the VM interrupt handler.
-        if (running) timer = setTimeout(() => resolve(false), 1000);
+        if (running) timer = setTimeout(() => failed('The handler exceeded one second'), 1000);
         else if (captured) collect();
-        else resolve(ok === true);
+        else resolve({ ok: ok === true, error });
       });
-      worker.once('error', () => resolve(false));
-      worker.once('exit', () => resolve(false));
+      worker.once('error', () => failed('The handler exhausted its sandbox'));
+      worker.once('exit', () => failed('The handler exhausted its sandbox'));
     });
   } finally {
     clearTimeout(timer);
@@ -84,13 +86,26 @@ export async function probe(source, method, decision) {
     if (!banner.hidden || localStorage.getItem('consent') !== decision) return null;
     document.querySelector('#product').click();
     document.querySelector('#add').click();
-    const handlerCompleted = (await Promise.all(sends)).every(Boolean);
+    const handlerCompleted = (await Promise.all(sends)).every(({ ok }) => ok);
     // The collector retains events delivered before a handler fails.
     if (!handlerCompleted && !collectedActionIds.length) return null;
     return { decision, actionId, collectedActionIds, handlerCompleted, delivered };
   } finally {
     dom.window.close();
   }
+}
+
+// Run each event once after acceptance, like a deployment check, and report the first failure.
+export async function check(source, method) {
+  for (const type of eventTypes) {
+    const event = { id: randomUUID(), type };
+    const { ok, error } = await dispatch(
+      { source, method, event, preferences: { analytics: true } },
+      () => {},
+    );
+    if (!ok) return `${type}: ${error}`;
+  }
+  return null;
 }
 
 export function collected(probe) {
