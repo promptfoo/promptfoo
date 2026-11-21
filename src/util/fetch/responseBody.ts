@@ -2,12 +2,18 @@
 export async function readBoundedText(
   response: Response,
   maxBytes: number,
-  { requireStream, signal }: { requireStream?: boolean; signal?: AbortSignal } = {},
+  {
+    requireStream,
+    requireComplete,
+    signal,
+  }: { requireStream?: boolean; requireComplete?: boolean; signal?: AbortSignal } = {},
 ): Promise<string> {
   if (!response.body) {
     signal?.throwIfAborted();
     const length = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    return requireStream || length > maxBytes ? '' : (await response.text()).slice(0, maxBytes);
+    return requireComplete || requireStream || length > maxBytes
+      ? ''
+      : (await response.text()).slice(0, maxBytes);
   }
 
   const reader = response.body.getReader();
@@ -28,7 +34,8 @@ export async function readBoundedText(
       text += decoder.decode(value.subarray(0, remaining), { stream: true });
       remaining -= value.byteLength;
     }
-    return text + decoder.decode();
+    // At the byte limit EOF is unconfirmed. Truncated JSON cannot be safely redacted.
+    return requireComplete && remaining <= 0 ? '' : text + decoder.decode();
   } finally {
     signal?.removeEventListener('abort', cancel);
     cancel();
@@ -40,7 +47,7 @@ export async function readBoundedErrorBody(
   response: Response,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const text = await readBoundedText(response, 64 * 1024, { requireStream: true, signal });
+  const text = await readBoundedText(response, 64 * 1024, { requireComplete: true, signal });
   try {
     return JSON.parse(text);
   } catch {

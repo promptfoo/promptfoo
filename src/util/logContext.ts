@@ -29,7 +29,7 @@ export async function requestLogContext({
     !response.headers?.get('content-type')?.toLowerCase().includes('text/event-stream')
   ) {
     try {
-      responseText = await readBoundedText(response.clone(), 64 * 1024, { requireStream: true });
+      responseText = await readBoundedText(response.clone(), 64 * 1024, { requireComplete: true });
     } catch {
       responseText = 'Unable to read response';
     }

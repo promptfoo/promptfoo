@@ -91,7 +91,12 @@ describe('OpenAiResponsesProvider error handling', () => {
         new ReadableStream({
           start(controller) {
             controller.enqueue(
-              new TextEncoder().encode('bad request'.padEnd(64 * 1024, ' ') + 'private-tail'),
+              new TextEncoder().encode(
+                JSON.stringify({
+                  access_token: 'private-prefix',
+                  data: 'a'.repeat(64 * 1024) + 'private-tail',
+                }),
+              ),
             );
           },
           cancel,
@@ -103,7 +108,7 @@ describe('OpenAiResponsesProvider error handling', () => {
       config: { apiKey: 'test-key', stream: true, background },
     }).callApi('Hello');
     expect(result.error).toContain('400');
-    expect(result.error).not.toContain('private-tail');
+    expect(result.error).not.toContain('private-');
     expect(cancel).toHaveBeenCalledOnce();
   });
 

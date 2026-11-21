@@ -1050,14 +1050,19 @@ describe('logger', () => {
     });
 
     it('bounds mislabeled response bodies without waiting for the other tee reader', async () => {
-      const response = new Response('a'.repeat(64 * 1024) + 'private-tail');
+      const response = new Response(
+        JSON.stringify({
+          access_token: 'private-prefix',
+          data: 'λ'.repeat(32 * 1024) + 'private-tail',
+        }),
+      );
       await logger.logRequestResponse({
         url: 'https://api.example.com',
         requestBody: null,
         requestMethod: 'GET',
         response,
       });
-      expect(mockLogger.debug.mock.calls[0][0].message).not.toContain('private-tail');
+      expect(mockLogger.debug.mock.calls[0][0].message).not.toContain('private-');
       expect(await response.text()).toContain('private-tail');
     });
 
