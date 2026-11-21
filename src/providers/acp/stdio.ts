@@ -19,14 +19,7 @@ interface LaunchOptions extends TurnOptions {
 // libuv searches the child's cwd for bare commands on Windows. On all platforms,
 // omit relative PATH entries and directories under the workspace, including symlinks.
 function resolveExecutable({ command, cwd, env }: LaunchOptions): string {
-  if (path.isAbsolute(command)) {
-    return realpathSync(command);
-  }
   const workspace = realpathSync(cwd);
-  const names =
-    process.platform === 'win32' && !path.extname(command)
-      ? [command + '.exe', command + '.com']
-      : [command];
   const directories = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter((dir) => {
     try {
       return (
@@ -37,7 +30,17 @@ function resolveExecutable({ command, cwd, env }: LaunchOptions): string {
     }
   });
   // Launchers with an /usr/bin/env shebang must also find a trusted interpreter.
+  if (!directories.length) {
+    throw new Error('ACP requires an absolute PATH entry outside the workspace.');
+  }
   env.PATH = directories.join(path.delimiter);
+  if (path.isAbsolute(command)) {
+    return realpathSync(command);
+  }
+  const names =
+    process.platform === 'win32' && !path.extname(command)
+      ? [command + '.exe', command + '.com']
+      : [command];
   for (const directory of directories) {
     for (const name of names) {
       try {

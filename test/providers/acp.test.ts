@@ -123,6 +123,35 @@ describe('Agent Client Protocol', () => {
   });
 
   it.runIf(process.platform !== 'win32')(
+    'protects the interpreter of an explicitly selected launcher',
+    async () => {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-test-acp-'));
+      try {
+        const cwd = path.join(root, 'workspace');
+        const command = path.join(root, 'agent.mjs');
+        await fs.mkdir(cwd);
+        await fs.writeFile(path.join(cwd, 'node'), '#!/bin/sh\nexit 1', { mode: 0o755 });
+        await fs.writeFile(
+          command,
+          '#!/usr/bin/env node\n' + (await fs.readFile(fixture, 'utf8')),
+          { mode: 0o755 },
+        );
+        const run = (PATH: string) =>
+          new AcpProvider('acp', {
+            ...options({ command, working_dir: cwd, pass_env: ['PATH'] }),
+            env: { PATH },
+          }).callApi('hello');
+        expect((await run(`.${path.delimiter}${path.dirname(process.execPath)}`)).output).toBe(
+          'hello\n',
+        );
+        expect((await run(cwd)).error).toContain('absolute PATH entry');
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
     'terminates the process group after a clean exit',
     async () => {
       const kill = vi.spyOn(process, 'kill');
