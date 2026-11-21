@@ -1,4 +1,4 @@
-import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, traceVerdict, validateTraceLimit } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -24,6 +24,7 @@ function calculatePercentile(durations: number[], percentile: number): number {
 export const handleTraceSpanDuration = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-duration assertion');
@@ -36,12 +37,8 @@ export const handleTraceSpanDuration = ({
 
   const { pattern = '*', max, percentile, attributes } = value;
 
-  if (
-    percentile !== undefined &&
-    (!Number.isFinite(percentile) || percentile < 0 || percentile > 100)
-  ) {
-    throw new Error('trace-span-duration assertion percentile must be a number between 0 and 100');
-  }
+  validateTraceLimit(max, 'trace-span-duration assertion max');
+  validateTraceLimit(percentile, 'trace-span-duration assertion percentile', 100);
 
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
@@ -51,15 +48,13 @@ export const handleTraceSpanDuration = ({
   );
 
   if (matchingSpans.length === 0) {
-    return {
-      pass: true,
-      score: 1,
-      reason: withTraceAttributeFilterContext(
-        `No spans found matching pattern "${pattern}" with complete timing data`,
-        attributes,
-      ),
+    return traceVerdict(
       assertion,
-    };
+      inverse,
+      true,
+      `No spans found matching pattern "${pattern}" with complete timing data`,
+      attributes,
+    );
   }
 
   const spanDurations = matchingSpans.map((span) => {
@@ -105,10 +100,5 @@ export const handleTraceSpanDuration = ({
     }
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: withTraceAttributeFilterContext(reason, attributes),
-    assertion,
-  };
+  return traceVerdict(assertion, inverse, pass, reason, attributes);
 };

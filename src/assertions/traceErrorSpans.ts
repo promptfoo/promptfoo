@@ -1,4 +1,4 @@
-import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, traceVerdict, validateTraceLimit } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -67,6 +67,7 @@ function isErrorSpan(span: TraceSpan): boolean {
 export const handleTraceErrorSpans = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
@@ -87,8 +88,12 @@ export const handleTraceErrorSpans = ({
     maxPercentage = objValue.max_percentage;
     pattern = objValue.pattern || '*';
     attributes = objValue.attributes;
+  } else if (value !== undefined) {
+    throw new Error('trace-error-spans assertion value must be a number or an object');
   }
 
+  validateTraceLimit(maxCount, 'trace-error-spans assertion max_count');
+  validateTraceLimit(maxPercentage, 'trace-error-spans assertion max_percentage', 100);
   if (maxCount === undefined && maxPercentage === undefined) {
     maxCount = 0; // Default to no errors allowed
   }
@@ -99,15 +104,13 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
   if (matchingSpans.length === 0) {
-    return {
-      pass: true,
-      score: 1,
-      reason: withTraceAttributeFilterContext(
-        `No spans found matching pattern "${pattern}"`,
-        attributes,
-      ),
+    return traceVerdict(
       assertion,
-    };
+      inverse,
+      true,
+      `No spans found matching pattern "${pattern}"`,
+      attributes,
+    );
   }
 
   // Find error spans
@@ -151,10 +154,5 @@ export const handleTraceErrorSpans = ({
     }
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: withTraceAttributeFilterContext(reason, attributes),
-    assertion,
-  };
+  return traceVerdict(assertion, inverse, pass, reason, attributes);
 };
