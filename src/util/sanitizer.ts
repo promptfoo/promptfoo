@@ -764,26 +764,95 @@ function isSchemaObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-// Allocate one namespace across nested schemas so property lists and local
-// pointers use the same name even when URL redaction introduces a collision.
-function schemaUrlNames(schema: unknown): Map<string, string> {
-  const names = new Set<string>();
-  function collect(value: unknown): void {
-    if (value && typeof value === 'object') {
-      for (const [key, child] of Object.entries(value)) {
-        names.add(key);
-        collect(child);
-      }
+const SCHEMA_REFS = new Set(['$ref', '$dynamicRef', '$recursiveRef']);
+
+function credentialSchemaName(name: string): boolean {
+  return (
+    name.toLowerCase() === 'headers' ||
+    (normalizeFieldName(name) !== 'key' && isSecretParameter(name, undefined))
+  );
+}
+
+function pointerToken(name: string): string {
+  return encodeURIComponent(name.replace(/~/g, '~0').replace(/\//g, '~1'));
+}
+
+// Return both the source spelling and decoded key so unchanged tokens stay intact.
+function localSchemaPointer(ref: string) {
+  if (/^#%2f/i.test(ref)) {
+    try {
+      ref = decodeURIComponent(ref);
+    } catch {
+      return [{ raw: REDACTED, name: REDACTED }];
     }
   }
-  collect(schema);
+  if (ref === '#') {
+    return [];
+  }
+  if (!ref.startsWith('#/')) {
+    return undefined;
+  }
+  // Accept a literal URL at the end of a pointer as a single map key.
+  ref = ref.replace(/\/([a-z][a-z0-9+.-]*:\/\/.*)$/i, (_, url) => '/' + pointerToken(url));
+  return ref
+    .slice(2)
+    .split('/')
+    .map((raw) => {
+      let name = raw;
+      try {
+        name = decodeURIComponent(raw);
+      } catch {
+        // Invalid URI escapes can still contain credentials.
+      }
+      return { raw, name: name.replace(/~1/g, '/').replace(/~0/g, '~') };
+    });
+}
+
+function indexSchema(root: unknown) {
+  const sensitive = new WeakSet<object>();
+  const names = new Set<string>();
+  function collect(value: unknown, credential = false, map = false, resource = root): void {
+    if (!value || typeof value !== 'object' || sensitive.has(value)) {
+      return;
+    }
+    if (!map && isSchemaObject(value) && typeof value.$id === 'string') {
+      resource = value;
+    }
+    if (credential) {
+      sensitive.add(value);
+    }
+    for (const [key, child] of Object.entries(value)) {
+      names.add(key);
+      if (credential && !map && SCHEMA_REFS.has(key) && typeof child === 'string') {
+        const pointer = localSchemaPointer(child);
+        if (pointer) {
+          // A credential's constraints may live under an innocently named definition.
+          // Follow only own properties inside this snapshot. The weak set breaks cycles.
+          const target = pointer.reduce<unknown>(
+            (node, { name }) =>
+              node && typeof node === 'object' && Object.prototype.hasOwnProperty.call(node, name)
+                ? (node as Record<string, unknown>)[name]
+                : undefined,
+            resource,
+          );
+          collect(target, true, false, resource);
+        }
+      }
+      collect(
+        child,
+        credential || (map && credentialSchemaName(key)),
+        !map && JSON_SCHEMA_MAP_KEYWORDS.has(key),
+        resource,
+      );
+    }
+  }
+  collect(root);
+
+  // Use one namespace for nested property lists and local pointers.
   const renamed = new Map<string, string>();
   let suffix = 0;
   for (const name of Array.from(names)) {
-    if (!URL_REFERENCE.test(name)) {
-      continue;
-    }
-    const safe = sanitizeUrl(name);
+    const safe = URL_REFERENCE.test(name) ? sanitizeUrl(name) : name;
     if (safe === name) {
       continue;
     }
@@ -794,87 +863,39 @@ function schemaUrlNames(schema: unknown): Map<string, string> {
     names.add(unique);
     renamed.set(name, unique);
   }
-  return renamed;
-}
-
-function safeSchemaPointer(ref: string, names: Map<string, string>): string {
-  const escape = (name: string) =>
-    encodeURIComponent(name.replace(/~/g, '~0').replace(/\//g, '~1'));
-  if (/^#%2f/i.test(ref)) {
-    try {
-      ref = decodeURIComponent(ref);
-    } catch {
-      return REDACTED;
-    }
-  }
-  // Some authors include an unescaped URL at the end of a local pointer.
-  const literal = ref.match(/\/([a-z][a-z0-9+.-]*:\/\/.*)$/i);
-  if (literal) {
-    ref = ref.slice(0, -literal[1].length) + escape(literal[1]);
-  }
-  return ref
-    .split('/')
-    .map((token) => {
-      let decoded = token;
-      try {
-        decoded = decodeURIComponent(token);
-      } catch {
-        // A malformed URI escape still needs credential redaction.
-      }
-      for (const candidate of [decoded, token]) {
-        const key = candidate.replace(/~1/g, '/').replace(/~0/g, '~');
-        const safe = names.get(key) ?? (URL_REFERENCE.test(key) ? sanitizeUrl(key) : key);
-        if (safe !== key) {
-          return escape(safe);
-        }
-      }
-      return token;
-    })
-    .join('/');
+  return { renamed, sensitive };
 }
 
 /** Schema property names describe data. Their literal constraints can carry credentials. */
 function sanitizeAssertionJsonSchema(root: unknown): unknown {
   const options = { sanitizeUrls: true, throwOnError: true, maxDepth: Number.POSITIVE_INFINITY };
-  const names = schemaUrlNames(root);
+  const { renamed: names, sensitive } = indexSchema(root);
   const sanitizeName = (name: unknown) =>
     (typeof name === 'string' ? names.get(name) : undefined) ?? sanitizeObject(name, options);
 
-  function visit(schema: unknown, credential = false): unknown {
+  function visit(schema: unknown): unknown {
     if (!isSchemaObject(schema)) {
       return sanitizeObject(schema, options);
     }
+    const credential = sensitive.has(schema);
     return Object.fromEntries(
       Object.entries(schema).flatMap(([keyword, value]) => {
         if (JSON_SCHEMA_MAP_KEYWORDS.has(keyword) && isSchemaObject(value)) {
-          const entries = Object.entries(value).map(([name, child]) => {
-            const sensitive =
-              credential ||
-              name.toLowerCase() === 'headers' ||
-              (normalizeFieldName(name) !== 'key' && isSecretParameter(name, undefined));
-            return [
-              names.get(name) ?? name,
-              isSchemaObject(child) || typeof child === 'boolean'
-                ? visit(child, sensitive)
-                : (keyword === 'dependencies' || keyword === 'dependentRequired') &&
-                    Array.isArray(child)
-                  ? child.map(sanitizeName)
-                  : sensitive
-                    ? REDACTED
-                    : sanitizeObject(child, options),
-            ];
-          });
+          const entries = Object.entries(value).map(([name, child]) => [
+            names.get(name) ?? name,
+            isSchemaObject(child) || typeof child === 'boolean'
+              ? visit(child)
+              : (keyword === 'dependencies' || keyword === 'dependentRequired') &&
+                  Array.isArray(child)
+                ? child.map(sanitizeName)
+                : credential || credentialSchemaName(name)
+                  ? REDACTED
+                  : sanitizeObject(child, options),
+          ]);
           return [[keyword, Object.fromEntries(entries)]];
         }
         if (JSON_SCHEMA_CHILD_KEYWORDS.has(keyword)) {
-          return [
-            [
-              keyword,
-              Array.isArray(value)
-                ? value.map((child) => visit(child, credential))
-                : visit(value, credential),
-            ],
-          ];
+          return [[keyword, Array.isArray(value) ? value.map(visit) : visit(value)]];
         }
         if (credential && !JSON_SCHEMA_STRUCTURAL_KEYWORDS.has(keyword)) {
           const redacted =
@@ -887,12 +908,15 @@ function sanitizeAssertionJsonSchema(root: unknown): unknown {
                   : REDACTED;
           return [[keyword, redacted]];
         }
-        if (
-          ['$ref', '$dynamicRef', '$recursiveRef'].includes(keyword) &&
-          typeof value === 'string' &&
-          /^#(?:\/|%2f)/i.test(value)
-        ) {
-          return [[keyword, safeSchemaPointer(value, names)]];
+        if (SCHEMA_REFS.has(keyword) && typeof value === 'string') {
+          const pointer = localSchemaPointer(value);
+          if (pointer) {
+            const tokens = pointer.map(({ raw, name }) => {
+              const safe = names.get(name) ?? (URL_REFERENCE.test(name) ? sanitizeUrl(name) : name);
+              return safe === name ? raw : pointerToken(safe);
+            });
+            return [[keyword, ['#', ...tokens].join('/')]];
+          }
         }
         if ((keyword === 'required' || keyword === 'enum') && Array.isArray(value)) {
           return [[keyword, value.map(sanitizeName)]];

@@ -453,6 +453,29 @@ describe('sanitizeConfigForOutput', () => {
     },
   );
 
+  it('redacts referenced credential constraints across cycles without resolving external references', () => {
+    const schema = {
+      $defs: {
+        field: { $ref: '#/$defs/a~1b' },
+        'a/b': { default: 'private-default', anyOf: [{ $ref: '#/$defs/field' }] },
+        public: { default: 'ordinary' },
+        nested: {
+          $id: 'child.json',
+          $defs: { public: { const: 'private-nested' } },
+          properties: { token: { $ref: '#/$defs/public' } },
+        },
+      },
+      properties: { apiKey: { $ref: '#/$defs/field' }, token: { $ref: 'public.json' } },
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const projected = (sanitizeConfigForOutput(config).tests as typeof config.tests)[0].assert[0]
+      .value;
+    expect(projected.$defs['a/b'].default).toBe('[REDACTED]');
+    expect(projected.$defs.public.default).toBe('ordinary');
+    expect(projected.$defs.nested.$defs.public.const).toBe('[REDACTED]');
+    expect(projected.properties).toEqual(schema.properties);
+  });
+
   it('updates name lists and local pointers when URL names collide', () => {
     const authored = 'https://example.test/data?token=private-value';
     const existing = 'https://example.test/data?token=%5BREDACTED%5D';
