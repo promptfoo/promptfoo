@@ -17,8 +17,8 @@ import {
   mergeGoogleCompletionOptions,
   parseConfigResponseSchema,
   parseConfigSystemInstruction,
+  parseGoogleFunctionCalls,
   resolveGoogleToolConfig,
-  validateFunctionCall,
   validateGoogleFunctionCalls,
 } from './util';
 
@@ -30,6 +30,9 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { CompletionOptions, FunctionDeclaration, GoogleProviderConfig, Tool } from './types';
+
+// Keep the exact request schemas across evaluator object spreads, without serializing them.
+const requestFunctions = Symbol('Gemini Interactions request functions');
 
 type InteractionContent = {
   type?: string;
@@ -1079,7 +1082,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
   }
 
   /** Validate function calls against `config.tools` and native `passthrough.tools` functions. */
-  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+  validateFunctionToolCall(
+    output: string | object,
+    vars?: CallApiContextParams['vars'],
+    response?: ProviderResponse & { [requestFunctions]?: FunctionDeclaration[] },
+  ): void {
+    const calls = parseGoogleFunctionCalls(output);
+    if (response?.[requestFunctions]) {
+      return validateGoogleFunctionCalls(calls, response[requestFunctions]);
+    }
     const configured = loadFile(this.config.tools, vars);
     const declarations = interactionFunctions([
       ...toInteractionTools(
@@ -1087,7 +1098,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ),
       ...[this.config.passthrough?.tools].flat(),
     ]);
-    validateFunctionCall(output, [{ functionDeclarations: declarations }], vars);
+    validateGoogleFunctionCalls(calls, declarations);
   }
 
   async callApi(
@@ -1782,7 +1793,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
           .filter((part) => part.type === 'text' && part.text)
           .map((part) => part.text)
           .join('');
-        return {
+        const pending = {
+          [requestFunctions]: declarations,
           output: JSON.stringify([
             ...(callText ? [{ text: callText }] : []),
             ...pendingCalls.map(({ id, name, arguments: args }) => ({
@@ -1794,6 +1806,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           cost,
           metadata,
         };
+        return pending;
       }
       if (!text) {
         return { error: 'Gemini interaction did not return text output', raw: data };

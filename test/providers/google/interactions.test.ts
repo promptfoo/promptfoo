@@ -4796,6 +4796,50 @@ describe('GoogleInteractionsProvider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps resolved tool factories local to each concurrent response', async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-tools-'));
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: { apiKey: 'test-key', tools: 'file://{{ factory }}:getTools' as any },
+      });
+      mockFetchWithCache.mockResolvedValue(functionCallResponse() as any);
+      try {
+        const [valid, invalid] = await Promise.all(
+          ['city', 'country'].map(async (field) => {
+            const factory = path.join(root, field + '.mjs');
+            const tool = {
+              name: 'get_weather',
+              parameters: {
+                type: 'object',
+                properties: { [field]: { type: 'string' } },
+                required: [field],
+              },
+            };
+            fs.writeFileSync(
+              factory,
+              `export function getTools() { return { functionDeclarations: [${JSON.stringify(tool)}] } }`,
+            );
+            const response = await provider.callApi('Weather?', {
+              vars: { factory },
+              prompt: { raw: 'Weather?', label: 'Weather' },
+            });
+            fs.unlinkSync(factory);
+            expect(response.error).toBeUndefined();
+            return response;
+          }),
+        );
+        expect(valid.output).toBe(invalid.output);
+        expect(JSON.stringify(invalid)).not.toContain('country');
+        expect(() =>
+          provider.validateFunctionToolCall(valid.output, {}, { ...valid }),
+        ).not.toThrow();
+        expect(() => provider.validateFunctionToolCall(invalid.output, {}, { ...invalid })).toThrow(
+          'does not match schema',
+        );
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
     it('runs callbacks and continues a stored interaction until the model answers', async () => {
       mockFetchWithCache
         .mockResolvedValueOnce(functionCallResponse('interaction-1') as any)

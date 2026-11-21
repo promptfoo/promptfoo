@@ -42,6 +42,7 @@ export const handleIsValidFunctionCall = ({
   inverse,
   output,
   provider,
+  providerResponse,
   test,
 }: AssertionParams): GradingResult => {
   // Without a validator there is no verdict to negate, so this fails under `not-` too.
@@ -54,7 +55,7 @@ export const handleIsValidFunctionCall = ({
     };
   }
   try {
-    provider.validateFunctionToolCall(output, test.vars);
+    provider.validateFunctionToolCall(output, test.vars, providerResponse);
     return toolCallVerdict(assertion, inverse, true, 'Assertion passed', 'function call');
   } catch (err) {
     return toolCallErrorVerdict(assertion, inverse, err, 'function call');

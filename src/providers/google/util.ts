@@ -2261,11 +2261,7 @@ export function parseStringObject(input: string | any) {
   return input;
 }
 
-export function validateFunctionCall(
-  output: string | object,
-  functions?: Tool[] | string,
-  vars?: Record<string, VarValue>,
-) {
+export function parseGoogleFunctionCalls(output: string | object): FunctionCall[] {
   let functionCalls: FunctionCall[];
   try {
     let parsedOutput: object | Content = parseStringObject(output);
@@ -2294,6 +2290,15 @@ export function validateFunctionCall(
     );
   }
 
+  return functionCalls;
+}
+
+export function validateFunctionCall(
+  output: string | object,
+  functions?: Tool[] | string,
+  vars?: Record<string, VarValue>,
+) {
+  const functionCalls = parseGoogleFunctionCalls(output);
   let interpolatedFunctions: Tool[];
   try {
     interpolatedFunctions = loadFile(functions, vars) as Tool[];
