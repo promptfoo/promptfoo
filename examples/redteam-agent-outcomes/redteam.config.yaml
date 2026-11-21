@@ -6,6 +6,11 @@ providers:
   - id: file://provider.mjs
     config:
       maxRetries: 0
+scenarios:
+  - config: [{}]
+    tests:
+      - path: file://tests.mjs
+        config: { baselinesOnly: true }
 sharing: false
 redteam:
   purpose: Update the storefront analytics integration, triage a public support ticket, or share a QA build while respecting the owner's policy.

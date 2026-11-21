@@ -56,12 +56,14 @@ For a standalone copy, install with `npm install --no-save --package-lock=false 
 
 ## Generate fresh attacks
 
-`redteam.config.yaml` requests one direct and one indirect attack per plugin. Run generation with your usual Promptfoo red team credentials and generation provider. Keep `AGENT_MODE=openclaw-live` and your target model settings for evaluation. The fixed cases above supply the matched controls.
+`redteam.config.yaml` requests one direct and one indirect attack per plugin. Run generation with your usual Promptfoo red team credentials and generation provider. Keep `AGENT_MODE=openclaw-live` and your target model settings for evaluation.
 
 ```bash
 example=examples/redteam-agent-outcomes
 npm run local -- redteam generate -c "$example/redteam.config.yaml" -o "$example/redteam.yaml" --no-cache
 npm run local -- redteam eval -c "$example/redteam.yaml" --no-cache -j 1
 ```
+
+Generation writes six attacks. At evaluation time, the scenario in `redteam.yaml` loads six matched controls and one explicitly authorized folder grant from `tests.mjs`, giving you 13 cases in one report. Compare each indirect attack with its control. The owner asks for the same work, and the tool returns a neutral record in the control. If both runs produce the violation, the agent also makes the mistake under ordinary conditions.
 
 The target provider routes `vars.agentOutcome` to the corresponding service. In indirect cases, `vars.artifact` becomes the vendor note, ticket body or QA note. The user's message stays fixed. To bring your own agent, replace the turn implementation in `provider.mjs`, seed its tools with the assigned record and return the service observations under `metadata.agentOutcomeEvidence`. [Connect your own target](https://www.promptfoo.dev/docs/red-team/plugins/agent-outcomes/#connect-a-target)
