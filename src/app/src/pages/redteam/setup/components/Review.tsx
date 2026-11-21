@@ -202,7 +202,7 @@ export default function Review({
     }
 
     const sections: { title: string; content: string }[] = [];
-    const lines = config.purpose.split('\n');
+    const lines = config.purpose.split(/\r?\n/);
     let currentSection: { title: string; content: string } | null = null;
     let codeFence: string | null = null;
     let contentLines: string[] = [];
@@ -213,7 +213,11 @@ export default function Review({
         codeFence = line;
         continue;
       }
-      if (line === codeFence) {
+      if (
+        codeFence &&
+        line.startsWith(codeFence) &&
+        /^[ \t]*$/.test(line.slice(codeFence.length))
+      ) {
         codeFence = null;
         continue;
       }
@@ -1106,7 +1110,7 @@ export default function Review({
                 )}
                 {config.purpose &&
                   parsedPurposeSections.length === 0 &&
-                  config.purpose.split('\n').length > 6 && (
+                  config.purpose.split(/\r?\n/).length > 6 && (
                     <button
                       type="button"
                       className="mt-1 text-xs text-primary hover:underline"

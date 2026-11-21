@@ -593,7 +593,7 @@ Application Details:
     mockUseRedTeamConfig.mockReturnValue({
       config: {
         ...defaultConfig,
-        purpose: `Application Purpose:\n\`\`\`\`\`\n${content}\n\`\`\`\`\`\n\nKey Features and Capabilities:\n\`\`\`\nReal features\n\`\`\``,
+        purpose: `Application Purpose:\n\`\`\`\`\`\n${content}\n\`\`\`\`\` \t\r\n\nKey Features and Capabilities:\n\`\`\`\nReal features\n\`\`\``,
       },
       updateConfig: mockUpdateConfig,
     });
