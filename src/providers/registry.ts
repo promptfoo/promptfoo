@@ -485,18 +485,13 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) =>
       providerPath === 'muse-code' || providerPath.startsWith('muse-code:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath, providerOptions) => {
       const { MuseCodeProvider } = await import('./muse-code');
       const model = providerPath.slice('muse-code:'.length);
       return new MuseCodeProvider({
         ...providerOptions,
         id: providerOptions.id ?? providerPath,
         config: model ? { ...providerOptions.config, model } : providerOptions.config,
-        env: { ...context.env, ...providerOptions.env },
       });
     },
   },

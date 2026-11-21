@@ -6,7 +6,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProviderEnvOverridesSchema } from '../../src/contracts/env';
+import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 import { MuseCodeProvider } from '../../src/providers/muse-code';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
@@ -145,9 +145,9 @@ describe('MuseCodeProvider', () => {
       output: `echo: ${prompt}`,
       sessionId: fixtureEvents[0].stream.id,
       metadata: { runId: fixtureEvents.at(-1)!.payload.run_stream.id },
-      raw: fixtureEvents,
     });
     // Echo reports no usage. Do not invent zero-cost model calls or token counts.
+    expect(response.raw).toBeUndefined();
     expect(response.tokenUsage).toBeUndefined();
     expect(response.cost).toBeUndefined();
     expect(instance.id()).toBe('muse-code');
@@ -165,6 +165,12 @@ describe('MuseCodeProvider', () => {
       '--prompt-file',
       path.join(path.dirname(String(options!.cwd)), 'prompt.txt'),
       '--user-input-auto-resolve',
+      '--sandbox-network',
+      'restricted',
+      '--disable-shell',
+      '--disable-write',
+      '--disable-web-tools',
+      '--no-foreign-personal-context',
       '--no-session-log',
     ]);
     expect(args).not.toContain('--disable-sandbox');
@@ -200,7 +206,7 @@ describe('MuseCodeProvider', () => {
       config: {
         basePath: testDir,
         working_dir: 'project',
-        muse_path: './bin/muse',
+        muse_path: path.relative(testDir, path.join(binDir, executableName('muse'))),
         model: 'default-model',
         reasoning_effort: 'medium',
         approval_mode: 'never',
@@ -212,7 +218,6 @@ describe('MuseCodeProvider', () => {
         no_foreign_personal_context: true,
         trust_workspace: true,
         max_model_steps: 4,
-        base_url: 'https://example.com/v1',
       },
     });
     const circularProvider = { child: {} };
@@ -221,7 +226,7 @@ describe('MuseCodeProvider', () => {
       prompt: {
         raw: '{{prompt}}',
         label: 'review',
-        config: { model: '{{model}}', provider: circularProvider },
+        config: { model: '{{model}}', provider: circularProvider, prefix: '', suffix: '' },
       },
       vars: { model: 'muse-spark-1.2' },
       evaluationId: 'eval-muse',
@@ -229,7 +234,7 @@ describe('MuseCodeProvider', () => {
     });
     expect(result.error).toBeUndefined();
     expect(spawn).toHaveBeenCalledWith(
-      path.join(testDir, 'bin/muse'),
+      path.join(binDir, executableName('muse')),
       expect.arrayContaining([
         '--model',
         'muse-spark-1.2',
@@ -248,8 +253,6 @@ describe('MuseCodeProvider', () => {
         '--trust-workspace',
         '--max-model-steps',
         '4',
-        '--base-url',
-        'https://example.com/v1',
       ]),
       expect.objectContaining({ cwd: path.join(testDir, 'project') }),
     );
@@ -270,55 +273,63 @@ describe('MuseCodeProvider', () => {
   });
 
   it.each([
-    [
-      { apiKey: 'explicit', env: { META_API_KEY: 'child' } },
-      { META_API_KEY: 'override' },
-      'explicit',
-    ],
-    [{ env: { META_API_KEY: 'child' } }, { META_API_KEY: 'override' }, 'child'],
-    [{}, { META_API_KEY: 'override' }, 'override'],
-    [{}, {}, 'inherited-meta'],
-    [{ env: { META_API_KEY: '' } }, {}, ''],
-  ])(
-    'applies credential precedence without inheriting other provider secrets',
-    async (config, env, expected) => {
-      mockProcessEnv({
-        ...process.env,
-        META_API_KEY: 'inherited-meta',
-        OPENAI_API_KEY: 'unrelated-secret',
-      });
-      const instance = provider({ config, env });
-      await instance.callApi(prompt);
-      const childEnv = vi.mocked(spawn).mock.calls[0][2]!.env!;
-      expect(childEnv.META_API_KEY).toBe(expected);
-      expect(childEnv.OPENAI_API_KEY).toBeUndefined();
-      expect(childEnv.MUSE_NO_AUTO_UPDATE).toBe('1');
-      expect(JSON.stringify(instance)).toBe('{"provider":"muse-code"}');
+    { config: { apiKey: 'fixture-secret' } },
+    { config: { env: { AZURE_CREDENTIALS: '{"clientSecret":"fixture-secret"}' } } },
+    { env: { META_API_KEY: 'fixture-secret' } },
+    { env: { MUSE_CLI_PATH: 'untrusted' } },
+  ])('rejects inline secrets and env overrides', (options) => {
+    expect(() => provider(options)).toThrow('process environment');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('uses only the process key and excludes unrelated credentials and loader variables', async () => {
+    vi.stubEnv('META_API_KEY', 'inherited-meta');
+    vi.stubEnv('OPENAI_API_KEY', 'another-key');
+    vi.stubEnv('NODE_OPTIONS', '--version');
+    vi.stubEnv('HTTPS_PROXY', 'https://user:password@localhost');
+    const instance = provider();
+    await instance.callApi(prompt);
+    const env = vi.mocked(spawn).mock.calls[0][2]!.env!;
+    expect(env.META_API_KEY).toBe('inherited-meta');
+    expect(env.MUSE_NO_AUTO_UPDATE).toBe('1');
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.NODE_OPTIONS).toBeUndefined();
+    expect(env.HTTPS_PROXY).toBeUndefined();
+    expect(JSON.stringify(instance)).toBe('{"provider":"muse-code"}');
+  });
+
+  it('supports existing login and a custom CLI in the process environment', async () => {
+    vi.stubEnv('MUSE_CLI_PATH', 'custom-muse');
+    const instance = provider();
+    expect(checkProviderApiKeys([instance]).size).toBe(0);
+    expect((await instance.callApi(prompt)).error).toBeUndefined();
+    const [command, , options] = vi.mocked(spawn).mock.calls[0];
+    expect(command).toBe(path.join(binDir, executableName('custom-muse')));
+    expect(options!.env!.META_API_KEY).toBeUndefined();
+  });
+
+  it.each(['explicit', 'path'])(
+    'removes unsafe PATH entries for %s launchers and their children',
+    async (mode) => {
+      vi.stubEnv('PATH', ['.', testDir, binDir, 'tools'].join(path.delimiter));
+      const command = path.join(binDir, executableName('muse'));
+      const config = { working_dir: testDir, muse_path: mode === 'explicit' ? command : 'muse' };
+      expect((await provider({ config }).callApi(prompt)).error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][2]!.env!.PATH).toBe(binDir);
+      vi.stubEnv('PATH', '.');
+      expect((await provider({ config }).callApi(prompt)).error).toContain('PATH');
+      expect(spawn).toHaveBeenCalledTimes(1);
     },
   );
 
-  it('supports existing Muse authentication without requiring an API key', async () => {
-    const instance = provider({
-      env: { MUSE_CLI_PATH: 'custom-muse' },
-      config: { env: { CUSTOM_SETTING: 'configured' } },
-    });
-    expect(checkProviderApiKeys([instance]).size).toBe(0);
-    const result = await instance.callApi(prompt);
-    expect(result.error).toBeUndefined();
-    expect(spawn).toHaveBeenCalledWith(
-      path.join(binDir, executableName('custom-muse')),
-      expect.any(Array),
-      expect.objectContaining({
-        env: expect.objectContaining({ CUSTOM_SETTING: 'configured' }),
-      }),
-    );
-    expect(vi.mocked(spawn).mock.calls[0][2]!.env!.META_API_KEY).toBeUndefined();
-    expect(
-      ProviderEnvOverridesSchema.parse({ META_API_KEY: 'key', MUSE_CLI_PATH: 'muse' }),
-    ).toEqual({
-      META_API_KEY: 'key',
-      MUSE_CLI_PATH: 'muse',
-    });
+  it('refuses explicitly selected workspace executables', async () => {
+    const filename = path.join(testDir, executableName('muse'));
+    await fs.writeFile(filename, '', { mode: 0o700 });
+    const response = await provider({
+      config: { working_dir: testDir, muse_path: filename },
+    }).callApi(prompt);
+    expect(response.error).toContain('outside the project');
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it.each(['.', '', 'tools'])(
@@ -330,10 +341,10 @@ describe('MuseCodeProvider', () => {
       await fs.writeFile(path.join(workspace, 'tools', executableName('muse')), '', {
         mode: 0o700,
       });
+      vi.stubEnv('PATH', `${entry}${path.delimiter}${binDir}`);
       const response = await provider({
         config: {
           working_dir: workspace,
-          env: { PATH: `${entry}${path.delimiter}${binDir}` },
         },
       }).callApi(prompt);
       expect(response.error).toBeUndefined();
@@ -346,7 +357,8 @@ describe('MuseCodeProvider', () => {
   );
 
   it('fails without spawning when PATH has no absolute directories', async () => {
-    const response = await provider({ config: { env: { PATH: '.' } } }).callApi(prompt);
+    vi.stubEnv('PATH', '.');
+    const response = await provider({ config: {} }).callApi(prompt);
     expect(response.error).toContain('Muse Code CLI was not found');
     expect(spawn).not.toHaveBeenCalled();
   });
@@ -373,10 +385,10 @@ describe('MuseCodeProvider', () => {
           workingDir = alias;
         }
       }
+      vi.stubEnv('PATH', `${searchDirectory}${path.delimiter}${binDir}`);
       const response = await provider({
         config: {
           working_dir: workingDir,
-          env: { PATH: `${searchDirectory}${path.delimiter}${binDir}` },
         },
       }).callApi(prompt);
       expect(response.error).toBeUndefined();
@@ -392,10 +404,10 @@ describe('MuseCodeProvider', () => {
     const malicious = path.join(workspace, 'muse');
     await fs.writeFile(malicious, '', { mode: 0o700 });
     await fs.symlink(malicious, path.join(firstBin, 'muse'));
+    vi.stubEnv('PATH', `${firstBin}${path.delimiter}${binDir}`);
     const response = await provider({
       config: {
         working_dir: workspace,
-        env: { PATH: `${firstBin}${path.delimiter}${binDir}` },
       },
     }).callApi(prompt);
     expect(response.error).toBeUndefined();
@@ -404,8 +416,9 @@ describe('MuseCodeProvider', () => {
 
   it('fails without spawning when Muse is only available inside the workspace', async () => {
     await fs.writeFile(path.join(testDir, executableName('muse')), '', { mode: 0o700 });
+    vi.stubEnv('PATH', testDir);
     const response = await provider({
-      config: { working_dir: testDir, env: { PATH: testDir } },
+      config: { working_dir: testDir },
     }).callApi(prompt);
     expect(response.error).toContain('Muse Code CLI was not found');
     expect(spawn).not.toHaveBeenCalled();
@@ -418,11 +431,11 @@ describe('MuseCodeProvider', () => {
       await fs.mkdir(repositoryBin, { recursive: true });
       await fs.mkdir(path.join(testDir, 'target'));
       await fs.writeFile(path.join(repositoryBin, executableName('muse')), '', { mode: 0o700 });
+      vi.stubEnv('PATH', `${repositoryBin}${path.delimiter}${binDir}`);
       const response = await provider({
         config: {
           basePath: testDir,
           working_dir: workingDir,
-          env: { PATH: `${repositoryBin}${path.delimiter}${binDir}` },
         },
       }).callApi(prompt);
       expect(response.error).toBeUndefined();
@@ -442,6 +455,7 @@ describe('MuseCodeProvider', () => {
       await fs.mkdir(repositoryBin, { recursive: true });
       if (kind === 'directory') {
         await fs.mkdir(path.join(repository, '.git'));
+        await fs.writeFile(path.join(repository, '.git', 'HEAD'), 'ref: refs/heads/main');
       } else {
         await fs.writeFile(path.join(repository, '.git'), 'gitdir: unused');
       }
@@ -456,11 +470,11 @@ describe('MuseCodeProvider', () => {
         basePath = path.join(alias, 'evaluations');
       }
       await fs.writeFile(path.join(repositoryBin, executableName('muse')), '', { mode: 0o700 });
+      vi.stubEnv('PATH', `${repositoryBin}${path.delimiter}${binDir}`);
       const response = await provider({
         config: {
           basePath,
           working_dir: '../src',
-          env: { PATH: `${repositoryBin}${path.delimiter}${binDir}` },
         },
       }).callApi(prompt);
       expect(response.error).toBeUndefined();
@@ -477,11 +491,11 @@ describe('MuseCodeProvider', () => {
     await fs.mkdir(workspace);
     await fs.writeFile(path.join(cwd, executableName('muse')), '', { mode: 0o700 });
     vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+    vi.stubEnv('PATH', `${cwd}${path.delimiter}${binDir}`);
     const response = await provider({
       config: {
         basePath: configDir,
         working_dir: workspace,
-        env: { PATH: `${cwd}${path.delimiter}${binDir}` },
       },
     }).callApi(prompt);
     expect(response.error).toBeUndefined();
@@ -490,15 +504,17 @@ describe('MuseCodeProvider', () => {
 
   it('allows absolute PATH lookup when cwd is the filesystem root', async () => {
     vi.spyOn(process, 'cwd').mockReturnValue(path.parse(testDir).root);
-    const response = await provider({ config: { env: { PATH: binDir } } }).callApi(prompt);
+    vi.stubEnv('PATH', binDir);
+    const response = await provider({ config: {} }).callApi(prompt);
     expect(response.error).toBeUndefined();
     expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
   });
 
   it('fails without spawning when Muse is only available in the config repository', async () => {
     await fs.writeFile(path.join(testDir, executableName('muse')), '', { mode: 0o700 });
+    vi.stubEnv('PATH', testDir);
     const response = await provider({
-      config: { basePath: testDir, env: { PATH: testDir } },
+      config: { basePath: testDir },
     }).callApi(prompt);
     expect(response.error).toContain('Muse Code CLI was not found');
     expect(spawn).not.toHaveBeenCalled();
@@ -519,20 +535,52 @@ describe('MuseCodeProvider', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
+  it.each(['base_url', 'muse_path', 'working_dir', 'approval_mode', 'sandbox_network'])(
+    'refuses template-controlled %s in provider config',
+    (key) => {
+      expect(() => provider({ config: { [key]: '{{setting}}' } })).toThrow();
+    },
+  );
+
   it.each([
-    ['base_url', 'https://meta.example/v1', '--base-url'],
-    ['reasoning_effort', 'high', '--reasoning-effort'],
-    ['approval_mode', 'never', '--approval-mode'],
-    ['sandbox_network', 'restricted', '--sandbox-network'],
-  ])('renders constrained provider option %s before validating it', async (key, value, flag) => {
-    const instance = provider({ config: { working_dir: testDir, [key]: '{{setting}}' } });
-    const response = await instance.callApi(prompt, {
-      vars: { setting: value },
-      prompt: { raw: prompt, label: 'test' },
+    { base_url: 'https://outside.invalid' },
+    { muse_path: '/tmp/agent' },
+    { working_dir: '.' },
+    { apiKey: 'override-secret' },
+    { env: { PATH: '.' } },
+    { disable_shell: false },
+    { disable_sandbox: true },
+    { trust_workspace: true },
+    { model: '--disable-sandbox' },
+    { model: '{{env.META_API_KEY}}' },
+  ])('rejects untrusted execution overrides before spawning', async (config) => {
+    const result = await provider().callApi(prompt, {
+      vars: {},
+      prompt: { raw: prompt, label: 'test', config },
     });
-    expect(response.error).toBeUndefined();
-    const args = vi.mocked(spawn).mock.calls[0][1]!;
-    expect(args[args.indexOf(flag) + 1]).toBe(value);
+    expect(result.error).toContain('Invalid Muse Code config');
+    expect(result.error).not.toContain('override-secret');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('lets agent-rubric inspect only a live evaluator-owned workspace', async () => {
+    const instance = provider();
+    const workspace = await createAgentWorkspace(testDir, 'copy');
+    const call = (dir: string) =>
+      instance.callApi(prompt, {
+        isGrading: true,
+        vars: {},
+        prompt: { raw: prompt, label: 'grade', config: { working_dir: dir } },
+      });
+    try {
+      expect((await call(testDir)).error).toContain('working_dir');
+      expect((await call(workspace.dir)).error).toBeUndefined();
+      expect(vi.mocked(spawn).mock.calls[0][2]!.cwd).toBe(workspace.dir);
+    } finally {
+      await workspace.remove();
+    }
+    expect((await call(workspace.dir)).error).toContain('working_dir');
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it('renders a validated session_id', async () => {
@@ -554,7 +602,7 @@ describe('MuseCodeProvider', () => {
   });
 
   it('rejects an invalid constrained option after rendering', async () => {
-    const instance = provider({ config: { approval_mode: '{{mode}}' } });
+    const instance = provider({ config: { reasoning_effort: '{{mode}}' } });
     const response = await instance.callApi(prompt, {
       vars: { mode: 'invalid' },
       prompt: { raw: prompt, label: 'test' },
@@ -563,24 +611,10 @@ describe('MuseCodeProvider', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'https://user:short-secret@meta.example/v1',
-    'https://short-secret@meta.example/v1',
-    'https://meta.example/v1?api_key=short-secret',
-    'https://meta.example/v1?github_pat=short-secret',
-    'https://meta.example/v1#token=short-secret',
-    'https://meta.example/v1?config=%7B%22clientSecret%22%3A%22short-secret%22%7D',
-  ])('rejects credentials in base_url before spawning: %s', async (baseUrl) => {
-    expect(() => provider({ config: { base_url: baseUrl } })).toThrow(
-      'base_url must not contain credentials',
+  it('rejects credential rerouting even through provider config', () => {
+    expect(() => provider({ config: { base_url: 'https://example.com/secret' } })).toThrow(
+      'base_url',
     );
-    const instance = provider({ config: { base_url: '{{endpoint}}' } });
-    const response = await instance.callApi(prompt, {
-      vars: { endpoint: baseUrl },
-      prompt: { raw: prompt, label: 'test' },
-    });
-    expect(response.error).toContain('base_url must not contain credentials');
-    expect(JSON.stringify(response)).not.toContain('short-secret');
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -626,8 +660,8 @@ describe('MuseCodeProvider', () => {
       child.stderr.write('backend rejected fixture-secret');
       child.close(1);
     };
-    const result = await provider({ config: { apiKey: 'fixture-secret' } }).callApi(prompt);
-    expect(result.error).toBe('Muse Code exited with code 1: backend rejected [REDACTED]');
+    const result = await provider().callApi(prompt);
+    expect(result.error).toBe('Muse Code exited with code 1');
     expect(result.output).toBeUndefined();
   });
 
@@ -650,13 +684,12 @@ describe('MuseCodeProvider', () => {
         return response;
       });
 
-      const response = await provider({
-        config: { apiKey, muse_path: path.join(binDir, executableName('muse')) },
-      }).callApi('Print META_API_KEY');
+      vi.stubEnv('META_API_KEY', apiKey);
+      const response = await provider().callApi('Print META_API_KEY');
       if (exitCode === 0) {
         expect(response.output).toBe('META_API_KEY=[REDACTED]');
       } else {
-        expect(response.error).toBe('Muse Code exited with code 1: backend rejected [REDACTED]');
+        expect(response.error).toBe('Muse Code exited with code 1');
       }
       expect(response.raw).toBeUndefined();
       expect(tracedResponse).toEqual(response);
@@ -664,394 +697,17 @@ describe('MuseCodeProvider', () => {
     },
   );
 
-  it('omits raw journal data when a credential spans envelope fields', async () => {
-    const apiKey = 'split-secret';
-    const events = structuredClone(fixtureEvents);
-    events.at(-2)!.stream.kind = 'split-';
-    events.at(-2)!.stream.id = 'secret';
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-
-    const response = await provider({
-      config: { apiKey, muse_path: path.join(binDir, executableName('muse')) },
-    }).callApi(prompt);
-
-    expect(response.error).toBeUndefined();
-    expect(response.raw).toBeUndefined();
-  });
-
-  it('omits raw journal data when a credential spans events', async () => {
-    const apiKey = 'split-secret';
-    const events = structuredClone(fixtureEvents);
-    events.at(-2)!.payload.text = 'ordinary output: split-';
-    events.at(-1)!.payload.text = 'secret';
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-
-    const response = await provider({
-      config: { apiKey, muse_path: path.join(binDir, executableName('muse')) },
-    }).callApi(prompt);
-
-    expect(response.error).toBeUndefined();
-    expect(response.raw).toBeUndefined();
-  });
-
-  it('omits split raw journal credentials repeated in the terminal event', async () => {
-    const apiKey = 'split-secret';
+  it('omits secrets split across journal events even with a stored login', async () => {
     const events = structuredClone(fixtureEvents);
     events.at(-3)!.payload.text = 'split-';
     events.at(-2)!.payload.text = 'secret';
-    events.at(-1)!.payload.text = apiKey;
     onSpawn = (child) => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
       child.close();
     };
-
-    const response = await provider({
-      config: { apiKey, muse_path: path.join(binDir, executableName('muse')) },
-    }).callApi(prompt);
-
+    const response = await provider().callApi(prompt);
+    expect(response.output).toBe(`echo: ${prompt}`);
     expect(response.raw).toBeUndefined();
-  });
-
-  it.each(['PROMPTFOO_STRIP_PROMPT_TEXT', 'PROMPTFOO_STRIP_RESPONSE_OUTPUT'])(
-    'omits raw journal data when %s is enabled',
-    async (name) => {
-      vi.stubEnv(name, 'true');
-      onSpawn = (child) => {
-        child.stdout.write(fixtureEvents.map((event) => JSON.stringify(event)).join('\n'));
-        child.close();
-      };
-
-      const response = await provider({
-        config: { muse_path: path.join(binDir, executableName('muse')) },
-      }).callApi(prompt);
-
-      expect(response.error).toBeUndefined();
-      expect(response.raw).toBeUndefined();
-    },
-  );
-
-  it.each([
-    ['output', 0],
-    ['error', 1],
-  ] as const)(
-    'preserves the %s response field when redacting a short key',
-    async (apiKey, exitCode) => {
-      const events = structuredClone(fixtureEvents);
-      events.at(-1)!.payload.text = apiKey;
-      onSpawn = (child) => {
-        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-        child.stderr.write(apiKey);
-        child.close(exitCode);
-      };
-      const response = await provider({ config: { apiKey } }).callApi(prompt);
-      if (exitCode === 0) {
-        expect(response.output).toBe('[REDACTED]');
-      } else {
-        expect(response.error).toBe('Muse Code exited with code 1: [REDACTED]');
-      }
-    },
-  );
-
-  it('redacts other injected credentials and URL authentication from journal data', async () => {
-    const proxy = 'http://proxy-user:p%40ssword@proxy.example:8080';
-    const restoreProxy = mockProcessEnv({ HTTPS_PROXY: proxy });
-    const sensitive = [
-      'github-credential',
-      'database-credential',
-      'deploy-credential',
-      proxy,
-      'proxy-user',
-      'p%40ssword',
-      'p@ssword',
-      'query-credential',
-      'endpoint-password',
-    ];
-    try {
-      onSpawn = (child) => {
-        const env = vi.mocked(spawn).mock.calls[0][2]!.env!;
-        expect(env.GITHUB_TOKEN).toBe(sensitive[0]);
-        expect(env.DATABASE_PASSWORD).toBe(sensitive[1]);
-        expect(env.HTTPS_PROXY).toBe(proxy);
-        const events = structuredClone(fixtureEvents);
-        events.at(-1)!.payload.text = `${sensitive.join(' | ')} | keep-me`;
-        events.at(-1)!.payload.details = { values: sensitive, [sensitive[0]]: 'field name' };
-        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-        child.close();
-      };
-      const response = await provider({
-        config: {
-          env: {
-            GITHUB_TOKEN: sensitive[0],
-            DATABASE_PASSWORD: sensitive[1],
-            DEPLOY_KEY: sensitive[2],
-            SERVICE_URL: 'https://service.example?api_key=query-credential',
-            ENDPOINT_URL: 'https://endpoint-user:endpoint-password@meta.example',
-            PUBLIC_SETTING: 'keep-me',
-          },
-        },
-      }).callApi(prompt);
-      expect(response.error).toBeUndefined();
-      expect(response.output).toContain('keep-me');
-      for (const credential of sensitive) {
-        expect(JSON.stringify(response)).not.toContain(credential);
-      }
-    } finally {
-      restoreProxy();
-    }
-  });
-
-  it.each([
-    { SERVICE_URL: '//user:fixture-password@gateway.example' },
-    { AZURE_CREDENTIALS: JSON.stringify({ clientSecret: 'fixture-password' }) },
-    { AZURE_CREDENTIALS: JSON.stringify('fixture-password') },
-    { AZURE_CREDENTIALS: JSON.stringify(['fixture-password']) },
-    { AZURE_STORAGE_CONNECTION_STRING: 'AccountName=fixture;AccountKey=fixture-password;' },
-    { DATABASE_CONNECTION: 'Server=localhost;Password=fixture-password;Database=example' },
-  ])('redacts extracted environment credentials before returning output: %j', async (env) => {
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = 'fixture-password';
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await provider({ config: { env } }).callApi(prompt);
-    expect(response.error).toBeUndefined();
-    expect(response.output).toBe('[REDACTED]');
-    expect(response.raw).toBeUndefined();
-  });
-
-  it('redacts overlapping credentials in stderr without rewriting redaction markers', async () => {
-    onSpawn = (child) => {
-      child.stderr.write('RED-secret RED literal.[key]+$');
-      child.close(1);
-    };
-    const response = await provider({
-      config: {
-        apiKey: 'RED',
-        env: { GITHUB_TOKEN: 'RED-secret', DATABASE_PASSWORD: 'literal.[key]+$' },
-      },
-    }).callApi(prompt);
-    expect(response.error).toBe('Muse Code exited with code 1: [REDACTED] [REDACTED] [REDACTED]');
-  });
-
-  it.each(
-    [
-      'short+secret',
-      'a%2fb',
-      'café%2fsecret',
-      'short space%2fsecret',
-      "'quote%2fsecret",
-      'unpaired\uD800%2fsecret',
-      'a+%2fb;second',
-    ].flatMap((raw) => ['query', 'userinfo', 'fragment'].map((location) => [location, raw])),
-  )('redacts a raw %s URL credential %j', async (location, raw) => {
-    const baseUrl =
-      location === 'userinfo'
-        ? `https://user:${raw}@meta.example/v1`
-        : `https://meta.example/v1${location === 'query' ? '?' : '#'}api_key=${raw}`;
-    onSpawn = (child) => {
-      const events = structuredClone(fixtureEvents);
-      events.at(-1)!.payload.text = raw;
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await provider({ config: { env: { SERVICE_URL: baseUrl } } }).callApi(prompt);
-    expect(response.error).toBeUndefined();
-    expect(response.output).toBe('[REDACTED]');
-    expect(JSON.stringify(response)).not.toContain(raw);
-  });
-
-  it.each([
-    ['GITHUB_PAT', 'synthetic-personal-token'],
-    ['GITHUB_TOKEN_VALUE', 'synthetic-token-value'],
-    ['servicePasswordValue', 'synthetic-password'],
-    ['DEPLOY_CREDENTIAL', 'synthetic-credential'],
-    ['PGPASSWORD', 'short-pg-pass'],
-    ['CUSTOM_SETTING', `sk-${'a'.repeat(24)}`],
-    ['GIT_ACCESS', `ghp_${'a'.repeat(36)}`],
-    ['USER', `ghp_${'b'.repeat(36)}`],
-  ])('redacts credential %s by name or value', async (name, value) => {
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = value;
-    events.at(-1)!.payload.details = { [value]: value };
-    onSpawn = (child) => {
-      expect(vi.mocked(spawn).mock.calls[0][2]!.env![name]).toBe(value);
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await provider({ config: { env: { [name]: value } } }).callApi(prompt);
-    expect(response.output).toBe('[REDACTED]');
-    expect(JSON.stringify(response)).not.toContain(value);
-  });
-
-  it.each([
-    ['Bearer short-secret', ['short-secret']],
-    ['token short-secret', ['short-secret']],
-    ['ApiKey short-secret', ['short-secret']],
-    [
-      `Basic ${Buffer.from('basic-user:short-pass').toString('base64')}`,
-      [
-        Buffer.from('basic-user:short-pass').toString('base64'),
-        'basic-user:short-pass',
-        'short-pass',
-      ],
-    ],
-    [
-      `Basic ${Buffer.from('unicode-user:café-pass').toString('base64')}`,
-      [Buffer.from('unicode-user:café-pass').toString('base64'), 'café-pass'],
-    ],
-    ['Basic malformed***', ['malformed***']],
-  ] as const)('redacts authorization components from %s', async (authorization, components) => {
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = components.join(' | ');
-    events.at(-1)!.payload.details = Object.fromEntries(components.map((value) => [value, value]));
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    let tracedResponse: unknown;
-    vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => {
-      const response = await fn({} as Span);
-      tracedResponse = response;
-      return response;
-    });
-    const response = await provider({
-      config: { env: { AUTHORIZATION: authorization } },
-    }).callApi(prompt);
-    expect(response.error).toBeUndefined();
-    expect(response.output).toBe(components.map(() => '[REDACTED]').join(' | '));
-    expect(tracedResponse).toEqual(response);
-    for (const component of components) {
-      expect(JSON.stringify(tracedResponse)).not.toContain(component);
-    }
-  });
-
-  it.each(['HOTKEY', 'MONKEY', 'TOKENIZER_SETTING'])(
-    'preserves ordinary output when nonsecret setting %s contains it',
-    async (name) => {
-      const events = structuredClone(fixtureEvents);
-      events.at(-1)!.payload.text = 'save changes to save.txt';
-      onSpawn = (child) => {
-        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-        child.close();
-      };
-      const response = await provider({ config: { env: { [name]: 'save' } } }).callApi(prompt);
-      expect(response.output).toBe('save changes to save.txt');
-      expect(response.raw).toEqual(events);
-    },
-  );
-
-  it.each(['0', 'false', ''])(
-    'keeps automatic updates disabled when custom env attempts to set %j',
-    async (value) => {
-      const response = await provider({
-        config: { env: { MUSE_NO_AUTO_UPDATE: value } },
-      }).callApi(prompt);
-      expect(response.error).toBeUndefined();
-      expect(vi.mocked(spawn).mock.calls[0][2]!.env!.MUSE_NO_AUTO_UPDATE).toBe('1');
-    },
-  );
-
-  it.each([
-    'https://hooks.slack.com/services/T000/B000/short-webhook-token',
-    'https://hooks.slack-gov.com/services/T000/B000/short-webhook-token',
-    'https://hooks.slack.com/triggers/T000/000000/short-webhook-token',
-    'https://discord.com/api/webhooks/123456/short-webhook-token',
-    'https://discord.com/api/v10/webhooks/123456/short-webhook-token',
-  ])('redacts webhook URLs and their path tokens from responses: %s', async (url) => {
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = url + ' | short-webhook-token';
-    events.at(-1)!.payload.details = { [url]: 'short-webhook-token' };
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    let tracedResponse: unknown;
-    vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => {
-      const response = await fn({} as Span);
-      tracedResponse = response;
-      return response;
-    });
-    const response = await provider({ config: { env: { SERVICE_URL: url } } }).callApi(prompt);
-    expect(response.error).toBeUndefined();
-    expect(response.output).toBe('[REDACTED] | [REDACTED]');
-    expect(tracedResponse).toEqual(response);
-    expect(JSON.stringify(tracedResponse)).not.toContain('short-webhook-token');
-  });
-
-  it.each(['a%2fb', 'café%2fsecret', 'short space%2fsecret'])(
-    'redacts raw and decoded webhook path credentials: %s',
-    async (token) => {
-      const events = structuredClone(fixtureEvents);
-      events.at(-1)!.payload.text = token + ' | ' + decodeURIComponent(token);
-      onSpawn = (child) => {
-        child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-        child.close();
-      };
-      const response = await provider({
-        config: {
-          env: { SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/' + token },
-        },
-      }).callApi(prompt);
-      expect(response.output).toBe('[REDACTED] | [REDACTED]');
-    },
-  );
-
-  it('preserves operational paths that resemble long opaque credentials', async () => {
-    const directory = path.join(testDir, 'x'.repeat(80));
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = directory;
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await provider({
-      config: { env: { MUSE_AUTH_PATH: directory, XDG_CACHE_HOME: directory } },
-    }).callApi(prompt);
-    expect(response.output).toBe(directory);
-    expect(response.raw).toEqual(events);
-  });
-
-  it.each([
-    ['GOOGLE_APPLICATION_CREDENTIALS', '/home/user/key.json'],
-    ['AWS_SHARED_CREDENTIALS_FILE', '/home/user/.aws/credentials'],
-    ['AWS_WEB_IDENTITY_TOKEN_FILE', '/var/run/secrets/aws-token'],
-    ['CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE', '/home/user/gcloud-key.json'],
-    ['AZURE_AUTH_LOCATION', '/home/user/azure-auth.json'],
-    ['SSH_AUTH_SOCK', '/tmp/ssh-agent.sock'],
-    ['SSL_KEY_FILE', '/home/user/client-key.pem'],
-    ['DATABASE_PASSWORD_FILE', '/var/run/secrets/database-password'],
-  ])('preserves the %s credential-file path in responses', async (name, file) => {
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = file;
-    onSpawn = (child) => {
-      expect(vi.mocked(spawn).mock.calls[0][2]!.env![name]).toBe(file);
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await provider({ config: { env: { [name]: file } } }).callApi(prompt);
-    expect(response.error).toBeUndefined();
-    expect(response.output).toBe(file);
-    expect(response.raw).toEqual(events);
-  });
-
-  it('preserves a nonsecret checksum supplied through the environment', async () => {
-    const checksum = 'a'.repeat(64);
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.text = checksum;
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await provider({ config: { env: { CHECKSUM: checksum } } }).callApi(prompt);
-    expect(response.output).toBe(checksum);
-    expect(response.raw).toEqual(events);
   });
 
   it.each(['failed', 'cancelled'])(
@@ -1260,8 +916,11 @@ describe('MuseCodeProvider', () => {
 
   it('does not replay a stateful run after a rate-limit error', async () => {
     onSpawn = (child) => {
-      child.stderr.write('429 rate limit');
-      child.close(1);
+      const events = structuredClone(fixtureEvents);
+      events.at(-1)!.payload_type = 'run.terminal.failed';
+      events.at(-1)!.payload.reason = '429 rate limit';
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
     };
     const registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
     try {
@@ -1321,13 +980,6 @@ describe('MuseCodeProvider', () => {
     expect(spawn).toHaveBeenCalledTimes(1);
   });
 
-  it('omits the journal whenever the child receives credentials', async () => {
-    const response = await provider({ config: { apiKey: 'fixture-secret' } }).callApi(prompt);
-    expect(response.error).toBeUndefined();
-    expect(response.output).toBe(`echo: ${prompt}`);
-    expect(response.raw).toBeUndefined();
-  });
-
   it('requires a stable, retained workspace for session reuse', async () => {
     expect((await provider({ config: { session_id: sessionId } }).callApi(prompt)).error).toContain(
       'requires working_dir',
@@ -1362,7 +1014,7 @@ describe('MuseCodeProvider', () => {
       },
       vars: {},
     });
-    expect(wrongWorkspace.error).toContain('original working_dir');
+    expect(wrongWorkspace.error).toContain('Invalid Muse Code config');
     expect(spawn).toHaveBeenCalledTimes(1);
     onSpawn = () => {};
     const first = instance.callApi(prompt, {
@@ -1401,7 +1053,11 @@ describe('MuseCodeProvider', () => {
         await fs.symlink(testDir, alias, process.platform === 'win32' ? 'junction' : 'dir');
       }
       const instance = provider({
-        config: { muse_path: path.join(binDir, executableName('muse')), working_dir: testDir },
+        config: {
+          muse_path: path.join(binDir, executableName('muse')),
+          disable_write: false,
+          working_dir: testDir,
+        },
       });
       const other =
         kind === 'same provider'
@@ -1409,6 +1065,7 @@ describe('MuseCodeProvider', () => {
           : provider({
               config: {
                 muse_path: path.join(binDir, executableName('muse')),
+                disable_write: false,
                 working_dir: kind === 'workspace alias' ? alias : testDir,
               },
             });
@@ -1433,7 +1090,11 @@ describe('MuseCodeProvider', () => {
 
   it.each(['error', 'abort'])('releases an explicit workspace after %s', async (outcome) => {
     const instance = provider({
-      config: { muse_path: path.join(binDir, executableName('muse')), working_dir: testDir },
+      config: {
+        muse_path: path.join(binDir, executableName('muse')),
+        disable_write: false,
+        working_dir: testDir,
+      },
     });
     const controller = new AbortController();
     onSpawn = () => {};
@@ -1495,77 +1156,27 @@ describe('MuseCodeProvider', () => {
     expect((await second).error).toBeUndefined();
   });
 
-  it('redacts credentials from earlier runs when a session is reused', async () => {
-    const firstKey = 'first-session-secret';
-    const instance = provider({
-      config: {
-        working_dir: testDir,
-        no_session_log: false,
-        muse_path: path.join(binDir, executableName('muse')),
-        apiKey: firstKey,
-      },
-    });
-    onSpawn = (child) => {
-      child.stdout.write(fixture);
-      child.close();
-    };
-    await instance.callApi(prompt);
-
+  it('redacts current and earlier process keys after a session key rotates', async () => {
+    vi.stubEnv('META_API_KEY', 'first-key');
+    const instance = provider({ config: { working_dir: testDir, no_session_log: false } });
+    const first = await instance.callApi(prompt);
+    vi.stubEnv('META_API_KEY', 'next-key');
     const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.details = firstKey;
+    events.at(-1)!.payload.text = 'first-key and next-key';
     onSpawn = (child) => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
       child.close();
     };
     const response = await instance.callApi(prompt, {
-      prompt: {
-        raw: prompt,
-        label: 'prompt',
-        config: { session_id: sessionId, apiKey: 'second-session-secret' },
-      },
+      prompt: { raw: prompt, label: 'resume', config: { session_id: first.sessionId } },
       vars: {},
     });
-
-    expect(response.raw).toBeUndefined();
-  });
-
-  it('retains credentials for a session ID returned by Muse', async () => {
-    const firstKey = 'first-generated-session-secret';
-    const instance = provider({
-      config: {
-        working_dir: testDir,
-        no_session_log: false,
-        muse_path: path.join(binDir, executableName('muse')),
-        apiKey: firstKey,
-      },
-    });
-    onSpawn = (child) => {
-      child.stdout.write(fixture);
-      child.close();
-    };
-    await instance.callApi(prompt);
-
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.details = firstKey;
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-    const response = await instance.callApi(prompt, {
-      prompt: {
-        raw: prompt,
-        label: 'prompt',
-        config: { session_id: sessionId, apiKey: 'second-generated-session-secret' },
-      },
-      vars: {},
-    });
-
-    expect(response.raw).toBeUndefined();
+    expect(response.output).toBe('[REDACTED] and [REDACTED]');
   });
 
   it('rejects a durable session whose credential history is unknown', async () => {
     const response = await provider({
-      config: { session_id: sessionId, working_dir: testDir, apiKey: 'second-process-secret' },
+      config: { session_id: sessionId, working_dir: testDir },
     }).callApi(prompt);
 
     expect(response.error).toContain('can only resume a session started by this provider instance');

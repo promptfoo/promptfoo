@@ -1,18 +1,17 @@
 import { spawn } from 'node:child_process';
-import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { z } from 'zod';
 import cliState from '../cliState';
-import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../tracing/genaiTracer';
-import { renderVarsInObject } from '../util/render';
-import { collectEnvCredentials, REDACTED } from '../util/sanitizer';
+import { REDACTED } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
+import { resolveAgentExecutable } from './agentExecutable';
 import { resolveAgenticWorkingDir } from './agentic-utils';
+import { isAgentWorkspace } from './agentWorkspace';
 import { providerRegistry } from './providerRegistry';
 
 import type {
@@ -29,15 +28,11 @@ const MuseCodeConfigSchema = z.object({
   suffix: z.string().optional(),
   provider: z.unknown().optional(),
   linkedTargetId: z.string().optional(),
-  apiKey: z.string().min(1).optional(),
   muse_path: z.string().min(1).optional(),
   working_dir: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  base_url: z
-    .url()
-    .refine((value) => collectEnvCredentials({}, value).length === 0, {
-      message: 'base_url must not contain credentials; use apiKey or META_API_KEY instead',
-    })
+  model: z
+    .string()
+    .regex(/^[a-zA-Z0-9][\w.:/-]*$/)
     .optional(),
   reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'ultra']).optional(),
   approval_mode: z.enum(['untrusted', 'on-request', 'never']).optional(),
@@ -54,20 +49,18 @@ const MuseCodeConfigSchema = z.object({
   max_model_steps: z.number().int().positive().optional(),
   timeout_ms: z.number().int().positive().max(2_147_483_647).optional(),
   max_output_bytes: z.number().int().positive().optional(),
-  env: z.record(z.string(), z.string()).optional(),
 });
 
 type MuseCodeConfig = z.infer<typeof MuseCodeConfigSchema>;
 
-const TemplateStringSchema = z.string().regex(/{{[\s\S]*?}}|{%[\s\S]*?%}|{#[\s\S]*?#}/);
-// Preserve per-test templates during construction; validate their resolved values in callApi.
-const MuseCodeInputSchema = MuseCodeConfigSchema.extend({
-  base_url: MuseCodeConfigSchema.shape.base_url.or(TemplateStringSchema),
+const variable = /^{{\s*(\w+)\s*}}$/;
+const TemplateStringSchema = z.string().regex(variable);
+const TurnSchema = z.strictObject({
+  model: MuseCodeConfigSchema.shape.model.or(TemplateStringSchema),
   reasoning_effort: MuseCodeConfigSchema.shape.reasoning_effort.or(TemplateStringSchema),
-  approval_mode: MuseCodeConfigSchema.shape.approval_mode.or(TemplateStringSchema),
-  sandbox_network: MuseCodeConfigSchema.shape.sandbox_network.or(TemplateStringSchema),
   session_id: MuseCodeConfigSchema.shape.session_id.or(TemplateStringSchema),
-}).strict();
+});
+const MuseCodeInputSchema = MuseCodeConfigSchema.extend(TurnSchema.shape).strict();
 
 type MuseCodeInputConfig = z.infer<typeof MuseCodeInputSchema>;
 
@@ -85,7 +78,6 @@ type MuseEvent = z.infer<typeof MuseEventSchema>;
 
 interface ProcessResult {
   stdout: string;
-  stderr: string;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   error?: string;
@@ -101,121 +93,20 @@ const PROCESS_ENV_KEYS = [
   'TMPDIR',
   'TMP',
   'TEMP',
-  'SHELL',
-  'COMSPEC',
   'SystemRoot',
-  'PATHEXT',
   'LANG',
   'LC_ALL',
-  'TERM',
   'XDG_CONFIG_HOME',
   'XDG_DATA_HOME',
   'XDG_CACHE_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'http_proxy',
-  'https_proxy',
-  'all_proxy',
-  'no_proxy',
   'SSL_CERT_FILE',
   'SSL_CERT_DIR',
   'MUSE_AUTH_PATH',
+  'META_API_KEY',
 ] as const;
 
 const CLI_NOT_FOUND_MESSAGE =
-  'Muse Code CLI was not found. Install it from https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.';
-
-async function getProjectRoots(workspace: string, basePath?: string): Promise<string[]> {
-  const projectRoots = new Set(
-    [workspace, basePath ?? process.cwd(), process.cwd()]
-      .map((root) => path.resolve(root))
-      .filter((root) => path.dirname(root) !== root),
-  );
-  for (const root of [...projectRoots]) {
-    projectRoots.add(await fs.realpath(root));
-  }
-  const visited = new Set<string>();
-  for (const root of [...projectRoots]) {
-    let directory = root;
-    while (!visited.has(directory)) {
-      visited.add(directory);
-      try {
-        // Git worktrees use a file here. Inspect every ancestor so a nested
-        // marker cannot hide a repository bin above the selected workspace.
-        await fs.lstat(path.join(directory, '.git'));
-        projectRoots.add(directory);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== 'ENOENT' && code !== 'ENOTDIR') {
-          throw error;
-        }
-      }
-      const parent = path.dirname(directory);
-      if (parent === directory) {
-        break;
-      }
-      directory = parent;
-    }
-  }
-  return [...projectRoots];
-}
-
-async function resolveMuseExecutable(
-  configuredPath: string,
-  env: NodeJS.ProcessEnv,
-  workspace: string,
-  basePath?: string,
-): Promise<string> {
-  if (configuredPath.includes('/') || configuredPath.includes('\\')) {
-    return resolveAgenticWorkingDir(configuredPath, basePath)!;
-  }
-
-  const projectRoots = await getProjectRoots(workspace, basePath);
-  const isInProject = (candidate: string) =>
-    projectRoots.some((root) => {
-      const relative = path.relative(root, candidate);
-      return (
-        !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
-      );
-    });
-
-  const names =
-    process.platform === 'win32' && !path.extname(configuredPath)
-      ? [`${configuredPath}.exe`, configuredPath]
-      : [configuredPath];
-  for (const directory of (env.PATH ?? env.Path ?? '').split(path.delimiter)) {
-    // Never let changing the child cwd redirect PATH lookup into the target repository.
-    if (!path.isAbsolute(directory) || isInProject(directory)) {
-      continue;
-    }
-    let resolvedDirectory: string;
-    try {
-      resolvedDirectory = await fs.realpath(directory);
-    } catch {
-      continue;
-    }
-    if (isInProject(resolvedDirectory)) {
-      continue;
-    }
-    for (const name of names) {
-      try {
-        const candidate = await fs.realpath(path.join(resolvedDirectory, name));
-        if (isInProject(candidate)) {
-          continue;
-        }
-        await fs.access(candidate, fsConstants.X_OK);
-        if ((await fs.stat(candidate)).isFile()) {
-          return candidate;
-        }
-      } catch {
-        // Continue searching when a PATH entry is missing or not executable.
-      }
-    }
-  }
-  throw new Error(CLI_NOT_FOUND_MESSAGE);
-}
+  'Muse Code CLI was not found. Install it outside the project and include a trusted directory in PATH. See https://dev.meta.ai/docs/muse-code or set muse_path / MUSE_CLI_PATH.';
 
 function getRunId(event: MuseEvent): string | undefined {
   const stream = event.payload.run_stream;
@@ -233,7 +124,7 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   const processError =
     result.exitCode === 0
       ? undefined
-      : `Muse Code exited with ${result.signal ? `signal ${result.signal}` : `code ${result.exitCode}`}${result.stderr.trim() ? `: ${result.stderr.trim()}` : ''}`;
+      : `Muse Code exited with ${result.signal ? `signal ${result.signal}` : `code ${result.exitCode}`}`;
   let events: MuseEvent[];
   try {
     events = result.stdout
@@ -245,6 +136,9 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   }
 
   const sessionId = events.find((event) => event.stream.kind === 'session')?.stream.id;
+  if (sessionId && !z.uuid().safeParse(sessionId).success) {
+    return { error: 'Muse Code returned an invalid session ID' };
+  }
   const sessionEvents = events
     .filter((event) => event.stream.kind === 'session' && event.stream.id === sessionId)
     .reverse();
@@ -257,7 +151,6 @@ function parseResponse(result: ProcessResult): ProviderResponse {
     : undefined;
   const response: ProviderResponse = {
     sessionId: sessionId?.toLowerCase(),
-    raw: events,
     metadata: { runId },
   };
 
@@ -281,42 +174,21 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   return { ...response, output: terminal.payload.text };
 }
 
-function redactCredentials(response: ProviderResponse, credentials: string[]): ProviderResponse {
-  // Journal fields can split credentials across events. Omit the journal when
-  // the child received credentials.
-  const sanitizedResponse =
-    credentials.length ||
-    getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) ||
-    getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false)
-      ? { ...response, raw: undefined }
-      : response;
-  if (!credentials.length) {
-    return sanitizedResponse;
+function redactCredentials(response: ProviderResponse, credentials: Set<string>): ProviderResponse {
+  if (!credentials.size) {
+    return response;
   }
   const pattern = new RegExp(
-    credentials
+    [...credentials]
       .sort((a, b) => b.length - a.length)
       .map(escapeRegExp)
       .join('|'),
     'g',
   );
-  const redact = (value: string) => value.replace(pattern, REDACTED);
   return JSON.parse(
-    JSON.stringify(sanitizedResponse, (_key, value) => {
-      if (typeof value === 'string') {
-        return redact(value);
-      }
-      // Preserve response field names even for an invalid, short credential.
-      if (
-        value !== sanitizedResponse &&
-        value &&
-        typeof value === 'object' &&
-        !Array.isArray(value)
-      ) {
-        return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), item]));
-      }
-      return value;
-    }),
+    JSON.stringify(response, (_key, value) =>
+      typeof value === 'string' ? value.replace(pattern, REDACTED) : value,
+    ),
   );
 }
 
@@ -329,16 +201,28 @@ export class MuseCodeProvider implements ApiProvider {
   readonly handlesOwnRetries = true;
   config: MuseCodeInputConfig;
   private readonly providerId: string;
-  private readonly env: ProviderOptions['env'];
   private readonly calls = new Map<AbortController, Promise<ProviderResponse>>();
   private readonly activeSessions = new Set<string>();
-  private readonly sessionCredentials = new Map<string, Set<string>>();
-  private readonly sessionWorkspaces = new Map<string, string>();
+  private readonly sessions = new Map<string, { workspace: string; credentials: Set<string> }>();
 
   constructor(options: ProviderOptions = {}) {
+    if (
+      options.config?.apiKey !== undefined ||
+      options.config?.env !== undefined ||
+      options.env?.META_API_KEY !== undefined ||
+      options.env?.MUSE_CLI_PATH !== undefined
+    ) {
+      throw new Error(
+        'Muse Code does not accept inline credentials or child env. Use a stored login or set META_API_KEY and MUSE_CLI_PATH in the process environment.',
+      );
+    }
     this.config = MuseCodeInputSchema.parse(options.config ?? {});
+    for (const key of ['basePath', 'working_dir', 'muse_path'] as const) {
+      if (/{[{%#]/.test(this.config[key] ?? '')) {
+        throw new Error(`Muse Code ${key} must be a static provider setting`);
+      }
+    }
     this.providerId = options.id ?? 'muse-code';
-    this.env = options.env;
     providerRegistry.register(this);
   }
 
@@ -359,26 +243,12 @@ export class MuseCodeProvider implements ApiProvider {
     return false;
   }
 
-  getApiKey(config: MuseCodeInputConfig = this.config): string | undefined {
-    return (
-      config.apiKey ??
-      config.env?.META_API_KEY ??
-      this.env?.META_API_KEY ??
-      getEnvString('META_API_KEY')
-    );
-  }
-
-  private buildEnv(config: MuseCodeConfig): NodeJS.ProcessEnv {
+  private buildEnv(): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = {};
     for (const key of PROCESS_ENV_KEYS) {
       if (process.env[key] !== undefined) {
         env[key] = process.env[key];
       }
-    }
-    Object.assign(env, config.env);
-    const apiKey = this.getApiKey(config);
-    if (apiKey !== undefined) {
-      env.META_API_KEY = apiKey;
     }
     env.MUSE_NO_AUTO_UPDATE = '1';
     return env;
@@ -392,12 +262,36 @@ export class MuseCodeProvider implements ApiProvider {
     if (options?.abortSignal?.aborted) {
       return { error: 'Muse Code call aborted before it started' };
     }
-    const merged = { ...this.config, ...context?.prompt?.config };
-    // Promptfoo can attach a live provider instance here; do not recursively render it.
-    delete merged.provider;
     let config: MuseCodeConfig;
     try {
-      config = MuseCodeConfigSchema.strict().parse(renderVarsInObject(merged, context?.vars));
+      // Only turn settings can come from test data. Promptfoo also attaches
+      // an optional live provider instance, which must never be rendered.
+      const {
+        provider: _provider,
+        prefix: _prefix,
+        suffix: _suffix,
+        working_dir,
+        ...overrides
+      } = context?.prompt?.config ?? {};
+      if (
+        working_dir !== undefined &&
+        !(context?.isGrading && typeof working_dir === 'string' && isAgentWorkspace(working_dir))
+      ) {
+        throw new Error('Set working_dir in the Muse Code provider configuration');
+      }
+      const { model, reasoning_effort, session_id } = this.config;
+      const turn = TurnSchema.parse({ model, reasoning_effort, session_id, ...overrides });
+      const resolve = (value?: string) => {
+        const match = value?.match(variable);
+        return match ? (context?.vars[match[1]] ?? '') : value;
+      };
+      config = MuseCodeConfigSchema.parse({
+        ...this.config,
+        working_dir: working_dir ?? this.config.working_dir,
+        model: resolve(turn.model),
+        reasoning_effort: resolve(turn.reasoning_effort),
+        session_id: resolve(turn.session_id),
+      });
       if (config.no_session_log === false && !config.working_dir) {
         throw new Error('no_session_log: false requires working_dir to retain a usable session');
       }
@@ -407,7 +301,7 @@ export class MuseCodeProvider implements ApiProvider {
       if (config.session_id && !config.working_dir) {
         throw new Error('session_id requires working_dir to keep the session workspace stable');
       }
-      if (config.session_id && !this.sessionCredentials.has(config.session_id)) {
+      if (config.session_id && !this.sessions.has(config.session_id)) {
         throw new Error('session_id can only resume a session started by this provider instance');
       }
     } catch (error) {
@@ -468,12 +362,11 @@ export class MuseCodeProvider implements ApiProvider {
     ];
     const values = {
       model: config.model,
-      'base-url': config.base_url,
       'reasoning-effort': config.reasoning_effort,
       'approval-mode': config.approval_mode,
       'approval-judge':
         config.approval_judge === undefined ? undefined : config.approval_judge ? 'on' : 'off',
-      'sandbox-network': config.sandbox_network,
+      'sandbox-network': config.sandbox_network ?? 'restricted',
       'session-id': config.session_id,
       'max-model-steps': config.max_model_steps,
     };
@@ -484,11 +377,11 @@ export class MuseCodeProvider implements ApiProvider {
     }
     const flags = {
       'disable-sandbox': config.disable_sandbox,
-      'disable-shell': config.disable_shell,
-      'disable-write': config.disable_write,
-      'disable-web-tools': config.disable_web_tools,
+      'disable-shell': config.disable_shell !== false,
+      'disable-write': config.disable_write !== false,
+      'disable-web-tools': config.disable_web_tools !== false,
       'trust-workspace': config.trust_workspace,
-      'no-foreign-personal-context': config.no_foreign_personal_context,
+      'no-foreign-personal-context': config.no_foreign_personal_context !== false,
       'no-session-log': config.no_session_log ?? !config.session_id,
     };
     for (const [flag, enabled] of Object.entries(flags)) {
@@ -506,12 +399,12 @@ export class MuseCodeProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     let tempDir: string | undefined;
     let lockedWorkspace: string | undefined;
-    const env = this.buildEnv(config);
-    const currentCredentials = collectEnvCredentials(env, config.base_url);
-    const historicalCredentials = config.session_id
-      ? [...(this.sessionCredentials.get(config.session_id) ?? new Set())]
-      : [];
-    const credentials = [...historicalCredentials, ...currentCredentials];
+    const env = this.buildEnv();
+    const session = config.session_id ? this.sessions.get(config.session_id) : undefined;
+    const credentials = session?.credentials ?? new Set<string>();
+    if (env.META_API_KEY) {
+      credentials.add(env.META_API_KEY);
+    }
     try {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;
@@ -522,10 +415,13 @@ export class MuseCodeProvider implements ApiProvider {
           throw new Error(`working_dir is not a directory: ${workspace}`);
         }
       }
-      if (config.session_id && this.sessionWorkspaces.get(config.session_id) !== workspace) {
+      if (session && session.workspace !== workspace) {
         throw new Error('session_id requires its original working_dir');
       }
-      if (workspace && (!config.disable_shell || !config.disable_write)) {
+      if (
+        workspace &&
+        (config.disable_shell === false || config.disable_write === false || config.trust_workspace)
+      ) {
         if (activeWorkspaces.has(workspace)) {
           throw new Error(
             'working_dir is already in use. Set evaluateOptions.maxConcurrency to 1 for calls that can modify the same workspace.',
@@ -542,9 +438,11 @@ export class MuseCodeProvider implements ApiProvider {
       const promptFile = path.join(tempDir, 'prompt.txt');
       await fs.writeFile(promptFile, prompt, { mode: 0o600 });
       signal.throwIfAborted();
-      const configuredPath =
-        config.muse_path ?? this.env?.MUSE_CLI_PATH ?? getEnvString('MUSE_CLI_PATH') ?? 'muse';
-      const command = await resolveMuseExecutable(configuredPath, env, workspace, basePath);
+      const configuredPath = config.muse_path ?? process.env.MUSE_CLI_PATH ?? 'muse';
+      const command = await resolveAgentExecutable(configuredPath, env, workspace, basePath);
+      if (!command) {
+        throw new Error(CLI_NOT_FOUND_MESSAGE);
+      }
       signal.throwIfAborted();
       const result = await this.execute(
         command,
@@ -561,11 +459,7 @@ export class MuseCodeProvider implements ApiProvider {
         config.working_dir &&
         (config.session_id || config.no_session_log === false)
       ) {
-        this.sessionCredentials.set(response.sessionId, new Set(credentials));
-        this.sessionWorkspaces.set(response.sessionId, workspace);
-      }
-      if (config.session_id) {
-        this.sessionCredentials.set(config.session_id, new Set(credentials));
+        this.sessions.set(response.sessionId, { workspace, credentials });
       }
       return redactCredentials(response, credentials);
     } catch (error) {
@@ -607,7 +501,6 @@ export class MuseCodeProvider implements ApiProvider {
         shell: false,
       });
       let stdout = '';
-      let stderr = '';
       let bytes = 0;
       let error: string | undefined;
       let settled = false;
@@ -639,7 +532,7 @@ export class MuseCodeProvider implements ApiProvider {
         clearTimeout(timer);
         clearTimeout(killTimer);
         signal.removeEventListener('abort', onAbort);
-        resolve({ stdout, stderr, exitCode: code, signal: processSignal, error });
+        resolve({ stdout, exitCode: code, signal: processSignal, error });
       };
       const boundCleanup = () => {
         if (killTimer) {
@@ -676,8 +569,6 @@ export class MuseCodeProvider implements ApiProvider {
           stop('Muse Code exceeded max_output_bytes');
         } else if (stream === 'stdout') {
           stdout += chunk;
-        } else {
-          stderr += chunk;
         }
       };
       child.stdout!.setEncoding('utf8').on('data', (chunk: string) => collect(chunk, 'stdout'));
@@ -723,8 +614,7 @@ export class MuseCodeProvider implements ApiProvider {
     try {
       await this.cleanup();
     } finally {
-      this.sessionCredentials.clear();
-      this.sessionWorkspaces.clear();
+      this.sessions.clear();
       providerRegistry.unregister(this);
     }
   }
