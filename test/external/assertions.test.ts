@@ -66,7 +66,7 @@ const defaultParams = {
 };
 
 describe('handleConversationRelevance', () => {
-  it('should handle single message pairs', async () => {
+  const verifySingleMessagePair = async () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: {
@@ -76,7 +76,7 @@ describe('handleConversationRelevance', () => {
       prompt: 'What is the weather like?',
       outputString: 'The weather is sunny today.',
       test: {
-        vars: {},
+        vars: {}, // _conversation is not defined
         options: {
           provider: createMockProvider('yes'),
         },
@@ -86,7 +86,9 @@ describe('handleConversationRelevance', () => {
     const result = await handleConversationRelevance(params);
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
-  });
+  };
+
+  it('should handle single message pairs', verifySingleMessagePair);
 
   it('should ignore outputString when _conversation is present and non-empty', async () => {
     const conversation = [{ input: 'Hi', output: 'Hello! How can I help you?' }];
@@ -267,29 +269,7 @@ describe('handleConversationRelevance', () => {
     expect(result.score).toBe(1);
   });
 
-  it('should use outputString when _conversation is undefined', async () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: {
-        type: 'conversation-relevance',
-        threshold: 0.8,
-      },
-      prompt: 'What is the weather like?',
-      outputString: 'The weather is sunny today.',
-      test: {
-        vars: {
-          // _conversation is not defined
-        },
-        options: {
-          provider: createMockProvider('yes'),
-        },
-      },
-    };
-
-    const result = await handleConversationRelevance(params);
-    expect(result.pass).toBe(true);
-    expect(result.score).toBe(1);
-  });
+  it('should use outputString when _conversation is undefined', verifySingleMessagePair);
 
   // https://github.com/promptfoo/promptfoo/issues/10141
   it('should use the DeepEval default threshold when threshold is omitted for Issue #10141', async () => {

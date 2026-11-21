@@ -24,7 +24,7 @@ import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import CountUp from 'react-countup';
+import AnimatedCounter from '../components/AnimatedCounter';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 
@@ -523,60 +523,6 @@ function SolutionSection() {
   );
 }
 
-function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: string }) {
-  const countUpRef = React.useRef(null);
-  const [isVisible, setIsVisible] = React.useState(false);
-
-  // Parse the target number (remove commas and convert to number)
-  const targetNumber = React.useMemo(() => {
-    return parseInt(target.replace(/,/g, ''), 10);
-  }, [target]);
-
-  React.useEffect(() => {
-    const element = countUpRef.current;
-    if (!element) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && !isVisible) {
-            setIsVisible(true);
-          }
-        });
-      },
-      {
-        threshold: 0.5,
-      },
-    );
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [isVisible]);
-
-  return (
-    <div ref={countUpRef} className={styles.communityStatNumber}>
-      {isVisible ? (
-        <CountUp
-          end={targetNumber}
-          duration={3.5}
-          separator=","
-          suffix={suffix}
-          useEasing={true}
-          easingFn={(t, b, c, d) => {
-            // easeOutExpo for smoother deceleration
-            return t === d ? b + c : c * (-Math.pow(2, (-10 * t) / d) + 1) + b;
-          }}
-        />
-      ) : (
-        <>0{suffix}</>
-      )}
-    </div>
-  );
-}
-
 function CommunitySection() {
   return (
     <section className={styles.communitySection}>
@@ -595,17 +541,29 @@ function CommunitySection() {
 
         <div className={styles.communityStats}>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={SITE_CONSTANTS.USER_COUNT_DISPLAY} suffix="+" />
+            <AnimatedCounter
+              className={styles.communityStatNumber}
+              target={SITE_CONSTANTS.USER_COUNT_DISPLAY}
+              suffix="+"
+            />
             <div className={styles.communityStatLabel}>Open Source Users</div>
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)} suffix="+" />
+            <AnimatedCounter
+              className={styles.communityStatNumber}
+              target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)}
+              suffix="+"
+            />
             <div className={styles.communityStatLabel}>Contributors</div>
             <p>From major foundation labs and tech companies</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={SITE_CONSTANTS.WEEKLY_DOWNLOADS_DISPLAY} suffix="+" />
+            <AnimatedCounter
+              className={styles.communityStatNumber}
+              target={SITE_CONSTANTS.WEEKLY_DOWNLOADS_DISPLAY}
+              suffix="+"
+            />
             <div className={styles.communityStatLabel}>Weekly Downloads</div>
             <p>Active deployments in production workflows worldwide</p>
           </div>

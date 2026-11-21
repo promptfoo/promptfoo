@@ -8,6 +8,8 @@ function normalizeContentPart(part: unknown): unknown {
   const candidate = part as UnknownRecord;
   const { type } = candidate;
 
+  // Responses EasyInputMessage accepts input_text for every role, including
+  // assistant. Replayed ResponseOutputMessage parts already use output_text.
   if (type === 'text' && typeof candidate.text === 'string') {
     return { ...candidate, type: 'input_text' };
   }
