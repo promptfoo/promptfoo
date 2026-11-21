@@ -1,3 +1,6 @@
+import path from 'node:path';
+
+import cliState from '../../cliState';
 import { providerRegistry } from '../providerRegistry';
 import { waitForPromiseWithAbort } from '../shared';
 import { MCPClient } from './client';
@@ -6,6 +9,7 @@ import type { MCPConfig } from './types';
 
 /** A stable resource owner whose connection can be recreated after evaluation cleanup. */
 export class McpClientSession {
+  readonly #basePath = path.resolve(cliState.basePath || '.');
   private currentClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private cleanupPromise?: Promise<void>;
@@ -23,7 +27,8 @@ export class McpClientSession {
     const client = new MCPClient(this.config);
     this.currentClient = client;
     providerRegistry.register(this.resource);
-    this.initializationPromise = client.initialize();
+    // Reconnection can run outside the loader's scope or under another evaluation's config.
+    this.initializationPromise = cliState.withBasePath(this.#basePath, () => client.initialize());
     // Eager failures are observed here and still returned to the first caller.
     void this.initializationPromise.catch(() => undefined);
   }

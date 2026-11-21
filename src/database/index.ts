@@ -121,9 +121,12 @@ function databasePathsReferToSameFile(firstPath: string, secondPath: string): bo
   }
 }
 
+function configuredDbPath(): string {
+  return path.resolve(getConfigDirectoryPath(), 'promptfoo.db');
+}
+
 export function getDbPath() {
-  const configDirectoryPath = getConfigDirectoryPath();
-  const dbPath = path.resolve(configDirectoryPath, 'promptfoo.db');
+  const dbPath = configuredDbPath();
   // Runner-owned globals survive helpers that clear process.env; JEST_WORKER_ID alone does not
   // identify Jest because the generic jest-worker package sets it for ordinary tasks.
   const isTestProcess =
@@ -425,6 +428,20 @@ export async function getDb() {
     // drop the promise reference so it can be garbage collected.
     dbPromise = null;
   }
+}
+
+/** Open an existing database for a read without creating a file on first use. */
+export async function getDbIfExists() {
+  // Test clients can share an in-memory database without a file on disk.
+  if (
+    dbInstance ||
+    dbPromise ||
+    getEnvBool('IS_TESTING') ||
+    fs.statSync(configuredDbPath(), { throwIfNoEntry: false })
+  ) {
+    return getDb();
+  }
+  return null;
 }
 
 export async function closeDb() {

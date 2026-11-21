@@ -44,6 +44,12 @@ export function usePassingTestCounts(): MetricValue[] {
   }, [table, filteredMetrics]);
 }
 
+function testCount(metrics?: PromptMetrics | null) {
+  return (
+    (metrics?.testPassCount ?? 0) + (metrics?.testFailCount ?? 0) + (metrics?.testErrorCount ?? 0)
+  );
+}
+
 /**
  * Returns the total number of tests for each prompt, with both total and filtered counts.
  *
@@ -54,47 +60,39 @@ export function useTestCounts(): MetricValue[] {
 
   return useMemo(() => {
     return table
-      ? table.head.prompts.map((prompt, idx) => {
-          const totalCount =
-            (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0);
-          const filteredCount = filteredMetrics?.[idx]
-            ? (filteredMetrics[idx].testPassCount ?? 0) + (filteredMetrics[idx].testFailCount ?? 0)
-            : null;
-
-          return {
-            total: totalCount,
-            filtered: filteredCount,
-          };
-        })
+      ? table.head.prompts.map((prompt, idx) => ({
+          total: testCount(prompt.metrics),
+          filtered: filteredMetrics?.[idx] ? testCount(filteredMetrics[idx]) : null,
+        }))
       : [];
   }, [table, filteredMetrics]);
 }
 
-/**
- * Returns the pass rate for each prompt, with both total and filtered rates.
- *
- * @returns An array of MetricValue objects (percentages), one for each prompt. Returns an empty array if the table is not defined.
- */
-export function usePassRates(): MetricValue[] {
-  const numTests = useTestCounts();
-  const numPassing = usePassingTestCounts();
+const passRate = (passed: number, count: number) => (count <= 0 ? 0 : (passed / count) * 100);
 
-  return useMemo(
+/** Returns the counts and pass rate for each prompt, including active filtered metrics. */
+export function usePromptPassMetrics() {
+  const testCounts = useTestCounts();
+  const passingTestCounts = usePassingTestCounts();
+  const passRates = useMemo(
     () =>
-      numTests.map((testCount, idx) => {
-        const passingCount = numPassing[idx];
+      testCounts.map(({ total, filtered }, index) => {
+        const passing = passingTestCounts[index];
         return {
-          total: testCount.total === 0 ? 0 : (passingCount.total / testCount.total) * 100,
+          total: passRate(passing.total, total),
           filtered:
-            testCount.filtered !== null && passingCount.filtered !== null
-              ? testCount.filtered === 0
-                ? 0
-                : (passingCount.filtered / testCount.filtered) * 100
+            filtered !== null && passing.filtered !== null
+              ? passRate(passing.filtered, filtered)
               : null,
         };
       }),
-    [numPassing, numTests],
+    [testCounts, passingTestCounts],
   );
+  return { testCounts, passingTestCounts, passRates };
+}
+
+export function usePassRates(): MetricValue[] {
+  return usePromptPassMetrics().passRates;
 }
 
 /**

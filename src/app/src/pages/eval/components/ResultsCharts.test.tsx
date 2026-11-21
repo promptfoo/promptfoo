@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, renderHook, screen } from '@testing-library/react';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { usePromptPassMetrics } from './hooks';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
 
@@ -636,6 +637,9 @@ describe('ResultsCharts', () => {
       },
       filteredMetrics: counts.map(() => ({ testPassCount: 1, testFailCount: 0 })),
     });
+    const { result } = renderHook(usePromptPassMetrics);
+    expect(result.current.testCounts[0]).toEqual({ total: 2, filtered: 1 });
+    expect(result.current.passRates[0]).toEqual({ total: 50, filtered: 100 });
     render(<ResultsCharts scores={[1]} />);
     const config = vi.mocked(Chart).mock.calls[0][1];
     expect(config.data.datasets.map((dataset) => dataset.data)).toEqual([
@@ -786,11 +790,22 @@ describe('ResultsCharts', () => {
         fetchEvalData: vi.fn(),
       });
 
-      const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
-
-      // Should render charts (the specific chart type logic is tested indirectly)
-      const canvasElements = container.querySelectorAll('canvas');
-      expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+      const configs = vi.mocked(Chart).mock.calls.map(([, config]) => config);
+      const metricChart = configs.find((config) => config.data.labels?.includes('accuracy'));
+      expect(metricChart).toMatchObject({
+        type: 'bar',
+        data: {
+          labels: ['accuracy', 'precision', 'recall'],
+          datasets: [
+            { label: 'test-provider-1', data: [1, 1, 1] },
+            { label: 'test-provider-2', data: [0.8 / 0.9, 0.7 / 0.8, 0.6 / 0.7] },
+          ],
+        },
+      });
+      expect(
+        configs.some((config) => config.options?.plugins?.title?.text === 'Score Distribution'),
+      ).toBe(false);
     });
 
     it('should render finite metric chart values if named scores are all zero', () => {
@@ -986,7 +1001,10 @@ describe('ResultsCharts', () => {
   it('handles empty columnVisibility and includes all prompts', () => {
     const mockTable = {
       head: {
-        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        prompts: [
+          { provider: 'test-provider-1', metrics: { testPassCount: 2, testFailCount: 0 } },
+          { provider: 'test-provider-2', metrics: { testPassCount: 1, testFailCount: 1 } },
+        ],
         vars: [],
       },
       body: [
@@ -1018,9 +1036,20 @@ describe('ResultsCharts', () => {
       fetchEvalData: vi.fn(),
     });
 
-    const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
-
-    const canvasElements = container.querySelectorAll('canvas');
-    expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+    render(<ResultsCharts {...defaultProps} scores={scores} />);
+    const passRate = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.options?.plugins?.title?.text === 'Pass Rate');
+    expect(passRate).toMatchObject({
+      type: 'bar',
+      data: {
+        labels: ['Pass Rate (%)'],
+        datasets: [
+          { label: 'test-provider-1', data: [100] },
+          { label: 'test-provider-2', data: [50] },
+        ],
+      },
+    });
   });
 });

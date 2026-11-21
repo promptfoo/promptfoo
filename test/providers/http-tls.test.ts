@@ -432,6 +432,7 @@ describe('HttpProvider with TLS Configuration', () => {
 
         expect(undici.interceptors.decompress).toHaveBeenCalledExactlyOnceWith({
           skipErrorResponses: false,
+          maxSize: 64 * 1024 * 1024,
         });
         const agentInstance = vi.mocked(undici.Agent).mock.results[0].value as any;
         expect(agentInstance.compose).toHaveBeenCalledWith(decompressionInterceptor);
