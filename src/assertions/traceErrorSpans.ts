@@ -1,12 +1,14 @@
-import { matchesPattern } from './traceUtils';
+import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import type { TraceSpanAttributeFilter } from './traceUtils';
 
 interface TraceErrorSpansValue {
   max_count?: number;
   max_percentage?: number;
   pattern?: string;
+  attributes?: TraceSpanAttributeFilter;
 }
 
 function isErrorSpan(span: TraceSpan): boolean {
@@ -75,20 +77,17 @@ export const handleTraceErrorSpans = ({
   let maxCount: number | undefined;
   let maxPercentage: number | undefined;
   let pattern = '*';
+  let attributes: TraceSpanAttributeFilter | undefined;
 
   // Handle simple number value for backwards compatibility
   if (typeof value === 'number') {
     maxCount = value;
-  } else if (
-    value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    typeof value !== 'function'
-  ) {
+  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
     const objValue = value as TraceErrorSpansValue;
     maxCount = objValue.max_count;
     maxPercentage = objValue.max_percentage;
     pattern = objValue.pattern || '*';
+    attributes = objValue.attributes;
   }
 
   if (maxCount === undefined && maxPercentage === undefined) {
@@ -98,14 +97,17 @@ export const handleTraceErrorSpans = ({
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern
-  const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));
+  const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
   if (matchingSpans.length === 0) {
     const pass = !inverse;
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: `No spans found matching pattern "${pattern}"`,
+      reason: withTraceAttributeFilterContext(
+        `No spans found matching pattern "${pattern}"`,
+        attributes,
+      ),
       assertion,
     };
   }
@@ -139,17 +141,15 @@ export const handleTraceErrorSpans = ({
     pass = false;
     reason = `Error rate ${errorPercentage.toFixed(1)}% exceeds threshold ${maxPercentage}% `;
     reason += `(${errorCount} errors out of ${matchingSpans.length} spans)`;
+  } else if (errorCount === 0) {
+    reason = `No errors found in ${matchingSpans.length} spans matching pattern "${pattern}"`;
   } else {
-    if (errorCount === 0) {
-      reason = `No errors found in ${matchingSpans.length} spans matching pattern "${pattern}"`;
-    } else {
-      reason = `Found ${errorCount} error(s) in ${matchingSpans.length} spans (${errorPercentage.toFixed(1)}%)`;
-      if (maxCount !== undefined) {
-        reason += `, within threshold of ${maxCount}`;
-      }
-      if (maxPercentage !== undefined) {
-        reason += `, within threshold of ${maxPercentage}%`;
-      }
+    reason = `Found ${errorCount} error(s) in ${matchingSpans.length} spans (${errorPercentage.toFixed(1)}%)`;
+    if (maxCount !== undefined) {
+      reason += `, within threshold of ${maxCount}`;
+    }
+    if (maxPercentage !== undefined) {
+      reason += `, within threshold of ${maxPercentage}%`;
     }
   }
 
@@ -157,7 +157,7 @@ export const handleTraceErrorSpans = ({
   return {
     pass: finalPass,
     score: finalPass ? 1 : 0,
-    reason,
+    reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
 };
