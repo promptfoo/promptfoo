@@ -1,3 +1,118 @@
+import {
+  isCredentialHeader,
+  isSecretEnvVarName,
+  isSecretField,
+  looksLikeSecret,
+  sanitizeUrlForLogging,
+} from '../../util/sanitizer';
+import { decodeUrlComponent } from '../urlEncoding';
+
+const CREDENTIAL_NAME =
+  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
+
+export function isCredentialName(name: string): boolean {
+  return isSecretField(name) || CREDENTIAL_NAME.test(name);
+}
+
+export function isHostedCredentialLabel(name: string): boolean {
+  const leaf = name.slice(name.lastIndexOf('.') + 1);
+  return isCredentialHeader(leaf, '') || isSecretEnvVarName(leaf);
+}
+
+// A namespace or file extension can surround a base64url token. Keep hyphens and
+// underscores inside each component so a token cannot hide behind its own separators.
+export function hasOpaqueIdentifierComponent(value: string): boolean {
+  return value.split(/[.:/]/).some(
+    (part) =>
+      looksLikeSecret(part) &&
+      // Some dated model slugs exceed the opaque-token threshold using descriptive words.
+      !/^(?:[a-z]{1,16}-){2,}\d{4}-\d{2}-\d{2}(?:-\d{1,8})?$/.test(part),
+  );
+}
+
+/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
+function decodeUserinfo(url: URL): string | undefined {
+  return url.username || url.password
+    ? `${decodeUrlComponent(url.username)}:${decodeUrlComponent(url.password)}`
+    : undefined;
+}
+
+export function basicCredential(userinfo: string): string {
+  return `Basic ${Buffer.from(userinfo).toString('base64')}`;
+}
+
+/**
+ * Promptfoo's fetch helper would Base64-encode URL userinfo while it is still percent-encoded, so
+ * request URLs omit it and the provider sends a decoded Basic credential instead.
+ */
+export function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
+  let url: URL;
+  try {
+    url = new URL(apiUrl);
+  } catch {
+    return { url: apiUrl };
+  }
+  const userinfo = decodeUserinfo(url);
+  if (!userinfo) {
+    return { url: apiUrl };
+  }
+  url.username = '';
+  url.password = '';
+  return { url: url.toString(), userinfo };
+}
+
+/**
+ * Credential values carried by a URL: userinfo, including the decoded pair and the Basic
+ * credential derived from it, and credential-named query parameters. Raw and decoded spellings
+ * are both returned for redaction.
+ */
+export function getUrlCredentials(
+  value: string,
+  includeFragment = true,
+  onMalformed?: () => void,
+): string[] {
+  // A single argv entry may carry a URL in --option=value or NAME=value form.
+  const trimmed = value.trim().replace(/^(?:--?)?[a-z_][\w.-]*=/i, '');
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
+    return [];
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    onMalformed?.();
+    // A malformed credential-bearing URL can be echoed only as one opaque error value.
+    return sanitizeUrlForLogging(value) === value ? [] : [value];
+  }
+  const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
+  const userinfo = decodeUserinfo(url);
+  if (userinfo) {
+    found.push(userinfo, basicCredential(userinfo));
+  }
+  const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
+  for (const [index, segment] of url.pathname.split('/').entries()) {
+    if (sanitizedSegments[index] === '%5BREDACTED%5D') {
+      found.push(segment, decodeUrlComponent(segment));
+    }
+  }
+  const parameterParts = includeFragment ? [url.search, url.hash] : [url.search];
+  for (const segment of parameterParts.flatMap((part) => part.slice(1).split(/[&;]/))) {
+    const separator = segment.indexOf('=');
+    const [param] = new URLSearchParams(segment);
+    if (
+      separator !== -1 &&
+      param &&
+      (isCredentialName(param[0]) ||
+        looksLikeSecret(param[1]) ||
+        looksLikeSecret(segment.slice(separator + 1)))
+    ) {
+      // A raw `+` decodes to a space; keep both spellings a server might echo.
+      found.push(segment.slice(separator + 1), param[1]);
+    }
+  }
+  return found.filter((credential) => credential.trim().length > 0);
+}
+
 // A stdio transport or command tool may pass a credential as a labelled argv value.
 // Inspect explicit arguments only. Shell programs and positional values are opaque.
 export function getHostedCredentialArgument(
