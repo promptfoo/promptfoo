@@ -74,6 +74,19 @@ describe('resolveTestsWatchPaths', () => {
     expect(resolve({ path: reference })).toEqual([literal]);
   });
 
+  it('resolves a scalar YAML glob before removing the workbook sheet selector', () => {
+    const reference = 'file://book[12].xlsx#Sheet1.yaml';
+    const literal = path.join(base, 'book[12].xlsx');
+    const match = path.join(base, 'book1.xlsx');
+    fs.writeFileSync(literal, '');
+    fs.writeFileSync(match, '');
+    fs.writeFileSync(match + '#Sheet1.yaml', '');
+
+    expect(resolve(reference)).toEqual([match]);
+    expect(resolve([reference])).toEqual([literal]);
+    expect(resolve({ path: reference })).toEqual([literal]);
+  });
+
   it('watches the glob match that a raw vars reference actually loads', async () => {
     const matched = path.join(base, 'vars1.yaml');
     fs.writeFileSync(matched, 'input: matched');
