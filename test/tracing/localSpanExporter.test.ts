@@ -2,6 +2,8 @@ import { ExportResultCode } from '@opentelemetry/core';
 import { BatchSpanProcessor, TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import { SPAN_ORIGIN_ATTRIBUTE } from '../../src/tracing/otlpOwnership';
+import { UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/store';
 import { createDeferred } from '../util/utils';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
@@ -114,6 +116,27 @@ describe('LocalSpanExporter', () => {
         expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
     });
+
+    it.each([63, 64])(
+      'checks local evidence length (%i) independently of the wire signature',
+      async (length) => {
+        exporter = new LocalSpanExporter(64);
+        const tool = 'x'.repeat(length);
+        const span = createMockSpan({
+          attributes: { [SPAN_ORIGIN_ATTRIBUTE]: 'a'.repeat(64), tool },
+        });
+        const { traceId } = span.spanContext();
+        const release = exporter.trackTrace(traceId);
+        exporter.trackSpan(span);
+        await exportSpans([span]);
+        expect(exporter.isReliable(traceId)).toBe(length < 64);
+        expect(mockAddSpans.mock.calls[0][1][0].attributes).toEqual({
+          tool,
+          ...(length === 64 && { [UNRELIABLE_SPAN_ATTRIBUTE]: true }),
+        });
+        release();
+      },
+    );
 
     it('should group spans by trace ID', async () => {
       const span1 = createMockSpan({
