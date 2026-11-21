@@ -4,8 +4,7 @@ import { getRequestListener } from '@hono/node-server';
 import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { isMissingPackageImportError } from '../../util/packageImportErrors';
-import { withoutExecutableScripts } from '../../util/scriptExecution';
+import { blockExecutableScripts, loadMcpDependency } from '../../util/mcpServer';
 import { createMcpErrorHandler } from './defaultErrorHandler';
 import { registerResources } from './resources';
 import { registerCompareProvidersTool } from './tools/compareProviders';
@@ -21,19 +20,6 @@ import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
-
-async function loadMcpDependency<T>(dependency: Promise<T>): Promise<T> {
-  try {
-    return await dependency;
-  } catch (error) {
-    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
-      throw new Error(
-        'The @modelcontextprotocol/sdk package is required for MCP server support. Install it with: npm install @modelcontextprotocol/sdk',
-      );
-    }
-    throw error;
-  }
-}
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo
@@ -97,7 +83,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
 
   const app = express();
   app.use(express.json());
-  app.use((_req, _res, next) => withoutExecutableScripts(next));
+  app.use(blockExecutableScripts);
 
   const mcpServer = await createMcpServer();
 

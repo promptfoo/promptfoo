@@ -8,7 +8,7 @@ import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { fetchWithProxy } from './fetch/index';
 import { promptYesNo } from './readline';
 
-export { withoutExecutableScripts } from './scriptExecution';
+export { blockExecutableScripts } from './scriptExecution';
 
 const openBrowserProcess = promisify((url: string, callback: (error: Error | null) => void) =>
   opener(url, {}, callback),
