@@ -3122,6 +3122,30 @@ describe('evalCommand', () => {
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
+  it('keeps CLI variable overrides in the config used to replay an eval', async () => {
+    const vars = { word: 'amber', style: 'plain' };
+    const config: UnifiedConfig = {
+      prompts: ['{{word}}'],
+      providers: ['echo'],
+      defaultTest: { vars, options: { prefix: 'Card ' } },
+    };
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [], defaultTest: { vars: { ...vars } } },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_suite, record) => record as Eval);
+
+    await doEval({ var: { word: 'blue' }, write: true, table: false }, config, undefined, {});
+
+    const [suite, record] = vi.mocked(evaluate).mock.lastCall!;
+    expect(suite.defaultTest).toMatchObject({ vars: { word: 'blue', style: 'plain' } });
+    expect((record as Eval).config.defaultTest).toEqual({
+      vars: { word: 'blue', style: 'plain' },
+      options: { prefix: 'Card ' },
+    });
+  });
+
   it('should handle repeat option', async () => {
     const cmdObj = { repeat: 3 };
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
