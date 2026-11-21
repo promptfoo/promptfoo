@@ -791,7 +791,18 @@ tests:
 
 - A string, such as `search_orders`
 - An array of strings, such as `['search_orders', 'compose_reply']`
-- An object with `pattern`, `min`, and optional `max`
+- An object with `name` or `pattern` and optional numeric `min` and `max`
+
+For object values, `name` or `pattern` selects the tool and numeric `min` and/or `max` values constrain its call count. The default minimum is `1`. When you provide a numeric `max` and omit `min`, the minimum defaults to `0`, so only the upper bound is enforced. Set `max: 0` to assert that the tool is never called:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-used
+        value:
+          name: refund_payment
+          max: 0
+```
 
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 
