@@ -1,4 +1,3 @@
-import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import { serializeProvider } from '../serialization';
 import {
@@ -28,11 +27,6 @@ import type { GroqResponsesProviderOptions } from './types';
 export class GroqResponsesProvider extends OpenAiResponsesProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
-  }
-
-  override getApiKey(): string | undefined {
-    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
-    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
   }
 
   protected isReasoningModel(): boolean {
