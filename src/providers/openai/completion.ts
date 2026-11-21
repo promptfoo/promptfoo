@@ -2,6 +2,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -180,8 +181,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         passthrough: { model: body.model },
       });
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
+      const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       return {
         output: data.choices[0].text,
+        ...(finishReason && { finishReason }),
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,

@@ -83,6 +83,37 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
+    it.each([
+      ['length', 'length'],
+      ['stop', 'stop'],
+    ])('should return the %s finish reason', async (rawReason, expected) => {
+      mockFetchWithCache.mockResolvedValue({
+        ...mockResponse,
+        data: {
+          ...mockResponse.data,
+          choices: [{ text: 'Test output', finish_reason: rawReason }],
+        },
+      });
+
+      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+        config: { apiBaseUrl: 'https://openai-compatible.example/v1' },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.finishReason).toBe(expected);
+    });
+
+    it('should omit the finish reason when the API does not return one', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+        config: { apiBaseUrl: 'https://openai-compatible.example/v1' },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).not.toHaveProperty('finishReason');
+    });
+
     it('records standard text-completion model attributes and token usage', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
       const { attributes, restore } = recordSpanAttributes();
