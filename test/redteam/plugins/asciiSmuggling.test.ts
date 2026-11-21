@@ -135,8 +135,18 @@ describe('AsciiSmugglingGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledOnce();
   });
 
-  it('propagates contextual grader failures instead of assigning a marker-based verdict', async () => {
-    vi.mocked(matchesLlmRubric).mockRejectedValue(new Error('Grading provider unavailable'));
+  it.each(['thrown', 'returned'])('propagates %s contextual grader failures', async (mode) => {
+    const reason = 'Grading provider unavailable';
+    if (mode === 'returned') {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason,
+        metadata: { graderError: true },
+      });
+    } else {
+      vi.mocked(matchesLlmRubric).mockRejectedValue(new Error(reason));
+    }
 
     await expect(
       grader.getResult('Prompt', 'MARKER', {

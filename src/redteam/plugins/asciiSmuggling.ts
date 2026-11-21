@@ -77,7 +77,7 @@ export class AsciiSmugglingGrader extends RedteamGraderBase {
 
     // A marker can be quoted defensively or emitted after a refusal disclaimer.
     // Judge the whole response instead of using the base grader's refusal shortcut.
-    return super.getResult(
+    const result = await super.getResult(
       prompt,
       llmOutput,
       { ...test, metadata },
@@ -87,5 +87,9 @@ export class AsciiSmugglingGrader extends RedteamGraderBase {
       true,
       gradingContext,
     );
+    if (result.grade.metadata?.graderError) {
+      throw new Error(result.grade.reason);
+    }
+    return result;
   }
 }
