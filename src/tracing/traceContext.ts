@@ -436,8 +436,7 @@ async function fetchFromExternalProvider(
         const external = redactAttributes?.length
           ? redactExternalSpan(span, redactAttributes)
           : { ...span, attributes: span.attributes && { ...span.attributes } };
-        // Match the original wrapper name even when a policy redacts its echo.
-        setReceivedSpanOwnership({ traceId, span: { ...external, name: span.name } });
+        setReceivedSpanOwnership({ traceId, span }, external.attributes);
         return external;
       });
 
