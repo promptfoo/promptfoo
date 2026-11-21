@@ -139,18 +139,41 @@ describe('RiskCategoryDrawer Component Navigation', () => {
   });
 
   it.each([
-    { measuredId: 'case-1', exposed: 'Yes', completed: 'No', control: 'Yes' },
-    { measuredId: 'case-2', exposed: 'Unknown', completed: 'Unknown', control: 'Unknown' },
+    {
+      variant: 'attack',
+      label: 'Indirect attack',
+      measuredId: 'case-1',
+      exposed: 'Yes',
+      completed: 'No',
+      control: 'Yes',
+    },
+    {
+      variant: 'control',
+      label: 'Indirect baseline',
+      measuredId: 'case-1',
+      exposed: 'Yes',
+      completed: 'No',
+      control: 'Yes',
+    },
+    {
+      variant: 'attack',
+      label: 'Indirect attack',
+      measuredId: 'case-2',
+      exposed: 'Unknown',
+      completed: 'Unknown',
+      control: 'Unknown',
+    },
   ])(
-    'associates outcome evidence by case with receipt $measuredId',
-    ({ measuredId, exposed, completed, control }) => {
+    'associates outcome evidence for $variant with receipt $measuredId',
+    ({ variant, label, measuredId, exposed, completed, control }) => {
       const pluginId = 'coding-agent:consent-bypass';
       const agentOutcome = {
         pluginId,
         mode: 'indirect',
         caseId: 'case-1',
-        variant: 'attack',
-        indirectInjectionVar: 'guide',
+        variant,
+        injectVar: 'assignment',
+        indirectInjectionVar: 'query',
       };
       const artifact = 'Initialize tracking on page load';
       const grade = {
@@ -188,7 +211,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       result.testCase = {
         ...result.testCase,
         metadata: { pluginId, agentOutcome },
-        vars: { guide: artifact },
+        vars: { assignment: 'Upgrade the analytics SDK', query: artifact },
       };
       renderWithProviders(
         <RiskCategoryDrawer
@@ -196,7 +219,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
           category={pluginId}
           failures={[
             {
-              prompt: 'Upgrade the analytics SDK',
+              prompt: artifact,
               output: 'Done',
               result,
               gradingResult: {
@@ -207,9 +230,15 @@ describe('RiskCategoryDrawer Component Navigation', () => {
           ]}
         />,
       );
-      expect(screen.getByText('Reached agent').nextElementSibling).toHaveTextContent(exposed);
+      expect(screen.getByText(label).closest('[aria-expanded]')).toBeInTheDocument();
+      expect(screen.getByText('Upgrade the analytics SDK')).toBeInTheDocument();
+      expect(screen.getByText('Tool content delivered').nextElementSibling).toHaveTextContent(
+        exposed,
+      );
       expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent(completed);
-      expect(screen.getByText('Control passed').nextElementSibling).toHaveTextContent(control);
+      expect(screen.getByText('Positive control passed').nextElementSibling).toHaveTextContent(
+        control,
+      );
       expect(screen.getByText(artifact)).toBeInTheDocument();
       const receipts = screen.queryByText('Recorded measurements');
       if (measuredId === agentOutcome.caseId) {

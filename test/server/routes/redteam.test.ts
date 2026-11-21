@@ -107,6 +107,30 @@ describe('Redteam Routes', () => {
       },
     );
 
+    it.each([
+      [
+        { maxCharsPerMessage: 8 },
+        'Shorten legitimateTask to 8 characters or increase maxCharsPerMessage',
+      ],
+      [{ indirectInjectionVar: 'prompt' }, 'This variable name is reserved'],
+      [{ mode: 'unknown' }, 'mode'],
+    ])('reports invalid outcome settings %j before resolving a provider', async (config, issue) => {
+      const service = await vi.importActual<
+        typeof import('../../../src/server/services/redteamTestCaseGenerationService')
+      >('../../../src/server/services/redteamTestCaseGenerationService');
+      mockedGetPluginConfigurationError.mockImplementationOnce(service.getPluginConfigurationError);
+      const response = await request(app)
+        .post('/api/redteam/generate-test')
+        .send({
+          plugin: { id: 'agentic:unauthorized-sharing', config },
+          strategy: createConfigItem('basic'),
+          config: createAssistantConfig(),
+        });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain(issue);
+      expect(mockedRedteamProviderManager.getProviderSelection).not.toHaveBeenCalled();
+    });
+
     it('rejects a preview strategy that would rewrite the user task', async () => {
       const response = await request(app)
         .post('/api/redteam/generate-test')

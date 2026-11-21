@@ -4,6 +4,7 @@ import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
+import { getLiteralVarNames } from '../contracts/literalVars';
 import { getEnvBool, getEnvInt } from '../envars';
 import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
@@ -48,7 +49,6 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
-import { getLiteralVarNames } from '../validation/literalVars';
 import type winston from 'winston';
 
 import type {
@@ -1175,9 +1175,8 @@ async function gradeRunEvalResponse({
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
-      throw error;
-    }
+    // Keep the completed target response, as deferred grading does, so a grading error
+    // still shows what the target returned.
     applyGradingError(ret, error, abortSignal);
   }
   ret.response = processedResponse;

@@ -27,6 +27,7 @@ export const AgentOutcomeCaseSchema = z
     caseId: identifier,
     mode: AgentOutcomeModeSchema,
     variant: z.enum(['attack', 'control', 'authorized']),
+    injectVar: z.string().min(1).optional(),
     indirectInjectionVar: z.string().min(1).optional(),
   })
   .refine((row) => row.variant !== 'authorized' || row.pluginId === pluginIds.unauthorizedSharing, {
@@ -52,7 +53,6 @@ const consentProbe = z.object({
 
 // A null readback records a verified denial. A null probe records an unavailable measurement.
 const readProbe = z.object({ marker: identifier, readback: z.string().nullable() });
-const scope = z.enum(['none', 'item', 'folder']);
 
 const consentMeasurements = z.object({
   beforeReject: consentProbe.nullable(),
@@ -69,10 +69,9 @@ const disclosureMeasurements = z.object({
 });
 
 const sharingMeasurements = z.object({
-  scopeBefore: scope,
-  scopeAfter: scope,
+  // Some adapters report the initial grant separately from their privacy check.
+  scopeBefore: z.enum(['none', 'item', 'folder']).optional(),
   futureVerified: z.boolean(),
-  requested: readProbe.nullable(),
   future: readProbe.nullable(),
   folderControl: readProbe.nullable(),
 });
@@ -101,7 +100,8 @@ export type AgentOutcomeEvidence = z.infer<typeof AgentOutcomeEvidenceSchema>;
 export const AgentOutcomeResultSchema = AgentOutcomeCaseSchema.safeExtend({
   status: z.enum(['violation', 'safe']),
   ...observations,
-  controlPassed: z.boolean(),
+  // The independent positive control can fail or be unavailable during a measured violation.
+  controlPassed: z.boolean().nullable().default(null),
   reason: z.string(),
 });
 

@@ -48,15 +48,27 @@ export const AGENT_OUTCOME_PLUGIN_ALIASES = metadataField('alias');
 export const AGENT_OUTCOME_DEFAULT_TASKS = metadataField('defaultTask');
 export const DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR = 'artifact';
 
-export function getAgentOutcomeArtifact(test: {
+export function getAgentOutcomeCase(test?: {
   metadata?: Record<string, unknown>;
   vars?: Record<string, unknown>;
-}): string | undefined {
-  const parsed = AgentOutcomeCaseSchema.safeParse(test.metadata?.agentOutcome);
-  if (!parsed.success || parsed.data.mode !== 'indirect') {
+}) {
+  if (!test?.metadata?.agentOutcome) {
     return undefined;
   }
-  const artifact =
-    test.vars?.[parsed.data.indirectInjectionVar ?? DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR];
-  return typeof artifact === 'string' ? artifact : undefined;
+  const parsed = AgentOutcomeCaseSchema.safeParse(test.metadata?.agentOutcome);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const {
+    mode,
+    injectVar = 'prompt',
+    indirectInjectionVar = DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR,
+  } = parsed.data;
+  const message = test.vars?.[injectVar];
+  const artifact = mode === 'indirect' ? test.vars?.[indirectInjectionVar] : undefined;
+  return {
+    ...parsed.data,
+    message: typeof message === 'string' ? message : undefined,
+    artifact: typeof artifact === 'string' ? artifact : undefined,
+  };
 }

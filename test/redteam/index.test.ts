@@ -261,6 +261,21 @@ describe('synthesize', () => {
 
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
+    it('identifies invalid target inputs before generating any outcome tests', async () => {
+      await expect(
+        synthesize({
+          provider: mockProvider,
+          plugins: [{ id: 'agentic:unauthorized-sharing', numTests: 2 }],
+          inputs: { message: 'Owner task', ticket: 'External note' },
+          prompts: ['{{message}}'],
+          strategies: [],
+          numTests: 2,
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow(/agentic:unauthorized-sharing.*indirectInjectionVar/s);
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('keeps tool content isolated with default strategies and remote generation disabled', async () => {
       vi.mocked(neverGenerateRemote).mockReturnValue(true);
       mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Grant access to the folder.' });

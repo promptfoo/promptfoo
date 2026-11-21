@@ -1,6 +1,6 @@
+import { processConfigField } from '../contracts/literalVars';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import { processConfigField } from '../validation/literalVars';
 import { getNunjucksEngine } from './templates';
 
 import type { VarValue } from '../types';

@@ -4,7 +4,7 @@
  */
 import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
-import { projectOperationalMetadata } from '../validation/literalVars';
+import { projectOperationalMetadata } from '../contracts/literalVars';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';

@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
+import { projectOperationalMetadata } from '../contracts/literalVars';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
@@ -15,7 +16,6 @@ import {
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
-import { projectOperationalMetadata } from '../validation/literalVars';
 
 import type { ProviderConfig } from '../providers/shared';
 import type {

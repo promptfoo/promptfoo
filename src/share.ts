@@ -6,6 +6,7 @@ import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import { processConfigField } from './contracts/literalVars';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
@@ -24,7 +25,6 @@ import {
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { sanitizeConfigForOutput } from './util/sanitizer';
-import { processConfigField } from './validation/literalVars';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';

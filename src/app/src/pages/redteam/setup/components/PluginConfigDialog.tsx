@@ -18,7 +18,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { AgentOutcomeConfig } from './AgentOutcomeConfig';
+import { AgentOutcomeConfig, getAgentOutcomeConfigIssue } from './AgentOutcomeConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -368,7 +368,14 @@ export default function PluginConfigDialog({
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>
-          {!isReadOnlyPlugin && <Button onClick={handleSave}>Save</Button>}
+          {!isReadOnlyPlugin && (
+            <Button
+              disabled={!!getAgentOutcomeConfigIssue(plugin, localConfig)}
+              onClick={handleSave}
+            >
+              Save
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

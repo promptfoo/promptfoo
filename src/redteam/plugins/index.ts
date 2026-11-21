@@ -42,9 +42,13 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
+import {
+  getLiteralMessageOverLimit,
+  getMaxCharsPerMessageFromConfig,
+} from '../shared/promptLengthValidation';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { agentOutcomePlugins, validateAgentOutcomeConfig } from './agentic/agentOutcome';
+import { agentOutcomePlugins, getAgentOutcomeGenerationSchema } from './agentic/agentOutcome';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -190,31 +194,6 @@ function applyDefaultRemotePluginConfig(
   };
 }
 
-function isValidMaxCharsPerMessage(limit: unknown): limit is number {
-  return typeof limit === 'number' && Number.isInteger(limit) && limit > 0;
-}
-
-function getMaxCharsPerMessageFromConfig(config: PluginConfig | undefined): number | undefined {
-  if (isValidMaxCharsPerMessage(config?.maxCharsPerMessage)) {
-    return config.maxCharsPerMessage;
-  }
-
-  const maxCharsModifier = (config?.modifiers as Record<string, string> | undefined)?.[
-    MAX_CHARS_PER_MESSAGE_MODIFIER_KEY
-  ];
-  if (typeof maxCharsModifier !== 'string') {
-    return undefined;
-  }
-
-  const match = /must be (\d+) characters or fewer\./.exec(maxCharsModifier);
-  if (!match) {
-    return undefined;
-  }
-
-  const maxCharsPerMessage = Number(match[1]);
-  return isValidMaxCharsPerMessage(maxCharsPerMessage) ? maxCharsPerMessage : undefined;
-}
-
 function buildRetryConfig(
   config: PluginConfig | undefined,
   retryInstructions: string | undefined,
@@ -310,6 +289,9 @@ function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?:
 
 function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
   const retriesByMode = isAgentOutcomePlugin(pluginFactory.key);
+  const checkMessageLength = retriesByMode
+    ? getLiteralMessageOverLimit
+    : getGeneratedPromptOverLimit;
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
@@ -332,7 +314,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         let rejectedPromptLimit: number | undefined;
 
         for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptOverLimit(
+          const violation = checkMessageLength(
             String(testCase.vars?.[params.injectVar] ?? ''),
             maxCharsPerMessage,
           );
@@ -354,7 +336,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       };
 
       // Outcome plugins retry within each mode. Reallocating the remaining count
-      // would turn a missing indirect case into a second direct case.
+      // can return an extra case for a source that already reached its target.
       if (retriesByMode) {
         return generateValidTestCases([]);
       }
@@ -521,7 +503,9 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   ...agentOutcomePlugins.map((Plugin) =>
-    createPluginFactory(Plugin, Plugin.id, validateAgentOutcomeConfig),
+    createPluginFactory(Plugin, Plugin.id, (config) =>
+      getAgentOutcomeGenerationSchema(Plugin.id).parse(config),
+    ),
   ),
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
   ...alignedHarmCategories.map((category) =>

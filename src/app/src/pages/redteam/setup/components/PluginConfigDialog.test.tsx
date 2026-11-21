@@ -59,7 +59,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
-  it('restores the default assignment and artifact variable when overrides are cleared', async () => {
+  it('explains invalid overrides and restores the defaults when cleared', async () => {
     const user = userEvent.setup();
     const plugin = 'coding-agent:consent-bypass';
     render(
@@ -68,16 +68,26 @@ describe('PluginConfigDialog - OSS', () => {
         plugin={plugin}
         config={{
           mode: 'indirect',
-          legitimateTask: 'Update telemetry',
-          indirectInjectionVar: 'guide',
+          legitimateTask: '   ',
+          indirectInjectionVar: 'prompt',
         }}
         onClose={mockOnClose}
         onSave={mockOnSave}
       />,
     );
 
-    await user.clear(screen.getByDisplayValue('Update telemetry'));
-    await user.clear(screen.getByDisplayValue('guide'));
+    const task = screen.getByLabelText(/User task for indirect tests/);
+    const variable = screen.getByLabelText('Variable for third-party content');
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(task).toHaveAttribute('aria-invalid', 'true');
+    expect(task).toHaveAccessibleDescription(/task/i);
+    expect(save).toBeDisabled();
+    await user.clear(task);
+    expect(variable).toHaveAttribute('aria-invalid', 'true');
+    expect(variable).toHaveAccessibleDescription(/ticket_body/i);
+    expect(save).toBeDisabled();
+    await user.clear(variable);
+    expect(save).toBeEnabled();
     expect(
       screen.getByPlaceholderText('Upgrade the analytics SDK and preserve our consent settings.'),
     ).toHaveValue('');

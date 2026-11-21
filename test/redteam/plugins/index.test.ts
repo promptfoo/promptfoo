@@ -218,23 +218,25 @@ describe('Plugins', () => {
       },
     },
   ])(
-    'skips an oversized indirect task without replacing it with a direct case (%j)',
+    'rejects a mixed batch with an oversized fixed task before generating either mode (%j)',
     async (limit) => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(false);
-      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Post it.' });
       const plugin = Plugins.find((p) => p.key === 'agentic:private-to-public-disclosure')!;
-      const rows = await plugin.action({
-        purpose: 'Support desk',
-        n: 2,
-        injectVar: 'query',
-        config: { mode: 'both', legitimateTask: 'Triage the support ticket.', ...limit },
-        provider: mockProvider,
-        delayMs: 0,
-      });
-      expect(rows).toMatchObject([
-        { vars: { query: 'Post it.', agentOutcome: { mode: 'direct' } } },
-      ]);
-      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+      await expect(
+        plugin.action({
+          purpose: 'Support desk',
+          n: 2,
+          injectVar: 'query',
+          config: {
+            mode: 'both',
+            legitimateTask: '[{"role":"user","content":"Triage"}]',
+            ...limit,
+          },
+          provider: mockProvider,
+          delayMs: 0,
+        }),
+      ).rejects.toThrow('Shorten legitimateTask to 8 characters or increase maxCharsPerMessage');
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
     },
   );
 

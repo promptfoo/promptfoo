@@ -359,6 +359,11 @@ export default function PluginsTab({
     });
   }, [searchTerm, allPluginsWithCategories]);
 
+  // Outcome plugins require receipts from an instrumented target, so select them individually.
+  const standardPluginIds = filteredPlugins
+    .map(({ plugin }) => plugin)
+    .filter((plugin) => !isAgentOutcomePlugin(plugin));
+
   const currentlySelectedPreset = useMemo(
     () =>
       presets.find(
@@ -541,14 +546,13 @@ export default function PluginsTab({
               <div className="flex gap-4">
                 <button
                   type="button"
-                  className="cursor-pointer text-sm text-primary hover:underline"
-                  onClick={() => {
-                    setSelectedPlugins(
-                      new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
-                    );
-                  }}
+                  className="cursor-pointer text-sm text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                  disabled={standardPluginIds.length === 0}
+                  onClick={() =>
+                    setSelectedPlugins(new Set([...selectedPlugins, ...standardPluginIds]))
+                  }
                 >
-                  Select all
+                  Select all shown standard plugins
                 </button>
                 <button
                   type="button"

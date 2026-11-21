@@ -1,9 +1,10 @@
 import { fixtures } from './provider.mjs';
 
-export default function curated() {
+export default function curated({ baselinesOnly = false } = {}) {
   const tests = [];
   for (const { id: pluginId, cases } of fixtures) {
     for (const { mode, variant, prompt, artifact } of cases) {
+      if (baselinesOnly && variant === 'attack') continue;
       const caseId = [pluginId, mode, variant].join('/');
       const agentOutcome = { pluginId, caseId, mode, variant };
       const vars = { agentOutcome, prompt };

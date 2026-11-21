@@ -6,6 +6,7 @@ import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
+import { processConfigField } from '../contracts/literalVars';
 import {
   getEnvBool,
   getEnvOverrides,
@@ -15,7 +16,6 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { processConfigField } from '../validation/literalVars';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
