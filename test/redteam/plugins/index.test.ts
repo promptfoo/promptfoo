@@ -312,12 +312,19 @@ describe('Plugins', () => {
   });
 
   describe('max chars retries', () => {
-    it('should retry oversized local PII generations', async () => {
+    it.each([
+      { maxCharsPerMessage: 10 },
+      {
+        modifiers: {
+          maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+        },
+      },
+    ])('should retry oversized local PII generations with %o', async (config) => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 
       vi.spyOn(mockProvider, 'callApi')
         .mockResolvedValueOnce({
-          output: 'Prompt: this prompt is too long\nPrompt: tiny',
+          output: 'Prompt: this prompt is too long\nPrompt: another long one\nPrompt: tiny',
           error: undefined,
         })
         .mockResolvedValueOnce({
@@ -331,14 +338,16 @@ describe('Plugins', () => {
         purpose: 'test',
         injectVar: 'testVar',
         n: 2,
-        config: { maxCharsPerMessage: 10 },
+        config,
         delayMs: 0,
       });
 
       expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
       expect(mockProvider.callApi).toHaveBeenNthCalledWith(
         2,
-        expect.stringContaining('Generate replacement prompts only'),
+        expect.stringMatching(
+          /2 generated prompts.*10-character limit.*23 characters.*Generate replacement prompts only/s,
+        ),
       );
       expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
     });
