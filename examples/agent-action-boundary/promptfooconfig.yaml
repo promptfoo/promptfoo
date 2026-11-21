@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare recorded controls with independent expected decisions
+
+prompts:
+  - '{{decision}}'
+
+providers:
+  - echo
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://boundary-assert.cjs:actionBoundaryCheck
+
+# These are hand-authored test expectations, not inferred safety classifications.
+tests:
+  - description: Inventory lookup matches the application's allow label
+    vars:
+      expected_action_id: read-inventory
+      expected_control: allow
+      decision: |
+        {"id":"read-inventory","runtime":"mcp","observed_control":"allow"}
+
+  - description: Public export matches the application's block label
+    vars:
+      expected_action_id: customer-export-public
+      expected_control: block
+      decision: |
+        {"id":"customer-export-public","runtime":"workflow","observed_control":"block"}
+
+  - description: Refund matches the application's dual-approval label
+    vars:
+      expected_action_id: refund-high-value-order
+      expected_control: require_dual_approval
+      decision: |
+        {"id":"refund-high-value-order","runtime":"support-agent","observed_control":"require_dual_approval"}
+
+  - description: Stale-proof case matches the application's review label
+    vars:
+      expected_action_id: stale-proof-deployment
+      expected_control: require_review
+      decision: |
+        {"id":"stale-proof-deployment","runtime":"shell","observed_control":"require_review"}
