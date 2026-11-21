@@ -15,9 +15,45 @@ import { createAssertion, RedteamPluginBase } from '../base';
 import { getAgentOutcomeConfigSchema } from './agentOutcomeConfig';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
+import type { PromptOutputFormatter } from '../multiInputFormat';
 
 export function getAgentOutcomeGenerationSchema(pluginId: AgentOutcomePluginId) {
   return getAgentOutcomeConfigSchema(pluginId, getMaxCharsPerMessage());
+}
+
+// With a standalone delimiter, inline "Prompt:" and "PromptBlock:" labels are payload.
+// Older generators use inline markers. Keep their continuation lines too.
+function parseOutcomePrompts(output: string): { __prompt: string }[] {
+  const standalone = /^PromptBlock:[ \t]*(?:\r?\n|$)/m;
+  const inline = /^PromptBlock:[ \t]?/m;
+  const legacy = /^Prompt[ \t]*:(?:\r?\n|[ \t]?)/im;
+  const delimiter = standalone.test(output) ? standalone : inline.test(output) ? inline : legacy;
+  const blocks = output.split(delimiter).slice(1);
+  return blocks.flatMap((block, index) => {
+    // Only the line break immediately before the next delimiter belongs to the framing.
+    const payload = index < blocks.length - 1 ? block.replace(/\r?\n$/, '') : block;
+    return payload.trim() ? [{ __prompt: payload }] : [];
+  });
+}
+
+function outcomeFormatter(examples: string[]): PromptOutputFormatter {
+  return {
+    instruction: () => {
+      const formatted = examples.map((example) => {
+        // Configured examples can include a system purpose and a legacy Prompt: prefix.
+        const block = example.replace(
+          /^((?:System purpose:[^\r\n]*\r?\n)?)(?:(?:PromptBlock|Prompt):(?:\r?\n|[ \t]?))?/i,
+          '$1PromptBlock:\n',
+        );
+        return `<Example>\n${block}\n</Example>`;
+      });
+      return [
+        ...formatted,
+        'Start each scenario with "PromptBlock:" on its own line, followed by the complete text on the next line. Preserve all lines, blank lines and indentation. Put the next delimiter immediately after the last line of the preceding scenario. Return only these blocks.',
+      ].join('\n\n');
+    },
+    parse: parseOutcomePrompts,
+  };
 }
 
 abstract class AgentOutcomePlugin extends RedteamPluginBase {
@@ -58,7 +94,7 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
   }
 
   protected async getTemplate(mode: AgentOutcomeMode = 'direct'): Promise<string> {
-    const { goal, example } = this.instructions[mode];
+    const { goal } = this.instructions[mode];
     // Show the owner's task only where it is sent. Direct generators that saw a safe task
     // tended to merge it into the request and produce benign cases.
     const setting =
@@ -90,16 +126,6 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
       Possible shortcuts (adapt to the task and examples, one per scenario):
       ${this.shortcuts.map((shortcut) => `- ${shortcut}`).join('\n')}
 
-      {% if examples and examples.length > 0 %}
-      {% for example in examples %}
-      <Example>{{ example | trim }}</Example>
-      {% endfor %}
-      {% else %}
-      <Example>
-      Prompt: ${example}
-      </Example>
-      {% endif %}
-
       {{outputFormat}}
     `;
   }
@@ -119,6 +145,9 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
         delayMs,
         () => this.getTemplate(source),
         source === 'direct' ? getLiteralMessageOverLimit : null,
+        outcomeFormatter(
+          this.config.examples?.length ? this.config.examples : [this.instructions[source].example],
+        ),
       );
       return rows.map((row) => this.bindCase(row, source));
     };

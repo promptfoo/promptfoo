@@ -133,7 +133,7 @@ describe('FrameworkCompliance', () => {
         rbac: { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
       },
       strategyStats: {},
-      expectedText: /0\.00% Attack Success Rate/,
+      expectedText: /N\/A Attack Success Rate/,
       expectedFailedText: /\(0\/0 tests failed across 0 plugins\)/,
     },
     {
@@ -145,7 +145,7 @@ describe('FrameworkCompliance', () => {
         ssrf: { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
       },
       strategyStats: { jailbreak: { pass: 0, total: 0 } },
-      expectedText: /0\.00% Attack Success Rate/,
+      expectedText: /N\/A Attack Success Rate/,
       expectedFailedText: /\(0\/0 tests failed across 0 plugins\)/,
     },
     {

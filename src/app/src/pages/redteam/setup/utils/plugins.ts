@@ -2,15 +2,23 @@ import { isAgentOutcomePlugin, type Plugin } from '@promptfoo/redteam/constants'
 
 import type { Config } from '../types';
 
+export const INCOMPATIBLE_PREVIEW_MESSAGE =
+  'Agent outcome plugins only support basic strategy previews.';
+
+export function canPreviewPluginWithStrategy(pluginId: string, strategyId?: string) {
+  return strategyId === 'basic' || strategyId === 'default' || !isAgentOutcomePlugin(pluginId);
+}
+
 export function getStrategyPreviewPlugins(plugins: Config['plugins'], strategyId?: string) {
-  const basic = strategyId === 'basic' || strategyId === 'default';
-  const candidates = (plugins ?? [])
+  if (!plugins?.length) {
+    return [{ id: 'harmful:hate' as const, config: {} }];
+  }
+  return plugins
     .map((plugin) => ({
       id: (typeof plugin === 'string' ? plugin : plugin.id) as Plugin,
       config: typeof plugin === 'string' ? {} : (plugin.config ?? {}),
     }))
-    .filter(({ id }) => id && (basic || !isAgentOutcomePlugin(id)));
-  return candidates.length ? candidates : [{ id: 'harmful:hate' as const, config: {} }];
+    .filter(({ id }) => id && canPreviewPluginWithStrategy(id, strategyId));
 }
 
 /**

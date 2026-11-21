@@ -602,6 +602,7 @@ async function doGenerateRedteamInternal(
     // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
+    maxCharsPerMessage: redteamConfig?.maxCharsPerMessage,
     maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,

@@ -2,7 +2,6 @@ import React from 'react';
 
 import { Card, CardContent } from '@app/components/ui/card';
 import { cn } from '@app/lib/utils';
-import { formatASRForDisplay } from '@app/utils/redteam';
 import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -18,6 +17,7 @@ import {
   type TestResultStats,
 } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
+import { formatFindingASR } from './shared';
 import { useReportStore } from './store';
 import type { UnifiedConfig } from '@promptfoo/types';
 
@@ -189,9 +189,12 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
       <Card className="overflow-hidden rounded-xl transition-shadow duration-300">
         <CardContent className="pt-6">
           <p className="mb-2 text-sm text-muted-foreground">
-            {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
-            {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
-            across {pluginComplianceStats.total} plugins)
+            {formatFindingASR(
+              pluginComplianceStats.totalTests ? pluginComplianceStats.attackSuccessRate : null,
+            )}{' '}
+            Attack Success Rate ({pluginComplianceStats.failedTests}/
+            {pluginComplianceStats.totalTests} tests failed across {pluginComplianceStats.total}{' '}
+            plugins)
           </p>
           {/* Progress bar */}
           <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">

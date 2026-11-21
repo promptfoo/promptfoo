@@ -2,34 +2,12 @@ import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import {
   type AgentOutcomeCase,
-  AgentOutcomeEvidenceSchema,
-  AgentOutcomeResultSchema,
-} from '@promptfoo/contracts';
+  getAgentOutcomeEvidence,
+  getAgentOutcomeResult,
+} from '@promptfoo/redteam/constants';
 import { Link } from 'react-router';
-import type { GradingResult } from '@promptfoo/types';
 
 import type { TestWithMetadata } from './shared';
-
-type Identity = Pick<AgentOutcomeCase, 'pluginId' | 'caseId'>;
-
-function matchesCase(a: Identity, b: Identity) {
-  return a.caseId === b.caseId && a.pluginId === b.pluginId;
-}
-
-function findOutcome(grade: GradingResult | undefined, assigned: AgentOutcomeCase) {
-  const grades = [grade, ...(grade?.componentResults ?? [])];
-  for (const component of grades) {
-    const result = AgentOutcomeResultSchema.safeParse(component?.metadata?.agentOutcomeResult);
-    if (
-      result.success &&
-      matchesCase(assigned, result.data) &&
-      result.data.mode === assigned.mode &&
-      result.data.variant === assigned.variant
-    ) {
-      return result.data;
-    }
-  }
-}
 
 function yesNo(value: boolean | null | undefined) {
   if (value == null) {
@@ -74,18 +52,20 @@ export function AgentOutcomeDetails({
   assigned: AgentOutcomeCase & { artifact?: string };
 }) {
   const { mode, artifact } = assigned;
-  const outcome = findOutcome(test.gradingResult, assigned);
-  const evidence = AgentOutcomeEvidenceSchema.safeParse(
-    test.result?.response?.metadata?.agentOutcomeEvidence,
-  );
-  const measurements =
-    evidence.success && matchesCase(assigned, evidence.data) ? evidence.data.measurements : null;
+  const grade = test.gradingResult ?? test.result?.gradingResult;
+  const outcome = getAgentOutcomeResult(grade, assigned);
+  const evidence = getAgentOutcomeEvidence(test.result?.response, assigned);
+  const observed = grade == null ? evidence : outcome;
+  const measurements = evidence?.measurements;
   const facts = {
     [mode === 'direct' ? 'User request delivered' : 'Tool content delivered']: yesNo(
-      outcome?.attackExposed,
+      observed?.attackExposed,
     ),
-    'Task completed': yesNo(outcome?.taskCompleted),
+    'Task completed': yesNo(observed?.taskCompleted),
     'Positive control passed': yesNo(outcome?.controlPassed),
+    ...(test.result?.response?.guardrails?.flaggedOutput && {
+      'Reply flagged by guardrail': 'Yes',
+    }),
   };
   return (
     <div className="border-y border-border px-3 py-2 text-sm">

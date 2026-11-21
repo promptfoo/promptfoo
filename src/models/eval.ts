@@ -14,7 +14,11 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { AGENT_OUTCOME_PLUGINS, PLUGIN_CATEGORIES } from '../redteam/constants';
+import {
+  AGENT_OUTCOME_PLUGINS,
+  classifyAgentOutcome,
+  PLUGIN_CATEGORIES,
+} from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
@@ -66,8 +70,7 @@ import EvalResult, {
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
-  persistRepeatMetadata,
-  persistTraceMetadata,
+  persistResultMetadata,
   projectPrompt,
   projectTracesForOutput,
   stripTraceLinkageFromMetadata,
@@ -575,11 +578,7 @@ export default class Eval {
           .values(
             opts.results?.map((r) => ({
               ...r,
-              metadata: persistTraceMetadata(
-                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
-                r.traceId,
-                r.evaluationId,
-              ),
+              metadata: persistResultMetadata(r),
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -1409,11 +1408,7 @@ export default class Eval {
         .values(
           results.map((r) => ({
             ...r,
-            metadata: persistTraceMetadata(
-              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
-              r.traceId,
-              r.evaluationId,
-            ),
+            metadata: persistResultMetadata(r),
             evalId: this.id,
           })),
         )
@@ -1811,31 +1806,70 @@ export default class Eval {
   }
 }
 
-// Prompt metrics combine attacks and controls. Seek candidate reports through the
-// plugin ID index, then aggregate final verdicts by eval ID, including mixed-plugin scans.
+// Prompt metrics mix attacks, controls and errors. For reports with outcome trials,
+// count ordinary results in SQL and validate outcome delivery with the same classifier as the UI.
 async function getAgentReportRates(evalIds: string[]): Promise<Map<string, number | undefined>> {
   const db = await getDb();
-  const isOutcome = sql`json_extract(metadata, '$.pluginId') IN (${sql.join([...AGENT_OUTCOME_PLUGINS], sql`, `)})`;
-  const isAttack = sql`
-    failure_reason != ${ResultFailureReason.ERROR}
-    AND CASE WHEN ${isOutcome} THEN
-      COALESCE(json_extract(test_case, '$.metadata.agentOutcome.variant'), 'attack') NOT IN ('control', 'authorized')
-    ELSE 1 END
-  `;
-  const rows = await db.all<{ eval_id: string; attempts: number; failures: number }>(sql`
-    SELECT eval_id,
-      COUNT(*) FILTER (WHERE ${isAttack}) AS attempts,
-      COUNT(*) FILTER (WHERE success = 0 AND ${isAttack}) AS failures
-    FROM eval_results
-    WHERE eval_id IN (
-      SELECT eval_id FROM eval_results
-      WHERE ${isOutcome} AND eval_id IN (SELECT value FROM json_each(${JSON.stringify(evalIds)}))
-    )
+  const plugins = sql.join([...AGENT_OUTCOME_PLUGINS], sql`, `);
+  const isOutcome = sql`json_extract(metadata, '$.pluginId') IN (${plugins})`;
+  const candidates = await db.all<{ id: string; eval_id: string; failure_reason: number }>(sql`
+    SELECT id, eval_id, failure_reason FROM eval_results WHERE ${isOutcome}
+    AND eval_id IN (SELECT value FROM json_each(${JSON.stringify(evalIds)}))
+  `);
+  const totals = new Map<string, { attempts: number; failures: number }>();
+  for (const row of candidates) {
+    totals.set(row.eval_id, { attempts: 0, failures: 0 });
+  }
+  if (!totals.size) {
+    return new Map();
+  }
+  const ordinary = await db.all<{ eval_id: string; attempts: number; failures: number }>(sql`
+    SELECT eval_id, COUNT(*) AS attempts, COUNT(*) FILTER (WHERE success = 0) AS failures
+    FROM eval_results WHERE eval_id IN (SELECT value FROM json_each(${JSON.stringify([...totals.keys()])}))
+    AND failure_reason != ${ResultFailureReason.ERROR} AND NOT COALESCE(${isOutcome}, 0)
     GROUP BY eval_id
   `);
+  for (const row of ordinary) {
+    totals.set(row.eval_id, row);
+  }
+  const ids = candidates
+    .filter((row) => row.failure_reason !== ResultFailureReason.ERROR)
+    .map((row) => row.id);
+  // Read only assignments, grades and (for stripped grades) provider evidence in bounded batches.
+  const batchSize = 100;
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const rows = await db
+      .select({
+        evalId: evalResultsTable.evalId,
+        success: evalResultsTable.success,
+        testCase:
+          sql`json_object('metadata',json_object('agentOutcome',json_extract(test_case, '$.metadata.agentOutcome')))`.mapWith(
+            evalResultsTable.testCase,
+          ),
+        gradingResult: evalResultsTable.gradingResult,
+        response: sql`CASE WHEN grading_result IS NULL THEN json_object(
+        'cached', json_extract(response, '$.cached'),
+        'metadata', json_object('agentOutcomeEvidence',json_extract(response, '$.metadata.agentOutcomeEvidence'))
+      ) END`.mapWith(evalResultsTable.response),
+      })
+      .from(evalResultsTable)
+      .where(
+        sql`id IN (SELECT value FROM json_each(${JSON.stringify(ids.slice(i, i + batchSize))}))`,
+      )
+      .all();
+    for (const row of rows) {
+      const counts = totals.get(row.evalId);
+      if (counts && classifyAgentOutcome(row) === 'attack') {
+        counts.attempts++;
+        if (!row.success) {
+          counts.failures++;
+        }
+      }
+    }
+  }
   return new Map(
-    rows.map(({ eval_id, attempts, failures }) => [
-      eval_id,
+    Array.from(totals, ([id, { attempts, failures }]) => [
+      id,
       attempts ? calculateAttackSuccessRate(attempts, failures) : undefined,
     ]),
   );

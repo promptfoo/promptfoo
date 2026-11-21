@@ -41,8 +41,36 @@ async function resolveEntry() {
   return path.resolve(directory, 'openclaw.mjs');
 }
 
+// OpenClaw's CLI can report ok after token exhaustion. Inspect the final accepted
+// completion's protocol fields, since the assistant can write any warning text.
+// Retain only a bounded tail. Missing or unreadable termination is inconclusive.
+const tailLimit = 64 * 1024;
+function finishReason(tail, streaming) {
+  const events = streaming ? tail.split(/\r?\n\r?\n/) : [tail];
+  for (const event of events.reverse()) {
+    const data = streaming
+      ? event
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5))
+          .join('\n')
+          .trim()
+      : event;
+    if (!data || data === '[DONE]') continue;
+    try {
+      const { choices } = JSON.parse(data);
+      if (choices?.length === 0) continue; // Optional usage-only trailer.
+      const reason = choices?.[0]?.finish_reason;
+      return typeof reason === 'string' && reason.length <= 64 ? reason : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 // Observe the request actually accepted by the model endpoint. Keep upstream credentials out of the child.
-async function forward(request, response, { endpoint, key, observe }, schema) {
+async function forward(request, response, { endpoint, key, observe }, schema, completion) {
   const controller = new AbortController();
   response.once('close', () => controller.abort());
   try {
@@ -57,12 +85,21 @@ async function forward(request, response, { endpoint, key, observe }, schema) {
       redirect: 'error',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
     });
-    if (result.ok) observe(messages);
+    const contentType = result.headers.get('content-type') || 'application/json';
+    const stream = result.body && Readable.fromWeb(result.body);
+    if (result.ok) {
+      observe(messages);
+      let tail = '';
+      completion.reason = () => finishReason(tail, contentType.includes('text/event-stream'));
+      stream?.on('data', (chunk) => {
+        tail = (tail + chunk.toString('utf8')).slice(-tailLimit);
+      });
+    }
     response.writeHead(result.status, {
-      'content-type': result.headers.get('content-type') || 'application/json',
+      'content-type': contentType,
     });
-    if (!result.body) return response.end();
-    await pipeline(Readable.fromWeb(result.body), response);
+    if (!stream) return response.end();
+    await pipeline(stream, response);
   } catch {
     if (response.headersSent) response.destroy();
     else response.writeHead(502).end();
@@ -71,6 +108,7 @@ async function forward(request, response, { endpoint, key, observe }, schema) {
 
 // The loopback service and its credentials live only for this trial.
 export async function serveFixture(tools, call, inference) {
+  const completion = { reason: () => null };
   const route = '/mcp/' + randomUUID();
   const token = randomUUID();
   const names = Object.keys(tools).map((name) => 'fixture__' + name);
@@ -93,7 +131,7 @@ export async function serveFixture(tools, call, inference) {
       request.url === '/v1/chat/completions' &&
       request.headers.authorization === 'Bearer ' + token
     ) {
-      return forward(request, response, inference, schema);
+      return forward(request, response, inference, schema, completion);
     }
     if (request.url !== route || request.method !== 'POST') {
       response.writeHead(404).end();
@@ -125,6 +163,7 @@ export async function serveFixture(tools, call, inference) {
     token,
     baseUrl: local + '/v1',
     toolUrl: local + route,
+    finishReason: () => completion.reason(),
     async close() {
       const closed = once(http, 'close');
       http.close();
@@ -229,6 +268,7 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
     const result = JSON.parse(stdout);
     if (!result.ok || typeof result.final !== 'string')
       throw new Error('OpenClaw returned no final reply');
+    const reason = service.finishReason();
     record('runtime', {
       harness: 'openclaw',
       version,
@@ -236,7 +276,13 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
       provider: result.provider,
       usage: result.usage,
       tools: result.toolSummary,
+      finishReason: reason,
     });
+    if (reason !== 'stop') {
+      throw new Error(
+        `Unfinished model turn (finish_reason=${reason ?? 'unknown'}). ${result.final}`,
+      );
+    }
     return result.final;
   } catch (error) {
     const reason = stop.aborted ? stop.reason : error;

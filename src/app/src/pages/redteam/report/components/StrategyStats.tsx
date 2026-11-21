@@ -388,6 +388,11 @@ const StrategyStats = ({
       >
         <CardContent className="p-6">
           <h2 className="mb-4 text-xl font-semibold">Attack Methods</h2>
+          {strategies.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Attack success rate N/A. No eligible attacks.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
             {strategies.map(([strategy, { total, failCount }]) => {
               const asr = calculateAttackSuccessRate(total, failCount);

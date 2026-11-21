@@ -1,5 +1,9 @@
 import logger from '../logger';
-import { AGENT_OUTCOME_PLUGINS, MULTI_INPUT_VAR } from '../redteam/constants';
+import {
+  AGENT_OUTCOME_PLUGINS,
+  AgentOutcomeCaseSchema,
+  MULTI_INPUT_VAR,
+} from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
   getGradingAssertionHash,
@@ -232,6 +236,15 @@ export const handleRedteam = async (
   const needsOutcomeEvidence = AGENT_OUTCOME_PLUGINS.some(
     (id) => assertion.type === `promptfoo:redteam:${id}`,
   );
+  // Measured trials already have an assignment on the test and a verdict from the
+  // grader. Copying arbitrary test metadata into grades could forge a verdict on a
+  // sibling assertion or expose private fields even after test metadata is stripped.
+  const assignedOutcome = test.metadata?.agentOutcome;
+  const passthroughMetadata =
+    needsOutcomeEvidence ||
+    (assignedOutcome && AgentOutcomeCaseSchema.safeParse(assignedOutcome).success)
+      ? undefined
+      : test.metadata;
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
   const getStoredTokens = () =>
@@ -265,7 +278,7 @@ export const handleRedteam = async (
         value: storedResult.assertion?.value || assertion.value,
       },
       metadata: {
-        ...test.metadata,
+        ...passthroughMetadata,
         ...storedResult.metadata,
         // Propagate gradingIncomplete if any turns had grader errors
         ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
@@ -372,8 +385,7 @@ export const handleRedteam = async (
         : {}),
       suggestions,
       metadata: {
-        // Pass through all test metadata for redteam
-        ...test.metadata,
+        ...passthroughMetadata,
         ...gradeWithUsage.metadata,
         ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
@@ -412,7 +424,7 @@ export const handleRedteam = async (
         assertion,
         ...(tokensUsed ? { tokensUsed } : {}),
         metadata: {
-          ...test.metadata,
+          ...passthroughMetadata,
           gradingIncomplete: true,
           gradingError: errorMessage,
         },

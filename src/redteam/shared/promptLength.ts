@@ -80,13 +80,14 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
 function getPromptLengthViolation(
   prompt: string,
   limit?: number,
+  literalMessage = false,
 ): { length: number; limit: number; path: string } | undefined {
   const maxCharsPerMessage = getMaxCharsPerMessage(limit);
   if (!maxCharsPerMessage) {
     return undefined;
   }
 
-  const messages = parseChatMessages(prompt);
+  const messages = literalMessage ? undefined : parseChatMessages(prompt);
   if (messages) {
     const oversizedMessage = messages.find(
       (message) => message.role === 'user' && message.content.length > maxCharsPerMessage,
@@ -129,8 +130,12 @@ export function getGeneratedPromptOverLimit(
   };
 }
 
-export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
-  const violation = getPromptLengthViolation(prompt, limit);
+export function throwIfTargetPromptExceedsMaxChars(
+  prompt: string,
+  limit?: number,
+  literalMessage = false,
+): void {
+  const violation = getPromptLengthViolation(prompt, limit, literalMessage);
   if (!violation) {
     return;
   }

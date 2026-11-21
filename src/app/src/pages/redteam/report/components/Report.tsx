@@ -61,6 +61,7 @@ import {
   flaggedByModeration,
   getPluginIdFromResult,
   getStrategyIdFromTest,
+  reportRowPassed,
   type TestWithMetadata,
 } from './shared';
 import { useReportStore } from './store';
@@ -108,14 +109,14 @@ function groupReportResults(evalData: ResultsFile | null, selectedPromptIndex: n
     // Exclude results with errors from being counted as results
     // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
     // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
-    if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+    if (result.failureReason === ResultFailureReason.ERROR) {
       if (isAgentOutcomePlugin(pluginId)) {
         groups.outcomeErrors++;
       }
       return;
     }
 
-    const passed = Boolean(result.success && result.gradingResult?.pass);
+    const passed = reportRowPassed(result);
     const byPlugin = passed ? passesByPlugin : failuresByPlugin;
     (byPlugin[pluginId] ??= []).push({
       prompt: getReportPrompt(result, injectVar, passed),
@@ -232,67 +233,21 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     [evalData, selectedPromptIndex],
   );
 
-  const categoryStats = useMemo(() => {
-    if (!evalData) {
-      return {};
-    }
-
-    const prompts =
-      (evalData.version >= 4
-        ? evalData.prompts
-        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
-    const selectedPrompt = prompts[selectedPromptIndex];
-
-    return evalData.results.results.reduce<Record<string, Required<TestResultStats>>>(
-      (acc, row) => {
-        // Filter by selected target/provider if multiple targets exist
-        if (prompts.length > 1 && selectedPrompt && row.promptIdx !== selectedPromptIndex) {
-          return acc;
-        }
-
-        const pluginId = getPluginIdFromResult(row);
-        if (!pluginId) {
-          return acc;
-        }
-
-        // Exclude results with errors from statistics
-        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
-          return acc;
-        }
-
-        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
-        acc[pluginId].total++;
-
-        if (row.success) {
-          acc[pluginId].pass++;
-          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
-        } else if (flaggedByModeration(row.gradingResult)) {
-          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
-        }
-
-        // Increment for grader-originated failures
-        if (row.failureReason === ResultFailureReason.ASSERT) {
-          acc[pluginId].failCount++;
-        }
-
-        return acc;
-      },
-      {},
-    );
-  }, [evalData, selectedPromptIndex]);
-
-  const attacks = useMemo(
-    () => buildAttackReport(failuresByPlugin, passesByPlugin, categoryStats, getStrategyIdFromTest),
-    [failuresByPlugin, passesByPlugin, categoryStats],
-  );
-
   const availableCategories = useMemo(() => {
-    return Object.keys(categoryStats).sort();
-  }, [categoryStats]);
+    return Object.keys({ ...failuresByPlugin, ...passesByPlugin }).sort();
+  }, [failuresByPlugin, passesByPlugin]);
 
   const availableStrategies = useMemo(() => {
-    return Object.keys(attacks.strategyStats).sort();
-  }, [attacks]);
+    const strategies = new Set<string>();
+    for (const groups of [failuresByPlugin, passesByPlugin]) {
+      for (const tests of Object.values(groups)) {
+        for (const test of tests) {
+          strategies.add(getStrategyIdFromTest(test));
+        }
+      }
+    }
+    return [...strategies].sort();
+  }, [failuresByPlugin, passesByPlugin]);
 
   const filterReportTests = useCallback(
     (testsByPlugin: typeof failuresByPlugin, excludedStatus: 'pass' | 'fail') => {
@@ -384,21 +339,13 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     Boolean(searchQuery);
   const visibleAttacks = useMemo(
     () =>
-      hasActiveFilters
-        ? buildAttackReport(
-            filteredFailuresByPlugin,
-            filteredPassesByPlugin,
-            filteredCategoryStats,
-            getStrategyIdFromTest,
-          )
-        : attacks,
-    [
-      hasActiveFilters,
-      filteredFailuresByPlugin,
-      filteredPassesByPlugin,
-      filteredCategoryStats,
-      attacks,
-    ],
+      buildAttackReport(
+        filteredFailuresByPlugin,
+        filteredPassesByPlugin,
+        filteredCategoryStats,
+        getStrategyIdFromTest,
+      ),
+    [filteredFailuresByPlugin, filteredPassesByPlugin, filteredCategoryStats],
   );
 
   /**
@@ -423,7 +370,6 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   /**
    * Constructs category stats for the framework compliance section.
    *
-   * - Determines whether to use filtered or unfiltered category stats based on the presence of active filters.
    * - Removes custom policies; they do not belong to any framework.
    */
   const categoryStatsForFrameworkCompliance = useMemo(() => {
@@ -876,10 +822,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
             plugins={evalData.config.redteam.plugins || []}
           />
           <RiskCategories
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+            categoryStats={filteredCategoryStats}
             evalId={evalId}
-            failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
-            passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
+            failuresByPlugin={filteredFailuresByPlugin}
+            passesByPlugin={filteredPassesByPlugin}
           />
           <TestSuites
             evalId={evalId}

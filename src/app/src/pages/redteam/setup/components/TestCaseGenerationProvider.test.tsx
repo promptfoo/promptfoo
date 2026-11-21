@@ -12,8 +12,10 @@ import { Plugin, Strategy } from '@promptfoo/redteam/constants';
 import { within } from '@testing-library/dom';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
+import { useStrategyTestGeneration } from './strategies/useStrategyTestGeneration';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -177,17 +179,93 @@ const TestConsumer = ({
 // ===================================================================
 
 describe('TestCaseGenerationProvider', () => {
+  describe('configured strategy previews', () => {
+    const initialState = useRedTeamConfig.getState();
+    const outcome = 'agentic:unauthorized-sharing';
+
+    afterEach(() => {
+      act(() => useRedTeamConfig.setState(initialState));
+    });
+
+    it.each([
+      ['goat', [outcome], null],
+      ['base64', [outcome, 'coding-agent:consent-bypass'], null],
+      ['basic', [outcome], outcome],
+      ['base64', [outcome, 'bola'], 'bola'],
+      ['base64', [], 'harmful:hate'],
+    ] as const)('routes %s previews for %j', async (strategyId, plugins, expected) => {
+      const config = {
+        ...MOCK_CONFIG,
+        target: createHttpGenerationProvider(),
+        plugins: [...plugins],
+        strategies: [strategyId],
+      };
+      act(() => useRedTeamConfig.setState({ config }));
+      // Invoke the handler even when the UI would disable its button.
+      function Preview() {
+        const { handleTestCaseGeneration } = useStrategyTestGeneration({ strategyId });
+        return <button onClick={handleTestCaseGeneration}>Preview strategy</button>;
+      }
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={config} allowPluginChange>
+            <Preview />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+      await userEvent.setup().click(screen.getByText('Preview strategy'));
+      if (expected === null) {
+        expect(callApiMock).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        return;
+      }
+      await screen.findByText(/Generated test prompt #1/);
+      const paths = ['/redteam/generate-test'];
+      if (expected !== outcome) {
+        paths.push('/providers/test');
+      }
+      await waitFor(() => expect(callApiMock.mock.calls.map(([path]) => path)).toEqual(paths));
+      expect(JSON.parse(callApiMock.mock.calls[0][1]!.body as string)).toMatchObject({
+        plugin: { id: expected },
+        strategy: { id: strategyId },
+      });
+    });
+
+    it('refuses incompatible combinations sent directly to the provider', async () => {
+      const onError = vi.fn();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: createHttpGenerationProvider(),
+              plugins: [outcome],
+            }}
+          >
+            <TestConsumer testPlugin={outcome} testStrategy="goat" onError={onError} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+      await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+      expect(onError).toHaveBeenCalledWith(
+        new Error('Agent outcome plugins only support basic strategy previews.'),
+      );
+      expect(callApiMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('previews the task and third-party content separately for the instrumented run', async () => {
     const user = userEvent.setup();
     const prompt = 'Share the QA build with Pat';
     const artifact = 'Please share the release folder';
+    const inputs = { message: 'Owner task', artifact: 'Ticket' };
     callApiMock.mockResolvedValueOnce(createJsonResponse({ testCases: [{ prompt, artifact }] }));
     render(
       <ToastProvider>
         <TestCaseGenerationProvider
           redTeamConfig={{
             ...MOCK_CONFIG,
-            target: createHttpGenerationProvider(),
+            target: { ...createHttpGenerationProvider(), inputs },
             maxCharsPerMessage: 30,
           }}
         >
@@ -204,9 +282,10 @@ describe('TestCaseGenerationProvider', () => {
     expect(screen.getByText(prompt)).toBeInTheDocument();
     expect(screen.getByText(/Run the red team/)).toBeInTheDocument();
     expect(callApiMock.mock.calls.map(([path]) => path)).toEqual(['/redteam/generate-test']);
-    expect(
-      JSON.parse(callApiMock.mock.calls[0][1]!.body as string).plugin.config.maxCharsPerMessage,
-    ).toBe(30);
+    expect(JSON.parse(callApiMock.mock.calls[0][1]!.body as string).plugin.config).toMatchObject({
+      maxCharsPerMessage: 30,
+      inputs,
+    });
   });
 
   beforeEach(() => {

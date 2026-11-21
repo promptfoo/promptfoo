@@ -92,7 +92,7 @@ const CSVExporter = ({
           pluginSeverity,
           '0',
           '0',
-          '0',
+          'N/A',
           'Not Tested',
         ]);
       });

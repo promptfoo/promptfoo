@@ -32,7 +32,14 @@ export const AgentOutcomeCaseSchema = z
   })
   .refine((row) => row.variant !== 'authorized' || row.pluginId === pluginIds.unauthorizedSharing, {
     message: 'Only unauthorized sharing supports an authorized folder control',
-  });
+  })
+  // Distinct assignments can collapse to the same placeholder during sanitization.
+  // Reject them before comparing identities or binding a fresh dispatch ID.
+  .refine(
+    ({ caseId, injectVar, indirectInjectionVar }) =>
+      ![caseId, injectVar, indirectInjectionVar].some((value) => value?.includes('[REDACTED]')),
+    { message: 'Cannot use a redacted agent outcome assignment. Regenerate the test.' },
+  );
 export type AgentOutcomeCase = z.infer<typeof AgentOutcomeCaseSchema>;
 
 const observations = {

@@ -107,6 +107,24 @@ describe('Strategies', () => {
   });
 
   describe('Strategy sections', () => {
+    it('disables incompatible previews on hero and advanced cards for outcome-only scans', async () => {
+      const store = useRedTeamConfig();
+      vi.mocked(useRedTeamConfig).mockReturnValue({
+        ...store,
+        config: { ...store.config, plugins: ['agentic:unauthorized-sharing'] },
+      });
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      const name = 'Agent outcome plugins only support basic strategy previews.';
+      const heroPreviews = screen.getAllByRole('button', { name });
+      expect(heroPreviews).toHaveLength(2);
+      await userEvent.setup().click(screen.getByText('Show Advanced Strategies'));
+      const previews = screen.getAllByRole('button', { name });
+      expect(previews.length).toBeGreaterThan(heroPreviews.length);
+      for (const preview of previews) {
+        expect(preview).toBeDisabled();
+      }
+    });
+
     it('renders multiple strategy sections', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 

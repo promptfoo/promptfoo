@@ -12,14 +12,32 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  classifyAgentOutcome,
+  displayNameOverrides,
+  getAgentOutcomeCase,
+  isAgentOutcomePlugin,
+} from '@promptfoo/redteam/constants';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { stringify } from 'csv-stringify/browser/esm/sync';
-import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
+import {
+  getPluginIdFromResult,
+  getStrategyIdFromTest,
+  reportRowPassed,
+} from '../components/shared';
 import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;
   evalData: ResultsFile;
+}
+
+function outcomeColumns(result: EvaluateResult, pluginId: string | null, isError: boolean) {
+  const classification = classifyAgentOutcome(result, pluginId);
+  return {
+    'Trial Variant': getAgentOutcomeCase(result.testCase)?.variant ?? '',
+    'Eligible Attack': !isError && (!classification || classification === 'attack') ? 'Yes' : 'No',
+  };
 }
 
 const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
@@ -31,6 +49,9 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
   const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
   function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const hasOutcomes = evalData.results.results.some((result) =>
+      isAgentOutcomePlugin(getPluginIdFromResult(result) ?? ''),
+    );
     const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
       let pluginDisplayName = null;
 
@@ -45,26 +66,27 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         }
       }
 
+      const error = result.failureReason === ResultFailureReason.ERROR;
+      const assigned = getAgentOutcomeCase(result.testCase);
+      const score = result.gradingResult?.score ?? result.score;
+      const verdict = error ? 'Error' : reportRowPassed(result) ? 'Pass' : 'Fail';
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
         'Plugin ID': pluginId ?? '',
-        // TODO: getStrategyIdFromTest expects TestWithMetadata but we're passing testCase directly
-        // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
-        Strategy: getStrategyIdFromTest(result.testCase as any),
+        ...(hasOutcomes && outcomeColumns(result, pluginId, error)),
+        Strategy: getStrategyIdFromTest({ result }),
         Target: result.provider.label || result.provider.id || '',
         Prompt:
+          assigned?.message ||
           result.vars.query?.toString() ||
           result.vars.prompt?.toString() ||
           result.prompt.raw ||
           '',
         Response: result.response?.output || '',
-        Pass:
-          result.gradingResult?.pass === true
-            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
-            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
-        Score: result.gradingResult?.score || '',
-        Reason: result.gradingResult?.reason || '',
+        Pass: score == null || error ? verdict : `${verdict} (${score})`,
+        Score: score ?? '',
+        Reason: result.gradingResult?.reason ?? result.error ?? '',
         Timestamp: new Date(evalData.createdAt).toISOString(),
       };
     });

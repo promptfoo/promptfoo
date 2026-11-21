@@ -3,7 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { getStrategyPreviewPlugins } from '../../utils/plugins';
+import { getStrategyPreviewPlugins, INCOMPATIBLE_PREVIEW_MESSAGE } from '../../utils/plugins';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
 import type { TargetPlugin } from '../testCaseGenerationTypes';
@@ -14,7 +14,8 @@ interface UseStrategyTestGenerationOptions {
 
 interface UseStrategyTestGenerationResult {
   strategyConfig: StrategyConfig;
-  testGenerationPlugin: Plugin;
+  testGenerationPlugin: Plugin | null;
+  previewDisabledReason?: string;
   handleTestCaseGeneration: () => Promise<void>;
   isGenerating: boolean;
   isCurrentStrategy: boolean;
@@ -38,13 +39,19 @@ export function useStrategyTestGeneration({
   }, [config.strategies, strategyId]);
 
   // Select a random plugin from the user's configured plugins, preserving any plugin config.
-  const testGenerationTargetPlugin = useMemo<TargetPlugin>(() => {
+  const testGenerationTargetPlugin = useMemo<TargetPlugin | null>(() => {
     const plugins = getStrategyPreviewPlugins(config.plugins, strategyId);
+    if (!plugins.length) {
+      return null;
+    }
     const selectedPlugin = plugins[Math.floor(Math.random() * plugins.length)];
     return { ...selectedPlugin, isStatic: true };
   }, [config.plugins, strategyId]);
 
   const handleTestCaseGeneration = useCallback(async () => {
+    if (!testGenerationTargetPlugin) {
+      return;
+    }
     await generateTestCase(testGenerationTargetPlugin, {
       id: strategyId,
       config: strategyConfig,
@@ -54,7 +61,8 @@ export function useStrategyTestGeneration({
 
   return {
     strategyConfig,
-    testGenerationPlugin: testGenerationTargetPlugin.id,
+    testGenerationPlugin: testGenerationTargetPlugin?.id ?? null,
+    previewDisabledReason: testGenerationTargetPlugin ? undefined : INCOMPATIBLE_PREVIEW_MESSAGE,
     handleTestCaseGeneration,
     isGenerating,
     isCurrentStrategy: currentStrategy === strategyId,
