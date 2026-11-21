@@ -86,7 +86,7 @@ export function prepareOpenAiFunctions(value: unknown, vars?: Record<string, Var
   return loaded === undefined ? undefined : z.array(FunctionDefinition).parse(loaded);
 }
 
-async function loadToolDefinitions(
+export async function loadOpenAiToolDefinitions(
   value: unknown,
   vars: Record<string, VarValue>,
   abortSignal?: AbortSignal,
@@ -103,7 +103,7 @@ async function loadToolDefinitions(
   }
   if (Array.isArray(value)) {
     const loaded = await Promise.all(
-      value.map((entry) => loadToolDefinitions(entry, vars, abortSignal)),
+      value.map((entry) => loadOpenAiToolDefinitions(entry, vars, abortSignal)),
     );
     return loaded.flat();
   }
@@ -119,7 +119,7 @@ export async function prepareOpenAiTools(
     return undefined;
   }
   abortSignal?.throwIfAborted();
-  const loaded = await loadToolDefinitions(value, vars, abortSignal);
+  const loaded = await loadOpenAiToolDefinitions(value, vars, abortSignal);
   return loaded == null ? undefined : Tools.parse(loaded);
 }
 
