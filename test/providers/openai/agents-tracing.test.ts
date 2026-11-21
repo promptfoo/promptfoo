@@ -710,7 +710,7 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
-    'redacts complete quoted YAML and ODBC credentials in %s',
+    'redacts complete YAML, ODBC, and XML credentials in %s',
     async (format) => {
       const { attributes, payload } = await exportCustomData(
         {
@@ -720,6 +720,8 @@ describe('OTLPTracingExporter', () => {
           odbc: 'Driver={ODBC Driver};UID=buildbot;PWD={opaque;credential};Database=public',
           escapedOdbc: 'Driver={ODBC Driver};PWD={opaque}};suffix};Database=public',
           xml: '<settings><password>opaque/xml</password></settings>',
+          multilineXml: '<password\n data="public">opaque/body</password>',
+          mixedXml: '<list>text<entry label="a > b"\r\n key="password">opaque/value</entry></list>',
           spacedXml: '<property name = "password" value = "opaque/spaced"/>',
           public: 'config: {description: "public phrase"}',
         },
@@ -733,6 +735,8 @@ describe('OTLPTracingExporter', () => {
       );
       expect(attributes.escapedOdbc).toBe('Driver={ODBC Driver};PWD=<redacted>;Database=public');
       expect(attributes.xml).toBe('<redacted>');
+      expect(attributes.multilineXml).toBe('<redacted>');
+      expect(attributes.mixedXml).toBe('<redacted>');
       expect(attributes.spacedXml).toBe('<redacted>');
       expect(attributes.public).toBe('config: {description: "public phrase"}');
       expect(JSON.stringify(payload)).not.toMatch(/opaque|suffix|credential/);

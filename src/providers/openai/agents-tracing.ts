@@ -855,8 +855,14 @@ function hasCredentialNamedPayload(value: string): boolean {
       return true;
     }
   }
-  // Excluding nested delimiters keeps malformed markup scans linear.
-  for (const [, tag] of value.matchAll(/(?<![\w$])<([^<>\r\n]*)>/g)) {
+  // Never cross another '<'. Quoted attributes can contain '>' and span lines.
+  const hasEndTag = value.includes('</') || value.includes('/>');
+  for (const match of value.matchAll(/<((?:[^<>"']|"[^"<]*"|'[^'<]*')*)>/g)) {
+    const tag = match[1];
+    // Preserve generic types such as Promise<Session> outside markup.
+    if (!hasEndTag && /[\w$]/.test(value[match.index - 1] ?? '')) {
+      continue;
+    }
     if (['redacted', 'REDACTED_API_KEY', 'REDACTED_AWS_KEY'].includes(tag)) {
       continue;
     }
