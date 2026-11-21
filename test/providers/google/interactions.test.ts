@@ -5099,24 +5099,32 @@ describe('GoogleInteractionsProvider', () => {
       expect(requestBody(1).input).toHaveLength(4);
     });
 
-    it('does not run callbacks when a prompt disables tools', async () => {
+    it.each([
+      { tool_choice: 'none' },
+      { passthrough: { tool_config: { function_calling_config: { mode: 'NONE' } } } },
+      { passthrough: { toolConfig: { functionCallingConfig: { mode: 'NONE' } } } },
+    ])('honors prompt tool opt-outs over the provider policy (%#)', async (policy) => {
       mockFetchWithCache.mockResolvedValue(functionCallResponse('interaction-1') as any);
       const getWeather = vi.fn();
       const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
         config: {
           apiKey: 'test-key',
           tools: [weatherTool],
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+          passthrough: { tool_config: { function_calling_config: { mode: 'AUTO' } } },
           functionToolCallbacks: { get_weather: getWeather },
         },
       });
 
       await provider.callApi('Weather in Paris?', {
-        prompt: { config: { tool_choice: 'none' } },
+        prompt: { config: policy },
       } as any);
 
       expect(getWeather).not.toHaveBeenCalled();
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(requestBody(0)).not.toHaveProperty('tools');
+      expect(requestBody(0)).not.toHaveProperty('tool_config');
+      expect(requestBody(0)).not.toHaveProperty('toolConfig');
       expect(requestBody(0).generation_config.tool_choice).toBe('none');
     });
 

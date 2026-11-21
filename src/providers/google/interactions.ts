@@ -822,9 +822,11 @@ function interactionFunctions(tools: unknown[]): FunctionDeclaration[] {
 }
 
 /** Map a Gemini function-calling policy onto Interactions `tool_choice`. NONE is handled separately. */
-function getInteractionToolChoice(config: CompletionOptions, includeAuto: boolean): unknown {
-  const { mode, allowedFunctionNames } =
-    resolveGoogleToolConfig(config).toolConfig?.functionCallingConfig ?? {};
+function getInteractionToolChoice(
+  policy: ReturnType<typeof resolveGoogleToolConfig>,
+  includeAuto: boolean,
+): unknown {
+  const { mode, allowedFunctionNames } = policy.toolConfig?.functionCallingConfig ?? {};
   if (mode === 'NONE') {
     return undefined;
   }
@@ -1100,7 +1102,12 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (this.modelName === 'gemini-omni-1.1-flash') {
       config.vertexai = false;
     }
-    const { toolsDisabled } = resolveGoogleToolConfig(config);
+    // Resolve aliases within each layer before applying the prompt's policy.
+    const providerPolicy = resolveGoogleToolConfig(this.config);
+    const promptPolicy = resolveGoogleToolConfig(promptConfig ?? {});
+    const { toolsDisabled } = promptPolicy.toolConfig?.functionCallingConfig?.mode
+      ? promptPolicy
+      : providerPolicy;
     const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const providerPassthrough = this.config.passthrough || {};
     const promptPassthrough = promptConfig?.passthrough || {};
@@ -1309,13 +1316,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const promptSetsToolPolicy =
-      promptConfig?.tool_choice !== undefined ||
-      promptConfig?.toolConfig !== undefined ||
-      promptConfig?.tool_config !== undefined;
-    const providerToolChoice = promptSetsToolPolicy
+    const providerToolChoice = promptPolicy.toolConfig
       ? undefined
-      : getInteractionToolChoice(this.config, false);
+      : getInteractionToolChoice(providerPolicy, false);
     const providerGenerationConfigValue = {
       ...(this.config.maxOutputTokens === undefined
         ? {}
@@ -1333,7 +1336,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(isVideoModel || isTranscriptionModel ? {} : { tool_choice: providerToolChoice }),
       ...(this.config.generationConfig || {}),
     };
-    const promptToolChoice = getInteractionToolChoice(promptConfig || {}, true);
+    const promptToolChoice = getInteractionToolChoice(promptPolicy, true);
     const promptGenerationConfigValue = {
       ...(promptConfig?.maxOutputTokens === undefined
         ? {}
@@ -1420,6 +1423,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
             field !== 'input' &&
             field !== 'store' &&
             field !== 'safety_settings' &&
+            field !== 'toolConfig' &&
+            field !== 'tool_config' &&
             field !== 'tools' &&
             !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field),
         ),
