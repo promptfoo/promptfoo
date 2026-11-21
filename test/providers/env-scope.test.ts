@@ -679,6 +679,20 @@ describe('provider environment scopes', () => {
     });
     expect(endpoint(target)).toBe('https://gateway.example.invalid/v1');
   });
+  it.each(['google:gemini-omni-flash-preview', 'google:interactions:gemini-omni-1.2-flash'])(
+    '%s with vertexai keeps Vertex selector aliases in their selected scope',
+    (route) => {
+      const merged = mergeProviderEnv(
+        { id: route, config: { vertexai: true } },
+        { VERTEX_PROJECT_ID: 'suite-project', VERTEX_REGION: 'suite-region' },
+        { GOOGLE_CLOUD_PROJECT: 'provider-project', GOOGLE_CLOUD_LOCATION: 'provider-region' },
+      );
+      expect(merged).toEqual({
+        GOOGLE_CLOUD_PROJECT: 'provider-project',
+        GOOGLE_CLOUD_LOCATION: 'provider-region',
+      });
+    },
+  );
   it.each(['vertex:gemini-omni-flash-preview', 'vertex:live:gemini-live'])(
     '%s keeps routing selector aliases in their selected scope',
     (route) => {
@@ -988,6 +1002,7 @@ describe('provider environment scopes', () => {
       [
         'gemini-omni-flash-preview',
         'gemini-omni-1.1-flash',
+        'gemini-omni-1.2-flash',
         'gemini-robotics-er-2-preview',
       ].flatMap((model) => [`${prefix}:${model}`, `${prefix}:interactions:${model}`]),
     ),

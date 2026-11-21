@@ -5,6 +5,7 @@ const GEMINI_ROBOTICS_STANDARD_MODEL = 'gemini-robotics-er-2-preview';
 const NATIVE_INTERACTIONS_MODELS = new Set([
   'gemini-omni-flash-preview',
   'gemini-omni-1.1-flash',
+  'gemini-omni-1.2-flash',
   'gemini-3.5-transcribe',
   GEMINI_ROBOTICS_STANDARD_MODEL,
 ]);
@@ -109,7 +110,11 @@ export const googleProviderFactories: ProviderFactory[] = [
       validateGoogleModelRoute(routedModelName, explicitServiceType);
       if (
         explicitServiceType === 'interactions' &&
-        !['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(routedModelName)
+        ![
+          'gemini-omni-flash-preview',
+          'gemini-omni-1.1-flash-preview',
+          'gemini-omni-1.2-flash',
+        ].includes(routedModelName)
       ) {
         throw new Error(
           `The Vertex Interactions provider does not support model "${routedModelName}".`,
@@ -122,6 +127,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       if (
         modelName === 'gemini-omni-flash-preview' ||
         modelName === 'gemini-omni-1.1-flash-preview' ||
+        modelName === 'gemini-omni-1.2-flash' ||
         modelName === 'gemini-robotics-er-2-preview'
       ) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');

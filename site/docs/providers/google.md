@@ -290,7 +290,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
 | Interactions API                                              | File transcription, Gemini 4 Argon and Hydrogen, Gemini Omni video, and Gemini Robotics ER                                                                |
 | [Decisions API](#gemini-decisions-api)                        | Yes/no probabilities, classifications, and ordered scores through `google:decisions:gemini-decision-1`                                                    |
-| Video generation                                              | Gemini Omni uses Interactions (`google:gemini-omni-1.1-flash`). For Veo, use the Vertex long-running prediction API (`vertex:video:`).                    |
+| Video generation                                              | Gemini Omni uses Interactions (`google:gemini-omni-1.2-flash`). For Veo, use the Vertex long-running prediction API (`vertex:video:`).                    |
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
 | Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
 | File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                        |
@@ -388,7 +388,8 @@ Use distinct serving models when comparing results. Google can redirect a Gemini
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
 - `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
-- `google:gemini-omni-1.1-flash` - Gemini Omni Flash for conversational video generation and editing via the Interactions API
+- `google:gemini-omni-1.2-flash` - [Gemini Omni 1.2 Flash](#video-generation-models-gemini-omni-flash) for conversational video generation, editing, and extension via the Interactions API ($1.50/1M input, $9/1M text output, $12/1M video output)
+- `google:gemini-omni-1.1-flash` - Previous Gemini Omni Flash model; Google routes its requests to `gemini-omni-1.2-flash` from December 3, 2026
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
@@ -578,17 +579,28 @@ Set `config.passthrough.generation_config.transcription_config` to pass Google's
 
 ### Video Generation Models (Gemini Omni Flash)
 
-Use `google:gemini-omni-1.1-flash` to generate video through the Gemini Interactions API. The Gemini API retired `gemini-omni-flash-preview`. Vertex AI has a separate model ID, `vertex:gemini-omni-1.1-flash-preview`; set `region: global` and use your Vertex project credentials. [Gemini Omni model card](https://ai.google.dev/gemini-api/docs/models/gemini-omni-flash) · [Vertex Omni model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/omni-1-1-flash)
+Use `google:gemini-omni-1.2-flash` to generate video with native audio through the Gemini Interactions API. It generates 3 to 15 seconds of video (3 to 10 seconds for first- and last-frame interpolation and for each extension turn, up to 30 seconds in total) and accepts up to 6 reference images. The Gemini API retired `gemini-omni-flash-preview`. On Vertex AI, use the same model ID, `vertex:gemini-omni-1.2-flash`, with `region: global` and your Vertex project credentials; Vertex deprecated `vertex:gemini-omni-1.1-flash-preview`. [Gemini Omni model card](https://ai.google.dev/gemini-api/docs/models/gemini-omni-flash) · [Vertex Omni model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/omni-1-2-flash)
 
 ```yaml
 providers:
-  - google:gemini-omni-1.1-flash
+  - id: google:gemini-omni-1.2-flash
+    config:
+      passthrough:
+        response_format:
+          type: video
+          duration: 4s
+          resolution: 360p
+          aspect_ratio: '16:9'
 
 prompts:
   - 'Generate a short video of autumn leaves floating down a stream.'
 ```
 
-Promptfoo stores the generated video in blob storage. To edit it in a later Gemini API request, set `store: true` on the first request and pass the returned `metadata.interactionId` as `previousInteractionId` on the next. Vertex supports single requests through this adapter. [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-omni-1.1-flash)
+Without `duration`, Google generates a 10-second video. `resolution` accepts `360p`, `720p` (default), `1080p`, or `4k`. A `passthrough.response_format` replaces the format that Promptfoo builds from `aspectRatio`, so set `aspect_ratio` inside it. Google rejects durations outside the model's range; `gemini-omni-1.1-flash` accepts 3 to 10 seconds.
+
+Promptfoo stores the generated video in blob storage. To edit it in a later Gemini API request, set `store: true` on the first request and pass the returned `metadata.interactionId` as `previousInteractionId` on the next. Vertex supports single requests through this adapter.
+
+Promptfoo prices each response from the token counts the API reports. Gemini Omni 1.2 Flash costs $1.50/1M input tokens, $9/1M text and thinking output tokens, and $12/1M video output tokens. A second of video uses 1,931 output tokens at 360p, 5,792 at 720p, 8,688 at 1080p, and 17,376 at 4K, so 720p costs about $0.07 per second. `gemini-omni-1.1-flash` bills video output at $17.50/1M tokens until December 3, 2026, when Google routes it to `gemini-omni-1.2-flash` at 1.2 rates. [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-omni-1.2-flash)
 
 ### Gemini Robotics ER
 
@@ -636,7 +648,7 @@ for capability details and safety guidance.
 
 ### Video Generation Models (Veo)
 
-The Gemini Developer API retired the Veo preview models. Use `google:gemini-omni-1.1-flash` for video generation through the Interactions API, or use Veo on Vertex AI. [Google’s video migration guide](https://ai.google.dev/gemini-api/docs/video)
+The Gemini Developer API retired the Veo preview models. Use `google:gemini-omni-1.2-flash` for video generation through the Interactions API, or use Veo on Vertex AI. [Google’s video migration guide](https://ai.google.dev/gemini-api/docs/video)
 
 #### Available Models
 

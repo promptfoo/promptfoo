@@ -276,6 +276,12 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       videoOutput: 17.5 / 1e6,
     },
   ),
+  ...modelsWithCost(['gemini-omni-1.2-flash'], {
+    input: 1.5 / 1e6,
+    output: 9.0 / 1e6,
+    audioInput: 1.5 / 1e6,
+    videoOutput: 12.0 / 1e6,
+  }),
   ...modelsWithCost(['gemini-3.5-live-translate-preview'], {
     input: 3.5 / 1e6,
     output: 21.0 / 1e6,

@@ -4127,6 +4127,46 @@ describe('util', () => {
       expect(cost).toBeCloseTo((1_000 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6, 12);
     });
 
+    it.each([false, true])(
+      'should use the 1.2 video-output rate for gemini-omni-1.2-flash (vertex: %s)',
+      (vertex) => {
+        const cost = calculateGoogleCost(
+          'gemini-omni-1.2-flash',
+          {},
+          1_000,
+          600,
+          vertex,
+          undefined,
+          undefined,
+          500,
+        );
+        expect(cost).toBeCloseTo((1_000 * 1.5 + 100 * 9 + 500 * 12) / 1e6, 12);
+      },
+    );
+
+    it('bills Gemini API gemini-omni-1.1-flash at 1.2 rates from the December 3, 2026 cutover', () => {
+      const cost = (vertex = false) =>
+        calculateGoogleCost(
+          'gemini-omni-1.1-flash',
+          {},
+          1_000,
+          600,
+          vertex,
+          undefined,
+          undefined,
+          500,
+        );
+      const rate11 = (1_000 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6;
+      const rate12 = (1_000 * 1.5 + 100 * 9 + 500 * 12) / 1e6;
+
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 3) - 1);
+      expect(cost()).toBeCloseTo(rate11, 12);
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 3));
+      expect(cost()).toBeCloseTo(rate12, 12);
+      // Vertex has its own lifecycle and is not covered by the Gemini API redirect.
+      expect(cost(true)).toBeCloseTo(rate11, 12);
+    });
+
     it('should calculate cost for gemini-3.1-flash-live-preview', () => {
       const cost = calculateGoogleCost('gemini-3.1-flash-live-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.003, 10);
