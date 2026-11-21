@@ -196,6 +196,7 @@ export class OTLPTracingExporter implements TracingExporter {
   private getSpanAttributes(span: Span<any>): Record<string, unknown> {
     const data = span.spanData;
     const attributes: Record<string, unknown> = {
+      __proto__: null,
       'openai.agents.span_type': data.type,
     };
 
@@ -333,7 +334,7 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     for (const [key, value] of structuredAttributeEntries(data.data)) {
-      attributes[key] = sanitizeAttributeValue(value);
+      attributes[key] = value;
     }
 
     const command = commandToString(
@@ -358,7 +359,7 @@ export class OTLPTracingExporter implements TracingExporter {
         continue;
       }
 
-      attributes[`agent.${key}`] = sanitizeAttributeValue(value);
+      attributes[`agent.${key}`] = value;
     }
   }
 
@@ -373,20 +374,19 @@ export class OTLPTracingExporter implements TracingExporter {
         return {
           key: sanitizeCredentialText(key),
           value: this.valueToOTLP(
-            preserveTraceLinkage ? value : sanitizeAttributeByKey(key, value),
-            preserveTraceLinkage,
+            preserveTraceLinkage ? value : sanitizeAttributeByKey(key, value, attributes),
           ),
         };
       });
   }
 
-  private valueToOTLP(value: unknown, preserveTraceLinkage = false): any {
+  private valueToOTLP(value: unknown): any {
     if (value === null || value === undefined) {
       return { stringValue: '' };
     }
 
     if (typeof value === 'string') {
-      return { stringValue: preserveTraceLinkage ? value : sanitizeSerializedAttribute(value) };
+      return { stringValue: value };
     }
 
     if (typeof value === 'number') {
@@ -409,7 +409,7 @@ export class OTLPTracingExporter implements TracingExporter {
       return { stringValue: sanitizeSerializedAttribute(safeJsonStringify(value)) };
     }
 
-    return { stringValue: String(value) };
+    return { stringValue: sanitizeCredentialText(String(value)) };
   }
 
   private hexToBase64(hex: string, kind: 'trace' | 'span'): string {
@@ -560,7 +560,9 @@ function commandToString(value: unknown): string | undefined {
   return String(value).trim() || undefined;
 }
 
-function sanitizeSerializedAttribute(value: unknown, headerPairs = false): string {
+type AttributeContext = 'headers' | 'curl' | 'operands' | undefined;
+
+function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext): string {
   if (typeof value !== 'string') {
     return '<redacted>';
   }
@@ -579,7 +581,7 @@ function sanitizeSerializedAttribute(value: unknown, headerPairs = false): strin
       const parsed = parseStructuredJson(trimmed);
       if (isRecord(parsed) || Array.isArray(parsed)) {
         // Parsing can discard earlier duplicate fields that still contain secrets in the source.
-        return JSON.stringify(sanitizeStructuredAttribute(parsed, false, headerPairs));
+        return JSON.stringify(sanitizeStructuredAttribute(parsed, context));
       }
     } catch (error) {
       if (error instanceof RangeError) {
@@ -589,10 +591,10 @@ function sanitizeSerializedAttribute(value: unknown, headerPairs = false): strin
     }
   }
 
-  if (headerPairs && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
-    return '<redacted>'; // A truncated header list can still contain credentials.
+  if (context && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
+    return '<redacted>'; // A truncated header or argument list can still contain credentials.
   }
-  return sanitizeCredentialText(value);
+  return sanitizeCredentialText(value, true, context);
 }
 
 function parseStructuredJson(value: string): unknown {
@@ -608,7 +610,11 @@ function parseStructuredJson(value: string): unknown {
   });
 }
 
-function sanitizeCredentialText(value: string, inspectEncoding = true): string {
+function sanitizeCredentialText(
+  value: string,
+  inspectEncoding = true,
+  context?: AttributeContext,
+): string {
   if (value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
     return '<redacted>';
   }
@@ -696,11 +702,11 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
   const command = value.replace(/\\\r?\n/g, '');
-  if (containsCurl(command)) {
+  if (context === 'curl' || containsCurl(command)) {
     if (SHELL_EXPANSION.test(command)) {
       return '<redacted>'; // Variable and command expansion cannot be classified safely.
     }
-    const redactCurl = curlArgumentRedactor();
+    const redactCurl = curlArgumentRedactor(context);
     value = command.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
   }
   let match: RegExpExecArray | null;
@@ -832,19 +838,23 @@ function containsCurl(text: string, plain = unquoteShellWord(text)) {
   return /\bcurl\b/i.test(text) || /\bcurl\b/i.test(plain);
 }
 
-// Recognize curl after wrappers and command separators in a single pass.
-function curlArgumentRedactor() {
-  let curl = false;
-  let ambiguous = false;
+// These programs take search patterns or paths as operands. Treat unknown
+// programs conservatively since they may launch curl (e.g. timeout or sudo).
+const FILE_COMMAND = /(?:^|[/\\])(?:rg|ag|[ef]?grep|findstr|ls)(?:\.exe)?$/i;
+const COMMAND_PREFIX =
+  /^(?:\w+=[\s\S]*|-i|--ignore-environment|--|(?:.*[/\\])?(?:env|command|exec|git))$/;
+
+function curlArgumentRedactor(context?: AttributeContext) {
+  let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
+    context === 'operands' || context === 'curl' ? context : 'start';
   let maskNext = false;
   return (word: unknown) => {
     if (typeof word === 'string' && /^[;&|\r\n]+$/.test(word)) {
-      curl = false;
-      ambiguous = false;
+      mode = 'start';
       maskNext = false;
       return;
     }
-    if (maskNext || ambiguous) {
+    if (maskNext || mode === 'expanded') {
       maskNext = false;
       return '<redacted>';
     }
@@ -852,18 +862,23 @@ function curlArgumentRedactor() {
       return;
     }
     const arg = unquoteShellWord(word);
+    if (mode === 'start' && !COMMAND_PREFIX.test(arg)) {
+      mode = FILE_COMMAND.test(arg) || FILE_COMMAND.test(word) ? 'operands' : 'unknown';
+    }
     if (containsCurl(word, arg)) {
       // A quoted shell program can hide both the option and its operand in one word.
       if (/\s/.test(arg) && arg.includes('-')) {
         return '<redacted>';
       }
-      curl = true;
+      if (mode !== 'operands') {
+        mode = 'curl';
+      }
     }
-    if (!curl) {
+    if (mode !== 'curl') {
       return;
     }
     if (SHELL_EXPANSION.test(arg)) {
-      ambiguous = true;
+      mode = 'expanded';
       return '<redacted>';
     }
     // curl permits short options without operands before the credential flag.
@@ -890,17 +905,17 @@ function hasCredentialNamedPayload(value: string): boolean {
     }
   }
   // Never cross another '<'. Quoted attributes can contain '>' and span lines.
-  const hasEndTag = value.includes('</') || value.includes('/>');
   for (const match of value.matchAll(/<((?:[^<>"']|"[^"<]*"|'[^'<]*')*)>/g)) {
     const tag = match[1];
-    // Preserve generic types such as Promise<Session> outside markup.
-    if (!hasEndTag && /[\w$]/.test(value[match.index - 1] ?? '')) {
+    // An adjacent type parameter such as Promise<Session> can coexist
+    // with JSX. Real elements also expose their name on the closing tag.
+    if (/[\w$]/.test(value[match.index - 1] ?? '') && !/[=/:]/.test(tag)) {
       continue;
     }
     if (['redacted', 'REDACTED_API_KEY', 'REDACTED_AWS_KEY'].includes(tag)) {
       continue;
     }
-    const name = tag.match(/^(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b/)?.[1];
+    const name = tag.match(/^\/?(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b/)?.[1];
     if (name && isCredentialAttributeKey(name)) {
       return true;
     }
@@ -1076,7 +1091,11 @@ function isCredentialName(key: string): boolean {
   });
 }
 
-function sanitizeAttributeByKey(key: string, value: unknown): unknown {
+function sanitizeAttributeByKey(
+  key: string,
+  value: unknown,
+  source?: Record<string, unknown>,
+): unknown {
   try {
     if (isCredentialAttributeKey(key) || typeof value === 'function' || ArrayBuffer.isView(value)) {
       return '<redacted>';
@@ -1084,11 +1103,12 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
     if (value instanceof Date) {
       return new Date(Date.prototype.getTime.call(value));
     }
-    if (typeof value === 'string' && isHeaderContainer(key)) {
-      return sanitizeSerializedAttribute(value, true);
+    const context = attributeContext(key, source);
+    if (typeof value === 'string') {
+      return sanitizeSerializedAttribute(value, context);
     }
     if (Array.isArray(value) || isRecord(value)) {
-      return sanitizeStructuredAttribute(value, false, isHeaderContainer(key));
+      return sanitizeStructuredAttribute(value, context);
     }
     return value;
   } catch {
@@ -1096,8 +1116,31 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   }
 }
 
-function isHeaderContainer(key: string): boolean {
-  return /headers?$/i.test(key);
+function attributeContext(key: string, source?: Record<string, unknown>): AttributeContext {
+  if (/headers?$/i.test(key)) {
+    return 'headers';
+  }
+  const args = /^(.*\.)?(?:argv|args|arguments|command_args)$/i.exec(key);
+  if (!args || !source) {
+    return;
+  }
+  // Commands and argument lists can be separate siblings, including process.*
+  // attributes. curl takes precedence when different aliases conflict.
+  let context: AttributeContext;
+  const fields = ['command', 'cmd', 'program', 'executable', 'executable.path', 'executable.name'];
+  for (const field of fields) {
+    const value = source[(args[1] ?? '') + field];
+    const program = Array.isArray(value) ? value[0] : value;
+    if (typeof program === 'string') {
+      if (program.length > MAX_STRUCTURED_ATTRIBUTE_BYTES || containsCurl(program)) {
+        return 'curl';
+      }
+      if (FILE_COMMAND.test(unquoteShellWord(program)) || FILE_COMMAND.test(program)) {
+        context = 'operands';
+      }
+    }
+  }
+  return context;
 }
 
 function isCredentialPairValue(
@@ -1172,8 +1215,7 @@ function isJwe(value: unknown, budget: { remaining: number }): boolean {
 
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
-  normalizeScalars = false,
-  headerPairs = false,
+  context?: AttributeContext,
 ): Record<string, unknown> | unknown[] | string {
   try {
     if (
@@ -1182,7 +1224,7 @@ function sanitizeStructuredAttribute(
     ) {
       return '<redacted>';
     }
-    return sanitizeStructuredAttributeValue(value, normalizeScalars, headerPairs);
+    return sanitizeStructuredAttributeValue(value, context);
   } catch {
     return '<redacted>';
   }
@@ -1190,8 +1232,7 @@ function sanitizeStructuredAttribute(
 
 function sanitizeStructuredAttributeValue(
   value: Record<string, unknown> | unknown[],
-  normalizeScalars: boolean,
-  headerPairs: boolean,
+  context: AttributeContext,
 ): Record<string, unknown> | unknown[] | string {
   const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
   if (isJwe(value, budget)) {
@@ -1203,11 +1244,11 @@ function sanitizeStructuredAttributeValue(
     source: StructuredValue;
     target: StructuredValue;
     depth: number;
-    headerPairs: boolean;
-  }> = [{ source: value, target: root, depth: 0, headerPairs }];
+    context: AttributeContext;
+  }> = [{ source: value, target: root, depth: 0, context }];
 
   while (stack.length > 0) {
-    const { source, target, depth, headerPairs: sourceHeaders } = stack.pop()!;
+    const { source, target, depth, context } = stack.pop()!;
     // Array holes also consume work when JSON.stringify serializes the copy.
     if (Array.isArray(source)) {
       budget.remaining -= source.length;
@@ -1216,7 +1257,9 @@ function sanitizeStructuredAttributeValue(
       }
       (target as unknown[]).length = source.length;
     }
-    const redactCurl = Array.isArray(source) ? curlArgumentRedactor() : undefined;
+    const headers = context === 'headers' && Array.isArray(source);
+    const fields = Array.isArray(source) ? undefined : source;
+    const redactCurl = fields ? undefined : curlArgumentRedactor(context);
     for (const [key, value] of structuredAttributeEntries(source)) {
       if (
         --budget.remaining < 0 ||
@@ -1227,7 +1270,7 @@ function sanitizeStructuredAttributeValue(
       }
 
       const entry = redactCurl?.(value) ?? value;
-      const nestedHeaders = isHeaderContainer(key) || (sourceHeaders && Array.isArray(source));
+      const nestedContext = headers ? 'headers' : attributeContext(key, fields);
       let sanitized: unknown;
       if (
         typeof entry === 'function' ||
@@ -1235,13 +1278,13 @@ function sanitizeStructuredAttributeValue(
         ((isRecord(entry) || Array.isArray(entry)) &&
           !(entry instanceof Date) &&
           typeof (entry as Record<string, unknown>).toJSON === 'function') ||
-        isCredentialPairValue(source, key, sourceHeaders) ||
+        isCredentialPairValue(source, key, headers) ||
         isCredentialAttributeKey(key) ||
         isPrivateJwkParameter(source, key) ||
         isJwe(entry, budget)
       ) {
         sanitized = '<redacted>';
-      } else if (!normalizeScalars && (losslessJson.isRawJSON?.(entry) || entry instanceof Date)) {
+      } else if (losslessJson.isRawJSON?.(entry) || entry instanceof Date) {
         sanitized = entry instanceof Date ? new Date(Date.prototype.getTime.call(entry)) : entry;
       } else if (isRecord(entry) || Array.isArray(entry)) {
         if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
@@ -1252,15 +1295,14 @@ function sanitizeStructuredAttributeValue(
             source: entry,
             target: child,
             depth: depth + 1,
-            headerPairs: nestedHeaders,
+            context: nestedContext,
           });
           sanitized = child;
         }
+      } else if (typeof entry === 'string') {
+        sanitized = sanitizeSerializedAttribute(entry, nestedContext);
       } else {
-        sanitized = normalizeScalars ? sanitizeAttributeValue(entry) : entry;
-        if (typeof sanitized === 'string') {
-          sanitized = sanitizeSerializedAttribute(sanitized, nestedHeaders);
-        }
+        sanitized = typeof entry === 'bigint' ? String(entry) : entry;
       }
 
       const sanitizedKey = sanitizeSerializedAttribute(key);
@@ -1292,32 +1334,6 @@ function* structuredAttributeEntries(
       }
     }
   }
-}
-
-function sanitizeAttributeValue(value: unknown): unknown {
-  if (typeof value === 'function') {
-    return '<redacted>';
-  }
-
-  if (
-    value === undefined ||
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-
-  if (ArrayBuffer.isView(value)) {
-    return '<redacted>';
-  }
-
-  if (Array.isArray(value) || isRecord(value)) {
-    return sanitizeStructuredAttribute(value, true);
-  }
-
-  return String(value);
 }
 
 function safeJsonStringify(value: unknown): string {

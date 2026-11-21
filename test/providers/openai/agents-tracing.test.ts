@@ -32,6 +32,10 @@ function getAttributes(span: any): Record<string, unknown> {
   );
 }
 
+function wireStrings(...values: string[]) {
+  return { arrayValue: { values: values.map((stringValue) => ({ stringValue })) } };
+}
+
 function createJwe(
   protectedHeader: Record<string, string> | null = { alg: 'dir', enc: 'A256GCM' },
 ) {
@@ -293,7 +297,7 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(formats)('preserves unrelated command options after curl in %s', async (format) => {
-    const cmd = ['curl', 'https://example.test', '&&', 'git', 'push', '-u', 'origin', 'main'];
+    const cmd = 'curl https://example.test && rg curl -u src ; git push -u origin main'.split(' ');
     const { attributes, payload } = await exportCustomData(
       {
         cmd,
@@ -303,9 +307,7 @@ describe('OTLPTracingExporter', () => {
       format,
     );
     expect(JSON.stringify(payload)).not.toContain('opaque');
-    expect(attributes.cmd).toEqual({
-      arrayValue: { values: cmd.map((stringValue) => ({ stringValue })) },
-    });
+    expect(attributes.cmd).toEqual(wireStrings(...cmd));
     expect(attributes.command).toBe(cmd.join(' '));
     expect(attributes.chained).toBe('curl -u <redacted> https://host;git push -u origin main');
     expect(attributes.lines).toContain('git push -u origin main');
@@ -329,6 +331,29 @@ describe('OTLPTracingExporter', () => {
       );
       expect(JSON.stringify(payload)).not.toContain('opaque/value');
       expect(attributes.publicText).toBe(publicText);
+    },
+  );
+
+  it.each(formats)(
+    'uses sibling executable information for split arguments in %s',
+    async (format) => {
+      const args = ['-u', 'bot:opaque/value', 'https://host'];
+      const search = { program: 'rg', args: ['curl', '-u', 'src'] };
+      const { attributes, payload } = await exportCustomData(
+        {
+          cmd: 'curl',
+          args,
+          nested: { executable: '/usr/bin/curl', arguments: args.join(' ') },
+          serialized: JSON.stringify({ command: 'curl', argv: args }),
+          search,
+          text: 'env -i rg curl -u src',
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque');
+      expect(attributes.args).toEqual(wireStrings('-u', '<redacted>', 'https://host'));
+      expect(attributes.search).toBe(JSON.stringify(search));
+      expect(attributes.text).toBe('env -i rg curl -u src');
     },
   );
 
@@ -367,33 +392,17 @@ describe('OTLPTracingExporter', () => {
       );
       expect(attributes.command).toBe('git push -u origin main');
       expect(attributes.gitText).toBe('git push -u origin main');
-      expect(attributes.curlArgs).toEqual({
-        arrayValue: {
-          values: ['curl', '-u', '<redacted>'].map((stringValue) => ({ stringValue })),
-        },
-      });
+      expect(attributes.curlArgs).toEqual(wireStrings('curl', '-u', '<redacted>'));
       expect(attributes.curlText).toBe('curl -u <redacted>');
       expect(attributes.curlLong).toBe('curl --user <redacted>');
-      expect(attributes.wrappedCurl).toEqual({
-        arrayValue: {
-          values: ['env', 'curl', '-u', '<redacted>'].map((stringValue) => ({ stringValue })),
-        },
-      });
+      expect(attributes.wrappedCurl).toEqual(wireStrings('env', 'curl', '-u', '<redacted>'));
       expect(attributes.wrappedCurlText).toBe('env -i curl --user <redacted>');
       expect(attributes.wrappedIdentity).toBe('env docker exec --user root app id');
-      expect(attributes.identity).toEqual({
-        arrayValue: {
-          values: ['docker', 'exec', '--user', 'root', 'app', 'id'].map((stringValue) => ({
-            stringValue,
-          })),
-        },
-      });
+      expect(attributes.identity).toEqual(
+        wireStrings('docker', 'exec', '--user', 'root', 'app', 'id'),
+      );
       expect(attributes.identityText).toBe('docker exec --user root app id');
-      expect(attributes.requiredOption).toEqual({
-        arrayValue: {
-          values: ['client', '--password', '<redacted>'].map((stringValue) => ({ stringValue })),
-        },
-      });
+      expect(attributes.requiredOption).toEqual(wireStrings('client', '--password', '<redacted>'));
     },
   );
 
@@ -406,6 +415,8 @@ describe('OTLPTracingExporter', () => {
           singleQuote: `curl -H 'Cookie: fixture=value' https://example.test && echo done`,
           genericType: `rg 'Promise<Session>' src`,
           nestedType: 'const value: Promise<Array<Session>> = result;',
+          tsx: 'Promise<Session>;<div /> <b>Hi</b>',
+          xml: 'prefix<Session>private</Session>',
         },
         format,
       );
@@ -417,6 +428,8 @@ describe('OTLPTracingExporter', () => {
       );
       expect(attributes.genericType).toBe("rg 'Promise<Session>' src");
       expect(attributes.nestedType).toBe('const value: Promise<Array<Session>> = result;');
+      expect(attributes.tsx).toBe('Promise<Session>;<div /> <b>Hi</b>');
+      expect(attributes.xml).toBe('<redacted>');
     },
   );
 
@@ -523,9 +536,7 @@ describe('OTLPTracingExporter', () => {
       expect(attributes.sparse).toBe('<redacted>');
       expect(attributes.nested).toBe('<redacted>');
       expect(attributes.aggregate).toBe('<redacted>');
-      expect(attributes.ordinary).toEqual({
-        arrayValue: { values: [{ stringValue: 'first' }, { stringValue: 'last' }] },
-      });
+      expect(attributes.ordinary).toEqual(wireStrings('first', 'last'));
     },
   );
 
@@ -620,11 +631,7 @@ describe('OTLPTracingExporter', () => {
       expect(attributes.session_status).toBe('completed');
       expect(attributes.session_duration).toBe(42);
       expect(attributes.useSession).toBe(true);
-      expect(attributes.arguments).toEqual({
-        arrayValue: {
-          values: ['client', '--session-id', '<redacted>'].map((stringValue) => ({ stringValue })),
-        },
-      });
+      expect(attributes.arguments).toEqual(wireStrings('client', '--session-id', '<redacted>'));
       expect(attributes.credentials).toBe('<redacted>');
       expect(attributes.certificateContent).toBe('public certificate');
       expect(attributes.token_count).toBe(10);
@@ -1039,9 +1046,7 @@ describe('OTLPTracingExporter', () => {
         },
         format,
       );
-      expect(attributes.requestHeaders).toEqual({
-        arrayValue: { values: clean.map((stringValue) => ({ stringValue })) },
-      });
+      expect(attributes.requestHeaders).toEqual(wireStrings(...clean));
       expect(JSON.parse(attributes.responseHeaders as string)).toEqual(clean);
       for (const key of ['native', 'result']) {
         expect(JSON.parse(attributes[key] as string)).toEqual({
@@ -1866,27 +1871,12 @@ describe('OTLPTracingExporter', () => {
       expect(getAttributes(span).invocation).toBe(
         'deploy --dry-run --api-key=<redacted> --token-count 12',
       );
-      expect(getAttributes(span).dashPrefixedValue).toEqual({
-        arrayValue: {
-          values: [
-            { stringValue: 'deploy' },
-            { stringValue: '--password' },
-            { stringValue: '<redacted>' },
-            { stringValue: 'test-region' },
-          ],
-        },
-      });
-      expect(getAttributes(span).cmd).toEqual({
-        arrayValue: {
-          values: [
-            { stringValue: 'deploy' },
-            { stringValue: '--api-key' },
-            { stringValue: '<redacted>' },
-            { stringValue: '--region' },
-            { stringValue: 'test-region' },
-          ],
-        },
-      });
+      expect(getAttributes(span).dashPrefixedValue).toEqual(
+        wireStrings('deploy', '--password', '<redacted>', 'test-region'),
+      );
+      expect(getAttributes(span).cmd).toEqual(
+        wireStrings('deploy', '--api-key', '<redacted>', '--region', 'test-region'),
+      );
     },
   );
 
@@ -1937,9 +1927,7 @@ describe('OTLPTracingExporter', () => {
         'trace.metadata.recorded_at': dateText,
         'trace.metadata.nested': JSON.stringify({ date }),
         'trace.metadata.serialized': '<redacted>',
-        'trace.metadata.list': {
-          arrayValue: { values: [{ stringValue: dateText }, { stringValue: '<redacted>' }] },
-        },
+        'trace.metadata.list': wireStrings(dateText, '<redacted>'),
       });
       expect(serialized.toJSON).not.toHaveBeenCalled();
       expect(JSON.stringify(payload)).not.toContain(jwt);
@@ -1992,9 +1980,7 @@ describe('OTLPTracingExporter', () => {
         auth_method: 'client_secret_post',
         auth_status: 'authenticated',
         auth_enabled: true,
-        token_endpoint_auth_methods_supported: {
-          arrayValue: { values: [{ stringValue: 'client_secret_post' }] },
-        },
+        token_endpoint_auth_methods_supported: wireStrings('client_secret_post'),
         num_tokens: 12,
         tokens_used: 3,
         estimated_tokens: 15,
@@ -2155,7 +2141,6 @@ describe('OTLPTracingExporter', () => {
   ] as const)(
     'keeps $format span batches exportable when tool data is $shape',
     async ({ format, shape }) => {
-      const exporter = new OTLPTracingExporter();
       const deeplyNestedSecret = 'deeply-nested-credential';
       const oversizedInput = `[${'0,'.repeat(50_000)}${JSON.stringify({
         access_token: deeplyNestedSecret,
@@ -2168,47 +2153,24 @@ describe('OTLPTracingExporter', () => {
             JSON.stringify({ access_token: deeplyNestedSecret }) +
             ']'.repeat(5000) +
             '}';
-      const spans = [
-        {
-          type: 'trace.span',
-          traceId: 'trace_0123456789abcdef0123456789abcdef',
-          spanId: 'span_0123456789abcde0',
-          spanData: { type: 'function', name: 'nested_tool', input: unsafeInput },
-          traceMetadata: { 'promptfoo.otlp_format': format },
-          error: null,
-        },
-        {
-          type: 'trace.span',
-          traceId: 'trace_0123456789abcdef0123456789abcdef',
-          spanId: 'span_0123456789abcde1',
-          spanData: { type: 'function', name: 'healthy_tool', input: '{"accountId":"123"}' },
-          traceMetadata: { 'promptfoo.otlp_format': format },
-          error: null,
-        },
-      ];
-
       const parseSpy = shape === 'oversized' ? vi.spyOn(JSON, 'parse') : undefined;
       try {
-        await exporter.export(spans as any);
+        const payload = await exportSpans(format, [
+          { spanData: { type: 'function', name: 'nested_tool', input: unsafeInput } },
+          { spanData: { type: 'function', name: 'healthy_tool', input: '{"accountId":"123"}' } },
+        ]);
         if (parseSpy) {
-          expect(parseSpy).not.toHaveBeenCalledWith(unsafeInput);
+          expect(parseSpy.mock.calls.some(([text]) => text === unsafeInput)).toBe(false);
         }
+        const exportedSpans = payload.resourceSpans[0].scopeSpans[0].spans;
+        expect(exportedSpans).toHaveLength(2);
+        expect(JSON.stringify(exportedSpans)).not.toContain(deeplyNestedSecret);
+        expect(JSON.stringify(exportedSpans)).not.toContain('9223372036854776000');
+        expect(getAttributes(exportedSpans[0])['tool.arguments']).toContain('<redacted>');
+        expect(getAttributes(exportedSpans[1])['tool.arguments']).toBe('{"accountId":"123"}');
       } finally {
         parseSpy?.mockRestore();
       }
-
-      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
-      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
-      const payload =
-        format === 'protobuf'
-          ? await decodeExportTraceServiceRequest(body as Uint8Array)
-          : JSON.parse(body as string);
-      const exportedSpans = payload.resourceSpans[0].scopeSpans[0].spans;
-      expect(exportedSpans).toHaveLength(2);
-      expect(JSON.stringify(exportedSpans)).not.toContain(deeplyNestedSecret);
-      expect(JSON.stringify(exportedSpans)).not.toContain('9223372036854776000');
-      expect(getAttributes(exportedSpans[0])['tool.arguments']).toContain('<redacted>');
-      expect(getAttributes(exportedSpans[1])['tool.arguments']).toBe('{"accountId":"123"}');
     },
   );
 
