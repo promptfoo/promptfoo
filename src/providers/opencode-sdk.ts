@@ -26,6 +26,7 @@ import {
   isCredentialName,
   redactDiagnosticText,
 } from './providerLogging';
+import { waitForPromiseWithAbort } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -434,6 +435,7 @@ interface OpenCodeClient {
     ) => Promise<OpenCodeSdkResult<Record<string, unknown>>>;
     prompt: (
       parameters: Record<string, unknown>,
+      options?: { signal: AbortSignal },
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     messages: (
       parameters: Record<string, unknown>,
@@ -806,7 +808,10 @@ function addOpenCodeUrlCredentials(value: unknown, add: (value: unknown) => void
     add(safeDecodeURIComponent(part));
   }
   for (const parameter of parameters.split(/[?#&;]/).filter(Boolean)) {
-    const parameterValue = parameter.slice(parameter.indexOf('=') + 1);
+    // Bare query or fragment tokens can end in Base64 padding.
+    const parameterValue = /^[^=]+={1,2}$/.test(parameter)
+      ? parameter
+      : parameter.slice(parameter.indexOf('=') + 1);
     add(parameterValue);
     add(safeDecodeURIComponent(parameterValue));
     add(safeDecodeURIComponent(parameterValue.replace(/\+/g, ' ')));
@@ -2539,10 +2544,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
             throw new Error('OpenCode SDK client is not initialized');
           }
 
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop
-          // rather than letting it run to completion while we discard the result.
-          // session.abort is only on v2; v1 has no abort primitive, so we still
-          // honor cancellation locally via the response check below.
+          // Cancel the transport on both SDK versions and ask v2 to stop the remote session.
           const abortSignal = callOptions?.abortSignal;
           if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
             const abortParams = this.buildAbortSessionParameters(
@@ -2564,7 +2566,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
             abortSignal.addEventListener('abort', abortListener, { once: true });
           }
 
-          const response = await client.session.prompt(promptOptions);
+          const request = abortSignal
+            ? this.opencodeModule?.apiVersion === 'v2'
+              ? client.session.prompt(promptOptions, { signal: abortSignal })
+              : client.session.prompt({ ...promptOptions, signal: abortSignal })
+            : client.session.prompt(promptOptions);
+          const response = await waitForPromiseWithAbort(request, abortSignal);
 
           // The prompt has returned, so an abort from here on must not ask the
           // server to kill the session it already answered.

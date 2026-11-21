@@ -2964,45 +2964,35 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('abortSignal mid-flight cancellation', () => {
-    it('calls session.abort when the caller aborts during the prompt', async () => {
-      const controller = new AbortController();
-      const promptStarted = createDeferred<void>();
-      // The prompt mock waits for the abort signal itself, then returns a
-      // canned response — that mirrors how a real server completes after an
-      // abort request rather than hanging forever.
-      mockSessionPrompt.mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            promptStarted.resolve();
-            controller.signal.addEventListener(
-              'abort',
-              () =>
-                resolve(
-                  createMockPromptResponse([{ type: 'text', text: 'Discarded' }], {
-                    input: 1,
-                    output: 1,
-                  }),
-                ),
-              { once: true },
-            );
-          }),
-      );
-
-      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
-
-      const callPromise = provider.callApi('Test prompt', undefined, {
-        abortSignal: controller.signal,
-      });
-
-      await promptStarted.promise;
-      controller.abort();
-
-      const result = await callPromise;
-      expect(mockSessionAbort).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionID: 'test-session-123' }),
-      );
-      expect(result.error).toBe('OpenCode SDK call aborted');
-    });
+    it.each(['v1', 'v2'])(
+      'cancels an outstanding %s request even when remote abort cannot settle it',
+      async (version) => {
+        if (version === 'v1') {
+          const { importModule } = await import('../../src/esm');
+          vi.mocked(importModule).mockImplementation(createV1SdkImporter());
+        }
+        const controller = new AbortController();
+        const prompt = createDeferred<unknown>();
+        mockSessionPrompt.mockReturnValueOnce(prompt.promise);
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
+        const pending = provider.callApi('Test prompt', undefined, {
+          abortSignal: controller.signal,
+        });
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledOnce());
+        const [parameters, options] = mockSessionPrompt.mock.calls[0];
+        expect((version === 'v2' ? options : parameters).signal).toBe(controller.signal);
+        controller.abort();
+        await expect(pending).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        if (version === 'v2') {
+          expect(mockSessionAbort).toHaveBeenCalledWith(
+            expect.objectContaining({ sessionID: 'test-session-123' }),
+          );
+        } else {
+          expect(mockSessionAbort).not.toHaveBeenCalled();
+        }
+        prompt.resolve(createMockPromptResponse([{ type: 'text', text: 'late' }]));
+      },
+    );
 
     it('does not call session.abort when no signal is provided', async () => {
       const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
@@ -3887,6 +3877,19 @@ describe('OpenCodeSDKProvider', () => {
           keep: ['upstream echoed', 'useful context'],
         });
       });
+
+      it.each(['?dGVzdC1zZWNyZXQ=', '#dGVzdA=='])(
+        'redacts padded opaque URL credentials (%#)',
+        async (suffix) => {
+          const token = suffix.slice(1);
+          await expectRedacted({
+            config: { baseUrl: 'https://example.test/v1' + suffix },
+            message: 'echoed ' + token,
+            secrets: [token],
+            keep: ['echoed'],
+          });
+        },
+      );
 
       it('redacts short auth tokens and slash-escaped URLs from errors and logs', async () => {
         await expectRedacted({
