@@ -26,6 +26,36 @@ You can also create service accounts at the team level, which will allow you to 
 Only system admins can create service accounts.
 :::
 
+## Team Secrets (On-Prem)
+
+Before creating team secrets, a deployment administrator must configure `TEAM_SECRET_ENCRYPTION_KEY` in the Promptfoo server environment. Use the same persistent value for every server instance and preserve it with deployment backups. Without it, secret encryption and decryption fail.
+
+This deployment key is separate from the provider credentials stored in team secrets. Encrypted values become unreadable without the original key. Keep it unchanged when rotating a provider API key.
+
+Team secrets store encrypted provider credentials that can be reused within a team. Open the team's settings, select **Team Secrets**, and click **Create Secret**. Enter a name, value, and optional description. Names must be unique within the team.
+
+Select a team secret from the provider's API Key field. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
+
+Secret permissions are separate from provider permissions. **Read** lets users list secret metadata and select a saved credential. **Update** lets them reveal, copy, or change its value. Grant update access only to users trusted with the credential. Creating and deleting secrets require their respective permissions.
+
+To rotate a value without changing its references, use **Edit** in the Team Secrets table and enter the replacement value. For API-based rotation, find the secret ID with `GET /api/v1/teams/{teamId}/secrets`, then send `PATCH /api/v1/teams/{teamId}/secrets/{secretId}` with the replacement value. See your API host's `/static/openapi.json` for the schemas in your release.
+
+```json
+{ "value": "<replacement-provider-api-key>" }
+```
+
+Start a new scan to verify the replacement before revoking the old key with your model provider.
+
+The **References** column lists saved targets and enabled team inference-provider overrides that block deletion. Replace or remove those references first. Disabled overrides are omitted, so check and clear their references before disabling them.
+
+## Team Probe Limits (On-Prem)
+
+When the organization has a licensed probe limit, an organization admin can set **Probe limit** in the team's settings and click **Save Changes**. Leave it blank to apply only the organization limit. The sum of configured team caps cannot exceed the organization's licensed limit.
+
+The server checks recorded team usage when a job starts. With a limit of 100 probes, a job can still start at 100. Once usage exceeds 100, the server blocks new jobs. Running jobs can exceed the limit.
+
+For spending limits and alerts, use your model provider's billing controls.
+
 ## CLI Team Context
 
 When using the Promptfoo CLI with multiple teams, you can control which team context your operations use:
