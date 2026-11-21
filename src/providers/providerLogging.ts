@@ -41,6 +41,12 @@ export function isCredentialAttributeKey(key: string): boolean {
 }
 
 function isCredentialName(key: string): boolean {
+  // Java/Maven system properties and Gradle project properties attach a short
+  // option to the name. Preserve standalone spellings such as -Password.
+  const property = /^-[DP]\w/.test(key);
+  if (property && isCredentialName(key.slice(2))) {
+    return true;
+  }
   // Trace metadata and tool fields can be qualified. Use the shared registry
   // for the final field, including vendors' lowercase and fused spellings.
   const normalized = normalizeFieldName(key);
@@ -69,8 +75,11 @@ function isCredentialName(key: string): boolean {
     if (part === 'session' || part === 'sessionid') {
       return /(?:^(?:--?)?|\.)session(?:[._-]?id)?$/i.test(key);
     }
+    // For properties, token and signature qualifiers were already checked
+    // without the leading D or P (e.g. -Dinput.tokens).
     if (part === 'token' || part === 'tokens') {
       return (
+        !property &&
         !/^(?:used|counts?|usage|limit|budget|length|type|ids?|index|indices|positions?|masks?|endpoint|url|uri)$/.test(
           next,
         ) &&
@@ -82,30 +91,26 @@ function isCredentialName(key: string): boolean {
     if (part === 'assertion') {
       return previous === 'client' && !['type', 'types'].includes(next);
     }
-    if (
-      SECRET_FIELD_NAMES.has(part) ||
-      /^(?:cookies|passwords|passphrases|credential|apikeys|jwt|pgpassword)$/.test(part)
-    ) {
-      if (
-        part === 'auth' &&
-        ['type', 'method', 'methods', 'supported', 'status', 'enabled'].includes(next)
-      ) {
-        return false;
-      }
-      if (
-        part === 'signature' &&
-        (previous === 'function' ||
-          ['algorithm', 'method', 'type', 'version', 'format', 'scheme', 'encoding'].includes(next))
-      ) {
-        return false;
-      }
-      if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(next)) {
-        return false;
-      }
-      return true;
+    if (part === 'auth') {
+      return !['type', 'method', 'methods', 'supported', 'status', 'enabled'].includes(next);
+    }
+    if (part === 'authorization') {
+      return !['endpoint', 'url', 'uri'].includes(next);
+    }
+    if (part === 'signature') {
+      return (
+        !property &&
+        previous !== 'function' &&
+        !['algorithm', 'method', 'type', 'version', 'format', 'scheme', 'encoding'].includes(next)
+      );
+    }
+    if (part !== 'key' && part !== 'keys') {
+      return (
+        SECRET_FIELD_NAMES.has(part) ||
+        /^(?:cookies|passwords|passphrases|credential|apikeys|jwt|pgpassword)$/.test(part)
+      );
     }
     return (
-      (part === 'key' || part === 'keys') &&
       (!['algorithm', 'type', 'format', 'id'].includes(next) ||
         (previous === 'access' && next === 'id')) &&
       /^(?:api|access|subscription|private|client|ssl|tls|signing|encryption)$/.test(previous)

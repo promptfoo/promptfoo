@@ -697,30 +697,18 @@ function sanitizeCredentialText(
     return '<redacted>';
   }
 
-  const options =
-    /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
   const command = value.replace(/\\\r?\n/g, '');
-  if (context === 'curl' || containsCurl(command)) {
-    if (SHELL_EXPANSION.test(command)) {
+  const curl = context === 'curl' || containsCurl(command);
+  if (curl || command.includes('-')) {
+    const redact = argumentRedactor(context);
+    const masked = command.replace(COMMAND_WORDS, (word) => redact(word) ?? word);
+    if ((curl || masked !== command) && SHELL_EXPANSION.test(command)) {
       return '<redacted>'; // Variable and command expansion cannot be classified safely.
     }
-    const redactCurl = curlArgumentRedactor(context);
-    value = command.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
-  }
-  let match: RegExpExecArray | null;
-  let sanitized = '';
-  let copied = 0;
-  while ((match = options.exec(value))) {
-    const [, prefix, option, separator] = match;
-    if (isCredentialAttributeKey(option)) {
-      sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
-      copied = options.lastIndex;
-    } else {
-      // A boolean option can precede another option instead of a value.
-      options.lastIndex = match.index + prefix.length + option.length;
+    if (masked !== command) {
+      value = masked;
     }
   }
-  value = sanitized + value.slice(copied);
 
   return (
     redactQuotedCredentials(value)
@@ -849,14 +837,52 @@ function classifyExecutable(word: string, arg = unquoteShellWord(word)) {
   return FILE_COMMAND.test(arg) || FILE_COMMAND.test(word) ? 'operands' : 'unknown';
 }
 
-function curlArgumentRedactor(context?: AttributeContext) {
+const PROPERTY_OPTIONS = new Set(['-D', '-P', '--define', '--project-prop', '--system-prop']);
+
+function isCredentialProperty(assignment: string) {
+  const field = /^\s*([^\s=]+)=/.exec(assignment)?.[1];
+  return field !== undefined && isCredentialAttributeKey(field);
+}
+
+function credentialOption(arg: string, curl: boolean, property: boolean): string | undefined {
+  if (property && isCredentialProperty(arg)) {
+    return '';
+  }
+  if (curl) {
+    // curl permits short options without operands before the credential flag.
+    const flag =
+      /^(?:-[#0-46:aBfgGiIjJklLMnNOpqRsSvVZ]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
+        arg,
+      )?.[0];
+    if (flag) {
+      return flag;
+    }
+  }
+  for (const option of arg.matchAll(/(?:^|(?<=[\s=]))(--?[A-Za-z][\w.-]*)(=|(?=\s|$))/g)) {
+    if (
+      PROPERTY_OPTIONS.has(option[1]) &&
+      isCredentialProperty(arg.slice(option.index + option[0].length))
+    ) {
+      return '';
+    }
+    if (isCredentialAttributeKey(option[1])) {
+      // A nested shell script can be a single argument. Withhold it in full.
+      return option.index === 0 ? option[1] + option[2] : '';
+    }
+  }
+  return undefined;
+}
+
+function argumentRedactor(context?: AttributeContext) {
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
   let maskNext = false;
+  let property = false;
   return (word: unknown) => {
     if (typeof word === 'string' && /^[;&|\r\n]+$/.test(word)) {
       mode = 'start';
       maskNext = false;
+      property = false;
       return;
     }
     if (maskNext || mode === 'expanded') {
@@ -879,19 +905,13 @@ function curlArgumentRedactor(context?: AttributeContext) {
         mode = 'curl';
       }
     }
-    if (mode !== 'curl') {
-      return;
-    }
-    if (SHELL_EXPANSION.test(arg)) {
+    if (mode === 'curl' && SHELL_EXPANSION.test(arg)) {
       mode = 'expanded';
       return '<redacted>';
     }
-    // curl permits short options without operands before the credential flag.
-    const flag =
-      /^(?:-[#0-46:aBfgGiIjJklLMnNOpqRsSvVZ]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
-        arg,
-      )?.[0];
-    if (!flag) {
+    const flag = credentialOption(arg, mode === 'curl', property);
+    property = PROPERTY_OPTIONS.has(arg);
+    if (flag === undefined) {
       return;
     }
     if (arg !== flag || flag.endsWith('=')) {
@@ -1135,10 +1155,10 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     charge(array ? source.length : 0);
     const target = array ? new Array<unknown>(source.length) : {};
     const headers = array && context === 'headers';
-    const redactCurl = array ? curlArgumentRedactor(context) : undefined;
+    const redactArgument = array ? argumentRedactor(context) : undefined;
     for (const [key, value] of structuredAttributeEntries(source)) {
       charge(1, key.length + (typeof value === 'string' ? value.length : 0));
-      const entry = redactCurl?.(value) ?? value;
+      const entry = redactArgument?.(value) ?? value;
       const nested = headers ? 'headers' : attributeContext(key, array ? undefined : source);
       const sensitive =
         isCredentialAttributeKey(key) ||

@@ -307,6 +307,37 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)(
+    'classifies attached system and project property names in %s',
+    async (format) => {
+      const cmd = ['java', '-Dpassword=first;second opaque/marker', '-Dinput.tokens=42', 'Main'];
+      const { attributes, payload } = await exportCustomData(
+        {
+          cmd,
+          serialized: JSON.stringify(cmd),
+          shell: 'mvn "-DapiKey=prefix opaque/marker" -Dfile.encoding=UTF-8',
+          gradle: "gradle -Ptoken='prefix opaque/marker' check",
+          nested: "sh -c 'java -Dpassword=opaque/marker Main'",
+          jvm: 'JAVA_TOOL_OPTIONS="-Dpassword=opaque/marker"',
+          powershell: ['cmdlet', '-Dsn', 'opaque/marker', '-PasswordHash', 'opaque/marker'],
+          expansion: 'java -Dpassword=$(echo opaque/marker) Main',
+          options: 'gradle -Dorg.gradle.jvmargs="-Dpassword=opaque/marker"',
+          split: ['gradle', '--project-prop', 'token=prefix opaque/marker', 'check'],
+          define: 'mvn --define="db.password=prefix opaque/marker" --define=region=west',
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque/marker');
+      const clean = ['java', '-Dpassword=<redacted>', '-Dinput.tokens=42', 'Main'];
+      expect(attributes.cmd).toEqual(wireStrings(...clean));
+      expect(attributes.command).toBe(clean.join(' '));
+      expect(JSON.parse(attributes.serialized as string)).toEqual(clean);
+      expect(attributes.shell).toBe('mvn -DapiKey=<redacted> -Dfile.encoding=UTF-8');
+      expect(attributes.gradle).toBe('gradle -Ptoken=<redacted> check');
+      expect(attributes.define).toContain('--define=region=west');
+    },
+  );
+
   it.each(formats)('preserves unrelated command options after curl in %s', async (format) => {
     const cmd = 'curl https://example.test && rg curl -u src ; git push -u origin main'.split(' ');
     const { attributes, payload } = await exportCustomData(
