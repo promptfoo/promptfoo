@@ -1012,6 +1012,8 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
+When the provider does not supply latency, Promptfoo measures elapsed provider-call time with a monotonic clock, so wall-clock adjustments do not affect it. Provider-reported latency is used unchanged.
+
 Example:
 
 ```yaml
@@ -1532,7 +1534,9 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) compares generated text with one or more references. It combines exact word matches, Porter stems, and WordNet synonyms, then applies a word-order penalty. Use it when expected outputs allow variation in wording.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores an output against reference text using exact word matches, Porter stemming, and WordNet synonyms. It combines precision and recall with a penalty for fragmented word order.
+
+Use it for translation or other tasks where a reference answer exists and some wording variation is acceptable. METEOR measures lexical overlap, not factual accuracy or general semantic understanding.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
@@ -1540,7 +1544,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.1.2
+npm install natural@^8.2.6
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
@@ -1653,7 +1657,7 @@ F-score (also F1 score) is used for measuring classification accuracy when you n
 
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
-- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+- **Precision and recall**: When both false positives and false negatives matter
 
 See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 
