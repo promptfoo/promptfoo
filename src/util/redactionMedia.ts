@@ -138,7 +138,7 @@ function inspectMedia(
         return true;
       }
       for (const key in record) {
-        if (Object.hasOwn(record, key)) {
+        if (Object.prototype.hasOwnProperty.call(record, key)) {
           if (pending.length + inspected + 2 > MAX_MEDIA_NODES) {
             return true;
           }

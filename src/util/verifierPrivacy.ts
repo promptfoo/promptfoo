@@ -161,7 +161,7 @@ function* ownEntries(value: object): Generator<[string, unknown]> {
     requireBudget(value.length);
   }
   for (const key in value) {
-    if (Object.hasOwn(value, key)) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
       yield [key, (value as Dict)[key]];
     }
   }
