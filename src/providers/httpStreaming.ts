@@ -35,7 +35,9 @@ function createTextDetector(format?: StreamFormat): (chunk: string, final?: bool
     return (chunk) => /\S/.test(chunk);
   }
 
-  const detectText = Object.hasOwn(textDetectors, format) ? textDetectors[format] : () => false;
+  const detectText = Object.prototype.hasOwnProperty.call(textDetectors, format)
+    ? textDetectors[format]
+    : () => false;
   let lineParts: string[] = [];
   let dataLines: string[] = [];
   let eventBytes = 0;
