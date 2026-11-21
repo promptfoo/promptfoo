@@ -11,9 +11,11 @@ npm install --global --ignore-scripts @earendil-works/pi-coding-agent@0.99.1
 pi --list-models
 ```
 
-Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` in the shell that runs Promptfoo. From this example directory, run the eval.
+Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` in the shell that runs Promptfoo. Use a Promptfoo release that includes the Pi provider. To start from a fresh directory, run these commands.
 
 ```sh
+npx promptfoo@latest init --example provider-pi/model-comparison
+cd provider-pi/model-comparison
 npx promptfoo@latest eval
 ```
 
