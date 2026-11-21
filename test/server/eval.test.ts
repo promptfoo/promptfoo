@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database';
+import { updateSignalFile } from '../../src/database/signal';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -161,20 +162,6 @@ describe('eval routes', () => {
       expect(updatedEvalB.prompts[resultB.promptIdx].metrics).toEqual(originalEvalBMetrics);
     });
 
-    it('returns a JSON 500 response when rating storage fails', async () => {
-      const findByIdSpy = vi
-        .spyOn(EvalResult, 'findById')
-        .mockRejectedValueOnce(new Error('database unavailable'));
-
-      const res = await api
-        .post('/api/eval/eval-1/results/result-1/rating')
-        .send({ pass: true, score: 1 });
-
-      expect(res.status).toBe(500);
-      expect(res.body).toEqual({ error: 'Failed to submit rating' });
-      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
-    });
-
     it.each([
       { label: 'an object', componentResults: {} },
       { label: 'a string', componentResults: 'invalid' },
@@ -246,13 +233,11 @@ describe('eval routes', () => {
         expect(annotationRes.status).toBe(200);
         expect(annotationRes.body.gradingResult.componentResults).toEqual([
           human,
+          { pass: 'true' },
           ...(result.gradingResult.componentResults ?? []),
         ]);
         const annotatedEval = await Eval.findById(eval_.id);
-        expect(annotatedEval?.prompts[result.promptIdx].metrics).toEqual({
-          ...metrics,
-          assertPassCount: 2,
-        });
+        expect(annotatedEval?.prompts[result.promptIdx].metrics).toEqual(metrics);
       }
 
       const payload = createManualRatingPayload(result, false);
@@ -305,6 +290,17 @@ describe('eval routes', () => {
         SET grading_result = ${JSON.stringify(legacyGrade)}
         WHERE id = ${result.id}
       `);
+        const annotation = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send({
+            pass: result.success,
+            score: result.score,
+            comment: 'Reviewed',
+          });
+        expect(annotation.status).toBe(200);
+        expect(annotation.body.gradingResult.componentResults).toEqual(
+          legacyGrade.componentResults,
+        );
         const payload = {
           pass,
           score,
@@ -366,25 +362,33 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.reason).toContain('Manual result');
     });
 
-    it('persists the rated result before notifying through the eval save', async () => {
+    it('rolls back a score edit if saving totals fails and notifies only after a successful retry', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
-      const results = await eval_.getResults();
-      const result = results[1];
+      const result = (await eval_.getResults())[0];
       invariant(result.id, 'Result ID is required');
-      const resultSaveSpy = vi.spyOn(EvalResult.prototype, 'save');
-      const evalSaveSpy = vi.spyOn(Eval.prototype, 'save');
-
-      const res = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(createManualRatingPayload(result, true));
-
-      expect(res.status).toBe(200);
-      expect(resultSaveSpy).toHaveBeenCalledTimes(1);
-      expect(evalSaveSpy).toHaveBeenCalledTimes(1);
-      expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
-        evalSaveSpy.mock.invocationCallOrder[0],
-      );
+      const rate = () =>
+        api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+          pass: result.success,
+          score: 0.25,
+        });
+      const db = await getDb();
+      vi.mocked(updateSignalFile).mockClear();
+      await db.run(sql`CREATE TRIGGER reject_rating BEFORE UPDATE OF prompts ON evals
+        BEGIN SELECT RAISE(ABORT, 'blocked'); END`);
+      try {
+        const res = await rate();
+        expect(res.status).toBe(500);
+        expect(res.body).toEqual({ error: 'Failed to submit rating' });
+        expect((await EvalResult.findById(result.id))?.score).toBe(result.score);
+        expect(updateSignalFile).not.toHaveBeenCalled();
+      } finally {
+        await db.run(sql`DROP TRIGGER reject_rating`);
+      }
+      expect((await rate()).status).toBe(200);
+      expect(updateSignalFile).toHaveBeenCalledExactlyOnceWith(eval_.id);
+      expect((await EvalResult.findById(result.id))?.score).toBe(0.25);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics?.score).toBe(0.25);
     });
 
     it.each([
