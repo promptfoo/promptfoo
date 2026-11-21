@@ -30,10 +30,7 @@ import {
   normalizeClaudeThinkingConfig,
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
-import {
-  executeProviderFunctionCallback,
-  loadProviderCallbackFromFileUrl,
-} from '../functionCallbackUtils';
+import { executeProviderFunctionCallback } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -42,9 +39,16 @@ import {
   type OpenAIToolChoice,
   openaiToolChoiceToBedrock,
   shouldBustProviderCache,
+  throwIfAborted,
+  waitForPromiseWithAbort,
   withResponseCacheMetadata,
 } from '../shared';
-import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import {
+  AwsBedrockGenericProvider,
+  type BedrockOptions,
+  createBedrockCacheKeyHash,
+  hasBedrockS3Location,
+} from './base';
 import {
   ConverseStreamValidationError,
   collectConverseStream,
@@ -75,10 +79,17 @@ import type {
 import type { DocumentType } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
+
+const MANAGED_PROMPT_ARN = /^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//;
 
 function getOneHourCacheWriteTokens(
   cacheDetails?: ReadonlyArray<{ ttl?: string; inputTokens?: number }>,
@@ -1024,33 +1035,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
-   * Loads a function from an external file
-   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
-   * @returns The loaded function
-   */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    return loadProviderCallbackFromFileUrl(fileRef, '[Bedrock Converse]');
-  }
-
-  /**
-   * Executes a function callback with proper error handling
-   */
-  private async executeFunctionCallback(
-    functionName: string,
-    args: string,
-    callId?: string,
-  ): Promise<string> {
-    return executeProviderFunctionCallback({
-      functionName,
-      args,
-      callId,
-      callbacks: this.config.functionToolCallbacks,
-      cache: this.loadedFunctionCallbacks,
-      logPrefix: '[Bedrock Converse]',
-    });
-  }
-
-  /**
    * Build the inference configuration from options
    *
    * Handles Amazon Nova 2 reasoning constraints:
@@ -1156,6 +1140,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async buildToolConfig(
     vars?: Record<string, VarValue>,
     promptConfig?: Partial<BedrockConverseOptions>,
+    abortSignal?: AbortSignal,
   ): Promise<ToolConfiguration | undefined> {
     const configToolChoice = this.getEffectiveToolChoice(promptConfig);
     if (isDisabledToolChoice(configToolChoice)) {
@@ -1177,7 +1162,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     // Load tools from external file with variable rendering if needed
-    const tools = configTools ? await maybeLoadToolsFromExternalFile(configTools, vars) : [];
+    const tools = configTools
+      ? await maybeLoadToolsFromExternalFile(configTools, vars, abortSignal)
+      : [];
     if (mcpTools.length === 0 && (!tools || tools.length === 0)) {
       return undefined;
     }
@@ -1378,7 +1365,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   private getEffectiveInferenceConfig(): InferenceConfiguration | undefined {
-    if (/^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//.test(this.modelName)) {
+    if (MANAGED_PROMPT_ARN.test(this.modelName)) {
       return undefined;
     }
     return this.buildInferenceConfig();
@@ -1387,9 +1374,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async buildRequest(
     prompt: string,
     context?: CallApiContextParams,
+    abortSignal?: AbortSignal,
   ): Promise<ConverseCommandInput> {
     const { messages, system } = parseConverseMessages(prompt);
-    const managedPrompt = /^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//.test(this.modelName);
+    const managedPrompt = MANAGED_PROMPT_ARN.test(this.modelName);
     const promptVariables = renderVarsInObject(this.config.promptVariables, context?.vars);
     const input: ConverseCommandInput = {
       modelId: this.modelName,
@@ -1465,20 +1453,31 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       toolConfig: await this.buildToolConfig(
         context?.vars,
         context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+        abortSignal,
       ),
       additionalModelRequestFields: this.buildAdditionalModelRequestFields(),
     };
   }
 
-  /**
-   * Main API call using Converse API
-   */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Only wait on MCP init when this request actually needs MCP. A
-    // tool-disabled request must not stall on a slow or hung MCP transport,
-    // and a recorded init error must not block a request that opted out of
-    // tools entirely.
-    const initErrorResponse = await this.awaitMcpReadyForRequest(context);
+  callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    return this.callConverse(prompt, context, !!this.config.streaming, options?.abortSignal);
+  }
+
+  callApiStreaming(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    return this.callConverse(prompt, context, true, options?.abortSignal);
+  }
+
+  private async callConverse(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    streaming: boolean,
+    abortSignal?: AbortSignal,
+  ): Promise<ProviderResponse> {
+    throwIfAborted(abortSignal);
+    const initErrorResponse = await waitForPromiseWithAbort(
+      this.awaitMcpReadyForRequest(context),
+      abortSignal,
+    );
     if (initErrorResponse) {
       return initErrorResponse;
     }
@@ -1529,11 +1528,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       spanContext,
       async () => {
         try {
-          return await (this.config.streaming
-            ? this.callApiStreaming(prompt, context)
-            : this.callApiInternal(prompt, context));
+          throwIfAborted(abortSignal);
+          return await waitForPromiseWithAbort(
+            this.callApiInternal(prompt, context, streaming, abortSignal),
+            abortSignal,
+          );
         } catch (err) {
-          return { error: `Bedrock Converse API error: ${errorMessage(err)}` };
+          throwIfAborted(abortSignal);
+          return {
+            error: `Bedrock ${streaming ? 'ConverseStream' : 'Converse'} API error: ${errorMessage(err)}`,
+          };
         }
       },
       resultExtractor,
@@ -1547,8 +1551,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     prompt: string,
     context?: CallApiContextParams,
     streaming = false,
+    abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const converseInput: ConverseStreamCommandInput = await this.buildRequest(prompt, context);
+    const converseInput: ConverseStreamCommandInput = await this.buildRequest(
+      prompt,
+      context,
+      abortSignal,
+    );
+    throwIfAborted(abortSignal);
     if (
       streaming &&
       converseInput.guardrailConfig &&
@@ -1562,29 +1572,41 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       (converseInput.additionalModelRequestFields as { thinking?: { type?: string } } | undefined)
         ?.thinking?.type === 'between_tools';
 
-    // Check cache
-    const cache = await getCache();
+    // Let AWS check access to referenced resources on every turn.
+    const cache =
+      isCacheEnabled() &&
+      !shouldBustProviderCache(context) &&
+      !MANAGED_PROMPT_ARN.test(this.modelName) &&
+      !hasBedrockS3Location(converseInput)
+        ? await getCache()
+        : undefined;
     const region = this.getRegion();
-    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
-    const cacheKey = `bedrock:${streaming ? 'converse-stream' : 'converse'}:${this.modelName}:${region}:${createBedrockCacheKeyHash(
-      {
-        config: this.config,
-        params: canonicalizeConverseCacheValue({ ...converseInput, requestMetadata: undefined }),
-        region,
-      },
-    )}`;
+    const cacheKey = cache
+      ? `bedrock:${streaming ? 'converse-stream' : 'converse'}:${this.modelName}:${region}:${createBedrockCacheKeyHash(
+          {
+            config: this.config,
+            params: canonicalizeConverseCacheValue({
+              ...converseInput,
+              requestMetadata: undefined,
+            }),
+            region,
+          },
+        )}`
+      : '';
 
-    if (useCache) {
+    if (cache) {
       const cachedResponse = await cache.get(cacheKey);
+      throwIfAborted(abortSignal);
       if (cachedResponse) {
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        if (!getConverseResponseError(parsed)) {
+        if (!getConverseResponseError(parsed) && !hasBedrockS3Location(parsed)) {
           logger.debug('Returning cached response');
           const result = await this.parseResponse(
             parsed,
             toolsDisabled,
             betweenToolsThinking,
             streaming,
+            abortSignal,
           );
           return withResponseCacheMetadata(result, true);
         }
@@ -1600,12 +1622,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const { ConverseCommand, ConverseStreamCommand } = await import(
         '@aws-sdk/client-bedrock-runtime'
       );
+      throwIfAborted(abortSignal);
       response = streaming
         ? await collectConverseStream(
-            await bedrockInstance.send(new ConverseStreamCommand(converseInput)),
+            await bedrockInstance.send(new ConverseStreamCommand(converseInput), { abortSignal }),
+            abortSignal,
           )
-        : await bedrockInstance.send(new ConverseCommand(converseInput));
+        : await bedrockInstance.send(new ConverseCommand(converseInput), { abortSignal });
     } catch (err: any) {
+      throwIfAborted(abortSignal);
       const errorMessage = err?.message || String(err);
       logger.error('Bedrock Converse API error', { error: errorMessage });
 
@@ -1636,8 +1661,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       };
     }
 
-    // Failed model responses must be retried, not replayed as cached results.
-    if (useCache && !getConverseResponseError(response)) {
+    throwIfAborted(abortSignal);
+    if (cache && !getConverseResponseError(response) && !hasBedrockS3Location(response)) {
       try {
         await cache.set(
           cacheKey,
@@ -1656,7 +1681,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled, betweenToolsThinking, streaming);
+    return this.parseResponse(
+      response,
+      toolsDisabled,
+      betweenToolsThinking,
+      streaming,
+      abortSignal,
+    );
   }
 
   /**
@@ -1706,15 +1737,21 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async dispatchMcpToolCall(
     name: string,
     input: unknown,
+    abortSignal?: AbortSignal,
   ): Promise<{ output: string; error?: string }> {
     try {
-      const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
+      throwIfAborted(abortSignal);
+      const args = parseToolInput(input);
+      const mcpResult = await (abortSignal
+        ? this.mcpClient!.callTool(name, args, abortSignal)
+        : this.mcpClient!.callTool(name, args));
       if (isMcpErrorResult(mcpResult)) {
         const msg = formatMcpToolError(name, getMcpErrorMessage(mcpResult));
         return { output: msg, error: msg };
       }
       return { output: formatMcpToolResult(name, mcpResult?.content) };
     } catch (err) {
+      throwIfAborted(abortSignal);
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
       const msg = formatMcpToolError(name, errorMessage(err));
       return { output: msg, error: msg };
@@ -1729,7 +1766,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     toolsDisabled = false,
     betweenToolsThinking = false,
     preserveText = false,
+    abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
+    throwIfAborted(abortSignal);
     // Extract output text
     const outputMessage = response.output?.message;
     const content = (outputMessage?.content || []).map(normalizeNativeContentBlock);
@@ -1882,7 +1921,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       for (let idx = 0; idx < toolUseBlocks.length; idx++) {
         const { name, input } = toolUseBlocks[idx].toolUse;
         if (this.mcpClient && name && mcpToolNames.has(name)) {
-          const { output, error } = await this.dispatchMcpToolCall(name, input);
+          const { output, error } = await this.dispatchMcpToolCall(name, input, abortSignal);
           dispatchResults[idx] = output;
           handledIndexes.add(idx);
           if (error) {
@@ -1907,14 +1946,18 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(
+            dispatchResults[idx] = await executeProviderFunctionCallback({
               functionName,
               args,
-              block.toolUse.toolUseId,
-            );
-            dispatchResults[idx] = result;
+              callId: block.toolUse.toolUseId,
+              abortSignal,
+              callbacks: this.config.functionToolCallbacks,
+              cache: this.loadedFunctionCallbacks,
+              logPrefix: '[Bedrock Converse]',
+            });
             handledIndexes.add(idx);
           } catch (err) {
+            throwIfAborted(abortSignal);
             logger.warn(
               `[Bedrock Converse] Function callback failed for ${functionName}: ${errorMessage(err)}; falling back to tool_use output`,
             );
@@ -2001,21 +2044,5 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ...(guardrails ? { guardrails } : {}),
       ...(modelError ? { error: modelError } : {}),
     };
-  }
-
-  /** Aggregate ConverseStream with the same metadata, guardrails, and tool dispatch as Converse. */
-  async callApiStreaming(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
-    const initErrorResponse = await this.awaitMcpReadyForRequest(context);
-    if (initErrorResponse) {
-      return initErrorResponse;
-    }
-    try {
-      return await this.callApiInternal(prompt, context, true);
-    } catch (err) {
-      return { error: `Bedrock ConverseStream API error: ${errorMessage(err)}` };
-    }
   }
 }
