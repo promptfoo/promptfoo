@@ -12,6 +12,25 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
 // Chat models that also accept google:interactions: but default to generateContent.
 const INTERACTIONS_OPT_IN_MODELS = new Set(['gemini-4-argon', 'gemini-4-hydrogen']);
 
+function isGeminiNativeImageModel(modelName: string): boolean {
+  return modelName.includes('-image') || modelName === 'gemini-nano-banana-2.1';
+}
+
+// `google:chat:` selects generateContent chat; Interactions and image models need their own route.
+function validateGoogleChatRoute(providerPath: string, modelName: string): void {
+  const providerPrefix = providerPath.split(':')[0];
+  if (!modelName) {
+    throw new Error(
+      `Missing model name for ${providerPath}. Use e.g. ${providerPrefix}:chat:gemini-3.8-flash.`,
+    );
+  }
+  if (NATIVE_INTERACTIONS_MODELS.has(modelName) || isGeminiNativeImageModel(modelName)) {
+    throw new Error(
+      `Model "${modelName}" does not support ${providerPrefix}:chat:. Use ${providerPrefix}:${modelName}.`,
+    );
+  }
+}
+
 function isLiveOnlyModel(modelName: string): boolean {
   return (
     modelName === 'gemini-3.5-live-translate-preview' ||
@@ -251,6 +270,10 @@ export const googleProviderFactories: ProviderFactory[] = [
           }
           const { AIStudioEmbeddingProvider } = await import('../google/ai.studio');
           return new AIStudioEmbeddingProvider(modelName, providerOptions);
+        } else if (serviceType === 'chat') {
+          validateGoogleChatRoute(providerPath, modelName);
+          const { AIStudioChatProvider } = await import('../google/ai.studio');
+          return new AIStudioChatProvider(modelName, providerOptions);
         }
       }
 
@@ -272,7 +295,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       // Check if this is a Gemini native image generation model. Dispatch is on
       // the '-image' substring (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image,
       // gemini-3.1-flash-lite-image, gemini-3-pro-image).
-      if (modelName.includes('-image') || modelName === 'gemini-nano-banana-2.1') {
+      if (isGeminiNativeImageModel(modelName)) {
         const { GeminiImageProvider } = await import('../google/gemini-image');
         return new GeminiImageProvider(modelName, providerOptions);
       }
