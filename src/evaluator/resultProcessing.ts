@@ -4,13 +4,13 @@ import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { generateIdFromPrompt } from '../prompts/id';
-import { PromptfooAttributes } from '../tracing/genaiTracer';
+import { GenAIAttributes, PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
-import { isApiProvider, isProviderOptions } from '../types/providers';
+import { isApiProvider } from '../types/providers';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -130,6 +130,10 @@ export function projectProviderResponse(
     delete projectedResponse.video;
     delete projectedResponse.raw;
     delete projectedResponse.providerTransformedOutput;
+    if (projectedResponse.guardrails) {
+      const { reason: _reason, ...flags } = projectedResponse.guardrails;
+      projectedResponse.guardrails = flags;
+    }
   }
 
   if (options.stripPrompt) {
@@ -527,35 +531,13 @@ export function sanitizeProvider(
   throwOnError = false,
 ): ProviderOptions {
   try {
-    if (isApiProvider(provider)) {
-      return {
-        id: provider.id(),
-        label: provider.label,
-        ...(provider.config && {
-          config: sanitizeProviderConfig(provider.config, throwOnError),
-        }),
-      };
-    }
-    if (isProviderOptions(provider)) {
-      return {
-        id: provider.id,
-        label: provider.label,
-        ...(provider.config && {
-          config: sanitizeProviderConfig(provider.config, throwOnError),
-        }),
-      };
-    }
     if (typeof provider === 'object' && provider) {
-      const providerObj = provider as {
-        id: string | (() => string);
-        label?: string;
-        config?: ProviderConfig;
-      };
+      const id = typeof provider.id === 'function' ? provider.id() : provider.id;
       return {
-        id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
-        label: providerObj.label,
-        ...(providerObj.config && {
-          config: sanitizeProviderConfig(providerObj.config, throwOnError),
+        id: throwOnError ? sanitizeForDbWithSecrets(id, true) : id,
+        label: throwOnError ? sanitizeForDbWithSecrets(provider.label, true) : provider.label,
+        ...(provider.config && {
+          config: sanitizeProviderConfig(provider.config, throwOnError),
         }),
       };
     }
@@ -564,7 +546,9 @@ export function sanitizeProvider(
       return { id: '[provider unavailable]' };
     }
   }
-  return JSON.parse(safeJsonStringify(provider) as string);
+  return JSON.parse(
+    safeJsonStringify(throwOnError ? sanitizeForDbWithSecrets(provider, true) : provider) as string,
+  );
 }
 
 /** Snapshot live provider references for replay without retaining runtime client state. */
@@ -683,6 +667,7 @@ export function sanitizeForDbWithSecrets<T>(obj: T, artifact = false): T {
     return sanitizeObject(obj, {
       context: 'evalResult field',
       throwOnError: artifact,
+      sanitizeUrls: artifact,
       maxDepth: artifact ? OUTPUT_SANITIZE_MAX_DEPTH : Number.POSITIVE_INFINITY,
     }) as T;
   } catch {
@@ -1169,6 +1154,9 @@ const TRACE_OUTPUT_ATTRIBUTE_KEYS = [
   ...SEARCH_ATTRIBUTE_KEYS,
   'tool.output',
   'tool.result',
+  'gen_ai.tool.call.result',
+  'braintrust.output',
+  'langfuse.output',
   'ai.toolCall.result',
   'codex.output',
   'codex.command.output',
@@ -1188,52 +1176,49 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
     shouldStripTestVars,
   } = stripFlags;
 
-  if (
-    !shouldStripMetadata &&
-    !shouldStripPromptText &&
-    !shouldStripResponseOutput &&
-    !shouldStripTestVars
-  ) {
-    return traces;
-  }
+  const omitted = [
+    ...(shouldStripPromptText
+      ? [
+          PromptfooAttributes.REQUEST_BODY,
+          PromptfooAttributes.PROMPT_LABEL,
+          'braintrust.input',
+          'langfuse.input',
+        ]
+      : []),
+    ...(shouldStripResponseOutput ? TRACE_OUTPUT_ATTRIBUTE_KEYS : []),
+    ...(stripFlags.shouldStripGradingResult ? [GenAIAttributes.EVALUATION_EXPLANATION] : []),
+  ];
+  const projectAttributes = (attributes: Record<string, unknown> | undefined) => {
+    if (!asRecord(attributes)) {
+      return attributes;
+    }
+    const projected = { ...attributes };
+    for (const key of omitted) {
+      delete projected[key];
+    }
+    return Object.keys(projected).length ? projected : undefined;
+  };
 
   return traces.map((trace) => {
-    let projectedTrace = trace;
-    if (shouldStripMetadata) {
-      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
-      projectedTrace = traceWithoutMetadata;
-    } else if (shouldStripTestVars && asRecord(trace.metadata) && 'vars' in trace.metadata!) {
-      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
-      const { vars: _vars, ...metadata } = traceMetadata;
-      projectedTrace = {
-        ...traceWithoutMetadata,
-        ...(Object.keys(metadata).length > 0 && { metadata }),
-      };
+    const projected = { ...trace };
+    const { metadata } = trace;
+    delete projected.metadata;
+    if (metadata !== undefined && !shouldStripMetadata) {
+      if (shouldStripTestVars && asRecord(metadata) && 'vars' in metadata) {
+        const { vars: _vars, ...rest } = metadata;
+        if (Object.keys(rest).length) {
+          projected.metadata = sanitizeForDbWithSecrets(rest, true);
+        }
+      } else {
+        projected.metadata = sanitizeForDbWithSecrets(metadata, true);
+      }
     }
-
-    if (!shouldStripPromptText && !shouldStripResponseOutput) {
-      return projectedTrace;
+    if (!omitted.length) {
+      return projected;
     }
-
     return {
-      ...projectedTrace,
-      spans: projectedTrace.spans.map((span) => {
-        const projectAttributes = (attributes: Record<string, unknown> | undefined) => {
-          if (!asRecord(attributes)) {
-            return attributes;
-          }
-          const projected = { ...attributes };
-          if (shouldStripPromptText) {
-            delete projected[PromptfooAttributes.REQUEST_BODY];
-            delete projected[PromptfooAttributes.PROMPT_LABEL];
-          }
-          if (shouldStripResponseOutput) {
-            for (const key of TRACE_OUTPUT_ATTRIBUTE_KEYS) {
-              delete projected[key];
-            }
-          }
-          return Object.keys(projected).length ? projected : undefined;
-        };
+      ...projected,
+      spans: projected.spans.map((span) => {
         let name = span.name;
         const attributes = asRecord(span.attributes);
         if (shouldStripResponseOutput && typeof name === 'string' && attributes) {
@@ -1249,7 +1234,7 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
           }
         }
         const events = asRecord(span)?.events;
-        return {
+        const projectedSpan = {
           ...span,
           ...(typeof name === 'string' && { name }),
           attributes: projectAttributes(span.attributes),
@@ -1262,6 +1247,15 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
             }),
           }),
         };
+        if (shouldStripResponseOutput) {
+          delete projectedSpan.statusMessage;
+          const legacyStatus = asRecord(asRecord(span)?.status);
+          if (legacyStatus) {
+            const { message: _message, ...status } = legacyStatus;
+            return { ...projectedSpan, status };
+          }
+        }
+        return projectedSpan;
       }),
     };
   });

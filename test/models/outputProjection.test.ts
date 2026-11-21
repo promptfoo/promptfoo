@@ -176,6 +176,71 @@ describe('artifact projection compatibility', () => {
     expect(trace).toEqual(original);
   });
 
+  it('removes imported payloads and grading explanations from spans and events independently', () => {
+    const attributes = {
+      'braintrust.input': 'private input',
+      'langfuse.input': 'private input',
+      'braintrust.output': 'private output',
+      'langfuse.output': 'private output',
+      'gen_ai.tool.call.result': 'private output',
+      'gen_ai.evaluation.explanation': 'private grading',
+      'gen_ai.usage.output_tokens': 3,
+    };
+    const span = {
+      attributes,
+      events: [{ attributes }],
+      statusCode: 2,
+      statusMessage: 'private output',
+      status: { code: 2, message: 'private output' },
+    };
+    const traces = [{ spans: [span] }] as unknown as TraceData[];
+    const gradingOnly = JSON.stringify(
+      projectTracesForOutput(traces, flags({ shouldStripGradingResult: true })),
+    );
+    expect(gradingOnly).not.toContain('private grading');
+    expect(gradingOnly).toContain('private input');
+    expect(gradingOnly).toContain('private output');
+    const [projected] = projectTracesForOutput(
+      traces,
+      flags({
+        shouldStripPromptText: true,
+        shouldStripResponseOutput: true,
+        shouldStripGradingResult: true,
+      }),
+    );
+    expect(JSON.stringify(projected)).not.toContain('private');
+    expect(projected.spans[0]).toMatchObject({
+      statusCode: 2,
+      status: { code: 2 },
+      attributes: { 'gen_ai.usage.output_tokens': 3 },
+    });
+    expect(span.status.message).toBe('private output');
+  });
+
+  it('protects signed URLs and trace credentials even with all strip flags disabled', () => {
+    const vars = { password: 'private', image: 'https://example.test/image?sig=private&size=1' };
+    const trace = { metadata: { vars }, spans: [] } as unknown as TraceData;
+    const traces = projectTracesForOutput([trace], flags());
+    const row = sanitizeResultForJsonlArtifact({ vars, provider: { id: vars.image } }, flags());
+    expect(JSON.stringify([row, traces])).not.toContain('private');
+    expect(row.vars.image).toContain('size=1');
+    expect(traces[0].metadata?.vars).toEqual(row.vars);
+    expect(vars.password).toBe('private');
+  });
+
+  it('keeps guardrail flags without the duplicated refusal', () => {
+    const response = {
+      output: 'private refusal',
+      guardrails: { flagged: true, reason: 'private refusal' },
+    };
+    const row = sanitizeResultForJsonlArtifact(
+      { response },
+      flags({ shouldStripResponseOutput: true }),
+    );
+    expect(row.response.guardrails).toEqual({ flagged: true });
+    expect(response.guardrails.reason).toBe('private refusal');
+  });
+
   it.each([undefined, null, 0])('preserves a legacy span name of %s', (name) => {
     const trace = { spans: [{ name, attributes: { operation: 'provider-call' } }] };
     const [projected] = projectTracesForOutput(
