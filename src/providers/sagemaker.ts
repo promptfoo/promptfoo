@@ -610,7 +610,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // Check for JumpStart Llama format first since that's common
-    if (responseJson.generated_text) {
+    if (responseJson.generated_text || responseJson.generated_text === '') {
       logger.debug('Detected JumpStart model response format with generated_text field');
       return responseJson.generated_text;
     }
@@ -633,9 +633,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         );
 
       case 'huggingface':
-        return Array.isArray(responseJson)
-          ? responseJson[0]?.generated_text || responseJson[0]
-          : responseJson.generated_text || responseJson;
+        if (Array.isArray(responseJson)) {
+          const generatedText = responseJson[0]?.generated_text;
+          return generatedText === '' ? '' : generatedText || responseJson[0];
+        }
+        return responseJson.generated_text || responseJson;
 
       case 'jumpstart':
         // For AWS JumpStart models
