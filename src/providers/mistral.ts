@@ -510,7 +510,7 @@ function getMistralErrorMessage(data: unknown): string | undefined {
 
 function safeErrorText(value: string, apiKey: string): string {
   // Gateways can echo the rejected key. Redact before truncating to avoid exposing a prefix.
-  return value.replaceAll(apiKey, '[REDACTED]').slice(0, MAX_MISTRAL_ERROR_DETAIL_LENGTH);
+  return value.split(apiKey).join('[REDACTED]').slice(0, MAX_MISTRAL_ERROR_DETAIL_LENGTH);
 }
 
 function formatMistralHttpError(
