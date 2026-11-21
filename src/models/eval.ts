@@ -14,7 +14,6 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
@@ -44,8 +43,8 @@ import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/f
 import invariant from '../util/invariant';
 import {
   sanitizeConfigForOutput,
-  sanitizeConfigForPersistence,
   sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -73,6 +72,7 @@ import EvalResult, {
   projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
+import { generateIdFromPrompt } from './prompt';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -98,6 +98,46 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
+
+export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+  for (const prompt of prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = generateIdFromPrompt(prompt);
+    await tx
+      .insert(promptsTable)
+      .values({ id: promptId, prompt: label })
+      .onConflictDoNothing()
+      .run();
+    await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
+}
+
+export async function insertEvalDatasetAndTags(
+  tx: EvalRelationDb,
+  evalId: string,
+  dataset: typeof datasetsTable.$inferInsert,
+  config: Pick<UnifiedConfig, 'tags'>,
+) {
+  await tx.insert(datasetsTable).values(dataset).onConflictDoNothing().run();
+  await tx
+    .insert(evalsToDatasetsTable)
+    .values({ evalId, datasetId: dataset.id })
+    .onConflictDoNothing()
+    .run();
+  logger.debug(`Inserting dataset ${dataset.id}`);
+
+  if (config.tags) {
+    for (const [name, value] of Object.entries(config.tags)) {
+      const tagId = sha256(`${name}:${value}`);
+      await tx.insert(tagsTable).values({ id: tagId, name, value }).onConflictDoNothing().run();
+      await tx.insert(evalsToTagsTable).values({ evalId, tagId }).onConflictDoNothing().run();
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -498,8 +538,7 @@ export default class Eval {
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
     const db = await getDb();
 
-    const savedConfig = sanitizeConfigForPersistence(config);
-    const datasetId = sha256(JSON.stringify(savedConfig.tests || []));
+    const datasetId = sha256(JSON.stringify(config.tests || []));
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
@@ -519,7 +558,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config: savedConfig,
+          config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -528,30 +567,7 @@ export default class Eval {
         })
         .run();
 
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
-
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
+      await insertEvalPrompts(tx, evalId, renderedPrompts);
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
@@ -572,52 +588,7 @@ export default class Eval {
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: savedConfig.tests,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
-
-          await tx
-            .insert(tagsTable)
-            .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          await tx
-            .insert(evalsToTagsTable)
-            .values({
-              evalId,
-              tagId,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          logger.debug(`Inserting tag ${tagId}`);
-        }
-      }
+      await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: config.tests }, config);
     });
 
     invalidateEvaluationCache(evalId);
@@ -689,7 +660,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: sanitizeConfigForPersistence(this.config),
+      config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -1677,7 +1648,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(sanitizeConfigForPersistence(this.config));
+    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1697,7 +1668,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
+          config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,
@@ -1754,17 +1725,24 @@ export default class Eval {
         }
       }
 
-      const datasetId = sha256(JSON.stringify(newConfig.tests || []));
-      await tx
-        .insert(datasetsTable)
-        .values({ id: datasetId, tests: newConfig.tests })
-        .onConflictDoNothing()
-        .run();
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({ evalId: newEvalId, datasetId })
-        .onConflictDoNothing()
-        .run();
+      // Copy dataset relationship
+      const datasetRel = await tx
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, this.id))
+        .limit(1)
+        .all();
+
+      if (datasetRel.length > 0) {
+        await tx
+          .insert(evalsToDatasetsTable)
+          .values({
+            evalId: newEvalId,
+            datasetId: datasetRel[0].datasetId,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
 
       // Copy results in batches to avoid memory exhaustion
       const BATCH_SIZE = 1000;

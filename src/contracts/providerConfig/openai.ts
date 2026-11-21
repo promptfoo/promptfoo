@@ -356,17 +356,16 @@ const CompletionFields = TextRequestFields.extend({
   stop: z.union([z.string(), z.array(z.string())]).optional(),
   seed: z.number().optional(),
 });
+const PromptCacheOptions = z.strictObject({
+  mode: z.enum(['implicit', 'explicit']).optional(),
+  ttl: z.literal('30m').optional(),
+});
 const ConversationFields = TextRequestFields.extend({
   reasoning_effort: z.union([ReasoningEffort, Template]).nullable().optional(),
   reasoning: Reasoning.optional(),
   verbosity: z.enum(['low', 'medium', 'high']).optional(),
   prompt_cache_key: z.string().optional(),
-  prompt_cache_options: z
-    .strictObject({
-      mode: z.enum(['implicit', 'explicit']).optional(),
-      ttl: z.literal('30m').optional(),
-    })
-    .optional(),
+  prompt_cache_options: PromptCacheOptions.optional(),
   prompt_cache_retention: z.enum(['in_memory', '24h']).nullable().optional(),
   safety_identifier: z.string().optional(),
   user: z.string().optional(),
@@ -396,7 +395,7 @@ const ChatFields = ConversationFields.extend({
       bitrate: z.string().optional(),
       format: z.string().optional(),
       speed: z.number().optional(),
-      voice: z.string().optional(),
+      voice: z.union([z.string(), z.strictObject({ id: z.string() })]).optional(),
     })
     .optional(),
   functionToolCallbacks: z
@@ -421,6 +420,9 @@ export const OpenAiChatConfigInputSchema = ChatFields.describe(
   'Serializable OpenAI Chat Completions configuration',
 );
 export const OpenAiResponsesConfigInputSchema = ConversationFields.extend({
+  prompt_cache_options: PromptCacheOptions.extend({
+    ttl: z.enum(['30m', '12h']).optional(),
+  }).optional(),
   tools: ResponsesTools.optional(),
   tool_choice: ToolChoice.optional(),
   response_format: ResponsesResponseFormat.optional(),
