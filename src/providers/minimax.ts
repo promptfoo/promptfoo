@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { renderVarsInObject } from '../util/render';
 import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getOpenAICompletionTokenDetails } from './openai/util';
@@ -49,6 +50,14 @@ type MiniMaxProviderOptions = Omit<ProviderOptions, 'config'> & {
 
 export const MINIMAX_CHAT_MODELS: MiniMaxModel[] = [
   {
+    id: 'MiniMax-M3.1-Flash',
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      cache_read: 0.015 / 1e6,
+    },
+  },
+  {
     id: 'MiniMax-M3',
     cost: {
       input: 0.3 / 1e6,
@@ -60,22 +69,6 @@ export const MINIMAX_CHAT_MODELS: MiniMaxModel[] = [
         output: 2.4 / 1e6,
         cache_read: 0.12 / 1e6,
       },
-    },
-  },
-  {
-    id: 'MiniMax-M2.7',
-    cost: {
-      input: 0.3 / 1e6,
-      output: 1.2 / 1e6,
-      cache_read: 0.06 / 1e6,
-    },
-  },
-  {
-    id: 'MiniMax-M2.7-highspeed',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      cache_read: 0.06 / 1e6,
     },
   },
 ];
@@ -199,7 +192,7 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
     // override a prompt-level limit. Passthrough wins within each layer.
     const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
     const promptPassthrough = promptConfig.passthrough as
-      | { max_completion_tokens?: unknown; max_tokens?: unknown }
+      | { max_completion_tokens?: unknown; max_tokens?: unknown; reasoning_effort?: unknown }
       | undefined;
     const maxCompletionTokens =
       promptPassthrough?.max_completion_tokens ??
@@ -216,6 +209,18 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
       body.max_completion_tokens = maxCompletionTokens;
     }
     delete body.max_tokens;
+
+    // The base provider sends reasoning_effort only for OpenAI reasoning models.
+    // MiniMax-M3.1-Flash uses it to tune thinking depth; other MiniMax models
+    // ignore it. Layers resolve like the token limit above.
+    const reasoningEffort =
+      promptPassthrough?.reasoning_effort ??
+      promptConfig.reasoning_effort ??
+      config.passthrough?.reasoning_effort ??
+      config.reasoning_effort;
+    if (reasoningEffort !== undefined) {
+      body.reasoning_effort = renderVarsInObject(reasoningEffort, context?.vars);
+    }
 
     // Let MiniMax apply its sampling default unless temperature is configured.
     if (config.temperature === undefined && config.passthrough?.temperature === undefined) {
