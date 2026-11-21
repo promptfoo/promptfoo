@@ -1672,7 +1672,11 @@ async function main(): Promise<void> {
         package: 'ai',
         version: '^6.0.286',
         script: 'optional-vercel.mjs',
-        env: { PROMPTFOO_CACHE_ENABLED: 'false' },
+        env: {
+          NO_PROXY: '127.0.0.1,localhost',
+          no_proxy: '127.0.0.1,localhost',
+          PROMPTFOO_CACHE_ENABLED: 'false',
+        },
       }),
     );
     await timeAsyncPhase('check optional Slack SDK', () =>

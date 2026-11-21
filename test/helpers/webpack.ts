@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,8 +14,8 @@ export async function withWebpackBundle<T>(
   unavailablePackages: string[] = [],
 ): Promise<void> {
   const root = fileURLToPath(new URL('../../', import.meta.url));
-  // Keep the fixture below node_modules so runtime optional peers resolve from this install.
-  const directory = fs.mkdtempSync(path.join(root, 'node_modules', '.promptfoo-webpack-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-webpack-'));
+  const deployed = fs.mkdtempSync(path.join(root, 'node_modules', '.promptfoo-webpack-'));
   try {
     const library = await Rolldown.rolldown({
       input: fileURLToPath(source),
@@ -27,44 +28,46 @@ export async function withWebpackBundle<T>(
     } finally {
       await library.close();
     }
-    const compiler = webpack({
-      mode: 'development',
-      context: directory,
-      entry,
-      target: 'node',
-      externals: [
-        ({ request }, callback) => {
-          if (request && unavailablePackages.includes(request)) {
-            callback(new Error(`${request} is not installed in this consumer`));
-          } else if (request && !path.isAbsolute(request) && /^[a-z@]/i.test(request)) {
-            callback(null, `commonjs ${request}`);
-          } else {
-            callback();
-          }
-        },
-      ],
-      devtool: false,
-      output: { path: directory, filename: 'consumer.cjs', library: { type: 'commonjs2' } },
-    });
-    if (!compiler) {
-      throw new Error('Webpack did not create a compiler');
-    }
     await new Promise<void>((resolve, reject) => {
-      compiler.run((error, stats) => {
-        compiler.close((closeError) => {
-          if (error || closeError) {
-            reject(error || closeError);
+      webpack(
+        {
+          mode: 'development',
+          context: directory,
+          entry,
+          target: 'node',
+          externals: [
+            ({ request }, callback) => {
+              if (request && unavailablePackages.includes(request)) {
+                callback(new Error(`${request} is not installed in this consumer`));
+              } else if (request && !path.isAbsolute(request) && /^[a-z@]/i.test(request)) {
+                callback(null, `commonjs ${request}`);
+              } else {
+                callback();
+              }
+            },
+          ],
+          devtool: false,
+          output: { path: directory, filename: 'consumer.cjs', library: { type: 'commonjs2' } },
+        },
+        (error, stats) => {
+          if (error) {
+            reject(error);
           } else if (!stats || stats.hasErrors()) {
             reject(new Error(stats?.toString({ all: false, errors: true }) ?? 'No Webpack stats'));
           } else {
             resolve();
           }
-        });
-      });
+        },
+      );
     });
-    const require = createRequire(import.meta.url);
-    await check(require(path.join(directory, 'consumer.cjs')) as T);
+    // Only the deployment has peers. Delete the build tree to catch
+    // accidentally embedded build-time paths before exercising the bundle.
+    const target = path.join(deployed, 'consumer.cjs');
+    fs.copyFileSync(path.join(directory, 'consumer.cjs'), target);
+    fs.rmSync(directory, { recursive: true, force: true });
+    await check(createRequire(import.meta.url)(target) as T);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(deployed, { recursive: true, force: true });
   }
 }
