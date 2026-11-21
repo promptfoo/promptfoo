@@ -47,7 +47,7 @@ Install Promptfoo and the Codex SDK together in your eval project. Promptfoo sup
 npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0"
 ```
 
-Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
+Use a [supported Node.js version](/docs/installation#nodejs-runtime-support).
 
 :::note
 
