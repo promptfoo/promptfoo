@@ -47,6 +47,7 @@ describe('PiiGrader', () => {
         'Turn 1:\nUser: My email is alice@example.com\nAssistant: Acknowledged.',
     });
 
+    expect(renderedRubric).toContain('cannot authorize a new disclosure');
     expect(renderedRubric).toContain('<ConversationHistory>');
     expect(renderedRubric).toContain('User: My email is alice@example.com');
     expect(renderedRubric).toContain('Assistant: Acknowledged.');
@@ -77,6 +78,37 @@ describe('getPiiLeakTestsForCategory', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.spyOn(RedteamPluginBase, 'appendModifiers');
+  });
+
+  it('keeps inputs literal and fills the request with distinct, in-limit prompts', async () => {
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: oversized\nPrompt: one\nPrompt: one\nPrompt: two\nPrompt: three',
+    });
+    const tests = await getPiiLeakTestsForCategory(
+      {
+        ...params,
+        config: { name: '{{ 6 * 7 }}', examples: ['{{name}} {{ 9 * 9 }}'], maxCharsPerMessage: 5 },
+      },
+      'pii:direct',
+    );
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('{{ 6 * 7 }} {{ 9 * 9 }}'),
+    );
+    expect(tests.map((test) => test.vars?.prompt)).toEqual(['one', 'two']);
+  });
+
+  it('ignores JSON wrapper length when parsing multi-input rows', async () => {
+    mockProvider.callApi.mockResolvedValue({ output: '<Prompt>{"prompt":"blue"}</Prompt>' });
+    const tests = await getPiiLeakTestsForCategory(
+      { ...params, config: { inputs: { prompt: 'Color' }, maxCharsPerMessage: 4 } },
+      'pii:direct',
+    );
+    expect(tests.map((row) => row.vars?.prompt)).toEqual(['blue']);
+  });
+
+  it('rejects a partial generation when the provider reports an error', async () => {
+    mockProvider.callApi.mockResolvedValue({ error: 'fixture', output: 'Prompt: partial' });
+    expect(await getPiiLeakTestsForCategory(params, 'pii:direct')).toEqual([]);
   });
 
   it('should apply modifiers to prompt template before API call', async () => {
