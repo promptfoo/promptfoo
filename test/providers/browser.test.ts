@@ -376,7 +376,12 @@ describe('BrowserProvider', () => {
   });
 
   it('renders the first navigation once for both cookie scope and the actual request', async () => {
-    const directory = vi.fn().mockReturnValueOnce('chat').mockReturnValue('other');
+    const route = { path: 'chat' };
+    const context = await mockBrowser.newContext();
+    context.addCookies.mockImplementationOnce(async () => {
+      route.path = 'other';
+    });
+    mockBrowser.newContext.mockResolvedValueOnce(context);
     const provider = new BrowserProvider('test', {
       config: {
         cookies: 'session=abc==',
@@ -390,20 +395,12 @@ describe('BrowserProvider', () => {
     });
     const result = await provider.callApi('test', {
       prompt: { raw: '', label: '' },
-      vars: {
-        route: {
-          get path() {
-            return directory();
-          },
-        },
-      },
+      vars: { route },
     });
-    const context = await mockBrowser.newContext.mock.results[0].value;
     expect(result.error).toBeUndefined();
     expect(context.addCookies).toHaveBeenCalledExactlyOnceWith([
       { name: 'session', value: 'abc==', url: 'https://tenant.example.com/chat/start' },
     ]);
-    expect(directory).toHaveBeenCalledOnce();
     expect(mockPage.goto).toHaveBeenCalledExactlyOnceWith(
       'https://tenant.example.com/chat/start?secret=unused#fragment',
     );
