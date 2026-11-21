@@ -28,7 +28,6 @@ interface OTLPAttribute {
     intValue?: string;
     doubleValue?: number;
     boolValue?: boolean;
-    bytesValue?: string;
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
   } | null;
@@ -971,9 +970,6 @@ export class OTLPReceiver {
     }
     if (value.boolValue !== undefined) {
       return value.boolValue;
-    }
-    if (typeof value.bytesValue === 'string') {
-      return Buffer.from(value.bytesValue, 'base64').toString('base64');
     }
     if (value.arrayValue?.values) {
       return value.arrayValue.values.map((v) => this.parseAttributeValue(v));

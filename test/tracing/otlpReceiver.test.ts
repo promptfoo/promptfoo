@@ -214,36 +214,44 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it.each(['json', 'protobuf'])('skips unset event attribute values in %s', async (format) => {
-      const body = payload([
-        {
-          name: 'optional values',
-          attributes: [
-            { key: 'omitted' },
-            { key: 'null', value: null },
-            { key: 'empty', value: {} },
-            { key: 'ready', value: { boolValue: false } },
-            { key: 'count', value: { intValue: '0' } },
-          ],
-        },
-      ]);
-      const encoded =
-        format === 'protobuf'
-          ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(body)
-          : body;
-      await request(receiver.getApp())
-        .post('/v1/traces')
-        .set('Content-Type', format === 'protobuf' ? 'application/x-protobuf' : 'application/json')
-        .send(encoded)
-        .expect(200);
-      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
-        {
-          name: 'optional values',
-          timestamp: 1700000000000,
-          attributes: { ready: false, count: 0 },
-        },
-      ]);
-    });
+    it.each(['json', 'protobuf'])(
+      'distinguishes an empty AnyValue from unset event attributes in %s',
+      async (format) => {
+        const body = payload([
+          {
+            name: 'optional values',
+            attributes: [
+              { key: 'omitted' },
+              { key: 'null', value: null },
+              { key: 'empty', value: {} },
+              { key: 'ready', value: { boolValue: false } },
+              { key: 'count', value: { intValue: '0' } },
+            ],
+          },
+        ]);
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+          {
+            name: 'optional values',
+            timestamp: 1700000000000,
+            attributes: { empty: null, ready: false, count: 0 },
+          },
+        ]);
+      },
+    );
 
     it.each([
       { intValue: '123456' },
