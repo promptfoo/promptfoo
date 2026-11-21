@@ -1,15 +1,19 @@
 import { z } from 'zod';
 
+export const MAX_GENERATION_COUNT = 1000;
+
 const GenerationCountSchema = z
   .string()
   .regex(/^\d+$/)
   .transform(Number)
-  .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
+  .pipe(z.number().int().positive().max(MAX_GENERATION_COUNT));
 
 export function parseGenerationCount(value: string, optionName: string): number {
   const result = GenerationCountSchema.safeParse(value);
   if (!result.success) {
-    throw new Error(`Option ${optionName} must be a positive safe integer.`);
+    throw new Error(
+      `Option ${optionName} must be a positive integer no greater than ${MAX_GENERATION_COUNT}.`,
+    );
   }
   return result.data;
 }

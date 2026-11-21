@@ -104,6 +104,7 @@ describe('dataset generation', () => {
       ['numPersonas', '1.5'],
       ['numPersonas', '2invalid'],
       ['numPersonas', '9007199254740992'],
+      ['numPersonas', '9007199254740991'],
       ['numTestCasesPerPersona', '0'],
       ['numTestCasesPerPersona', 'NaN'],
       ['numTestCasesPerPersona', ''],
@@ -120,10 +121,27 @@ describe('dataset generation', () => {
           numTestCasesPerPersona: '3',
           [name]: value,
         }),
-      ).rejects.toThrow(`Option --${name} must be a positive safe integer`);
+      ).rejects.toThrow(`Option --${name} must be a positive integer`);
       expect(resolveConfigs).not.toHaveBeenCalled();
       expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
       expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('caps the combined workload before loading any config or provider', async () => {
+      const options = {
+        config: 'fixture.yaml',
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+        cache: true,
+        write: false,
+        numPersonas: '10',
+        numTestCasesPerPersona: '101',
+      };
+      await expect(doGenerateDataset(options)).rejects.toThrow('at most 1000 test cases');
+      expect(resolveConfigs).not.toHaveBeenCalled();
+      expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+      await doGenerateDataset({ ...options, numTestCasesPerPersona: '100' });
+      expect(synthesizeFromTestSuite).toHaveBeenCalledOnce();
     });
 
     it.each(['tests.txt', 'tests.json', ''])(

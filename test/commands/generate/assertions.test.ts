@@ -110,7 +110,7 @@ describe('assertion generation', () => {
       });
     });
 
-    it.each(['0', '-1', '1.5', '2invalid', 'NaN', '', '9007199254740992'])(
+    it.each(['0', '-1', '1.5', '2invalid', 'NaN', '', '1001', '9007199254740992'])(
       'rejects invalid assertion count %j before loading config or generating',
       async (numAssertions) => {
         await expect(
@@ -123,7 +123,7 @@ describe('assertion generation', () => {
             type: 'llm-rubric',
             numAssertions,
           }),
-        ).rejects.toThrow('Option --numAssertions must be a positive safe integer');
+        ).rejects.toThrow('Option --numAssertions must be a positive integer');
         expect(resolveConfigs).not.toHaveBeenCalled();
         expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
         expect(fs.writeFileSync).not.toHaveBeenCalled();

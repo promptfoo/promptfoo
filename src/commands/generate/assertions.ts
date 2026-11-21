@@ -12,7 +12,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { loadYaml } from '../../util/yamlLoad';
-import { parseGenerationCount, validateGenerationOutput } from './options';
+import { MAX_GENERATION_COUNT, parseGenerationCount, validateGenerationOutput } from './options';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
@@ -149,7 +149,10 @@ export function generateAssertionsCommand(
     )
     .option('-o, --output [path]', 'Path to output file. Supports YAML output')
     .option('-w, --write', 'Write results to promptfoo configuration file')
-    .option('--numAssertions <amount>', 'Number of assertions to generate')
+    .option(
+      '--numAssertions <amount>',
+      `Number of assertions to generate (up to ${MAX_GENERATION_COUNT})`,
+    )
     .option(
       '--provider <provider>',
       `Provider to use for generating assertions. Defaults to the default grading provider.`,

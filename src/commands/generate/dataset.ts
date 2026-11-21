@@ -12,7 +12,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { loadYaml } from '../../util/yamlLoad';
-import { parseGenerationCount, validateGenerationOutput } from './options';
+import { MAX_GENERATION_COUNT, parseGenerationCount, validateGenerationOutput } from './options';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
@@ -35,6 +35,11 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     options.numTestCasesPerPersona,
     '--numTestCasesPerPersona',
   );
+  if (numPersonas * numTestCasesPerPersona > MAX_GENERATION_COUNT) {
+    throw new Error(
+      `Reduce --numPersonas or --numTestCasesPerPersona to generate at most ${MAX_GENERATION_COUNT} test cases.`,
+    );
+  }
   validateGenerationOutput(options.output, ['.csv', '.yaml']);
 
   setupEnv(options.envFile);
@@ -150,7 +155,11 @@ export function generateDatasetCommand(
       `Provider to use for generating adversarial tests. Defaults to the default grading provider.`,
     )
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
-    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .option(
+      '--numTestCasesPerPersona <number>',
+      `Number of test cases per persona (up to ${MAX_GENERATION_COUNT} total)`,
+      '3',
+    )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action((opts) => doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath }));
