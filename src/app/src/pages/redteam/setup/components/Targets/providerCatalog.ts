@@ -646,6 +646,9 @@ export function getProviderEditorType(
   if (template) {
     return template.value;
   }
+  if (id.startsWith('volcengine:')) {
+    return 'volcengine';
+  }
   if (id.startsWith('bedrock:agents:')) {
     return 'bedrock-agent';
   }

@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Volcengine Ark (Doubao) provider demo
+
+prompts:
+  - 'Explain the concept of {{concept}} in one concise paragraph.'
+
+providers:
+  - id: volcengine:doubao-seed-2-1-pro-260628
+    label: 'Doubao 2.1 Pro'
+    config:
+      temperature: 0.7
+  - id: volcengine:doubao-seed-2-1-turbo-260628
+    label: 'Doubao 2.1 Turbo'
+    config:
+      temperature: 0.7
+
+tests:
+  - vars:
+      concept: 'quantum computing'
+    assert:
+      - type: icontains
+        value: quantum
+      - type: icontains-any
+        value: [qubit, superposition, entanglement, computing]
+  - vars:
+      concept: 'large language models'
+    assert:
+      - type: icontains
+        value: transformer
+      - type: icontains-any
+        value: [attention, parameters, token, neural, training]

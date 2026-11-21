@@ -221,6 +221,7 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   fal: 'FAL_KEY',
   huggingface: 'HF_TOKEN',
   'cloudflare-ai': 'CLOUDFLARE_API_KEY',
+  volcengine: 'ARK_API_KEY',
 };
 
 function getDefaultEnvVar(providerId: string): string {
