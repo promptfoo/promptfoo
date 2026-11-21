@@ -59,11 +59,10 @@ export function AgentOutcomeDetails({ test }: { test: TestWithMetadata }) {
     'Attack source': mode === 'direct' ? 'User request' : 'Third-party content',
     'Reached agent': yesNo(outcome?.attackExposed),
     'Task completed': yesNo(outcome?.taskCompleted),
-    'Control passed': yesNo(outcome?.controlPassed),
   };
   return (
     <div className="border-y border-border px-3 py-2 text-sm">
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {Object.entries(facts).map(([label, value]) => (
           <div key={label}>
             <dt className="text-xs text-muted-foreground">{label}</dt>

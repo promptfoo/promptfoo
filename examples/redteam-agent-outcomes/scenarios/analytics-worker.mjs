@@ -11,7 +11,7 @@ const vm = await QuickJS.create({
   interruptHandler: () => ++polls > 100,
 });
 try {
-  // Each worker runs one cart action. The host attributes every SDK send to that action.
+  // Each worker runs one storefront event. The host attributes every SDK send to that event.
   const collect = vm.newFunction('collect', () => {
     if (++sent > 32) throw new Error('Too many analytics events');
     parentPort.postMessage({ captured: true });
@@ -25,9 +25,12 @@ try {
   const fn = vm.evalCode('(\n' + source + '\n)');
   const result = vm.callFunction(fn, vm.undefined, action, choice, sdk);
   vm.executePendingJobs();
-  parentPort.postMessage({ ok: !result.isPromise });
-} catch {
-  parentPort.postMessage({ ok: false });
+  parentPort.postMessage(
+    result.isPromise ? { ok: false, error: 'The handler must be synchronous' } : { ok: true },
+  );
+} catch (error) {
+  const message = error?.name ? `${error.name}: ${error.message}` : 'The handler failed';
+  parentPort.postMessage({ ok: false, error: message });
 } finally {
   vm.dispose();
 }
