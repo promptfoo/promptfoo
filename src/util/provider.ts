@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
 import { sanitizeUrl } from './sanitizer';
@@ -72,6 +74,47 @@ export function sanitizeProviderIdForLog(providerId: string): string {
     : providerId;
 }
 
+function normalizeWildcardPath(raw: string, canonical: string): string {
+  // An exec ID can contain a command and arguments. Resolving the whole string as
+  // a path can remove the executable when an argument contains a parent segment.
+  if (raw.startsWith('exec:') && /\s/.test(raw)) {
+    const script = raw.slice('exec:'.length);
+    const command = /^\s*(?:"([^"]*)"|'([^']*)'|([^\s"']+))/.exec(script);
+    const executable = command?.[1] || command?.[2] || command?.[3];
+    if (!command || !executable || !/[\\/]/.test(executable)) {
+      return raw;
+    }
+    const args = script.slice(command[0].length);
+    if (args && !/^\s/.test(args)) {
+      return raw;
+    }
+    return canonicalizeProviderId('exec:' + executable) + args;
+  }
+  // The shared canonicalizer preserves absolute file IDs for exact matching.
+  return canonical.startsWith('file://')
+    ? `file://${path.normalize(canonical.slice('file://'.length))}`
+    : canonical;
+}
+
+function matchesBasenameScriptWildcard(ref: string, id: string, basePath: unknown): boolean {
+  const script = /^(python|golang):([^:]+)(:[^:]*)?$/.exec(id);
+  if (
+    !script ||
+    [script[2], script[3]].some((part) => part?.includes('/') || part?.includes(path.win32.sep)) ||
+    !script[2].toLowerCase().endsWith(script[1] === 'python' ? '.py' : '.go') ||
+    !ref.startsWith(script[1] + ':')
+  ) {
+    return false;
+  }
+
+  // These constructors omit './' for scripts directly inside their base directory.
+  const directory = typeof basePath === 'string' ? basePath : process.cwd();
+  const refPath = ref.slice(script[1].length + 1);
+  const resolvedRef = path.resolve(directory, refPath);
+  const resolvedId = path.resolve(directory, script[2] + (script[3] ?? ''));
+  return resolvedId.startsWith(resolvedRef.slice(0, -1));
+}
+
 /**
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
@@ -97,7 +140,18 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
   // Wildcard match: 'openai:*' matches 'openai:gpt-4', etc.
   if (ref.endsWith('*')) {
     const prefix = ref.slice(0, -1);
-    if (label?.startsWith(prefix) || id.startsWith(prefix) || canonicalId.startsWith(prefix)) {
+    // Normalize before removing '*' so a directory's trailing separator is retained.
+    const canonicalPrefix = normalizeWildcardPath(ref, canonicalRef).slice(0, -1);
+    const wildcardId = normalizeWildcardPath(id, canonicalId);
+    if (
+      label?.startsWith(prefix) ||
+      id.startsWith(prefix) ||
+      wildcardId.startsWith(prefix) ||
+      wildcardId.startsWith(canonicalPrefix)
+    ) {
+      return true;
+    }
+    if (matchesBasenameScriptWildcard(ref, id, provider.config?.basePath)) {
       return true;
     }
   }
