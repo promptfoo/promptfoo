@@ -80,53 +80,11 @@ To use promptfoo as a library in your project, run `npm install promptfoo --save
 
 ## Verify Installation
 
-To verify that promptfoo is installed correctly, run:
-
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    promptfoo --version
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
-    ```bash
-    npx promptfoo@latest --version
-    ```
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    ```bash
-    promptfoo --version
-    ```
-  </TabItem>
-</Tabs>
-
-This should display the current version number of promptfoo.
+With npm, Homebrew, or pip, run `promptfoo --version` to check the CLI version. With npx, run `npx promptfoo@latest --version`.
 
 ## Run Promptfoo
 
-After installation, you can start using promptfoo by running:
-
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    promptfoo init
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
-    ```bash
-    npx promptfoo@latest init
-    ```
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    ```bash
-    promptfoo init
-    ```
-  </TabItem>
-</Tabs>
-
-This will guide you through the process of creating a `promptfooconfig.yaml` file.
-
-For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
+Run `promptfoo init` (or `npx promptfoo@latest init` with npx) to create a `promptfooconfig.yaml` file. See [Getting Started](./getting-started.md) to run your first evaluation.
 
 ## Uninstall Promptfoo
 
