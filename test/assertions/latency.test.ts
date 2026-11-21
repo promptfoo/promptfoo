@@ -1,20 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { handleLatency } from '../../src/assertions/latency';
+import { createNumericAssertionParams } from '../factories/assertionParams';
 
-import type { AssertionParams } from '../../src/types';
-
-const params = (overrides: Partial<AssertionParams>): AssertionParams =>
-  ({
-    assertion: { type: 'latency', threshold: 1000 },
-    baseType: 'latency',
-    assertionValueContext: {} as any,
-    inverse: false,
-    output: '',
-    outputString: '',
-    providerResponse: { output: '' },
-    test: {},
-    ...overrides,
-  }) as AssertionParams;
+const params = createNumericAssertionParams('latency', 1000);
 
 describe('handleLatency', () => {
   it('passes when latency is within threshold', () => {

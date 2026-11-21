@@ -2,7 +2,7 @@ name: Browser Example Python
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'examples/integration-browser/headless/**'
       - 'src/**'
       - 'scripts/**'
@@ -15,17 +15,7 @@ on:
       - '.github/workflows/browser-example-python.yml'
   push:
     branches: [main]
-    paths:
-      - 'examples/integration-browser/headless/**'
-      - 'src/**'
-      - 'scripts/**'
-      - 'drizzle/**'
-      - '.nvmrc'
-      - '.npmrc'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - '.github/workflows/browser-example-python.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read
@@ -43,7 +33,7 @@ jobs:
       GRADIO_ANALYTICS_ENABLED: 'False'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
+        with: &no-persisted-credentials
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -64,8 +54,7 @@ jobs:
       PROMPTFOO_DISABLE_TELEMETRY: '1'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+        with: *no-persisted-credentials
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'

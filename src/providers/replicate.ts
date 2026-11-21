@@ -10,15 +10,12 @@ import {
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
-import {
-  extractProviderResponseAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../tracing/genaiTracer';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { resolveProviderApiKey } from './credentials';
 import { parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -254,12 +251,12 @@ export class ReplicateProvider implements ApiProvider {
     const { config, id, env } = options;
     const { apiKey, ...restConfig } = config ?? {};
     this.modelName = modelName;
-    this.apiKey =
-      apiKey ||
-      env?.REPLICATE_API_KEY ||
-      env?.REPLICATE_API_TOKEN ||
-      getEnvString('REPLICATE_API_TOKEN') ||
-      getEnvString('REPLICATE_API_KEY');
+    this.apiKey = resolveProviderApiKey(
+      { apiKey },
+      env,
+      ['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN'],
+      ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
+    );
     this.config = restConfig;
     this.id = id ? () => id : this.id;
   }
@@ -305,7 +302,7 @@ export class ReplicateProvider implements ApiProvider {
       withGenAISpan(
         spanContext,
         () => this.callApiInternal(prompt, options, retain),
-        extractProviderResponseAttributes,
+        extractGenAIResponse,
       ),
     );
   }
@@ -608,14 +605,6 @@ export class ReplicateModerationProvider
   }
 }
 
-// LlamaGuard 4 is the preferred default on Replicate
-// LlamaGuard 4 adds S14: Code Interpreter Abuse category for enhanced safety
-export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b';
-
-export const DefaultModerationProvider = new ReplicateModerationProvider(
-  LLAMAGUARD_4_MODEL_ID, // Using LlamaGuard 4 as the default
-);
-
 export class ReplicateImageProvider extends ReplicateProvider {
   constructor(
     modelName: string,
@@ -712,6 +701,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
       const polled = prediction.status === 'starting' || prediction.status === 'processing';
       cacheHit = creation.cached && !polled;
       if (polled) {
+        cached = shared;
         prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
 
@@ -724,6 +714,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
       if (prediction.status === 'failed') {
         return {
           error: prediction.error || 'Image generation failed',
+          cached,
+          cacheHit,
         };
       }
 
@@ -740,6 +732,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
     if (!response) {
       return {
         error: 'No output received from Replicate',
+        cached,
+        cacheHit,
       };
     }
 
@@ -753,6 +747,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
     if (!url) {
       return {
         error: `No image URL found in response: ${JSON.stringify(response)}`,
+        cached,
+        cacheHit,
       };
     }
 

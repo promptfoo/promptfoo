@@ -49,6 +49,25 @@ function evaluateLatency(provider: ApiProvider, prompt = 'hello', type: Assertio
   });
 }
 
+function backgroundProvider(endpoint?: 'gateway') {
+  return new OpenAiResponsesProvider('gpt-4.1', {
+    config: {
+      apiKey: 'fixture-key',
+      background: true,
+      ...(endpoint && { apiBaseUrl: 'https://gateway.example/v1' }),
+      headers: { 'OpenAI-Project': 'fixture-project', ...(endpoint && { Authorization: '' }) },
+    },
+  });
+}
+
+async function expectReplay(provider: ApiProvider, requestCount: number) {
+  expect(fetchWithRetries).toHaveBeenCalledTimes(requestCount);
+  const [replay] = await evaluateLatency(provider);
+  expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
+  expect(replay.error).toContain('does not support cached results');
+  expect(fetchWithRetries).toHaveBeenCalledTimes(requestCount);
+}
+
 const output = 'fixture output';
 const providers = [
   {
@@ -103,8 +122,8 @@ describe('latency assertions with real provider caching', () => {
     await evaluateLatency(provider);
 
     expect(tracedResponses).toHaveLength(2);
-    expect(await callApi.mock.results[1].value).toMatchObject({ output, cacheHit: true });
-    expect(tracedResponses[1]).toMatchObject({ output, cacheHit: true });
+    expect(await callApi.mock.results[1].value).toMatchObject({ output, cached: true });
+    expect(tracedResponses[1]).toMatchObject({ output, cached: true });
     expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   });
 
@@ -142,14 +161,7 @@ describe('latency assertions with real provider caching', () => {
       vi.mocked(fetchWithRetries)
         .mockImplementationOnce(() => creation.promise)
         .mockImplementation(async () => Response.json(refusal));
-      const provider = new OpenAiResponsesProvider('gpt-4.1', {
-        config: {
-          apiKey: 'fixture-key',
-          apiBaseUrl: 'https://gateway.example/v1',
-          background: true,
-          headers: { 'OpenAI-Project': 'fixture-project', Authorization: '' },
-        },
-      });
+      const provider = backgroundProvider('gateway');
 
       const calls = [evaluateLatency(provider), evaluateLatency(provider)];
       await vi.advanceTimersByTimeAsync(25);
@@ -178,7 +190,7 @@ describe('latency assertions with real provider caching', () => {
 
     const rawReplay = await provider.callApi('hello');
     expect(rawReplay.output).toBe(output);
-    expect(rawReplay.cacheHit).toBe(true);
+    expect(rawReplay.cached).toBe(true);
     const [replay] = await evaluateLatency(provider);
     expect(replay.success).toBe(false);
     expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
@@ -243,10 +255,7 @@ describe('latency assertions with real provider caching', () => {
       expect(fresh.response?.output).toContain('https://example.com/output');
       expect(fetchWithRetries).toHaveBeenCalledTimes(3);
 
-      const [replay] = await evaluateLatency(provider);
-      expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(replay.error).toContain('does not support cached results');
-      expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+      await expectReplay(provider, 3);
     },
   );
 
@@ -277,41 +286,32 @@ describe('latency assertions with real provider caching', () => {
     },
   );
 
-  it('grades a live poll after replaying an unfinished background job', async () => {
-    vi.mocked(fetchWithRetries)
+  it.each([false, true])('grades resumed background jobs (expired: %s)', async (expired) => {
+    const requests = vi
+      .mocked(fetchWithRetries)
       .mockResolvedValueOnce(Response.json({ id: 'resp_pending', status: 'queued', output: [] }))
-      .mockResolvedValueOnce(Response.json({ error: { message: 'Unavailable' } }, { status: 503 }))
-      .mockResolvedValueOnce(
-        Response.json({
-          id: 'resp_pending',
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: output }],
-            },
-          ],
-        }),
+      .mockResolvedValueOnce(Response.json({ error: { message: 'Unavailable' } }, { status: 503 }));
+    if (expired) {
+      requests.mockResolvedValueOnce(
+        Response.json({ error: { message: 'Expired' } }, { status: 404 }),
       );
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: {
-        apiKey: 'fixture-key',
-        background: true,
-        headers: { 'OpenAI-Project': 'fixture-project' },
-      },
-    });
+    }
+    requests.mockResolvedValueOnce(
+      Response.json({
+        id: expired ? 'resp_replacement' : 'resp_pending',
+        status: 'completed',
+        output: [
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: output }] },
+        ],
+      }),
+    );
+    const provider = backgroundProvider();
     expect((await provider.callApi('hello')).error).toContain('Unavailable');
 
     const [fresh] = await evaluateLatency(provider);
     expect(fresh.success).toBe(true);
     expect(fresh.response).toMatchObject({ output, cacheHit: false });
-    expect(fetchWithRetries).toHaveBeenCalledTimes(3);
-
-    const [replay] = await evaluateLatency(provider);
-    expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-    expect(replay.error).toContain('does not support cached results');
-    expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+    await expectReplay(provider, expired ? 4 : 3);
   });
 
   it('grades a live HTTP policy refusal after replaying a queued background job', async () => {
@@ -331,14 +331,7 @@ describe('latency assertions with real provider caching', () => {
         ),
       )
       .mockResolvedValueOnce(Response.json({ id: 'resp_policy', status: 'cancelled' }));
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: {
-        apiKey: 'fixture-key',
-        apiBaseUrl: 'https://gateway.example/v1',
-        background: true,
-        headers: { 'OpenAI-Project': 'fixture-project', Authorization: '' },
-      },
-    });
+    const provider = backgroundProvider('gateway');
     expect((await provider.callApi('hello')).error).toContain('Unavailable');
     const [fresh] = await evaluateLatency(provider);
     expect(fresh.success).toBe(true);
@@ -361,49 +354,7 @@ describe('latency assertions with real provider caching', () => {
       expect(result.failureReason).not.toBe(ResultFailureReason.ERROR);
       expect(result.error).toContain('threshold 10ms');
     }
-    const [replay] = await evaluateLatency(provider);
-    expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-    expect(replay.error).toContain('does not support cached results');
-    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
-  });
-
-  it('grades a fresh replacement after discarding an expired cached background job', async () => {
-    vi.mocked(fetchWithRetries)
-      .mockResolvedValueOnce(Response.json({ id: 'resp_expired', status: 'queued', output: [] }))
-      .mockResolvedValueOnce(Response.json({ error: { message: 'Unavailable' } }, { status: 503 }))
-      .mockResolvedValueOnce(Response.json({ error: { message: 'Expired' } }, { status: 404 }))
-      .mockResolvedValueOnce(
-        Response.json({
-          id: 'resp_replacement',
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: output }],
-            },
-          ],
-        }),
-      );
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: {
-        apiKey: 'fixture-key',
-        background: true,
-        headers: { 'OpenAI-Project': 'fixture-project' },
-      },
-    });
-    // The failed first poll leaves a queued cache entry that expires upstream.
-    expect((await provider.callApi('hello')).error).toContain('Unavailable');
-
-    const [fresh] = await evaluateLatency(provider);
-    expect(fresh.success).toBe(true);
-    expect(fresh.response).toMatchObject({ output, cacheHit: false });
-    expect(fetchWithRetries).toHaveBeenCalledTimes(4);
-
-    const [replay] = await evaluateLatency(provider);
-    expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-    expect(replay.error).toContain('does not support cached results');
-    expect(fetchWithRetries).toHaveBeenCalledTimes(4);
+    await expectReplay(provider, 1);
   });
 
   it.each([false, true])(
@@ -421,13 +372,7 @@ describe('latency assertions with real provider caching', () => {
       vi.mocked(fetchWithRetries)
         .mockImplementationOnce(() => creation.promise)
         .mockImplementation(async () => Response.json(completed));
-      const provider = new OpenAiResponsesProvider('gpt-4.1', {
-        config: {
-          apiKey: 'fixture-key',
-          background: true,
-          headers: { 'OpenAI-Project': 'fixture-project' },
-        },
-      });
+      const provider = backgroundProvider();
 
       const calls = [evaluateLatency(provider), evaluateLatency(provider)];
       await vi.advanceTimersByTimeAsync(25);
@@ -449,10 +394,7 @@ describe('latency assertions with real provider caching', () => {
         expect(result.error).toContain('threshold 10ms');
       }
 
-      const [replay] = await evaluateLatency(provider);
-      expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(replay.error).toContain('does not support cached results');
-      expect(fetchWithRetries).toHaveBeenCalledTimes(polling ? 2 : 1);
+      await expectReplay(provider, polling ? 2 : 1);
     },
   );
 });
