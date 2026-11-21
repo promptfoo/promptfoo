@@ -73,7 +73,7 @@ function isSecretParameterName(name: string): boolean {
   });
 }
 
-function isSecretParameter(name: string, value: string | undefined): boolean {
+export function isSecretParameter(name: string, value?: string): boolean {
   // Boolean controls such as includeCredentials are settings, not credential values.
   if (
     /^(?:true|false)$/i.test(value ?? '') &&
@@ -1694,6 +1694,32 @@ export function sanitizeUrl(url: string): string {
   }
 }
 
+/** Mask opaque credential segments in a diagnostic URL or path. */
+export function sanitizePathnameForLogging(pathname: string) {
+  return pathname
+    .split('/')
+    .map((segment, index, segments) => {
+      const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
+      try {
+        const decoded = decodeURIComponent(segment);
+        // Credential routes can also contain ordinary words such as /auth/proxy.
+        const opaqueValue =
+          isSecretField(previous) &&
+          /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
+          /[a-z]/i.test(decoded) &&
+          /[0-9]/.test(decoded);
+        return opaqueValue ||
+          OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
+          looksLikeSecret(decoded)
+          ? '%5BREDACTED%5D'
+          : segment;
+      } catch {
+        return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
+      }
+    })
+    .join('/');
+}
+
 /**
  * Sanitize a URL specifically for diagnostic output. Opaque path segments can be
  * legitimate resource IDs in persisted provider results, so only logging paths
@@ -1704,28 +1730,7 @@ export function sanitizeUrlForLogging(url: string): string {
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
-    const sanitizedPathname = parsed.pathname
-      .split('/')
-      .map((segment, index, segments) => {
-        const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
-        try {
-          const decoded = decodeURIComponent(segment);
-          // Credential routes can also contain ordinary words such as /auth/proxy.
-          const opaqueValue =
-            isSecretField(previous) &&
-            /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
-            /[a-z]/i.test(decoded) &&
-            /[0-9]/.test(decoded);
-          return opaqueValue ||
-            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
-            looksLikeSecret(decoded)
-            ? '%5BREDACTED%5D'
-            : segment;
-        } catch {
-          return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
-        }
-      })
-      .join('/');
+    const sanitizedPathname = sanitizePathnameForLogging(parsed.pathname);
     if (sanitizedPathname === parsed.pathname) {
       return sanitized;
     }

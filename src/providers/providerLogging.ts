@@ -1,10 +1,13 @@
 import {
   isCredentialHeader,
   isSecretEnvVarName,
+  isSecretParameter,
+  looksLikeSecret,
   normalizeFieldName,
   REDACTED,
   SECRET_FIELD_NAMES,
   sanitizeObject,
+  sanitizePathnameForLogging,
   sanitizeUrl,
 } from '../util/sanitizer';
 
@@ -28,29 +31,38 @@ export function sanitizeProviderObject(value: unknown, context: string): unknown
   return sanitizeObject(value, { context });
 }
 
-export function isEnvironmentAttribute(key: string): boolean {
-  return /env(?:iron(?:ment)?)?(?:[._-]?(?:vars|variables))?$/i.test(key);
+type Container = 'env' | 'headers' | 'params';
+
+export { isCredentialHeader, looksLikeSecret, sanitizePathnameForLogging };
+
+export function credentialContainer(key: string): Container | undefined {
+  if (/env(?:iron(?:ment)?)?(?:[._-]?(?:vars|variables))?(?:\.|$)/i.test(key)) {
+    return 'env';
+  }
+  if (/headers?(?:\.|$)/i.test(key)) {
+    return 'headers';
+  }
+  if (/(?:query|search|form)[._-]?(?:params|parameters|data|fields)(?:\.|$)/i.test(key)) {
+    return 'params';
+  }
 }
 
 /** Classify credential fields in provider traces while preserving usage and other descriptive metadata. */
-export function isCredentialAttributeKey(key: string, env = false): boolean {
+export function isCredentialAttributeKey(key: string, container?: Container): boolean {
   if (key.includes('\\')) {
     const decoded = key.replace(/(?<!\\)\\+(?:u([\da-f]{4})|[bfnrt])/gi, (_, hex?: string) =>
       hex ? String.fromCharCode(Number.parseInt(hex, 16)) : ' ',
     );
-    if (decoded !== key && isCredentialName(decoded, env)) {
+    if (decoded !== key && isCredentialName(decoded, container)) {
       return true;
     }
   }
-  return isCredentialName(key, env);
+  return isCredentialName(key, container);
 }
 
-function isCredentialName(key: string, env = false): boolean {
-  const dot = key.lastIndexOf('.');
-  if (
-    (env || (dot >= 0 && isEnvironmentAttribute(key.slice(0, dot)))) &&
-    isSecretEnvVarName(key.slice(dot + 1))
-  ) {
+function isCredentialName(key: string, container = credentialContainer(key)): boolean {
+  const name = key.slice(key.lastIndexOf('.') + 1);
+  if (container === 'env' && isSecretEnvVarName(name)) {
     return true;
   }
   // Java/Maven system properties and Gradle project properties attach a short
@@ -68,7 +80,7 @@ function isCredentialName(key: string, env = false): boolean {
     // Check auth and token compounds below so diagnostics like X-Token-Count survive.
     (field.startsWith('x') && !/auth|token/.test(field) && isCredentialHeader(field, '')) ||
     /(?:connstr_|connectionstrings(?:__|[.:]))/i.test(key) ||
-    /(?:connectionstrings?|connstr|dsn|(?:account|storage|sharedaccess)keys?[12]?|sharedaccesssignature|xsessionid|(?:code|pkce)verifier)$/.test(
+    /(?:jkscontent|sshkeys?|connectionstrings?|connstr|dsn|(?:account|storage|sharedaccess)keys?[12]?|sharedaccesssignature|xsessionid|(?:code|pkce)verifier)$/.test(
       normalized.replace(/[.[\]]/g, ''),
     )
   ) {
@@ -80,6 +92,17 @@ function isCredentialName(key: string, env = false): boolean {
     .toLowerCase()
     .split(/[^a-z\d]+/)
     .filter(Boolean);
+
+  // The shared HTTP predicates cover fused and vendor-specific credentials.
+  // Token and auth diagnostics have more specific rules below.
+  if (!parts.some((part) => /^(?:auth|authorization|tokens?)$/.test(part))) {
+    if (container === 'headers' && isCredentialHeader(name, '')) {
+      return true;
+    }
+    if (container === 'params' && (key.length > 1024 || isSecretParameter(key))) {
+      return true;
+    }
+  }
 
   return parts.some((part, index) => {
     const previous = parts[index - 1];
@@ -125,7 +148,7 @@ function isCredentialName(key: string, env = false): boolean {
     return (
       (!['algorithm', 'type', 'format', 'id'].includes(next) ||
         (previous === 'access' && next === 'id')) &&
-      /^(?:api|access|subscription|private|client|ssl|tls|signing|encryption)$/.test(previous)
+      /^(?:api|access|subscription|private|client|ssh|ssl|tls|signing|encryption)$/.test(previous)
     );
   });
 }

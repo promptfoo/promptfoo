@@ -1,7 +1,13 @@
 import logger from '../../logger';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { isCredentialAttributeKey, isEnvironmentAttribute } from '../providerLogging';
+import {
+  credentialContainer,
+  isCredentialAttributeKey,
+  isCredentialHeader,
+  looksLikeSecret,
+  sanitizePathnameForLogging,
+} from '../providerLogging';
 import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
 
@@ -57,12 +63,6 @@ export class OTLPTracingExporter implements TracingExporter {
               ? new Uint8Array(await encodeExportTraceServiceRequest(otlpPayload))
               : JSON.stringify(otlpPayload);
 
-          logger.debug('[AgentsTracing] Sending OTLP payload', {
-            url,
-            format,
-            spanCount: spans.length,
-          });
-
           const response = await fetchWithProxy(url, {
             method: 'POST',
             headers: {
@@ -72,22 +72,11 @@ export class OTLPTracingExporter implements TracingExporter {
             signal,
           });
 
-          if (response.ok) {
-            logger.debug('[AgentsTracing] Successfully exported traces to OTLP', {
-              otlpEndpoint,
-              spanCount: spans.length,
-            });
-          } else {
-            logger.error(
-              `[AgentsTracing] OTLP export failed: ${response.status} ${response.statusText}`,
-              { otlpEndpoint },
-            );
+          if (!response.ok) {
+            logger.error('[AgentsTracing] OTLP export failed', { status: response.status });
           }
-        } catch (error) {
-          logger.error('[AgentsTracing] Failed to export traces to OTLP', {
-            error,
-            otlpEndpoint,
-          });
+        } catch {
+          logger.error('[AgentsTracing] Failed to export traces to OTLP');
         }
       }),
     );
@@ -431,8 +420,8 @@ export class OTLPTracingExporter implements TracingExporter {
       }
 
       return Buffer.from(cleanHex, 'hex').toString('base64');
-    } catch (error) {
-      logger.error(`[AgentsTracing] Failed to convert hex to base64: ${hex}`, { error });
+    } catch {
+      logger.error('[AgentsTracing] Failed to encode an identifier');
       const fallbackLen = kind === 'span' ? 16 : 32;
       return Buffer.from(this.generateRandomHex(fallbackLen), 'hex').toString('base64');
     }
@@ -564,7 +553,8 @@ function commandToString(value: unknown): string | undefined {
   return String(value).trim() || undefined;
 }
 
-type AttributeContext = 'env' | 'headers' | 'curl' | 'operands' | undefined;
+type Container = ReturnType<typeof credentialContainer>;
+type AttributeContext = Container | 'curl' | 'operands' | 'omit';
 
 function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext): string {
   if (typeof value !== 'string') {
@@ -573,7 +563,8 @@ function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext)
   const trimmed = value.trim();
   if (
     (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
   ) {
     if (
       trimmed.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
@@ -583,6 +574,10 @@ function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext)
     }
     try {
       const parsed = parseStructuredJson(trimmed);
+      if (typeof parsed === 'string') {
+        const clean = sanitizeSerializedAttribute(parsed, context);
+        return clean === parsed ? value : JSON.stringify(clean);
+      }
       if (isRecord(parsed) || Array.isArray(parsed)) {
         // Parsing can discard earlier duplicate fields that still contain secrets in the source.
         return JSON.stringify(sanitizeStructuredAttribute(parsed, context));
@@ -674,11 +669,18 @@ function mustWithholdCredentialText(value: string): boolean {
     return true;
   }
 
-  // Simple quoted fields can retain surrounding text. For ambiguous fields
-  // classify the entire key, then withhold the text instead of guessing value boundaries.
-  for (const [, escapes, double, single, first] of value.matchAll(
-    /(?<!\\)(\\*)(?:"([^"]*)"|'([^']*)')\s*[:=]\s*(?=(\S|$))/g,
+  return hasAmbiguousCredential(value);
+}
+
+// Withhold ambiguous quoted fields, including keys followed by JSONC comments.
+function hasAmbiguousCredential(value: string) {
+  for (const match of value.matchAll(
+    /(?<!\\)(\\*)(?:"([^"]*)"|'([^']*)')\s*(?:\/[*/]|[:=]\s*(?=(\S|$)))/g,
   )) {
+    const [, escapes, double, single, first] = match;
+    if (first === undefined && value[match.index - 1] === '=') {
+      continue; // A quoted assignment value can precede a //registry line.
+    }
     const key = double ?? single;
     if (!escapes && /^[A-Za-z_][\w.-]*$/.test(key) && (first === '"' || first === "'")) {
       continue;
@@ -700,11 +702,21 @@ function sanitizeCredentialText(
     return '<redacted>';
   }
 
-  // Withhold mixed environment dumps as a unit. A value can span multiple lines.
-  if (context === 'env') {
-    for (const [, name] of value.matchAll(/\b([A-Za-z_]\w*)["']?\s*[:=]/g)) {
-      if (isCredentialAttributeKey(name, true)) {
-        return '<redacted>';
+  if (
+    (context === 'headers' &&
+      value
+        .split(/[\r\n]+/)
+        .some((line) => isCredentialHeader('', line.replace(/^\s*[\w.-]+\s*:\s*/, '')))) ||
+    (context === 'params' && looksLikeSecret(value))
+  ) {
+    return '<redacted>';
+  }
+
+  // Withhold mixed dumps as a unit. A header or environment value can span lines.
+  if (context === 'env' || context === 'headers') {
+    for (const match of value.matchAll(/(?<![\w.-])([\w.-]+)["']?\s*[:=][ \t]*/g)) {
+      if (isCredentialAttributeKey(match[1], context)) {
+        return context === 'headers' && match.index === 0 ? match[0] + '<redacted>' : '<redacted>';
       }
     }
   }
@@ -725,7 +737,7 @@ function sanitizeCredentialText(
   return (
     redactQuotedCredentials(value)
       .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
-      .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
+      .replace(/\b(?:sk|pk|key)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
       .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
       .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
       .replace(
@@ -749,6 +761,7 @@ function sanitizeCredentialText(
           }
         },
       )
+      .replace(/\/[\w.%~+=/-]+/g, sanitizePathnameForLogging)
       .replace(/(\/\/)[^\s/?#]+@/g, (_match, prefix: string) => `${prefix}<redacted>@`)
       .replace(
         /(["'])(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)(?:\\[^\r\n]|(?!\1)[^\\\r\n])*(?:\1|(?=[\r\n]|$))|(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
@@ -776,7 +789,7 @@ function sanitizeCredentialText(
             : match,
       )
       .replace(
-        /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]]+)\4/gi,
+        /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[[\w.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]]+)\4/gi,
         (match, prefix: string, key: string, separator: string, quote: string, raw: string) =>
           isPrivateParameter(key, prefix, raw, inspectEncoding)
             ? prefix + key + separator + quote + '<redacted>' + quote
@@ -792,11 +805,10 @@ function isPrivateParameter(key: string, prefix: string, raw: string, inspectEnc
   } catch {
     // Preserve malformed query parameters while still checking their literal key.
   }
-  const bareFormKey =
-    /^(?:key|code)$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
+  const parameter = (prefix === '' && !key.startsWith('-')) || /[?&#;]/.test(prefix);
   return (
-    isCredentialAttributeKey(decodedKey) ||
-    bareFormKey ||
+    isCredentialAttributeKey(decodedKey, parameter ? 'params' : undefined) ||
+    (parameter && (/^code$/i.test(decodedKey) || looksLikeSecret(raw))) ||
     (inspectEncoding && hasEncodedCredential(raw))
   );
 }
@@ -1012,6 +1024,9 @@ function sanitizeAttributeByKey(
       return new Date(Date.prototype.getTime.call(value));
     }
     const context = attributeContext(key, source);
+    if (context === 'omit') {
+      return '<redacted>';
+    }
     if (typeof value === 'string') {
       return sanitizeSerializedAttribute(value, context);
     }
@@ -1025,11 +1040,9 @@ function sanitizeAttributeByKey(
 }
 
 function attributeContext(key: string, source?: Record<string, unknown>): AttributeContext {
-  if (isEnvironmentAttribute(key)) {
-    return 'env';
-  }
-  if (/headers?$/i.test(key)) {
-    return 'headers';
+  const container = credentialContainer(key);
+  if (container) {
+    return container;
   }
   const args = /^(.*\.)?(?:argv|args|arguments|command_args)$/i.exec(key);
   if (!args || !source) {
@@ -1041,31 +1054,45 @@ function attributeContext(key: string, source?: Record<string, unknown>): Attrib
   const fields = ['command', 'cmd', 'program', 'executable', 'executable.path', 'executable.name'];
   for (const field of fields) {
     const value = source[(args[1] ?? '') + field];
-    const program = Array.isArray(value) ? value[0] : value;
-    if (typeof program === 'string') {
-      if (program.length > MAX_STRUCTURED_ATTRIBUTE_BYTES || containsCurl(program)) {
-        return 'curl';
+    if (value == null) {
+      continue;
+    }
+    const words = Array.isArray(value) ? value : [value];
+    let budget = MAX_STRUCTURED_ATTRIBUTE_BYTES;
+    if (words.length > MAX_STRUCTURED_ATTRIBUTE_NODES) {
+      return 'omit';
+    }
+    let tail = '';
+    for (const word of words) {
+      if (typeof word !== 'string' || word.length > budget || word.includes('<redacted>')) {
+        return 'omit';
       }
-      if (classifyExecutable(program) === 'operands') {
+      budget -= word.length;
+      tail = word;
+      if (containsCurl(word)) {
+        context = 'curl';
+      } else if (context !== 'curl' && classifyExecutable(word) === 'operands') {
         context = 'operands';
+        break;
       }
+    }
+    // The operand for a trailing credential option may start the sibling list.
+    const last = unquoteShellWord(tail).trimEnd().split(/\s+/).pop();
+    if (last && credentialOption(last, context === 'curl', false) === last) {
+      return 'omit';
     }
   }
   return context;
 }
 
-function isCredentialParameter(source: StructuredValue, key: string, context?: AttributeContext) {
+function isCredentialParameter(source: StructuredValue, key: string, context?: Container) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
     if (typeof option !== 'string') {
       return false;
     }
-    if (
-      (context === 'headers' || context === 'env') &&
-      Number(key) % 2 === 1 &&
-      /^[A-Za-z_][\w.-]*$/.test(option)
-    ) {
-      return isCredentialAttributeKey(option, context === 'env');
+    if (context && Number(key) % 2 === 1 && /^[\w.[\]-]+$/.test(option)) {
+      return isCredentialAttributeKey(option, context);
     }
     return /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) && isCredentialAttributeKey(option);
   }
@@ -1074,7 +1101,7 @@ function isCredentialParameter(source: StructuredValue, key: string, context?: A
       ([field, name]) =>
         /^(name|key)$/i.test(field) &&
         typeof name === 'string' &&
-        isCredentialAttributeKey(name, context === 'env'),
+        isCredentialAttributeKey(name, context),
     );
   }
   if (source.kty === 'RSA') {
@@ -1160,6 +1187,7 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     depth: number,
   ): StructuredValue | string {
     if (
+      context === 'omit' ||
       depth > MAX_STRUCTURED_ATTRIBUTE_DEPTH ||
       typeof (source as Record<string, unknown>).toJSON === 'function' ||
       isJwe(source, budget)
@@ -1170,15 +1198,22 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     const array = Array.isArray(source);
     charge(array ? source.length : 0);
     const target = array ? new Array<unknown>(source.length) : {};
-    const inherited = array && (context === 'headers' || context === 'env') ? context : undefined;
+    const inherited = context === 'operands' || context === 'curl' ? undefined : context;
     const redactArgument = array ? argumentRedactor(context, true) : undefined;
     for (const [key, value] of structuredAttributeEntries(source)) {
       charge(1, key.length + (typeof value === 'string' ? value.length : 0));
       const entry = redactArgument?.(value) ?? value;
-      const nested = inherited ?? attributeContext(key, array ? undefined : source);
+      const nested = attributeContext(key, array ? undefined : source) ?? inherited;
+      const headerLabel =
+        inherited === 'headers' &&
+        /^key$/i.test(key) &&
+        typeof entry === 'string' &&
+        isCredentialHeader(entry, '') &&
+        Object.keys(source).some((field) => /^value$/i.test(field));
       const sensitive =
-        isCredentialAttributeKey(key, context === 'env') ||
-        isCredentialParameter(source, key, context);
+        nested === 'omit' ||
+        (!headerLabel && isCredentialAttributeKey(key, inherited)) ||
+        isCredentialParameter(source, key, inherited);
       Object.defineProperty(target, sanitizeSerializedAttribute(key), {
         configurable: true,
         enumerable: true,

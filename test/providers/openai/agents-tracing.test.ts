@@ -1,6 +1,7 @@
 import { createCipheriv } from 'node:crypto';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
 import { decodeExportTraceServiceRequest } from '../../../src/tracing/protobuf';
 import { SECRET_FIELD_NAMES } from '../../../src/util/sanitizer';
@@ -8,6 +9,7 @@ import type { Span, SpanData } from '@openai/agents';
 
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
 
+vi.mock('../../../src/logger');
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
@@ -31,6 +33,10 @@ function getAttributes(span: any): Record<string, unknown> {
       return [attribute.key, value];
     }),
   );
+}
+
+function redacted(...fields: string[]) {
+  return Object.fromEntries(fields.map((field) => [field, '<redacted>']));
 }
 
 function wireStrings(...values: string[]) {
@@ -85,12 +91,16 @@ describe('OTLPTracingExporter', () => {
     await new OTLPTracingExporter().export(spans as unknown as Span<SpanData>[]);
     expect(mockFetchWithProxy).toHaveBeenCalledOnce();
     const body = mockFetchWithProxy.mock.calls[0][1].body;
-    return format === 'protobuf' ? decodeExportTraceServiceRequest(body) : JSON.parse(body);
+    const payload =
+      format === 'protobuf' ? await decodeExportTraceServiceRequest(body) : JSON.parse(body);
+    // All fixtures reserve 'opaque' for credentials. Check the complete decoded wire payload.
+    expect(JSON.stringify(payload)).not.toContain('opaque');
+    return payload;
   }
 
   async function exportCustomData(
-    data: Record<string, unknown>,
     format: Format,
+    data: Record<string, unknown>,
     name: unknown = 'lookup',
     error?: unknown,
   ) {
@@ -104,8 +114,26 @@ describe('OTLPTracingExporter', () => {
     return { attributes: getAttributes(spans[0]), payload };
   }
 
+  it.each(['success', 'status', 'exception'])('omits collector details on %s', async (result) => {
+    const endpoint = 'https://trace:opaque@host';
+    if (result === 'status') {
+      mockFetchWithProxy.mockResolvedValue({ status: 500, statusText: 'opaque' });
+    }
+    if (result === 'exception') {
+      mockFetchWithProxy.mockRejectedValue({ message: 'opaque' });
+    }
+    await exportSpans('json', [
+      { spanData: { type: 'custom' }, traceMetadata: { 'promptfoo.otlp_endpoint': endpoint } },
+    ]);
+    expect(mockFetchWithProxy.mock.calls[0][0]).toBe(endpoint + '/v1/traces');
+    expect(
+      JSON.stringify([vi.mocked(logger.debug).mock.calls, vi.mocked(logger.error).mock.calls]),
+    ).not.toContain('opaque');
+  });
+
   it.each(formats)('keeps both spans without exporting credentials in %s', async (format) => {
     const { attributes, payload } = await exportCustomData(
+      format,
       {
         request: "curl --header 'X-Api-Key: sensitive header value'",
         assigned: 'env HOME=/tmp curl -u buildbot:sensitive https://host',
@@ -121,7 +149,6 @@ describe('OTLPTracingExporter', () => {
         status_code: 200,
         source: 'next=%2Fsettings',
       },
-      format,
       17,
       {
         get message() {
@@ -144,18 +171,15 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'redacts standalone authorization values and encoded form credentials in %s',
     async (format) => {
-      const { attributes, payload } = await exportCustomData(
-        {
-          bearer: 'Bearer 0123456789abcdefghijklmnop',
-          basic: 'Basic YWxpY2U6b3BhcXVlLXBhc3N3b3Jk',
-          form: 'api+key=opaque/plus&access+token=opaque/token&token+count=12',
-          query: 'https://service.test/run?key=opaque/query&name=public',
-          formKey: 'key=opaque/form&name=public',
-          structured: { key: 'public identifier', session_status: 'complete' },
-          description: 'Basic authentication is supported',
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        bearer: 'Bearer 0123456789abcdefghijklmnop',
+        basic: 'Basic YWxpY2U6b3BhcXVlLXBhc3N3b3Jk',
+        form: 'api+key=opaque/plus&access+token=opaque/token&token+count=12',
+        query: 'https://service.test/run?key=opaque/query&name=public',
+        formKey: 'key=opaque/form&name=public',
+        structured: { key: 'public identifier', session_status: 'complete' },
+        description: 'Basic authentication is supported',
+      });
       expect(attributes.bearer).toBe('<redacted>');
       expect(attributes.basic).toBe('<redacted>');
       expect(attributes.form).toBe('api+key=<redacted>&access+token=<redacted>&token+count=12');
@@ -166,49 +190,61 @@ describe('OTLPTracingExporter', () => {
         session_status: 'complete',
       });
       expect(attributes.description).toBe('Basic authentication is supported');
-      expect(JSON.stringify(payload)).not.toContain('opaque/');
     },
   );
 
-  it.each([
-    ['json', 'X-Session-Id'],
-    ['protobuf', 'X-Session-Id'],
-    ['json', 'Ocp-Apim-Subscription-Key'],
-    ['protobuf', 'Ocp-Apim-Subscription-Key'],
-    ['json', 'X-Honeycomb-Team'],
-    ['protobuf', 'X-Honeycomb-Team'],
-  ] as const)(
-    'redacts %s header records for %s in every supported container',
-    async (format, header) => {
-      const diagnostics = {
-        'X-Idempotency-Key': 'request-id',
-        'X-Token-Count': 42,
-        'X-Auth-Type': 'oauth',
-        'X-Input-Tokens': 12,
-      };
-      const { attributes, payload } = await exportCustomData(
-        {
-          headers: { [header.toLowerCase()]: 'opaque/object', 'Content-Type': 'text/plain' },
-          rawHeaders: [header, 'opaque/raw', 'Content-Type', 'text/plain'],
-          records: [{ name: header, value: 'opaque/record' }],
-          text: `${header}: opaque/text`,
-          nested: JSON.stringify({ headers: { [header.toLowerCase()]: 'opaque/serialized' } }),
-          ...diagnostics,
-          session_status: 'completed',
-          session_duration: 42,
-        },
-        format,
-      );
-      expect(JSON.parse(attributes.headers as string)).toEqual({
-        [header.toLowerCase()]: '<redacted>',
-        'Content-Type': 'text/plain',
-      });
-      expect(attributes).toMatchObject(diagnostics);
-      expect(attributes.session_status).toBe('completed');
-      expect(attributes.session_duration).toBe(42);
-      expect(JSON.stringify(payload)).not.toContain('opaque/');
-    },
-  );
+  it.each(
+    formats.flatMap((format) =>
+      ['X-Session-Id', 'Ocp-Apim-Subscription-Key', 'X-Honeycomb-Team'].map(
+        (name) => [format, name] as const,
+      ),
+    ),
+  )('redacts %s header records for %s in every supported container', async (format, header) => {
+    const diagnostics = {
+      'X-Idempotency-Key': 'request-id',
+      'X-Token-Count': 42,
+      'X-Auth-Type': 'oauth',
+      'X-Input-Tokens': 12,
+    };
+    const { attributes } = await exportCustomData(format, {
+      headers: { [header.toLowerCase()]: 'opaque/object', 'Content-Type': 'text/plain' },
+      rawHeaders: [header, 'opaque/raw', 'Content-Type', 'text/plain'],
+      records: [{ name: header, value: 'opaque/record' }],
+      text: `${header}: opaque/text`,
+      nested: JSON.stringify({ headers: { [header.toLowerCase()]: 'opaque/serialized' } }),
+      ...diagnostics,
+      session_status: 'completed',
+      session_duration: 42,
+    });
+    expect(JSON.parse(attributes.headers as string)).toEqual({
+      [header.toLowerCase()]: '<redacted>',
+      'Content-Type': 'text/plain',
+    });
+    expect(attributes).toMatchObject(diagnostics);
+    expect(attributes.session_status).toBe('completed');
+    expect(attributes.session_duration).toBe(42);
+  });
+
+  it.each(formats)('uses HTTP credential rules in %s', async (format) => {
+    const fields = { vendorSessionId: 'opaque', gatewayauthentication: 'opaque' };
+    const { attributes } = await exportCustomData(format, {
+      headers: { ...fields, 'User-Agent': 'Basic opaque', 'X-Cache-Key': 'visible' },
+      requestHeaders: JSON.stringify(Object.entries(fields)),
+      scalar: JSON.stringify(JSON.stringify({ headers: fields })),
+      rawHeaders: 'VendorKey: opaque',
+      responseHeaders: 'Content-Type: text/plain\nUser-Agent: Basic opaque',
+      'response.headers.gatewayjwtv2': 'opaque',
+      queryParams: { 'user[key]': 'opaque' },
+      form: 'public=ok;key[0]=opaque',
+      url: 'https://host/?accesskeyid2=opaque&region=west',
+      result: 'POST https://gateway.test/v1/token_opaqueTenant123/responses',
+      relative: '/auth/opaqueTenant123',
+      generic: 'key-opaque123456789abcdefghij',
+    });
+    expect(JSON.parse(attributes.headers as string)['X-Cache-Key']).toBe('visible');
+    expect(attributes.url).toBe('https://host/?accesskeyid2=<redacted>&region=west');
+    expect(attributes.result).toBe('POST https://gateway.test/v1/%5BREDACTED%5D/responses');
+  });
 
   it.each(formats)(
     'redacts callable values at custom and trace metadata roots in %s',
@@ -251,15 +287,12 @@ describe('OTLPTracingExporter', () => {
         '-bname=opaque/cookie',
         'https://host',
       ];
-      const { attributes, payload } = await exportCustomData(
-        {
-          argv: args,
-          text: args.join(' '),
-          continued: 'curl -u \\\n bot:opaque/password https://host',
-          unrelated: 'git push -uorigin main',
-        },
-        format,
-      );
+      const { attributes, payload } = await exportCustomData(format, {
+        argv: args,
+        text: args.join(' '),
+        continued: 'curl -u \\\n bot:opaque/password https://host',
+        unrelated: 'git push -uorigin main',
+      });
       expect(JSON.stringify(payload)).not.toMatch(/opaque|phrase/);
       expect(attributes.text).toContain('https://host');
       expect(attributes.unrelated).toBe('git push -uorigin main');
@@ -269,18 +302,14 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'masks curl credentials in command chains and nested shell programs in %s',
     async (format) => {
-      const { attributes, payload } = await exportCustomData(
-        {
-          joined: "curl -''u bot:opaque/value https://host",
-          escaped: "c\\url --us''er bot:opaque/value https://host",
-          expansion: 'curl --us$(echo er) bot:opaque/value https://host',
-          command: 'echo public&&/usr/bin/curl -u bot:opaque/value https://host',
-          nested: "sh -c 'curl --proxy-user bot:opaque/value https://host'",
-          args: ['bash', '-lc', 'echo public\ncurl -ubot:opaque/value https://host'],
-        },
-        format,
-      );
-      expect(JSON.stringify(payload)).not.toContain('opaque/value');
+      const { attributes } = await exportCustomData(format, {
+        joined: "curl -''u bot:opaque/value https://host",
+        escaped: "c\\url --us''er bot:opaque/value https://host",
+        expansion: 'curl --us$(echo er) bot:opaque/value https://host',
+        command: 'echo public&&/usr/bin/curl -u bot:opaque/value https://host',
+        nested: "sh -c 'curl --proxy-user bot:opaque/value https://host'",
+        args: ['bash', '-lc', 'echo public\ncurl -ubot:opaque/value https://host'],
+      });
       expect(attributes.expansion).toBe('<redacted>');
       expect(attributes.command).toBe('echo public&&/usr/bin/curl -u <redacted> https://host');
     },
@@ -289,16 +318,13 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'redacts complete URL and form credentials, including punctuation, in %s',
     async (format) => {
-      const { attributes, payload } = await exportCustomData(
-        {
-          query: 'https://host/?password=,opaque/value&region=west',
-          encodedKey: 'https://host/?%61pi_key=before];opaque/value&region=west',
-          form: 'secret=]opaque/value&region=west',
-          redirect: 'next=https://host/?password=,opaque/value&region=west',
-          publicForm: 'cities=London,Tokyo&bbox=[1,2]',
-        },
-        format,
-      );
+      const { attributes, payload } = await exportCustomData(format, {
+        query: 'https://host/?password=,opaque/value&region=west',
+        encodedKey: 'https://host/?%61pi_key=before];opaque/value&region=west',
+        form: 'secret=]opaque/value&region=west',
+        redirect: 'next=https://host/?password=,opaque/value&region=west',
+        publicForm: 'cities=London,Tokyo&bbox=[1,2]',
+      });
       expect(JSON.stringify(payload)).not.toMatch(/opaque|before/);
       expect(attributes.query).toBe('https://host/?password=<redacted>&region=west');
       expect(attributes.encodedKey).toBe('https://host/?%61pi_key=<redacted>&region=west');
@@ -311,23 +337,19 @@ describe('OTLPTracingExporter', () => {
     'classifies attached system and project property names in %s',
     async (format) => {
       const cmd = ['java', '-Dpassword=first;second opaque/marker', '-Dinput.tokens=42', 'Main'];
-      const { attributes, payload } = await exportCustomData(
-        {
-          cmd,
-          serialized: JSON.stringify(cmd),
-          shell: 'mvn "-DapiKey=prefix opaque/marker" -Dfile.encoding=UTF-8',
-          gradle: "gradle -Ptoken='prefix opaque/marker' check",
-          nested: "sh -c 'java -Dpassword=opaque/marker Main'",
-          jvm: 'JAVA_TOOL_OPTIONS="-Dpassword=opaque/marker"',
-          powershell: ['cmdlet', '-Dsn', 'opaque/marker', '-PasswordHash', 'opaque/marker'],
-          expansion: 'java -Dpassword=$(echo opaque/marker) Main',
-          options: 'gradle -Dorg.gradle.jvmargs="-Dpassword=opaque/marker"',
-          split: ['gradle', '--project-prop', 'token=prefix opaque/marker', 'check'],
-          define: 'mvn --define="db.password=prefix opaque/marker" --define=region=west',
-        },
-        format,
-      );
-      expect(JSON.stringify(payload)).not.toContain('opaque/marker');
+      const { attributes } = await exportCustomData(format, {
+        cmd,
+        serialized: JSON.stringify(cmd),
+        shell: 'mvn "-DapiKey=prefix opaque/marker" -Dfile.encoding=UTF-8',
+        gradle: "gradle -Ptoken='prefix opaque/marker' check",
+        nested: "sh -c 'java -Dpassword=opaque/marker Main'",
+        jvm: 'JAVA_TOOL_OPTIONS="-Dpassword=opaque/marker"',
+        powershell: ['cmdlet', '-Dsn', 'opaque/marker', '-PasswordHash', 'opaque/marker'],
+        expansion: 'java -Dpassword=$(echo opaque/marker) Main',
+        options: 'gradle -Dorg.gradle.jvmargs="-Dpassword=opaque/marker"',
+        split: ['gradle', '--project-prop', 'token=prefix opaque/marker', 'check'],
+        define: 'mvn --define="db.password=prefix opaque/marker" --define=region=west',
+      });
       const clean = ['java', '-Dpassword=<redacted>', '-Dinput.tokens=42', 'Main'];
       expect(attributes.cmd).toEqual(wireStrings(...clean));
       expect(attributes.command).toBe(clean.join(' '));
@@ -342,11 +364,7 @@ describe('OTLPTracingExporter', () => {
     'preserves literal operands without ending authentication masking in %s',
     async (format) => {
       const cmd = ['curl', '--data', '&&', '-u', 'bot:opaque/value', 'https://host'];
-      const { attributes, payload } = await exportCustomData(
-        { cmd, nested: JSON.stringify(cmd) },
-        format,
-      );
-      expect(JSON.stringify(payload)).not.toContain('opaque');
+      const { attributes } = await exportCustomData(format, { cmd, nested: JSON.stringify(cmd) });
       expect(attributes.cmd).toEqual(
         wireStrings('curl', '--data', '&&', '-u', '<redacted>', 'https://host'),
       );
@@ -356,24 +374,20 @@ describe('OTLPTracingExporter', () => {
 
   it.each(formats)('checks environment maps and multiline dumps in %s', async (format) => {
     const env = { DBPWD: 'opaque', VENDOR_CERTKEY: 'opaque', KEY: 'opaque', MAX_TOKENS: '128' };
-    const { attributes, payload } = await exportCustomData(
-      {
-        env,
-        nested: JSON.stringify({ environment: env }),
-        'process.env.DBPWD': 'opaque',
-        'environmentVariables._DBPWD': 'opaque',
-        environment: [{ name: 'APP_ENCRYPTIONKEY', value: 'opaque' }],
-        'process.env': 'HOME=/tmp\nDBPWD=opaque\nKEY=opaque',
-        envVars: [
-          'DBPWD=opaque',
-          'HOME=/tmp\r\nexport KEY = "first\r\nopaque"',
-          'REGION=west\nMAX_TOKENS=128',
-        ],
-        key: 'item',
-      },
-      format,
-    );
-    expect(JSON.stringify(payload)).not.toContain('opaque');
+    const { attributes } = await exportCustomData(format, {
+      env,
+      nested: JSON.stringify({ environment: env }),
+      'process.env.DBPWD': 'opaque',
+      'environmentVariables._DBPWD': 'opaque',
+      environment: [{ name: 'APP_ENCRYPTIONKEY', value: 'opaque' }],
+      'process.env': 'HOME=/tmp\nDBPWD=opaque\nKEY=opaque',
+      envVars: [
+        'DBPWD=opaque',
+        'HOME=/tmp\r\nexport KEY = "first\r\nopaque"',
+        'REGION=west\nMAX_TOKENS=128',
+      ],
+      key: 'item',
+    });
     expect(JSON.parse(attributes.env as string).MAX_TOKENS).toBe('128');
     expect(attributes.envVars).toEqual(
       wireStrings('<redacted>', '<redacted>', 'REGION=west\nMAX_TOKENS=128'),
@@ -384,17 +398,13 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)('preserves unrelated command options after curl in %s', async (format) => {
     const cmd = ['rg', 'curl', '-u', 'src'];
     const shell = 'curl https://example.test && rg curl -u src ; git push -u origin main';
-    const { attributes, payload } = await exportCustomData(
-      {
-        cmd,
-        shell,
-        literal: ['curl', 'https://example.test', '&&', 'git', 'push', '-u', 'bot:opaque', 'main'],
-        chained: 'curl -u "bot:opaque;value" https://host;git push -u origin main',
-        lines: 'curl https://host\ngit push -u origin main',
-      },
-      format,
-    );
-    expect(JSON.stringify(payload)).not.toContain('opaque');
+    const { attributes } = await exportCustomData(format, {
+      cmd,
+      shell,
+      literal: ['curl', 'https://example.test', '&&', 'git', 'push', '-u', 'bot:opaque', 'main'],
+      chained: 'curl -u "bot:opaque;value" https://host;git push -u origin main',
+      lines: 'curl https://host\ngit push -u origin main',
+    });
     expect(attributes.cmd).toEqual(wireStrings(...cmd));
     expect(attributes.command).toBe(cmd.join(' '));
     expect(attributes.shell).toBe(shell);
@@ -406,19 +416,18 @@ describe('OTLPTracingExporter', () => {
     'withholds embedded fields with escaped or punctuated credential keys in %s',
     async (format) => {
       const publicText = 'Reply: {"city name":"London","st\\u0061tus":"ok"}';
-      const { attributes, payload } = await exportCustomData(
-        {
-          text: 'Request failed: {"pass\\u0077ord":"opaque/value"}',
-          array: 'Received {"\\u0061pi_key":["opaque/value"]}',
-          control: 'Received {"db\\tpassword":"opaque/value"}',
-          spaced: 'Request failed: {"api key":"opaque/value"}',
-          toml: "Request: 'database password' = 'opaque/value'",
-          native: { 'api key': 'opaque/value', 'pass\\u0077ord': 'opaque/value' },
-          publicText,
-        },
-        format,
-      );
-      expect(JSON.stringify(payload)).not.toContain('opaque/value');
+      const { attributes } = await exportCustomData(format, {
+        text: 'Request failed: {"pass\\u0077ord":"opaque/value"}',
+        array: 'Received {"\\u0061pi_key":["opaque/value"]}',
+        control: 'Received {"db\\tpassword":"opaque/value"}',
+        spaced: 'Request failed: {"api key":"opaque/value"}',
+        jsonc: '{"password" /* note */: "opaque/value"}',
+        scalar: JSON.stringify('{"password"\t/* note */\t: "opaque/value"}'),
+        comment: 'Reply: {"apiKey" // note\n: ["opaque/value"]}',
+        toml: "Request: 'database password' = 'opaque/value'",
+        native: { 'api key': 'opaque/value', 'pass\\u0077ord': 'opaque/value' },
+        publicText,
+      });
       expect(attributes.publicText).toBe(publicText);
     },
   );
@@ -428,18 +437,16 @@ describe('OTLPTracingExporter', () => {
     async (format) => {
       const args = ['-u', 'bot:opaque/value', 'https://host'];
       const search = { program: 'rg', args: ['curl', '-u', 'src'] };
-      const { attributes, payload } = await exportCustomData(
-        {
-          cmd: 'curl',
-          args,
-          nested: { executable: '/usr/bin/curl', arguments: args.join(' ') },
-          serialized: JSON.stringify({ command: 'curl', argv: args }),
-          search,
-          text: 'env -i rg curl -u src',
-        },
-        format,
-      );
-      expect(JSON.stringify(payload)).not.toContain('opaque');
+      const { attributes } = await exportCustomData(format, {
+        cmd: 'curl',
+        args,
+        nested: { executable: '/usr/bin/curl', arguments: args.join(' ') },
+        wrapped: { command: ['env', 'curl'], args },
+        split: { command: ['env', 'curl', '-u'], args: args.slice(1) },
+        serialized: JSON.stringify({ command: 'curl', argv: args }),
+        search,
+        text: 'env -i rg curl -u src',
+      });
       expect(attributes.args).toEqual(wireStrings('-u', '<redacted>', 'https://host'));
       expect(attributes.search).toBe(JSON.stringify(search));
       expect(attributes.text).toBe('env -i rg curl -u src');
@@ -455,30 +462,26 @@ describe('OTLPTracingExporter', () => {
         return 'env';
       },
     });
-    const { payload } = await exportCustomData({ argv: args }, 'json');
+    await exportCustomData('json', { argv: args });
     expect(reads).toBeLessThan(10);
-    expect(JSON.stringify(payload)).not.toContain('opaque/password');
   });
 
   it.each(formats)(
     'keeps ordinary short options and masks curl authentication in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        {
-          command: ['git', 'push', '-u', 'origin', 'main'],
-          gitText: 'git push -u origin main',
-          curlArgs: ['curl', '-u', 'fixture-user:fixture-password'],
-          curlText: 'curl -u fixture-user:fixture-password',
-          curlLong: 'curl --user fixture-user:fixture-password',
-          wrappedCurl: ['env', 'curl', '-u', 'fixture-user:fixture-password'],
-          wrappedCurlText: 'env -i curl --user fixture-user:fixture-password',
-          wrappedIdentity: 'env docker exec --user root app id',
-          identity: ['docker', 'exec', '--user', 'root', 'app', 'id'],
-          identityText: 'docker exec --user root app id',
-          requiredOption: ['client', '--password', '-fixture-value'],
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        command: ['git', 'push', '-u', 'origin', 'main'],
+        gitText: 'git push -u origin main',
+        curlArgs: ['curl', '-u', 'fixture-user:fixture-password'],
+        curlText: 'curl -u fixture-user:fixture-password',
+        curlLong: 'curl --user fixture-user:fixture-password',
+        wrappedCurl: ['env', 'curl', '-u', 'fixture-user:fixture-password'],
+        wrappedCurlText: 'env -i curl --user fixture-user:fixture-password',
+        wrappedIdentity: 'env docker exec --user root app id',
+        identity: ['docker', 'exec', '--user', 'root', 'app', 'id'],
+        identityText: 'docker exec --user root app id',
+        requiredOption: ['client', '--password', '-fixture-value'],
+      });
       expect(attributes.command).toBe('git push -u origin main');
       expect(attributes.gitText).toBe('git push -u origin main');
       expect(attributes.curlArgs).toEqual(wireStrings('curl', '-u', '<redacted>'));
@@ -498,17 +501,14 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'preserves text after quoted headers and TypeScript generic syntax in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        {
-          command: `curl -H "Authorization: Bearer fixture-value" https://example.test && echo done`,
-          singleQuote: `curl -H 'Cookie: fixture=value' https://example.test && echo done`,
-          genericType: `rg 'Promise<Session>' src`,
-          nestedType: 'const value: Promise<Array<Session>> = result;',
-          tsx: 'Promise<Session>;<div /> <b>Hi</b>',
-          xml: 'prefix<Session>private</Session>',
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        command: `curl -H "Authorization: Bearer fixture-value" https://example.test && echo done`,
+        singleQuote: `curl -H 'Cookie: fixture=value' https://example.test && echo done`,
+        genericType: `rg 'Promise<Session>' src`,
+        nestedType: 'const value: Promise<Array<Session>> = result;',
+        tsx: 'Promise<Session>;<div /> <b>Hi</b>',
+        xml: 'prefix<Session>private</Session>',
+      });
       expect(attributes.command).toBe(
         'curl -H "Authorization: <redacted>" https://example.test && echo done',
       );
@@ -527,10 +527,11 @@ describe('OTLPTracingExporter', () => {
       '{"url":"https://example.test","email":"alice@example.test","count":12345678901234567890123456789012345678901234567890123456789012345}';
     const lists = { fields: ['password', 'email'], tools: ['get_session', 'lookup_order'] };
     const sourcePath = 'src/app/src/pages/redteam/setup/components/PluginsTab.tsx';
-    const { attributes } = await exportCustomData(
-      { json, lists, command: `cat ${sourcePath}` },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      json,
+      lists,
+      command: `cat ${sourcePath}`,
+    });
     expect(attributes.json).toBe(json);
     expect(JSON.parse(attributes.lists as string)).toEqual(lists);
     expect(attributes.command).toBe(`cat ${sourcePath}`);
@@ -540,17 +541,14 @@ describe('OTLPTracingExporter', () => {
     'preserves exact numbers and command text through repeated redaction in %s',
     async (format) => {
       const decimal = '{"amount":1.0000000000000001,"password":"fixture"}';
-      const { attributes } = await exportCustomData(
-        {
-          decimal,
-          command: ['bash', '-c', 'echo sk-abcdefghijklmnopqrstuvwxyz; echo done'],
-          ordinaryCommand: 'pwd && echo done',
-          nestedCommand: JSON.stringify({ command: 'pwd && echo done', password: 'fixture' }),
-          encoded: String.raw`prefix \"password\": \"fixture\"`,
-          unfinished: String.raw`prefix \"public\\`,
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        decimal,
+        command: ['bash', '-c', 'echo sk-abcdefghijklmnopqrstuvwxyz; echo done'],
+        ordinaryCommand: 'pwd && echo done',
+        nestedCommand: JSON.stringify({ command: 'pwd && echo done', password: 'fixture' }),
+        encoded: String.raw`prefix \"password\": \"fixture\"`,
+        unfinished: String.raw`prefix \"public\\`,
+      });
       expect(attributes.decimal).toBe('{"amount":1.0000000000000001,"password":"<redacted>"}');
       expect(attributes.command).toBe('bash -c echo <REDACTED_API_KEY>; echo done');
       expect(attributes.ordinaryCommand).toBe('pwd && echo done');
@@ -566,10 +564,9 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'redacts unsupported callable metadata and preserves adjacent values in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        { structured: { callback: () => 'ordinary callback', note: 'kept' } },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        structured: { callback: () => 'ordinary callback', note: 'kept' },
+      });
 
       expect(JSON.parse(attributes.structured as string)).toEqual({
         callback: '<redacted>',
@@ -582,7 +579,7 @@ describe('OTLPTracingExporter', () => {
     const items = ['first'];
     items.length = 3;
     const structured = { items, empty: new Array(2) };
-    const { attributes } = await exportCustomData({ structured }, format);
+    const { attributes } = await exportCustomData(format, { structured });
 
     expect(attributes.structured).toBe(JSON.stringify(structured));
     expect(items).toHaveLength(3);
@@ -592,14 +589,11 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'masks whitespace-delimited properties and retains ordinary lines in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        {
-          properties: 'region test\npassword fixture/value\napi_key\tfixture-key\nretries 3',
-          dottedName: 'application.release.version',
-          dottedAssignment: 'application.api_key=fixture-key',
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        properties: 'region test\npassword fixture/value\napi_key\tfixture-key\nretries 3',
+        dottedName: 'application.release.version',
+        dottedAssignment: 'application.api_key=fixture-key',
+      });
       expect(attributes.properties).toBe(
         'region test\npassword <redacted>\napi_key\t<redacted>\nretries 3',
       );
@@ -618,13 +612,13 @@ describe('OTLPTracingExporter', () => {
         item[1_999] = 'last';
         return item;
       });
-      const { attributes } = await exportCustomData(
-        { sparse, nested: { sparse }, aggregate, ordinary: ['first', 'last'] },
-        format,
-      );
-      expect(attributes.sparse).toBe('<redacted>');
-      expect(attributes.nested).toBe('<redacted>');
-      expect(attributes.aggregate).toBe('<redacted>');
+      const { attributes } = await exportCustomData(format, {
+        sparse,
+        nested: { sparse },
+        aggregate,
+        ordinary: ['first', 'last'],
+      });
+      expect(attributes).toMatchObject(redacted('sparse', 'nested', 'aggregate'));
       expect(attributes.ordinary).toEqual(wireStrings('first', 'last'));
     },
   );
@@ -632,17 +626,14 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'redacts credential text formats without changing ordinary metadata in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        {
-          xml: '<config><password>fixture-value</password></config>',
-          multipart:
-            'Content-Disposition: form-data; name="credentials[password]"\r\n\r\nfixture-value',
-          url: '//fixture-user:fixture-value@example.test/resource',
-          publicUrl: '//example.test/resource',
-          message: 'machine learning uses account metadata',
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        xml: '<config><password>fixture-value</password></config>',
+        multipart:
+          'Content-Disposition: form-data; name="credentials[password]"\r\n\r\nfixture-value',
+        url: '//fixture-user:fixture-value@example.test/resource',
+        publicUrl: '//example.test/resource',
+        message: 'machine learning uses account metadata',
+      });
       expect(attributes.xml).toBe('<redacted>');
       expect(attributes.multipart).toBe('<redacted>');
       expect(attributes.url).toBe('//<redacted>@example.test/resource');
@@ -658,7 +649,7 @@ describe('OTLPTracingExporter', () => {
         throw new Error('unreadable attribute');
       },
     });
-    const { attributes } = await exportCustomData({ details: unreadable, result: 'ok' }, format);
+    const { attributes } = await exportCustomData(format, { details: unreadable, result: 'ok' });
     expect(attributes.details).toBe('<redacted>');
     expect(attributes.result).toBe('ok');
   });
@@ -677,7 +668,7 @@ describe('OTLPTracingExporter', () => {
         });
       }
 
-      const { attributes, payload } = await exportCustomData(data, format);
+      const { attributes, payload } = await exportCustomData(format, data);
       expect(attributes.result).toBe('ok');
       for (const key of keys) {
         expect(attributes[key]).toBe('<redacted>');
@@ -690,10 +681,12 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'preserves command and exit-code aliases when primary attributes are undefined in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        { command: undefined, cmd: ['echo', 'ok'], exit_code: undefined, exitCode: 0 },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        command: undefined,
+        cmd: ['echo', 'ok'],
+        exit_code: undefined,
+        exitCode: 0,
+      });
       expect(attributes.command).toBe('echo ok');
       expect(attributes['process.exit.code']).toBe(0);
       expect(attributes).not.toHaveProperty('exit_code');
@@ -703,20 +696,17 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'redacts credential names without hiding public metadata in %s',
     async (format) => {
-      const { attributes } = await exportCustomData(
-        {
-          session_id: 'fixture-session',
-          session_status: 'completed',
-          session_duration: 42,
-          useSession: true,
-          arguments: ['client', '--session-id', 'fixture-session'],
-          credentials: 'fixture-credential',
-          certificateContent: 'fixture certificate',
-          certificateIssuer: 'public issuer',
-          token_count: 10,
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        session_id: 'fixture-session',
+        session_status: 'completed',
+        session_duration: 42,
+        useSession: true,
+        arguments: ['client', '--session-id', 'fixture-session'],
+        credentials: 'fixture-credential',
+        certificateContent: 'fixture certificate',
+        certificateIssuer: 'public issuer',
+        token_count: 10,
+      });
       expect(attributes.session_id).toBe('<redacted>');
       expect(attributes.session_status).toBe('completed');
       expect(attributes.session_duration).toBe(42);
@@ -730,13 +720,10 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(formats)('redacts typed credential declarations in %s', async (format) => {
-    const { attributes } = await exportCustomData(
-      {
-        declaration: 'const password: string = "fixture-value";',
-        ordinary: 'const token_count: number = 7;',
-      },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      declaration: 'const password: string = "fixture-value";',
+      ordinary: 'const token_count: number = 7;',
+    });
     expect(attributes.declaration).toBe('<redacted>');
     expect(attributes.ordinary).toBe('const token_count: number = 7;');
   });
@@ -746,10 +733,11 @@ describe('OTLPTracingExporter', () => {
       (header) => `${Buffer.from(header).toString('base64url')}.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl`,
     );
     const identifier = 'a-'.repeat(20_000);
-    const { attributes, payload } = await exportCustomData(
-      { result: tokens.join('\n'), module: 'package.module.method', identifier },
-      format,
-    );
+    const { attributes, payload } = await exportCustomData(format, {
+      result: tokens.join('\n'),
+      module: 'package.module.method',
+      identifier,
+    });
     expect(attributes.result).toBe('<redacted>\n<redacted>');
     expect(attributes.module).toBe('package.module.method');
     expect(attributes.identifier).toBe(identifier);
@@ -760,10 +748,10 @@ describe('OTLPTracingExporter', () => {
 
   it.each(formats)('redacts direct-encryption compact JWE credentials in %s', async (format) => {
     const token = Object.values(createJwe()).join('.');
-    const { attributes } = await exportCustomData(
-      { result: token, module: 'package.module.method' },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      result: token,
+      module: 'package.module.method',
+    });
     expect(attributes.result).toBe('<redacted>');
     expect(attributes.module).toBe('package.module.method');
   });
@@ -776,10 +764,11 @@ describe('OTLPTracingExporter', () => {
       const general = { ...envelope, recipients: [{ encrypted_key }] };
       const ordinary = { ciphertext: 'public data', tag: 'version-1' };
       const input = { flattened, general, ordinary };
-      const { attributes, payload } = await exportCustomData(
-        { native: input, result: JSON.stringify(input), root: JSON.stringify(flattened) },
-        format,
-      );
+      const { attributes, payload } = await exportCustomData(format, {
+        native: input,
+        result: JSON.stringify(input),
+        root: JSON.stringify(flattened),
+      });
       for (const key of ['native', 'result']) {
         expect(JSON.parse(attributes[key] as string)).toEqual({
           flattened: '<redacted>',
@@ -815,10 +804,10 @@ describe('OTLPTracingExporter', () => {
           recipients: [{ encrypted_key: directKey, header: { alg: 'dir', enc: 'A256GCM' } }],
         },
       };
-      const { attributes, payload } = await exportCustomData(
-        { native: values, serialized: JSON.stringify(values) },
-        format,
-      );
+      const { attributes, payload } = await exportCustomData(format, {
+        native: values,
+        serialized: JSON.stringify(values),
+      });
       const expected = Object.fromEntries(Object.keys(values).map((key) => [key, '<redacted>']));
       expect(JSON.parse(attributes.native as string)).toEqual(expected);
       expect(JSON.parse(attributes.serialized as string)).toEqual(expected);
@@ -828,44 +817,31 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(formats)('redacts YAML credential flow collections in %s', async (format) => {
-    const { attributes, payload } = await exportCustomData(
-      {
-        sequence: 'tokens: [opaque-token-one, opaque-token-two]',
-        mapping: 'password: {primary: opaque-secret}',
-        nested: 'config: {password: {primary: opaque-nested}}',
-        flowSequence: '[{password: {primary: opaque-sequence}}]',
-        multiline: 'config:\n  credentials: [\n    opaque-first,\n    opaque-second\n  ]',
-        ordinary: 'names: [first, second]',
-      },
-      format,
+    const { attributes } = await exportCustomData(format, {
+      sequence: 'tokens: [opaque-token-one, opaque-token-two]',
+      mapping: 'password: {primary: opaque-secret}',
+      nested: 'config: {password: {primary: opaque-nested}}',
+      flowSequence: '[{password: {primary: opaque-sequence}}]',
+      multiline: 'config:\n  credentials: [\n    opaque-first,\n    opaque-second\n  ]',
+      ordinary: 'names: [first, second]',
+    });
+    expect(attributes).toMatchObject(
+      redacted('sequence', 'mapping', 'nested', 'flowSequence', 'multiline'),
     );
-    expect(attributes.sequence).toBe('<redacted>');
-    expect(attributes.mapping).toBe('<redacted>');
-    expect(attributes.nested).toBe('<redacted>');
-    expect(attributes.flowSequence).toBe('<redacted>');
-    expect(attributes.multiline).toBe('<redacted>');
     expect(attributes.ordinary).toBe('names: [first, second]');
-    expect(JSON.stringify(payload)).not.toContain('opaque-');
   });
 
   it.each(formats)('redacts netrc password and account clauses in %s', async (format) => {
-    const { attributes, payload } = await exportCustomData(
-      {
-        single: 'machine api.example login buildbot password opaque/value',
-        commented:
-          'machine api.example\n# deployment account\nlogin buildbot\npassword opaque/commented',
-        quoted: 'machine api.example\nlogin buildbot\npassword "opaque quoted phrase"',
-        fallback: 'default login buildbot account opaque-account',
-        ordinary: 'machine learning uses account metadata',
-      },
-      format,
-    );
-    expect(attributes.single).toBe('<redacted>');
-    expect(attributes.commented).toBe('<redacted>');
-    expect(attributes.quoted).toBe('<redacted>');
-    expect(attributes.fallback).toBe('<redacted>');
+    const { attributes } = await exportCustomData(format, {
+      single: 'machine api.example login buildbot password opaque/value',
+      commented:
+        'machine api.example\n# deployment account\nlogin buildbot\npassword opaque/commented',
+      quoted: 'machine api.example\nlogin buildbot\npassword "opaque quoted phrase"',
+      fallback: 'default login buildbot account opaque-account',
+      ordinary: 'machine learning uses account metadata',
+    });
+    expect(attributes).toMatchObject(redacted('single', 'commented', 'quoted', 'fallback'));
     expect(attributes.ordinary).toBe('machine learning uses account metadata');
-    expect(JSON.stringify(payload)).not.toContain('opaque');
   });
 
   it.each(formats)('masks registered and connection-string credentials in %s', async (format) => {
@@ -876,6 +852,8 @@ describe('OTLPTracingExporter', () => {
       ';EndpointSuffix=core.windows.net';
     const keys = [
       ...SECRET_FIELD_NAMES,
+      'jksContent',
+      'sshKey',
       'AccountKey',
       'SharedAccessKey',
       'AzureStorageKey',
@@ -910,21 +888,18 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)('redacts complete YAML, ODBC, and XML credentials in %s', async (format) => {
-    const { attributes, payload } = await exportCustomData(
-      {
-        yaml: "password: 'opaque''suffix'",
-        flow: 'config: {passphrase: "opaque nested phrase"}',
-        nested: "config: [{password: 'opaque''nested'}]",
-        odbc: 'Driver={ODBC Driver};UID=buildbot;PWD={opaque;credential};Database=public',
-        escapedOdbc: 'Driver={ODBC Driver};PWD={opaque}};suffix};Database=public',
-        xml: '<settings><password>opaque/xml</password></settings>',
-        multilineXml: '<password\n data="public">opaque/body</password>',
-        mixedXml: '<list>text<entry label="a > b"\r\n key="password">opaque/value</entry></list>',
-        spacedXml: '<property name = "password" value = "opaque/spaced"/>',
-        public: 'config: {description: "public phrase"}',
-      },
-      format,
-    );
+    const { attributes, payload } = await exportCustomData(format, {
+      yaml: "password: 'opaque''suffix'",
+      flow: 'config: {passphrase: "opaque nested phrase"}',
+      nested: "config: [{password: 'opaque''nested'}]",
+      odbc: 'Driver={ODBC Driver};UID=buildbot;PWD={opaque;credential};Database=public',
+      escapedOdbc: 'Driver={ODBC Driver};PWD={opaque}};suffix};Database=public',
+      xml: '<settings><password>opaque/xml</password></settings>',
+      multilineXml: '<password\n data="public">opaque/body</password>',
+      mixedXml: '<list>text<entry label="a > b"\r\n key="password">opaque/value</entry></list>',
+      spacedXml: '<property name = "password" value = "opaque/spaced"/>',
+      public: 'config: {description: "public phrase"}',
+    });
     expect(attributes.yaml).toBe("password: '<redacted>'");
     expect(attributes.flow).toBe('config: {passphrase: "<redacted>"}');
     expect(attributes.nested).toBe("config: [{password: '<redacted>'}]");
@@ -932,10 +907,7 @@ describe('OTLPTracingExporter', () => {
       'Driver={ODBC Driver};UID=buildbot;PWD=<redacted>;Database=public',
     );
     expect(attributes.escapedOdbc).toBe('Driver={ODBC Driver};PWD=<redacted>;Database=public');
-    expect(attributes.xml).toBe('<redacted>');
-    expect(attributes.multilineXml).toBe('<redacted>');
-    expect(attributes.mixedXml).toBe('<redacted>');
-    expect(attributes.spacedXml).toBe('<redacted>');
+    expect(attributes).toMatchObject(redacted('xml', 'multilineXml', 'mixedXml', 'spacedXml'));
     expect(attributes.public).toBe('config: {description: "public phrase"}');
     expect(JSON.stringify(payload)).not.toMatch(/opaque|suffix|credential/);
   });
@@ -953,31 +925,23 @@ describe('OTLPTracingExporter', () => {
       client_key_id: 'kid-123',
       'client-certificate-data': 'public certificate',
     };
-    const { attributes, payload } = await exportCustomData(
-      {
-        armor:
-          '-----BEGIN PGP PRIVATE KEY BLOCK-----\nopaque/base64\n-----END PGP PRIVATE KEY BLOCK-----',
-        native: keys,
-        serialized: JSON.stringify(keys),
-      },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      armor:
+        '-----BEGIN PGP PRIVATE KEY BLOCK-----\nopaque/base64\n-----END PGP PRIVATE KEY BLOCK-----',
+      native: keys,
+      serialized: JSON.stringify(keys),
+    });
     expect(attributes.armor).toBe('<redacted>');
     for (const name of ['native', 'serialized']) {
       expect(JSON.parse(attributes[name] as string)).toEqual({
         'client-key-data': '<redacted>',
-        client_key: '<redacted>',
-        ssl_key: '<redacted>',
-        tlsKey: '<redacted>',
-        signing_key: '<redacted>',
-        encryptionKey: '<redacted>',
+        ...redacted('client_key', 'ssl_key', 'tlsKey', 'signing_key', 'encryptionKey'),
         tls_key_algorithm: 'RSA',
         ssl_key_type: 'EC',
         client_key_id: 'kid-123',
         'client-certificate-data': 'public certificate',
       });
     }
-    expect(JSON.stringify(payload)).not.toContain('opaque/');
   });
 
   it.each(formats)('redacts byte array attributes in %s', async (format) => {
@@ -988,14 +952,11 @@ describe('OTLPTracingExporter', () => {
         throw new Error('do not read');
       },
     });
-    const { attributes, payload } = await exportCustomData(
-      {
-        direct: Buffer.from('sk-direct-byte-secret'),
-        native: { bytes: Buffer.from('sk-opaque-byte-secret') },
-        throwing,
-      },
-      format,
-    );
+    const { attributes, payload } = await exportCustomData(format, {
+      direct: Buffer.from('sk-direct-byte-secret'),
+      native: { bytes: Buffer.from('sk-opaque-byte-secret') },
+      throwing,
+    });
 
     expect(attributes.direct).toBe('<redacted>');
     expect(JSON.parse(attributes.native as string)).toEqual({ bytes: '<redacted>' });
@@ -1004,28 +965,24 @@ describe('OTLPTracingExporter', () => {
       secret: '<redacted>',
     });
     expect(JSON.stringify(payload)).not.toContain('direct-byte-secret');
-    expect(JSON.stringify(payload)).not.toContain('opaque-byte-secret');
   });
 
   it.each(formats)(
     'redacts remaining credential text and structured shapes in %s',
     async (format) => {
-      const { attributes, payload } = await exportCustomData(
-        {
-          text: 'curl --user alice:opaque-user -H "Authorization: Custom opaque-auth"',
-          embedded: 'Request: "{\\"p\\u0061ssword\\":\\"opaque-embedded\\"}"',
-          native: {
-            assertion: { type: 'contains', value: 'Paris' },
-            client_assertion: 'opaque-assertion',
-            client_assertion_type: 'public-type',
-            passwords: 'opaque-passwords',
-            env: { PGPASSWORD: 'opaque-pgpassword' },
-            headers: ['Authorization', 'opaque-header', 'Content-Type'],
-            encoded: '{"kty":"RSA","d":"opaque-jwk"}',
-          },
+      const { attributes } = await exportCustomData(format, {
+        text: 'curl --user alice:opaque-user -H "Authorization: Custom opaque-auth"',
+        embedded: 'Request: "{\\"p\\u0061ssword\\":\\"opaque-embedded\\"}"',
+        native: {
+          assertion: { type: 'contains', value: 'Paris' },
+          client_assertion: 'opaque-assertion',
+          client_assertion_type: 'public-type',
+          passwords: 'opaque-passwords',
+          env: { PGPASSWORD: 'opaque-pgpassword' },
+          headers: ['Authorization', 'opaque-header', 'Content-Type'],
+          encoded: '{"kty":"RSA","d":"opaque-jwk"}',
         },
-        format,
-      );
+      });
 
       expect(attributes.text).not.toContain('opaque-');
       expect(attributes.embedded).not.toContain('opaque-');
@@ -1038,7 +995,6 @@ describe('OTLPTracingExporter', () => {
         headers: ['Authorization', '<redacted>', 'Content-Type'],
         encoded: '{"kty":"RSA","d":"<redacted>"}',
       });
-      expect(JSON.stringify(payload)).not.toContain('opaque-');
     },
   );
 
@@ -1048,10 +1004,13 @@ describe('OTLPTracingExporter', () => {
     const blankLines = '\n'.repeat(3);
     const encoded = '\\"public'.repeat(3);
     const fragments = ['a-a-a-', String.raw`\\\\`, 'Content-Disposition: x Content-Disposition: y'];
-    const { attributes } = await exportCustomData(
-      { xml, unterminated, blankLines, encoded, fragments: JSON.stringify(fragments) },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      xml,
+      unterminated,
+      blankLines,
+      encoded,
+      fragments: JSON.stringify(fragments),
+    });
 
     expect(attributes.xml).toBe(xml);
     expect(attributes.unterminated).toBe(unterminated);
@@ -1069,21 +1028,16 @@ describe('OTLPTracingExporter', () => {
       private_keys: ['opaque/six'],
       cache_keys: ['public identifier'],
     };
-    const { attributes, payload } = await exportCustomData(
-      { native: input, serialized: JSON.stringify(input) },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      native: input,
+      serialized: JSON.stringify(input),
+    });
     for (const name of ['native', 'serialized']) {
       expect(JSON.parse(attributes[name] as string)).toEqual({
-        api_keys: '<redacted>',
-        apiKeys: '<redacted>',
-        apikeys: '<redacted>',
-        accessKeys: '<redacted>',
-        private_keys: '<redacted>',
+        ...redacted('api_keys', 'apiKeys', 'apikeys', 'accessKeys', 'private_keys'),
         cache_keys: ['public identifier'],
       });
     }
-    expect(JSON.stringify(payload)).not.toContain('opaque/');
   });
 
   it.each(formats)(
@@ -1101,21 +1055,18 @@ describe('OTLPTracingExporter', () => {
         tag: 'ordinary',
         recipients: Array(200).fill(recipient),
       };
-      const { attributes } = await exportCustomData({ native: Array(200).fill(envelope) }, format);
+      const { attributes } = await exportCustomData(format, { native: Array(200).fill(envelope) });
       expect(attributes.native).toBe('<redacted>');
       expect(reads).toBeLessThanOrEqual(10_000);
     },
   );
 
   it.each(formats)('redacts complete plain YAML credential scalars in %s', async (format) => {
-    const { attributes } = await exportCustomData(
-      {
-        inline: 'passphrase: correct horse battery staple\nname: fixture',
-        continued: 'config:\n  password:\n    correct horse\n    battery staple',
-        ordinary: 'description: correct horse battery staple',
-      },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      inline: 'passphrase: correct horse battery staple\nname: fixture',
+      continued: 'config:\n  password:\n    correct horse\n    battery staple',
+      ordinary: 'description: correct horse battery staple',
+    });
     expect(attributes.inline).toBe('<redacted>');
     expect(attributes.continued).toBe('<redacted>');
     expect(attributes.ordinary).toBe('description: correct horse battery staple');
@@ -1131,7 +1082,7 @@ describe('OTLPTracingExporter', () => {
         '//registry.example/:username=fixture-user',
         'registry=https://registry.example/',
       ].join('\n');
-      const { attributes } = await exportCustomData({ result: npmrc }, format);
+      const { attributes } = await exportCustomData(format, { result: npmrc });
       expect(attributes.result).toBe(
         [
           '//registry.example/:_password=<redacted>',
@@ -1168,16 +1119,13 @@ describe('OTLPTracingExporter', () => {
         requestHeaders: pairs,
         responseHeaders: JSON.stringify(pairs),
       };
-      const { attributes, payload } = await exportCustomData(
-        {
-          ...headers,
-          native: headers,
-          result: JSON.stringify(headers),
-          HTTPHeaders: [pairs.slice(0, 2)],
-          partialHeaders: '["Authorization","Negotiate opaque-proof"',
-        },
-        format,
-      );
+      const { attributes } = await exportCustomData(format, {
+        ...headers,
+        native: headers,
+        result: JSON.stringify(headers),
+        HTTPHeaders: [pairs.slice(0, 2)],
+        partialHeaders: '["Authorization","Negotiate opaque-proof"',
+      });
       expect(attributes.requestHeaders).toEqual(wireStrings(...clean));
       expect(JSON.parse(attributes.responseHeaders as string)).toEqual(clean);
       for (const key of ['native', 'result']) {
@@ -1187,18 +1135,14 @@ describe('OTLPTracingExporter', () => {
           responseHeaders: JSON.stringify(clean),
         });
       }
-      expect(JSON.stringify(payload)).not.toContain('opaque-');
     },
   );
 
   it.each(formats)('preserves code following an Authorization assignment in %s', async (format) => {
-    const { attributes } = await exportCustomData(
-      {
-        script: 'enum Header { Authorization = "Authorization", ContentType = "Content-Type" }',
-        header: 'Authorization=Digest realm="service", response="opaque-proof"',
-      },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, {
+      script: 'enum Header { Authorization = "Authorization", ContentType = "Content-Type" }',
+      header: 'Authorization=Digest realm="service", response="opaque-proof"',
+    });
     expect(attributes.script).toBe(
       'enum Header { Authorization = "<redacted>", ContentType = "Content-Type" }',
     );
@@ -1211,16 +1155,12 @@ describe('OTLPTracingExporter', () => {
       { KEY: 'X-Api-Key', VALUE: 'opaque/api-value' },
       { Name: 'Content-Type', Value: 'application/json' },
     ];
-    const { attributes, payload } = await exportCustomData(
-      { records: JSON.stringify(records) },
-      format,
-    );
+    const { attributes } = await exportCustomData(format, { records: JSON.stringify(records) });
     expect(JSON.parse(attributes.records as string)).toEqual([
       { Name: 'Authorization', Value: '<redacted>' },
       { KEY: 'X-Api-Key', VALUE: '<redacted>' },
       records[2],
     ]);
-    expect(JSON.stringify(payload)).not.toContain('opaque/');
   });
 
   it.each(formats)(
@@ -1245,18 +1185,12 @@ describe('OTLPTracingExporter', () => {
         { kty: 'OKP', crv: 'Ed25519', x: 'public-x', d: 'private-okp-d' },
         { kty: 'oct', k: 'private-symmetric' },
       ];
-      const { attributes, payload } = await exportCustomData({ key_set: { keys } }, format);
+      const { attributes, payload } = await exportCustomData(format, { key_set: { keys } });
       const sanitized = JSON.parse(attributes.key_set as string).keys;
       expect(sanitized).toEqual([
         {
           ...rsa,
-          d: '<redacted>',
-          p: '<redacted>',
-          q: '<redacted>',
-          dp: '<redacted>',
-          dq: '<redacted>',
-          qi: '<redacted>',
-          oth: '<redacted>',
+          ...redacted('d', 'p', 'q', 'dp', 'dq', 'qi', 'oth'),
         },
         keys[1],
         { ...keys[2], d: '<redacted>' },
@@ -1287,7 +1221,6 @@ describe('OTLPTracingExporter', () => {
     );
     const spans = payload.resourceSpans[0].scopeSpans[0].spans;
     expect(spans).toHaveLength(records.length * 2);
-    expect(JSON.stringify(payload)).not.toContain('opaque');
     expect(getAttributes(spans[0])).toMatchObject({ k: '<redacted>', kid: 'visible' });
     expect(getAttributes(spans[1])).toMatchObject({
       'agent.kid': 'visible',
@@ -1307,10 +1240,10 @@ describe('OTLPTracingExporter', () => {
       for (let depth = 0; depth < 20_000; depth++) {
         nested = [nested];
       }
-      const { attributes, payload } = await exportCustomData(
-        { nested, details: { count: 2n, label: 'public' } },
-        format,
-      );
+      const { attributes, payload } = await exportCustomData(format, {
+        nested,
+        details: { count: 2n, label: 'public' },
+      });
       expect(JSON.parse(attributes.details as string)).toEqual({ count: '2', label: 'public' });
       expect(JSON.stringify(payload)).not.toContain('deep-private-canary');
       expect(JSON.stringify(payload)).toContain('<redacted>');
@@ -1850,37 +1783,32 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'redacts credentials from tool data, metadata, and error messages in %s exports',
     async (format) => {
+      const diagnostics = {
+        token_count: 12,
+        token_type: 'Bearer',
+        token_ids: [101, 102],
+        token_endpoint: 'https://issuer.example.com/oauth/token',
+        token_url: 'https://issuer.example.com/token',
+        secretary: 'Alice',
+      };
       const apiKey = 'sk-abcdefghijklmnopqrstuvwxyz';
       const sessionToken = 'agent-session-token-value-123456789012345';
       const metadataSecret = 'customer-credential-without-a-known-prefix';
       const accessToken = 'opaque.value/with+arbitrary=chars';
       const clientSecret = 'tiny';
       const refreshToken = 'renew?credential/value';
-      const credentials = 'opaque-credential-bundle';
       const clientCredentials = 'oauth-client-bundle';
-      const secrets = 'opaque-secret-bundle';
-      const tokens = 'opaque-token-bundle';
-      const authorization = 'Bearer opaque/container-value';
-      const cookie = 'opaque-cookie-session';
       const callback = `https://host/callback?access_token=${accessToken}&token_count=12`;
-      const colonToken = 'colon-opaque/value';
       const colonCookie = 'colon-cookie-session';
-      const headerCredential = 'header-opaque.value/with+arbitrary=chars';
-      const encodedCredential = 'encoded-query-opaque/value';
       const secondaryCookie = 'csrf-cookie-opaque/value';
-      const equalsCredential = 'equals-header-opaque/value';
-      const digestCredential = 'digest-response-opaque/value';
-      const negotiateCredential = 'negotiate-opaque/value';
-      const awsCredential = 'aws-signature-opaque/value';
-      const encodedCallback = `https://host/callback?%61ccess_token=${encodedCredential}`;
       const logDetails = [
-        `access_token: ${colonToken}`,
+        'access_token: colon-opaque/value',
         `Cookie: session=${colonCookie}; csrf=${secondaryCookie}`,
-        `Authorization: Bearer ${headerCredential}`,
-        `Authorization=Basic ${equalsCredential}`,
-        `Authorization: Digest realm="accounts;production", response="${digestCredential}"`,
-        `Authorization=Negotiate ${negotiateCredential}`,
-        `Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, Signature=${awsCredential}`,
+        'Authorization: Bearer header-opaque.value/with+arbitrary=chars',
+        'Authorization=Basic equals-header-opaque/value',
+        'Authorization: Digest realm="accounts;production", response="digest-response-opaque/value"',
+        'Authorization=Negotiate negotiate-opaque/value',
+        'Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, Signature=aws-signature-opaque/value',
       ].join('\n');
       const evaluationId = 'a'.repeat(64);
       const testCaseId = 'b'.repeat(64);
@@ -1893,25 +1821,20 @@ describe('OTLPTracingExporter', () => {
             accountId: 'account-123',
             access_token: accessToken,
             callback,
-            encodedCallback,
-            credentials,
+            encodedCallback: 'https://host/callback?%61ccess_token=encoded-query-opaque/value',
+            credentials: 'opaque-credential-bundle',
             clientCredentials,
-            authorization: [authorization],
-            token_count: 12,
-            token_type: 'Bearer',
-            token_ids: [101, 102],
-            token_endpoint: 'https://issuer.example.com/oauth/token',
-            token_url: 'https://issuer.example.com/token',
-            secretary: 'Alice',
+            authorization: ['Bearer opaque/container-value'],
+            ...diagnostics,
             logDetails,
             nested: [{ refreshToken }],
           }),
           output: JSON.stringify({
             token: sessionToken,
             client_secret: clientSecret,
-            secrets,
-            tokens,
-            cookie: { session: cookie },
+            secrets: 'opaque-secret-bundle',
+            tokens: 'opaque-token-bundle',
+            cookie: { session: 'opaque-cookie-session' },
             cookies: [{ name: 'sid', value: secondaryCookie }],
           }),
         },
@@ -1931,28 +1854,17 @@ describe('OTLPTracingExporter', () => {
       };
 
       const payload = await exportSpans(format, [span]);
-      const serializedPayload = JSON.stringify(payload);
-      expect(serializedPayload).not.toContain(apiKey);
-      expect(serializedPayload).not.toContain(sessionToken);
-      expect(serializedPayload).not.toContain(metadataSecret);
-      expect(serializedPayload).not.toContain(accessToken);
-      expect(serializedPayload).not.toContain(clientSecret);
-      expect(serializedPayload).not.toContain(refreshToken);
-      expect(serializedPayload).not.toContain(credentials);
-      expect(serializedPayload).not.toContain(clientCredentials);
-      expect(serializedPayload).not.toContain(secrets);
-      expect(serializedPayload).not.toContain(tokens);
-      expect(serializedPayload).not.toContain(authorization);
-      expect(serializedPayload).not.toContain(cookie);
-      expect(serializedPayload).not.toContain(colonToken);
-      expect(serializedPayload).not.toContain(colonCookie);
-      expect(serializedPayload).not.toContain(headerCredential);
-      expect(serializedPayload).not.toContain(encodedCredential);
-      expect(serializedPayload).not.toContain(secondaryCookie);
-      expect(serializedPayload).not.toContain(equalsCredential);
-      expect(serializedPayload).not.toContain(digestCredential);
-      expect(serializedPayload).not.toContain(negotiateCredential);
-      expect(serializedPayload).not.toContain(awsCredential);
+      for (const secret of [
+        apiKey,
+        sessionToken,
+        metadataSecret,
+        clientSecret,
+        refreshToken,
+        clientCredentials,
+        colonCookie,
+      ]) {
+        expect(JSON.stringify(payload)).not.toContain(secret);
+      }
 
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
       const attributes = getAttributes(exportedSpan);
@@ -1962,26 +1874,14 @@ describe('OTLPTracingExporter', () => {
         access_token: '<redacted>',
         callback: 'https://host/callback?access_token=<redacted>&token_count=12',
         encodedCallback: 'https://host/callback?%61ccess_token=<redacted>',
-        credentials: '<redacted>',
-        clientCredentials: '<redacted>',
-        authorization: '<redacted>',
-        token_count: 12,
-        token_type: 'Bearer',
-        token_ids: [101, 102],
-        token_endpoint: 'https://issuer.example.com/oauth/token',
-        token_url: 'https://issuer.example.com/token',
-        secretary: 'Alice',
+        ...redacted('credentials', 'clientCredentials', 'authorization'),
+        ...diagnostics,
         logDetails: '<redacted>',
         nested: [{ refreshToken: '<redacted>' }],
       });
-      expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
-        token: '<redacted>',
-        client_secret: '<redacted>',
-        secrets: '<redacted>',
-        tokens: '<redacted>',
-        cookie: '<redacted>',
-        cookies: '<redacted>',
-      });
+      expect(JSON.parse(attributes['tool.output'] as string)).toEqual(
+        redacted('token', 'client_secret', 'secrets', 'tokens', 'cookie', 'cookies'),
+      );
       expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
       expect(attributes['trace.metadata.clientCredentials']).toBe('<redacted>');
       expect(attributes['evaluation.id']).toBe(evaluationId);
@@ -2083,9 +1983,7 @@ describe('OTLPTracingExporter', () => {
       const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
       const dateText = JSON.stringify(date);
       expect(attributes).toMatchObject({
-        result: '<redacted>',
-        literal_yaml: '<redacted>',
-        folded_yaml: '<redacted>',
+        ...redacted('result', 'literal_yaml', 'folded_yaml'),
         ordinary_yaml: 'description: |\n  public description',
         request: '{"offset":-0,"exponent":-0e0,"password":"<redacted>"}',
         'evaluation.id': '<redacted>',
@@ -2096,11 +1994,7 @@ describe('OTLPTracingExporter', () => {
       });
       expect(serialized.toJSON).not.toHaveBeenCalled();
       expect(JSON.stringify(payload)).not.toContain(jwt);
-      expect(JSON.stringify(payload)).not.toContain('opaque-custom');
       expect(JSON.stringify(payload)).not.toContain('AIza' + 'a'.repeat(35));
-      expect(JSON.stringify(payload)).not.toContain('opaque-multipart');
-      expect(JSON.stringify(payload)).not.toContain('opaque-cipher');
-      expect(JSON.stringify(payload)).not.toContain('opaque-xml');
     },
   );
 
