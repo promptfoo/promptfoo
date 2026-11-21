@@ -28,7 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`
+- Install a [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - For local generation, configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Promptfoo selects a default model from the configured credentials.
 
 ## Initialize the project

@@ -83,7 +83,7 @@
     ]
   },
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
