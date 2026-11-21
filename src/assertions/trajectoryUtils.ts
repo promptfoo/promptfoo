@@ -1,3 +1,4 @@
+import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -9,12 +10,21 @@ import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
 
-export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
+export { TRAJECTORY_STEP_TYPES };
+
+export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
 
 export interface TrajectoryStepMatcher {
   name?: string;
   pattern?: string;
   type?: TrajectoryStepType | TrajectoryStepType[];
+}
+
+export type TrajectoryStatusValue = 'success' | 'error' | number;
+
+export interface TrajectoryStepStatusMatcher extends TrajectoryStepMatcher {
+  status: TrajectoryStatusValue;
+  message?: string;
 }
 
 export interface TrajectoryStep {
@@ -23,6 +33,7 @@ export interface TrajectoryStep {
   name: string;
   spanName: string;
   statusCode?: number;
+  httpStatusCode?: number;
   statusMessage?: string;
   type: TrajectoryStepType;
 }
@@ -307,6 +318,16 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
+function getHttpStatusCode(attributes: TraceSpan['attributes']): number | undefined {
+  for (const key of ['http.response.status_code', 'http.status_code']) {
+    const value = attributes?.[key];
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
@@ -384,8 +405,10 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         aliases.add('message');
       }
 
+      const httpStatusCode = getHttpStatusCode(span.attributes);
       return {
         aliases: [...aliases],
+        ...(httpStatusCode === undefined ? {} : { httpStatusCode }),
         ...(args === undefined ? {} : { args }),
         attributes: span.attributes || {},
         endTime: span.endTime,
@@ -438,6 +461,33 @@ export function matchesTrajectoryStep(
   }
 
   return step.aliases.some((alias) => matchesPattern(alias, matchPattern));
+}
+
+export function matchesTrajectoryStepStatus(
+  step: TrajectoryStep,
+  matcher: TrajectoryStepStatusMatcher,
+): boolean {
+  if (!matchesTrajectoryStep(step, matcher)) {
+    return false;
+  }
+
+  const status = matcher.status;
+  const { statusCode, httpStatusCode } = step;
+  const semanticCode = statusCode === undefined || statusCode === 0 ? httpStatusCode : statusCode;
+  const statusMatches =
+    typeof status === 'number'
+      ? status === statusCode || status === httpStatusCode
+      : semanticCode !== undefined &&
+        (status === 'success'
+          ? semanticCode === 1 || (semanticCode >= 200 && semanticCode < 400)
+          : semanticCode === 2 || (semanticCode >= 400 && semanticCode < 600));
+  if (!statusMatches) {
+    return false;
+  }
+
+  return matcher.message === undefined
+    ? true
+    : matchesPattern(step.statusMessage || '', matcher.message);
 }
 
 export function formatTrajectoryStep(step: TrajectoryStep): string {
