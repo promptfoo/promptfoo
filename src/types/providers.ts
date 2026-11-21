@@ -209,7 +209,7 @@ export function hasProviderCapability<K extends ProviderCapability>(
   if (!Array.isArray(capabilities)) {
     return false;
   }
-  if (!Object.hasOwn(capabilities, inheritedProviderCapabilities)) {
+  if (!Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) {
     return capabilities.includes(capability);
   }
 
@@ -220,7 +220,7 @@ export function hasProviderCapability<K extends ProviderCapability>(
     return hasProviderCapability(delegate, capability);
   }
 
-  let overridden = Object.hasOwn(provider, capability);
+  let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
   let prototype = Object.getPrototypeOf(provider);
   while (prototype && prototype !== Object.prototype) {
     const explicit = Object.getOwnPropertyDescriptor(prototype, 'promptfooCapabilities');
@@ -236,7 +236,7 @@ export function hasProviderCapability<K extends ProviderCapability>(
     ) {
       return overridden || capabilities.includes(capability);
     }
-    overridden ||= Object.hasOwn(prototype, capability);
+    overridden ||= Object.prototype.hasOwnProperty.call(prototype, capability);
     prototype = parent;
   }
   return capabilities.includes(capability);
