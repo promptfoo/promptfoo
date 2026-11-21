@@ -8,6 +8,14 @@ describe('MCP server optional dependency', () => {
     vi.resetModules();
   });
 
+  it('preserves import failures from an installed SDK', async () => {
+    const { loadMcpDependency } = await import('../../../src/util/mcpServer');
+    const failure = Object.assign(new Error("Cannot find package 'fixture-dependency'"), {
+      code: 'ERR_MODULE_NOT_FOUND',
+    });
+    await expect(loadMcpDependency(Promise.reject(failure))).rejects.toBe(failure);
+  });
+
   it('explains how to install the MCP SDK when server mode is requested', async () => {
     vi.doMock('@modelcontextprotocol/sdk/server/mcp.js', () => {
       throw new Error('Cannot find package @modelcontextprotocol/sdk');
