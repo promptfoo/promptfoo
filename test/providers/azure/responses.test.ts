@@ -151,6 +151,20 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('my-custom-deployment');
       expect(provider.isReasoningModel()).toBe(false);
     });
+
+    it.each(['MAI-Code-2-Flash', 'mai-code-2-flash', 'MAI-Code-2'])(
+      'should identify MAI-Code-2 family deployment %s as a reasoning model',
+      (name) => {
+        expect(new AzureResponsesProvider(name).isReasoningModel()).toBe(true);
+      },
+    );
+
+    it('should identify an aliased MAI-Code-2-Flash deployment through modelName', () => {
+      const provider = new AzureResponsesProvider('coding-agent', {
+        config: { modelName: 'MAI-Code-2-Flash' },
+      });
+      expect(provider.isReasoningModel()).toBe(true);
+    });
   });
 
   describe('supportsTemperature', () => {
@@ -281,6 +295,23 @@ describe('AzureResponsesProvider', () => {
 
         expect(body).toHaveProperty('max_output_tokens', 2_000);
         expect(body).not.toHaveProperty('reasoning.effort');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it.each(['low', 'medium', 'high', 'xhigh', 'max'] as const)(
+      'sends MAI-Code-2-Flash reasoning effort %s without sampling or output-cap defaults',
+      async (effort) => {
+        const provider = new AzureResponsesProvider('mai-code-2-flash', {
+          config: { reasoning_effort: effort },
+        });
+
+        const body = await provider.getAzureResponsesBody('Write a Python function');
+
+        expect(body.model).toBe('mai-code-2-flash');
+        expect(body.reasoning).toEqual({ effort });
+        // A 1024-token default would cut off reasoning at high effort before any answer.
+        expect(body).not.toHaveProperty('max_output_tokens');
         expect(body).not.toHaveProperty('temperature');
       },
     );
@@ -846,6 +877,82 @@ describe('AzureResponsesProvider', () => {
 
       expect(requestBody).toMatchObject({ model: 'gpt-5.6-sol', service_tier: 'default' });
       expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('prices MAI-Code-2-Flash Responses usage, including cached input and reasoning tokens', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          object: 'response',
+          status: 'completed',
+          model: 'MAI-Code-2-Flash',
+          reasoning: { effort: 'max' },
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              status: 'completed',
+              content: [{ type: 'output_text', text: 'def reverse(s): return s[::-1]' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10_000,
+            input_tokens_details: { cached_tokens: 4_000 },
+            output_tokens: 2_000,
+            output_tokens_details: { reasoning_tokens: 1_500 },
+            total_tokens: 12_000,
+          },
+        }),
+      );
+      const provider = new AzureResponsesProvider('mai-code-2-flash', {
+        config: { reasoning_effort: 'max' },
+      });
+
+      const result = await provider.callApi('Reverse a string in Python');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('def reverse(s): return s[::-1]');
+      expect(result.cost).toBeCloseTo((6_000 * 0.05 + 4_000 * 0.005 + 2_000 * 0.25) / 1e6, 12);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10_000,
+        completion: 2_000,
+        cached: 4_000,
+        completionDetails: { reasoning: 1_500 },
+      });
+    });
+
+    it('prices an aliased deployment by its configured modelName', async () => {
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createCachedTokenResponse()));
+      const provider = new AzureResponsesProvider('coding-agent', {
+        config: { modelName: 'MAI-Code-2-Flash' },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(requestBody.model).toBe('coding-agent');
+      expect(result.cost).toBeCloseTo((1_500 * 0.05 + 500 * 0.005 + 1_000 * 0.25) / 1e6, 12);
+    });
+
+    it('prefers a priced modelName over a priced deployment name', async () => {
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createCachedTokenResponse()));
+      const provider = new AzureResponsesProvider('gpt-5.6', {
+        config: { modelName: 'MAI-Code-2-Flash' },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((1_500 * 0.05 + 500 * 0.005 + 1_000 * 0.25) / 1e6, 12);
+    });
+
+    it('prefers the passthrough model over modelName for cost', async () => {
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createCachedTokenResponse()));
+      const provider = new AzureResponsesProvider('coding-agent', {
+        config: { modelName: 'MAI-Code-2-Flash', passthrough: { model: 'gpt-5.6' } },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
     });
 
     it('prices the priority tier Azure served instead of requested auto', async () => {

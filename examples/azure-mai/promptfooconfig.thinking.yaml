@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: MAI-Thinking-1 reasoning on Azure AI Foundry
+
+# MAI-Thinking-1 is Microsoft's reasoning model. It speaks the chat-completions
+# API, so it runs through `azure:chat:<deployment>`. promptfoo detects it as a
+# reasoning model by name: it sends `max_completion_tokens` and
+# `reasoning_effort` and omits `temperature`.
+#
+# Setup:
+#   az cognitiveservices account deployment create \
+#     --name <RESOURCE> --resource-group <RG> \
+#     --deployment-name mai-thinking-1 \
+#     --model-name MAI-Thinking-1 --model-format Microsoft \
+#     --model-version 2026-06-01 --sku-name GlobalStandard --sku-capacity 50
+#   (Each capacity unit allows 1 request and 1,000 tokens per minute; a single
+#   reasoning answer can use hundreds of tokens.)
+#   export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
+#   export AZURE_API_KEY=<key>            # or use `az login` (Entra ID)
+#   promptfoo eval -c promptfooconfig.thinking.yaml --no-cache
+
+prompts:
+  - '{{question}} Reply with just the answer.'
+
+providers:
+  - id: azure:chat:mai-thinking-1
+    label: MAI-Thinking-1
+    config:
+      # Reasoning tokens count toward this cap, so leave headroom.
+      max_completion_tokens: 4096
+      reasoning_effort: medium
+
+tests:
+  - vars:
+      question: What is 17 * 23?
+    assert:
+      - type: contains
+        value: '391'
+  - vars:
+      question: >-
+        A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball.
+        How many cents does the ball cost?
+    assert:
+      - type: contains
+        value: '5'
+      - type: not-contains
+        value: '10'

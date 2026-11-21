@@ -1,20 +1,19 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Microsoft MAI models on Azure AI Foundry (Foundry Models sold by Azure)
+description: Microsoft MAI image models on Azure AI Foundry (Foundry Models sold by Azure)
 
-# Microsoft's first-party "MAI" model family. Image models (MAI-Image-2.5 and
-# friends, currently Preview) use a Microsoft-managed `/mai/v1/images` route and
-# run through the dedicated `azure:image:<deployment>` provider — that's what this
-# example uses. Text/reasoning models (MAI-DS-R1, MAI-Thinking-1, MAI-Code-1-Flash)
-# use the standard chat-completions API via `azure:chat:<deployment>`, but have
-# limited availability today (see the commented chat provider below).
+# Compares MAI-Image-2.7 with its faster, cheaper Flash variant. MAI image models
+# use a Microsoft-managed `/mai/v1/images` route and run through the dedicated
+# `azure:image:<deployment>` provider. See promptfooconfig.thinking.yaml for the
+# MAI-Thinking-1 reasoning model and promptfooconfig.code.yaml for MAI-Code-2-Flash.
 #
 # Setup:
-#   1. Deploy an MAI image model to a Microsoft Foundry (AIServices) resource:
+#   1. Deploy both models to a Microsoft Foundry (AIServices) resource:
 #        az cognitiveservices account deployment create \
 #          --name <RESOURCE> --resource-group <RG> \
-#          --deployment-name mai-image-2-5 \
-#          --model-name MAI-Image-2.5 --model-format Microsoft \
-#          --model-version 2026-06-02 --sku-name GlobalStandard --sku-capacity 1
+#          --deployment-name mai-image-2-7 \
+#          --model-name MAI-Image-2.7 --model-format Microsoft \
+#          --model-version 2026-11-02 --sku-name GlobalStandard --sku-capacity 1
+#      Repeat with --deployment-name mai-image-2-7-flash --model-name MAI-Image-2.7-Flash.
 #   2. Point promptfoo at the resource's *.services.ai.azure.com endpoint:
 #        export AZURE_API_HOST=<RESOURCE>.services.ai.azure.com
 #        export AZURE_API_KEY=<key>            # or use `az login` (Entra ID)
@@ -24,23 +23,22 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:image:mai-image-2-5
-    label: MAI-Image-2.5
+  - id: azure:image:mai-image-2-7
+    label: MAI-Image-2.7
     config:
       # `model` is used only for cost reporting; Azure deployment names can't
-      # contain the dot in "MAI-Image-2.5", so name the model id explicitly.
-      model: MAI-Image-2.5
+      # contain the dot in "MAI-Image-2.7", so name the model id explicitly.
+      model: MAI-Image-2.7
       width: 1024
       height: 1024
-
-  # Reasoning/chat MAI models use the standard chat provider, but aren't deployable
-  # on most subscriptions yet (MAI-DS-R1 is deprecated; MAI-Thinking-1 and
-  # MAI-Code-1-Flash are private preview). Uncomment once your subscription can
-  # deploy one:
-  # - id: azure:chat:mai-thinking-1
-  #   label: MAI-Thinking-1
-  #   config:
-  #     max_completion_tokens: 2048
+  - id: azure:image:mai-image-2-7-flash
+    label: MAI-Image-2.7-Flash
+    config:
+      model: MAI-Image-2.7-Flash
+      width: 1024
+      height: 1024
+      passthrough:
+        background: transparent # MAI-Image-2.7 models only
 
 tests:
   - vars:
@@ -53,11 +51,17 @@ tests:
         value: |
           return typeof output === 'string' &&
             (output.startsWith('promptfoo://blob/') || output.startsWith('data:image/'));
+      # A 1024x1024 image is 1,024 output tokens: about $0.035 on MAI-Image-2.7
+      # and $0.010 on MAI-Image-2.7-Flash.
+      - type: cost
+        threshold: 0.05
 
   - vars:
-      prompt: An isometric illustration of a cozy reading nook with warm lighting
+      prompt: A cheerful orange toy robot, full body, centered, no shadow
     assert:
       - type: javascript
         value: |
           return typeof output === 'string' &&
             (output.startsWith('promptfoo://blob/') || output.startsWith('data:image/'));
+      - type: cost
+        threshold: 0.05
