@@ -71,7 +71,8 @@ export function getUrlCredentials(
   includeFragment = true,
   onMalformed?: () => void,
 ): string[] {
-  const trimmed = value.trim();
+  // A single argv entry may carry a URL in --option=value or NAME=value form.
+  const trimmed = value.trim().replace(/^(?:--?)?[a-z_][\w.-]*=/i, '');
   if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
     return [];
   }
