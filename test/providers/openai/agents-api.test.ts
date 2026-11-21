@@ -1423,14 +1423,16 @@ describe('OpenAiAgentsApiProvider', () => {
     },
   );
 
-  it('reports a missing session ID without attempting cleanup', async () => {
-    vi.mocked(fetchWithRetries).mockResolvedValueOnce(json({ status: 'idle' }));
+  const invalidIds = [undefined, null, '', ' ', '.', '..'];
+
+  it.each(invalidIds)('rejects session ID %j without attempting cleanup', async (id) => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(json({ id, status: 'idle' }));
     const result = await provider().callApi('hi');
     expect(result.error).toBe('Agents API did not return a session ID');
     expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   });
 
-  it.each([undefined, null, '', ' ', '..'])(
+  it.each(invalidIds)(
     'rejects a completed root turn with invalid ID %j before reading its messages',
     async (id) => {
       mockApi((pathname) => {
@@ -2008,6 +2010,21 @@ describe('OpenAiAgentsApiProvider', () => {
           .mock.calls.filter(([url]) => String(url).includes(`/subagents/${subagentId}/items`))
           .map(([url]) => new URL(String(url)).searchParams.get('after')),
       ).toEqual([null, 'call_mcp']);
+    });
+
+    it.each(invalidIds)('does not request history or usage for subagent ID %j', async (id) => {
+      mockApi((pathname) =>
+        pathname.endsWith('/subagents') ? json(page([{ id }])) : rootItemsRoute(pathname),
+      );
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.metadata).toMatchObject({
+        subagentToolCallsUnavailable: true,
+        usageMayExcludeSubagents: true,
+        sessionDeleted: true,
+      });
+      // A '..' segment would fetch the root's history or turns again.
+      expect(calls().filter(({ pathname }) => /\/(items|turns)$/.test(pathname))).toHaveLength(2);
     });
 
     it('keeps the answer and flags subagent tool calls it cannot read', async () => {

@@ -618,7 +618,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   ): Promise<string[]> {
     const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
     return subagents.map(({ id }) => {
-      if (typeof id !== 'string' || !id) {
+      if (!isResourceId(id)) {
         throw new Error('Agents API returned an invalid subagent');
       }
       return id;
