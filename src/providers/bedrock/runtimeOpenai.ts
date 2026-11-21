@@ -1,5 +1,5 @@
 import { getEnvInt } from '../../envars';
-import { calculateOpenAIUsageCost } from '../openai/billing';
+import { calculateOpenAIUsageCost, getBedrockGptInferenceProfile } from '../openai/billing';
 import { isGpt6Model } from '../openai/gpt6';
 import { getOpenAICacheWriteInputTokens, getTokenUsage } from '../openai/util';
 import { getResponsesTokenUsage } from '../responses/processor';
@@ -68,6 +68,7 @@ function runtimeCost(
   configuredRegion: string,
   apiUrl: string,
   cached: boolean,
+  createdAt: number | undefined,
 ): number | undefined {
   // Complete manual rates remain authoritative. Do not fall back to first-party vendor prices.
   if (
@@ -83,15 +84,16 @@ function runtimeCost(
     }
   }
   const region = getBedrockRuntimeBillingRegion(configuredRegion, apiUrl);
-  const gptProfile = /(?:^|\/)(us|global|us-gov|in)\.openai\.(gpt-\d[^/]+)$/.exec(modelName);
+  const gptProfile = getBedrockGptInferenceProfile(modelName);
   if (gptProfile) {
-    return calculateOpenAIUsageCost(gptProfile[2], config, usage, {
+    return calculateOpenAIUsageCost(gptProfile.model, config, usage, {
       cachedResponse: cached,
       apiUrl,
       provider: 'bedrock',
       region,
-      bedrockProfile: gptProfile[1],
+      bedrockProfile: gptProfile.scope,
       serviceTier,
+      createdAt,
     });
   }
   if (!['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')) {
@@ -292,6 +294,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       this.getBillingRegion(),
       this.getApiUrl(),
       cached,
+      data.created,
     );
   }
 }
@@ -384,6 +387,7 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
       this.getBillingRegion(),
       this.getApiUrl(),
       cached,
+      data.created_at,
     );
     const { cost: _previousCost, ...unbilled } = result;
     return {
