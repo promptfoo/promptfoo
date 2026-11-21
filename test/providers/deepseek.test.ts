@@ -860,6 +860,14 @@ describe('completed model callback billing', () => {
     'retains $route completed cost and the real $source model cache after callback selection',
     async (item) => {
       const fixture = await setup(item);
+      // Cache hits: Fireworks and DeepSeek report zero, Meta keeps its reported
+      // cost (the evaluator derives zero incurred cost), and the rest omit it.
+      const cachedCost =
+        item.route.startsWith('fireworks:') || item.route.startsWith('deepseek:')
+          ? 0
+          : item.route.startsWith('meta:')
+            ? item.cost
+            : undefined;
       await withCacheNamespace(`completed-model-${item.route}-${item.source}`, () =>
         withCacheEnabled(true, async () => {
           const ordinary = response(await fixture.run('success', 'ordinary'));
@@ -868,23 +876,11 @@ describe('completed model callback billing', () => {
           const selected = response(await fixture.run('selected-error', prompt));
           expect(selected.cached).toBe(item.source === 'cached');
           expect(selected.tokenUsage?.total).toBe(5);
-          cost(
-            selected.cost,
-            item.source === 'fresh'
-              ? ordinary.cost
-              : item.route.startsWith('fireworks:') || item.route.startsWith('deepseek:')
-                ? 0
-                : undefined,
-          );
+          cost(selected.cost, item.source === 'fresh' ? ordinary.cost : cachedCost);
           const survivor = response(await fixture.run('success', prompt));
           expect(survivor.output).toBe('Hello from lookup');
           expect(survivor.cached).toBe(true);
-          cost(
-            survivor.cost,
-            item.route.startsWith('fireworks:') || item.route.startsWith('deepseek:')
-              ? 0
-              : undefined,
-          );
+          cost(survivor.cost, cachedCost);
           expect(fixture.fetch).toHaveBeenCalledTimes(item.source === 'fresh' ? 2 : 1);
           expect(fixture.callback).toHaveBeenCalledTimes(3);
         }),

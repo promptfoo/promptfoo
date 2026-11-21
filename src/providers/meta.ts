@@ -16,6 +16,8 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { AnthropicMessageOptions } from './anthropic/types';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
+import type { OpenAiBillingConfig } from './openai/config';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const META_API_BASE_URL = 'https://api.meta.ai/v1';
@@ -26,7 +28,8 @@ const META_MESSAGES_API_BASE_URL = 'https://api.meta.ai';
 // quickstart use. Use `apiKeyEnvar` (or `apiKey`) in the provider config to
 // source the key from somewhere else.
 const META_API_KEY_ENVAR = 'MODEL_API_KEY';
-const DEFAULT_META_MODEL = 'muse-spark-1.1';
+// Meta recommends Muse Spark 1.3 for new work; it is priced like 1.1.
+const DEFAULT_META_MODEL = 'muse-spark-1.3';
 const DEFAULT_META_MAX_OUTPUT_TOKENS = 131_072;
 const UNSUPPORTED_META_SUBTYPES = new Set([
   'assistant',
@@ -41,8 +44,10 @@ const UNSUPPORTED_META_SUBTYPES = new Set([
   'video',
 ]);
 
-// Muse Spark rejects other values (including OpenAI's 'none') with an HTTP 400.
-const META_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+// Muse reasoning models reject other values (including OpenAI's 'none') with an
+// HTTP 400. 'max' is served on muse-wonder-1.0, muse-spark-1.3, and
+// muse-ember-1.0; the API rejects it on older or Contributor Spark versions.
+const META_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 // Minimal config shapes shared by the OpenAI- and Anthropic-based Meta providers.
 type MetaKeyConfig = { apiKey?: string; apiKeyEnvar?: string };
@@ -67,20 +72,50 @@ type MetaMessagesProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MetaMessagesConfig;
 };
 
+type MetaTokenRates = { input: number; cachedInput: number; output: number };
+
 // Published Meta Model API pricing in USD per token. Reasoning tokens bill at
 // the output rate. Contributor models permit training on prompts and completions
 // and must be selected explicitly. Unknown models use caller pricing overrides.
+// A `longContext` tier replaces every rate for a request whose input tokens
+// (cached tokens included) exceed its threshold.
 // https://dev.meta.ai/docs/pricing-rate-limits
 export const META_MODEL_PRICES: Record<
   string,
-  { input: number; cachedInput: number; output: number }
+  MetaTokenRates & { longContext?: MetaTokenRates & { threshold: number } }
 > = {
+  'muse-wonder-1.0': {
+    input: 4 / 1e6,
+    cachedInput: 0.2 / 1e6,
+    output: 20 / 1e6,
+  },
+  'muse-ember-1.0': {
+    input: 0.1 / 1e6,
+    cachedInput: 0.004 / 1e6,
+    output: 0.5 / 1e6,
+    longContext: {
+      threshold: 200_000,
+      input: 0.3 / 1e6,
+      cachedInput: 0.012 / 1e6,
+      output: 1.5 / 1e6,
+    },
+  },
   'muse-spark-1.3': {
     input: 1.25 / 1e6,
     cachedInput: 0.15 / 1e6,
     output: 4.25 / 1e6,
   },
   'muse-spark-1.3-contributor': {
+    input: 0.1 / 1e6,
+    cachedInput: 0.002 / 1e6,
+    output: 0.2 / 1e6,
+  },
+  'muse-spark-1.2': {
+    input: 1.25 / 1e6,
+    cachedInput: 0.15 / 1e6,
+    output: 4.25 / 1e6,
+  },
+  'muse-spark-1.2-contributor': {
     input: 0.1 / 1e6,
     cachedInput: 0.002 / 1e6,
     output: 0.2 / 1e6,
@@ -147,8 +182,8 @@ function assertSupportedReasoningEffort(effort: unknown): void {
   }
   if (!META_REASONING_EFFORTS.includes(String(effort))) {
     throw new Error(
-      `Muse Spark models do not support reasoning_effort '${effort}'. Omit it to let ` +
-        `the model pick its own reasoning depth, or use one of: ${META_REASONING_EFFORTS.join(', ')}.`,
+      `Muse models do not support reasoning_effort '${effort}'. Omit it to use the ` +
+        `model's default reasoning depth, or use one of: ${META_REASONING_EFFORTS.join(', ')}.`,
     );
   }
 }
@@ -196,11 +231,11 @@ function assertSupportedMetaRequest(
 ): void {
   if (config.stop !== undefined || 'stop' in body) {
     throw new Error(
-      'Muse Spark models do not support `stop` sequences; remove `stop` from the provider config.',
+      'Muse models do not support `stop` sequences; remove `stop` from the provider config.',
     );
   }
   if ('logprobs' in body) {
-    throw new Error('Muse Spark models do not support logprobs.');
+    throw new Error('Muse models do not support logprobs.');
   }
   if (
     Array.isArray(body.include) &&
@@ -208,17 +243,13 @@ function assertSupportedMetaRequest(
       (include) => include === 'logprobs' || include === 'message.output_text.logprobs',
     )
   ) {
-    throw new Error('Muse Spark models do not support logprobs.');
+    throw new Error('Muse models do not support logprobs.');
   }
   if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
-    throw new Error(
-      'Muse Spark models do not support `logit_bias`; remove it from the provider config.',
-    );
+    throw new Error('Muse models do not support `logit_bias`; remove it from the provider config.');
   }
   if (typeof body.n === 'number' && body.n > 1) {
-    throw new Error(
-      'Muse Spark models do not support `n > 1`; remove `n` from the provider config.',
-    );
+    throw new Error('Muse models do not support `n > 1`; remove `n` from the provider config.');
   }
   // The chat base builder never copies `config.stream` into the body, so check
   // the config too — a requested streaming eval must fail fast, not silently
@@ -263,10 +294,11 @@ function applyMetaSamplingHygiene(
 
 /**
  * Cost for a Meta Model API call. Uses the built-in price table for known
- * models; `cost` / `inputCost` / `outputCost` / `cacheReadCost` overrides take
- * precedence (all in USD per token). Cached prompt tokens bill at
- * `cacheReadCost`, falling back to a user input rate, then the built-in cached
- * rate — the same precedence the OpenAI billing path uses.
+ * models, including a model's long-context tier when the prompt (cached tokens
+ * included) exceeds its threshold; `cost` / `inputCost` / `outputCost` /
+ * `cacheReadCost` overrides take precedence (all in USD per token). Cached
+ * prompt tokens bill at `cacheReadCost`, falling back to a user input rate, then
+ * the built-in cached rate — the same precedence the OpenAI billing path uses.
  */
 export function calculateMetaCost(
   modelName: string,
@@ -279,7 +311,11 @@ export function calculateMetaCost(
     return undefined;
   }
 
-  const prices = META_MODEL_PRICES[modelName];
+  const modelPrices = META_MODEL_PRICES[modelName];
+  const prices =
+    modelPrices?.longContext && promptTokens! > modelPrices.longContext.threshold
+      ? modelPrices.longContext
+      : modelPrices;
   const inputCost = config.inputCost ?? config.cost ?? prices?.input;
   const outputCost = config.outputCost ?? config.cost ?? prices?.output;
   if (inputCost === undefined || outputCost === undefined) {
@@ -335,9 +371,10 @@ function resolveMetaProviderOptions(providerOptions: MetaProviderOptions) {
   return { resolvedConfig, options: { ...providerOptions, config: resolvedConfig } };
 }
 
-// The Meta Model API (dev.meta.ai) serves the Muse Spark models through an
-// OpenAI-compatible chat completions endpoint, so the standard chat provider
-// handles requests once the base URL and key resolution point at it.
+// The Meta Model API (dev.meta.ai) serves the Muse reasoning models (Wonder,
+// Spark, Ember) through an OpenAI-compatible chat completions endpoint, so the
+// standard chat provider handles requests once the base URL and key resolution
+// point at it.
 // https://dev.meta.ai/docs/features/chat-completion
 class MetaProvider extends OpenAiChatCompletionProvider {
   config: MetaConfig;
@@ -366,7 +403,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return missingMetaApiKeyMessage(this.config);
   }
 
-  // The Muse Spark models are reasoning models: they take reasoning_effort and
+  // The Muse models are reasoning models: they take reasoning_effort and
   // max_completion_tokens (max_tokens is only a deprecated alias upstream).
   // Marking them as reasoning models makes the base class forward those fields
   // and skip the injected max_tokens default (1024), which would starve
@@ -379,7 +416,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
-  // Unlike OpenAI's o-series, Muse Spark accepts temperature (0-2), so keep
+  // Unlike OpenAI's o-series, Muse models accept temperature (0-2), so keep
   // promptfoo's deterministic default instead of suppressing the parameter.
   protected override supportsTemperature(): boolean {
     return true;
@@ -428,6 +465,28 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     ]);
 
     return result;
+  }
+
+  // The OpenAI billing tables can't price Muse models, so price them from the
+  // raw usage here. That also covers cache hits, whose token usage omits the
+  // prompt/completion split: they keep their reported cost, and the evaluator
+  // derives zero incurred cost from the cache marker.
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiBillingConfig,
+    cached: boolean,
+  ): number | undefined {
+    const baseCost = super.calculateResponseCost(data, config, cached);
+    if (baseCost !== undefined) {
+      return baseCost;
+    }
+    return calculateMetaCost(
+      this.getBillingModelName(config),
+      config as MetaConfig,
+      data.usage?.prompt_tokens,
+      data.usage?.completion_tokens,
+      data.usage?.prompt_tokens_details?.cached_tokens,
+    );
   }
 
   override async callApi(
@@ -541,8 +600,10 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): ProviderResponse {
+    // Cache hits keep their reported cost too; the evaluator derives zero
+    // incurred cost from the cache marker.
     const billed = super.applyBilling(result, data, config, cached);
-    if (cached || billed.cost !== undefined) {
+    if (billed.cost !== undefined) {
       return billed;
     }
     const usage = data?.usage;
@@ -657,6 +718,30 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
   toJSON() {
     return metaToJSON('meta:messages', this.modelName, this.config as MetaMessagesConfig);
+  }
+
+  // The base prices each request of a turn (pause_turn resumes, MCP tool
+  // loops) separately and sums the results. Price every request with Meta's
+  // rates here so a long-context tier is chosen per request, as Meta bills
+  // it, rather than from the turn's combined usage.
+  protected override calculateMessageCost(
+    config: AnthropicMessageOptions,
+    message: Parameters<AnthropicMessagesProvider['calculateMessageCost']>[1],
+    modelName = this.modelName,
+  ): number | undefined {
+    const usage = message.usage;
+    const cacheReadTokens = usage?.cache_read_input_tokens ?? 0;
+    const promptTokens =
+      usage?.input_tokens == null
+        ? undefined
+        : usage.input_tokens + cacheReadTokens + (usage.cache_creation_input_tokens ?? 0);
+    return calculateMetaCost(
+      modelName,
+      config as MetaMessagesConfig,
+      promptTokens,
+      usage?.output_tokens,
+      cacheReadTokens,
+    );
   }
 
   override async callApi(
