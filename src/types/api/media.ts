@@ -25,7 +25,10 @@ const MediaQuerySchema = z.object({
     .string()
     .min(1)
     .max(2048)
-    .regex(/^(?!\/|[a-zA-Z]:)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^\\\x00-\x1f]+$/, 'Invalid media key'),
+    .regex(
+      /^(?!\/|[a-zA-Z]:)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^\\\x00-\x1f\x7f\u2028\u2029]+$/,
+      'Invalid media key',
+    ),
 });
 
 // GET /api/media/stats

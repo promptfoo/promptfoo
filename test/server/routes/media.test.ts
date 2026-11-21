@@ -40,6 +40,8 @@ describe('Media Routes', () => {
       '../private.pdf',
       'document/../../private.pdf',
       '/private.pdf',
+      'prefix\u2028/../../private.pdf',
+      'prefix\u2029/../../private.pdf',
       'document/./private.pdf',
       'document\\..\\private.pdf',
     ];
