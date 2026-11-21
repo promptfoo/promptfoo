@@ -183,17 +183,14 @@ export class OTLPTracingExporter implements TracingExporter {
     return data.name || 'custom';
   }
 
-  private getSpanStatus(span: Span<any>): any {
-    if (span.error) {
-      return {
-        code: 2,
-        message: sanitizeSerializedAttribute(span.error.message || String(span.error)),
-      };
+  private getSpanStatus(span: Span<any>) {
+    try {
+      const error = span.error;
+      return error ? { code: 2, message: sanitizeSerializedAttribute(error.message) } : { code: 0 };
+    } catch {
+      // SDK extensions can attach errors with unreadable property accessors.
+      return { code: 2, message: '<redacted>' };
     }
-
-    return {
-      code: 0,
-    };
   }
 
   private getSpanAttributes(span: Span<any>): Record<string, unknown> {
@@ -563,7 +560,10 @@ function commandToString(value: unknown): string | undefined {
   return String(value).trim() || undefined;
 }
 
-function sanitizeSerializedAttribute(value: string): string {
+function sanitizeSerializedAttribute(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '<redacted>';
+  }
   const trimmed = value.trim();
   if (
     (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
@@ -578,9 +578,8 @@ function sanitizeSerializedAttribute(value: string): string {
     try {
       const parsed = parseStructuredJson(trimmed);
       if (isRecord(parsed) || Array.isArray(parsed)) {
-        const state = { changed: false };
-        const sanitized = sanitizeStructuredAttribute(parsed, state);
-        return state.changed ? JSON.stringify(sanitized) : value;
+        // Parsing can discard earlier duplicate fields that still contain secrets in the source.
+        return JSON.stringify(sanitizeStructuredAttribute(parsed));
       }
     } catch (error) {
       if (error instanceof RangeError) {
@@ -606,7 +605,15 @@ function parseStructuredJson(value: string): unknown {
   });
 }
 
-function sanitizeCredentialText(value: string): string {
+function sanitizeCredentialText(value: string, inspectEncoding = true): string {
+  if (value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+    return '<redacted>';
+  }
+  // A folded header can continue onto several lines.
+  if (/\b(?:authorization|cookie)[ \t]*:[^\r\n]*\r?\n[ \t]/i.test(value)) {
+    return '<redacted>';
+  }
+
   if (/^\s*(?:Bearer|Basic)[ \t]+[A-Za-z\d._~+/-]{20,}=*\s*$/i.test(value)) {
     return '<redacted>';
   }
@@ -704,6 +711,7 @@ function sanitizeCredentialText(value: string): string {
   value = sanitized + value.slice(copied);
 
   return redactQuotedCredentials(value)
+    .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
     .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
     .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
@@ -747,39 +755,62 @@ function sanitizeCredentialText(value: string): string {
     )
     .replace(
       /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
-      (match, prefix: string, key: string, separator: string, quote: string) => {
+      (match, prefix: string, key: string, separator: string, quote: string, raw: string) => {
         let decodedKey = key;
         try {
           decodedKey = decodeURIComponent(key.replace(/\+/g, ' '));
         } catch {
           // Preserve malformed query parameters while still checking their literal key.
         }
-        const bareFormKey = /^key$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
-        return isCredentialAttributeKey(decodedKey) || bareFormKey
-          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
-          : match;
+        const bareFormKey =
+          /^(?:key|code)$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
+        const secret =
+          isCredentialAttributeKey(decodedKey) ||
+          bareFormKey ||
+          (inspectEncoding && hasEncodedCredential(raw));
+        return secret ? `${prefix}${key}${separator}${quote}<redacted>${quote}` : match;
       },
     );
 }
 
-function isCurlCommand(command: unknown): boolean {
-  let executable: unknown;
-  if (Array.isArray(command)) {
-    let index = 0;
-    while (['env', 'command', 'exec'].includes(command[index])) {
-      if (command[index] === 'env' && command[index + 1] === '-i') {
-        index++;
-      }
-      index++;
+// Inspect encoded query values under otherwise harmless names. Never substitute
+// a decoded URL into the trace, and bound decoding of nested redirects.
+function hasEncodedCredential(raw: string): boolean {
+  for (let depth = 0; /%[\da-f]{2}/i.test(raw); depth++) {
+    if (depth >= 3) {
+      return true;
     }
-    executable = command[index];
-  } else if (typeof command === 'string') {
-    const match = command
-      .trimStart()
-      .match(/^(?:(?:env(?:[ \t]+-i)?|command|exec)[ \t]+)*(?:"([^"]+)"|'([^']+)'|(\S+))/);
-    executable = match?.[1] ?? match?.[2] ?? match?.[3];
+    try {
+      raw = decodeURIComponent(raw.replace(/\+/g, ' '));
+    } catch {
+      return true;
+    }
+    if (sanitizeCredentialText(raw, false) !== raw) {
+      return true;
+    }
   }
-  return typeof executable === 'string' && /(?:^|[/\\])curl(?:\.exe)?$/i.test(executable);
+  return false;
+}
+
+function isCurlCommand(command: unknown): boolean {
+  const words = Array.isArray(command)
+    ? command
+    : typeof command === 'string'
+      ? command.match(/(?:[^\s"']|"[^"]*"|'[^']*')+/g)
+      : undefined;
+  for (const word of words ?? []) {
+    if (typeof word !== 'string') {
+      return false;
+    }
+    const arg = word.replace(/^(["'])(.*)\1$/, '$2');
+    if (
+      /^(?:[\w]+=[\s\S]*|-i|--ignore-environment|--|command|exec|(?:\/usr\/bin\/)?env)$/.test(arg)
+    ) {
+      continue;
+    }
+    return /(?:^|[/\\])curl(?:\.exe)?$/i.test(arg);
+  }
+  return false;
 }
 
 function isCredentialOption(option: string, usesCurlAuth: boolean): boolean {
@@ -818,12 +849,17 @@ function hasCredentialNamedPayload(value: string): boolean {
 function redactQuotedCredentials(value: string): string {
   return value
     .replace(
+      /(["'])([A-Za-z_][\w.-]*)([ \t]*:[ \t]*)(?:\\.|(?!\1)[^\\\r\n])*(?:\1|$)/gi,
+      (match, quote: string, key: string, separator: string) =>
+        isCredentialAttributeKey(key) ? `${quote}${key}${separator}<redacted>${quote}` : match,
+    )
+    .replace(
       /(^|[\s;])([A-Za-z_][A-Za-z\d_.-]*)(\s*=\s*)\{(?:}}|[^}])*(?:}|$)/gi,
       (match, prefix: string, key: string, separator: string) =>
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(["'])([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|\4\4|(?!\4)[^\\])*(?:\4|$)/g,
+      /(["'])([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|\4\4|(?!\4)[^\\])*(?:\4|$)/g,
       (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
         isCredentialAttributeKey(key)
           ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
@@ -839,7 +875,7 @@ function redactQuotedCredentials(value: string): string {
 }
 
 function isCredentialAttributeKey(key: string): boolean {
-  if (/^x-session-id$/i.test(key)) {
+  if (/^(?:x-session-id|(?:code|pkce)[_.-]?verifier)$/i.test(key)) {
     return true;
   }
 
@@ -962,7 +998,7 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
       return new Date(Date.prototype.getTime.call(value));
     }
     if (Array.isArray(value) || isRecord(value)) {
-      return sanitizeStructuredAttribute(value, { changed: false }, false, isHeaderContainer(key));
+      return sanitizeStructuredAttribute(value, false, isHeaderContainer(key));
     }
     return value;
   } catch {
@@ -1049,7 +1085,6 @@ function isJwe(value: unknown, budget: { remaining: number }): boolean {
 
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
-  state: { changed: boolean } = { changed: false },
   normalizeScalars = false,
   headerPairs = false,
 ): Record<string, unknown> | unknown[] | string {
@@ -1058,25 +1093,21 @@ function sanitizeStructuredAttribute(
       !(value instanceof Date) &&
       typeof (value as Record<string, unknown>).toJSON === 'function'
     ) {
-      state.changed = true;
       return '<redacted>';
     }
-    return sanitizeStructuredAttributeValue(value, state, normalizeScalars, headerPairs);
+    return sanitizeStructuredAttributeValue(value, normalizeScalars, headerPairs);
   } catch {
-    state.changed = true;
     return '<redacted>';
   }
 }
 
 function sanitizeStructuredAttributeValue(
   value: Record<string, unknown> | unknown[],
-  state: { changed: boolean },
   normalizeScalars: boolean,
   headerPairs: boolean,
 ): Record<string, unknown> | unknown[] | string {
   const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
   if (isJwe(value, budget)) {
-    state.changed = true;
     return '<redacted>';
   }
   type StructuredValue = Record<string, unknown> | unknown[];
@@ -1094,14 +1125,12 @@ function sanitizeStructuredAttributeValue(
     if (Array.isArray(source)) {
       budget.remaining -= source.length;
       if (budget.remaining < 0) {
-        state.changed = true;
         return '<redacted>';
       }
       (target as unknown[]).length = source.length;
     }
     for (const [key, entry] of structuredAttributeEntries(source)) {
       if (--budget.remaining < 0) {
-        state.changed = true;
         return '<redacted>';
       }
 
@@ -1118,13 +1147,11 @@ function sanitizeStructuredAttributeValue(
         isJwe(entry, budget)
       ) {
         sanitized = '<redacted>';
-        state.changed = true;
       } else if (!normalizeScalars && (losslessJson.isRawJSON?.(entry) || entry instanceof Date)) {
         sanitized = entry instanceof Date ? new Date(Date.prototype.getTime.call(entry)) : entry;
       } else if (isRecord(entry) || Array.isArray(entry)) {
         if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
           sanitized = '<redacted>';
-          state.changed = true;
         } else {
           const child: StructuredValue = Array.isArray(entry) ? [] : {};
           stack.push({
@@ -1140,11 +1167,9 @@ function sanitizeStructuredAttributeValue(
         if (typeof sanitized === 'string') {
           sanitized = sanitizeSerializedAttribute(sanitized);
         }
-        state.changed ||= sanitized !== entry;
       }
 
       const sanitizedKey = sanitizeSerializedAttribute(key);
-      state.changed ||= sanitizedKey !== key;
       Object.defineProperty(target, sanitizedKey, {
         configurable: true,
         enumerable: true,
@@ -1155,7 +1180,6 @@ function sanitizeStructuredAttributeValue(
   }
 
   if (Buffer.byteLength(safeJsonStringify(root), 'utf8') > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
-    state.changed = true;
     return '<redacted>';
   }
 
@@ -1196,7 +1220,7 @@ function sanitizeAttributeValue(value: unknown): unknown {
   }
 
   if (Array.isArray(value) || isRecord(value)) {
-    return sanitizeStructuredAttribute(value, { changed: false }, true);
+    return sanitizeStructuredAttribute(value, true);
   }
 
   return String(value);

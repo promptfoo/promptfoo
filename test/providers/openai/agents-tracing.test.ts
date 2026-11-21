@@ -57,16 +57,21 @@ describe('OTLPTracingExporter', () => {
     mockFetchWithProxy.mockResolvedValue({ ok: true });
   });
 
-  async function exportCustomData(data: Record<string, unknown>, format: 'json' | 'protobuf') {
+  async function exportCustomData(
+    data: Record<string, unknown>,
+    format: 'json' | 'protobuf',
+    name: unknown = 'lookup',
+    error?: unknown,
+  ) {
     const exporter = new OTLPTracingExporter();
     await exporter.export(
       [data, { result: 'healthy' }].map((attributes, index) => ({
         type: 'trace.span',
         traceId: 'trace_0123456789abcdef0123456789abcdef',
         spanId: `span_0123456789abcde${index}`,
-        spanData: { type: 'custom', name: index ? 'healthy' : 'lookup', data: attributes },
+        spanData: { type: 'custom', name: index ? 'healthy' : name, data: attributes },
         traceMetadata: { 'promptfoo.otlp_format': format },
-        error: null,
+        error: index ? null : error,
       })) as any,
     );
     expect(mockFetchWithProxy).toHaveBeenCalledOnce();
@@ -78,6 +83,44 @@ describe('OTLPTracingExporter', () => {
     expect(getAttributes(spans[1]).result).toBe('healthy');
     return { attributes: getAttributes(spans[0]), payload };
   }
+
+  it.each(['json', 'protobuf'] as const)(
+    'keeps both spans without exporting credentials in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          request: "curl --header 'X-Api-Key: sensitive header value'",
+          assigned: 'env HOME=/tmp curl -u buildbot:sensitive https://host',
+          argv: ['/usr/bin/env', 'HOME=/tmp', 'curl', '-u', 'buildbot:sensitive'],
+          config: '"password" = "sensitive value"',
+          folded: 'Authorization:\r\n Bearer sensitive',
+          callback: 'https://host/cb?code=sensitive&count=2',
+          forwarded: 'next=sk%2Dsensitiveabcdefghijklmnopqrst',
+          raw: 'github_pat_sensitive ghp_sensitive glpat-sensitive',
+          code_verifier: 'sensitive',
+          duplicate: '{"body":{"password":"sensitive"},"body":"ok"}',
+          status_code: 200,
+          source: 'next=%2Fsettings',
+        },
+        format,
+        17,
+        {
+          get message() {
+            throw new Error('unreadable');
+          },
+        },
+      );
+      expect(JSON.stringify(payload)).not.toContain('sensitive');
+      expect(attributes.callback).toBe('https://host/cb?code=<redacted>&count=2');
+      expect(attributes.source).toBe('next=%2Fsettings');
+      expect(JSON.parse(attributes.duplicate as string)).toEqual({ body: 'ok' });
+      expect(attributes.status_code).toBe(200);
+      expect(payload.resourceSpans[0].scopeSpans[0].spans[0]).toMatchObject({
+        name: '<redacted>',
+        status: { code: 2, message: '<redacted>' },
+      });
+    },
+  );
 
   it.each(['json', 'protobuf'] as const)(
     'redacts standalone authorization values and encoded form credentials in %s',
