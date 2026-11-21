@@ -1446,7 +1446,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       !this.processTermination.signal.aborted &&
       (this.server || this.pendingTempDirs.size || this.remoteWork.size > 0)
     ) {
-      providerRegistry.register(this);
+      providerRegistry.retainForProcessShutdown(this);
     } else {
       providerRegistry.unregister(this);
     }
@@ -1511,9 +1511,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.pendingTempDirs.delete(workingDir);
     } catch (error) {
       this.pendingTempDirs.add(workingDir);
-      if (!this.processTermination.signal.aborted) {
-        providerRegistry.register(this);
-      }
+      this.updateRegistry();
       logger.debug('Failed to remove temp directory for OpenCode', { workingDir, error });
     }
   }

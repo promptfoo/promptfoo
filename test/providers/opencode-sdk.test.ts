@@ -2393,6 +2393,22 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionDelete).not.toHaveBeenCalled();
     });
 
+    it('does not re-arm beforeExit after a failed workspace removal', async () => {
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
+      const denied = new Error('EACCES');
+      rmSpy.mockRejectedValueOnce(denied).mockRejectedValueOnce(denied);
+      await provider.callApi('Test prompt');
+      expect(providerRegistry.has(provider)).toBe(true);
+
+      await providerRegistry.shutdownAll();
+      expect(providerRegistry.has(provider)).toBe(false);
+      await providerRegistry.shutdownAll();
+      expect(rmSpy).toHaveBeenCalledTimes(2);
+
+      await provider.cleanup();
+      expect(rmSpy).toHaveBeenCalledTimes(3);
+    });
+
     it('retains a repeatedly failing process close for an explicit retry without spinning', async () => {
       const registry = isolateProcessRegistry();
       const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
