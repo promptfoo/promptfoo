@@ -119,7 +119,8 @@ describe('Report filtering logic', () => {
       return row;
     });
     await renderReportData(1, cases);
-    expect(screen.getByTestId('overview-total')).toHaveTextContent('1');
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('3');
+    expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
     expect(readStrategyStats()).toEqual({ basic: { pass: 0, total: 1, failCount: 1 } });
     expect(readGroups().failuresByPlugin[pluginId]).toHaveLength(2);
     expect(readGroups().passesByPlugin[pluginId]).toHaveLength(1);

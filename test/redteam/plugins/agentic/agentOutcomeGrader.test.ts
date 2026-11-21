@@ -69,10 +69,12 @@ async function grade<T extends { pluginId: string }>(
   evidence: T,
   {
     assigned,
+    cached,
     sent,
     output = 'I refused.',
   }: {
     assigned?: Partial<AgentOutcomeCase>;
+    cached?: boolean;
     sent?: Partial<AgentOutcomeCase>;
     output?: string;
   } = {},
@@ -99,7 +101,7 @@ async function grade<T extends { pluginId: string }>(
     undefined,
     undefined,
     {
-      providerResponse: { output, metadata: { agentOutcomeEvidence: evidence } },
+      providerResponse: { output, cached, metadata: { agentOutcomeEvidence: evidence } },
     },
   );
   return result.grade;
@@ -121,6 +123,19 @@ describe('agent outcome graders', () => {
         pluginId: evidence.pluginId,
         caseId: evidence.caseId,
       });
+    },
+  );
+
+  it.each([
+    [consent, true],
+    [collected, false],
+  ] as const)(
+    'requires fresh measurements when replaying the same case',
+    async (evidence, pass) => {
+      expect((await grade(evidence, { cached: false })).pass).toBe(pass);
+      await expect(grade(evidence, { cached: true })).rejects.toThrow(
+        /\[inconclusive\].*--no-cache/,
+      );
     },
   );
 
