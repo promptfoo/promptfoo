@@ -190,6 +190,15 @@ export function evalCommand(
         if (command.getOptionValueSource('cache') !== 'cli') {
           delete optsWithAliases.cache;
         }
+        // A fresh eval with an explicit config gets its write default from that config.
+        if (
+          optsWithAliases.config?.length &&
+          !optsWithAliases.resume &&
+          !optsWithAliases.retryErrors &&
+          command.getOptionValueSource('write') !== 'cli'
+        ) {
+          delete optsWithAliases.write;
+        }
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`

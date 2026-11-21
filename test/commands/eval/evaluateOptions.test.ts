@@ -2,16 +2,18 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { evalCommand } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
+import { runDbMigrations } from '../../../src/migrate';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
-import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
 
@@ -1289,6 +1291,33 @@ describe('evaluateOptions behavior', () => {
           expect(getTable).toHaveBeenCalledTimes(table ? 1 : 0);
         } finally {
           getTable.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      { configuredWrite: false, args: [], expectedWrite: false },
+      { configuredWrite: true, args: ['--no-write'], expectedWrite: false },
+      { configuredWrite: undefined, args: [], expectedWrite: true },
+    ])(
+      'honors write settings from the selected eval config (%j)',
+      async ({ configuredWrite, args, expectedWrite }) => {
+        const config = writeTempConfig(tmpDir, 'selected-write.yaml', {
+          prompts: ['Hello'],
+          providers: ['echo'],
+          commandLineOptions: { write: configuredWrite },
+        });
+        const create = vi.spyOn(Eval, 'create').mockResolvedValue(new Eval({}));
+        try {
+          const program = new Command();
+          evalCommand(program, {}, undefined);
+          await program.parseAsync(['eval', '-c', config, '--no-table', ...args], { from: 'user' });
+
+          expect(evaluateMock).toHaveBeenCalledOnce();
+          expect(runDbMigrations).toHaveBeenCalledTimes(expectedWrite ? 1 : 0);
+          expect(create).toHaveBeenCalledTimes(expectedWrite ? 1 : 0);
+        } finally {
+          create.mockRestore();
         }
       },
     );
