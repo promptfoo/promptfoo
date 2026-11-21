@@ -17,6 +17,8 @@ export {
   type StoredBlob,
 } from './types';
 
+export { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType };
+
 export function isSafeInlineBlobMimeType(mimeType: string): boolean {
   return sanitizeBlobMimeType(mimeType) !== BLOB_MIME_TYPE_FALLBACK;
 }

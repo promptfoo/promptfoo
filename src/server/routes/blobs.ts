@@ -3,15 +3,16 @@ import express from 'express';
 import {
   BLOB_MAX_BASE64_SIZE,
   BLOB_MAX_SIZE,
+  BLOB_MIME_TYPE_FALLBACK,
   getBlobStorageProvider,
   getBlobUrl,
   isBlobAllowedForShare,
   isSafeInlineBlobMimeType,
   type StoredBlob,
+  sanitizeBlobMimeType,
   storeBlob,
 } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
-import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from '../../blobs/mimeTypes';
 import { getDb } from '../../database';
 import {
   blobAssetsTable,

@@ -1527,6 +1527,7 @@ describe('createShareableUrl', () => {
       let enumerateContexts: ReturnType<typeof vi.spyOn> | undefined;
       vi.mocked(uploadTraceBlobRefsForShare).mockImplementation(
         (value, cache, context, target, uploadedResultHashes) => {
+          expect(cache.resultContexts.has(resultOnlyHash)).toBe(false);
           enumerateContexts ??= vi.spyOn(cache.resultContexts.get(sharedHash)!, 'values');
           return uploads.uploadTraceBlobRefsForShare(
             value,

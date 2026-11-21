@@ -487,6 +487,50 @@ describe('Eval', () => {
     },
   );
 
+  it('refreshes the same paginated, searched result set after a saved rating or comment', async () => {
+    const options = {
+      pageIndex: 2,
+      pageSize: 100,
+      filterMode: 'failures',
+      searchText: 'needle',
+      filters: [
+        {
+          id: 'f',
+          type: 'metadata',
+          operator: 'exists',
+          field: 'category',
+          value: '',
+          logicOperator: 'and',
+          sortIndex: 0,
+        },
+      ],
+    };
+    (useTableStore as any).getState.mockReturnValue({
+      ...useTableStore.getState(),
+      filters: { values: {} },
+      activeEvalQuery: { evalId: 'retried-eval', options },
+    });
+    vi.mocked(useTableStore).mockReturnValue({ ...baseMockTableStore, evalId: 'retried-eval' });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'retried-eval' }] }),
+    } as Response);
+    render(
+      <MemoryRouter>
+        <Eval fetchId="retried-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ evalId: 'retried-eval' });
+    });
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenLastCalledWith('retried-eval', {
+      ...options,
+      skipSettingEvalId: true,
+      skipLoadingState: true,
+    });
+  });
+
   it('does not navigate away for a scoped background socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,

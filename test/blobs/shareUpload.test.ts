@@ -294,6 +294,7 @@ describe('share-time blob upload', () => {
     const hash = 'a'.repeat(64);
     const uri = `promptfoo://blob/${hash}`;
     const cache = createRemoteBlobUploadCache();
+    cache.trackTraceHashes([uri]);
     recordResultBlobRefsForShare(
       { output: uri },
       cache,
@@ -325,6 +326,7 @@ describe('share-time blob upload', () => {
     const inlineUri = `promptfoo://blob/${inlineHash}`;
     const remainingUri = `promptfoo://blob/${remainingHash}`;
     const cache = createRemoteBlobUploadCache();
+    cache.trackTraceHashes([inlineUri, remainingUri]);
     const context = { localEvalId: 'source', remoteEvalId: 'recipient', promptIdx: 2, testIdx: 1 };
     recordResultBlobRefsForShare([inlineUri, remainingUri], cache, context, [
       'data:image/png;base64,aW1hZ2U=',

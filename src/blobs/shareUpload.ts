@@ -4,7 +4,19 @@ import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } f
 import { getShareAuthorizedBlob } from './index';
 import { type RemoteBlobUploadTarget, uploadBlobRemote } from './remoteUpload';
 
+const scanOptions = { maxDepth: BLOB_SCAN_MAX_DEPTH, maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH };
+
 export class RemoteBlobUploadCache extends Map<string, Promise<boolean>> {
+  readonly traceHashes = new Set<string>();
+
+  trackTraceHashes(traces: readonly unknown[]) {
+    for (const trace of traces) {
+      for (const hash of collectBlobHashes(trace, scanOptions)) {
+        this.traceHashes.add(hash);
+      }
+    }
+  }
+
   readonly resultContexts = new Map<
     string,
     Map<string, ShareBlobUploadContext & { needsUpload: boolean }>
@@ -97,10 +109,7 @@ export async function uploadBlobRefsForShare(
   context: ShareBlobUploadContext,
   target?: RemoteBlobUploadTarget,
 ): Promise<void> {
-  const hashes = collectBlobHashes(value, {
-    maxDepth: BLOB_SCAN_MAX_DEPTH,
-    maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
-  });
+  const hashes = collectBlobHashes(value, scanOptions);
   for (const hash of hashes) {
     await uploadBlobForShare(hash, cache, context, target);
   }
@@ -112,18 +121,14 @@ export function recordResultBlobRefsForShare(
   context: ShareBlobUploadContext,
   valueToUpload: unknown = value,
 ): void {
-  const hashes = collectBlobHashes(value, {
-    maxDepth: BLOB_SCAN_MAX_DEPTH,
-    maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
-  });
+  const hashes = collectBlobHashes(value, scanOptions);
   const uploadHashes =
-    valueToUpload === value
-      ? hashes
-      : collectBlobHashes(valueToUpload, {
-          maxDepth: BLOB_SCAN_MAX_DEPTH,
-          maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
-        });
+    valueToUpload === value ? hashes : collectBlobHashes(valueToUpload, scanOptions);
   for (const hash of hashes) {
+    // A successfully inlined result needs no later work unless a trace uses the same blob.
+    if (!uploadHashes.has(hash) && !cache.traceHashes.has(hash)) {
+      continue;
+    }
     const contexts = cache.resultContexts.get(hash) ?? new Map();
     const key = getUploadCacheKey(hash, context);
     contexts.set(key, {
@@ -155,10 +160,7 @@ export async function uploadTraceBlobRefsForShare(
   target?: RemoteBlobUploadTarget,
   uploadedResultHashes = new Set<string>(),
 ): Promise<void> {
-  const hashes = collectBlobHashes(value, {
-    maxDepth: BLOB_SCAN_MAX_DEPTH,
-    maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
-  });
+  const hashes = collectBlobHashes(value, scanOptions);
   const uploads = [...hashes].flatMap((hash) => {
     const contexts = cache.resultContexts.get(hash);
     if (contexts?.size) {

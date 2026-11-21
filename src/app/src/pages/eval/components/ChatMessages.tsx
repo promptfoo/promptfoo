@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 
 import { cn } from '@app/lib/utils';
 import {
+  getImageRetryProps,
   getMediaRefreshKey,
-  markMediaLoadFailed,
+  getMediaRetryProps,
   markMediaLoadSucceeded,
   resolveAudioSource,
   resolveBlobUri,
@@ -97,8 +98,7 @@ const ChatMessage = ({
               <source
                 src={audioSource.src}
                 type={audioSource.type || 'audio/mpeg'}
-                data-media-refresh-key={getMediaRefreshKey(audioSource.src)}
-                onError={(event) => markMediaLoadFailed(audioSource.src, event.currentTarget)}
+                {...getMediaRetryProps(audioSource.src)}
               />
               Your browser does not support the audio element.
             </audio>
@@ -121,9 +121,7 @@ const ChatMessage = ({
             alt={`${roleLabel} message image`}
             data-testid="image"
             className="h-[180px] w-[min(500px,70vw)] max-w-full object-contain object-left sm:h-[300px]"
-            data-media-refresh-key={getMediaRefreshKey(imageSrc)}
-            onError={(event) => markMediaLoadFailed(imageSrc, event.currentTarget)}
-            onLoad={(event) => markMediaLoadSucceeded(imageSrc, event.currentTarget)}
+            {...getImageRetryProps(imageSrc)}
           />
         );
       }
@@ -141,12 +139,7 @@ const ChatMessage = ({
               data-testid="video"
               onLoadedData={(event) => markMediaLoadSucceeded(videoSrc, event.currentTarget)}
             >
-              <source
-                src={videoSrc}
-                type="video/mp4"
-                data-media-refresh-key={getMediaRefreshKey(videoSrc)}
-                onError={(event) => markMediaLoadFailed(videoSrc, event.currentTarget)}
-              />
+              <source src={videoSrc} type="video/mp4" {...getMediaRetryProps(videoSrc)} />
               Your browser does not support the video element.
             </video>
           </div>
@@ -176,10 +169,7 @@ const ChatMessage = ({
                     <source
                       src={audioSource?.src}
                       type={audioSource?.type || 'audio/mpeg'}
-                      data-media-refresh-key={getMediaRefreshKey(audioSource?.src)}
-                      onError={(event) =>
-                        markMediaLoadFailed(audioSource?.src, event.currentTarget)
-                      }
+                      {...getMediaRetryProps(audioSource?.src)}
                     />
                     Your browser does not support the audio element.
                   </audio>
@@ -192,9 +182,7 @@ const ChatMessage = ({
                     src={imageSrc}
                     alt="Input"
                     className="max-w-full max-h-[300px] rounded-lg"
-                    data-media-refresh-key={getMediaRefreshKey(imageSrc)}
-                    onError={(event) => markMediaLoadFailed(imageSrc, event.currentTarget)}
-                    onLoad={(event) => markMediaLoadSucceeded(imageSrc, event.currentTarget)}
+                    {...getImageRetryProps(imageSrc)}
                   />
                 </div>
               )}

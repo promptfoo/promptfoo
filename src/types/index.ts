@@ -1125,6 +1125,11 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+// Shared limits for outgoing trace batches and the receiving API.
+export const MAX_TRACES_PER_APPEND_REQUEST = 1_000;
+export const MAX_SPANS_PER_TRACE = 10_000;
+export const MAX_SPANS_PER_APPEND_REQUEST = 20_000;
+
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
   const hasCredentialPath = hasTraceCredentialPath(url.pathname);

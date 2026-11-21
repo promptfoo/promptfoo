@@ -25,6 +25,7 @@
     "test/",
     "scripts/",
     "./package.json",
+    "site/static/openapi.json",
     "src/**/*.json",
     "test/**/*.json",
     "src/types/globals.d.ts",

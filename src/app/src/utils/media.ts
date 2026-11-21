@@ -10,7 +10,25 @@ const STORAGE_REF_PREFIX = 'storageRef:';
 const MEDIA_URL_REGEX = /promptfoo:\/\/blob\/[a-f0-9]{32,64}|(?:https?:\/\/|\/)[^\s)'"`<>]+/gi;
 const STORAGE_REF_REGEX = /storageRef:\/?([^\s)'"`]+)/gi;
 
-const blobMediaRefreshVersions = new Map<string, number>();
+// Keep every mounted media retryable. A weak owner lets us discard entries left by
+// navigation and pagination without evicting media on large result pages.
+const blobMediaRefreshVersions = new Map<
+  string,
+  { version: number; owner: WeakRef<RetryableMediaElement> }
+>();
+let updatesUntilSweep = 256;
+
+function rememberVersion(source: string, version: number, element: RetryableMediaElement) {
+  if (--updatesUntilSweep === 0) {
+    for (const [url, entry] of blobMediaRefreshVersions) {
+      if (!entry.owner.deref()?.isConnected) {
+        blobMediaRefreshVersions.delete(url);
+      }
+    }
+    updatesUntilSweep = 256;
+  }
+  blobMediaRefreshVersions.set(source, { version, owner: new WeakRef(element) });
+}
 const retryingBlobMediaElements = new WeakMap<RetryableMediaElement, number>();
 const pendingBlobMediaRetryTimers = new WeakMap<RetryableMediaElement, number>();
 const BLOB_MEDIA_RETRY_DELAY_MS = 250;
@@ -43,7 +61,7 @@ export function getMediaRefreshKey(source: string | undefined): string {
   if (!isBlobMediaSource(source)) {
     return 'stable';
   }
-  const version = blobMediaRefreshVersions.get(source) ?? 0;
+  const version = blobMediaRefreshVersions.get(source)?.version ?? 0;
   // Include the source so React never reuses a failed node for a different content hash while a
   // bounded retry is still pending for the old source.
   return `${source}:${version}`;
@@ -62,8 +80,8 @@ export function markMediaLoadFailed(
     return;
   }
 
-  const version = blobMediaRefreshVersions.get(source) ?? 0;
-  blobMediaRefreshVersions.set(source, version + 1);
+  const version = blobMediaRefreshVersions.get(source)?.version ?? 0;
+  rememberVersion(source, version + 1, element);
   if (retryingBlobMediaElements.has(element)) {
     return;
   }
@@ -103,14 +121,33 @@ export function markMediaLoadSucceeded(
     return;
   }
 
-  const mountedVersion = retryingBlobMediaElements.get(element);
+  const mountedVersion =
+    retryingBlobMediaElements.get(element) ??
+    Number(element.dataset.mediaRefreshKey?.slice(source.length + 1));
   clearBlobMediaRetry(element);
   // An in-place retry keeps its original key. A replacement already has the new key.
   if (mountedVersion === 0) {
     blobMediaRefreshVersions.delete(source);
-  } else if (mountedVersion !== undefined) {
-    blobMediaRefreshVersions.set(source, mountedVersion);
+  } else if (Number.isSafeInteger(mountedVersion)) {
+    rememberVersion(source, mountedVersion, element);
   }
+}
+
+// A source must carry the version it mounted with so an in-place retry keeps its key.
+export function getMediaRetryProps(source: string | undefined) {
+  return {
+    'data-media-refresh-key': getMediaRefreshKey(source),
+    onError: (event: { currentTarget: RetryableMediaElement }) =>
+      markMediaLoadFailed(source, event.currentTarget),
+  };
+}
+
+export function getImageRetryProps(source: string | undefined) {
+  return {
+    ...getMediaRetryProps(source),
+    onLoad: (event: { currentTarget: HTMLImageElement }) =>
+      markMediaLoadSucceeded(source, event.currentTarget),
+  };
 }
 
 /** Number of items to fetch per page in the media library */

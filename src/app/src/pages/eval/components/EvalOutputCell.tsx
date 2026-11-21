@@ -2,12 +2,14 @@ import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useCopyFeedback } from '@app/hooks/useCopyFeedback';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
 import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
+  getImageRetryProps,
   getMediaRefreshKey,
-  markMediaLoadFailed,
+  getMediaRetryProps,
   markMediaLoadSucceeded,
   normalizeMediaText,
   resolveAudioSource,
@@ -355,9 +357,7 @@ function renderMediaNode({
         src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
-        data-media-refresh-key={getMediaRefreshKey(primaryRenderedImageSrc)}
-        onError={(event) => markMediaLoadFailed(primaryRenderedImageSrc, event.currentTarget)}
-        onLoad={(event) => markMediaLoadSucceeded(primaryRenderedImageSrc, event.currentTarget)}
+        {...getImageRetryProps(primaryRenderedImageSrc)}
         onClick={() => toggleLightbox(primaryRenderedImageSrc)}
       />
     );
@@ -379,8 +379,7 @@ function renderMediaNode({
             <source
               src={outputAudioSource.src}
               type={outputAudioSource.type || 'audio/mpeg'}
-              data-media-refresh-key={getMediaRefreshKey(outputAudioSource.src)}
-              onError={(event) => markMediaLoadFailed(outputAudioSource.src, event.currentTarget)}
+              {...getMediaRetryProps(outputAudioSource.src)}
             />
             Your browser does not support the audio element.
           </audio>
@@ -419,8 +418,7 @@ function renderMediaNode({
             <source
               src={videoSource.src}
               type={videoSource.type || 'video/mp4'}
-              data-media-refresh-key={getMediaRefreshKey(videoSource.src)}
-              onError={(event) => markMediaLoadFailed(videoSource.src, event.currentTarget)}
+              {...getMediaRetryProps(videoSource.src)}
             />
             Your browser does not support the video element.
           </video>
@@ -536,9 +534,7 @@ function renderStructuredImages({
           alt={output.prompt || 'Generated image'}
           loading="lazy"
           style={{ display: 'block', width: '100%', cursor: 'pointer' }}
-          data-media-refresh-key={getMediaRefreshKey(src)}
-          onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
-          onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
+          {...getImageRetryProps(src)}
           onClick={() => toggleLightbox(src)}
         />
       );
@@ -1069,8 +1065,7 @@ function renderResponseAudioPlayer(
         <source
           src={responseAudioSource.src}
           type={responseAudioSource.type || 'audio/mpeg'}
-          data-media-refresh-key={getMediaRefreshKey(responseAudioSource.src)}
-          onError={(event) => markMediaLoadFailed(responseAudioSource.src, event.currentTarget)}
+          {...getMediaRetryProps(responseAudioSource.src)}
         />
         Your browser does not support the audio element.
       </audio>
@@ -1429,9 +1424,7 @@ function EvalOutputCell({
             loading="lazy"
             src={src}
             alt={alt}
-            data-media-refresh-key={getMediaRefreshKey(src)}
-            onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
-            onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
+            {...getImageRetryProps(src)}
             onClick={() => toggleLightbox(src)}
             style={{ cursor: 'pointer' }}
           />
@@ -1535,55 +1528,15 @@ function EvalOutputCell({
     setScoreDialogOpen(false);
   };
 
-  const [linked, setLinked] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const [linked, showLinked] = useCopyFeedback(3000);
+  const [copied, showCopied] = useCopyFeedback(3000);
   const isMountedRef = React.useRef(true);
-  const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-
-  const clearLinkedResetTimeout = useCallback(() => {
-    if (linkedResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(linkedResetTimeoutRef.current);
-      linkedResetTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearCopiedResetTimeout = useCallback(() => {
-    if (copiedResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(copiedResetTimeoutRef.current);
-      copiedResetTimeoutRef.current = null;
-    }
-  }, []);
-
   React.useEffect(() => {
     isMountedRef.current = true;
-
     return () => {
       isMountedRef.current = false;
-      clearLinkedResetTimeout();
-      clearCopiedResetTimeout();
     };
-  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
-
-  const scheduleLinkedReset = useCallback(() => {
-    clearLinkedResetTimeout();
-    linkedResetTimeoutRef.current = globalThis.setTimeout(() => {
-      linkedResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setLinked(false);
-      }
-    }, 3000);
-  }, [clearLinkedResetTimeout]);
-
-  const scheduleCopiedReset = useCallback(() => {
-    clearCopiedResetTimeout();
-    copiedResetTimeoutRef.current = globalThis.setTimeout(() => {
-      copiedResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setCopied(false);
-      }
-    }, 3000);
-  }, [clearCopiedResetTimeout]);
+  }, []);
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
@@ -1594,13 +1547,7 @@ function EvalOutputCell({
 
     navigator.clipboard
       .writeText(url.toString())
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setLinked(true);
-        scheduleLinkedReset();
-      })
+      .then(showLinked)
       .catch((error) => {
         if (!isMountedRef.current) {
           return;
@@ -1612,13 +1559,7 @@ function EvalOutputCell({
   const handleCopy = () => {
     navigator.clipboard
       .writeText(text)
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setCopied(true);
-        scheduleCopiedReset();
-      })
+      .then(showCopied)
       .catch((error) => {
         if (!isMountedRef.current) {
           return;
@@ -1732,13 +1673,7 @@ function EvalOutputCell({
           className="lightbox"
           onClick={() => toggleLightbox()}
         >
-          <img
-            src={lightboxImage}
-            alt="Lightbox"
-            data-media-refresh-key={getMediaRefreshKey(lightboxImage)}
-            onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
-            onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
-          />
+          <img src={lightboxImage} alt="Lightbox" {...getImageRetryProps(lightboxImage)} />
         </div>
       )}
       {commentDialogOpen && (

@@ -10,8 +10,10 @@ import {
   getExtensionFromMimeType,
   getKindIcon,
   getKindLabel,
+  getMediaRefreshKey,
   hashToNumber,
   isMediaRef,
+  markMediaLoadFailed,
   normalizeMediaText,
   resolveAudioSource,
   resolveBlobUri,
@@ -1240,4 +1242,15 @@ describe('evaluation-scoped media URLs', () => {
     expect(resolveBlobUri(external, evalId)).toBeUndefined();
     expect(normalizeMediaText(`![x](${external})`, evalId)).toBe(`![x](${external})`);
   });
+});
+
+it('discards detached failed media during later retries', () => {
+  const element = document.createElement('img');
+  const stale = '/api/blobs/stale';
+  markMediaLoadFailed(stale, element);
+  expect(getMediaRefreshKey(stale)).toBe(`${stale}:1`);
+  for (let i = 0; i < 256; i++) {
+    markMediaLoadFailed(`/api/blobs/detached-${i}`, element);
+  }
+  expect(getMediaRefreshKey(stale)).toBe(`${stale}:0`);
 });

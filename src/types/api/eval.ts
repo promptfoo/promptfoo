@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
-import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import {
+  EvalResultsFilterMode,
+  EvaluateOptionsSchema,
+  MAX_SPANS_PER_APPEND_REQUEST,
+  MAX_SPANS_PER_TRACE,
+  MAX_TRACES_PER_APPEND_REQUEST,
+  TestSuiteConfigSchema,
+} from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -239,9 +246,6 @@ export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;
 
 export const AddTracesParamsSchema = EvalIdParamSchema;
 
-export const MAX_TRACES_PER_APPEND_REQUEST = 1_000;
-export const MAX_SPANS_PER_TRACE = 10_000;
-export const MAX_SPANS_PER_APPEND_REQUEST = 20_000;
 const MAX_TRACE_IDENTIFIER_LENGTH = 512;
 const MAX_TRACE_RECORD_LENGTH = 1_000_000;
 const MAX_TRACE_REQUEST_LENGTH = 8 * 1024 * 1024;
@@ -259,8 +263,8 @@ function serializedLengthWithin(limit: number) {
 const TraceSpanRequestSchema = z
   .object({
     // Empty legacy span IDs/names have historically been storable and must remain shareable.
-    spanId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH),
-    parentSpanId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH).optional(),
+    spanId: z.string(),
+    parentSpanId: z.string().optional(),
     name: z.string(),
     startTime: z.number().finite(),
     endTime: z.number().finite().optional(),

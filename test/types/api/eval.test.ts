@@ -117,17 +117,18 @@ describe('Eval API schemas', () => {
     expect(result.success).toBe(true);
   });
 
-  it('preserves stored span names within the serialized record limit', () => {
+  it('preserves stored span identifiers and names within the serialized record limit', () => {
     const name = 'stored operation '.repeat(260);
+    const span = { name, spanId: 'a'.repeat(513), parentSpanId: 'b'.repeat(513), startTime: 1 };
     const traces = [
       {
         traceId: 'trace-1',
         evaluationId: 'eval-1',
         testCaseId: 'test-1',
-        spans: [{ spanId: 'span-1', name, startTime: 1 }],
+        spans: [span],
       },
     ];
-    expect(EvalSchemas.AddTraces.Request.parse(traces)[0].spans[0].name).toBe(name);
+    expect(EvalSchemas.AddTraces.Request.parse(traces)[0].spans[0]).toMatchObject(span);
   });
 
   it('accepts persisted long test-case IDs', () => {

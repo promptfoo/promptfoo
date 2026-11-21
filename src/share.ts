@@ -28,7 +28,9 @@ import {
   MAX_SPANS_PER_APPEND_REQUEST,
   MAX_SPANS_PER_TRACE,
   MAX_TRACES_PER_APPEND_REQUEST,
-} from './types/api/eval';
+  type Prompt,
+  type TestCase,
+} from './types';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -41,7 +43,6 @@ import { sanitizeConfigForOutput } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
-import type { Prompt, TestCase } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -1119,6 +1120,7 @@ async function sendChunkedResults(
           authHeaders: headers,
         };
     const traces = projectTracesForOutput(await evalRecord.getTraces(), stripFlags);
+    remoteBlobUploadCache?.trackTraceHashes(traces);
     const traceIds: TraceIdMap | null = isCloudEnabled ? null : new Map();
 
     // Send initial data and get eval ID
