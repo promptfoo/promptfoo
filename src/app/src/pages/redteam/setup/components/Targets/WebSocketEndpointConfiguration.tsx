@@ -197,7 +197,8 @@ const WebSocketEndpointConfiguration = ({
             </p>
             <div className="relative rounded-md border border-border bg-card">
               <Editor
-                id="stream-response-transform"
+                ignoreTabKey
+                textareaId="stream-response-transform"
                 aria-describedby="stream-response-helper-text"
                 value={selectedTarget.config.streamResponse ?? DEFAULT_WEBSOCKET_STREAM_RESPONSE}
                 onValueChange={(code) => updateWebSocketTarget('streamResponse', code)}

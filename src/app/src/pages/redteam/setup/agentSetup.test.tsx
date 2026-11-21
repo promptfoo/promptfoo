@@ -84,7 +84,7 @@ describe('agent-led red team setup', () => {
     await user.click(button('Review setup'));
     expect(await screen.findByRole('heading', { name: 'Review & Run' })).toBeInTheDocument();
     expect(screen.getByText('localhost:8888')).toBeInTheDocument();
-    expect(screen.getByText('Function-Level Authorization Bypass')).toBeInTheDocument();
+    expect(screen.getByText('Unauthorized actions')).toBeInTheDocument();
     expect(button('Save YAML')).toBeEnabled();
     expect(button('Run Now')).toBeEnabled();
     expect(load(generateOrderedYaml(config()))).toMatchObject({
@@ -204,7 +204,8 @@ describe('agent-led red team setup', () => {
     await user.click(button('Draft test plan'));
     expect(screen.getByText(both.note)).toBeInTheDocument();
     expect(screen.getByText('6 requests')).toBeInTheDocument();
-    const [read, write] = screen.getAllByRole('checkbox');
+    const read = screen.getByRole('checkbox', { name: 'Access to other users’ records' });
+    const write = screen.getByRole('checkbox', { name: 'Unauthorized actions' });
     await user.click(write);
     expect(screen.getByText('3 requests')).toBeInTheDocument();
     await user.click(read);

@@ -1,4 +1,25 @@
+import { displayNameOverrides, type Plugin } from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
+
+// Keep technical plugin names in the full catalog. Describe the risk in guided setup.
+const starterLabels: Partial<Record<Plugin, string>> = {
+  bfla: 'Unauthorized actions',
+  bola: 'Access to other users’ records',
+  'excessive-agency': 'Overstepping permissions',
+  hallucination: 'Made-up answers',
+  hijacking: 'Misuse of the app',
+  overreliance: 'Trusting false assumptions',
+  'pii:direct': 'Leaks of personal information',
+  'rag-document-exfiltration': 'Leaks of private documents',
+  rbac: 'Bypassing role restrictions',
+};
+
+export function riskName(id: string): string {
+  if (!Object.prototype.hasOwnProperty.call(displayNameOverrides, id)) {
+    return id;
+  }
+  return starterLabels[id as Plugin] ?? displayNameOverrides[id as Plugin];
+}
 
 /**
  * Counts the number of custom policies defined in the config.

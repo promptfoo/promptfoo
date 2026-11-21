@@ -5,11 +5,11 @@ import { Checkbox } from '@app/components/ui/checkbox';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { callApi } from '@app/utils/api';
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { type RedteamSetupPlan, RedteamSetupPlanSchema } from '@promptfoo/types/api/redteamSetup';
 import isEqual from 'fast-deep-equal';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { riskName } from '../utils/plugins';
 import { applicationDefinitionToPurpose } from '../utils/purposeParser';
 import { getEstimatedProbes } from './strategies/utils';
 
@@ -74,7 +74,7 @@ function PlanSummary({
                 checked={config.plugins.includes(id)}
                 onCheckedChange={() => toggleRisk(id)}
                 disabled={pending}
-                aria-label={displayNameOverrides[id]}
+                aria-label={riskName(id)}
                 aria-describedby={`reason-${id}`}
               />
             )}
@@ -82,7 +82,7 @@ function PlanSummary({
               htmlFor={plan.plugins.length > 1 ? `risk-${id}` : undefined}
               className="min-w-0 space-y-1"
             >
-              <span className="block text-sm font-medium">{displayNameOverrides[id]}</span>
+              <span className="block text-sm font-medium">{riskName(id)}</span>
               <span id={`reason-${id}`} className="block text-sm break-words text-muted-foreground">
                 {reason}
               </span>

@@ -32,12 +32,7 @@ import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
 import { checkEmailStatus } from '@app/utils/emailVerification';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
-import {
-  displayNameOverrides,
-  type Plugin,
-  REDTEAM_DEFAULTS,
-  strategyDisplayNames,
-} from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
   isValidPolicyObject,
   makeDefaultPolicyName,
@@ -47,6 +42,7 @@ import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } fro
 import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
+import { riskName } from '../utils/plugins';
 import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -84,12 +80,6 @@ function guidedReviewError({ target, plugins }: Config): string | null {
     return 'Adjust test settings to select at least one plugin before running.';
   }
   return null;
-}
-
-function riskName(id: string) {
-  return Object.prototype.hasOwnProperty.call(displayNameOverrides, id)
-    ? displayNameOverrides[id as Plugin]
-    : id;
 }
 
 function AgentReview({

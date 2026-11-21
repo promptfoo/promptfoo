@@ -632,6 +632,8 @@ const CustomTargetConfiguration = ({
             </div>
             <div className="bg-white dark:bg-zinc-950">
               <Editor
+                ignoreTabKey
+                textareaId="config-json"
                 value={rawConfigJson}
                 onValueChange={handleConfigChange}
                 highlight={highlightJSON}
