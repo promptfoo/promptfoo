@@ -27,6 +27,7 @@ import {
   type GradingResult,
   isApiProvider,
   isProviderOptions,
+  type ProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
@@ -57,7 +58,6 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import { withRedteamOutputLimit } from './outputLimit';
 
 import type { TraceContextData } from '../../tracing/traceContext';
-import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
 
