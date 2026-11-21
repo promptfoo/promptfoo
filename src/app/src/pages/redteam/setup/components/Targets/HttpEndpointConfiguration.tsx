@@ -1,3 +1,4 @@
+import { normalizeLocalProviders } from './helpers';
 import './syntax-highlighting.css';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -181,7 +182,9 @@ Content-Type: application/json
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: selectedTarget }),
+        body: JSON.stringify({
+          providerOptions: normalizeLocalProviders(selectedTarget, { forRuntime: true }),
+        }),
       });
 
       if (response.ok) {

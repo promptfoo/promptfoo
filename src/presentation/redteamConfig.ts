@@ -10,7 +10,7 @@ import {
 import { RedteamConfigSchema } from '../validators/redteam';
 
 import type { RedteamPluginObject, SavedRedteamConfig } from '../redteam/types';
-import type { UnifiedConfig, Vars } from '../types/index';
+import type { ProviderOptions, UnifiedConfig, Vars } from '../types/index';
 
 export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],
@@ -91,13 +91,95 @@ export function normalizeRedteamConfigForPreview(
     : { plugins, numTests, strategies: config.strategies, language: config.language };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+export function getTargetForExecution(
+  provider: ProviderOptions,
+  id = provider.id,
+): ProviderOptions {
+  if (
+    !/^https?(?::|$)/i.test(id ?? '') ||
+    !isPlainObject(provider.config) ||
+    !isPlainObject(provider.config.tls)
+  ) {
+    return provider;
+  }
+
+  const target = { ...provider, config: { ...provider.config } };
+  const tls: Record<string, unknown> = { ...provider.config.tls };
+  const certificateType = tls.certificateType;
+  if (
+    typeof certificateType === 'string' &&
+    ['none', 'pem', 'pfx', 'pkcs12', 'jks'].includes(certificateType)
+  ) {
+    if (certificateType !== 'pem') {
+      delete tls.cert;
+      delete tls.certPath;
+      delete tls.key;
+      delete tls.keyPath;
+    }
+    if (certificateType !== 'pfx' && certificateType !== 'pkcs12') {
+      delete tls.pfx;
+      delete tls.pfxPath;
+    }
+    if (certificateType !== 'jks') {
+      delete tls.jksContent;
+      delete tls.jksPath;
+      delete tls.keyAlias;
+    }
+    if (certificateType === 'none') {
+      delete tls.passphrase;
+    }
+  }
+
+  // Keep certificate data while removing the setup form's input state.
+  delete tls.enabled;
+  delete tls.certInputType;
+  delete tls.keyInputType;
+  delete tls.jksInputType;
+  delete tls.pfxInputType;
+  delete tls.caInputType;
+  delete tls.jksFileName;
+  delete tls.jksExtractConfigured;
+  delete tls.certificateType;
+
+  for (const key of ['ca', 'cert', 'key']) {
+    if (Array.isArray(tls[key])) {
+      const entries = tls[key].filter(
+        (entry: unknown) => typeof entry !== 'string' || entry.trim() !== '',
+      );
+      tls[key] = entries.length ? entries : undefined;
+    }
+  }
+  for (const key of Object.keys(tls)) {
+    if (tls[key] === '' || tls[key] === undefined) {
+      delete tls[key];
+    }
+  }
+  if (Object.keys(tls).length) {
+    target.config.tls = tls;
+  } else {
+    delete target.config.tls;
+  }
+
+  return target;
+}
+
 export function getUnifiedConfig(
   config: SavedRedteamConfig,
 ): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
-  // Remove UI specific configs from target
-  const target = { ...config.target, config: { ...config.target.config } };
-  delete target.config.sessionSource;
-  delete target.config.stateful;
+  const target = { ...getTargetForExecution(config.target) };
+  target.config ??= {};
+  if (isPlainObject(target.config)) {
+    const { sessionSource: _source, stateful: _stateful, ...options } = target.config;
+    target.config = options;
+  }
 
   const defaultTest = {
     ...(config.defaultTest ?? {}),

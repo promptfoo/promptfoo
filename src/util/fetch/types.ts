@@ -2,6 +2,9 @@
  * Extended RequestInit options with additional features
  */
 export interface FetchOptions extends RequestInit {
+  /** Override certificate verification while retaining environment proxy and CA settings. */
+  rejectUnauthorized?: boolean;
+
   /**
    * Resolve default authentication headers immediately before each HTTP attempt, including
    * retries. Explicit request headers take precedence (case-insensitively). The signal includes
