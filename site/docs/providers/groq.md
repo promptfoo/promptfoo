@@ -9,7 +9,7 @@ description: Configure Groq's ultra-fast LLM inference API for high-performance 
 [OpenAI provider](/docs/providers/openai/) for shared configuration options and
 [Groq's compatibility guide](https://console.groq.com/docs/openai) for unsupported fields.
 
-Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
+Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, multimodal models, and models with server-side built-in tools. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 
 :::warning Model availability changes frequently
 
@@ -22,7 +22,7 @@ Groq lists `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` as Enterprise mo
 | Feature          | Description                                      | Provider Prefix   | Key Config          |
 | ---------------- | ------------------------------------------------ | ----------------- | ------------------- |
 | Reasoning Models | Models with chain-of-thought capabilities        | `groq:`           | `include_reasoning` |
-| Compound Models  | Built-in code execution, web search, browsing    | `groq:`           | `compound_custom`   |
+| Built-in Tools   | Server-side browser search and code execution    | `groq:`           | `tools`             |
 | Standard Models  | General-purpose chat models                      | `groq:`           | `temperature`       |
 | Long Context     | Models with extended context windows (100k+)     | `groq:`           | N/A                 |
 | Responses API    | Structured API with simplified reasoning control | `groq:responses:` | `reasoning.effort`  |
@@ -31,9 +31,7 @@ Groq lists `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` as Enterprise mo
 
 - **`groq:`** - Standard Chat Completions API with granular reasoning control
 - **`groq:responses:`** - Responses API (beta) with simplified `reasoning.effort` parameter
-- **Compound models** - Have automatic code execution, web search, and visit website tools
-- **Reasoning models** - Support `browser_search` tool via manual configuration
-- **Explicit control** - Use `compound_custom.tools.enabled_tools` to control which built-in tools are enabled
+- **Built-in tools** - GPT-OSS models run `browser_search` and `code_interpreter` on Groq's servers when you add them to `tools`
 
 ## Setup
 
@@ -80,7 +78,7 @@ Key configuration options:
 - `service_tier`: Groq Chat Completions accepts `auto`, `on_demand` (the default), `flex`, or `performance`. `null` also uses Groq's default selection.
 - `reasoning_format`: For reasoning models, controls how reasoning is presented. Options: `'parsed'` (separate field), `'raw'` (with think tags), `'hidden'` (no reasoning shown). Note: `parsed` or `hidden` required when using JSON mode or tool calls.
 - `include_reasoning`: For GPT-OSS models, set to `false` to hide reasoning output (default: `true`)
-- `reasoning_effort`: For reasoning models, controls the level of reasoning effort. Options: `'low'`, `'medium'`, `'high'` for GPT-OSS models; `'none'`, `'default'` for Qwen models
+- `reasoning_effort`: For reasoning models, controls the level of reasoning effort. Options: `'low'`, `'medium'`, `'high'` for GPT-OSS models; `'none'` (the default), `'low'`, `'medium'`, `'high'` for Qwen 3.8 27B; `'low'`, `'medium'`, `'high'`, `'xhigh'` (the default) for Muse Spark Open
 - `stop`: Up to 4 sequences where the API will stop generating further tokens
 - `tool_choice`: Controls tool usage ('none', 'auto', 'required', or specific tool)
 - `tools`: List of tools (functions) the model may call (max 128)
@@ -88,7 +86,7 @@ Key configuration options:
 
 ## Supported Models
 
-Groq provides access to models across several categories: reasoning models, agentic compound systems, multimodal (vision) models, speech models, and safety/guard models.
+Groq provides access to models across several categories: reasoning models, multimodal (vision) models, speech models, and safety/guard models.
 
 :::info Model availability is authoritative on Groq's site
 
@@ -98,19 +96,19 @@ Groq updates its lineup frequently. The [Groq Models page](https://console.groq.
 
 ### Models available through the `groq:` provider
 
-The `groq:` and `groq:responses:` prefixes route to Groq's Chat Completions and Responses APIs, so they cover Groq's text, reasoning, vision, and compound models:
+The `groq:` and `groq:responses:` prefixes route to Groq's Chat Completions and Responses APIs, so they cover Groq's text, reasoning, and vision models:
 
 | Model ID                       | Type                                         | Tier       |
 | ------------------------------ | -------------------------------------------- | ---------- |
 | `openai/gpt-oss-120b`          | Reasoning / general-purpose, tool use        | Production |
 | `openai/gpt-oss-20b`           | Reasoning / general-purpose, tool use        | Production |
-| `groq/compound`                | Agentic system (web search + code execution) | Production |
-| `groq/compound-mini`           | Agentic system (lower latency)               | Production |
 | `minimaxai/minimax-m2.7`       | Reasoning, tool use, JSON object mode        | Preview¹   |
-| `qwen/qwen3.6-27b`             | Multimodal (reasoning + vision)              | Preview    |
+| `meta-models/muse-spark-open`  | Multimodal (reasoning + vision), tool use    | Preview¹   |
+| `qwen/qwen3.8-27b`             | Multimodal (reasoning + vision), tools, JSON | Preview    |
 | `openai/gpt-oss-safeguard-20b` | Safety / content moderation (chat-based)     | Preview    |
+| `allam-2-7b`                   | Bilingual Arabic-English chat, 4K context    | Unlisted²  |
 
-Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on. ¹ MiniMax M2.7 is available to Enterprise customers through Groq sales.
+Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on. ¹ MiniMax M2.7 and Muse Spark Open are available to Enterprise customers through Groq sales. ² Groq's Models API returns `allam-2-7b` and Groq documents it on a [model card](https://console.groq.com/docs/model/allam-2-7b), but the Models page doesn't list it.
 
 ### Other Groq models
 
@@ -122,7 +120,7 @@ Groq hosts additional models that use audio or classification endpoints, so they
 
 See the [Groq Models page](https://console.groq.com/docs/models) for these models' specifications.
 
-**Lifecycle qualification:** The deprecation notices for `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `qwen/qwen3-32b`, and `meta-llama/llama-4-scout-17b-16e-instruct` apply to Free and Developer tier usage; Enterprise customers with committed-spend contracts are exempt. Confirm your account's access with Groq and check the [deprecations page](https://console.groq.com/docs/deprecations) for model-specific dates.
+**Lifecycle qualification:** The deprecation notices for `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `qwen/qwen3-32b`, `qwen/qwen3.6-27b` (replaced by `qwen/qwen3.8-27b`), and `meta-llama/llama-4-scout-17b-16e-instruct` apply to Free and Developer tier usage; Enterprise customers with committed-spend contracts are exempt. Groq no longer serves `groq/compound` or `groq/compound-mini` on any tier. Confirm your account's access with Groq and check the [deprecations page](https://console.groq.com/docs/deprecations) for model-specific dates.
 
 ### Using Groq Models
 
@@ -180,7 +178,7 @@ Groq provides vision models that can process both text and image inputs. These m
 
 :::note
 
-Groq's multimodal lineup changes frequently. `qwen/qwen3.6-27b` is the current vision-capable model used in the example below, but Groq serves it as a **preview** model (intended for evaluation, not production). Check the [Groq Vision documentation](https://console.groq.com/docs/vision) for the latest production-ready vision options before deploying.
+Groq's multimodal lineup changes frequently. `qwen/qwen3.8-27b` is the vision-capable model used in the example below, but Groq serves it as a **preview** model (intended for evaluation, not production). Check the [Groq Vision documentation](https://console.groq.com/docs/vision) for the latest production-ready vision options before deploying.
 
 :::
 
@@ -188,7 +186,7 @@ Groq's multimodal lineup changes frequently. `qwen/qwen3.6-27b` is the current v
 
 - **Image URLs:** Maximum allowed size is 20MB
 - **Base64 Encoded Images:** Maximum allowed size is 4MB
-- **Multiple Images:** Check model documentation for image limits per request
+- **Multiple Images:** Qwen 3.8 27B accepts up to 3 images per request and Muse Spark Open up to 5
 
 ### How to Use Vision in Promptfoo
 
@@ -208,14 +206,14 @@ Specify a vision model ID in your provider configuration and include images in O
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://openai-compatible-prompt-format.yaml
 providers:
-  - id: groq:qwen/qwen3.6-27b
+  - id: groq:qwen/qwen3.8-27b
     config:
       temperature: 1
       max_completion_tokens: 1024
 tests:
   - vars:
       question: 'What do you see in the image?'
-      url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Felis_catus-cat_on_snow.jpg/1024px-Felis_catus-cat_on_snow.jpg
+      url: https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/amazon-bedrock/models/cat.jpg
     assert:
       - type: contains
         value: 'cat'
@@ -223,7 +221,7 @@ tests:
 
 ## Reasoning
 
-Groq provides access to reasoning models that excel at complex problem-solving tasks requiring step-by-step analysis. These include GPT-OSS variants and Qwen models. Check the [Groq Models documentation](https://console.groq.com/docs/models) for current reasoning model availability.
+Groq provides access to reasoning models that excel at complex problem-solving tasks requiring step-by-step analysis. These include GPT-OSS variants, Qwen 3.8 27B, MiniMax M2.7, and Muse Spark Open. Check the [Groq Models documentation](https://console.groq.com/docs/models) for current reasoning model availability.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -274,6 +272,18 @@ For **other reasoning models** (e.g., Qwen), use `reasoning_format`:
 | `hidden` | Returns only the final answer              | Production/end-user responses  |
 
 Note: When using JSON mode or tool calls with `reasoning_format`, only `parsed` or `hidden` formats are supported.
+
+Qwen 3.8 27B answers without reasoning unless you set `reasoning_effort` to `low`, `medium`, or `high`:
+
+```yaml
+providers:
+  - id: groq:qwen/qwen3.8-27b
+    config:
+      reasoning_effort: medium
+      reasoning_format: hidden # Return only the final answer
+```
+
+When Groq returns reasoning in a separate field, promptfoo prefixes it to the output as `Thinking: ...`. Set `showThinking: false` to keep only the final answer.
 
 ## Assistant Message Prefilling
 
@@ -407,125 +417,23 @@ For more details on the Responses API, see [Groq's Responses API documentation](
 
 ## Built-in Tools
 
-Groq offers models with built-in tools: compound models with automatic tool usage, and reasoning models with manually configured tools like browser search.
+GPT-OSS models on Groq support server-side built-in tools. Add a built-in tool to `tools`, and Groq runs the tool calls and returns the final answer. See [Groq Built-In Tools](https://console.groq.com/docs/tool-use/built-in-tools) for the models that support each tool.
 
-### Compound Models (Automatic Tools)
+<a id="compound-models-automatic-tools"></a>
 
-Groq's compound models combine language models with pre-enabled built-in tools that activate automatically based on the task. Check the [Groq documentation](https://console.groq.com/docs/models) for current compound model availability.
+### Code Execution
 
-**Built-in Capabilities (No Configuration Needed):**
-
-- **Code Execution** - Python code execution for calculations and algorithms
-- **Web Search** - Real-time web searches for current information
-- **Visit Website** - Automatic webpage fetching when URLs are in the message
-
-**Basic Configuration:**
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-providers:
-  - id: groq:groq/compound
-    config:
-      temperature: 0.7
-      max_completion_tokens: 3000
-
-prompts:
-  - |
-    {{task}}
-
-tests:
-  # Code execution
-  - vars:
-      task: Calculate the first 10 Fibonacci numbers using code
-    assert:
-      - type: javascript
-        value: output.length > 50
-
-  # Web search
-  - vars:
-      task: What is the current population of Seattle?
-    assert:
-      - type: javascript
-        value: output.length > 50
-```
-
-**Example Outputs:**
-
-Code execution:
-
-```
-Thinking:
-To calculate the first 10 Fibonacci numbers, I will use a Python code snippet.
-
-<tool>
-python
-def fibonacci(n):
-    fib = [0, 1]
-    for i in range(2, n):
-        fib.append(fib[i-1] + fib[i-2])
-    return fib[:n]
-
-print(fibonacci(10))
-</tool>
-
-<output>[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]</output>
-```
-
-Web search:
-
-```
-<tool>search(current population of Seattle)</tool>
-
-<output>
-Title: Seattle Population 2025
-URL: https://example.com/seattle
-Content: The current metro area population of Seattle in 2025 is 816,600...
-</output>
-```
-
-**Web Search Settings (Optional):**
-
-You can customize web search behavior:
+`openai/gpt-oss-120b` and `openai/gpt-oss-20b` run Python with the `code_interpreter` tool:
 
 ```yaml
 providers:
-  - id: groq:groq/compound
+  - id: groq:openai/gpt-oss-120b
     config:
-      search_settings:
-        exclude_domains: ['example.com'] # Exclude specific domains
-        include_domains: ['*.edu'] # Restrict to specific domains
-        country: 'us' # Boost results from country
+      max_completion_tokens: 2000
+      tools:
+        - type: code_interpreter
+      tool_choice: required # Ensures the tool is used
 ```
-
-**Explicit Tool Control:**
-
-By default, Compound models automatically select which tools to use. You can explicitly control which tools are available using `compound_custom`:
-
-```yaml
-providers:
-  - id: groq:groq/compound
-    config:
-      compound_custom:
-        tools:
-          enabled_tools:
-            - code_interpreter # Python code execution
-            - web_search # Web searches
-            - visit_website # URL fetching
-```
-
-This allows you to:
-
-- Restrict which tools are available for a request
-- Control costs by limiting tool usage
-- Ensure only specific capabilities are used
-
-**Available Tool Identifiers:**
-
-- `code_interpreter` - Python code execution
-- `web_search` - Real-time web searches
-- `visit_website` - Webpage fetching
-- `browser_automation` - Interactive browser control (requires latest version)
-- `wolfram_alpha` - Computational knowledge (requires API key)
 
 ### Reasoning Models with Browser Search
 
@@ -560,14 +468,9 @@ tests:
 
 Browser search navigates websites interactively, providing detailed results with automatic citations. The model will search, read pages, and cite sources in its response.
 
-**Key Differences from Web Search:**
-
-- **Browser Search** (Reasoning models): Mimics human browsing, navigates websites interactively, provides detailed content
-- **Web Search** (Compound models): Performs single search, retrieves text snippets, faster for simple queries
-
 ### Use Cases
 
-**Code Execution (Compound Models):**
+**Code Execution:**
 
 - Mathematical calculations and equation solving
 - Data analysis and statistical computations
@@ -581,17 +484,10 @@ Browser search navigates websites interactively, providing detailed results with
 - Research on recent developments
 - Population statistics, weather, stock prices
 
-**Combined Capabilities (Compound Models):**
-
-- Financial analysis requiring both research and calculations
-- Scientific research with computational verification
-- Data-driven reports combining current information and analysis
-
 ### Best Practices
 
 1. **Model Selection**:
-   - Use compound models for tasks combining code and research
-   - Use reasoning models with browser search for detailed web research
+   - Use `code_interpreter` for calculations and `browser_search` for current information
    - Consider token costs when choosing `reasoning_effort` levels
 
 2. **Token Limits**: Built-in tools consume significant tokens. Set `max_completion_tokens` to 3000-4000 for complex tasks
@@ -601,8 +497,8 @@ Browser search navigates websites interactively, providing detailed results with
    - Use 0.7-0.9 for creative tasks
 
 4. **Tool Choice**:
-   - Use `required` to ensure browser search is always used
-   - Compound models handle tool selection automatically
+   - Use `required` to ensure the model calls a built-in tool
+   - With `auto`, the model decides whether to call one
 
 5. **Error Handling**: Tool calls may fail due to network issues. Models typically acknowledge failures and try alternative approaches
 
