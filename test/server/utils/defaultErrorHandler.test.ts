@@ -1,6 +1,8 @@
-import { statSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { format } from 'node:util';
 import { gunzipSync } from 'node:zlib';
@@ -199,11 +201,16 @@ describe.each([
     },
   );
 
-  it('preserves the file size on an unsatisfied range and replaces stale validators', async () => {
-    const file = fileURLToPath(import.meta.url);
-    const { size } = statSync(file);
+  it('preserves static file size and replaces stale validators for invalid ranges', async ({
+    onTestFinished,
+  }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-static-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const data = Buffer.from('fixture');
+    const size = data.length;
+    writeFileSync(join(dir, 'index.html'), data);
     const app = express();
-    app.get('/', (_req, res) => res.sendFile(file));
+    app.use(express.static(dir));
     app.use(handler);
 
     await withServer(app, async (port) => {
