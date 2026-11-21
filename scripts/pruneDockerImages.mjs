@@ -35,7 +35,7 @@ const matchesAny = (patterns, tag) => patterns.some((pattern) => pattern.test(ta
 const tagsOf = (version) => version.metadata?.container?.tags ?? [];
 
 /** The image digests an attestation version describes, or none for any other version. */
-export function attestationSubjects(version) {
+function attestationSubjects(version) {
   const tags = tagsOf(version);
   if (tags.length === 0 || !tags.every((tag) => ATTESTATION_TAG.test(tag))) {
     return [];
@@ -53,28 +53,22 @@ export function attestationSubjects(version) {
  */
 export function planPrune(versions, { now, olderThanDays, extraTags = [] }) {
   const cutoff = now - olderThanDays * 24 * 60 * 60 * 1000;
-  const extra = new Set(extraTags);
-  const isOld = (version) => Date.parse(version.updated_at ?? version.created_at) < cutoff;
-
-  const remove = [];
-  for (const version of versions) {
+  // A manual tag cannot make a release or a mixed image/attestation disposable.
+  const extra = new Set(
+    extraTags.filter((tag) => !matchesAny(PROTECTED_TAGS, tag) && !ATTESTATION_TAG.test(tag)),
+  );
+  const old = versions.filter((version) => Date.parse(version.updated_at) < cutoff);
+  const remove = old.filter((version) => {
     const tags = tagsOf(version);
-    // An attestation is only ever removed with its image, in the second pass below.
-    if (tags.length === 0 || !isOld(version) || attestationSubjects(version).length > 0) {
-      continue;
-    }
-    // Any other tag on the same image, such as a release or `main`, keeps it.
-    if (tags.every((tag) => matchesAny(BUILD_TAGS, tag) || extra.has(tag))) {
-      remove.push(version);
-    }
-  }
+    return tags.length > 0 && tags.every((tag) => matchesAny(BUILD_TAGS, tag) || extra.has(tag));
+  });
 
   // An attestation goes with the image it describes, and is an orphan once that is gone.
   const removedDigests = new Set(remove.map((version) => version.name));
   const remainingDigests = new Set(
     versions.map((version) => version.name).filter((digest) => !removedDigests.has(digest)),
   );
-  for (const version of versions) {
+  for (const version of old) {
     const subjects = attestationSubjects(version);
     if (subjects.length > 0 && subjects.every((digest) => !remainingDigests.has(digest))) {
       remove.push(version);
@@ -179,12 +173,16 @@ async function main() {
       continue;
     }
     try {
-      // The Docker workflow can tag an image while this runs. Read the version again and
-      // leave it alone if its tags are no longer the ones the plan was made from.
+      // Another registry client may have refreshed or retagged the version since listing.
       const current = await github('GET', `${base}/versions/${version.id}`, token);
-      if (tagsOf(current).join('\n') !== tagsOf(version).join('\n')) {
+      if (
+        current.id !== version.id ||
+        current.name !== version.name ||
+        current.updated_at !== version.updated_at ||
+        tagsOf(current).join('\n') !== tagsOf(version).join('\n')
+      ) {
         keptDigests.add(version.name);
-        console.log(`kept ${label}: its tags changed after it was listed`);
+        console.log(`kept ${label}: version changed after it was listed`);
         continue;
       }
       await github('DELETE', `${base}/versions/${version.id}`, token);

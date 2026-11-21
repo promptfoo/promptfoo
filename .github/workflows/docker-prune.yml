@@ -6,9 +6,7 @@
 # never candidates. A `sha-*` tag that shares its image with a release also stays,
 # because GitHub can only delete a whole image version.
 #
-# A manual run is a dry run unless `delete` is ticked, and it only deletes when it is run
-# from the default branch. The script never runs on pull requests, where it would be
-# contributor-controlled code holding a package token; its tests cover it there.
+# Both jobs require main. A manual run is read-only unless delete is enabled.
 
 name: Prune Docker image tags
 
@@ -41,6 +39,7 @@ env:
 jobs:
   plan:
     name: List prunable versions
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -71,6 +70,10 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete))
     needs: [plan]
+    # Share docker.yml's lock while re-listing, rechecking and deleting versions.
+    concurrency:
+      group: docker-publish-${{ github.repository }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

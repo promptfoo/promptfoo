@@ -1,18 +1,11 @@
 import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { type PackageVersion, planPrune } from '../../scripts/pruneDockerImages.mjs';
 
-const SCRIPT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  'scripts',
-  'pruneDockerImages.mjs',
-);
+const SCRIPT = path.resolve(import.meta.dirname, '../../scripts/pruneDockerImages.mjs');
 const NOW = Date.parse('2026-10-12T00:00:00Z');
 const OLD = '2026-08-01T00:00:00Z';
 const RECENT = '2026-10-01T00:00:00Z';
@@ -118,6 +111,20 @@ describe('pruneDockerImages', () => {
     expect(removedTags(versions, named)).toEqual([['sha-0123abc'], [`sha256-${'a'.repeat(64)}`]]);
   });
 
+  it('keeps recent attestations and ignores protected or mixed attestation tags', () => {
+    const tag = `sha256-${'a'.repeat(64)}`;
+    expect(
+      removedTags(
+        [
+          version('a', ['latest']),
+          version('b', [tag, 'sha-0123abc']),
+          version('c', [`sha256-${'d'.repeat(64)}`], RECENT),
+        ],
+        ['latest', tag],
+      ),
+    ).toEqual([]);
+  });
+
   it.each([
     [['--org', 'promptfoo'], /--org and --package are required/],
     [
@@ -169,8 +176,14 @@ describe('pruneDockerImages', () => {
       })),
     ];
 
-    async function run(args: string[], failingId?: number, retaggedId?: number) {
+    async function run(args: string[], failingId?: number, change?: 'retag' | 'refresh') {
       const requests: string[] = [];
+      const current = structuredClone(listed);
+      if (change === 'retag') {
+        current[1].metadata?.container?.tags?.push('0.125.0');
+      } else if (change === 'refresh') {
+        current[1].updated_at = new Date().toISOString();
+      }
       server = http.createServer((request, response) => {
         requests.push(`${request.method} ${request.url}`);
         const url = new URL(request.url ?? '', 'http://localhost');
@@ -178,18 +191,8 @@ describe('pruneDockerImages', () => {
         if (request.headers.authorization !== 'Bearer test-token') {
           response.writeHead(401).end('{}');
         } else if (request.method === 'GET' && single) {
-          // The re-read before each delete. One version can have gained a release tag.
-          const found = listed.find((entry) => entry.id === Number(single[1]));
-          const tags = found?.metadata?.container?.tags ?? [];
           response.setHeader('content-type', 'application/json');
-          response.end(
-            JSON.stringify({
-              ...found,
-              metadata: {
-                container: { tags: found?.id === retaggedId ? [...tags, '0.125.0'] : tags },
-              },
-            }),
-          );
+          response.end(JSON.stringify(current.find((entry) => entry.id === Number(single[1]))));
         } else if (request.method === 'GET') {
           const page = Number(url.searchParams.get('page'));
           response.setHeader('content-type', 'application/json');
@@ -267,13 +270,13 @@ describe('pruneDockerImages', () => {
       expect(output).toContain(`kept sha256-${'b'.repeat(64)}`);
     });
 
-    it('leaves a version alone when it was tagged after the listing', async () => {
-      const { status, output, deletes } = await run(['--delete'], undefined, 12);
+    it.each(['retag', 'refresh'] as const)('keeps a version after a %s', async (change) => {
+      const { status, output, deletes } = await run(['--delete'], undefined, change);
 
-      // Version 12 gained a release tag, so it and its attestation stay.
+      // Version 12 changed, so it and its attestation stay.
       expect(status).toBe(0);
       expect(output).toContain('kept sha-4567def');
-      expect(output).toContain('its tags changed after it was listed');
+      expect(output).toContain('version changed after it was listed');
       expect(deletes).toEqual([
         `DELETE ${versionsPath}/11`,
         `DELETE ${versionsPath}/13`,
