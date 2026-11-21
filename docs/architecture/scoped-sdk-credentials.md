@@ -10,6 +10,8 @@ Cache keys use public selectors and credential-file revision metadata where poss
 
 Some inputs lack a safe public identifier. Scoped AWS key tuples, provider-only Bedrock bearer tokens, direct AWS endpoints, possible credential-process inputs and scoped Foundry identities use an HMAC with a random process key. Equal inputs can share a result within that process. Secret rotation or a process restart forces a fresh request. The partition mechanism retains no map of raw secrets.
 
+SageMaker and Vertex use new cache keys because earlier entries could cross credential or project boundaries. SageMaker bypasses sharing for configured credentials, profiles and injected clients. Vertex bypasses sharing for explicit SDK auth or custom headers, except the service-tier header included in the Gemini request key. Vertex partitions eligible requests by project, region, ADC, quota project and the Express API key.
+
 ## AWS
 
 - Explicit key pairs win over Bedrock bearer tokens. Bedrock completion and Converse use a new cache namespace for configured IAM pairs because an older handler could sign with a bearer token and cache under the key pair. An explicitly cleared environment bearer cannot restore the host token.
