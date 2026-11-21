@@ -99,7 +99,7 @@ export async function readTestFiles(
         if (isStringArray(value)) {
           loadedKeys?.delete(key);
           Object.defineProperty(ret, key, {
-            value,
+            value: value.map(prepareVarsFileAlternative),
             enumerable: true,
             writable: true,
             configurable: true,
@@ -571,6 +571,21 @@ function absoluteVarsFileReference(value: string, basePath: string): string {
       ? referencePath.slice(1)
       : referencePath;
   return `file://${path.resolve(basePath, localPath)}`;
+}
+
+// The per-value loader reads one file and does not render templates, so do the two
+// things the eager vars-file loader used to do here: render templated paths, and load a
+// glob entry in place (the matched contents, as one value).
+function prepareVarsFileAlternative(value: string): unknown {
+  if (!value.startsWith('file://')) {
+    return value;
+  }
+  const rendered = maybeLoadConfigFromExternalFile(value, 'vars') as string;
+  const filePath = rendered.slice('file://'.length);
+  const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+  return !fs.existsSync(resolvedPath) && hasMagic(filePath, { windowsPathsNoEscape: true })
+    ? maybeLoadConfigFromExternalFile(rendered)
+    : rendered;
 }
 
 function isStringArray(value: unknown): value is string[] {

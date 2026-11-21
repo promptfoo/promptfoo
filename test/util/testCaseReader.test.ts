@@ -947,7 +947,11 @@ describe('readTest', () => {
 
     const varsFileResult = await readTest({ vars: 'cases/vars.yaml' }, '/project');
 
-    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+    // Only template rendering in vars context: no file is loaded and nothing is rebased.
+    expect(vi.mocked(maybeLoadConfigFromExternalFile).mock.calls).toEqual([
+      ['file://a.txt', 'vars'],
+      ['file://b.txt', 'vars'],
+    ]);
     expect(varsFileResult.vars).toEqual({ docs: ['file://a.txt', 'file://b.txt'] });
     expect(varsFileResult.metadata?.__promptfoo?.varsFileKeys).toBeUndefined();
     expect(varsFileResult.metadata?.__promptfoo?.varsFileKeys ?? []).not.toContain('docs');
