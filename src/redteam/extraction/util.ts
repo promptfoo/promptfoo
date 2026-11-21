@@ -148,6 +148,8 @@ export async function materializeMcpToolCallRemote(
       getRequestTimeoutMs(),
       'json',
       true,
+      // An automatic HTTP retry would discard any usage billed on the first attempt.
+      0,
     );
     tokenUsage = response.data?.tokenUsage;
 

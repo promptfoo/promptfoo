@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Comprehensive catalog of red team attack strategies for systematically identifying and exploiting LLM application vulnerabilities
+description: Choose red team strategies for single-turn attacks, multi-turn conversations, encodings, and other ways to probe LLM applications for vulnerabilities.
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
@@ -14,7 +14,7 @@ Strategies are attack techniques that systematically probe LLM applications for 
 
 ## Recommended Strategies
 
-Most users only need two strategies for comprehensive coverage. These agentic methods provide the highest attack success rates across use cases.
+Start with `jailbreak:meta` for single-turn attacks and `jailbreak:hydra` for multi-turn conversations. Add strategies for attack surfaces specific to your application.
 
 ### Meta Agent: Best for Single-Turn
 
@@ -30,7 +30,7 @@ The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack t
 
 ### Quick Start
 
-For most applications, this configuration provides comprehensive red team coverage:
+Configure both strategies:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -68,7 +68,7 @@ Multi-turn strategies use an attacker agent to coerce the target over multiple c
 
 Multi-turn scans track target, attacker, and grading tokens separately. Probe counts include only requests to the target; grading request counts include one request per grading task, while cached responses do not create additional requests.
 
-For MCP targets, inferring tool arguments counts as attacker usage. If that step fails after consuming tokens, those tokens remain in the result and no target probe is counted.
+For MCP targets, inferring tool arguments counts as attacker usage. When this step fails, reported usage remains in the result and no target probe is counted. Remote argument inference makes one HTTP attempt so automatic transport retries cannot hide billed usage. A failed materialization that reports usage also skips scheduler retries.
 
 ### Indirect Prompt Injection Strategies
 

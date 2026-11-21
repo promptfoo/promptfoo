@@ -197,6 +197,9 @@ class RedteamMcpTargetProvider implements ApiProvider {
     } catch (error) {
       signal?.throwIfAborted();
       const errorResponse: ProviderResponse = {
+        // Retrying the entire target call would hide the materializer's bill.
+        ...(!targetWasCalled &&
+          materializationUsage?.tokenUsage && { metadata: { rateLimitRetryable: false } }),
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
         }`,

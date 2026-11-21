@@ -4,6 +4,7 @@ import cliState from '../../src/cliState';
 import { getEnvBool, getEnvInt, getEnvString } from '../../src/envars';
 import { getUserEmail, isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { materializeMcpToolCallRemote } from '../../src/redteam/extraction/util';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 
 const { createDisabledCloudConfigFactory } = await vi.hoisted(
   () => import('../factories/moduleMocks'),
@@ -138,7 +139,21 @@ describe('materializeMcpToolCallRemote', () => {
       expect.any(Number),
       'json',
       true,
+      0,
     );
+  });
+
+  it('retains reported usage from a terminal HTTP rate-limit response', async () => {
+    vi.mocked(getEnvString).mockImplementation((key) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+    );
+    const tokenUsage = { total: 9, prompt: 7, completion: 2, numRequests: 1 };
+    vi.mocked(fetchWithCache).mockRejectedValue(
+      new HttpRateLimitError({ status: 429, body: { tokenUsage } }),
+    );
+    await expect(
+      materializeMcpToolCallRemote({ tools: [searchCompaniesTool], value: 'Find companies' }),
+    ).rejects.toMatchObject({ tokenUsage });
   });
 
   it('returns undefined when remote generation is explicitly disabled', async () => {

@@ -571,6 +571,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const response = await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
     expect(response).toMatchObject({
+      metadata: { rateLimitRetryable: false },
       error: expect.stringContaining('Remote MCP materialization failed'),
       tokenUsage: {
         numRequests: 0,
