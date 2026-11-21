@@ -1029,8 +1029,9 @@ function redactSensitiveResultFieldsForDb<
 } {
   // Capture metadata once, before serializing any part of the response.
   const response = fields.response && { ...fields.response, toJSON: undefined };
-  if (response?.metadata) {
-    response.metadata = snapshotMetadata(response.metadata);
+  const metadata = response?.metadata;
+  if (response && metadata) {
+    response.metadata = snapshotMetadata(metadata);
   }
   const plainResponse = sanitizeForDb(response as R);
   return {
@@ -1039,6 +1040,8 @@ function redactSensitiveResultFieldsForDb<
     metadata: redactHttpHeadersOnMetadata(snapshotMetadata(fields.metadata), {
       // Match legacy result headers against their source before redaction.
       legacyHeadersSource: response?.metadata,
+      // If even the metadata projection failed, treat sensitive legacy headers as echoes.
+      redactLegacyHeaders: Boolean(metadata && !asRecord(response?.metadata)),
     }),
   };
 }

@@ -2024,24 +2024,34 @@ describe('EvalResult', () => {
         expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
       });
 
-      it('keeps failed response projections closed and still scrubs legacy header echoes', async () => {
-        const headers = { Authorization: 'fixture-header' };
-        const metadata = { http: { requestHeaders: headers }, headers };
-        const toJSON = vi.fn(() => ({ output: '1', metadata }));
-        const input = {
-          ...mockEvaluateResult,
-          response: { output: BigInt(1), metadata, toJSON },
-          metadata: { headers },
-        };
-        const result = await EvalResult.createFromEvaluateResult('unserializable-response', input);
-        const saved = await EvalResult.findById(result.id);
-        expect(saved?.response).toBeUndefined();
-        expect(saved?.metadata.headers).toEqual({ Authorization: '[REDACTED]' });
-        expect(JSON.stringify(sanitizeResultForJsonlArtifact(input))).not.toContain(
-          'fixture-header',
-        );
-        expect(toJSON).not.toHaveBeenCalled();
-      });
+      it.each([false, true])(
+        'keeps failed responses closed (metadata also rejected: %s)',
+        async (invalidMetadata) => {
+          const headers = { Authorization: 'fixture-header' };
+          const metadata = {
+            http: { status: 200, statusText: 'OK', requestHeaders: headers },
+            headers,
+            ...(invalidMetadata && { extra: BigInt(1) }),
+          };
+          const toJSON = vi.fn(() => ({ output: '1', metadata }));
+          const input = {
+            ...mockEvaluateResult,
+            response: { output: BigInt(1), metadata, toJSON },
+            metadata: { headers },
+          };
+          const result = await EvalResult.createFromEvaluateResult(
+            'unserializable-response',
+            input,
+          );
+          const saved = await EvalResult.findById(result.id);
+          expect(saved?.response).toBeUndefined();
+          expect(saved?.metadata.headers).toEqual({ Authorization: '[REDACTED]' });
+          expect(JSON.stringify(sanitizeResultForJsonlArtifact(input))).not.toContain(
+            'fixture-header',
+          );
+          expect(toJSON).not.toHaveBeenCalled();
+        },
+      );
 
       it('captures prompt config before sanitizing it', async () => {
         let reads = 0;
