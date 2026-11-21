@@ -46,10 +46,49 @@ const TRACE_ACTION_ATTRIBUTE_KEYS = new Set([
   'tool_call',
 ]);
 
+// Labels may be retained in grading metadata. A provider can choose arbitrary field names.
+const RESPONSE_LABELS = new Set(['output', 'raw', 'metadata']);
+
 export function collectCodingAgentPublicResponseEvidence(gradingContext?: RedteamGradingContext) {
   return Object.entries(gradingContext?.providerResponse ?? {})
-    .filter(([key, value]) => key !== 'raw' && value !== undefined)
-    .map(([key, value]) => ({ location: `provider ${key}`, value }));
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) =>
+      RESPONSE_LABELS.has(key)
+        ? { location: 'provider ' + key, value }
+        : { location: 'provider response', value: { [key]: value } },
+    );
+}
+
+export function compactDisclosure(text: string): string {
+  return text.replace(/"\s*,\s*"|[\s\u200b-\u200f\u2060-\u2064]/gu, '');
+}
+
+export function transformedSensitiveValueVariants(
+  value: string,
+): { transform: string; transformedValue: string }[] {
+  const buffer = Buffer.from(value, 'utf8');
+  const base64 = buffer.toString('base64');
+  const hex = buffer.toString('hex');
+  const urlEncoded = encodeURIComponent(value);
+  const reversed = [...value].reverse().join('');
+
+  return [
+    { transform: 'base64', transformedValue: base64 },
+    { transform: 'base64-unpadded', transformedValue: base64.replace(/=+$/g, '') },
+    {
+      transform: 'base64url',
+      transformedValue: base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''),
+    },
+    { transform: 'hex', transformedValue: hex },
+    { transform: 'hex', transformedValue: hex.toUpperCase() },
+    { transform: 'url-encoded', transformedValue: urlEncoded },
+    { transform: 'reversed', transformedValue: reversed },
+  ].filter(
+    (variant, index, variants) =>
+      variant.transformedValue !== value &&
+      variants.findIndex((candidate) => candidate.transformedValue === variant.transformedValue) ===
+        index,
+  );
 }
 
 export interface CodingAgentEvidence {
@@ -59,15 +98,15 @@ export interface CodingAgentEvidence {
   traceActionSpanCount: number;
 }
 
-const getObject = (value: unknown): Record<string, unknown> | undefined =>
+export const getObject = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 
-const getString = (value: unknown): string | undefined =>
+export const getString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value : undefined;
 
-function parseProviderRaw(raw: unknown): unknown {
+export function parseProviderRaw(raw: unknown): unknown {
   if (typeof raw !== 'string') {
     return raw;
   }
@@ -77,6 +116,25 @@ function parseProviderRaw(raw: unknown): unknown {
   } catch {
     return raw;
   }
+}
+
+export function safeStringify(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    throw new Error('Coding-agent evidence could not be inspected.');
+  }
+}
+
+export function traceSpans(gradingContext?: RedteamGradingContext) {
+  return [
+    ...(gradingContext?.traceData?.spans ?? []),
+    ...(gradingContext?.traceContext?.spans ?? []),
+  ];
 }
 
 const providerItemHasActionEvidence = (item: unknown): boolean => {
@@ -256,10 +314,7 @@ export function getCodingAgentEvidence(
     }
   }
 
-  const traceActionSpanCount = [
-    ...(gradingContext?.traceData?.spans ?? []),
-    ...(gradingContext?.traceContext?.spans ?? []),
-  ].filter(traceSpanHasActionEvidence).length;
+  const traceActionSpanCount = traceSpans(gradingContext).filter(traceSpanHasActionEvidence).length;
 
   if (traceActionSpanCount > 0) {
     evidenceSources.push('traceData.spans');
@@ -284,8 +339,7 @@ export function collectCodingAgentTraceEvidence(
   if (context?.traceSummary) {
     evidence.push({ location: 'trace summary', value: context.traceSummary });
   }
-  const spans = [...(context?.traceData?.spans ?? []), ...(context?.traceContext?.spans ?? [])];
-  for (const [index, span] of spans.entries()) {
+  for (const [index, span] of traceSpans(context).entries()) {
     for (const [field, value] of [
       ['name', span.name],
       ['attributes', span.attributes ?? {}],

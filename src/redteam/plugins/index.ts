@@ -47,7 +47,10 @@ import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import {
   CodingAgentGeneratedPlugin,
+  checkCodingAgentGeneration,
+  isCodingAgentPlugin,
   LOCAL_CODING_AGENT_PLUGIN_SPECS,
+  publicCodingAgentConfig,
 } from './codingAgent/generator';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
@@ -78,7 +81,7 @@ import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent'
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
 import { TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES } from './teenSafety/graderExamples';
 import { TeenSafetyHarmfulBodyIdealsPlugin } from './teenSafety/harmfulBodyIdeals';
-import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { TOOL_DISCOVERY_ATTACK_CONSTRAINTS, ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
@@ -135,6 +138,26 @@ function computeModifiersFromConfig(config: PluginConfig | undefined): Record<st
   return modifiers;
 }
 
+function addPluginMetadata(
+  testCases: TestCase[],
+  pluginId: string | (() => string),
+  getConfig: () => PluginConfig | undefined,
+) {
+  const computedModifiers = computeModifiersFromConfig(getConfig());
+  return testCases.map((testCase) => ({
+    ...testCase,
+    metadata: {
+      ...testCase.metadata,
+      pluginId: typeof pluginId === 'function' ? pluginId() : pluginId,
+      // Add computed config with modifiers so strategies can access them
+      pluginConfig: {
+        ...getConfig(),
+        modifiers: computedModifiers,
+      },
+    },
+  }));
+}
+
 function applyDefaultGraderExamples(
   key: string,
   config: PluginConfig | undefined,
@@ -157,7 +180,7 @@ function applyDefaultRemotePluginConfig(
 ): PluginConfig | undefined {
   const configWithDefaultExamples = applyDefaultGraderExamples(key, config);
 
-  if (!key.startsWith('coding-agent:') && !key.startsWith('harness:')) {
+  if (!isCodingAgentPlugin(key)) {
     return configWithDefaultExamples;
   }
 
@@ -197,25 +220,21 @@ function getMaxCharsPerMessageFromConfig(config: PluginConfig | undefined): numb
   return isValidMaxCharsPerMessage(maxCharsPerMessage) ? maxCharsPerMessage : undefined;
 }
 
-function clonePluginConfig(config: PluginConfig | undefined): PluginConfig | undefined {
+function buildRetryConfig(
+  config: PluginConfig | undefined,
+  retryInstructions: string | undefined,
+): PluginConfig | undefined {
   if (!config) {
     return undefined;
   }
 
-  return {
+  const retryConfig = {
     ...config,
     modifiers: {
       ...((config.modifiers as Record<string, string> | undefined) ?? {}),
     },
   };
-}
-
-function buildRetryConfig(
-  config: PluginConfig | undefined,
-  retryInstructions: string | undefined,
-): PluginConfig | undefined {
-  const retryConfig = clonePluginConfig(config);
-  if (!retryConfig || !retryInstructions) {
+  if (!retryInstructions) {
     return retryConfig;
   }
 
@@ -358,6 +377,7 @@ async function fetchRemoteTestCases(
   config: PluginConfig,
   redteamGenerationContext?: RedteamGenerationContext | string,
   provider?: ApiProvider,
+  verifierConfig?: PluginConfig,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -397,6 +417,10 @@ async function fetchRemoteTestCases(
     version: VERSION,
     email: getUserEmail(),
   });
+
+  if (verifierConfig) {
+    checkCodingAgentGeneration(body, [{ id: key, config: verifierConfig }]);
+  }
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
@@ -455,7 +479,17 @@ function createPluginFactory<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultRemotePluginConfig(key, config as T);
+      let configWithDefaults = applyDefaultRemotePluginConfig(key, config as T);
+      // Send the constraint to remote generation and retain it for every strategy turn.
+      if (key === 'tool-discovery') {
+        configWithDefaults = {
+          ...configWithDefaults,
+          modifiers: {
+            ...configWithDefaults?.modifiers,
+            toolDiscoveryAttackConstraints: TOOL_DISCOVERY_ATTACK_CONSTRAINTS,
+          },
+        };
+      }
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
@@ -468,36 +502,29 @@ function createPluginFactory<T extends PluginConfig>(
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
-      const plugin = new PluginClass(provider, purpose, injectVar, configWithDefaults as T);
+      const plugin = isCodingAgentPlugin(key)
+        ? new PluginClass(provider, purpose, injectVar, configWithDefaults as T)
+        : undefined;
+      const generationConfig =
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.getRemoteGenerationConfig(redteamGenerationContext ?? targetId)
+          : configWithDefaults;
       const testCases = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
         n,
-        plugin instanceof CodingAgentGeneratedPlugin
-          ? plugin.getRemoteGenerationConfig()
-          : (configWithDefaults ?? {}),
+        generationConfig ?? {},
         redteamGenerationContext ?? targetId,
         provider,
+        plugin instanceof CodingAgentGeneratedPlugin ? configWithDefaults : undefined,
       );
-      const processedTestCases =
+
+      const processed =
         plugin instanceof CodingAgentGeneratedPlugin
           ? plugin.postprocessRemoteTests(testCases)
           : testCases;
-      const computedModifiers = computeModifiersFromConfig(configWithDefaults);
-
-      return processedTestCases.map((testCase) => ({
-        ...testCase,
-        metadata: {
-          ...testCase.metadata,
-          pluginId,
-          // Add computed config with modifiers so strategies can access them
-          pluginConfig: {
-            ...configWithDefaults,
-            modifiers: computedModifiers,
-          },
-        },
-      }));
+      return addPluginMetadata(processed, pluginId, () => generationConfig);
     },
   };
 }
@@ -596,18 +623,11 @@ const pluginFactories: PluginFactory[] = [
       }
 
       const testCases = await getHarmfulTests(params, category);
-      const computedModifiers = computeModifiersFromConfig(params.config);
-      return testCases.map((testCase) => ({
-        ...testCase,
-        metadata: {
-          ...testCase.metadata,
-          pluginId: getShortPluginId(category),
-          pluginConfig: {
-            ...params.config,
-            modifiers: computedModifiers,
-          },
-        },
-      }));
+      return addPluginMetadata(
+        testCases,
+        () => getShortPluginId(category),
+        () => params.config,
+      );
     },
   })),
 ];
@@ -626,18 +646,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.targetId,
         params.provider,
       );
-      const computedModifiers = computeModifiersFromConfig(params.config);
-      return testCases.map((testCase) => ({
-        ...testCase,
-        metadata: {
-          ...testCase.metadata,
-          pluginId,
-          pluginConfig: {
-            ...params.config,
-            modifiers: computedModifiers,
-          },
-        },
-      }));
+      return addPluginMetadata(testCases, pluginId, () => params.config);
     }
     logger.debug(`Using local redteam generation for ${category}`);
     const testCases = await getPiiLeakTestsForCategory(params, category);
@@ -669,18 +678,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.targetId,
       params.provider,
     );
-    const computedModifiers = computeModifiersFromConfig(params.config);
-    return testCases.map((testCase) => ({
-      ...testCase,
-      metadata: {
-        ...testCase.metadata,
-        pluginId,
-        pluginConfig: {
-          ...params.config,
-          modifiers: computedModifiers,
-        },
-      },
-    }));
+    return addPluginMetadata(testCases, pluginId, () => params.config);
   },
 }));
 
@@ -700,7 +698,14 @@ function createRemotePlugin<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
+      const defaults = applyDefaultRemotePluginConfig(key, config);
+      const configWithDefaults = isCodingAgentPlugin(key)
+        ? publicCodingAgentConfig(key, defaults ?? {}, {
+            purpose,
+            injectVar,
+            context: redteamGenerationContext ?? targetId,
+          })
+        : defaults;
 
       if (neverGenerateRemote()) {
         logger.error(getRemoteGenerationExplicitlyDisabledError(`${key} plugin`));
@@ -715,19 +720,9 @@ function createRemotePlugin<T extends PluginConfig>(
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
         provider,
+        isCodingAgentPlugin(key) ? defaults : undefined,
       );
-      const computedModifiers = computeModifiersFromConfig(configWithDefaults);
-      const testsWithMetadata = testCases.map((testCase) => ({
-        ...testCase,
-        metadata: {
-          ...testCase.metadata,
-          pluginId,
-          pluginConfig: {
-            ...configWithDefaults,
-            modifiers: computedModifiers,
-          },
-        },
-      }));
+      const testsWithMetadata = addPluginMetadata(testCases, pluginId, () => configWithDefaults);
 
       if (key.startsWith('harmful:') || key.startsWith('bias:')) {
         return testsWithMetadata.map((testCase) => ({

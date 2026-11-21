@@ -2,7 +2,7 @@
 
 This example runs a real [OSWorld](https://github.com/xlang-ai/OSWorld) task through promptfoo by wrapping the Inspect-native implementation in [`inspect_evals/osworld`](https://github.com/UKGovernmentBEIS/inspect_evals/tree/main/src/inspect_evals/osworld). OSWorld is a multimodal computer-use benchmark where an agent observes an Ubuntu desktop via screenshots, acts with mouse and keyboard tools, and is graded by task-specific checks against VM state. The benchmark is described in [OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments](https://arxiv.org/abs/2404.07972).
 
-This is an orchestration wrapper, not a from-scratch promptfoo-native computer-use agent loop. Inspect owns the Docker sandbox, `basic_agent` solver, `computer` tool, screenshots, model calls, and OSWorld scorer. Promptfoo starts one Inspect eval, dumps the `.eval` log to JSON, parses the final score, and applies a normal promptfoo assertion.
+This is an orchestration wrapper, not a from-scratch promptfoo-native computer-use agent loop. Inspect owns the Docker sandbox, `react` agent, `computer` tool, screenshots, model calls, and OSWorld scorer. Promptfoo starts one Inspect eval, dumps the `.eval` log to JSON, parses the final score, and applies a normal promptfoo assertion.
 
 ## Prerequisites
 
@@ -12,18 +12,27 @@ You need:
 - Docker Compose V2 available as `docker compose`. Inspect validates this with
   `docker compose version --format json`; a standalone `docker-compose` binary
   is not enough unless your `docker` command exposes it as `docker compose`.
-- Python with Inspect's OSWorld dependencies, Promptfoo's Python OpenTelemetry
-  dependencies, and the SDK for whichever model provider you choose. This
-  installs both SDKs used below:
+- Python 3.11 or newer. Install Inspect's OSWorld integration and the SDK for
+  the default OpenAI model:
 
   ```bash
-  pip install 'inspect-evals[osworld]' openai anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+  python -m pip install 'inspect-evals[osworld]>=0.21,<0.23' 'openai>=3.19.2,<4'
   ```
+
+- For an Anthropic model, install `anthropic>=1.7.0,<2` instead of the OpenAI SDK.
+- The traced commands below additionally need the optional tracing packages:
+
+  ```bash
+  python -m pip install 'opentelemetry-sdk>=1.44,<2' 'opentelemetry-exporter-otlp-proto-http>=1.44,<2'
+  ```
+
+  Omit `PROMPTFOO_ENABLE_OTEL=true` when running without Python tracing. These
+  packages are not required to load test cases or invoke Inspect.
 
 - A computer-use-capable model and API key. For the default config, export
   `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and set
   `vars.model` or `providers[0].config.defaultModel` to an Inspect model such as
-  `anthropic/claude-sonnet-4-5`.
+  `anthropic/claude-sonnet-5`.
 - Disk and time for Inspect's OSWorld Docker image. The first run builds an image of roughly 8GB and can take several minutes before the sample starts.
 - Budget for a non-trivial model run. Start with one exact sample before expanding
   to a larger subset or the full suite.

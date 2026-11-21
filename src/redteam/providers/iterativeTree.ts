@@ -30,6 +30,7 @@ import {
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { withGradingUsage } from '../grading/storedResult';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -65,6 +66,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   gradeRedactionResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
 } from './shared';
@@ -503,7 +505,8 @@ type StopReason =
   | 'MAX_DEPTH'
   | 'NO_IMPROVEMENT'
   | 'GRADER_FAILED'
-  | 'ATTACKER_ERROR';
+  | 'ATTACKER_ERROR'
+  | 'TARGET_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -547,6 +550,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  attackerUsesRemoteProvider = shouldGenerateRemote(),
   targetId,
   treeParams,
 }: {
@@ -563,6 +567,9 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  /** Whether the attacker is the remote task provider; explicit providers
+   * force false so multi-input materialization stays on the local path. */
+  attackerUsesRemoteProvider?: boolean;
   targetId?: string;
   treeParams?: {
     maxDepth?: number;
@@ -619,6 +626,14 @@ async function runRedteamConversation({
   let storedGraderResult: GradingResult | undefined = undefined;
   const storedGraderResults: Record<number, GradingResult> = {};
   const redactTrace = requiresTraceRedaction(test?.assert);
+  if (redactTrace && context?.test !== test) {
+    context = { ...context, vars, prompt, test };
+  }
+  let bestGraderResult: GradingResult | undefined;
+  const getBestGraderResult = () =>
+    bestGraderResult
+      ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
+      : storedGraderResult;
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -638,6 +653,45 @@ async function runRedteamConversation({
   // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
   let lastFinalAttackPrompt: string | undefined;
   let bestFinalAttackPrompt: string | undefined;
+
+  // All return paths, including errors and early stops, carry the same privacy verdicts.
+  function historyMetadata() {
+    return {
+      highestScore: maxScore,
+      attempts,
+      messages: treeOutputs as Record<string, any>[],
+      redteamTreeHistory: treeOutputs,
+      sessionIds: extractSessionIds(treeOutputs),
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
+      ...(redactTrace && { storedGraderResults, redactionContentOmitted: true }),
+    };
+  }
+
+  function buildFinalResponse(finalTargetResponse: ProviderResponse): RedteamTreeResponse {
+    return preserveSelectedError(
+      {
+        output:
+          bestResponse ||
+          (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+        prompt: bestNode.prompt,
+        metadata: {
+          ...historyMetadata(),
+          redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+          stopReason: stoppingReason,
+          storedGraderResult: getBestGraderResult(),
+          ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+            transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: finalTargetResponse?.guardrails,
+        ...(mediaRedactionError || finalTargetResponse.error
+          ? { error: mediaRedactionError || finalTargetResponse.error }
+          : {}),
+      },
+      finalTargetResponse,
+    );
+  }
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -667,7 +721,7 @@ async function runRedteamConversation({
           attackPromptResult = await getNewPrompt(
             redteamProvider,
             [...redteamHistory, { role: 'assistant', content: node.prompt }],
-            shouldGenerateRemote()
+            attackerUsesRemoteProvider
               ? {
                   inputs,
                   materializationIndex: attempts,
@@ -692,19 +746,10 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             error: mediaRedactionError || error.message,
             metadata: {
-              ...(mediaRedactionError && { redactionMediaOmitted: true }),
-              highestScore: maxScore,
+              ...historyMetadata(),
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
               stopReason: 'ATTACKER_ERROR',
-              storedGraderResult,
-              ...(redactTrace && {
-                storedGraderResults,
-                redactionContentOmitted: true,
-              }),
-              sessionIds: extractSessionIds(treeOutputs),
+              storedGraderResult: getBestGraderResult(),
             },
             tokenUsage: totalTokenUsage,
           };
@@ -717,7 +762,7 @@ async function runRedteamConversation({
           materializedVars,
           prompt: newInjectVar,
         } = attackPromptResult;
-        if (inputs && shouldGenerateRemote()) {
+        if (inputs && attackerUsesRemoteProvider) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
             'Iterative Tree multi-input generation',
@@ -802,7 +847,7 @@ async function runRedteamConversation({
 
         // If inputs is defined, extract individual keys from the attack prompt JSON
         if (inputs && Object.keys(inputs).length > 0) {
-          if (shouldGenerateRemote()) {
+          if (attackerUsesRemoteProvider) {
             try {
               const parsed = JSON.parse(newInjectVar);
               Object.assign(
@@ -849,6 +894,7 @@ async function runRedteamConversation({
           options,
         );
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+        const sessionId = redactTrace ? undefined : getSessionId(targetResponse, iterationContext);
         if (redactTrace && test) {
           storedGraderResult = await gradeRedactionResponse(
             targetPrompt,
@@ -886,8 +932,12 @@ async function runRedteamConversation({
             score: 0,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
+            sessionId,
           });
+          if (options?.abortSignal?.aborted) {
+            stoppingReason = 'TARGET_ERROR';
+            return buildFinalResponse(targetResponse);
+          }
           continue;
         }
         invariant(
@@ -897,14 +947,16 @@ async function runRedteamConversation({
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
-        const { score, explanation } = await evaluateResponse(
-          gradingProvider,
-          judgeSystemPrompt,
-          targetResponse.output,
-          bestResponse,
-          containsPenalizedPhrase,
-          totalTokenUsage,
-        );
+        const { score, explanation } = redactTrace
+          ? { score: 1, explanation: 'Privacy verdict is local.' }
+          : await evaluateResponse(
+              gradingProvider,
+              judgeSystemPrompt,
+              targetResponse.output,
+              bestResponse,
+              containsPenalizedPhrase,
+              totalTokenUsage,
+            );
 
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
@@ -919,7 +971,8 @@ async function runRedteamConversation({
           }),
         );
 
-        if (score > maxScore) {
+        const isNewBest = score > maxScore;
+        if (isNewBest) {
           maxScore = score;
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
@@ -1024,7 +1077,7 @@ async function runRedteamConversation({
 
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              newInjectVar,
+              finalInjectVar,
               targetResponse.output,
               iterationTest,
               gradingProvider,
@@ -1033,10 +1086,22 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                prompt: finalInjectVar,
+                output: targetResponse.output,
+                pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
+              },
+            );
+            if (isNewBest) {
+              bestGraderResult = storedGraderResult;
+            }
             graderPassed = grade.pass;
           }
         }
@@ -1060,26 +1125,17 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
+            sessionId,
           });
           return {
             output: targetResponse.output,
-            prompt: bestNode.prompt,
+            prompt: newInjectVar,
             ...(mediaRedactionError && { error: mediaRedactionError }),
             metadata: {
-              ...(mediaRedactionError && { redactionMediaOmitted: true }),
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
+              ...historyMetadata(),
+              redteamFinalPrompt: finalInjectVar,
               stopReason: stoppingReason,
               storedGraderResult,
-              ...(redactTrace && {
-                storedGraderResults,
-                redactionContentOmitted: true,
-              }),
-              sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
               }),
@@ -1109,26 +1165,17 @@ async function runRedteamConversation({
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
+            sessionId,
           });
           return {
             output: bestResponse,
             prompt: bestNode.prompt,
             ...(mediaRedactionError && { error: mediaRedactionError }),
             metadata: {
-              ...(mediaRedactionError && { redactionMediaOmitted: true }),
-              highestScore: maxScore,
+              ...historyMetadata(),
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
-              ...(redactTrace && {
-                storedGraderResults,
-                redactionContentOmitted: true,
-              }),
-              sessionIds: extractSessionIds(treeOutputs),
+              storedGraderResult: getBestGraderResult(),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
               }),
@@ -1159,26 +1206,17 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
+            sessionId,
           });
           return {
             output: bestResponse,
             prompt: bestNode.prompt,
             ...(mediaRedactionError && { error: mediaRedactionError }),
             metadata: {
-              ...(mediaRedactionError && { redactionMediaOmitted: true }),
-              highestScore: maxScore,
+              ...historyMetadata(),
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
-              ...(redactTrace && {
-                storedGraderResults,
-                redactionContentOmitted: true,
-              }),
-              sessionIds: extractSessionIds(treeOutputs),
+              storedGraderResult: getBestGraderResult(),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
               }),
@@ -1216,7 +1254,7 @@ async function runRedteamConversation({
           score,
           wasSelected: true,
           guardrails: targetResponse?.guardrails,
-          sessionId: getSessionId(targetResponse, iterationContext),
+          sessionId,
         });
       }
     }
@@ -1244,7 +1282,7 @@ async function runRedteamConversation({
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(bestPrompt);
-      if (shouldGenerateRemote()) {
+      if (attackerUsesRemoteProvider) {
         const remoteBestNodeMaterialization = {
           inputMaterialization: bestNode.inputMaterialization,
           materializationHandled: bestNode.materializationHandled,
@@ -1322,39 +1360,9 @@ async function runRedteamConversation({
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse?.guardrails,
-    sessionId: getSessionId(finalTargetResponse, context),
+    sessionId: redactTrace ? undefined : getSessionId(finalTargetResponse, context),
   });
-  return {
-    output:
-      bestResponse ||
-      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-    prompt: bestNode.prompt,
-    metadata: {
-      ...(mediaRedactionError && {
-        redactionMediaOmitted: true,
-      }),
-      highestScore: maxScore,
-      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-      messages: treeOutputs as Record<string, any>[],
-      attempts,
-      redteamTreeHistory: treeOutputs,
-      stopReason: stoppingReason,
-      storedGraderResult,
-      ...(redactTrace && {
-        storedGraderResults,
-        redactionContentOmitted: true,
-      }),
-      sessionIds: extractSessionIds(treeOutputs),
-      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-      }),
-    },
-    tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse?.guardrails,
-    ...(mediaRedactionError || finalTargetResponse.error
-      ? { error: mediaRedactionError || finalTargetResponse.error }
-      : {}),
-  };
+  return buildFinalResponse(finalTargetResponse);
 }
 
 /**
@@ -1428,14 +1436,17 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<RedteamTreeResponse> {
-    logger.debug('[IterativeTree] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
     let redteamProvider: ApiProvider;
     let gradingProvider: ApiProvider;
 
-    if (shouldGenerateRemote()) {
+    // Remote task handlers only know the built-in default. An explicit
+    // redteamProvider must stay local even when remote generation is enabled.
+    const attackerUsesRemoteProvider = shouldGenerateRemote() && !this.config.redteamProvider;
+
+    if (attackerUsesRemoteProvider) {
       gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -1482,6 +1493,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      attackerUsesRemoteProvider,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
     });

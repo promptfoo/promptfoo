@@ -1,6 +1,6 @@
 ---
 sidebar_position: 23
-description: Red team LLM applications against NIST AI Risk Management Framework measures to ensure trustworthy AI development and deployment
+description: Test LLM applications for technical risks mapped to NIST AI Risk Management Framework measures. Use the preset and findings as evidence in risk assessments.
 ---
 
 # NIST AI Risk Management Framework
@@ -360,7 +360,7 @@ redteam:
 
 ## Comprehensive NIST AI RMF Testing
 
-For complete NIST AI RMF compliance testing across all measures:
+To run the NIST AI RMF Measure preset:
 
 ```yaml
 redteam:
@@ -371,7 +371,7 @@ redteam:
     - jailbreak-templates
 ```
 
-This configuration tests your AI system against all NIST AI RMF measurement criteria, providing comprehensive risk assessment aligned with federal AI guidelines.
+This configuration runs the checks mapped to the Measure preset. Some measures require evidence outside an automated scan.
 
 ## Integration with Other Frameworks
 
@@ -414,16 +414,16 @@ While Promptfoo helps automate many NIST AI RMF measures, some requirements need
 - **MEASURE 3.3**: Stakeholder feedback processes require organizational procedures
 - **MEASURE 4.3**: Business value assessment requires business context beyond automated testing
 
-Automated red teaming should be part of a comprehensive NIST AI RMF compliance program that includes governance, documentation, and stakeholder engagement.
+Use red team findings alongside governance records, documentation, and stakeholder feedback.
 
 ## What's Next
 
-The NIST AI RMF is regularly updated to reflect emerging AI risks and best practices. Regular testing with Promptfoo helps ensure ongoing compliance with the framework's measurement requirements.
+Rerun relevant tests after application changes and document how findings affect your risk assessment.
 
-To learn more about setting up comprehensive AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
+To learn more about setting up AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
 
 ## Additional Resources
 
 - [NIST AI RMF Official Website](https://www.nist.gov/itl/ai-risk-management-framework)
-- [NIST AI RMF Playbook](https://pages.nist.gov/AIRMF/)
+- [NIST AI RMF Playbook](https://airc.nist.gov/airmf-resources/playbook/)
 - [NIST AI RMF Crosswalk](https://airc.nist.gov/AI_RMF_Knowledge_Base/Crosswalks)

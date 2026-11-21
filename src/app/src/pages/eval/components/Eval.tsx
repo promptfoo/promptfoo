@@ -9,7 +9,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { type ResultLightweightWithLabel } from '@promptfoo/types';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -126,27 +126,37 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters } = useTableStore.getState();
+        const { filters, activeEvalQuery } = useTableStore.getState();
+        const queryOptions =
+          isBackgroundUpdate && activeEvalQuery?.evalId === id
+            ? activeEvalQuery.options
+            : {
+                filterMode,
+                filters: Object.values(filters.values).filter((filter) =>
+                  filter.type === 'metadata'
+                    ? Boolean(filter.value && filter.field)
+                    : Boolean(filter.value),
+                ),
+              };
 
         const data = await fetchEvalData(id, {
+          ...queryOptions,
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode,
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
         });
 
         if (!data) {
-          setFailed(true);
+          if (!isBackgroundUpdate) {
+            setFailed(true);
+          }
           return false;
         }
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        if (!isBackgroundUpdate) {
+          setFailed(true);
+        }
         return false;
       }
     },

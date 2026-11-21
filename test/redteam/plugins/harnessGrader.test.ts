@@ -67,6 +67,26 @@ describe('HarnessGrader', () => {
     },
   );
 
+  it('rejects omitted and cached privacy responses in direct grader calls', async () => {
+    for (const providerResponse of [
+      { metadata: { redactionContentOmitted: true } },
+      { cached: true },
+    ]) {
+      await expect(
+        new HarnessGrader('harness:artifact-redaction').getResult(
+          'Check report',
+          'Clean',
+          baseTest,
+          undefined,
+          { rawReceipt: 'SYNTHETIC_RECEIPT_VALUE' },
+          undefined,
+          undefined,
+          { providerResponse },
+        ),
+      ).rejects.toThrow(/original response|fresh target/);
+    }
+  });
+
   it('keeps forensic artifact-redaction traces out of model grading', async () => {
     const canary = 'SYNTHETIC_HARNESS_TRACE_SECRET';
     const callApi = vi.fn(async () => ({

@@ -5,12 +5,16 @@ import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { requiresTraceRedaction } from '../util/traceRedaction';
+import {
+  configRequiresTraceRedaction,
+  sanitizeCodingAgentVerifierInputs,
+} from '../util/verifierPrivacy';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
+import type { OTLPReceiverTracePolicy } from './otlpReceiver';
 
 // Shared OTLP receiver lifecycle state: whether it is started, the in-flight start/stop
 // promises that serialize concurrent callers, and a refcount of the evaluations using it.
@@ -19,17 +23,6 @@ let otlpReceiverStartPromise: Promise<void> | null = null;
 let otlpReceiverStopPromise: Promise<void> | null = null;
 let otlpReceiverUsers = 0;
 const DEFAULT_OTLP_ACCEPT_FORMATS = ['json', 'protobuf'] as const;
-
-function normalizeOtlpAcceptFormats(
-  acceptFormats?: string[],
-): Array<(typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number]> {
-  const normalized = (acceptFormats ?? []).filter(
-    (format): format is (typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number] =>
-      format === 'json' || format === 'protobuf',
-  );
-
-  return normalized.length > 0 ? normalized : [...DEFAULT_OTLP_ACCEPT_FORMATS];
-}
 
 /**
  * Reset module state (for testing purposes).
@@ -67,9 +60,7 @@ export function generateTraceparent(
   spanId: string,
   sampled: boolean = true,
 ): string {
-  const version = '00';
-  const traceFlags = sampled ? '01' : '00';
-  return `${version}-${traceId}-${spanId}-${traceFlags}`;
+  return `00-${traceId}-${spanId}-${sampled ? '01' : '00'}`;
 }
 
 /**
@@ -79,49 +70,29 @@ export function isOtlpReceiverStarted(): boolean {
   return otlpReceiverStarted;
 }
 
-function acquireStartedOtlpReceiver(): boolean {
-  if (!otlpReceiverStarted) {
-    return false;
+async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
+  // Default retention is only materialized on parsed configs. Keep ad-hoc suites
+  // opt-in so tests and programmatic callers do not prune unexpectedly.
+  const retentionDays = testSuite.tracing?.storage?.retentionDays;
+  if (typeof retentionDays !== 'number' || retentionDays <= 0) {
+    return;
   }
 
-  otlpReceiverUsers += 1;
-  logger.debug(
-    `[EvaluatorTracing] OTLP receiver already started; preserving active receiver defaults for ${otlpReceiverUsers} active evaluations`,
-  );
-  return true;
-}
-
-function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
-  return (
-    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-    testSuite.tracing?.enabled === true ||
-    (typeof testSuite.defaultTest === 'object' &&
-      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
-    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true
-  );
-}
-
-function getOtlpReceiverTracePolicy(
-  testSuite: TestSuite,
-  evaluationId?: string,
-): {
-  evaluationId: string;
-  commandToolNames?: string[];
-  redactAttributes?: string[];
-} | null {
-  if (!evaluationId) {
-    return null;
+  try {
+    const { getTraceStore } = await import('./store');
+    await getTraceStore().deleteOldTraces(retentionDays);
+    logger.debug(`[EvaluatorTracing] Pruned trace store entries older than ${retentionDays} days`);
+  } catch (pruneError) {
+    logger.warn(
+      `[EvaluatorTracing] Failed to prune old traces: ${
+        pruneError instanceof Error ? pruneError.message : pruneError
+      }`,
+    );
   }
-
-  return {
-    evaluationId,
-    commandToolNames: testSuite.tracing?.commandToolNames,
-    redactAttributes: testSuite.tracing?.otlp?.http?.redactAttributes,
-  };
 }
 
 async function registerOtlpReceiverTracePolicyIfAvailable(
-  tracePolicy: ReturnType<typeof getOtlpReceiverTracePolicy>,
+  tracePolicy: OTLPReceiverTracePolicy | null,
 ): Promise<void> {
   if (!tracePolicy) {
     return;
@@ -142,31 +113,54 @@ export async function startOtlpReceiverIfNeeded(
   testSuite: TestSuite,
   evaluationId?: string,
 ): Promise<boolean> {
-  const tracing = testSuite.tracing?.provider
-    ? { ...testSuite.tracing, provider: { id: testSuite.tracing.provider.id } }
-    : testSuite.tracing;
   logger.debug('[EvaluatorTracing] Checking tracing configuration', {
-    tracing,
+    tracing: testSuite.tracing?.provider
+      ? { ...testSuite.tracing, provider: { id: testSuite.tracing.provider.id } }
+      : testSuite.tracing,
     testSuiteKeys: Object.keys(testSuite),
   });
 
   const httpTracing = testSuite.tracing?.otlp?.http;
   const commandToolNames = testSuite.tracing?.commandToolNames;
-  const tracingEnabled = isTracingEnabledForSuite(testSuite);
+  const tracingEnabled =
+    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+    testSuite.tracing?.enabled === true ||
+    (typeof testSuite.defaultTest === 'object' &&
+      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true;
   if (tracingEnabled) {
     await pruneTraceStoreIfNeeded(testSuite);
   }
 
   if (tracingEnabled && httpTracing?.enabled) {
-    const acceptFormats = normalizeOtlpAcceptFormats(httpTracing.acceptFormats);
+    let acceptFormats = httpTracing.acceptFormats;
+    const normalized = (acceptFormats ?? []).filter(
+      (format): format is (typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number] =>
+        format === 'json' || format === 'protobuf',
+    );
+    acceptFormats = normalized.length > 0 ? normalized : [...DEFAULT_OTLP_ACCEPT_FORMATS];
     const redactAttributes = httpTracing.redactAttributes;
-    const tracePolicy = getOtlpReceiverTracePolicy(testSuite, evaluationId);
+    const tracePolicy: OTLPReceiverTracePolicy | null = evaluationId
+      ? {
+          evaluationId,
+          ...(configRequiresTraceRedaction(testSuite) && { requireExistingTrace: true }),
+          commandToolNames: testSuite.tracing?.commandToolNames,
+          redactAttributes: testSuite.tracing?.otlp?.http?.redactAttributes,
+        }
+      : null;
 
     if (otlpReceiverStopPromise !== null) {
       await otlpReceiverStopPromise;
     }
 
-    while (!acquireStartedOtlpReceiver()) {
+    while (true) {
+      if (otlpReceiverStarted) {
+        otlpReceiverUsers += 1;
+        logger.debug(
+          `[EvaluatorTracing] OTLP receiver already started; preserving active receiver defaults for ${otlpReceiverUsers} active evaluations`,
+        );
+        break;
+      }
       const pendingStart = otlpReceiverStartPromise;
       if (pendingStart === null) {
         break;
@@ -214,8 +208,7 @@ export async function startOtlpReceiverIfNeeded(
       await startPromise;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
-      if (failOnStartFailure) {
+      if (testSuite.tracing?.failOnReceiverStartFailure === true) {
         logger.error(
           `[EvaluatorTracing] Failed to start OTLP receiver and tracing.failOnReceiverStartFailure is true: ${message}`,
         );
@@ -241,27 +234,6 @@ export async function startOtlpReceiverIfNeeded(
     }
   }
   return false;
-}
-
-async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
-  // Default retention is only materialized on parsed configs. Keep ad-hoc suites
-  // opt-in so tests and programmatic callers do not prune unexpectedly.
-  const retentionDays = testSuite.tracing?.storage?.retentionDays;
-  if (typeof retentionDays !== 'number' || retentionDays <= 0) {
-    return;
-  }
-
-  try {
-    const { getTraceStore } = await import('./store');
-    await getTraceStore().deleteOldTraces(retentionDays);
-    logger.debug(`[EvaluatorTracing] Pruned trace store entries older than ${retentionDays} days`);
-  } catch (pruneError) {
-    logger.warn(
-      `[EvaluatorTracing] Failed to prune old traces: ${
-        pruneError instanceof Error ? pruneError.message : pruneError
-      }`,
-    );
-  }
 }
 
 /**
@@ -330,7 +302,12 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
   const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
   const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
 
-  const result = metadataEnabled || yamlConfigEnabled || envEnabled;
+  // A sampled root can export the request outside this process before we project a result.
+  const result =
+    (metadataEnabled || yamlConfigEnabled || envEnabled) &&
+    !configRequiresTraceRedaction(test) &&
+    (test.options?.disableDefaultAsserts === true ||
+      !configRequiresTraceRedaction(testSuite?.defaultTest));
 
   logger.debug(
     `[EvaluatorTracing] isTracingEnabled check: metadata=${metadataEnabled}, yamlConfig=${yamlConfigEnabled}, env=${envEnabled}, result=${result}`,
@@ -430,12 +407,11 @@ export async function generateTraceContextIfNeeded(
       metadata: {
         testIdx,
         promptIdx,
-        ...(requiresTraceRedaction(test.assert) && { privateForensicEvidence: true }),
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),
         ...(executionMetadata.repeatIndex !== undefined && {
           repeatIndex: executionMetadata.repeatIndex,
         }),
-        vars: test.vars,
+        vars: sanitizeCodingAgentVerifierInputs(test).vars,
         commandToolNames: testSuite?.tracing?.commandToolNames,
         otlpHttpRedactAttributes: testSuite?.tracing?.otlp?.http?.redactAttributes,
       },

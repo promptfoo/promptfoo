@@ -1,4 +1,5 @@
 import { getAgenticAttackProfile } from '../agenticProfile';
+import { appendMetricSuffix } from './assertions';
 
 import type { ProviderOptions, TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -16,15 +17,16 @@ type AdaptiveMultiTurnStrategy = (
 ) => TestCase[];
 
 /**
- * Creates the shared test-case transformer used by Hydra-compatible multi-turn strategies.
+ * Creates the shared test-case transformer used by multi-turn strategies.
  */
 export function createAdaptiveMultiTurnStrategy(
   definition: AdaptiveMultiTurnStrategyDefinition,
+  generateScanId = true,
 ): AdaptiveMultiTurnStrategy {
   const { providerName, metricSuffix, strategyId } = definition;
 
   return (testCases, injectVar, config) => {
-    const scanId = crypto.randomUUID(); // Generate once for all tests in this scan
+    const scanId = generateScanId ? crypto.randomUUID() : undefined; // Generate once for all tests in this scan
 
     return testCases.map((testCase) => {
       const originalText = String(testCase.vars![injectVar]);
@@ -38,16 +40,13 @@ export function createAdaptiveMultiTurnStrategy(
           id: providerName,
           config: {
             injectVar,
-            scanId,
+            ...(generateScanId ? { scanId } : {}),
             ...config,
-            // Pass inputs from plugin config to Hydra provider
+            // Pass inputs from plugin config to the selected provider
             ...(inputs && { inputs }),
           },
         },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-        })),
+        assert: appendMetricSuffix(testCase, metricSuffix),
         metadata: {
           ...testCase.metadata,
           strategyId,

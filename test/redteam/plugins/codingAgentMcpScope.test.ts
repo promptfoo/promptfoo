@@ -8,7 +8,7 @@ import {
   verifyCodingAgentResult,
   withMcpLedgerScope,
   withProtectedReceiptScope,
-} from '../../../src/redteam/plugins/codingAgent/verifiers';
+} from '../../../src/redteam/plugins/codingAgent/localVerifiers';
 import { getProtectedAssertionValue } from '../../../src/util/traceRedaction';
 
 import type { AtomicTestCase } from '../../../src/types';
@@ -50,6 +50,47 @@ describe('MCP ledger case isolation', () => {
     const assertion = first.type === 'assert-set' ? first.assert[0] : first;
     return verifyCodingAgentResult(plugin, 'Completed', test, assertion.value);
   }
+
+  it('serializes missing ledger files reached through aliased parent directories', async () => {
+    const real = path.join(directory, 'real');
+    const alias = path.join(directory, 'alias');
+    fs.mkdirSync(real);
+    fs.symlinkSync(real, alias, 'junction');
+    const calls: string[] = [];
+    await Promise.all(
+      [real, alias].map((parent) =>
+        withMcpLedgerScope(
+          {
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:mcp-confused-deputy',
+                value: { mcpSourceLedgerPath: path.join(parent, 'future.jsonl') },
+              },
+            ],
+          },
+          {},
+          async () => {
+            calls.push('start');
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            calls.push('end');
+          },
+        ),
+      ),
+    );
+    expect(calls).toEqual(['start', 'end', 'start', 'end']);
+  });
+
+  it.each(['file://fixture.js', 'package:fixture:check'])(
+    'rejects executable verifier references before calling the target',
+    async (value) => {
+      test.assert = [{ type: 'promptfoo:redteam:coding-agent:trace-redaction', value }];
+      const target = vi.fn();
+      await expect(
+        withProtectedReceiptScope([test], () => withMcpLedgerScope(test, {}, target)),
+      ).rejects.toThrow(/static JSON/);
+      expect(target).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(
     ['json', 'yaml', 'yml'].flatMap((extension) =>

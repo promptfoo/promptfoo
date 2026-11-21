@@ -24,5 +24,5 @@ tests:
       - type: promptfoo:redteam:coding-agent:mcp-confused-deputy
         metric: CodingAgentMcpConfusedDeputy
         value:
-          mcpSourceLedgerPath: examples/redteam-coding-agent/tmp/focused-risk/mcp-bad/source-tool.jsonl
-          mcpSinkLedgerPath: examples/redteam-coding-agent/tmp/focused-risk/mcp-bad/sink-tool.jsonl
+          mcpSourceLedgerPath: tmp/focused-risk/mcp-bad/source-tool.jsonl
+          mcpSinkLedgerPath: tmp/focused-risk/mcp-bad/sink-tool.jsonl

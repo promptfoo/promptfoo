@@ -1,5 +1,5 @@
 import { asc, eq, sql } from 'drizzle-orm';
-import { getDb } from '../database/index';
+import { getDb, getDbIfExists } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
@@ -50,79 +50,23 @@ export interface AddSpansOptions {
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
+  rawAttributes = span.attributes || undefined,
 ): SpanData {
-  const rawAttributes = span.attributes ?? undefined;
-
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
     name: span.name,
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
-      ? shouldSanitizeAttributes
-        ? sanitizeTraceAttributes(rawAttributes)
-        : rawAttributes
-      : undefined,
+    attributes:
+      rawAttributes === undefined
+        ? undefined
+        : shouldSanitizeAttributes
+          ? sanitizeTraceAttributes(rawAttributes)
+          : rawAttributes,
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
   };
-}
-
-function isGraderOwnedSpan(
-  span: typeof spansTable.$inferSelect,
-  spansById: ReadonlyMap<string, typeof spansTable.$inferSelect>,
-  ownershipCache: Map<string, boolean>,
-): boolean {
-  let ancestor: typeof spansTable.$inferSelect | undefined = span;
-  const visitedSpanIds = new Set<string>();
-  let belongsToGrader = false;
-
-  while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
-    const cached = ownershipCache.get(ancestor.spanId);
-    if (cached !== undefined) {
-      belongsToGrader = cached;
-      break;
-    }
-
-    visitedSpanIds.add(ancestor.spanId);
-    if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
-      belongsToGrader = true;
-      break;
-    }
-
-    ancestor = ancestor.parentSpanId ? spansById.get(ancestor.parentSpanId) : undefined;
-  }
-
-  for (const spanId of visitedSpanIds) {
-    ownershipCache.set(spanId, belongsToGrader);
-  }
-
-  return belongsToGrader;
-}
-
-function sqliteTimestampFromMs(timestampMs: number): string {
-  return new Date(timestampMs).toISOString().slice(0, 19).replace('T', ' ');
-}
-
-function traceCreatedBefore(cutoffTime: number) {
-  const sqliteTimestampCutoff = sqliteTimestampFromMs(cutoffTime);
-  return sql`(
-    (
-      typeof(${tracesTable.createdAt}) in ('integer', 'real')
-      and ${tracesTable.createdAt} < ${cutoffTime}
-    )
-    or (
-      typeof(${tracesTable.createdAt}) = 'text'
-      and (
-        (
-          cast(${tracesTable.createdAt} as integer) > 1000000000000
-          and cast(${tracesTable.createdAt} as integer) < ${cutoffTime}
-        )
-        or datetime(${tracesTable.createdAt}) < datetime(${sqliteTimestampCutoff})
-      )
-    )
-  )`;
 }
 
 function computeDepth(
@@ -139,8 +83,7 @@ function computeDepth(
     return 0;
   }
 
-  const parentDepth = computeDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache);
-  const currentDepth = parentDepth + 1;
+  const currentDepth = computeDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache) + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
 }
@@ -161,8 +104,7 @@ export class TraceStore {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
-      const db = await this.getDatabase();
-      await db
+      await (await this.getDatabase())
         .insert(tracesTable)
         .values({
           id: crypto.randomUUID(),
@@ -170,7 +112,10 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          metadata: trace.metadata,
+          metadata:
+            trace.metadata?.privateForensicEvidence === true
+              ? { privateForensicEvidence: true }
+              : trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
@@ -190,17 +135,16 @@ export class TraceStore {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
       const db = await this.getDatabase();
 
-      // Only verify trace exists if not skipping the check (for OTLP scenarios)
-      if (options?.skipTraceCheck) {
-        logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
-      } else {
-        logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
-        const trace = await db
-          .select()
-          .from(tracesTable)
-          .where(eq(tracesTable.traceId, traceId))
-          .limit(1);
-
+      // Imports and delayed OTLP batches must respect older traces marked as private.
+      const trace = await db
+        .select()
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId))
+        .limit(1);
+      if (trace[0]?.metadata?.privateForensicEvidence === true) {
+        return { stored: false, reason: 'Trace is private' };
+      }
+      if (!options?.skipTraceCheck) {
         if (trace.length === 0) {
           const message =
             `[TraceStore] Trace ${traceId} not found, skipping ${spans.length} spans. ` +
@@ -258,7 +202,10 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
-      const db = await this.getDatabase();
+      const db = (this.db ??= await getDbIfExists());
+      if (!db) {
+        return [];
+      }
 
       // Get all traces for the evaluation
       const traces = await db
@@ -269,22 +216,24 @@ export class TraceStore {
 
       // Get spans for each trace
       const tracesWithSpans = await Promise.all(
-        traces.map(async (trace) => {
-          logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
-          const spans = await db
-            .select()
-            .from(spansTable)
-            .where(eq(spansTable.traceId, trace.traceId));
-          logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${trace.traceId}`);
+        traces
+          .filter((trace) => trace.metadata?.privateForensicEvidence !== true)
+          .map(async (trace) => {
+            logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
+            const spans = await db
+              .select()
+              .from(spansTable)
+              .where(eq(spansTable.traceId, trace.traceId));
+            logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${trace.traceId}`);
 
-          return {
-            traceId: trace.traceId,
-            evaluationId: trace.evaluationId,
-            testCaseId: trace.testCaseId,
-            metadata: trace.metadata ?? undefined,
-            spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
-          };
-        }),
+            return {
+              traceId: trace.traceId,
+              evaluationId: trace.evaluationId,
+              testCaseId: trace.testCaseId,
+              metadata: trace.metadata ?? undefined,
+              spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+            };
+          }),
       );
 
       logger.debug(`[TraceStore] Returning ${tracesWithSpans.length} traces with spans`);
@@ -311,7 +260,7 @@ export class TraceStore {
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
-      if (traces.length === 0) {
+      if (traces.length === 0 || traces[0].metadata?.privateForensicEvidence === true) {
         logger.debug(`[TraceStore] Trace ${traceId} not found`);
         return null;
       }
@@ -337,13 +286,15 @@ export class TraceStore {
   async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
     try {
       logger.debug(`[TraceStore] Fetching metadata for trace ${traceId}`);
-      const db = await this.getDatabase();
-      const traces = await db
+      const traces = await (await this.getDatabase())
         .select({ metadata: tracesTable.metadata })
         .from(tracesTable)
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
+      if (traces[0]?.metadata?.privateForensicEvidence === true) {
+        return { privateForensicEvidence: true };
+      }
       return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
@@ -356,7 +307,22 @@ export class TraceStore {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
       const db = await this.getDatabase();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-      const cutoffCondition = traceCreatedBefore(cutoffTime);
+      const cutoffCondition = sql`(
+    (
+      typeof(${tracesTable.createdAt}) in ('integer', 'real')
+      and ${tracesTable.createdAt} < ${cutoffTime}
+    )
+    or (
+      typeof(${tracesTable.createdAt}) = 'text'
+      and (
+        (
+          cast(${tracesTable.createdAt} as integer) > 1000000000000
+          and cast(${tracesTable.createdAt} as integer) < ${cutoffTime}
+        )
+        or datetime(${tracesTable.createdAt}) < datetime(${new Date(cutoffTime).toISOString().slice(0, 19).replace('T', ' ')})
+      )
+    )
+  )`;
 
       // `spans.trace_id` is FK-enforced without ON DELETE CASCADE.
       await db.transaction(async (tx) => {
@@ -393,12 +359,13 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching spans for trace ${traceId}`);
-      const db = await this.getDatabase();
-
-      const rows = await db
+      const rows = await (await this.getDatabase())
         .select()
         .from(spansTable)
-        .where(eq(spansTable.traceId, traceId))
+        .where(sql`${spansTable.traceId} = ${traceId} AND NOT EXISTS (
+          SELECT 1 FROM ${tracesTable} WHERE ${tracesTable.traceId} = ${traceId}
+          AND json_extract(${tracesTable.metadata}, '$.privateForensicEvidence') = 1
+        )`)
         .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
       const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
@@ -413,20 +380,37 @@ export class TraceStore {
 
         const rawAttributes = row.attributes ?? {};
 
-        if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
-          continue;
+        if (!includeInternalSpans) {
+          let ancestor: typeof spansTable.$inferSelect | undefined = row;
+          const visitedSpanIds = new Set<string>();
+          let belongsToGrader = false;
+
+          while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
+            const cached = graderOwnedSpanIds.get(ancestor.spanId);
+            if (cached !== undefined) {
+              belongsToGrader = cached;
+              break;
+            }
+
+            visitedSpanIds.add(ancestor.spanId);
+            if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+              belongsToGrader = true;
+              break;
+            }
+
+            ancestor = ancestor.parentSpanId ? rowsBySpanId.get(ancestor.parentSpanId) : undefined;
+          }
+
+          for (const spanId of visitedSpanIds) {
+            graderOwnedSpanIds.set(spanId, belongsToGrader);
+          }
+
+          if (belongsToGrader) {
+            continue;
+          }
         }
 
-        const spanData: SpanData = {
-          spanId: row.spanId,
-          parentSpanId: row.parentSpanId ?? undefined,
-          name: row.name,
-          startTime: row.startTime,
-          endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
-          statusCode: row.statusCode ?? undefined,
-          statusMessage: row.statusMessage ?? undefined,
-        };
+        const spanData = serializeSpan(row, shouldSanitize, rawAttributes);
 
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
@@ -473,11 +457,4 @@ export function getTraceStore(): TraceStore {
     traceStore = new TraceStore();
   }
   return traceStore;
-}
-
-export async function getTraceSpans(
-  traceId: string,
-  options: TraceSpanQueryOptions = {},
-): Promise<SpanData[]> {
-  return getTraceStore().getSpans(traceId, options);
 }

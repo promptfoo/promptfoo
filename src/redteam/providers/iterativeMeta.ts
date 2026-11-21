@@ -48,6 +48,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   gradeRedactionResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
   type TargetResponse,
@@ -81,7 +82,11 @@ interface IterativeMetaMetadata {
   storedGraderResult?: GradingResult;
   storedGraderResults?: Record<number, GradingResult>;
   redactionContentOmitted?: boolean;
-  stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached';
+  stopReason:
+    | 'Grader failed'
+    | 'Agent abandoned'
+    | 'Agent request failed'
+    | 'Max iterations reached';
   redteamHistory: {
     prompt: string;
     promptAudio?: MediaData;
@@ -91,6 +96,8 @@ interface IterativeMetaMetadata {
     outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
@@ -211,6 +218,9 @@ export async function runMetaAgentRedteam({
     test?.assert?.find((a) => a.type && a.type.includes(test.metadata?.pluginId)) ??
     test?.assert?.find((a) => a.type);
   const redactTrace = requiresTraceRedaction(test?.assert);
+  if (redactTrace && context?.test !== test) {
+    context = { ...context, vars, prompt, test };
+  }
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({
@@ -219,7 +229,9 @@ export async function runMetaAgentRedteam({
     config: {},
   });
   const shouldFetchTrace =
-    tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+    !redactTrace &&
+    tracingOptions.enabled &&
+    (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
   const traceSnapshots: TraceContextData[] = [];
 
   const sessionIds: string[] = [];
@@ -231,11 +243,11 @@ export async function runMetaAgentRedteam({
   let finalIteration = numIterations;
   let storedGraderResult: GradingResult | undefined = undefined;
   const storedGraderResults: Record<number, GradingResult> = {};
-  let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
-    'Max iterations reached';
+  let stopReason: IterativeMetaMetadata['stopReason'] = 'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
   let mediaRedactionError: string | undefined;
   let failClosedError: string | undefined;
+  let agentRequestError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
@@ -286,7 +298,10 @@ export async function runMetaAgentRedteam({
                 ? '[Hidden for privacy]'
                 : lastResponse.output,
               responseLength: lastResponse.output.length,
-              graderPassed: redteamHistory[i - 1].graderPassed || false,
+              graderPassed:
+                storedGraderResult?.metadata?.graderError === true
+                  ? undefined
+                  : redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
@@ -331,6 +346,18 @@ export async function runMetaAgentRedteam({
       logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
         error: agentResp.error,
       });
+      const remoteError = agentResp.metadata?.remoteGenerationError;
+      if (
+        !agentResp.isRefusal &&
+        remoteError?.status === 400 &&
+        remoteError?.type === 'invalid_request_error' &&
+        remoteError?.code === 'invalid_json'
+      ) {
+        agentRequestError = agentResp.error;
+        stopReason = 'Agent request failed';
+        finalIteration = i + 1;
+        break;
+      }
       continue;
     }
 
@@ -525,6 +552,9 @@ export async function runMetaAgentRedteam({
     }
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    if (targetResponse.error && options?.abortSignal?.aborted) {
+      break;
+    }
 
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
@@ -668,7 +698,7 @@ export async function runMetaAgentRedteam({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          attackPrompt,
+          finalAttackPrompt,
           targetResponse.output,
           iterationTest,
           gradingProvider,
@@ -681,7 +711,12 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult);
+        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult, {
+          prompt: finalAttackPrompt,
+          output: targetResponse.output,
+          pluginId: test.metadata?.pluginId,
+          assertion: assertToUse,
+        });
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,
@@ -689,6 +724,11 @@ export async function runMetaAgentRedteam({
         });
       }
     }
+
+    const graderError =
+      graderResult?.metadata?.graderError === true
+        ? graderResult.reason || 'Grading failed'
+        : undefined;
 
     // Store in redteam history for Messages tab
     redteamHistory.push({
@@ -706,7 +746,11 @@ export async function runMetaAgentRedteam({
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy
-      graderPassed: graderResult?.pass,
+      graderPassed: graderError ? undefined : graderResult?.pass,
+      graderError,
+      gradingInputHash: graderError
+        ? storedGraderResult?.metadata?.redteamGradingInputHash
+        : undefined,
       guardrails: undefined,
       trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: redactTrace ? undefined : computedTraceSummary,
@@ -714,8 +758,8 @@ export async function runMetaAgentRedteam({
       inputVars: currentRenderInputVars,
     });
 
-    // Check if vulnerability was achieved
-    if (graderResult?.pass === false) {
+    // Only a valid grader verdict can establish a vulnerability.
+    if (graderResult?.pass === false && !graderError) {
       vulnerabilityAchieved = true;
       bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
       bestResponse = targetResponse.output;
@@ -730,7 +774,7 @@ export async function runMetaAgentRedteam({
     }
   }
 
-  if (!lastResponse && !failClosedError) {
+  if (!lastResponse && !failClosedError && !agentRequestError) {
     failClosedError = 'Iterative Meta did not execute any target probes';
     stopReason = 'Agent abandoned';
     logger.warn('[IterativeMeta] No target probes were executed', {
@@ -739,35 +783,35 @@ export async function runMetaAgentRedteam({
     });
   }
 
-  return {
-    output: bestResponse || lastResponse?.output || '',
-    prompt: bestPrompt,
-    ...(mediaRedactionError || failClosedError
-      ? { error: mediaRedactionError || failClosedError }
-      : lastResponse?.error
-        ? { error: lastResponse.error }
-        : {}),
-    metadata: {
-      ...(mediaRedactionError && { redactionMediaOmitted: true }),
-      finalIteration,
-      vulnerabilityAchieved,
-      // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-      // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-      redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-      storedGraderResult,
-      ...(redactTrace && { storedGraderResults, redactionContentOmitted: true }),
-      stopReason,
-      redteamHistory,
-      sessionIds,
-      traceSnapshots:
-        !redactTrace && traceSnapshots.length > 0
-          ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-          : undefined,
-      // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
-      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+  const error = mediaRedactionError || agentRequestError || failClosedError || lastResponse?.error;
+  return preserveSelectedError(
+    {
+      output: bestResponse || lastResponse?.output || '',
+      prompt: bestPrompt,
+      ...(error ? { error } : {}),
+      metadata: {
+        ...(mediaRedactionError && { redactionMediaOmitted: true }),
+        ...(redactTrace && { storedGraderResults, redactionContentOmitted: true }),
+        finalIteration,
+        vulnerabilityAchieved,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        storedGraderResult,
+        stopReason,
+        redteamHistory,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+            : undefined,
+        // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    agentRequestError || failClosedError ? undefined : lastResponse,
+  );
 }
 
 class RedteamIterativeMetaProvider implements ApiProvider {
@@ -833,6 +877,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<{
     output: string;
+    error?: string;
     metadata: IterativeMetaMetadata;
     tokenUsage: TokenUsage;
   }> {

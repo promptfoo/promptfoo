@@ -15,7 +15,6 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
-  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -40,29 +39,31 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
-import {
-  extractInputVarsFromPrompt,
-  extractPromptFromTags,
-  getSessionId,
-  isBasicRefusal,
-} from '../../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../../util';
+import { MemorySystem } from '../conversationMemory';
+import { getEvalScore, getRefusalScore } from '../conversationScoring';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
-  CachedRedactionResponseError,
-  callGradingProvider,
+  captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  getTargetSessionId,
   gradeRedactionResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
   isValidChatMessageArray,
+  messagesToRedteamHistory,
+  PrivateVerificationError,
+  preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
@@ -73,7 +74,7 @@ import {
   type RedteamTracingOptions,
   resolveTracingOptions,
 } from '../tracingOptions';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT } from './prompts';
 
 import type {
   ApiProvider,
@@ -91,7 +92,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -106,16 +107,13 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoResult: boolean;
   crescendoConfidence: number | null;
   stopReason: RoundBacktrackingStopReason;
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }>;
+  successfulAttacks?: SuccessfulAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   storedGraderResults?: Record<number, GradingResult>;
   redactionContentOmitted?: boolean;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -158,29 +156,6 @@ interface CrescendoConfig {
   [key: string]: unknown;
 }
 
-export class MemorySystem {
-  private conversations: Map<string, Message[]> = new Map();
-
-  addMessage(conversationId: string, message: Message) {
-    if (!this.conversations.has(conversationId)) {
-      this.conversations.set(conversationId, []);
-    }
-    this.conversations.get(conversationId)!.push(message);
-  }
-
-  getConversation(conversationId: string): Message[] {
-    return this.conversations.get(conversationId) || [];
-  }
-
-  duplicateConversationExcludingLastTurn(conversationId: string): string {
-    const originalConversation = this.getConversation(conversationId);
-    const newConversationId = crypto.randomUUID();
-    const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
-    this.conversations.set(newConversationId, newConversation);
-    return newConversationId;
-  }
-}
-
 export class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
   private readonly nunjucks: any;
@@ -195,11 +170,7 @@ export class CrescendoProvider implements ApiProvider {
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }> = [];
+  private successfulAttacks: SuccessfulAttack[] = [];
 
   constructor(config: CrescendoConfig) {
     // Create a copy of config to avoid mutating the original
@@ -228,13 +199,17 @@ export class CrescendoProvider implements ApiProvider {
 
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
+  }
 
-    logger.debug('[Crescendo] CrescendoProvider initialized with config', { config });
+  private attackerUsesRemoteProvider(): boolean {
+    // Remote task handlers only know the built-in default. An explicit
+    // redteamProvider must stay local.
+    return shouldGenerateRemote() && !this.config.redteamProvider;
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
@@ -256,7 +231,7 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
@@ -276,19 +251,14 @@ export class CrescendoProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoResponse> {
-    logger.debug('[Crescendo] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
-    logger.debug(`[Crescendo] callApi invoked with prompt: ${prompt}`);
-
     this.userGoal = context.test?.metadata?.goal || String(context.vars[this.config.injectVar]);
-
-    logger.debug(`[Crescendo] User goal: ${this.userGoal}`);
 
     return this.runAttack({
       prompt: context.prompt,
@@ -318,10 +288,6 @@ export class CrescendoProvider implements ApiProvider {
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
   }): Promise<CrescendoResponse> {
-    logger.debug(
-      `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
-    );
-
     const session: { id?: string } = {};
 
     // Reset successful attacks array for each new attack
@@ -333,11 +299,15 @@ export class CrescendoProvider implements ApiProvider {
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
     let mediaRedactionError: string | undefined;
+    let hasTargetResponse = false;
+    let lastAttemptError: string | undefined;
+    let lastResponseMessages: Message[] = [];
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let storedGraderResult: GradingResult | undefined = undefined;
+    let storedGraderResult: GradingResult | undefined;
+    let flaggedRound: FlaggedTurn | undefined;
     const storedGraderResults: Record<number, GradingResult> = {};
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
@@ -367,8 +337,11 @@ export class CrescendoProvider implements ApiProvider {
       test,
       config: this.config,
     });
+    const redactTrace = requiresTraceRedaction(test?.assert);
     const shouldFetchTrace =
-      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+      !redactTrace &&
+      tracingOptions.enabled &&
+      (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
@@ -399,11 +372,6 @@ export class CrescendoProvider implements ApiProvider {
     // Fallback: if no assertion matches the pluginId, use the first assertion with a type
     if (!assertToUse) {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
-
-    const redactTrace = requiresTraceRedaction(test?.assert);
-    if (redactTrace) {
-      tracingOptions.includeInAttack = false;
     }
 
     const { getGraderById } = await import('../../graders');
@@ -447,7 +415,6 @@ export class CrescendoProvider implements ApiProvider {
           materializedVars,
         } = await this.getAttackPrompt(
           roundNum,
-          evalFlag,
           lastResponse,
           lastFeedback,
           objectiveScore,
@@ -461,8 +428,6 @@ export class CrescendoProvider implements ApiProvider {
           logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
           continue;
         }
-
-        logger.debug(`[Crescendo] Generated attack prompt: ${attackPrompt}`);
 
         const {
           response,
@@ -483,6 +448,13 @@ export class CrescendoProvider implements ApiProvider {
           { inputMaterialization, materializationHandled, materializedVars },
           session,
         );
+        if (transformResult?.error) {
+          lastAttemptError = transformResult.error;
+          if (transformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+          }
+          continue;
+        }
         lastResponse = response;
         if (redactTrace) {
           storedGraderResult = await gradeRedactionResponse(
@@ -496,6 +468,8 @@ export class CrescendoProvider implements ApiProvider {
         if (lastResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= lastResponse.error;
         }
+        hasTargetResponse = true;
+        lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
@@ -507,13 +481,18 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-        if (transformResult?.prompt) {
-          lastFinalAttackPrompt = transformResult.prompt;
-        }
+        lastFinalAttackPrompt =
+          transformResult?.prompt ||
+          getLastMessageContent(lastResponseMessages, 'user') ||
+          attackPrompt;
 
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        if (lastResponse.error && options?.abortSignal?.aborted) {
+          exitReason = 'Target error';
+          break;
+        }
 
         if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
@@ -535,6 +514,10 @@ export class CrescendoProvider implements ApiProvider {
           break;
         }
 
+        if (lastResponse.error) {
+          continue;
+        }
+
         // Check if the target is asking a blocking question that needs an answer to proceed
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
@@ -547,9 +530,6 @@ export class CrescendoProvider implements ApiProvider {
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
-          logger.debug(
-            `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
-          );
 
           const { response: unblockingResponse, transformResult: unblockingTransform } =
             await this.sendPrompt(
@@ -567,6 +547,13 @@ export class CrescendoProvider implements ApiProvider {
               undefined,
               session,
             );
+
+          if (unblockingTransform?.error) {
+            if (unblockingTransform.tokenUsage) {
+              accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
+            }
+            continue;
+          }
 
           if (unblockingTransform?.tokenUsage) {
             accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
@@ -588,6 +575,15 @@ export class CrescendoProvider implements ApiProvider {
           if (lastResponse.metadata?.redactionMediaOmitted === true) {
             mediaRedactionError ??= lastResponse.error;
           }
+          lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
+          lastFinalAttackPrompt =
+            unblockingTransform?.prompt ||
+            getLastMessageContent(lastResponseMessages, 'user') ||
+            unblockingResult.unblockingPrompt;
+          if (lastResponse.error && options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -605,15 +601,13 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
-          attackPrompt,
-          lastResponse.output,
-          totalTokenUsage,
-          options,
-        );
-        logger.debug(
-          `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
-        );
+        if (lastResponse.error) {
+          continue;
+        }
+
+        const [isRefusal, refusalRationale] = redactTrace
+          ? ([false, ''] as const)
+          : await this.getRefusalScore(attackPrompt, lastResponse.output, totalTokenUsage, options);
 
         if (isRefusal && !this.stateful) {
           logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
@@ -710,10 +704,9 @@ export class CrescendoProvider implements ApiProvider {
             // Provide prior turns separately from the latest assistant output
             // under test. Context-aware graders can use this to reason over
             // provenance without duplicating the current turn in `llmOutput`.
-            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
-              prompt: turn.prompt,
-              output: turn.output,
-            }));
+            const conversationHistoryForGrading = messagesToRedteamHistory(
+              lastResponseMessages,
+            ).slice(0, -1);
             gradingContext = {
               ...(gradingContext ?? {}),
               redteamHistory: [...redteamHistory],
@@ -723,10 +716,20 @@ export class CrescendoProvider implements ApiProvider {
               ),
             };
 
+            const gradedTurn = {
+              prompt:
+                lastFinalAttackPrompt ||
+                getLastMessageContent(lastResponseMessages, 'user') ||
+                attackPrompt,
+              output: lastResponse.output,
+              messages: lastResponseMessages,
+              guardrails: lastResponse.guardrails,
+              transformDisplayVars: lastTransformDisplayVars,
+            };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              attackPrompt,
-              lastResponse.output,
+              gradedTurn.prompt,
+              gradedTurn.output,
               test,
               provider,
               getGraderAssertionValue(assertToUse),
@@ -736,10 +739,19 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                ...gradedTurn,
+                pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
+              },
+            );
+            flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
 
@@ -780,6 +792,10 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
+        if (redactTrace) {
+          // Scoring a placeholder adds a remote request and cannot verify the response.
+          continue;
+        }
         const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -796,16 +812,20 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Crescendo] Operation aborted');
           throw error;
         }
         if (
-          error instanceof CachedRedactionResponseError ||
+          error instanceof PrivateVerificationError ||
           isRemoteMaterializationUpgradeError(error)
         ) {
           throw error;
         }
+        if (redactTrace) {
+          throw new PrivateVerificationError('Private target verification failed');
+        }
+        lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
@@ -823,9 +843,6 @@ export class CrescendoProvider implements ApiProvider {
       `\n[Crescendo] FINAL RESULTS, TOTAL ROUNDS: ${roundNum}, TOTAL BACKTRACKS ${backtrackCount}:\n`,
     );
 
-    this.logChatHistory(this.targetConversationId);
-    this.logChatHistory(this.redTeamingChatConversationId);
-
     // Determine final exit reason and result
     const hasSuccessfulAttacks = this.successfulAttacks.length > 0;
     if (hasSuccessfulAttacks) {
@@ -833,47 +850,62 @@ export class CrescendoProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = this.memory.getConversation(this.targetConversationId);
-    const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
+    const reported = flaggedRound ?? {
       output: lastResponse.output,
-      ...(mediaRedactionError || lastResponse.error
-        ? { error: mediaRedactionError || lastResponse.error }
-        : {}),
-      prompt: finalPrompt,
-      metadata: {
-        ...(mediaRedactionError && { redactionMediaOmitted: true }),
-        sessionId: getSessionId(lastResponse, context),
-        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
-        crescendoRoundsCompleted: roundNum,
-        crescendoBacktrackCount: backtrackCount,
-        crescendoResult: evalFlag,
-        crescendoConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
-        ...(redactTrace && {
-          storedGraderResults,
-          redactionContentOmitted: true,
-        }),
-        traceSnapshots:
-          !redactTrace && traceSnapshots.length > 0
-            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-      },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
+      prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
+      messages: lastResponseMessages,
+      guardrails: lastResponse.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
     };
+    const finalPrompt = getLastMessageContent(reported.messages, 'user');
+    const error =
+      lastResponse.error ||
+      (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
+    return preserveSelectedError(
+      {
+        output: reported.output,
+        ...(mediaRedactionError
+          ? { error: mediaRedactionError }
+          : !flaggedRound && error
+            ? { error }
+            : {}),
+        prompt: finalPrompt,
+        metadata: {
+          ...(!redactTrace && { sessionId: getSessionId(lastResponse, context) }),
+          ...(redactTrace && { storedGraderResults, redactionContentOmitted: true }),
+          ...(mediaRedactionError && { redactionMediaOmitted: true }),
+          // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+          redteamFinalPrompt: reported.prompt,
+          messages: reported.messages as Record<string, any>[],
+          crescendoRoundsCompleted: roundNum,
+          crescendoBacktrackCount: backtrackCount,
+          crescendoResult: evalFlag,
+          crescendoConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult: resolveStoredGraderResult(
+            flaggedRound?.graderResult,
+            storedGraderResult,
+          ),
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+              : undefined,
+          ...(reported.transformDisplayVars && {
+            transformDisplayVars: reported.transformDisplayVars,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: reported.guardrails,
+      },
+      lastResponse,
+    );
   }
 
   private async getAttackPrompt(
     roundNum: number,
-    evalFlag: boolean,
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore: { value: number; rationale: string } | undefined,
@@ -882,12 +914,6 @@ export class CrescendoProvider implements ApiProvider {
     totalTokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoAttackPromptResponse> {
-    logger.debug(
-      `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
-        objectiveScore,
-      )}`,
-    );
-
     let promptText =
       `This is round ${roundNum} of ${this.maxTurns}. ` +
       `Generate the next question in the series of questions you need to ask ` +
@@ -924,7 +950,6 @@ export class CrescendoProvider implements ApiProvider {
 
     const redTeamingHistory = this.memory.getConversation(this.redTeamingChatConversationId);
     logger.debug(`Sending to red teaming chat:`);
-    this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
     const response = await redTeamingChat.callApi(
       JSON.stringify(redTeamingHistory),
@@ -933,7 +958,7 @@ export class CrescendoProvider implements ApiProvider {
           raw: JSON.stringify(redTeamingHistory),
           label: 'history',
         },
-        vars: shouldGenerateRemote()
+        vars: this.attackerUsesRemoteProvider()
           ? buildRemoteMaterializationContextVars({
               injectVar: this.config.injectVar,
               inputs: this.config.inputs,
@@ -958,14 +983,14 @@ export class CrescendoProvider implements ApiProvider {
     }
     // Check if the attack model refused to generate the prompt
     if (response.isRefusal) {
-      logger.debug('[Crescendo] Attack model refused to generate prompt', { response });
+      logger.debug('[Crescendo] Attack model refused to generate prompt');
       return {
         generatedQuestion: undefined,
         tokenUsage: response.tokenUsage,
       };
     }
     if (!response.output) {
-      logger.debug('[Crescendo] No output from redteam provider', { response });
+      logger.debug('[Crescendo] No output from redteam provider');
       return {
         generatedQuestion: undefined,
         tokenUsage: response.tokenUsage,
@@ -992,7 +1017,6 @@ export class CrescendoProvider implements ApiProvider {
     }
     if (missingKeys.length > 0) {
       logger.warn(`[Crescendo] Missing keys in response: ${missingKeys.join(', ')}`);
-      logger.warn(`[Crescendo] Response: ${response.output}`);
     }
 
     // Handle multi-input mode where generatedQuestion is an object
@@ -1000,20 +1024,6 @@ export class CrescendoProvider implements ApiProvider {
       typeof parsedOutput.generatedQuestion === 'object'
         ? JSON.stringify(parsedOutput.generatedQuestion)
         : parsedOutput.generatedQuestion;
-
-    logger.debug(dedent`
-      [Crescendo] Received from red teaming chat:
-
-      generatedQuestion: ${generatedQuestion}
-      rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
-      lastResponseSummary: ${parsedOutput.lastResponseSummary}
-    `);
-
-    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
-      logger.debug(
-        `[Crescendo] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
-      );
-    }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
       role: 'assistant',
@@ -1059,7 +1069,7 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     // Extract input vars from the processed prompt for multi-input mode
-    if (this.config.inputs && shouldGenerateRemote()) {
+    if (this.config.inputs && this.attackerUsesRemoteProvider()) {
       assertRemoteMaterializationHandled(remoteMaterialization, 'Crescendo multi-input generation');
     }
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
@@ -1068,14 +1078,14 @@ export class CrescendoProvider implements ApiProvider {
       | undefined;
     if (
       this.config.inputs &&
-      shouldGenerateRemote() &&
+      this.attackerUsesRemoteProvider() &&
       !currentInputVars &&
       !remoteMaterialization?.materializedVars
     ) {
       throw new Error('Crescendo remote multi-input generation returned an invalid prompt format');
     }
     if ((currentInputVars || remoteMaterialization?.materializedVars) && this.config.inputs) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           remoteMaterialization ?? {},
           currentInputVars ?? {},
@@ -1111,28 +1121,34 @@ export class CrescendoProvider implements ApiProvider {
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
+    const pendingMessages: Message[] = [];
     try {
       const parsed = extractFirstJsonObject<Message[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
           message.role === 'system' &&
-          this.memory.getConversation(this.targetConversationId).some((m) => m.role === 'system')
+          [...this.memory.getConversation(this.targetConversationId), ...pendingMessages].some(
+            (m) => m.role === 'system',
+          )
         ) {
           // No duplicate system messages
           continue;
         }
-        this.memory.addMessage(this.targetConversationId, message);
+        pendingMessages.push(message);
       }
     } catch {
       // Otherwise, just send the rendered prompt as a string
-      this.memory.addMessage(this.targetConversationId, {
+      pendingMessages.push({
         role: 'user',
         content: renderedPrompt,
       });
     }
 
-    const conversationHistory = this.memory.getConversation(this.targetConversationId);
+    const conversationHistory = [
+      ...this.memory.getConversation(this.targetConversationId),
+      ...pendingMessages,
+    ];
     let targetPrompt: string;
 
     if (this.stateful) {
@@ -1160,7 +1176,6 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug(
       `[Crescendo] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
     );
-    logger.debug(targetPrompt);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Apply per-turn layer transforms if configured (e.g., audio, base64)
@@ -1262,24 +1277,31 @@ export class CrescendoProvider implements ApiProvider {
       targetContext,
       options,
     );
-    if (this.stateful && targetResponse.sessionId) {
-      session.id = targetResponse.sessionId;
+    for (const message of pendingMessages) {
+      this.memory.addMessage(this.targetConversationId, message);
+    }
+    if (this.stateful) {
+      session.id = getTargetSessionId(targetResponse) ?? session.id;
     }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
-    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Crescendo] Target response', { response: targetResponse });
 
     invariant(
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
       '[Crescendo] Target did not return an output property',
     );
-    logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
       role: 'assistant',
       content: targetResponse.output,
     });
 
-    if (shouldFetchTrace && tracingOptions && !targetResponse.cached) {
+    if (
+      shouldFetchTrace &&
+      tracingOptions &&
+      !targetResponse.cached &&
+      !(targetResponse.error && options?.abortSignal?.aborted)
+    ) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
@@ -1326,72 +1348,18 @@ export class CrescendoProvider implements ApiProvider {
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
-    logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
-      logger.debug(
-        '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
-      );
-      return [true, 'The output contains a standard refusal.'];
-    }
-
-    // Otherwise, use the scoring chat to grade the refusal
-    const refusalInput = JSON.stringify({
-      conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const refusalBody = JSON.stringify([
-      { role: 'system', content: refusalSystemPrompt },
-      { role: 'user', content: refusalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await callGradingProvider(
-      scoringProvider,
-      refusalBody,
+    return getRefusalScore(
       {
-        prompt: {
-          raw: refusalBody,
-          label: 'refusal',
-        },
-        vars: {},
+        logPrefix: 'Crescendo',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      attackPrompt,
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
-    }
-
-    logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
-
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
-
-    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
-
-    return [parsed.value, parsed.rationale];
   }
 
   private async getEvalScore(
@@ -1399,85 +1367,21 @@ export class CrescendoProvider implements ApiProvider {
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<any> {
-    logger.debug(
-      `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
-    );
-    const evalInput = JSON.stringify({
-      conversationObjective: this.userGoal,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const evalBody = JSON.stringify([
-      { role: 'system', content: evalSystemPrompt },
-      { role: 'user', content: evalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await callGradingProvider(
-      scoringProvider,
-      evalBody,
+    return getEvalScore(
       {
-        prompt: {
-          raw: evalBody,
-          label: 'eval',
-        },
-        vars: {},
+        logPrefix: 'Crescendo',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
-    }
-
-    logger.debug(`[Crescendo] Eval score response: ${evalResponse.output}`);
-
-    const parsed =
-      typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
-        : evalResponse.output;
-
-    logger.debug('[Crescendo] Eval score parsed response', { parsed });
-    invariant(
-      typeof parsed.value === 'boolean',
-      `Expected eval grader value to be a boolean: ${parsed}`,
-    );
-    invariant(
-      typeof parsed.metadata === 'number',
-      `Expected eval grader metadata to be a number: ${parsed}`,
-    );
-
-    return parsed;
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {
     return this.memory.duplicateConversationExcludingLastTurn(conversationId);
-  }
-
-  private logChatHistory(conversationId: string, _lastMessageOnly = false): void {
-    const messages = this.memory.getConversation(conversationId);
-    logger.debug(`[Crescendo] Memory for conversation ${conversationId}:`);
-    for (const message of messages) {
-      try {
-        logger.debug(`... ${message.role}: ${message.content.slice(0, 100)} ...`);
-      } catch (error) {
-        logger.warn(`Error logging message in conversation: ${error}`);
-      }
-    }
   }
 
   private recordSuccessfulAttack(roundNum: number, attackPrompt: string, response: string): void {

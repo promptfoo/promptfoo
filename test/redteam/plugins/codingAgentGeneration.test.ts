@@ -500,16 +500,17 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(tests[0].vars?.task).toContain('examples/openai-agents/tmp/trace-export.json');
   });
 
-  it('keeps private nested modifiers out of remote generation', () => {
+  it('keeps private nested modifiers out of local and remote generation', async () => {
     const config = {
       modifiers: {
-        instructions: 'Public generation instruction',
+        testGenerationInstructions: 'Public generation instruction',
         rawReceipt: 'PRIVATE_MODIFIER_RECEIPT',
         nested: { ledger: 'PRIVATE_MODIFIER_LEDGER', publicHint: 'Public hint' },
       },
     };
+    const callApi = vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Fixture stop'));
     const plugin = new CodingAgentGeneratedPlugin(
-      { id: () => 'fixture', callApi: vi.fn<ApiProvider['callApi']>() },
+      { id: () => 'fixture', callApi },
       'Report agent',
       'task',
       getSpec('coding-agent:trace-redaction'),
@@ -519,8 +520,65 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(remote).not.toContain('PRIVATE_MODIFIER_');
     expect(remote).toContain('Public generation instruction');
     expect(remote).toContain('Public hint');
+    await expect(plugin.generateTests(1)).rejects.toThrow();
+    expect(callApi).toHaveBeenCalled();
+    expect(JSON.stringify(callApi.mock.calls)).not.toContain('PRIVATE_MODIFIER_');
+    expect(callApi.mock.calls[0][0]).toContain('Public generation instruction');
     expect(config.modifiers.rawReceipt).toBe('PRIVATE_MODIFIER_RECEIPT');
   });
+
+  const marker = 'DUMMY_VALUE_123';
+  const privateCases: (PluginConfig & { scenarioContext?: string })[] = [
+    { examples: [`Public label ${marker}`] },
+    { inputs: { rawReceipt: 'Private input' } },
+    { inputs: { task: { description: marker } } },
+    { modifiers: { nested: { [marker]: 'Label' } } },
+    { targetManifest: { notes: [Buffer.from(marker).toString('base64')] } },
+    { scenarioContext: 'Read fixtures/private.txt' },
+    {
+      examples: ['Label for nested/private.txt'],
+      modifiers: { sourceLedgerPath: 'nested/private.txt' },
+    },
+  ];
+  it.each(privateCases)(
+    'rejects a private generation field before calling either provider',
+    async (fields) => {
+      const callApi = vi.fn<ApiProvider['callApi']>();
+      const config = {
+        language: 'en',
+        ...fields,
+        rawReceipt: marker,
+        rawReceiptPath: 'fixtures/private.txt',
+      };
+      const plugin = new CodingAgentGeneratedPlugin(
+        { id: () => 'fixture', callApi },
+        'Report agent',
+        'task',
+        getSpec('coding-agent:trace-redaction'),
+        config,
+      );
+      expect(() => plugin.getRemoteGenerationConfig()).toThrow(
+        /^Invalid or private coding-agent generation data/,
+      );
+      await expect(plugin.generateTests(1)).rejects.toThrow(
+        /^Invalid or private coding-agent generation data/,
+      );
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'excludes best-of-n when every response must be inspected for %s',
+    (id) => {
+      const plugin = new CodingAgentGeneratedPlugin(
+        { id: () => 'fixture', callApi: vi.fn<ApiProvider['callApi']>() },
+        'Report agent',
+        'task',
+        getSpec(id),
+      );
+      expect(plugin.getRemoteGenerationConfig().excludeStrategies).toContain('best-of-n');
+    },
+  );
 
   it('validates remote examples and strips unknown input description fields', () => {
     const config = {

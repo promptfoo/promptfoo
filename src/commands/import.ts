@@ -14,6 +14,7 @@ import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeConfigForPersistence } from '../util/sanitizer';
+import { configRequiresTraceRedaction } from '../util/verifierPrivacy';
 import type { Command } from 'commander';
 
 import type {
@@ -363,6 +364,26 @@ function prepareImportArtifacts(
   traces: TraceData[];
   blobAssets: PreparedBlobAsset[];
 } {
+  const privateImport =
+    configRequiresTraceRedaction(evalData.config) ||
+    configRequiresTraceRedaction(evalData.results?.results) ||
+    configRequiresTraceRedaction(evalData.results?.table?.body);
+  if (privateImport) {
+    evalData.config = {
+      ...evalData.config,
+      metadata: { ...evalData.config?.metadata, privatePrompts: true },
+    };
+    // Older exports can repeat protected text outside the rows. Derive
+    // variable names from projected rows and discard unowned free text.
+    delete evalData.vars;
+    delete evalData.runtimeOptions;
+    delete evalData.description;
+    delete evalData.config.description;
+    // Imported trace IDs and blob references do not prove which row owns
+    // their contents. Drop the attachments before touching disk or --force.
+    evalData.results = sanitizeLegacyResults(evalData.results, evalData.config);
+    return { traces: [], blobAssets: [] };
+  }
   const traces = importV3 ? prepareTraces(evalData.traces) : [];
   const blobAssets =
     importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
@@ -447,31 +468,20 @@ export function importCommand(program: Command) {
 
         const importId = extractEvalId(evalData);
         const importCreatedAt = extractCreatedAt(evalData);
-        const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
 
-        let formatChecked = false;
         let importV3 = false;
-        let importLegacy = false;
-        let artifactsPrepared = false;
-        let traces: TraceData[] = [];
-        let blobAssets: PreparedBlobAsset[] = [];
-        const validateImportFormat = () => {
-          if (!formatChecked) {
+        let artifacts: ReturnType<typeof prepareImportArtifacts> | undefined;
+        const prepareArtifacts = () => {
+          if (!artifacts) {
             importV3 = isImportableV3Results(evalData.results);
-            importLegacy = isImportableLegacyResults(evalData.results);
+            const importLegacy = isImportableLegacyResults(evalData.results);
             if (!importV3 && !importLegacy) {
               throw new Error('Unsupported eval export results format');
             }
-            formatChecked = true;
+            artifacts = prepareImportArtifacts(evalData, importV3);
           }
-        };
-        const prepareArtifacts = () => {
-          if (!artifactsPrepared) {
-            validateImportFormat();
-            ({ traces, blobAssets } = prepareImportArtifacts(evalData, importV3));
-            artifactsPrepared = true;
-          }
+          return artifacts;
         };
 
         // Validate replacement artifacts before consulting the database. A
@@ -496,7 +506,7 @@ export function importCommand(program: Command) {
           }
         }
 
-        prepareArtifacts();
+        const { traces, blobAssets } = prepareArtifacts();
 
         // Restore embedded media before the destructive replace so a corrupt
         // artifact cannot delete the existing eval. blobAssets is empty for v2.
@@ -507,7 +517,9 @@ export function importCommand(program: Command) {
           newId: Boolean(cmdObj.newId),
           importId,
           importCreatedAt,
-          importAuthor,
+          importAuthor: evalData.config?.metadata?.privatePrompts
+            ? undefined
+            : extractAuthor(evalData),
         };
         evalId = importV3
           ? await createImportedV3Eval(evalData, traces, blobAssets, context)

@@ -1,14 +1,13 @@
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { setupTestServer } from '../util/testServer';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -19,28 +18,9 @@ vi.mock('../../src/database/signal', async () => {
 });
 
 describe('eval routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
   const testEvalIds = new Set<string>();
 
-  beforeAll(async () => {
-    await runDbMigrations();
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp, runDbMigrations);
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -135,7 +115,45 @@ describe('eval routes', () => {
     });
   });
 
+  it('refuses to replay protected prompts without their privacy assertions', async () => {
+    const evaluation = await Eval.create({ providers: ['echo'] }, [], { privatePrompts: true });
+    testEvalIds.add(evaluation.id);
+    const res = await api.post('/api/eval/replay').send({
+      evaluationId: evaluation.id,
+      prompt: 'PRIVATE_REPLAY_PROMPT',
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).not.toContain('PRIVATE_REPLAY_PROMPT');
+  });
+
   describe('post("/:evalId/results/:id/rating")', () => {
+    it('returns only projected grading details when a private result is rated', async () => {
+      const prompt = createCompletedPrompt();
+      const evaluation = await Eval.create(
+        { defaultTest: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] } },
+        [prompt],
+        { completedPrompts: [prompt] },
+      );
+      testEvalIds.add(evaluation.id);
+      await evaluation.addResult(createEvaluateResult({ prompt }));
+      const [result] = await evaluation.getResults();
+      invariant(result.id, 'Result ID is required');
+      const res = await api
+        .post(`/api/eval/${evaluation.id}/results/${result.id}/rating`)
+        .send({ pass: false, score: 0, reason: 'PRIVATE_RATING_DETAILS' });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: result.id,
+        evalId: evaluation.id,
+        success: false,
+        score: 0,
+      });
+      expect(JSON.stringify(res.body)).not.toContain('PRIVATE_RATING_DETAILS');
+      expect(JSON.stringify(await EvalResult.findById(result.id))).not.toContain(
+        'PRIVATE_RATING_DETAILS',
+      );
+    });
+
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
       const evalB = await EvalFactory.create();
@@ -400,6 +418,7 @@ describe('eval routes', () => {
     it('preserves config tests returned from the table endpoint when saved back', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
+      const originalTable = await eval_.getTable();
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -408,13 +427,19 @@ describe('eval routes', () => {
 
       const patchRes = await api
         .patch(`/api/eval/${eval_.id}`)
-        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+        .send({ config: { ...res.body.config, description: 'renamed eval', otherField: 'value' } });
 
       expect(patchRes.status).toBe(200);
+      expect(patchRes.body).toEqual({ message: 'Eval updated successfully' });
 
       const updatedEval = await Eval.findById(eval_.id);
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.config.tests).toHaveLength(2);
+      expect(updatedEval.config).toMatchObject({
+        description: 'renamed eval',
+        otherField: 'value',
+      });
+      expect(await updatedEval.getTable()).toEqual(originalTable);
     });
 
     it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {

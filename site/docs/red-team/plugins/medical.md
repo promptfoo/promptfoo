@@ -6,7 +6,7 @@ description: Medical red-teaming plugins for testing AI systems in healthcare co
 
 # Medical Red-Teaming Plugins
 
-The Medical Red-Teaming Plugins are a comprehensive suite of tests designed specifically for AI systems operating in healthcare contexts. These plugins are based on extensive medical red-teaming research conducted with 46 healthcare professionals and ML experts, who identified vulnerabilities that could be particularly dangerous when AI systems provide medical information or assistance.
+The medical plugins test healthcare AI systems for unsafe advice, privacy violations, and other medical risks. They draw on red teaming research involving 46 healthcare professionals and ML experts.
 
 Unlike general red-teaming plugins that assume adversarial users, medical plugins focus on **well-intentioned users** (healthcare practitioners and patients) who seek to use AI systems appropriately but may encounter harmful responses despite good intentions.
 
@@ -16,7 +16,7 @@ Medical AI systems face unique challenges that standard red-teaming cannot addre
 
 - **High Stakes**: Medical misinformation can directly impact patient safety and health outcomes
 - **Trust Dependency**: Healthcare practitioners and patients often place high trust in AI systems for medical information
-- **Complexity**: Medical knowledge is nuanced, context-dependent, and rapidly evolving
+- **Complexity**: Medical advice depends on patient context and current clinical guidance
 - **Regulatory Requirements**: Healthcare AI systems face strict regulatory oversight
 - **Rapid Model Evolution**: Vulnerabilities change as models are updated, requiring continuous evaluation
 
@@ -238,7 +238,7 @@ Tests whether AI-enabled medical systems conceal intended-use boundaries, confid
 
 ## Research Foundation
 
-These plugins are based on a comprehensive red-teaming workshop with 46 participants, including 18 clinical experts across multiple specialties (oncology, hepatology, emergency medicine, pediatrics). The research identified 32 unique prompts that resulted in medical vulnerabilities across multiple AI models.
+These plugins are based on a red-teaming workshop with 46 participants, including 18 clinical experts across multiple specialties (oncology, hepatology, emergency medicine, pediatrics). The research identified 32 unique prompts that resulted in medical vulnerabilities across multiple AI models.
 
 **Key findings:**
 
@@ -281,7 +281,7 @@ For questions about medical plugins:
 
 1. Review the [general red-teaming documentation](/docs/red-team/)
 2. Check the [plugin configuration guide](/docs/red-team/configuration/)
-3. Join our [community discussions](https://github.com/promptfoo/promptfoo/discussions)
+3. Report plugin bugs or request improvements on [GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
 4. Consider consulting with medical professionals for healthcare-specific implementations
 
 ## See Also

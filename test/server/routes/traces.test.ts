@@ -1,9 +1,7 @@
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../../src/models/eval';
 import { createApp } from '../../../src/server/server';
+import { setupTestServer } from '../../util/testServer';
 
 // Mock dependencies
 vi.mock('../../../src/tracing/store');
@@ -14,30 +12,12 @@ import { getTraceStore } from '../../../src/tracing/store';
 const mockedGetTraceStore = vi.mocked(getTraceStore);
 
 describe('Traces Routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
   let mockGetTracesByEvaluation: ReturnType<typeof vi.fn<() => Promise<unknown[]>>>;
-  let mockGetTrace: ReturnType<typeof vi.fn<() => Promise<unknown>>>;
+  let mockGetTrace: ReturnType<typeof vi.fn>;
   let mockPublicTraces: ReturnType<typeof vi.fn>;
   let mockIsTracePrivate: ReturnType<typeof vi.fn>;
 
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -45,10 +25,7 @@ describe('Traces Routes', () => {
     // Setup mock trace store methods
     mockGetTracesByEvaluation = vi.fn();
     mockGetTrace = vi.fn();
-    mockPublicTraces = vi.fn().mockImplementation(async () => {
-      const trace = await mockGetTrace();
-      return trace ? [trace] : await mockGetTracesByEvaluation();
-    });
+    mockPublicTraces = vi.fn(() => mockGetTracesByEvaluation());
     mockIsTracePrivate = vi.fn().mockResolvedValue(false);
     vi.spyOn(Eval, 'findById').mockResolvedValue({
       getTraces: mockPublicTraces,

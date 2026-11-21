@@ -20,6 +20,7 @@ import {
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -47,12 +48,15 @@ import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
-  CachedRedactionResponseError,
   callTargetProvider,
+  captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
+  getTargetSessionId,
   gradeRedactionResponse,
+  PrivateVerificationError,
+  resolveStoredGraderResult,
   runRedteamGrader,
   tryUnblocking,
 } from './shared';
@@ -77,10 +81,14 @@ import type {
 } from '../../types/providers';
 import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
-import type { Message } from './shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from './shared';
 
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
+
+interface SuccessfulGoatAttack extends SuccessfulAttack {
+  traceSummary?: string;
+}
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -88,17 +96,13 @@ const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-    traceSummary?: string;
-  }>;
+  successfulAttacks?: SuccessfulGoatAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   storedGraderResults?: Record<number, GradingResult>;
   redactionContentOmitted?: boolean;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -145,12 +149,7 @@ export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
   private readonly nunjucks: any;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-    traceSummary?: string;
-  }> = [];
+  private successfulAttacks: SuccessfulGoatAttack[] = [];
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -218,12 +217,16 @@ export default class GoatProvider implements ApiProvider {
       test: context?.test,
       config: this.config,
     });
+    const redactTrace = requiresTraceRedaction(
+      (context?.test as AtomicTestCase | undefined)?.assert,
+    );
     const shouldFetchTrace =
-      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+      !redactTrace &&
+      tracingOptions.enabled &&
+      (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
     let response: Response | undefined = undefined;
-    logger.debug('[GOAT] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -262,6 +265,7 @@ export default class GoatProvider implements ApiProvider {
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
     const storedGraderResults: Record<number, GradingResult> = {};
+    let flaggedTurn: FlaggedTurn | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
 
@@ -277,13 +281,9 @@ export default class GoatProvider implements ApiProvider {
       }
     }
 
-    const redactTrace = requiresTraceRedaction(test?.assert);
+    let privateSessionId: string | undefined;
     let redactionError: string | undefined;
     let mediaRedactionFailed = false;
-    if (redactTrace) {
-      tracingOptions.includeInAttack = false;
-      context = { ...context, vars: { ...context.vars } };
-    }
 
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
@@ -351,11 +351,15 @@ export default class GoatProvider implements ApiProvider {
             let unblockingResponse = await callTargetProvider(
               targetProvider,
               unblockingTargetPrompt,
-              context,
+              privateSessionId
+                ? { ...context, vars: { ...context.vars, sessionId: privateSessionId } }
+                : context,
               options,
             );
 
-            if (unblockingResponse.sessionId) {
+            if (redactTrace) {
+              privateSessionId = getTargetSessionId(unblockingResponse) ?? privateSessionId;
+            } else if (unblockingResponse.sessionId) {
               context.vars.sessionId = unblockingResponse.sessionId;
             }
 
@@ -531,21 +535,21 @@ export default class GoatProvider implements ApiProvider {
           Object.keys(attackerVars),
         );
 
-        messages.push({
-          role: attackerMessage.role,
-          content: renderedAttackerPrompt,
-        });
+        const pendingMessage = { role: attackerMessage.role, content: renderedAttackerPrompt };
+        const turnMessages = [...messages, pendingMessage];
 
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
-          ${chalk.cyan(JSON.stringify(messages, null, 2))}
+          ${chalk.cyan(JSON.stringify(turnMessages, null, 2))}
         `,
         );
 
         // Get the latest message content for transforms
-        const latestMessageContent = messages[messages.length - 1].content;
-        let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
+        const latestMessageContent = turnMessages[turnMessages.length - 1].content;
+        let targetPrompt = this.config.stateful
+          ? latestMessageContent
+          : JSON.stringify(turnMessages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -591,7 +595,7 @@ export default class GoatProvider implements ApiProvider {
           // - Current turn as audio/image (the actual attack)
           if (lastTransformResult.audio || lastTransformResult.image) {
             // Build hybrid payload with conversation history + current transformed turn
-            const historyWithoutCurrentTurn = messages.slice(0, -1);
+            const historyWithoutCurrentTurn = turnMessages.slice(0, -1);
             const hybridPayload = {
               _promptfoo_audio_hybrid: true,
               history: historyWithoutCurrentTurn,
@@ -628,9 +632,6 @@ export default class GoatProvider implements ApiProvider {
           if (lastTransformResult.displayVars) {
             lastTransformDisplayVars = lastTransformResult.displayVars;
           }
-
-          // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-          lastFinalAttackPrompt = lastTransformResult.prompt;
         }
 
         const iterationStart = Date.now();
@@ -640,6 +641,7 @@ export default class GoatProvider implements ApiProvider {
               ...context,
               vars: {
                 ...targetVars,
+                ...(privateSessionId && { sessionId: privateSessionId }),
                 [this.config.injectVar]: targetPrompt,
               },
             }
@@ -650,8 +652,12 @@ export default class GoatProvider implements ApiProvider {
           targetContext,
           options,
         )) as GoatProviderResponse;
+        messages.push(pendingMessage);
+        lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
 
-        if (targetResponse.sessionId) {
+        if (redactTrace) {
+          privateSessionId = getTargetSessionId(targetResponse) ?? privateSessionId;
+        } else if (targetResponse.sessionId) {
           context.vars.sessionId = targetResponse.sessionId;
         }
 
@@ -805,6 +811,7 @@ export default class GoatProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
+            conversationTranscript: getTargetConversation(messages).conversationTranscript,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
           };
 
@@ -857,10 +864,20 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
+          const gradedTurn = {
+            prompt:
+              lastFinalAttackPrompt ||
+              getLastMessageContent(messages, 'user') ||
+              attackerMessage.content,
+            output: finalOutput,
+            messages,
+            guardrails: finalResponse.guardrails,
+            transformDisplayVars: lastTransformDisplayVars,
+          };
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            attackerMessage.content,
-            finalOutput,
+            gradedTurn.prompt,
+            gradedTurn.output,
             test,
             targetProvider,
             getGraderAssertionValue(assertToUse),
@@ -869,10 +886,19 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = accumulateGraderResult(storedGraderResult, {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          });
+          storedGraderResult = accumulateGraderResult(
+            storedGraderResult,
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            {
+              ...gradedTurn,
+              pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
+            },
+          );
+          flaggedTurn ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
         }
 
         if (graderPassed === false) {
@@ -903,7 +929,7 @@ export default class GoatProvider implements ApiProvider {
           throw error;
         }
         if (
-          error instanceof CachedRedactionResponseError ||
+          error instanceof PrivateVerificationError ||
           isRemoteMaterializationUpgradeError(error)
         ) {
           throw error;
@@ -918,19 +944,30 @@ export default class GoatProvider implements ApiProvider {
     }
 
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
-    return {
+    const reported = flaggedTurn ?? {
       output: getLastMessageContent(messages, 'assistant') || '',
-      ...(redactionError && { error: redactionError }),
       prompt: finalPrompt,
+      messages,
+      guardrails: lastTargetResponse?.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
+    };
+    return {
+      output: reported.output,
+      ...(redactionError && { error: redactionError }),
+      prompt: reported.prompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: flaggedTurn ? flaggedTurn.prompt : lastFinalAttackPrompt || finalPrompt,
+        messages: reported.messages as Record<string, any>[],
         stopReason,
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
+        storedGraderResult: resolveStoredGraderResult(
+          flaggedTurn?.graderResult,
+          storedGraderResult,
+        ),
+        ...(mediaRedactionFailed && { redactionMediaOmitted: true }),
         ...(redactTrace && {
           storedGraderResults,
           redactionContentOmitted: true,
@@ -940,10 +977,12 @@ export default class GoatProvider implements ApiProvider {
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         ...(!redactTrace && { sessionId: getSessionId(lastTargetResponse, context) }),
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 }

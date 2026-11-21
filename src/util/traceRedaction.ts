@@ -1,19 +1,25 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { types } from 'node:util';
 
 import { marked } from 'marked';
 import { type DefaultTreeAdapterMap, parseFragment } from 'parse5';
-import { BLOB_SCHEME } from '../blobs/constants';
-import { sanitizeCodingAgentVerifierInputs } from './sanitizer';
+import { hasPrivateMedia } from './redactionMedia';
+import {
+  getAssertionLeaves,
+  projectRedactionResult,
+  sanitizeCodingAgentVerifierInputs,
+} from './verifierPrivacy';
 
-import type {
-  Assertion,
-  AssertionOrSet,
-  AtomicTestCase,
-  GradingResult,
-  Prompt,
-  ProviderResponse,
-} from '../types';
+import type { Assertion, AtomicTestCase, ProviderResponse } from '../types';
+
+export {
+  configRequiresTraceRedaction,
+  getAssertionLeaves,
+  REDACTED_PROMPT,
+  requiresTraceRedaction,
+  sanitizeRedactionGrade,
+  sanitizeRedactionPrompt,
+  TRACE_REDACTION_ASSERTIONS,
+} from './verifierPrivacy';
 
 export type VerifierReceipt = {
   location: string;
@@ -21,10 +27,13 @@ export type VerifierReceipt = {
   value: string;
 };
 
+export type ProtectedPlan = { value: Assertion['value'] } | { error: unknown; missing?: boolean };
+
 export const protectedReceiptScope = new AsyncLocalStorage<{
   receipts: Map<string, VerifierReceipt[]>;
   receiptPaths: Map<string, string>;
-  assertionValues: Map<Assertion, { value: Assertion['value'] } | { error: unknown }>;
+  plans?: Map<string, ProtectedPlan>;
+  assertionValues: Map<Assertion, ProtectedPlan>;
 }>();
 
 export function getProtectedAssertionValue(assertion: Assertion): Assertion['value'] {
@@ -38,84 +47,59 @@ export function getProtectedAssertionValue(assertion: Assertion): Assertion['val
   return captured.value;
 }
 
-export const TRACE_REDACTION_ASSERTIONS = new Set([
-  'promptfoo:redteam:coding-agent:trace-redaction',
-  'promptfoo:redteam:harness:artifact-redaction',
-]);
-
-export const REDACTED_PROMPT = '[Prompt omitted for trace/artifact redaction.]';
-
-export function sanitizeRedactionPrompt<T extends Prompt>(prompt: T): T {
+// Snapshots may have been deleted or overwritten by the target. Never reopen them.
+export function getCapturedVerifierInputs(test: AtomicTestCase) {
+  const scope = protectedReceiptScope.getStore();
+  if (!scope) {
+    return undefined;
+  }
+  const captured = getAssertionLeaves(test.assert).map((assertion) =>
+    scope.assertionValues.get(assertion),
+  );
   return {
-    ...prompt,
-    raw: REDACTED_PROMPT,
-    ...(prompt.template !== undefined && { template: REDACTED_PROMPT }),
-    label:
-      typeof prompt.label !== 'string' || (prompt.raw && prompt.label.includes(prompt.raw))
-        ? REDACTED_PROMPT
-        : prompt.label,
-    ...(prompt.display !== undefined && { display: REDACTED_PROMPT }),
+    id: 'coding-agent:trace-redaction',
+    canaries: Array.from(scope.receipts.values(), (items) => items.map((item) => item.value)),
+    values: captured.map((entry) => (entry && 'value' in entry ? entry.value : undefined)),
   };
 }
 
-/** Project model-grading inputs after local verifiers have used the original receipts. */
-export function sanitizeRedactionGradingInputs<T extends AtomicTestCase>(
+/** Model graders only see public inputs after local verification. */
+export function sanitizeRedactionGradingInputs<TArgs extends unknown[]>(
   type: string,
-  test: T,
+  test: AtomicTestCase & { gradingArguments?: TArgs },
   value: Assertion['value'],
 ) {
+  const assert = getAssertionLeaves(test.assert).map(({ type }) => ({ type }));
+  const publicTest = {
+    assert,
+    options: test.options,
+    metadata: { purpose: 'Assess the public report.' },
+    gradingArguments: test.gradingArguments,
+  };
   return sanitizeCodingAgentVerifierInputs(
-    { type, assert: test.assert, test, value },
-    { preservePaths: false },
+    { type, assert, test: publicTest, value },
+    {
+      preservePaths: false,
+      strict: true,
+      source: {
+        type,
+        assert: test.assert,
+        vars: test.vars,
+        metadata: test.metadata,
+        captured: getCapturedVerifierInputs(test),
+      },
+    },
   );
 }
 
-// Non-enumerable on wrapper-created assertions; JSON target responses cannot carry this marker.
-export const TRUSTED_REDACTION_GRADER = Symbol.for('promptfoo.trustedRedactionGrader');
-
-export function getAssertionLeaves(assertions: AssertionOrSet[] | undefined): Assertion[] {
-  const leaves: Assertion[] = [];
-  const ancestors = new Set<AssertionOrSet>();
-  const pending = (assertions ?? [])
-    .slice()
-    .reverse()
-    .map((assertion) => ({ assertion, exit: false }));
-  while (pending.length) {
-    const { assertion, exit } = pending.pop()!;
-    if (exit) {
-      ancestors.delete(assertion);
-      continue;
-    }
-    if (assertion.type === 'assert-set') {
-      if (ancestors.has(assertion)) {
-        continue;
-      }
-      ancestors.add(assertion);
-      pending.push({ assertion, exit: true });
-      pending.push(
-        ...assertion.assert
-          .slice()
-          .reverse()
-          .map((child) => ({ assertion: child, exit: false })),
-      );
-    } else {
-      leaves.push(assertion);
-    }
-  }
-  return leaves;
-}
-
-export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined): boolean {
-  return getAssertionLeaves(assertions).some((assertion) =>
-    TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),
-  );
-}
+// Module-local identity. A target cannot authorize its own grade using Symbol.for or JSON.
+export const TRUSTED_REDACTION_GRADER = Symbol('promptfoo.trustedRedactionGrader');
 
 function hasMarkdownImage(text: string): boolean {
   if (!text.includes('![')) {
     return false;
   }
-  if (text.length > 16 * 1024 * 1024) {
+  if (text.length > 1024 * 1024) {
     return true;
   }
   try {
@@ -134,7 +118,7 @@ function hasHtmlMedia(text: string): boolean {
   if (!/<[a-z]/i.test(text)) {
     return false;
   }
-  if (text.length > 16 * 1024 * 1024) {
+  if (text.length > 1024 * 1024) {
     return true;
   }
   const pending: DefaultTreeAdapterMap['node'][] = [parseFragment(text)];
@@ -142,6 +126,14 @@ function hasHtmlMedia(text: string): boolean {
     const node = pending.pop()!;
     if ('tagName' in node) {
       if (
+        node.tagName === 'script' ||
+        node.tagName === 'iframe' ||
+        node.attrs.some(
+          ({ name, value }) =>
+            /^on[a-z]/i.test(name) ||
+            name === 'srcdoc' ||
+            /^javascript:/i.test(value.replace(/\s/g, '')),
+        ) ||
         (node.tagName === 'input' &&
           node.attrs.some(
             ({ name, value }) => name === 'type' && value.toLowerCase() === 'image',
@@ -180,218 +172,9 @@ function hasHtmlMedia(text: string): boolean {
 }
 
 export function hasRedactionMedia(response: ProviderResponse | null | undefined): boolean {
-  const pending: unknown[] = [response];
-  const seen = new Set<object>();
-  const seenText = new Set<string>();
-  let inspected = 0;
-  let inspectedBytes = 0;
-  while (pending.length) {
-    if (++inspected > 10000) {
-      return true;
-    }
-    const value = pending.pop();
-    if (typeof value === 'string') {
-      let text = value;
-      if (seenText.has(text)) {
-        continue;
-      }
-      seenText.add(text);
-      for (let depth = 0; ; depth++) {
-        inspectedBytes += Buffer.byteLength(text);
-        if (inspectedBytes > 32 * 1024 * 1024) {
-          return true;
-        }
-        if (!/%[\da-f]{2}/i.test(text)) {
-          break;
-        }
-        if (depth === 8) {
-          return true;
-        }
-        try {
-          text = decodeURIComponent(text);
-        } catch {
-          return true;
-        }
-      }
-      if (
-        text.includes(BLOB_SCHEME) ||
-        /\bdata:[^\s,]*,|<(?:svg|img|audio|video|picture|source|object|embed)(?:\s|\/?>)/i.test(
-          text,
-        ) ||
-        hasHtmlMedia(text) ||
-        hasMarkdownImage(text)
-      ) {
-        return true;
-      }
-      if (/^\s*[[{"]/.test(text)) {
-        try {
-          pending.push(JSON.parse(text));
-        } catch {
-          // Plain text is checked by the text verifier.
-        }
-      }
-    } else if (value && typeof value === 'object' && !seen.has(value)) {
-      if (ArrayBuffer.isView(value) || types.isAnyArrayBuffer(value)) {
-        return true;
-      }
-      seen.add(value);
-      const record = value as Record<string, unknown>;
-      const image = record.image as Record<string, unknown> | undefined;
-      const audio = record.audio as ProviderResponse['audio'];
-      const video = record.video as ProviderResponse['video'];
-      if (
-        record.redactionMediaOmitted === true ||
-        record.isBase64 === true ||
-        (record.type === 'Buffer' && Array.isArray(record.data)) ||
-        (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
-        (Array.isArray(record.images) && record.images.length > 0) ||
-        ([record.mimeType, record.mime_type, record.mediaType, record.media_type].some(
-          (mime) => typeof mime === 'string' && /^\s*(?:image|audio|video)\//i.test(mime),
-        ) &&
-          [
-            record.data,
-            record.raw,
-            record.bytesBase64Encoded,
-            record.base64Data,
-            record.url,
-            record.uri,
-            record.fileWithBytes,
-            record.fileWithUri,
-            record.fileUri,
-            record.file_uri,
-          ].some((payload) =>
-            typeof payload === 'string'
-              ? payload.length > 0
-              : payload && typeof payload === 'object' && Object.keys(payload).length > 0,
-          )) ||
-        (typeof record.type === 'string' &&
-          /^(?:(?:input|output)_)?(?:image|audio|video)(?:_url)?$/.test(record.type)) ||
-        image?.data ||
-        image?.url ||
-        image?.blobRef ||
-        record.image_url ||
-        record.audio_url ||
-        record.video_url ||
-        audio?.id ||
-        audio?.data ||
-        audio?.blobRef ||
-        (video && Object.values(video).some(Boolean))
-      ) {
-        return true;
-      }
-      for (const [key, child] of Object.entries(record)) {
-        if (value !== response || key !== 'raw') {
-          pending.push(child);
-        }
-      }
-    }
-  }
-  return false;
+  return hasPrivateMedia(response, (text) => hasHtmlMedia(text) || hasMarkdownImage(text));
 }
 
-function sanitizeRedactionGrade(result: GradingResult): GradingResult {
-  const evidence = result.metadata?.verifierEvidence;
-  return {
-    ...result,
-    reason: 'Grading details omitted for trace/artifact redaction.',
-    ...(result.metadata && {
-      metadata: {
-        ...result.metadata,
-        renderedGradingPrompt: undefined,
-        ...(evidence && {
-          verifierEvidence: Object.fromEntries(
-            Object.entries(evidence).filter(([key]) =>
-              [
-                'failureKind',
-                'artifactByteLength',
-                'redactedArtifactByteLength',
-                'redactedArtifactSha256',
-                'redactionReceiptByteLength',
-                'redactionReceiptSha256',
-              ].includes(key),
-            ),
-          ),
-        }),
-      },
-    }),
-    ...(result.componentResults && {
-      componentResults: result.componentResults.map(sanitizeRedactionGrade),
-    }),
-  };
-}
-
-/** Keep privacy-check response bodies and their echoes out of public result copies. */
 export function sanitizeRedactionResult<T extends object>(input: T): T {
-  const result = input as T & {
-    testCase?: AtomicTestCase;
-    prompt?: Prompt;
-    vars?: Record<string, unknown>;
-    response?: ProviderResponse | null;
-    gradingResult?: GradingResult | null;
-    metadata?: Record<string, unknown>;
-    error?: string | null;
-    tokenUsage?: unknown;
-    cost?: unknown;
-    incurredCost?: unknown;
-    latencyMs?: unknown;
-  };
-  const response = result.response;
-  if (!requiresTraceRedaction(result.testCase?.assert)) {
-    return input;
-  }
-  // Provider-reported numbers can carry private receipts just like text fields.
-  const accounting = {
-    tokenUsage: undefined,
-    cost: undefined,
-    incurredCost: undefined,
-    latencyMs: undefined,
-  };
-  const mediaOmitted = hasRedactionMedia(response);
-  const publicInputs = sanitizeCodingAgentVerifierInputs({
-    assert: result.testCase?.assert,
-    testCase: result.testCase,
-    vars: result.vars,
-    gradingResult: result.gradingResult,
-    metadata: result.metadata,
-    prompt: result.prompt,
-  });
-  const { testCase, vars } = publicInputs;
-  const prompt = publicInputs.prompt && sanitizeRedactionPrompt(publicInputs.prompt);
-  const metadata = { ...publicInputs.metadata };
-  for (const key of Object.keys(response?.metadata ?? {})) {
-    if (testCase?.metadata && Object.prototype.hasOwnProperty.call(testCase.metadata, key)) {
-      metadata[key] = testCase.metadata[key];
-    } else {
-      delete metadata[key];
-    }
-  }
-  delete metadata.errorContext;
-  delete metadata.sessionId;
-  delete metadata.redteamHistory;
-  const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
-  const gradingResult = publicInputs.gradingResult
-    ? sanitizeRedactionGrade(publicInputs.gradingResult)
-    : publicInputs.gradingResult;
-  if (!response) {
-    return { ...input, ...accounting, testCase, vars, prompt, error, metadata, gradingResult };
-  }
-  return {
-    ...input,
-    ...accounting,
-    testCase,
-    vars,
-    prompt,
-    error,
-    metadata,
-    gradingResult,
-    response: {
-      output: mediaOmitted
-        ? '[Media response omitted: binary, image, audio, or video redaction could not be verified.]'
-        : '[Response omitted for trace/artifact redaction.]',
-      ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
-      ...(response.conversationEnded === true && { conversationEnded: true }),
-      cached: typeof response.cached === 'boolean' ? response.cached : undefined,
-      metadata: mediaOmitted ? { redactionMediaOmitted: true } : { redactionContentOmitted: true },
-    },
-  };
+  return projectRedactionResult(input, hasRedactionMedia, getCapturedVerifierInputs);
 }

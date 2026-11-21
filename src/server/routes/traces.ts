@@ -29,8 +29,8 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
     res.json(TracesSchemas.GetByEval.Response.parse({ traces }));
-  } catch (error) {
-    logger.error(`[TracesRoute] Error fetching traces: ${error}`);
+  } catch {
+    logger.error('[TracesRoute] Error fetching traces');
     res.status(500).json({ error: 'Failed to fetch traces' });
   }
 });
@@ -63,8 +63,8 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
     res.json(TracesSchemas.Get.Response.parse({ trace }));
-  } catch (error) {
-    logger.error(`[TracesRoute] Error fetching trace: ${error}`);
+  } catch {
+    logger.error('[TracesRoute] Error fetching trace');
     res.status(500).json({ error: 'Failed to fetch trace' });
   }
 });

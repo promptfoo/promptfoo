@@ -251,6 +251,7 @@ describe('ElevenLabs documented request contracts', () => {
   it.each([1, 2])(
     'does not replay TTS request version %i and separates latency settings',
     async (version) => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
       const legacyParams = {
         ...(version === 2 && { requestVersion: 2 }),
         text: 'Hello',

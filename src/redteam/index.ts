@@ -42,6 +42,11 @@ import { CODING_AGENT_CORE_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { trackGenerationTokenUsage } from './generationTokenUsage';
+import {
+  checkCodingAgentGeneration,
+  isCodingAgentPlugin,
+  publicCodingAgentConfig,
+} from './plugins/codingAgent/generator';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -543,13 +548,14 @@ function addLanguageToPluginMetadata(
     test.metadata.pluginConfig === undefined
   );
 
+  const metadataConfig = isCodingAgentPlugin(plugin.id) ? undefined : plugin.config;
   // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
   // then fall back to the original plugin.config?.modifiers
   const pluginModifiers = buildRedteamModifiers({
     maxCharsPerMessage,
     pluginConfig:
       (test.metadata?.pluginConfig as Record<string, any> | undefined) ||
-      plugin.config ||
+      metadataConfig ||
       undefined,
     testGenerationInstructions,
   });
@@ -561,7 +567,7 @@ function addLanguageToPluginMetadata(
       pluginId: plugin.id,
       ...(includePluginConfig && {
         pluginConfig: {
-          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+          ...resolvePluginConfigWithMaxChars(metadataConfig, maxCharsPerMessage),
           ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
         },
       }),
@@ -1011,6 +1017,33 @@ export async function synthesize({
   // Add abort checks at key points
   checkAbort();
 
+  // Check shared fields before purpose/entity extraction or another plugin
+  // can send them. Verifier evidence belongs only in local assertions.
+  const verifierSources = plugins.filter(({ id }) => isCodingAgentPlugin(id));
+  if (verifierSources.length) {
+    checkCodingAgentGeneration(
+      {
+        prompts,
+        purposeOverride,
+        entitiesOverride,
+        injectVar,
+        inputs,
+        language,
+        targetManifest,
+        testGenerationInstructions,
+        targetIds,
+        strategies,
+        explicitCloudTargetDatabaseId,
+        inputRedteamGenerationContext,
+        plugins: plugins.map(({ id, config }) => ({
+          id,
+          config: isCodingAgentPlugin(id) ? publicCodingAgentConfig(id, config ?? {}) : config,
+        })),
+      },
+      verifierSources,
+    );
+  }
+
   if (prompts.length === 0) {
     throw new Error('Prompts array cannot be empty');
   }
@@ -1370,6 +1403,7 @@ export async function synthesize({
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
 
+  checkCodingAgentGeneration({ purpose, entities }, verifierSources);
   logger.debug(`System purpose: ${purpose}`);
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};

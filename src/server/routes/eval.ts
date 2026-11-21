@@ -17,12 +17,14 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
+import { loadProviderConfigsFromFile, normalizeProviderRef } from '../../util/providerRef';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { configRequiresTraceRedaction, sanitizeRedactionResult } from '../../util/verifierPrivacy';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -144,6 +146,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     evaluateOptions,
     sourceEvalId,
     providers: _validatedProviders,
+    basePath: _basePath,
     ...restData
   } = result.data;
   let testSuite = {
@@ -156,7 +159,10 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     try {
       const sourceEval = await Eval.findById(sourceEvalId);
       if (sourceEval) {
-        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+        testSuite = {
+          ...restoreAzureBlobSasTokens(testSuite, sourceEval.config),
+          ...(sourceEval.config.basePath !== undefined && { basePath: sourceEval.config.basePath }),
+        };
       }
     } catch (error) {
       sendError(res, 500, 'Failed to prepare eval job', error);
@@ -207,37 +213,23 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobService.get(id);
-  if (!job) {
-    res.status(404).json({ error: 'Job not found' });
-    return;
-  }
+  try {
+    const job = evalJobService.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
 
-  if (job.status === 'complete') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'complete',
-        result: job.result,
-        evalId: job.evalId,
-        logs: job.logs,
-      }),
-    );
-  } else if (job.status === 'error') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'error',
-        logs: job.logs,
-      }),
-    );
-  } else {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'in-progress',
-        progress: job.progress,
-        total: job.total,
-        logs: job.logs,
-      }),
-    );
+    res.json(EvalSchemas.GetJob.Response.parse(job));
+  } catch (error) {
+    const category =
+      error instanceof z.ZodError
+        ? 'invalid-result'
+        : error instanceof SyntaxError
+          ? 'invalid-json'
+          : 'unavailable';
+    // Logs are shared with active jobs; omit snapshot contents and filesystem details.
+    sendError(res, 500, 'Failed to load eval job', { category });
   }
 });
 
@@ -610,6 +602,12 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // Replay discards the suite's assertions and would return the unfiltered provider reply.
+    if (configRequiresTraceRedaction(eval_.config)) {
+      res.status(403).json({ error: 'Replay is disabled for evaluations with protected prompts' });
+      return;
+    }
+
     // Get the provider configuration from the eval
     const providers = eval_.config.providers;
     if (!providers) {
@@ -634,6 +632,26 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       providerConfig = providers;
     }
 
+    // Replay is a one-prompt diagnostic. Keep the saved selection and local options,
+    // but replace evaluation routing filters after expanding provider config files.
+    const selectedRef = normalizeProviderRef(providerConfig);
+    const replayProviders = (
+      selectedRef.kind === 'file'
+        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath, eval_.config.basePath)
+        : [providerConfig]
+    ).map((provider) => {
+      const ref = normalizeProviderRef(provider);
+      if (ref.kind === 'options' || ref.kind === 'map') {
+        const options = { ...ref.loadOptions, prompts: ['Replay'] };
+        return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
+      }
+      if (ref.kind === 'named') {
+        return { id: ref.loadProviderPath, prompts: ['Replay'] };
+      }
+      // Persisted refs are declarative; leave other forms for normal loader validation.
+      return provider;
+    });
+
     // Run the prompt through the provider
     const result = await evaluateWithSource(
       {
@@ -643,7 +661,8 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
             label: 'Replay', // Add required label field
           },
         ],
-        providers: [providerConfig],
+        providers: replayProviders,
+        basePath: eval_.config.basePath,
         tests: [
           {
             vars: (variables || {}) as Vars,
@@ -784,7 +803,9 @@ evalRouter.post(
       await result.save();
       await eval_.save();
 
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      res.json(
+        EvalSchemas.SubmitRating.Response.parse({ ...sanitizeRedactionResult(result), evalId }),
+      );
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

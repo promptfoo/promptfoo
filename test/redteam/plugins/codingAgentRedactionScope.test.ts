@@ -5,10 +5,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   hasProtectedReceiptFiles,
+  snapshotReceiptSetup,
   verifyCodingAgentResult,
   verifyTraceRedaction,
   withProtectedReceiptScope,
-} from '../../../src/redteam/plugins/codingAgent/verifiers';
+} from '../../../src/redteam/plugins/codingAgent/localVerifiers';
 import {
   getProtectedAssertionValue,
   requiresTraceRedaction,
@@ -37,6 +38,91 @@ describe('protected redaction receipts', () => {
     };
   });
   afterEach(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+  it('pins a captured plan across cloned declarations and ignores target replacements', async () => {
+    const config = path.join(directory, 'plan.json');
+    fs.writeFileSync(config, JSON.stringify({ rawReceipt: original }));
+    const assertion = {
+      type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+      value: 'file://' + config,
+    };
+    await withProtectedReceiptScope([{ assert: [assertion] }], async () => {
+      fs.writeFileSync(config, JSON.stringify({ rawReceipt: replacement }));
+      const cloned = { ...assertion };
+      const row = { assert: [cloned] };
+      const setup = snapshotReceiptSetup(row);
+      await withProtectedReceiptScope(
+        [row],
+        async () => {
+          expect(getProtectedAssertionValue(cloned)).toEqual({ rawReceipt: original });
+        },
+        { inherit: true, setup },
+      );
+    });
+  });
+
+  it('accepts a missing plan only after an observed setup change', async () => {
+    const config = path.join(directory, 'plan.json');
+    const assertion = {
+      type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+      value: 'file://' + config,
+    };
+    const row = { assert: [assertion] };
+    await withProtectedReceiptScope([row], async () => {
+      fs.writeFileSync(config, JSON.stringify({ rawReceipt: replacement }));
+      const setup = snapshotReceiptSetup(row);
+      await withProtectedReceiptScope(
+        [row],
+        async () => {
+          expect(() => getProtectedAssertionValue(assertion)).toThrow(/static JSON/);
+        },
+        { inherit: true, setup },
+      );
+      fs.writeFileSync(config, JSON.stringify({ rawReceipt: original }));
+      await withProtectedReceiptScope(
+        [row],
+        async () => {
+          expect(getProtectedAssertionValue(assertion)).toEqual({ rawReceipt: original });
+        },
+        { inherit: true, setup },
+      );
+    });
+  });
+
+  it('fails closed when setup writes an unreadable replacement receipt', async () => {
+    await withProtectedReceiptScope([test], async () => {
+      const setup = snapshotReceiptSetup(test);
+      fs.writeFileSync(receipt, '');
+      await expect(
+        withProtectedReceiptScope([test], async () => null, {
+          inherit: true,
+          setup,
+        }),
+      ).rejects.toThrow(/verifier artifact/);
+    });
+  });
+
+  it('adds hook-written receipts to only their own case', async () => {
+    const fresh = 'FRESH_CASE_ONLY_RECEIPT';
+    const matches = (text: string) =>
+      verifyTraceRedaction({ rawReceiptPath: receipt }, text)?.kind ===
+      'redacted-artifact-sensitive-value';
+    await withProtectedReceiptScope([test], async () => {
+      fs.writeFileSync(receipt, replacement);
+      const setup = snapshotReceiptSetup(test);
+      fs.writeFileSync(receipt, fresh);
+      await withProtectedReceiptScope(
+        [test],
+        async () => {
+          expect(matches(original)).toBe(true);
+          expect(matches(fresh)).toBe(true);
+          expect(matches(replacement)).toBe(false);
+        },
+        { inherit: true, setup },
+      );
+      expect(matches(fresh)).toBe(false);
+    });
+  });
 
   it('finds privacy assertions after a cyclic assertion set', () => {
     const group: Record<string, unknown> = { type: 'assert-set' };

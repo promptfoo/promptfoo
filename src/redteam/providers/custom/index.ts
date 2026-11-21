@@ -10,11 +10,11 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
-  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { requiresTraceRedaction } from '../../../util/traceRedaction';
+import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -24,23 +24,28 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { getSessionId } from '../../util';
+import { MemorySystem } from '../conversationMemory';
+import { getEvalScore, getRefusalScore } from '../conversationScoring';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
-  CachedRedactionResponseError,
-  callGradingProvider,
+  captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  getTargetSessionId,
   gradeRedactionResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
+  PrivateVerificationError,
+  preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
@@ -61,7 +66,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -125,11 +130,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customResult: boolean;
   customConfidence: number | null;
   stopReason: RoundBacktrackingStopReason;
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }>;
+  successfulAttacks?: SuccessfulAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   storedGraderResults?: Record<number, GradingResult>;
@@ -157,29 +158,6 @@ interface CustomConfig {
   _perTurnLayers?: LayerConfig[];
 }
 
-export class MemorySystem {
-  private conversations: Map<string, Message[]> = new Map();
-
-  addMessage(conversationId: string, message: Message) {
-    if (!this.conversations.has(conversationId)) {
-      this.conversations.set(conversationId, []);
-    }
-    this.conversations.get(conversationId)!.push(message);
-  }
-
-  getConversation(conversationId: string): Message[] {
-    return this.conversations.get(conversationId) || [];
-  }
-
-  duplicateConversationExcludingLastTurn(conversationId: string): string {
-    const originalConversation = this.getConversation(conversationId);
-    const newConversationId = crypto.randomUUID();
-    const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
-    this.conversations.set(newConversationId, newConversation);
-    return newConversationId;
-  }
-}
-
 export class CustomProvider implements ApiProvider {
   readonly config: CustomConfig;
   private readonly nunjucks: any;
@@ -194,11 +172,7 @@ export class CustomProvider implements ApiProvider {
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }> = [];
+  private successfulAttacks: SuccessfulAttack[] = [];
 
   constructor(config: CustomConfig) {
     invariant(config.strategyText, 'CustomProvider requires strategyText in config');
@@ -229,13 +203,13 @@ export class CustomProvider implements ApiProvider {
 
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
-
-    logger.debug('[Custom] CustomProvider initialized with config', { config });
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      // Remote task handlers only know the built-in default. An explicit
+      // redteamProvider must stay local.
+      if (shouldGenerateRemote() && !this.config.redteamProvider) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
@@ -255,7 +229,7 @@ export class CustomProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      if (shouldGenerateRemote() && !this.config.redteamProvider) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
@@ -277,19 +251,14 @@ export class CustomProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CustomResponse> {
-    logger.debug('[Custom] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
-    logger.debug(`[Custom] callApi invoked with prompt: ${prompt}`);
-
     this.userGoal = context.test?.metadata?.goal || String(context.vars[this.config.injectVar]);
-
-    logger.debug(`[Custom] User goal: ${this.userGoal}`);
 
     return this.runAttack({
       prompt: context.prompt,
@@ -319,10 +288,6 @@ export class CustomProvider implements ApiProvider {
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
   }): Promise<CustomResponse> {
-    logger.debug(
-      `[Custom] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
-    );
-
     const session: { id?: string } = {};
 
     // Reset successful attacks array for each new attack
@@ -334,11 +299,14 @@ export class CustomProvider implements ApiProvider {
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
     let mediaRedactionError: string | undefined;
+    let hasTargetResponse = false;
+    let lastAttemptError: string | undefined;
+    let lastResponseMessages: Message[] = [];
+    let lastFinalAttackPrompt: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let lastTargetError: string | undefined = undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -369,6 +337,7 @@ export class CustomProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined;
     const storedGraderResults: Record<number, GradingResult> = {};
     const redactTrace = requiresTraceRedaction(test?.assert);
+    let flaggedRound: FlaggedTurn | undefined;
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
@@ -414,7 +383,6 @@ export class CustomProvider implements ApiProvider {
 
         const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
           roundNum,
-          evalFlag,
           lastResponse,
           lastFeedback,
           objectiveScore,
@@ -427,8 +395,6 @@ export class CustomProvider implements ApiProvider {
           continue;
         }
 
-        logger.debug(`[Custom] Generated attack prompt: ${attackPrompt}`);
-
         const { response, transformResult } = await this.sendPrompt(
           attackPrompt,
           prompt,
@@ -440,6 +406,13 @@ export class CustomProvider implements ApiProvider {
           options,
           session,
         );
+        if (transformResult?.error) {
+          lastAttemptError = transformResult.error;
+          if (transformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+          }
+          continue;
+        }
         lastResponse = response;
         if (redactTrace) {
           storedGraderResult = await gradeRedactionResponse(
@@ -453,7 +426,13 @@ export class CustomProvider implements ApiProvider {
         if (lastResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= lastResponse.error;
         }
+        hasTargetResponse = true;
+        lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
+        lastFinalAttackPrompt =
+          transformResult?.prompt ||
+          getLastMessageContent(lastResponseMessages, 'user') ||
+          attackPrompt;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
         }
@@ -467,12 +446,14 @@ export class CustomProvider implements ApiProvider {
           break;
         }
         if (lastResponse.error) {
-          lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
-          logger.info(
-            `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
-              lastResponse,
-            )}`,
-          );
+          if (options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
+          logger.info(`[Custom] ROUND ${roundNum} - Target error`, {
+            error: lastResponse.error,
+            response: lastResponse,
+          });
           continue;
         }
 
@@ -499,9 +480,6 @@ export class CustomProvider implements ApiProvider {
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
-          logger.debug(
-            `[Custom] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
-          );
 
           const { response: unblockingResponse, transformResult: unblockingTransform } =
             await this.sendPrompt(
@@ -515,6 +493,13 @@ export class CustomProvider implements ApiProvider {
               options,
               session,
             );
+
+          if (unblockingTransform?.error) {
+            if (unblockingTransform.tokenUsage) {
+              accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
+            }
+            continue;
+          }
 
           if (unblockingTransform?.tokenUsage) {
             accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
@@ -536,6 +521,11 @@ export class CustomProvider implements ApiProvider {
           if (lastResponse.metadata?.redactionMediaOmitted === true) {
             mediaRedactionError ??= lastResponse.error;
           }
+          lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
+          lastFinalAttackPrompt =
+            unblockingTransform?.prompt ||
+            getLastMessageContent(lastResponseMessages, 'user') ||
+            unblockingResult.unblockingPrompt;
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
@@ -546,7 +536,10 @@ export class CustomProvider implements ApiProvider {
           }
 
           if (lastResponse.error) {
-            lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
+            if (options?.abortSignal?.aborted) {
+              exitReason = 'Target error';
+              break;
+            }
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },
@@ -561,15 +554,9 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
-          attackPrompt,
-          lastResponse.output,
-          totalTokenUsage,
-          options,
-        );
-        logger.debug(
-          `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
-        );
+        const [isRefusal, refusalRationale] = redactTrace
+          ? ([false, ''] as const)
+          : await this.getRefusalScore(attackPrompt, lastResponse.output, totalTokenUsage, options);
 
         if (isRefusal && !this.stateful) {
           logger.debug('\n[Custom] Response Rejected, performing back tracking...\n');
@@ -606,12 +593,20 @@ export class CustomProvider implements ApiProvider {
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
+              conversationTranscript:
+                getTargetConversation(lastResponseMessages).conversationTranscript,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
+            const gradedTurn = {
+              prompt: lastFinalAttackPrompt,
+              output: lastResponse.output,
+              messages: lastResponseMessages,
+              guardrails: lastResponse.guardrails,
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              attackPrompt,
-              lastResponse.output,
+              gradedTurn.prompt,
+              gradedTurn.output,
               test,
               provider,
               getGraderAssertionValue(assertToUse),
@@ -620,10 +615,19 @@ export class CustomProvider implements ApiProvider {
               gradingContext,
             );
             graderPassed = grade.pass;
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                ...gradedTurn,
+                pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
+              },
+            );
+            flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
 
@@ -642,7 +646,28 @@ export class CustomProvider implements ApiProvider {
           // Note: outputImage not tracked as TargetResponse doesn't include image yet
         });
 
-        const [evalScore] = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
+        // A failing grade ends the attack before the internal evaluator call, as in crescendo.
+        // If that call failed, this round used to be abandoned before the grade was acted on,
+        // and a later passing grade replaced it. A grader error is not a verdict and keeps the
+        // handling below.
+        if (graderPassed === false && storedGraderResult?.metadata?.graderError !== true) {
+          // recordSuccessfulAttack ignores a turn it has already recorded, so with
+          // continueAfterSuccess the check after the evaluator doesn't record this turn twice.
+          this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
+          if (!this.config.continueAfterSuccess) {
+            exitReason = 'Grader failed';
+            logger.debug(
+              `[Custom] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
+            );
+            break;
+          }
+        }
+
+        if (redactTrace) {
+          // Scoring a placeholder adds a remote request and cannot verify the response.
+          continue;
+        }
+        const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
 
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -679,14 +704,18 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
-        if (error instanceof CachedRedactionResponseError) {
+        if (error instanceof PrivateVerificationError) {
           throw error;
         }
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
+        if (redactTrace) {
+          throw new PrivateVerificationError('Private target verification failed');
+        }
+        lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
     }
@@ -704,9 +733,6 @@ export class CustomProvider implements ApiProvider {
       `\n[Custom] FINAL RESULTS, TOTAL ROUNDS: ${roundNum}, TOTAL BACKTRACKS ${backtrackCount}:\n`,
     );
 
-    this.logChatHistory(this.targetConversationId);
-    this.logChatHistory(this.redTeamingChatConversationId);
-
     // Determine final exit reason and result
     const hasSuccessfulAttacks = this.successfulAttacks.length > 0;
     if (hasSuccessfulAttacks) {
@@ -714,53 +740,60 @@ export class CustomProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = this.memory.getConversation(this.targetConversationId);
-    const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
+    const reported = flaggedRound ?? {
       output: lastResponse.output,
-      prompt: finalPrompt,
-      metadata: {
-        ...(mediaRedactionError && { redactionMediaOmitted: true }),
-        redteamFinalPrompt: finalPrompt,
-        messages: messages as Record<string, any>[],
-        customRoundsCompleted: roundNum,
-        customBacktrackCount: backtrackCount,
-        customResult: evalFlag,
-        customConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
-        ...(redactTrace && {
-          storedGraderResults,
-          redactionContentOmitted: true,
-        }),
-        sessionId: getSessionId(lastResponse, context),
-      },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
-      ...(mediaRedactionError || lastTargetError
-        ? { error: mediaRedactionError || lastTargetError }
-        : {}),
+      prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
+      messages: lastResponseMessages,
+      guardrails: lastResponse.guardrails,
     };
+    const targetError =
+      lastResponse.error && (typeof lastResponse.error === 'string' ? lastResponse.error : 'Error');
+    const error =
+      targetError ||
+      (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
+    return preserveSelectedError(
+      {
+        output: reported.output,
+        prompt: reported.prompt,
+        metadata: {
+          redteamFinalPrompt: reported.prompt,
+          messages: reported.messages as Record<string, any>[],
+          customRoundsCompleted: roundNum,
+          customBacktrackCount: backtrackCount,
+          customResult: evalFlag,
+          customConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult: resolveStoredGraderResult(
+            flaggedRound?.graderResult,
+            storedGraderResult,
+          ),
+          ...(!redactTrace && { sessionId: getSessionId(lastResponse, context) }),
+          ...(redactTrace && { storedGraderResults, redactionContentOmitted: true }),
+          ...(mediaRedactionError && { redactionMediaOmitted: true }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: reported.guardrails,
+        ...(mediaRedactionError
+          ? { error: mediaRedactionError }
+          : !flaggedRound && error
+            ? { error }
+            : {}),
+      },
+      lastResponse,
+    );
   }
 
   private async getAttackPrompt(
     roundNum: number,
-    evalFlag: boolean,
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore: { value: number; rationale: string } | undefined,
     totalTokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
-    logger.debug(
-      `[Custom] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
-        objectiveScore,
-      )}`,
-    );
-
     let promptText =
       `This is round ${roundNum - 1} of ${this.maxTurns}. ` +
       `Generate the next question in the series of questions you need to ask ` +
@@ -789,7 +822,6 @@ export class CustomProvider implements ApiProvider {
 
     const redTeamingHistory = this.memory.getConversation(this.redTeamingChatConversationId);
     logger.debug(`Sending to red teaming chat:`);
-    this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
     const response = await redTeamingChat.callApi(
       JSON.stringify(redTeamingHistory),
@@ -812,7 +844,7 @@ export class CustomProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.debug('[Custom] No output from redteam provider', { response });
+      logger.debug('[Custom] No output from redteam provider');
       return {
         generatedQuestion: undefined,
         tokenUsage: response.tokenUsage,
@@ -839,19 +871,6 @@ export class CustomProvider implements ApiProvider {
     }
     if (missingKeys.length > 0) {
       logger.warn(`[Custom] Missing keys in response: ${missingKeys.join(', ')}`);
-      logger.warn(`[Custom] Response: ${response.output}`);
-    }
-
-    logger.debug(dedent`
-      [Custom] Received from red teaming chat:
-
-      generatedQuestion: ${parsedOutput.generatedQuestion}
-      rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
-      lastResponseSummary: ${parsedOutput.lastResponseSummary}
-    `);
-
-    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
-      logger.debug(`[Custom] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`);
     }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -878,36 +897,43 @@ export class CustomProvider implements ApiProvider {
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
     let lastTransformResult: TransformResult | undefined;
 
+    const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
     const renderedPrompt = await renderPrompt(
       originalPrompt,
-      { ...vars, [this.config.injectVar]: attackPrompt },
+      { ...targetVars },
       filters,
       provider,
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
+    const pendingMessages: Message[] = [];
     try {
       const parsed = extractFirstJsonObject<Message[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
           message.role === 'system' &&
-          this.memory.getConversation(this.targetConversationId).some((m) => m.role === 'system')
+          [...this.memory.getConversation(this.targetConversationId), ...pendingMessages].some(
+            (m) => m.role === 'system',
+          )
         ) {
           // No duplicate system messages
           continue;
         }
-        this.memory.addMessage(this.targetConversationId, message);
+        pendingMessages.push(message);
       }
     } catch {
       // Otherwise, just send the rendered prompt as a string
-      this.memory.addMessage(this.targetConversationId, {
+      pendingMessages.push({
         role: 'user',
         content: renderedPrompt,
       });
     }
 
-    const conversationHistory = this.memory.getConversation(this.targetConversationId);
+    const conversationHistory = [
+      ...this.memory.getConversation(this.targetConversationId),
+      ...pendingMessages,
+    ];
     let finalTargetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -983,20 +1009,21 @@ export class CustomProvider implements ApiProvider {
     logger.debug(
       `[Custom] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
     );
-    logger.debug(finalTargetPrompt);
 
-    const targetContext =
-      context && session.id
-        ? { ...context, vars: { ...context.vars, sessionId: session.id } }
-        : context;
     let targetResponse = await getTargetResponse(
       provider,
       finalTargetPrompt,
-      targetContext,
+      context && {
+        ...context,
+        vars: { ...targetVars, ...(session.id && { sessionId: session.id }) },
+      },
       options,
     );
-    if (this.stateful && targetResponse.sessionId) {
-      session.id = targetResponse.sessionId;
+    for (const message of pendingMessages) {
+      this.memory.addMessage(this.targetConversationId, message);
+    }
+    if (this.stateful) {
+      session.id = getTargetSessionId(targetResponse) ?? session.id;
     }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug('[Custom] Target response', { response: targetResponse });
@@ -1005,7 +1032,6 @@ export class CustomProvider implements ApiProvider {
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
       '[Custom] Target did not return an output property',
     );
-    logger.debug(`[Custom] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
       role: 'assistant',
@@ -1021,156 +1047,40 @@ export class CustomProvider implements ApiProvider {
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
-    logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
-      logger.debug(
-        '[Custom] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
-      );
-      return [true, 'The output contains a standard refusal.'];
-    }
-
-    // Otherwise, use the scoring chat to grade the refusal
-    const refusalInput = JSON.stringify({
-      conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const refusalBody = JSON.stringify([
-      { role: 'system', content: refusalSystemPrompt },
-      { role: 'user', content: refusalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await callGradingProvider(
-      scoringProvider,
-      refusalBody,
+    return getRefusalScore(
       {
-        prompt: {
-          raw: refusalBody,
-          label: 'refusal',
-        },
-        vars: {},
+        logPrefix: 'Custom',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      attackPrompt,
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
-    }
-
-    logger.debug(`[Custom] Refusal score response: ${refusalResponse.output}`);
-
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
-
-    logger.debug('[Custom] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
-
-    return [parsed.value, parsed.rationale];
   }
 
   private async getEvalScore(
     lastResponse: string,
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
-  ): Promise<[any, TokenUsage | undefined]> {
-    logger.debug(`[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
-    const evalInput = JSON.stringify({
-      conversationObjective: this.userGoal,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const evalBody = JSON.stringify([
-      { role: 'system', content: evalSystemPrompt },
-      { role: 'user', content: evalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await callGradingProvider(
-      scoringProvider,
-      evalBody,
+  ): Promise<any> {
+    return getEvalScore(
       {
-        prompt: {
-          raw: evalBody,
-          label: 'eval',
-        },
-        vars: {},
+        logPrefix: 'Custom',
+        userGoal: this.userGoal,
+        nunjucks: this.nunjucks,
+        getScoringProvider: () => this.getScoringProvider(),
       },
+      lastResponse,
+      tokenUsage,
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
-    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
-    if (scoringProvider.delay) {
-      logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
-    }
-    if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
-    }
-
-    logger.debug(`[Custom] Eval score response: ${evalResponse.output}`);
-
-    const parsed =
-      typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
-        : evalResponse.output;
-
-    logger.debug('[Custom] Eval score parsed response', { parsed });
-    invariant(
-      typeof parsed.value === 'boolean',
-      `Expected eval grader value to be a boolean: ${parsed}`,
-    );
-    invariant(
-      typeof parsed.metadata === 'number',
-      `Expected eval grader metadata to be a number: ${parsed}`,
-    );
-
-    return [parsed, evalResponse.tokenUsage];
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {
     return this.memory.duplicateConversationExcludingLastTurn(conversationId);
-  }
-
-  private logChatHistory(conversationId: string, _lastMessageOnly = false): void {
-    const messages = this.memory.getConversation(conversationId);
-    logger.debug(`[Custom] Memory for conversation ${conversationId}:`);
-    for (const message of messages) {
-      try {
-        logger.debug(`... ${message.role}: ${message.content.slice(0, 100)} ...`);
-      } catch (error) {
-        logger.warn(`Error logging message in conversation: ${error}`);
-      }
-    }
   }
 
   private recordSuccessfulAttack(roundNum: number, attackPrompt: string, response: string): void {

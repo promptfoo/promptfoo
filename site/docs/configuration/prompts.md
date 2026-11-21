@@ -126,7 +126,7 @@ Referencing the entry label still selects every row — `prompts: [Translations]
 
 ### Multiple Prompts in One File
 
-Separate multiple prompts with `---`:
+In `.txt` files, put `---` on its own line between prompts:
 
 ```text title="prompts.txt"
 Translate to French: {{text}}
@@ -135,6 +135,15 @@ Translate to Spanish: {{text}}
 ---
 Translate to German: {{text}}
 ```
+
+To keep `---` lines inside a prompt, choose a different separator in your config:
+
+```yaml
+env:
+  PROMPTFOO_PROMPT_SEPARATOR: '%%%'
+```
+
+Use `%%%` on its own line between prompts.
 
 ### Using Globs
 
@@ -358,9 +367,9 @@ prompts:
     label: claude_prompt
 
 providers:
-  - id: openai:gpt-5.6
+  - id: openai:gpt-6-sol
     prompts: [gpt_prompt]
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     prompts: [claude_prompt]
 ```
 
@@ -455,7 +464,7 @@ If no prompts are specified, promptfoo uses `{{prompt}}` as a passthrough.
 1. **Start Simple**: Use inline text for basic use cases
 2. **Organize Complex Prompts**: Move longer prompts to files
 3. **Use Version Control**: Track prompt files in Git
-4. **Leverage Templates**: Use variables for reusable prompts
+4. **Use Templates**: Use variables for reusable prompts
 5. **Test Variations**: Create multiple versions to compare performance
 
 ## Common Patterns

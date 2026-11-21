@@ -1,3 +1,5 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import fs from 'node:fs';
@@ -94,6 +96,86 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
+  it('protects private verdicts across target context, progress and result hooks', async () => {
+    const marker = 'SYNTHETIC_VERDICT_RECEIPT';
+    const visible: unknown[] = [];
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => {
+      expect(context?.bustCache).toBe(true);
+      visible.push(context?.test);
+      return { output: marker };
+    });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+      if (phase === 'afterEach' && 'result' in context) {
+        visible.push(structuredClone(context));
+        context.result.success = true;
+        context.result.testCase.assert = [];
+      } else if (phase === 'afterAll') {
+        visible.push(context);
+      }
+      return context;
+    });
+    const suite: TestSuite = {
+      prompts: [toPrompt('Inspect report')],
+      providers: [mockApiProvider],
+      extensions: ['file://fixture.js'],
+      tests: [
+        {
+          threshold: 0,
+          vars: { rawReceipt: marker },
+          assert: [
+            {
+              type: 'assert-set',
+              threshold: 0,
+              assert: [
+                {
+                  type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                  value: { rawReceipt: marker },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, {
+      progressCallback: (_done, _total, _index, step) => visible.push(step),
+    });
+    expect(visible.length).toBeGreaterThanOrEqual(4);
+    expect(JSON.stringify(visible)).not.toContain(marker);
+    expect((await record.toEvaluateSummary()).results[0].success).toBe(false);
+  });
+
+  it('pins a static verifier plan even if a setup hook replaces its file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-plan-'));
+    const file = path.join(dir, 'plan.json');
+    const marker = 'ORIGINAL_PLAN_SYNTHETIC_RECEIPT';
+    const type = 'promptfoo:redteam:coding-agent:trace-redaction';
+    try {
+      fs.writeFileSync(file, JSON.stringify({ rawReceipt: marker }));
+      vi.mocked(runExtensionHook).mockImplementation(async (_hooks, phase, ctx) => {
+        if (phase === 'beforeEach') {
+          fs.writeFileSync(file, JSON.stringify({ rawReceipt: 'REPLACEMENT_SYNTHETIC_RECEIPT' }));
+        }
+        return ctx;
+      });
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output: marker });
+      const suite: TestSuite = {
+        prompts: [toPrompt('Inspect report')],
+        providers: [mockApiProvider],
+        extensions: ['file://fixture.js'],
+        tests: [{ assert: [{ type: 'assert-set', assert: [{ type, value: `file://${file}` }] }] }],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, {});
+      const { results } = await record.toEvaluateSummary();
+      expect(results[0].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(JSON.stringify(results[0])).not.toContain(marker);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects select-best when privacy checks omit candidate responses', async () => {
     const suite: TestSuite = {
       providers: [mockApiProvider],
@@ -151,7 +233,7 @@ describeEvaluator('evaluator assertions', () => {
         }).finally(() => {
           completed = true;
         });
-        await vi.waitFor(() => expect(hookCalls).toBe(1));
+        await vi.waitFor(() => expect(hookCalls).toBe(1), { interval: 1 });
         if (mode === 'cancel') {
           controller.abort();
         }
@@ -338,6 +420,8 @@ describeEvaluator('evaluator assertions', () => {
               ];
             }
             events.push(`hook-${index}`);
+          } else if (phase === 'afterEach' && 'result' in context) {
+            events.push(`after-${context.result.testIdx}`);
           }
           return context;
         });
@@ -375,7 +459,14 @@ describeEvaluator('evaluator assertions', () => {
           ),
         ).toBe(true);
         if (!initial.startsWith('unconfigured')) {
-          expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
+          expect(events).toEqual([
+            'hook-0',
+            'target-0',
+            'after-0',
+            'hook-1',
+            'target-1',
+            'after-1',
+          ]);
         }
         expect(events.filter((event) => event.startsWith('hook-'))).toEqual(['hook-0', 'hook-1']);
       } finally {
@@ -428,7 +519,7 @@ describeEvaluator('evaluator assertions', () => {
           return context;
         });
         vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
-          expect(hookCalls).toBe(2);
+          expect(hookCalls).toBe(targetCalls + 1);
           fs.writeFileSync(receipt, 'PRIVATE_TARGET_DECOY_RECEIPT');
           return { output: secrets[targetCalls++] };
         });
@@ -485,7 +576,7 @@ describeEvaluator('evaluator assertions', () => {
   );
 
   it.each([false, true])(
-    'preserves hook errors for file receipt tests: %s',
+    'omits private setup errors and preserves public hook errors: %s',
     async (protectedReceipt) => {
       const error = new Error('Fixture setup failed');
       let hookCalls = 0;
@@ -516,7 +607,7 @@ describeEvaluator('evaluator assertions', () => {
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       await expect(
         evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 10000 }),
-      ).rejects.toThrow(error);
+      ).rejects.toThrow(protectedReceipt ? 'Private test setup failed.' : error);
       expect(hookCalls).toBe(1);
       expect(mockApiProvider.callApi).not.toHaveBeenCalled();
     },
@@ -1045,16 +1136,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderPasses,
@@ -1271,16 +1353,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderFails,

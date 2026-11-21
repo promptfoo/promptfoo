@@ -1,15 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 
-import chalk from 'chalk';
+import { Chalk } from 'chalk';
 import winston from 'winston';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
+import { isPrivateEvaluation } from './util/privateEvaluation';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
+// Named construction also works when the CommonJS bundle loads Chalk as an ES module.
+const chalk = new Chalk();
 const MAX_LOG_FILES = 50;
 
 type LogCallback = (message: string) => void;
@@ -54,7 +57,6 @@ export interface SanitizedLogContext {
 }
 
 // Lazy source map support - only loaded when debug is enabled
-export let sourceMapSupportInitialized = false;
 let sourceMapSupportInitializationPromise: Promise<void> | null = null;
 
 // Shutdown state tracking - prevents writes once logger closure begins
@@ -70,24 +72,18 @@ export function getLoggerShuttingDown(): boolean {
   return isLoggerShuttingDown;
 }
 
-export async function initializeSourceMapSupport(): Promise<void> {
-  if (sourceMapSupportInitialized) {
-    return;
-  }
-
+export function initializeSourceMapSupport(): Promise<void> {
   sourceMapSupportInitializationPromise ??= (async () => {
     try {
       const sourceMapSupport = await import('source-map-support');
       sourceMapSupport.install();
-      sourceMapSupportInitialized = true;
     } catch {
-      // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
-    } finally {
+      // The optional dev dependency can be unavailable. Allow the next call to retry.
       sourceMapSupportInitializationPromise = null;
     }
   })();
 
-  await sourceMapSupportInitializationPromise;
+  return sourceMapSupportInitializationPromise;
 }
 
 /**
@@ -217,7 +213,7 @@ export function setLogLevel(level: LogLevel) {
 }
 
 export function isDebugEnabled(): boolean {
-  return getLogLevel() === 'debug';
+  return !isPrivateEvaluation() && getLogLevel() === 'debug';
 }
 
 /**
@@ -311,9 +307,9 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
       void initializeSourceMapSupport();
     }
 
-    // Handle both string and structured object inputs
-    const message = typeof input === 'string' ? input : input.message;
-    return winstonLogger[level]({ message, location });
+    // Preserve sanitized context for transports that consume structured fields.
+    const info = typeof input === 'string' ? { message: input } : input;
+    return winstonLogger[level]({ ...info, location });
   };
 }
 
@@ -385,7 +381,7 @@ function sanitizeContext(context: SanitizedLogContext): Record<string, unknown> 
  * If context is provided, it will be sanitized and formatted.
  *
  * When structured logging is enabled (via setStructuredLogging(true)):
- * - Passes { message, ...context } object to the logger
+ * - Passes { ...context, message } object to the logger
  * - Ideal for cloud logging integrations that expect structured data
  *
  * When structured logging is disabled (default):
@@ -396,8 +392,7 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
-    // Prevent new writes once shutdown starts
-    if (isLoggerShuttingDown) {
+    if (isLoggerShuttingDown || isPrivateEvaluation()) {
       return;
     }
 
@@ -410,7 +405,7 @@ function createLogMethodWithContext(
 
     if (useStructuredLogging) {
       // Structured mode: pass object with message field for cloud logging systems
-      internalLogger[level]({ message, ...sanitized });
+      internalLogger[level]({ ...sanitized, message });
     } else {
       // Default mode: format as string for CLI/console output
       const contextStr = safeJsonStringify(sanitized, true);
@@ -456,6 +451,9 @@ export async function logRequestResponse(options: {
   response?: Response | null;
   error?: boolean;
 }): Promise<void> {
+  if (isPrivateEvaluation()) {
+    return;
+  }
   const { url, requestBody, requestMethod, response, error } = options;
 
   const logMethod = error ? logger.error : logger.debug;
@@ -508,41 +506,32 @@ export async function closeLogger(): Promise<void> {
       return;
     }
 
-    // Add temporary error handlers to catch "write after end" errors during shutdown.
-    // This can happen due to a race condition where the pipe from winston's Transform
-    // stream still has data when _final() calls transport.end(). The error handlers
-    // prevent this from becoming an uncaught exception that crashes the process.
-    const errorHandlers = new Map<winston.transport, (err: Error) => void>();
-    for (const transport of fileTransports) {
-      const handler = (err: Error) => {
-        // Silently ignore "write after end" errors during shutdown - this is expected
-        // when the logger has buffered data that races with transport closing
-        if (err?.message?.includes('write after end')) {
-          return;
-        }
-        console.error(`Transport error during shutdown: ${err}`);
-      };
-      errorHandlers.set(transport, handler);
-      transport.on('error', handler);
+    // Winston ends transports in _final() before its readable buffer has drained.
+    // Deliver queued records first so backpressure cannot cause writes after end.
+    if (winstonLogger.readableLength > 0 || winstonLogger.writableLength > 0) {
+      await new Promise<void>((resolve) => {
+        const checkDrained = () => {
+          if (winstonLogger.readableLength === 0 && winstonLogger.writableLength === 0) {
+            winstonLogger.off('data', afterWrite);
+            winstonLogger.off('drain', afterWrite);
+            resolve();
+          }
+        };
+        // The transform's write callback runs after it emits data.
+        const afterWrite = () => queueMicrotask(checkDrained);
+        winstonLogger.on('data', afterWrite);
+        winstonLogger.on('drain', afterWrite);
+        afterWrite();
+      });
     }
 
-    // Use winstonLogger.end() instead of ending transports directly.
-    // This properly triggers winston's _final() method which:
-    // 1. Waits for all piped data to flush through the transform stream
-    // 2. Calls transport.end() on each transport in sequence
-    // 3. Waits for each transport's 'finish' event before proceeding
-    // This significantly reduces "write after end" errors from data still in the pipeline.
+    // File transport finish waits for the underlying file stream to flush.
     await new Promise<void>((resolve) => {
       winstonLogger.once('finish', resolve);
       winstonLogger.end();
     });
 
-    // Remove error handlers and file transports
     for (const transport of fileTransports) {
-      const handler = errorHandlers.get(transport);
-      if (handler) {
-        transport.off('error', handler);
-      }
       winstonLogger.remove(transport);
     }
   } catch (error) {

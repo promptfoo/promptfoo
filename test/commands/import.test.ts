@@ -20,6 +20,7 @@ import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
+import { parseImportFile } from '../../src/importers/parse';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -284,6 +285,35 @@ describe('importCommand', () => {
       expect(importedEval!.durationMs).toBe(4321);
       expect(importedEval!.generationDurationMs).toBe(123);
       expect(importedEval!.evaluationDurationMs).toBe(4198);
+    });
+
+    it('drops unowned attachments and applies inherited privacy before a v3 import', async () => {
+      const marker = 'SYNTHETIC_IMPORT_RECEIPT';
+      const data = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../__fixtures__/sample-export.json'), 'utf-8'),
+      );
+      data.config.defaultTest = {
+        assert: [
+          { type: 'promptfoo:redteam:coding-agent:trace-redaction', value: { rawReceipt: marker } },
+        ],
+      };
+      data.results.prompts[0].label = marker;
+      data.results.results[0].response.output = marker;
+      data.vars = [marker];
+      data.runtimeOptions = { filterPattern: marker };
+      data.traces = [
+        { traceId: 'imported', testCaseId: 'unknown', metadata: { text: marker }, spans: [] },
+      ];
+      tempFilePath = path.join(__dirname, `temp-private-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(data));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      const imported = await Eval.findById(data.evalId);
+      expect(imported).toBeDefined();
+      expect(imported!.vars).not.toContain(marker);
+      expect(JSON.stringify(imported!.runtimeOptions ?? {})).not.toContain(marker);
+      expect(JSON.stringify(await imported!.toEvaluateSummary())).not.toContain(marker);
+      expect(await new TraceStore().getTracesByEvaluation(data.evalId)).toEqual([]);
     });
 
     it('should import traces and attach them to the imported eval', async () => {
@@ -952,7 +982,9 @@ describe('importCommand', () => {
         tempFilePath,
         JSON.stringify({
           id,
-          config: {},
+          author: 'PRIVATE_LEGACY_RECEIPT',
+          description: 'PRIVATE_LEGACY_RECEIPT',
+          config: { description: 'PRIVATE_LEGACY_RECEIPT' },
           results: createLegacyRedactionSummary('promptfoo:redteam:coding-agent:trace-redaction'),
         }),
       );
@@ -1031,6 +1063,16 @@ describe('importCommand', () => {
   });
 
   describe('with OpenAI eval items JSONL export', () => {
+    it.each(['[]', '[null]', 'null', '42', '{"other":true}'])(
+      'preserves non-OpenAI JSON as promptfoo input: %s',
+      (text) => {
+        expect(parseImportFile(text)).toStrictEqual({
+          source: 'promptfoo-json',
+          evalData: JSON.parse(text),
+        });
+      },
+    );
+
     it('should import grader outcomes and preserve OpenAI metadata', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/openai-evals-items.jsonl');
 
@@ -1054,6 +1096,8 @@ describe('importCommand', () => {
       expect(importedEval!.prompts[0].metrics?.testFailCount).toBe(1);
       expect(importedEval!.prompts[0].metrics?.assertPassCount).toBe(5);
       expect(importedEval!.prompts[0].metrics?.assertFailCount).toBe(1);
+      expect(importedEval!.prompts[0].metrics).not.toHaveProperty('testCacheHitCount');
+      expect(importedEval!.prompts[0].metrics?.namedScoreWeights).toEqual({});
 
       const results = (await EvalResult.findManyByEvalId(importedEval!.id)).sort(
         (a, b) => a.testIdx - b.testIdx,
@@ -1167,60 +1211,82 @@ describe('importCommand', () => {
       });
     });
 
-    it('should keep non-equivalent multi-run items on separate test rows', async () => {
-      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
-      fs.writeFileSync(
-        filePath,
-        [
+    for (const { name, sources, grader, testCount, testIndices } of [
+      {
+        name: 'should keep non-equivalent items separate in interleaved runs',
+        sources: [
           {
-            run_id: 'evalrun_first_dataset',
-            data_source_idx: 0,
+            runId: 'evalrun_first_dataset',
             item: { input: 'First dataset item' },
-            grades: { Match: 1 },
-            passes: { Match: true },
           },
           {
-            run_id: 'evalrun_second_dataset',
-            data_source_idx: 0,
+            runId: 'evalrun_second_dataset',
             item: { input: 'Different dataset item' },
-            grades: { Match: 1 },
-            passes: { Match: true },
           },
-        ]
-          .map((row) => JSON.stringify(row))
-          .join('\n'),
-      );
-      tempFilePath = filePath;
-
-      importCommand(program);
-      await program.parseAsync(['node', 'test', 'import', filePath]);
-
-      expect(process.exitCode).toBeUndefined();
-
-      const importedEvals = await Eval.getMany(10);
-      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
-
-      expect(importedEvals[0].config.tests).toHaveLength(2);
-      expect(results).toHaveLength(2);
-      expect(results.map((result) => result.testIdx)).toEqual([0, 1]);
-      expect(results.map((result) => result.testCase.vars?.item)).toEqual([
-        { input: 'First dataset item' },
-        { input: 'Different dataset item' },
-      ]);
-    });
-
-    it('should import dashboard rows that omit optional pass results as score-only data', async () => {
-      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
-      fs.writeFileSync(
-        filePath,
-        JSON.stringify({
-          run_id: 'evalrun_without_passes',
+          { runId: 'evalrun_first_dataset', item: { input: 17 } },
+        ],
+        grader: 'Match',
+        testCount: 3,
+        testIndices: [0, 1, 2],
+      },
+      {
+        name: 'should align rows whose items have identical content but different key orderings',
+        sources: [
+          {
+            runId: 'evalrun_canonical_a',
+            item: { a: 1, b: 2, nested: { x: 10, y: 20 } },
+          },
+          {
+            runId: 'evalrun_canonical_b',
+            item: { nested: { y: 20, x: 10 }, b: 2, a: 1 },
+          },
+        ],
+        grader: 'Quality',
+        testCount: 1,
+        testIndices: [0, 0],
+      },
+    ]) {
+      it(name, async () => {
+        const rows = sources.map(({ runId, item }) => ({
+          run_id: runId,
           data_source_idx: 0,
-          item: { input: 'Grade this later' },
-          grades: { Quality: 0.5 },
-          eval_id: 'eval_future_shape',
-        }),
-      );
+          item,
+          grades: { [grader]: 1 },
+          passes: { [grader]: true },
+        }));
+        const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+        fs.writeFileSync(filePath, rows.map((row) => JSON.stringify(row)).join('\n'));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+
+        const importedEvals = await Eval.getMany(10);
+        const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+
+        expect(importedEvals[0].config.tests).toHaveLength(testCount);
+        expect(importedEvals[0].prompts[0].raw).toBe('Imported OpenAI eval item');
+        expect(results).toHaveLength(sources.length);
+        expect(results.map((result) => result.testIdx)).toEqual(testIndices);
+        expect(results.map((result) => result.testCase.vars?.item)).toEqual(
+          sources.map(({ item }) => item),
+        );
+        expect(new Set(results.map((result) => result.promptIdx)).size).toBe(2);
+      });
+    }
+
+    it.each([false, true])('imports score-only dashboard rows with array=%s', async (asArray) => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      const row = {
+        run_id: 'evalrun_without_passes',
+        data_source_idx: 0,
+        item: { input: 'Grade this later' },
+        grades: { Quality: 0.5 },
+        eval_id: 'eval_future_shape',
+      };
+      fs.writeFileSync(filePath, JSON.stringify(asArray ? [row] : row));
       tempFilePath = filePath;
 
       importCommand(program);
@@ -1244,45 +1310,6 @@ describe('importCommand', () => {
       });
       expect(results[0].metadata?.openai?.passes).toEqual({});
       expect(results[0].metadata?.openai?.outputItem?.eval_id).toBe('eval_future_shape');
-    });
-
-    it('should align rows whose items have identical content but different key orderings', async () => {
-      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
-      fs.writeFileSync(
-        filePath,
-        [
-          {
-            run_id: 'evalrun_canonical_a',
-            data_source_idx: 0,
-            item: { a: 1, b: 2, nested: { x: 10, y: 20 } },
-            grades: { Quality: 1 },
-            passes: { Quality: true },
-          },
-          {
-            run_id: 'evalrun_canonical_b',
-            data_source_idx: 0,
-            item: { nested: { y: 20, x: 10 }, b: 2, a: 1 },
-            grades: { Quality: 1 },
-            passes: { Quality: true },
-          },
-        ]
-          .map((row) => JSON.stringify(row))
-          .join('\n'),
-      );
-      tempFilePath = filePath;
-
-      importCommand(program);
-      await program.parseAsync(['node', 'test', 'import', filePath]);
-
-      expect(process.exitCode).toBeUndefined();
-
-      const importedEvals = await Eval.getMany(10);
-      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
-
-      expect(importedEvals[0].config.tests).toHaveLength(1);
-      expect(results).toHaveLength(2);
-      expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
-      expect(new Set(results.map((result) => result.promptIdx)).size).toBe(2);
     });
 
     it('should surface JSON error when a JSONL file mixes valid and invalid lines', async () => {

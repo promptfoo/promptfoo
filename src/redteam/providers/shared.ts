@@ -8,8 +8,13 @@ import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
+  createProviderRateLimitOptions,
+  getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  getRateLimitKey,
+  isRateLimitWrapped,
   type RateLimitRegistry,
+  sleepWithAbort,
   wrapProviderWithRateLimiting,
 } from '../../scheduler';
 import {
@@ -27,9 +32,15 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
+import {
+  composeResponseHeadersObservers,
+  preserveResponseHeadersObserverError,
+  preserveResponseHeadersObserverErrorResponse,
+} from '../../util/fetch/responseHeadersObserver';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
+import { withPrivateEvaluation } from '../../util/privateEvaluation';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
@@ -38,14 +49,20 @@ import {
 import {
   getAssertionLeaves,
   getProtectedAssertionValue,
-  hasRedactionMedia,
+  REDACTED_PROMPT,
   requiresTraceRedaction,
+  sanitizeRedactionGrade,
   sanitizeRedactionGradingInputs,
   sanitizeRedactionResult,
   TRACE_REDACTION_ASSERTIONS,
   TRUSTED_REDACTION_GRADER,
 } from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+  withGradingUsage,
+} from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -477,6 +494,20 @@ export type TargetResponse = {
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
 
+/** Retain only the selected error's origin when a strategy rebuilds its response. */
+export function preserveSelectedError<T extends ProviderResponse>(
+  response: T,
+  selected: ProviderResponse | undefined,
+): T {
+  if (!response.error || !selected?.error) {
+    return response;
+  }
+  if (selected.metadata?.errorOrigin === 'tool') {
+    response.metadata = { ...response.metadata, errorOrigin: 'tool' };
+  }
+  return preserveResponseHeadersObserverErrorResponse(selected, response);
+}
+
 export function isConversationEndedResponse(
   response: Pick<ProviderResponse, 'conversationEnded'> | undefined,
 ): boolean {
@@ -508,14 +539,71 @@ export function callTargetProvider(
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
+  const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return targetProvider.callApi(targetPrompt, context, options);
+  const privateCall = requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert);
+  const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    // The raw response and headers must stay inside the target / local verifier boundary.
+    // Neither diagnostics, response hooks nor trace callbacks may observe that evidence.
+    if (privateCall) {
+      return withPrivateEvaluation(async () => {
+        try {
+          const raw = await targetProvider.callApi(targetPrompt, context, {
+            ...options,
+            onResponseHeaders: undefined,
+          });
+          return await externalizeResponseForRedteamHistory(raw, context);
+        } catch (error) {
+          if (isTargetCallAbortError(error, options?.abortSignal)) {
+            options?.abortSignal?.throwIfAborted();
+            throw new DOMException('Private target request aborted', 'AbortError');
+          }
+          throw new Error('Private target request failed');
+        }
+      });
+    }
+    const targetOptions = onResponseHeaders
+      ? {
+          ...options,
+          onResponseHeaders: composeResponseHeadersObservers(
+            onResponseHeaders,
+            options?.onResponseHeaders,
+          ),
+        }
+      : options;
+    const call = async (callContext?: CallApiContextParams) => {
+      const response = await targetProvider.callApi(targetPrompt, callContext, targetOptions);
+      executionContext?.onTargetResponse?.(targetPrompt, response);
+      return response;
+    };
+    return tracingContext
+      ? tracingContext.withProviderSpan({ provider: targetProvider, callContext: context }, call)
+      : call(context);
+  };
+  const registry = executionContext?.rateLimitRegistry;
+  const activeProvider = executionContext?.rateLimitProvider;
+  // The evaluator already owns the slot when a same-pool override delegates.
+  // A different raw target needs its own observer; preserve the original object
+  // for rendering, tracing and the actual call receiver.
+  if (
+    registry &&
+    !isRateLimitWrapped(targetProvider) &&
+    (!activeProvider || getRateLimitKey(activeProvider) !== getRateLimitKey(targetProvider))
+  ) {
+    return registry.execute(
+      targetProvider,
+      invoke,
+      createProviderRateLimitOptions(options?.abortSignal),
+    );
   }
+  return invoke();
+}
 
-  return tracingContext.withProviderSpan(
-    { provider: targetProvider, callContext: context },
-    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+/** Preserve caller cancellation across target and strategy error accounting. */
+export function isTargetCallAbortError(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    (error instanceof Error && error.name === 'AbortError') ||
+    isCallerAbortError(error, signal, { requireReasonMatch: true })
   );
 }
 
@@ -564,44 +652,60 @@ export async function getTargetResponse(
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isTargetCallAbortError(error, options?.abortSignal)) {
       throw error;
     }
-    return {
+    return preserveResponseHeadersObserverError(options?.onResponseHeaders, error, {
       output: '',
       error: (error as Error).message,
       tokenUsage: {
         numRequests:
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
-    };
-  }
-  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
-    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    await sleep(targetProvider.delay);
+    });
   }
   if (
-    requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert) &&
-    hasRedactionMedia(targetRespRaw)
+    !targetRespRaw.cached &&
+    targetProvider.delay &&
+    targetProvider.delay > 0 &&
+    !options?.abortSignal?.aborted
   ) {
-    targetRespRaw = await externalizeResponseForRedteamHistory(targetRespRaw, context);
+    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+    try {
+      await sleepWithAbort(targetProvider.delay, options?.abortSignal);
+    } catch (error) {
+      // The target already completed. Only cancellation of this caller's delay
+      // may shorten pacing without replacing its response or accounting.
+      if (!isCallerAbortError(error, options?.abortSignal, { requireReasonMatch: true })) {
+        throw error;
+      }
+    }
+  }
+  if (requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert)) {
+    // Do not spread the projected object. Its identity links it to local-only evidence.
+    return targetRespRaw as TargetResponse;
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
-  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+  const hasOutput =
+    targetRespRaw &&
+    Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
+    targetRespRaw.output != null;
 
-  if (hasError) {
+  if (targetRespRaw?.error) {
     const output = hasOutput
       ? ((typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
           : safeJsonStringify(targetRespRaw.output)) as string)
       : '';
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
+    return preserveSelectedError(
+      {
+        ...(targetRespRaw as ProviderResponse),
+        output,
+        error: targetRespRaw.error,
+        tokenUsage,
+      },
+      targetRespRaw,
+    );
   }
 
   if (hasOutput) {
@@ -617,15 +721,6 @@ export async function getTargetResponse(
     };
   }
 
-  if (targetRespRaw?.error) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
-  }
-
   if (targetRespRaw?.conversationEnded) {
     return {
       ...(targetRespRaw as ProviderResponse),
@@ -634,15 +729,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error(
-    `
-    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
-
-    Instead got: ${safeJsonStringify(targetRespRaw)}
-
-    Note: Empty strings are valid output values.
-    `,
-  );
+  return {
+    ...(targetRespRaw as ProviderResponse),
+    output: '',
+    error:
+      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+    tokenUsage,
+  };
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
@@ -657,7 +750,12 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
 
 const privateRedactionResponses = new WeakMap<ProviderResponse, ProviderResponse>();
 
-export class CachedRedactionResponseError extends Error {}
+/** A session receipt goes only into the next target request. */
+export function getTargetSessionId(response: ProviderResponse) {
+  return (privateRedactionResponses.get(response) ?? response).sessionId;
+}
+
+export class PrivateVerificationError extends Error {}
 
 /** Grade every private target response before strategy control flow can discard it. */
 export async function gradeRedactionResponse(
@@ -666,40 +764,63 @@ export async function gradeRedactionResponse(
   test: AtomicTestCase | undefined,
   results: Record<number, GradingResult>,
 ): Promise<GradingResult | undefined> {
-  if (!test || response.metadata?.redactionMediaOmitted === true) {
+  if (!test || !requiresTraceRedaction(test.assert)) {
     return undefined;
   }
-  const { getGraderById } = await import('../graders');
-  for (const [index, assertion] of getAssertionLeaves(test.assert).entries()) {
-    const type = assertion.type.replace(/^not-/, '');
-    if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
-      continue;
-    }
-    if (response.cached) {
-      throw new CachedRedactionResponseError(
-        'Trace/artifact redaction requires a fresh target call; rerun with --no-cache',
-      );
-    }
-    const grader = getGraderById(type);
-    invariant(grader, `Missing privacy grader: ${type}`);
-    const { grade, rubric } = await runRedteamGrader(
-      grader,
-      prompt,
-      String(response.output ?? ''),
-      test,
-      undefined,
-      getGraderAssertionValue(assertion),
-      undefined,
-      undefined,
-      { providerResponse: response },
+  if (response.cached) {
+    throw new PrivateVerificationError(
+      'Trace/artifact redaction requires a fresh target call; rerun with --no-cache',
     );
-    const previous = results[index];
-    const current = accumulateGraderResult(previous, {
-      ...grade,
-      assertion: buildGraderResultAssertion(grade.assertion, assertion, rubric),
-    });
-    results[index] =
-      previous?.pass === false ? { ...previous, tokensUsed: current.tokensUsed } : current;
+  }
+  if (response.metadata?.redactionMediaOmitted === true) {
+    return undefined;
+  }
+  // Only a verifier from the local registry may recover the original evidence.
+  // Invalid verification must stop the strategy, even after a previous turn passed.
+  try {
+    const { getGraderById } = await import('../graders');
+    const original = privateRedactionResponses.get(response);
+    invariant(original && !original.metadata?.redactionContentOmitted, 'Missing private evidence');
+    const output =
+      typeof original.output === 'string'
+        ? original.output
+        : (safeJsonStringify(original.output) ?? '');
+    for (const [index, assertion] of getAssertionLeaves(test.assert).entries()) {
+      const type = assertion.type.replace(/^not-/, '');
+      if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
+        continue;
+      }
+      const grader = getGraderById(type);
+      invariant(grader?.id === type, 'Missing local verifier');
+      const { grade } = await withPrivateEvaluation(() =>
+        grader.getResult(
+          prompt,
+          output,
+          test,
+          undefined,
+          getGraderAssertionValue(assertion),
+          undefined,
+          undefined,
+          { providerResponse: original },
+        ),
+      );
+      const verdict = sanitizeRedactionGrade(grade);
+      const incomplete =
+        verdict.metadata?.graderError ||
+        verdict.metadata?.gradingIncomplete ||
+        verdict.metadata?.codingAgentExploitStatus === 'evidence_missing';
+      if (results[index]?.pass !== false || incomplete) {
+        results[index] = {
+          ...verdict,
+          ...(incomplete && { pass: false, score: 0 }),
+          assertion: Object.defineProperty({ type: assertion.type }, TRUSTED_REDACTION_GRADER, {
+            value: true,
+          }),
+        };
+      }
+    }
+  } catch {
+    throw new PrivateVerificationError('Private target verification failed');
   }
   const grades = Object.values(results);
   return grades.find((grade) => !grade.pass) ?? grades[0];
@@ -714,20 +835,13 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   ...args: TArgs
 ): Promise<TResult> {
   const context = args[args.length - 1] as RedteamGradingContext | undefined;
-  const privateResponse =
-    context?.providerResponse && privateRedactionResponses.get(context.providerResponse);
-  if (privateResponse && TRACE_REDACTION_ASSERTIONS.has(grader.id)) {
-    output =
-      typeof privateResponse.output === 'string'
-        ? privateResponse.output
-        : (safeJsonStringify(privateResponse.output) ?? '');
-    args = [...args.slice(0, -1), { ...context, providerResponse: privateResponse }] as TArgs;
-  }
-  if (requiresTraceRedaction(test.assert) && !TRACE_REDACTION_ASSERTIONS.has(grader.id)) {
+  const privateCall = requiresTraceRedaction(test.assert);
+  if (privateCall) {
     const response = sanitizeRedactionResult({
       response: context?.providerResponse ?? { output },
       testCase: test,
     }).response;
+    prompt = REDACTED_PROMPT;
     output = String(response.output ?? '');
     if (context) {
       args = [
@@ -746,10 +860,16 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
       { ...test, gradingArguments: args },
       undefined,
     ).test;
+    if (!Array.isArray(gradingArguments)) {
+      throw new PrivateVerificationError('Private grader inputs could not be projected');
+    }
     test = publicTest;
     args = gradingArguments;
   }
   const invoke = () => grader.getResult(prompt, output, test, ...args);
+  if (privateCall) {
+    return withPrivateEvaluation(invoke);
+  }
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke();
@@ -769,7 +889,30 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
+  input?: {
+    prompt: string;
+    output: string;
+    messages?: unknown;
+    pluginId?: string;
+    assertion?: AssertionOrSet;
+  },
 ): GradingResult {
+  if (input) {
+    current = {
+      ...current,
+      metadata: {
+        ...current.metadata,
+        redteamGradingAssertionHash: getGradingAssertionHash(input.assertion),
+        redteamGradingInputHash: getGradingInputHash(
+          input.prompt,
+          input.output,
+          input.messages,
+          input.pluginId,
+        ),
+      },
+    };
+  }
+
   const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
     if (!result.tokensUsed) {
       return undefined;
@@ -788,7 +931,7 @@ export function accumulateGraderResult(
         total: 0,
         prompt: 0,
         completion: 0,
-        cached: cachedTokens || reportedTotal,
+        cached: Math.max(cachedTokens, reportedTotal),
         numRequests: 0,
       };
     }
@@ -805,10 +948,7 @@ export function accumulateGraderResult(
       return current;
     }
 
-    return {
-      ...current,
-      tokensUsed,
-    };
+    return withGradingUsage(current, tokensUsed);
   }
 
   // The latest verdict can be cached even when the accumulated usage already
@@ -834,7 +974,37 @@ export function accumulateGraderResult(
     accumulateTokenUsage(tokensUsed, currentTokensUsed);
   }
 
-  return { ...current, tokensUsed };
+  return withGradingUsage(current, tokensUsed);
+}
+
+export interface FlaggedTurn {
+  graderResult: GradingResult;
+  output: string;
+  prompt: string | undefined;
+  messages: Message[];
+  guardrails?: ProviderResponse['guardrails'];
+  transformDisplayVars?: Record<string, string>;
+}
+
+/** Keep the verdict and its inputs together; grader errors do not identify vulnerabilities. */
+export function captureFlaggedTurn(
+  graderResult: GradingResult,
+  turn: Omit<FlaggedTurn, 'graderResult'>,
+): FlaggedTurn | undefined {
+  if (graderResult.pass || graderResult.metadata?.graderError === true) {
+    return undefined;
+  }
+  return { graderResult, ...turn, messages: [...turn.messages] };
+}
+
+/** Preserve the flagged verdict with grading usage from all turns. */
+export function resolveStoredGraderResult(
+  flaggedResult: GradingResult | undefined,
+  storedGraderResult: GradingResult | undefined,
+): GradingResult | undefined {
+  return flaggedResult
+    ? withGradingUsage(flaggedResult, storedGraderResult?.tokensUsed)
+    : storedGraderResult;
 }
 
 export interface Message {
@@ -994,6 +1164,7 @@ export async function createIterationContext({
 type SharedBacktrackingStopReason =
   | 'Grader failed'
   | 'Max backtracks reached'
+  | 'Target error'
   | 'Target ended conversation';
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
@@ -1009,20 +1180,22 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
 ): Promise<T> {
   const testCase = context?.test as AtomicTestCase | undefined;
   if (requiresTraceRedaction(testCase?.assert)) {
-    if (!hasRedactionMedia(response)) {
-      const sanitized = sanitizeRedactionResult({ response, testCase }).response;
-      privateRedactionResponses.set(
-        sanitized,
-        response.raw === undefined ? response : { ...response, raw: undefined },
-      );
-      return sanitized;
+    if (privateRedactionResponses.has(response)) {
+      return response;
     }
     const sanitized = sanitizeRedactionResult({ response, testCase }).response;
-    return {
-      ...sanitized,
-      error:
-        'Binary, image, audio, and video redaction cannot be verified; provide a text-only report.',
-    };
+    if (sanitized.metadata?.redactionMediaOmitted === true) {
+      return {
+        ...sanitized,
+        error:
+          'Binary, image, audio, and video redaction cannot be verified; provide a text-only report.',
+      };
+    }
+    privateRedactionResponses.set(
+      sanitized,
+      response.raw === undefined ? response : { ...response, raw: undefined },
+    );
+    return sanitized;
   }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
@@ -1170,17 +1343,7 @@ export function buildGraderResultAssertion(
   rubric: string | undefined,
 ): Assertion | undefined {
   const assertion = gradeAssertion ?? (isSingleAssertion(assertToUse) ? assertToUse : undefined);
-  if (!assertion) {
-    return undefined;
-  }
-  const storedAssertion = { ...assertion, value: rubric };
-  if (
-    isSingleAssertion(assertToUse) &&
-    TRACE_REDACTION_ASSERTIONS.has(assertToUse.type.replace(/^not-/, ''))
-  ) {
-    Object.defineProperty(storedAssertion, TRUSTED_REDACTION_GRADER, { value: true });
-  }
-  return storedAssertion;
+  return assertion && { ...assertion, value: rubric };
 }
 
 export function getGraderAssertionValue(
@@ -1191,4 +1354,10 @@ export function getGraderAssertionValue(
   }
 
   return getProtectedAssertionValue(assertToUse);
+}
+
+export interface SuccessfulAttack {
+  turn: number;
+  prompt: string;
+  response: string;
 }

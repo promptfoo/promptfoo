@@ -100,7 +100,7 @@ describe('convertTestResultsToTableRow', () => {
     expect(cell.text).toContain('Response omitted');
     expect(cell.gradingResult?.metadata?.renderedGradingPrompt).toBeUndefined();
     if (row) {
-      expect(row.vars).toEqual(['[REDACTED]', 'keep']);
+      expect(row.vars).toEqual(['', '']);
     }
     expect(JSON.stringify(result)).toBe(snapshot);
   });
