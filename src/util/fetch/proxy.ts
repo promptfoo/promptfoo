@@ -59,5 +59,15 @@ export function getProxyForUrl(url: string, env = getProxyEnvironment()): string
     return '';
   }
   const proxy = env[`${protocol}_proxy`] || env.all_proxy || '';
-  return proxy && !proxy.includes('://') ? `${protocol}://${proxy}` : proxy;
+  if (!proxy) {
+    return '';
+  }
+  const route = proxy.includes('://') ? proxy : `${protocol}://${proxy}`;
+  // Some SDKs include an unsupported proxy URL verbatim in exported errors.
+  // Reject it before handing credentials to them. PAC scripts are never loaded.
+  const parsedProxy = URL.parse(route);
+  if (!parsedProxy?.hostname || !/^(?:https?|socks(?:4a?|5h?)?):$/.test(parsedProxy.protocol)) {
+    throw new Error('Invalid or unsupported proxy URL.');
+  }
+  return route;
 }

@@ -115,7 +115,7 @@ describe('ConfigModal', () => {
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
 
-  it('downloads config as YAML file when download button is clicked', async () => {
+  it('downloads config as a YAML file with the expected filename', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
@@ -124,14 +124,6 @@ describe('ConfigModal', () => {
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
-  });
-
-  it('sets the config download filename', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
-
-    await user.click(getDownloadButton());
-
     const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock
       .contexts[0] as HTMLAnchorElement;
     expect(anchor.download).toBe('config.yaml');

@@ -248,6 +248,20 @@ describe('scoped credential_process environment', () => {
     });
   });
 
+  it('omits credential subprocess arguments and stderr from SDK diagnostics', async () => {
+    fs.writeFileSync(script, "process.stderr.write('private-output'); process.exit(1)");
+    fs.writeFileSync(
+      configFilepath,
+      `[profile fixture]\ncredential_process=${command()} private-argument\n`,
+    );
+    const log = vi.fn();
+    const logger = { debug: log, info: log, warn: log, error: log };
+    const provider = await getScopedAwsProfileCredentials({ ...options(), logger }, scoped());
+    await expect(provider?.()).rejects.toThrow('Could not load credentials');
+    expect(JSON.stringify(log.mock.calls)).toContain('credential_process failed');
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-argument|private-output/);
+  });
+
   it('reloads profile changes on forced refresh and preserves static credentials ahead of process credentials', async () => {
     const provider = await getScopedAwsProfileCredentials(options(), scoped());
     expect((await provider?.())?.accessKeyId).toBe('scoped-value');

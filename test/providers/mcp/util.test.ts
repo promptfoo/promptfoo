@@ -18,6 +18,16 @@ import type {
   MCPServerConfig,
 } from '../../../src/providers/mcp/types';
 
+const createClientCredentialsServer = () => ({
+  auth: {
+    type: 'oauth' as const,
+    grantType: 'client_credentials' as const,
+    clientId: 'id',
+    clientSecret: 'secret',
+    tokenUrl: 'https://auth.example.com/token',
+  },
+});
+
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
 
@@ -199,30 +209,14 @@ describe('getAuthHeaders', () => {
   });
 
   it('should return oauth bearer token when provided', () => {
-    const server: MCPServerConfig = {
-      auth: {
-        type: 'oauth',
-        grantType: 'client_credentials',
-        clientId: 'id',
-        clientSecret: 'secret',
-        tokenUrl: 'https://auth.example.com/token',
-      },
-    };
+    const server: MCPServerConfig = createClientCredentialsServer();
     expect(getAuthHeaders(server, 'oauth-token-123')).toEqual({
       Authorization: 'Bearer oauth-token-123',
     });
   });
 
   it('should return empty object for oauth without token', () => {
-    const server: MCPServerConfig = {
-      auth: {
-        type: 'oauth',
-        grantType: 'client_credentials',
-        clientId: 'id',
-        clientSecret: 'secret',
-        tokenUrl: 'https://auth.example.com/token',
-      },
-    };
+    const server: MCPServerConfig = createClientCredentialsServer();
     expect(getAuthHeaders(server)).toEqual({});
   });
 
@@ -639,5 +633,89 @@ describe('getOAuthTokenWithExpiry', () => {
       'https://agent-a.example.com/oauth/token',
       'https://agent-b.example.com/oauth/token',
     ]);
+  });
+});
+
+describe('OAuth cancellation ownership', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps a token fetch alive while another waiter remains', async () => {
+    let complete!: (value: unknown) => void;
+    let fetchSignal!: AbortSignal;
+    mockFetch.mockImplementation((_url, init) => {
+      fetchSignal = init.signal;
+      return new Promise((resolve, reject) => {
+        complete = resolve;
+        fetchSignal.addEventListener('abort', () => reject(fetchSignal.reason), { once: true });
+      });
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'fixture',
+      clientSecret: 'fixture-secret',
+      tokenUrl: 'https://shared-cancel.example.test/token',
+    };
+    const controller = new AbortController();
+    const first = getOAuthTokenWithExpiry(auth, undefined, undefined, controller.signal);
+    const rejected = expect(first).rejects.toThrow();
+    const second = getOAuthTokenWithExpiry(auth);
+    controller.abort();
+    await rejected;
+    expect(fetchSignal.aborted).toBe(false);
+    complete({ ok: true, json: async () => ({ access_token: 'kept', expires_in: 3600 }) });
+    await expect(second).resolves.toMatchObject({ accessToken: 'kept' });
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('aborts the fetch after the last waiter leaves and permits a fresh request', async () => {
+    let fetchSignal!: AbortSignal;
+    mockFetch.mockImplementationOnce((_url, init) => {
+      fetchSignal = init.signal;
+      return new Promise((_resolve, reject) =>
+        fetchSignal.addEventListener('abort', () => reject(fetchSignal.reason), { once: true }),
+      );
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'fixture',
+      clientSecret: 'fixture-secret',
+      tokenUrl: 'https://last-cancel.example.test/token',
+    };
+    const controller = new AbortController();
+    const first = getOAuthTokenWithExpiry(auth, undefined, undefined, controller.signal);
+    const rejected = expect(first).rejects.toThrow();
+    controller.abort();
+    await rejected;
+    expect(fetchSignal.aborted).toBe(true);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'fresh', expires_in: 3600 }),
+    });
+    await expect(getOAuthTokenWithExpiry(auth)).resolves.toMatchObject({ accessToken: 'fresh' });
+  });
+
+  it('does not continue discovery after cancellation', async () => {
+    mockFetch.mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) =>
+          init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }),
+        ),
+    );
+    const controller = new AbortController();
+    const pending = discoverTokenEndpoint(
+      'https://discovery-cancel.example.test/mcp',
+      controller.signal,
+    );
+    const rejected = expect(pending).rejects.toThrow();
+    controller.abort();
+    await rejected;
+    expect(mockFetch).toHaveBeenCalledOnce();
   });
 });

@@ -1,3 +1,4 @@
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import { resolveProviderEnv } from './env';
 
 interface CredentialOptions {
@@ -17,4 +18,17 @@ export function resolveProviderApiKey(
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
   return resolveProviderEnv(env, envars, config?.apiKeyEnvar ? envars : ambientEnvars)?.value;
+}
+
+export function resolveConfiguredApiKey(provider: {
+  config: CredentialOptions;
+  env?: Readonly<Record<string, string | undefined>>;
+}): string | undefined {
+  if (provider.config.apiKey !== undefined) {
+    return provider.config.apiKey;
+  }
+  const apiKeyEnvar = provider.config.apiKeyEnvar as EnvVarKey | undefined;
+  return apiKeyEnvar
+    ? (getProviderEnvString(provider.env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar))
+    : undefined;
 }

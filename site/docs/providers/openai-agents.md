@@ -26,22 +26,22 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ## Prerequisites
 
-- Install Promptfoo and the supported JavaScript SDK together: `npm install promptfoo @openai/agents@^0.14.1`
+- Install Promptfoo and the supported JavaScript SDK together: `npm install promptfoo @openai/agents@^0.21.0`
 - Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
 
-The SDK is an optional peer and is not installed by default. Use the project-local `npx promptfoo` command for file-exported agents so Promptfoo and the agent share the same SDK installation. An incompatible SDK in your project does not prevent ordinary Promptfoo evals; selecting `openai:agents:*` checks compatibility.
+Promptfoo supports SDK versions `^0.21.0` and `^0.14.1` as optional peers. Use the project-local `npx promptfoo` command for file-exported agents so Promptfoo and the agent share the same SDK installation. An incompatible SDK in your project does not prevent ordinary Promptfoo evals; selecting `openai:agents:*` checks compatibility.
 
 For inline agents, a global installation is also supported:
 
 ```bash
-npm install -g promptfoo @openai/agents@^0.14.1
+npm install -g promptfoo @openai/agents@^0.21.0
 ```
 
 For a one-off inline-agent eval, run this from an empty directory outside an existing npm project, using an absolute config path:
 
 ```bash
-npx --yes --package=promptfoo --package=@openai/agents@^0.14.1 promptfoo eval -c /absolute/path/config.yaml --no-cache
+npx --yes --package=promptfoo --package=@openai/agents@^0.21.0 promptfoo eval -c /absolute/path/config.yaml --no-cache
 ```
 
 You can also supply OpenAI credentials and endpoints through provider or top-level `env`, `--env-file`, or `config.apiKey` and `config.apiBaseUrl`. Agents with a custom SDK `Model` object keep that model's client.
@@ -56,7 +56,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-6-luna
+        model: gpt-6.2-sol
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
@@ -365,6 +365,8 @@ providers:
 ```
 
 Use `type: unix-local` for the SDK's local sandbox client or `type: docker` for the Docker client. You can also pass a full SDK `SandboxRunConfig`, a file export, or a factory if you need custom sessions, snapshots, manifests, or clients.
+
+With SDK 0.21, `unix-local` also requires a trusted Python 3 interpreter on the host with descriptor-relative filesystem support for protected file operations. If the SDK cannot discover it, set `OPENAI_AGENTS_PYTHON` to the interpreter's absolute path. The SDK fails closed when this prerequisite is missing; disabling file protection is unsupported. Docker sandbox images need `/bin/sh` and standard GNU filesystem utilities, including `realpath`.
 
 Inline agent definitions can opt into the sandbox runtime with `type: sandbox`, but file-exported SDK agents are the better fit once you need custom capability objects such as `skills()` or non-default manifests.
 

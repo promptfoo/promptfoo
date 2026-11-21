@@ -852,7 +852,7 @@ describe('real cloud SDK credential construction without authentication calls', 
               config: { projectUrl: 'https://fixture.services.ai.azure.com/api/projects/fixture' },
             });
             const client = await Reflect.get(provider, 'initializeClient').call(provider);
-            const credential = Reflect.get(client, '_credential');
+            const credential = Reflect.get(client, 'credential');
             expect(credential).toBeInstanceOf(ClientSecretCredential);
             expect(Reflect.get(credential, 'tenantId')).toBe(tenantId);
             expect(await Reflect.get(provider, 'initializeClient').call(provider)).toBe(client);

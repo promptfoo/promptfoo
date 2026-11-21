@@ -4,8 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { createCache } from 'cache-manager';
-import { Keyv } from 'keyv';
-import { KeyvFile } from 'keyv-file';
+import { createDiskCache } from './cache/storage';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
@@ -21,7 +20,9 @@ import {
   PROMPTFOO_TEAM_ID_HEADER,
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
+import { getProxyForUrl } from './util/fetch/proxy';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
+import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
@@ -35,17 +36,23 @@ let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 let cacheClearGeneration = 0;
 
-const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 // The CLI and the public ESM/CJS entry points can load separate copies of this
 // module. Share only the async policy, not cache instances or module defaults,
 // so providers loaded by extension hooks observe the evaluation's cache policy.
 const CACHE_ENABLED_CONTEXT = Symbol.for('promptfoo.cache.enabledContext.v1');
+const CACHE_NAMESPACE_CONTEXT = Symbol.for('promptfoo.cache.namespaceContext.v1');
 const cacheContextGlobal = globalThis as typeof globalThis & {
   [CACHE_ENABLED_CONTEXT]?: AsyncLocalStorage<{ enabled: boolean }>;
+  [CACHE_NAMESPACE_CONTEXT]?: AsyncLocalStorage<{ namespace: string }>;
 };
 const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new AsyncLocalStorage<{
   enabled: boolean;
 }>());
+
+const cacheNamespaceStorage = (cacheContextGlobal[CACHE_NAMESPACE_CONTEXT] ??=
+  new AsyncLocalStorage<{
+    namespace: string;
+  }>());
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -87,7 +94,7 @@ export function getCache() {
 function getCacheInstance() {
   if (!cacheInstance) {
     let cachePath = '';
-    const stores = [];
+    let diskCache: Cache | undefined;
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
@@ -101,16 +108,7 @@ function getCacheInstance() {
       const newCacheFile = path.join(cachePath, 'cache.json');
 
       try {
-        const store = new KeyvFile({
-          filename: newCacheFile,
-        });
-
-        const keyv = new Keyv({
-          store,
-          ttl: getCacheTtlMs(),
-        });
-
-        stores.push(keyv);
+        diskCache = createDiskCache(newCacheFile, getCacheTtlMs());
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
@@ -120,12 +118,12 @@ function getCacheInstance() {
       }
     }
 
-    // Initialize cache (disk if stores array has items, memory otherwise)
-    cacheInstance = createCache({
-      stores,
-      ttl: getCacheTtlMs(),
-      refreshThreshold: 0, // Disable background refresh
-    });
+    cacheInstance =
+      diskCache ??
+      createCache({
+        ttl: getCacheTtlMs(),
+        refreshThreshold: 0, // Disable background refresh
+      });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       const result = await clear();
@@ -577,7 +575,26 @@ function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown)
   return { cacheable: true, identity };
 }
 
+function getFetchCachePrefix(url: RequestInfo, options: FetchOptions): string | null {
+  if (('dispatcher' in options && options.dispatcher) || getEnvString('PROMPTFOO_CA_CERT_PATH')) {
+    return null;
+  }
+  const proxy = getProxyForUrl(getRequestUrlString(url));
+  const route = proxy ? new URL(proxy) : undefined;
+  if (
+    route &&
+    (route.username || route.password || route.search || route.hash || route.pathname !== '/')
+  ) {
+    return null;
+  }
+  const insecure = getEnvBool('PROMPTFOO_INSECURE_SSL') ? ':insecure' : '';
+  const partition = route ? `:proxy:${sha256(route.origin)}` : '';
+  // v3 entries predate transport isolation and might originate from any route.
+  return `fetch:v4${insecure}${partition}`;
+}
+
 function getFetchCacheKey(
+  prefix: string,
   url: RequestInfo,
   options: RequestInit,
   method: string,
@@ -598,7 +615,7 @@ function getFetchCacheKey(
 
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   return getScopedCacheKey(
-    `fetch:v3:${hashFetchCacheKey({
+    `${prefix}:${hashFetchCacheKey({
       format,
       headers: getHeadersForCacheKey(url, options),
       method,
@@ -741,7 +758,9 @@ async function fetchAndReadBody(
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
   const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
-  const maxBodyRetries = isIdempotent ? Math.min(2, retryBudget) : 0;
+  const body = options.body ?? (url instanceof Request ? url.body : null);
+  const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
+  const maxBodyRetries = isIdempotent && !singleUseBody ? Math.min(2, retryBudget) : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -749,12 +768,12 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await resp.text();
+      const respText = await readWithResponseDeadline(resp, () => resp.text());
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (
         !options.signal?.aborted &&
-        isTransientConnectionError(err as Error) &&
+        (err instanceof ResponseBodyTimeoutError || isTransientConnectionError(err as Error)) &&
         bodyAttempt < maxBodyRetries
       ) {
         const backoffMs = Math.pow(2, bodyAttempt) * 1000;
@@ -920,13 +939,14 @@ async function prepareFetchResponse(
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number = getRequestTimeoutMs(),
+  timeout: number | `${number}` = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
   onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<FetchWithCacheResult<T>> {
+  const timeoutMs = Number(timeout);
   const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
@@ -961,16 +981,14 @@ export async function fetchWithCache<T = unknown>(
     );
   }
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
-  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
-  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
-    ? 'fetch:cloud-auth:v3'
-    : 'fetch:v3';
+  const prefix = cacheEnabled && !bust ? getFetchCachePrefix(url, fetchOptions) : null;
   const cacheKey =
-    cacheEnabled && !bust
-      ? providedCacheKey
-        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
-      : null;
+    prefix &&
+    (providedCacheKey
+      ? getScopedCacheKey(
+          `${prefix}:explicit:${fetchOptions.restrictCloudAuthRedirects ? 'cloud' : 'plain'}:${providedCacheKey}${repeatSuffix}`,
+        )
+      : getFetchCacheKey(prefix, url, fetchOptions, method, format, repeatIndex));
 
   let notifyRateLimitBackoff: typeof onRateLimitBackoff;
   const observerFailure = onRateLimitBackoff
@@ -996,7 +1014,7 @@ export async function fetchWithCache<T = unknown>(
     const response = fetchAndReadBody(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       logEnabled,
@@ -1057,7 +1075,8 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = getAbortSignalScopedKey(cacheKey, signal);
+  // Only share an active transport when its deadline works for both callers.
+  const inflightCacheKey = `${timeoutMs}:${getAbortSignalScopedKey(cacheKey, signal)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
@@ -1065,7 +1084,7 @@ export async function fetchWithCache<T = unknown>(
     const response = prepareFetchResponse(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       format,

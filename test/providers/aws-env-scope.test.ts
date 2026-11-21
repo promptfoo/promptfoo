@@ -817,7 +817,7 @@ describe('scoped AWS SDK authentication', () => {
   });
 
   it.each(['host', 'file'])(
-    'partitions Knowledge Base IAM caches with a suite mask for the %s bearer and ignored provider tokens',
+    'bypasses Knowledge Base IAM caches with a suite mask for the %s bearer and ignored provider tokens',
     async (source) => {
       mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: source === 'host' ? 'fixture-host-bearer' : undefined,
@@ -854,12 +854,12 @@ describe('scoped AWS SDK authentication', () => {
                   expect((await client.config.credentials()).accessKeyId).toBe(`${owner}-access`);
                   const response = await provider.callApi('same masked prompt');
                   expect(response.output).toBe(owner);
-                  expect(Boolean(response.cached)).toBe(index === 2);
+                  expect(response.cached).not.toBe(true);
                 } finally {
                   client.destroy();
                 }
               }
-              expect(requests).toEqual(['first', 'second']);
+              expect(requests).toEqual(['first', 'second', 'first']);
             }),
           ),
       );

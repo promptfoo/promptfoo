@@ -243,7 +243,7 @@ export async function resolveAwsCredentials(
   return getScopedAwsProfileCredentials({ ...getAwsCredentialProviderOptions(env), profile }, env);
 }
 
-/** Stable public identity partition for SDK credentials introduced by scoped environments. */
+/** Partition scoped SDK requests by the selected identity and endpoint. */
 export function getAwsCredentialCacheNamespace(
   config: AwsCredentialConfig = {},
   env?: EnvOverrides,
@@ -330,6 +330,12 @@ function getScopedCredentialCacheNamespace(
     (options.filepath !== undefined || options.configFilepath !== undefined);
   if (!source || (source === config && !hasScopedProfileFiles)) {
     return undefined;
+  }
+  if (source.accessKeyId && source.secretAccessKey) {
+    // An access key ID alone does not authenticate a caller to another invocation's cache.
+    return getOpaqueCredentialCacheNamespace(
+      JSON.stringify([source.accessKeyId, source.secretAccessKey, source.sessionToken]),
+    );
   }
   const scoped = getMergedEnvOverrides(env);
   const profileSourceAccessKey =

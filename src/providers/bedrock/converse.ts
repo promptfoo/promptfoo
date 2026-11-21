@@ -45,7 +45,11 @@ import {
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockCost } from './pricing';
+import {
+  calculateBedrockCost,
+  getBedrockRuntimeBillingRegion,
+  isBedrockGrokRuntimeProfile,
+} from './pricing';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -1086,6 +1090,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     if (!this.config.serviceTier) {
       return undefined;
     }
+    if (
+      isBedrockGrokRuntimeProfile(this.modelName) &&
+      this.modelName.endsWith('grok-4.7') &&
+      this.config.serviceTier.type !== 'default'
+    ) {
+      throw new Error(
+        'Grok 4.7 Converse supports the default service tier only. Use Runtime Chat, Responses, or InvokeModel for Priority or Flex.',
+      );
+    }
     return {
       type: this.config.serviceTier.type,
     };
@@ -1443,8 +1456,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       completionTokens,
       cacheReadTokens,
       cacheWriteTokens,
-      this.getRegion(),
-      this.config.serviceTier,
+      getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
+      response.serviceTier?.type ? { type: response.serviceTier.type } : this.config.serviceTier,
       cacheWrite1hTokens,
     );
 
@@ -1700,6 +1713,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let output = '';
       let reasoning = '';
       let stopReason: string | undefined;
+      let billedTier = this.config.serviceTier;
       let usage: {
         inputTokens?: number;
         outputTokens?: number;
@@ -1757,8 +1771,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           if ('messageStop' in event && event.messageStop) {
             stopReason = event.messageStop.stopReason;
           }
-          if ('metadata' in event && event.metadata?.usage) {
-            usage = event.metadata.usage;
+          if ('metadata' in event && event.metadata) {
+            usage = event.metadata.usage ?? usage;
+            if (event.metadata.serviceTier?.type) {
+              billedTier = { type: event.metadata.serviceTier.type };
+            }
           }
         }
       }
@@ -1812,8 +1829,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.outputTokens,
         usage.cacheReadInputTokens,
         usage.cacheWriteInputTokens,
-        this.getRegion(),
-        this.config.serviceTier,
+        getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
+        billedTier,
         getOneHourCacheWriteTokens(usage.cacheDetails),
       );
 

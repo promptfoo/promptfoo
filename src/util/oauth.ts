@@ -11,6 +11,7 @@ export const TOKEN_REFRESH_BUFFER_MS = 60000;
  * Values should already be rendered/resolved (no templates).
  */
 export interface OAuthTokenConfig {
+  signal?: AbortSignal;
   tokenUrl: string;
   /** Discovered endpoints must not redirect configured credentials elsewhere. */
   redirect?: RequestRedirect;
@@ -66,6 +67,7 @@ export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTo
   }
 
   const response = await fetchWithProxy(config.tokenUrl, {
+    signal: config.signal,
     method: 'POST',
     redirect: config.redirect,
     headers: {

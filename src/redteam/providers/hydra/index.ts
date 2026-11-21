@@ -91,6 +91,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     message: string;
     response: string;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
@@ -102,8 +103,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
     outputAudio?: MediaData;
     outputImage?: MediaData;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -340,12 +344,7 @@ export class HydraProvider implements ApiProvider {
     this.conversationHistory = [];
     this.sessionId = undefined;
     const sessionIds: string[] = [];
-    const successfulAttacks: Array<{
-      turn: number;
-      message: string;
-      response: string;
-      traceSummary?: string;
-    }> = [];
+    const successfulAttacks: NonNullable<HydraMetadata['successfulAttacks']> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
@@ -358,18 +357,7 @@ export class HydraProvider implements ApiProvider {
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      graderPassed: boolean | undefined;
-      trace?: Record<string, unknown>;
-      traceSummary?: string;
-      inputVars?: Record<string, string>;
-    }> = [];
+    const redteamHistory: HydraMetadata['redteamHistory'] = [];
     let lastTransformResult: TransformResult | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
@@ -414,7 +402,7 @@ export class HydraProvider implements ApiProvider {
         conversationHistory: conversationHistoryForCloud,
         ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
-          turn > 1 && storedGraderResult
+          turn > 1 && storedGraderResult && storedGraderResult.metadata?.graderError !== true
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,
@@ -973,6 +961,11 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
+      const graderError =
+        graderResult?.metadata?.graderError === true
+          ? graderResult.reason || 'Grading failed'
+          : undefined;
+
       // Store in redteam history (with audio/image if transforms were applied)
       redteamHistory.push({
         prompt: nextMessage,
@@ -983,15 +976,19 @@ export class HydraProvider implements ApiProvider {
           ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
           : undefined,
         // Note: outputImage would come from provider if model responds with image
-        graderPassed: graderResult?.pass,
+        graderPassed: graderError ? undefined : graderResult?.pass,
+        graderError,
+        gradingInputHash: graderError
+          ? storedGraderResult?.metadata?.redteamGradingInputHash
+          : undefined,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
 
-      // Check if vulnerability was achieved
-      if (graderResult?.pass === false) {
+      // Only a valid grader verdict can establish a vulnerability.
+      if (graderResult?.pass === false && !graderError) {
         vulnerabilityAchieved = true;
         successfulAttacks.push({
           turn,

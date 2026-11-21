@@ -23,7 +23,7 @@ import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProviderFromCloud } from '../../../src/util/cloud';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { getProxyForUrl } from '../../../src/util/fetch/proxy';
-import { clearProxyEnv, createDeferred, mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv, PROXY_ENV_KEYS } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 vi.mock('../../../src/util/cloud', async (importOriginal) => ({
@@ -31,6 +31,14 @@ vi.mock('../../../src/util/cloud', async (importOriginal) => ({
   getProviderFromCloud: vi.fn(),
 }));
 let restoreEnv = () => {};
+const emptyItems = { data: [], object: 'list', first_id: null, last_id: null, has_more: false };
+
+function rejectAmbientModel() {
+  const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+  vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('Unexpected default model'));
+  setDefaultModelProvider(custom);
+}
+
 const response = {
   id: 'resp_fixture',
   object: 'response',
@@ -52,6 +60,7 @@ const response = {
 beforeEach(() => {
   setTracingDisabled(true);
   restoreEnv = mockProcessEnv({
+    ...Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
     OPENAI_API_KEY: 'host-key',
     OPENAI_BASE_URL: undefined,
     OPENAI_API_BASE_URL: undefined,
@@ -116,9 +125,7 @@ describe('Agents SDK scoped client', () => {
       ].map(([name, value]) => ({ scope, name, value })),
     ),
   )('honors call-time $scope $name on an unbound provider', async ({ scope, name, value }) => {
-    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
-    vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed gateway'));
-    setDefaultModelProvider(custom);
+    rejectAmbientModel();
     const target = provider();
     const invoke = () => target.callApi('hello');
     if (scope === 'process') {
@@ -135,11 +142,7 @@ describe('Agents SDK scoped client', () => {
 
   it.each(['host-org', ''])('honors a process-only organization of %j', async (organization) => {
     mockProcessEnv({ OPENAI_ORGANIZATION: organization, OPENAI_ORG_ID: 'sdk-org' });
-    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
-    vi.spyOn(custom, 'getModel').mockRejectedValue(
-      new Error('default provider bypassed organization'),
-    );
-    setDefaultModelProvider(custom);
+    rejectAmbientModel();
     await provider().callApi('hello');
     expect(request().headers.get('openai-organization')).toBe(organization || null);
   });
@@ -173,10 +176,8 @@ describe('Agents SDK scoped client', () => {
   it.each(['suite', 'file'] as const)(
     'uses the shared transport for a %s-only proxy setting',
     async (scope) => {
-      const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
-      vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed proxy'));
-      setDefaultModelProvider(custom);
-      const invoke = () => provider().callApi('hello');
+      rejectAmbientModel();
+      const invoke = () => provider({ headers: {} }).callApi('hello');
       await (scope === 'suite'
         ? cliState.withEnv({ HTTPS_PROXY: 'http://127.0.0.1:19191' }, invoke)
         : cliState.withEnvFileOverrides({ no_proxy: '*' }, invoke));
@@ -199,11 +200,7 @@ describe('Agents SDK scoped client', () => {
     ),
   )('uses the shared transport for $scope $name=$value', async ({ scope, name, value }) => {
     mockProcessEnv({ [name]: scope === 'process' ? value : 'host-setting' });
-    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
-    vi.spyOn(custom, 'getModel').mockRejectedValue(
-      new Error('default provider bypassed transport'),
-    );
-    setDefaultModelProvider(custom);
+    rejectAmbientModel();
     vi.mocked(fetchWithProxy).mockImplementation(async () => {
       expect(getEnvString(name)).toBe(value);
       expect(getEnvString('AGENTS_FIXTURE_PRESERVED')).toBe('suite-setting');
@@ -234,7 +231,7 @@ describe('Agents SDK scoped client', () => {
         .spyOn(custom, 'getModel')
         .mockRejectedValue(new Error('custom model selected'));
       setDefaultModelProvider(custom);
-      const invoke = () => provider().callApi('hello');
+      const invoke = () => provider({ headers: {} }).callApi('hello');
       await expect(
         scope === 'suite'
           ? cliState.withEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' }, invoke)
@@ -245,14 +242,20 @@ describe('Agents SDK scoped client', () => {
     },
   );
 
+  it.each([Infinity, NaN, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid retry budget %s before dispatch',
+    async (maxRetries) => {
+      await expect(provider({ maxRetries }).callApi('hello')).rejects.toThrow(
+        'maxRetries must be a safe integer',
+      );
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([0, -1])(
     'applies a retry budget of %s without other connection settings',
     async (maxRetries) => {
-      const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
-      vi.spyOn(custom, 'getModel').mockRejectedValue(
-        new Error('default provider bypassed retries'),
-      );
-      setDefaultModelProvider(custom);
+      rejectAmbientModel();
       vi.mocked(fetchWithProxy).mockResolvedValue(
         Response.json({ error: 'retry fixture' }, { status: 409 }),
       );
@@ -345,7 +348,6 @@ describe('Agents SDK scoped client', () => {
       ].map((testCase) => ({ loading, ...testCase })),
     ),
   )('retains $loading loaded proxy policy $env', async ({ loading, env, active, expected }) => {
-    clearProxyEnv();
     mockProcessEnv({ HTTPS_PROXY: 'http://host.example:8080' });
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('loaded proxy policy was ignored'));
@@ -378,7 +380,6 @@ describe('Agents SDK scoped client', () => {
     { env: { HTTPS_PROXY: 'http://upper.example:8080', https_proxy: '' }, expected: '' },
     { env: { NO_PROXY: '*' }, expected: '' },
   ])('merges provider proxy aliases before retained capture: $env', async ({ env, expected }) => {
-    clearProxyEnv();
     vi.mocked(fetchWithProxy).mockImplementation(async () => {
       expect(getProxyForUrl('https://api.openai.com/v1/responses')).toBe(expected);
       return Response.json(response);
@@ -402,7 +403,6 @@ describe('Agents SDK scoped client', () => {
   it.each(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const)(
     'retains a provider %s empty mask over a suite lowercase alias',
     async (key) => {
-      clearProxyEnv();
       const url =
         key === 'HTTP_PROXY'
           ? 'http://fixture.example/v1/responses'
@@ -432,7 +432,6 @@ describe('Agents SDK scoped client', () => {
   )(
     'preserves provider proxy priority through a $wrapperType wrapper (value=$value)',
     async ({ value, wrapperType }) => {
-      clearProxyEnv();
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-agents-proxy-'));
       const filename = path.join(directory, 'provider.json');
       try {
@@ -561,14 +560,9 @@ describe('Agents SDK scoped client', () => {
   ])(
     'preserves transport ownership for $name',
     async ({ session, scopedModel, scopedRequests }) => {
-      clearProxyEnv();
       mockProcessEnv({ HTTPS_PROXY: 'http://host-proxy.example:8080' });
       const respond = async (input: string | URL | Request) =>
-        Response.json(
-          String(input).includes('/items')
-            ? { data: [], object: 'list', has_more: false }
-            : response,
-        );
+        Response.json(String(input).includes('/items') ? emptyItems : response);
       const sdkFetch = vi.fn(respond);
       vi.stubGlobal('fetch', sdkFetch);
       vi.mocked(fetchWithProxy).mockImplementation(respond);
@@ -725,13 +719,7 @@ describe('Agents SDK scoped client', () => {
           });
         }
         if (url.pathname.includes('/items')) {
-          return Response.json({
-            data: [],
-            object: 'list',
-            first_id: null,
-            last_id: null,
-            has_more: false,
-          });
+          return Response.json(emptyItems);
         }
         if (url.pathname === '/v1/responses/compact') {
           return Response.json({
@@ -785,13 +773,7 @@ describe('Agents SDK scoped client', () => {
       }
       if (url.pathname.includes('/items')) {
         expect(url.pathname).toContain(`conv_${tenant}`);
-        return Response.json({
-          data: [],
-          object: 'list',
-          first_id: null,
-          last_id: null,
-          has_more: false,
-        });
+        return Response.json(emptyItems);
       }
       return Response.json(response);
     });
@@ -811,9 +793,7 @@ describe('Agents SDK scoped client', () => {
   });
 
   it('preserves an explicitly supplied inline session client', async () => {
-    const sessionFetch = vi.fn(async () =>
-      Response.json({ data: [], object: 'list', first_id: null, last_id: null, has_more: false }),
-    );
+    const sessionFetch = vi.fn(async () => Response.json(emptyItems));
     const client = new OpenAI({
       apiKey: 'owned-session-key',
       baseURL: 'https://session.example.invalid/v1',
@@ -838,9 +818,7 @@ describe('Agents SDK scoped client', () => {
     'requires a session endpoint when a separate key would inherit URL credentials: %s',
     async (apiBaseUrl) => {
       vi.mocked(fetchWithProxy).mockImplementation(async (input) =>
-        String(input).includes('/items')
-          ? Response.json({ data: [], object: 'list', has_more: false })
-          : Response.json(response),
+        String(input).includes('/items') ? Response.json(emptyItems) : Response.json(response),
       );
       await expect(
         provider({
@@ -871,9 +849,7 @@ describe('Agents SDK scoped client', () => {
     'preserves deliberately configured session routing for $sessionURL',
     async ({ modelURL, sessionURL }) => {
       vi.mocked(fetchWithProxy).mockImplementation(async (input) =>
-        String(input).includes('/items')
-          ? Response.json({ data: [], object: 'list', has_more: false })
-          : Response.json(response),
+        String(input).includes('/items') ? Response.json(emptyItems) : Response.json(response),
       );
       await provider({
         apiBaseUrl: modelURL,
@@ -909,15 +885,7 @@ describe('Agents SDK scoped client', () => {
         auth: headers.get('authorization'),
         org: headers.get('openai-organization'),
       });
-      return String(input).includes('/items')
-        ? Response.json({
-            data: [],
-            object: 'list',
-            first_id: null,
-            last_id: null,
-            has_more: false,
-          })
-        : Response.json(response);
+      return String(input).includes('/items') ? Response.json(emptyItems) : Response.json(response);
     });
     await provider(
       {
@@ -953,9 +921,7 @@ describe('Agents SDK scoped client', () => {
       vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
         const session = String(input).includes('/items');
         calls.push({ session, headers: new Headers(options?.headers) });
-        return session
-          ? Response.json({ data: [], object: 'list', has_more: false })
-          : Response.json(response);
+        return session ? Response.json(emptyItems) : Response.json(response);
       });
       await provider({
         apiKey: 'model-key',
@@ -982,15 +948,7 @@ describe('Agents SDK scoped client', () => {
 
   it('shares gateway headers when a session only supplies its conversation ID', async () => {
     vi.mocked(fetchWithProxy).mockImplementation(async (input) =>
-      String(input).includes('/items')
-        ? Response.json({
-            data: [],
-            object: 'list',
-            first_id: null,
-            last_id: null,
-            has_more: false,
-          })
-        : Response.json(response),
+      String(input).includes('/items') ? Response.json(emptyItems) : Response.json(response),
     );
     await provider({
       apiKey: 'fixture-key',
@@ -1011,15 +969,7 @@ describe('Agents SDK scoped client', () => {
       vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
         const path = new URL(String(input)).pathname;
         calls.push({ path, headers: new Headers(options?.headers) });
-        return path.includes('/items')
-          ? Response.json({
-              data: [],
-              object: 'list',
-              first_id: null,
-              last_id: null,
-              has_more: false,
-            })
-          : Response.json(response);
+        return path.includes('/items') ? Response.json(emptyItems) : Response.json(response);
       });
       await provider({
         apiKey: 'model-key',
@@ -1054,9 +1004,7 @@ describe('Agents SDK scoped client', () => {
     const calls: { url: string; headers: Headers }[] = [];
     vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
       calls.push({ url: String(input), headers: new Headers(options?.headers) });
-      return String(input).includes('/items')
-        ? Response.json({ data: [], object: 'list', has_more: false })
-        : Response.json(response);
+      return String(input).includes('/items') ? Response.json(emptyItems) : Response.json(response);
     });
     await provider({
       apiKey: 'model-key',
@@ -1096,9 +1044,7 @@ describe('Agents SDK scoped client', () => {
       getStreamedResponse: vi.fn(),
     } as unknown as Model);
     setDefaultModelProvider(custom);
-    vi.mocked(fetchWithProxy).mockImplementation(async () =>
-      Response.json({ data: [], object: 'list', has_more: false }),
-    );
+    vi.mocked(fetchWithProxy).mockImplementation(async () => Response.json(emptyItems));
     const result = await provider({
       session: {
         type: 'openai-conversations',
@@ -1210,9 +1156,7 @@ describe('Agents SDK scoped client', () => {
         url: String(input),
         authorization: new Headers(options?.headers).get('authorization'),
       });
-      return String(input).includes('/items')
-        ? Response.json({ data: [], object: 'list', has_more: false })
-        : Response.json(response);
+      return String(input).includes('/items') ? Response.json(emptyItems) : Response.json(response);
     });
     await provider({
       apiKey: 'model-key',
@@ -1276,7 +1220,7 @@ describe('Agents SDK scoped client', () => {
               );
             }
             return String(input).includes('/items')
-              ? Response.json({ data: [], object: 'list', has_more: false })
+              ? Response.json(emptyItems)
               : Response.json(response);
           });
           try {

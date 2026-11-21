@@ -125,6 +125,24 @@ describe('scoped SDK response cache compatibility', () => {
     expect(getAwsCredentialCacheNamespace({}, { AWS_PROFILE: '' })).not.toBe(first);
   });
 
+  it('isolates scoped tuples that share a public ID but differ in a secret or session token', () => {
+    const env = {
+      AWS_PROFILE: '',
+      AWS_ACCESS_KEY_ID: 'same-access',
+      AWS_SECRET_ACCESS_KEY: 'first-secret',
+      AWS_SESSION_TOKEN: 'first-session',
+    };
+    const first = getAwsCredentialCacheNamespace({}, env);
+    expect(getAwsCredentialCacheNamespace({}, { ...env })).toBe(first);
+    expect(getAwsCredentialCacheNamespace({}, { ...env, AWS_SECRET_ACCESS_KEY: 'wrong' })).not.toBe(
+      first,
+    );
+    expect(getAwsCredentialCacheNamespace({}, { ...env, AWS_SESSION_TOKEN: 'other' })).not.toBe(
+      first,
+    );
+    expect(first).not.toContain('first-secret');
+  });
+
   it('partitions the public source identity beneath the same scoped AWS role profile', () => {
     const env = {
       AWS_PROFILE: 'role-profile',
@@ -143,7 +161,7 @@ describe('scoped SDK response cache compatibility', () => {
     expect(getAwsCredentialCacheNamespace({ profile: 'configured-role' })).toBeUndefined();
   });
 
-  it('retains the exact released SageMaker embedding cache key', () => {
+  it('migrates ambiguous SageMaker embeddings to a full request digest', () => {
     const provider = new SageMakerEmbeddingProvider('fixture-endpoint', {
       config: {
         region: 'us-east-1',
@@ -152,8 +170,8 @@ describe('scoped SDK response cache compatibility', () => {
         acceptType: 'application/json',
       },
     });
-    expect(Reflect.get(provider, 'getCacheKey').call(provider, 'fixture input')).toBe(
-      'sagemaker:embedding:v1:fixture-endpoint:bda3c7ef0c3f3baa:25221529',
+    expect(Reflect.get(provider, 'getCacheKey').call(provider, 'fixture input')).toMatch(
+      /^sagemaker:embedding:v2:fixture-endpoint:[a-f0-9]{64}$/,
     );
   });
 

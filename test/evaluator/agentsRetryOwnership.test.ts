@@ -102,7 +102,7 @@ describe('retry ownership through test-level providers', () => {
   )(
     'preserves loaded function $capability=$enabled during scheduling',
     async ({ capability, enabled }) => {
-      const error = new Error('429 retry after 0');
+      const error = new Error('HTTP 429 Too Many Requests, retry after 0');
       const callApi = vi
         .fn<ApiProvider['callApi']>()
         .mockRejectedValueOnce(error)
@@ -217,7 +217,7 @@ describe('retry ownership through test-level providers', () => {
     const callApi = vi
       .fn<ApiProvider['callApi']>()
       .mockResolvedValueOnce({
-        error: '429 retry after 0',
+        error: 'HTTP 429 Too Many Requests, retry after 0',
         metadata: {
           http: {
             status: 429,
@@ -243,7 +243,7 @@ describe('retry ownership through test-level providers', () => {
       // Throw to retain the immediate retry hint through either wrapper's response shape.
       const callApi = vi
         .fn<ApiProvider['callApi']>()
-        .mockRejectedValueOnce(new Error('429 retry after 0'))
+        .mockRejectedValueOnce(new Error('HTTP 429 Too Many Requests, retry after 0'))
         .mockResolvedValueOnce({ output: 'target succeeded' });
       const wrapper =
         kind === 'sequence'
@@ -266,7 +266,7 @@ describe('retry ownership through test-level providers', () => {
       [false, true].map((delegates) => ({ path, delegates })),
     ),
   )('the $path helper honors declared delegation ($delegates)', async ({ path, delegates }) => {
-    const error = new Error('429 retry after 0');
+    const error = new Error('HTTP 429 Too Many Requests, retry after 0');
     const target: ApiProvider = {
       id: () => 'internally-retried',
       handlesOwnRetries: true,

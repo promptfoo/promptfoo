@@ -29,6 +29,21 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
+const createNestedAuthorizationFixture = () => ({
+  transformedRequest: {
+    headers: {
+      Authorization: 'Bearer nested-secret',
+    },
+  },
+});
+
+const createUserTraceMetadataFixture = () => ({
+  __promptfoo: {
+    traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+    retained: 'user-metadata',
+  },
+});
+
 describe('EvalResult', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -294,6 +309,24 @@ describe('EvalResult', () => {
       });
     });
 
+    it('preserves repeat linkage across single-row persistence', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-repeat-linkage', {
+        ...mockEvaluateResult,
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        repeatIndex: 2,
+        repeatGroupId: 'test-0-vars-1',
+        metadata: { source: 'repeat' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
     it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -326,12 +359,7 @@ describe('EvalResult', () => {
         ...mockEvaluateResult,
         traceId: 'internal-trace',
         evaluationId: 'internal-evaluation',
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       expect(warnSpy).toHaveBeenCalledWith(
@@ -347,12 +375,7 @@ describe('EvalResult', () => {
     it('strips user-supplied reserved trace linkage from untraced rows', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
         ...mockEvaluateResult,
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       const retrieved = await EvalResult.findById(result.id);
@@ -1352,6 +1375,54 @@ describe('EvalResult', () => {
 
   describe('toEvaluateResult', () => {
     it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].flatMap((strip) =>
+          [
+            'native-conversation-text',
+            [
+              { text: 'native-conversation-text', thoughtSignature: 'signed-text' },
+              { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLWltYWdl' } },
+            ],
+          ].map((conversationOutput) => ({ boundary, strip, conversationOutput })),
+        ),
+      ),
+    )(
+      'projects native conversation output at $boundary (strip: $strip)',
+      async ({ boundary, strip, conversationOutput }) => {
+        const response = { output: 'display output', conversationOutput };
+        const original = structuredClone(response);
+        const input = createEvaluateResult({ response });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'conversation-projection',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          expect(loaded?.response?.conversationOutput).toEqual(conversationOutput);
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded?.response?.conversationOutput).toEqual(conversationOutput);
+        }
+
+        if (strip) {
+          expect(projected.response).toEqual({ output: '[output stripped]' });
+          expect(JSON.stringify(projected)).not.toContain('native-conversation-text');
+          expect(JSON.stringify(projected)).not.toContain('bmF0aXZlLWltYWdl');
+        } else {
+          expect(projected.response).toEqual(response);
+        }
+        expect(response).toEqual(original);
+        expect(input.response).toEqual(original);
+      },
+    );
+
+    it.each(
       [
         { boundary: 'model', strip: true },
         { boundary: 'model', strip: false },
@@ -1525,13 +1596,7 @@ describe('EvalResult', () => {
     it('should preserve the original response object when response stripping is disabled', () => {
       const response = {
         output: 'provider output',
-        metadata: {
-          transformedRequest: {
-            headers: {
-              Authorization: 'Bearer nested-secret',
-            },
-          },
-        },
+        metadata: createNestedAuthorizationFixture(),
       };
 
       const result = new EvalResult({
@@ -1671,13 +1736,7 @@ describe('EvalResult', () => {
           response: {
             output: 'provider output',
             latencyMs: 42,
-            metadata: {
-              transformedRequest: {
-                headers: {
-                  Authorization: 'Bearer nested-secret',
-                },
-              },
-            },
+            metadata: createNestedAuthorizationFixture(),
           },
           gradingResult: null,
           provider: mockProvider,

@@ -316,7 +316,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         output: result.finalOutput as string,
         tokenUsage: this.extractTokenUsage(result),
         cached: false,
-        cost: this.calculateCost(result),
+        // The Agents SDK exposes aggregate usage, but a run can include handoffs to
+        // agents with different models. Without per-model usage, no exact total is available.
+        cost: undefined,
       };
 
       return response;
@@ -331,6 +333,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private createScopedClient(
     overrides: Parameters<OpenAiAgentsSessionClientFactory>[0] = {},
   ): NonNullable<ReturnType<OpenAiAgentsSessionClientFactory>> {
+    const { maxRetries } = this.config;
+    if (maxRetries !== undefined && !Number.isSafeInteger(maxRetries)) {
+      throw new Error('Agents maxRetries must be a safe integer.');
+    }
     const separateEndpoint = overrides.baseURL !== undefined;
     const separateCredentials = separateEndpoint || overrides.apiKey !== undefined;
     const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
@@ -393,8 +399,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       // The SDK requires a constructor key; the null header keeps it off the wire.
       apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
       adminAPIKey: null,
-      maxRetries:
-        this.config.maxRetries === undefined ? undefined : Math.max(0, this.config.maxRetries),
+      maxRetries: maxRetries === undefined ? undefined : Math.max(0, maxRetries),
       baseURL: apiUrl.toString(),
       organization,
       project: overrides.project ?? (separateCredentials ? null : undefined),
@@ -429,11 +434,11 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       'apiHost',
       'apiBaseUrl',
       'organization',
-      'headers',
       'maxRetries',
     ] as const;
     if (
       configKeys.some((key) => this.config[key] !== undefined) ||
+      Object.keys(this.config.headers ?? {}).length > 0 ||
       this.config.useDefaultApiKey === false
     ) {
       return true;
@@ -494,15 +499,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       ...(usage.requests === undefined ? {} : { numRequests: usage.requests }),
       ...(Object.keys(completionDetails).length ? { completionDetails } : {}),
     };
-  }
-
-  /**
-   * Calculate cost from agent result
-   */
-  private calculateCost(_result: any): number | undefined {
-    // The Agents SDK exposes aggregate usage, but a run can include handoffs to
-    // agents with different models. Without per-model usage, no exact total is available.
-    return undefined;
   }
 
   private wrapToolsIfNeeded(agent: Agent<any, any>): Agent<any, any> {

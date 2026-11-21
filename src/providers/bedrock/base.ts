@@ -6,10 +6,13 @@
  */
 
 import { createHmac } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { getEnvInt, getEnvString, getMergedEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import {
   getAwsCredentialCacheNamespace,
   getAwsCredentialProviderOptions,
@@ -20,6 +23,7 @@ import {
 import { getScopedAwsEndpointOptions } from '../awsEndpointConfig';
 import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
 import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
+import { resolveBedrockMantleRegion } from './mantle';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -179,6 +183,9 @@ export abstract class AwsBedrockGenericProvider {
     }
   }
   config: BedrockOptions;
+  // Agent Runtime clients are reused. Once one sees configured credentials, its
+  // responses cannot safely enter a shared cache, even if the config is later cleared.
+  protected allowSharedAgentRuntimeCache = true;
 
   constructor(
     modelName: string,
@@ -210,6 +217,13 @@ export abstract class AwsBedrockGenericProvider {
     return false;
   }
 
+  protected checkAgentRuntimeCacheIdentity(): void {
+    const { accessKeyId, profile, secretAccessKey, sessionToken } = this.config;
+    if (accessKeyId || profile || secretAccessKey || sessionToken || this.getApiKey()) {
+      this.allowSharedAgentRuntimeCache = false;
+    }
+  }
+
   protected getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
@@ -228,10 +242,7 @@ export abstract class AwsBedrockGenericProvider {
   async getCredentials(): Promise<
     AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
   > {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
-      return resolveAwsCredentials(this.config, this.env);
-    }
-    if (this.getApiKey()) {
+    if (!(this.config.accessKeyId && this.config.secretAccessKey) && this.getApiKey()) {
       return undefined;
     }
     return resolveAwsCredentials(this.config, this.env);
@@ -255,32 +266,62 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   /** Keep released IAM discovery for agent-runtime and async media/S3 clients. */
-  protected async getIamCredentialOptions(serviceId = 'Bedrock Agent Runtime') {
+  async getIamCredentialOptions(serviceId = 'Bedrock Agent Runtime') {
     const config = this.getIamCredentialConfig();
     const credentials = await resolveAwsCredentials(config, this.env);
     const profile = getAwsSdkProfile(config, this.env);
-    const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
-    return {
+    const sdkOptions = {
       ...getAwsCredentialProviderOptions(this.env),
-      ...(await this.getScopedEndpointOptions(serviceId, sdkOptions)),
-      ...(credentials ? { credentials } : {}),
       ...(profile === undefined ? {} : { profile }),
     };
+    return {
+      ...sdkOptions,
+      ...(await this.getScopedEndpointOptions(serviceId, sdkOptions)),
+      ...(credentials ? { credentials } : {}),
+    };
+  }
+
+  protected async createAgentRuntimeClient(
+    requestHandler?: Awaited<ReturnType<typeof createBedrockRequestHandler>>,
+  ) {
+    const { BedrockAgentRuntimeClient } = await import(
+      '@aws-sdk/client-bedrock-agent-runtime'
+    ).catch((error) => {
+      if (!isMissingPackageImportError(error, '@aws-sdk/client-bedrock-agent-runtime')) {
+        throw error;
+      }
+      throw new Error(
+        'Please install @aws-sdk/client-bedrock-agent-runtime to use Bedrock agents and knowledge bases.',
+      );
+    });
+    const options = await this.getIamCredentialOptions();
+    if (options.credentials) {
+      this.allowSharedAgentRuntimeCache = false;
+    }
+    return new BedrockAgentRuntimeClient({
+      region: this.getRegion(),
+      maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+      retryMode: 'adaptive',
+      ...(requestHandler && { requestHandler }),
+      ...options,
+    });
   }
 
   protected async getBedrockAuthOptions() {
     const credentials = await this.getCredentials();
     const profile = this.getProfile();
     const apiKey = this.getApiKey();
-    const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
-    return {
+    const sdkOptions = {
       ...getAwsCredentialProviderOptions(this.env),
+      ...(profile === undefined ? {} : { profile }),
+    };
+    return {
+      ...sdkOptions,
       ...(await this.getScopedEndpointOptions('Bedrock Runtime', {
         ...sdkOptions,
         endpoint: this.config.endpoint,
       })),
       ...(credentials ? { credentials } : {}),
-      ...(profile === undefined ? {} : { profile }),
       // Explicitly represent an invocation's cleared bearer token so SDK
       // discovery cannot restore the host token. Existing SigV4 paths still win.
       ...(!credentials && apiKey === '' && process.env.AWS_BEARER_TOKEN_BEDROCK
@@ -290,7 +331,7 @@ export abstract class AwsBedrockGenericProvider {
         ? { authSchemePreference: ['sigv4'] }
         : apiKey
           ? { token: { token: apiKey }, authSchemePreference: ['httpBearerAuth'] }
-          : credentials || profile
+          : profile
             ? { authSchemePreference: ['sigv4'] }
             : {}),
     };
@@ -333,11 +374,24 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   getRegion(): string {
-    return (
-      this.config?.region ||
-      this.env?.AWS_BEDROCK_REGION ||
-      getEnvString('AWS_BEDROCK_REGION') ||
-      'us-east-1'
-    );
+    return resolveBedrockMantleRegion(this.config, this.env, 'us-east-1');
   }
+}
+
+/** Load image data from a file:// path or return already encoded data. */
+export function loadBedrockImageData(imagePath: string): { data?: string; error?: string } {
+  if (imagePath.startsWith('file://')) {
+    const filePath = imagePath.slice(7);
+    // Resolve to absolute path and validate no path traversal
+    const resolvedPath = path.resolve(filePath);
+    if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
+      return { error: `Invalid image path (path traversal detected): ${filePath}` };
+    }
+    if (!fs.existsSync(resolvedPath)) {
+      return { error: `Image file not found: ${resolvedPath}` };
+    }
+    return { data: fs.readFileSync(resolvedPath).toString('base64') };
+  }
+  // Assume it's already base64
+  return { data: imagePath };
 }

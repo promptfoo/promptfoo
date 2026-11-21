@@ -9,13 +9,13 @@ import cliState from '../../../src/cliState';
 import { LumaRayVideoProvider } from '../../../src/providers/bedrock/luma-ray';
 import { NovaReelVideoProvider } from '../../../src/providers/bedrock/nova-reel';
 import { mockProcessEnv } from '../../util/utils';
+import { invokeMedia, methods } from './mediaFixture';
 import type { HttpRequest } from '@smithy/types';
 
 vi.mock('../../../src/blobs', () => ({
   storeBlob: async () => ({ ref: { uri: 'fixture-video', hash: 'fixture' } }),
 }));
 const kinds = ['nova-reel', 'luma-ray'] as const;
-const methods = ['startVideoGeneration', 'pollForCompletion', 'downloadAndStoreVideo'] as const;
 const invocationArn = 'arn:aws:bedrock:us-east-1:123456789012:async-invoke/fixture';
 let dir: string;
 let restore: () => void;
@@ -76,18 +76,6 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-async function invoke(
-  provider: NovaReelVideoProvider | LumaRayVideoProvider,
-  method: (typeof methods)[number],
-) {
-  const args =
-    method === 'startVideoGeneration'
-      ? [{}, 's3://fixture-bucket/output']
-      : method === 'pollForCompletion'
-        ? [invocationArn, 1, 100]
-        : ['s3://fixture-bucket/output'];
-  return Reflect.get(provider, method).apply(provider, args);
-}
 function createProvider(
   kind: (typeof kinds)[number],
   config: object,
@@ -153,7 +141,7 @@ describe('released async media credential precedence', () => {
         config,
         bearer === 'provider' ? { AWS_BEARER_TOKEN_BEDROCK: 'provider-token' } : undefined,
       );
-      const run = () => invoke(provider, method);
+      const run = () => invokeMedia(provider, method);
       const scoped = { AWS_BEARER_TOKEN_BEDROCK: bearer === 'file-blank' ? '' : 'fixture-bearer' };
       const result = await (bearer === 'file' || bearer === 'file-blank'
         ? cliState.withEnvFileOverrides(scoped, run)
@@ -161,8 +149,7 @@ describe('released async media credential precedence', () => {
           ? cliState.withEnv(scoped, run)
           : run());
       const nativeRuntimeBearer =
-        method !== 'downloadAndStoreVideo' &&
-        ['ambient', 'file', 'suite', 'file-blank'].includes(bearer);
+        method !== 'storage' && ['ambient', 'file', 'suite', 'file-blank'].includes(bearer);
       const profileBypassed = ['ambient', 'config', 'file', 'suite'].includes(bearer);
       if (nativeRuntimeBearer && bearer === 'file-blank') {
         expect(result.error).toContain('token');
@@ -176,7 +163,8 @@ describe('released async media credential precedence', () => {
         expect(authorizations).toEqual([]);
       } else {
         expect(result.error).toBeUndefined();
-        expect(authorizations).toEqual([
+        expect(authorizations).toHaveLength(method === 'storage' ? 1 : 2);
+        expect([...new Set(authorizations)]).toEqual([
           nativeRuntimeBearer
             ? 'bearer'
             : configured === 'explicit'
@@ -221,9 +209,12 @@ describe('released async media credential precedence', () => {
         apiKey: 'configured-bearer',
         profile: 'missing-sso',
       });
-      const result = await cliState.withEnvFileOverrides(scoped, () => invoke(provider, method));
+      const result = await cliState.withEnvFileOverrides(scoped, () =>
+        invokeMedia(provider, method),
+      );
       expect(result.error).toBeUndefined();
-      expect(authorizations).toEqual([
+      expect(authorizations).toHaveLength(method === 'storage' ? 1 : 2);
+      expect([...new Set(authorizations)]).toEqual([
         source === 'keys'
           ? 'scoped-access'
           : source === 'profile'
@@ -246,12 +237,13 @@ describe('released async media credential precedence', () => {
       const provider = createProvider(kind, {});
       const result = await cliState.withEnvFileOverrides(
         { AWS_PROFILE: 'scoped', AWS_CONFIG_FILE: configFile },
-        () => invoke(provider, method),
+        () => invokeMedia(provider, method),
       );
       expect(result.error).toBeUndefined();
-      expect(authorizations).toEqual(['scoped-profile-access']);
-      expect(destinations).toEqual([
-        method === 'downloadAndStoreVideo' ? 'fixture-bucket.s3.invalid' : 'bedrock.invalid',
+      expect(authorizations).toHaveLength(method === 'storage' ? 1 : 2);
+      expect([...new Set(authorizations)]).toEqual(['scoped-profile-access']);
+      expect([...new Set(destinations)]).toEqual([
+        method === 'storage' ? 'fixture-bucket.s3.invalid' : 'bedrock.invalid',
       ]);
     },
   );

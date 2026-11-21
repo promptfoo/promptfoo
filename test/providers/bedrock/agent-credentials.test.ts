@@ -253,7 +253,7 @@ describe('Bedrock agent-runtime released IAM selection', () => {
     },
   );
 
-  it('binds Agent response caches to the scoped IAM identity after profile bypass', async () => {
+  it('bypasses the shared Agent cache after using scoped credentials', async () => {
     const usedKeys: string[] = [];
     const call = async (key: string) =>
       cliState.withEnvFileOverrides(
@@ -274,8 +274,8 @@ describe('Bedrock agent-runtime released IAM selection', () => {
         },
       );
     expect(await call('first-access')).toMatchObject({ output: 'first-access' });
-    expect(await call('first-access')).toMatchObject({ output: 'first-access', cached: true });
+    expect((await call('first-access')).cached).not.toBe(true);
     expect(await call('second-access')).toMatchObject({ output: 'second-access' });
-    expect(usedKeys).toEqual(['first-access', 'second-access']);
+    expect(usedKeys).toEqual(['first-access', 'first-access', 'second-access']);
   });
 });
