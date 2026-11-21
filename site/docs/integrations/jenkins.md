@@ -107,9 +107,7 @@ chown -R jenkins:jenkins ~/.promptfoo/cache
 
 ### 4. Advanced Pipeline Configuration
 
-Here's an example of a more advanced pipeline with additional features:
-
-The advanced configuration includes several important improvements:
+This pipeline adds:
 
 - **Build timeouts**: The `timeout` option ensures builds don't run indefinitely (1 hour limit)
 - **Timestamps**: Adds timestamps to console output for better debugging
@@ -118,7 +116,7 @@ The advanced configuration includes several important improvements:
 - **Email notifications**: Sends emails to developers on pipeline failures
 - **Workspace cleanup**: Automatically cleans up workspace after each run
 - **Artifact management**: Archives both JSON and HTML reports with fingerprinting
-- **Better error handling**: More robust error catching and build status management
+- **Error handling**: Catches errors and updates the build status
 
 ```groovy:Jenkinsfile
 pipeline {
