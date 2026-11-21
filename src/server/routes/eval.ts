@@ -1,14 +1,8 @@
-import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { getDb } from '../../database/index';
-import { evalResultsTable, evalsTable } from '../../database/tables';
-import { sanitizeGradingResultForDb } from '../../evaluator/resultProcessing';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
-import { notifyEvaluationChanged } from '../../models/evalMutation';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
@@ -29,7 +23,6 @@ import {
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
-import { getCurrentTimestamp } from '../../util/time';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -729,70 +722,18 @@ evalRouter.post(
 
     try {
       const { evalId, id } = paramsResult.data;
-      const db = await getDb();
-      const response = await db.transaction(async (tx) => {
-        const [row] = await tx
-          .select({ result: evalResultsTable, prompts: evalsTable.prompts })
-          .from(evalResultsTable)
-          .innerJoin(evalsTable, eq(evalsTable.id, evalResultsTable.evalId))
-          .where(and(eq(evalResultsTable.id, id), eq(evalsTable.id, evalId)));
-        if (!row) {
-          return { status: 404, body: { error: 'Result not found' } };
-        }
-        const { result, prompts } = row;
-        const metrics = prompts?.[result.promptIdx]?.metrics;
-        if (!metrics) {
-          return { status: 400, body: { error: 'Prompt metrics not found' } };
-        }
-
-        const gradingResult = { ...bodyResult.data } as unknown as GradingResult;
-        const passChange = Number(gradingResult.pass) - Number(result.success);
-        const scoreChange = gradingResult.score - result.score;
-        const stored = result.gradingResult?.componentResults;
-        const previous = Array.isArray(stored)
-          ? stored.filter((component) => component !== null && typeof component === 'object')
-          : [];
-        if (gradingResult.componentResults === undefined) {
-          gradingResult.componentResults = previous.map((component) =>
-            (passChange || scoreChange) && component.assertion?.type === HUMAN_ASSERTION_TYPE
-              ? {
-                  ...component,
-                  pass: gradingResult.pass,
-                  score: gradingResult.score,
-                  reason:
-                    typeof gradingResult.reason === 'string'
-                      ? gradingResult.reason
-                      : 'Manual result (overrides all other grading results)',
-                }
-              : component,
-          );
-        }
-        const updated = gradingResult.componentResults ?? [];
-        // Historical counters used truthiness, even for non-boolean legacy verdicts.
-        const assertPassChange =
-          updated.filter((component) => component.pass).length -
-          previous.filter((component) => component.pass).length;
-        metrics.testPassCount += passChange;
-        metrics.testFailCount -= passChange;
-        metrics.score += scoreChange;
-        metrics.assertPassCount += assertPassChange;
-        metrics.assertFailCount += updated.length - previous.length - assertPassChange;
-
-        const rating = {
-          gradingResult: sanitizeGradingResultForDb(gradingResult),
-          success: gradingResult.pass,
-          score: gradingResult.score,
-          updatedAt: getCurrentTimestamp(),
-        };
-        await tx.update(evalResultsTable).set(rating).where(eq(evalResultsTable.id, id));
-        await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, evalId));
-        const saved = new EvalResult({ ...result, ...rating, persisted: true });
-        return { status: 200, body: EvalSchemas.SubmitRating.Response.parse(saved) };
-      });
-      if (response.status === 200) {
-        notifyEvaluationChanged(evalId);
+      const result = await EvalResult.updateRating(
+        evalId,
+        id,
+        bodyResult.data as unknown as GradingResult,
+      );
+      if (result === 'missing-result') {
+        res.status(404).json({ error: 'Result not found' });
+      } else if (result === 'missing-metrics') {
+        res.status(400).json({ error: 'Prompt metrics not found' });
+      } else {
+        res.json(EvalSchemas.SubmitRating.Response.parse(result));
       }
-      res.status(response.status).json(response.body);
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
