@@ -11,7 +11,7 @@ Use Promptfoo assertions in Jest or Vitest to check semantic similarity and grad
 
 ## Getting Started
 
-Use Node.js 22.22 or newer to meet the Promptfoo and Vitest 5 requirements.
+Use a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support) for Promptfoo and Vitest 5.
 
 1. **Install the dependencies**:
 
