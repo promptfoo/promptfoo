@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { ellipsize } from '../util/text';
 import type { Cache } from 'cache-manager';
@@ -115,7 +115,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
 
     this.config = config ?? {};
     const { apiKey, client } = this.config;
-    this.apiKey = apiKey ?? env?.FAL_KEY ?? getEnvString('FAL_KEY');
+    this.apiKey = apiKey ?? getProviderEnvString(env, 'FAL_KEY') ?? getEnvString('FAL_KEY');
     this.clientConfig = client ?? {};
     this.input = getFalModelInput(this.config) as Input;
   }

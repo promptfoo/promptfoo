@@ -6,7 +6,7 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher, interceptors } from 'undici';
+import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -21,14 +21,10 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { isTransientConnectionError, responseBodyError } from '../util/fetch/errors';
-import { fetchWithRetries, sleepWithAbort } from '../util/fetch/index';
 import {
-  estimateStreamingTokensPerSecond,
-  processStreamingResponse,
-  type StreamingMetrics,
-} from '../util/fetch/streaming';
-import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
+  createDecompressionInterceptor,
+  stripDecompressionHeaders,
+} from '../util/fetch/decompress';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -39,7 +35,9 @@ import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
+import { optionalPackageInstallHint } from '../util/packageImportErrors';
 import { safeResolve } from '../util/pathUtils';
+import { readPfxPrivateKey } from '../util/pfx';
 import {
   isSecretField,
   looksLikeSecret,
@@ -55,6 +53,11 @@ import {
   type RenderedHttpMultipartBody,
   renderHttpMultipartBody,
 } from './httpMultipart';
+import {
+  estimateStreamingTokensPerSecond,
+  processStreamingResponse,
+  type StreamingMetrics,
+} from './httpStreaming';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -328,17 +331,15 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
-    // Replace the original URL in the first line
-    rawRequest = rawRequest.replace(
+    // A callback preserves literal dollar patterns in the URL.
+    return rawRequest.replace(
       firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+      () => `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
     );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
   }
-
-  return rawRequest;
 }
 
 /**
@@ -454,7 +455,7 @@ export async function generateSignature(
         // Use eval to avoid TypeScript static analysis of the dynamic import
         const jksModule = await import('jks-js').catch(() => {
           throw new Error(
-            'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+            `JKS certificate support requires the "jks-js" package. ${optionalPackageInstallHint('npm install promptfoo jks-js@^1.1.5')}`,
           );
         });
 
@@ -530,90 +531,21 @@ export async function generateSignature(
             );
           }
 
-          try {
-            // Use eval to avoid TypeScript static analysis of the dynamic import
-            const pemModule = await import('pem').catch(() => {
-              throw new Error(
-                'PFX certificate support requires the "pem" package. Install it with: npm install pem',
-              );
-            });
-
-            const pem = pemModule.default as any;
-
-            let result: { key: string; cert: string };
-
-            if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
-              // Use base64 encoded content from database
-              const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
-              logger.debug(`[Signature Auth] Loading PFX from base64 content`);
-              const pfxBuffer = Buffer.from(content, 'base64');
-
-              logger.debug(
-                `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
-              );
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
-              });
-            } else {
-              // Use file path (existing behavior)
-              const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-              logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-              try {
-                const stat = await fs.stat(resolvedPath);
-                logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
-              } catch (e) {
-                logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
-              }
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(
-                  resolvedPath,
-                  { p12Password: pfxPassword },
-                  (err: any, data: any) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      resolve(data);
-                    }
-                  },
-                );
-              });
-            }
-
-            if (!result.key) {
-              logger.error('[Signature Auth][PFX] No private key extracted from PFX');
-              throw new Error('No private key found in PFX file');
-            }
-
-            privateKey = result.key;
-            keySource =
-              signatureAuth.pfxContent || signatureAuth.certificateContent
-                ? 'pfxContent'
-                : `pfxPath ${safeResolve(cliState.basePath || '', signatureAuth.pfxPath)}`;
-            logger.debug(
-              `[Signature Auth] Successfully extracted private key from PFX using pem library`,
+          const openssl = getEnvString('OPENSSL_BIN') || 'openssl';
+          if (hasPfxContent) {
+            keySource = 'pfxContent';
+            privateKey = await readPfxPrivateKey(
+              Buffer.from(hasPfxContent, 'base64'),
+              pfxPassword,
+              openssl,
             );
-          } catch (err) {
-            if (err instanceof Error) {
-              if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
-                const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-                throw new Error(`PFX file not found: ${resolvedPath}`);
-              }
-              if (err.message.includes('invalid') || err.message.includes('decrypt')) {
-                throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
-              }
+          } else {
+            const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+            if (!(await pathExists(resolvedPath))) {
+              throw new Error(`PFX file not found: ${resolvedPath}`);
             }
-            logger.error(`Error loading PFX certificate: ${String(err)}`);
-            throw new Error(
-              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
-            );
+            keySource = `pfxPath ${resolvedPath}`;
+            privateKey = await readPfxPrivateKey(resolvedPath, pfxPassword, openssl);
           }
         } else if (hasCertAndKey) {
           try {
@@ -1606,7 +1538,7 @@ async function createHttpsAgent(
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
-          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+          `JKS certificate support requires the "jks-js" package. ${optionalPackageInstallHint('npm install promptfoo jks-js@^1.1.5')}`,
         );
       });
       const jks = jksModule as any;
@@ -1747,7 +1679,7 @@ async function createHttpsAgent(
   return new Agent({
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
 }
 
@@ -1839,82 +1771,50 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  // Streaming bypasses the cache so TTFT reflects a live call.
   private async fetchResponse(
     url: string,
-    fetchOptions: RequestInit,
-    context: CallApiContextParams | undefined,
-    isStreaming: boolean,
-    multipartBody: boolean = false,
-  ): Promise<{
-    response: FetchWithCacheResult<string>;
-    streamingMetrics?: StreamingMetrics;
-  }> {
-    if (isStreaming) {
-      const requestStartTime = Date.now();
-      const timeoutMs = getRequestTimeoutMs();
-      const method = (fetchOptions.method ?? 'GET').toUpperCase();
-      const maxBodyRetries = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method) ? 2 : 0;
-      for (let bodyAttempt = 0; ; bodyAttempt++) {
-        const controller = new AbortController();
-        const signal = fetchOptions.signal
-          ? AbortSignal.any([fetchOptions.signal, controller.signal])
-          : controller.signal;
-        const rawResponse = await fetchWithRetries(
-          url,
-          { ...fetchOptions, signal },
-          timeoutMs,
-          this.config.maxRetries,
-        );
-        // Fetch retains its per-attempt timeout; body consumption has its own deadline.
-        const bodyTimeout = setTimeout(
-          () => controller.abort(new Error(`Streaming response timed out after ${timeoutMs} ms`)),
-          timeoutMs,
-        );
-        try {
-          const { text, streamingMetrics } = await processStreamingResponse(
-            rawResponse,
-            requestStartTime,
-            { streamFormat: this.config.streamFormat },
-          );
-          return {
-            response: {
-              data: text,
-              cached: false,
-              status: rawResponse.status,
-              statusText: rawResponse.statusText,
-              headers: Object.fromEntries(rawResponse.headers.entries()),
-              latencyMs: Date.now() - requestStartTime,
-              deleteFromCache: async () => {},
-            },
-            streamingMetrics,
-          };
-        } catch (error) {
-          // Abort every response branch, including the fetch logger's clone.
-          controller.abort(error);
-          if (fetchOptions.signal?.aborted) {
-            throw error;
-          }
-          if (bodyAttempt >= maxBodyRetries || !isTransientConnectionError(error as Error)) {
-            throw responseBodyError(error, url, rawResponse);
-          }
-        } finally {
-          clearTimeout(bodyTimeout);
-        }
-        const backoffMs = 2 ** bodyAttempt * 1000;
-        await sleepWithAbort(backoffMs, fetchOptions.signal);
-      }
-    }
+    options: RequestInit,
+    bustCache?: boolean,
+  ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
+    const streaming = requestsStreamingTransport(options.body);
+    const controller = streaming ? new AbortController() : undefined;
+    let streamingMetrics: StreamingMetrics | undefined;
+    const start = Date.now();
+    const readBody = async (raw: Response) => {
+      const result = await processStreamingResponse(raw, start, {
+        streamFormat: this.config.streamFormat,
+      });
+      streamingMetrics = result.streamingMetrics;
+      return result.text;
+    };
 
-    const response = await fetchWithCache<string>(
-      url,
-      fetchOptions,
-      getRequestTimeoutMs(),
-      'text',
-      multipartBody ? true : (context?.bustCache ?? context?.debug),
-      this.config.maxRetries,
-    );
-    return { response };
+    try {
+      const response = await fetchWithCache<string>(
+        url,
+        controller
+          ? {
+              ...options,
+              readBody,
+              signal: options.signal
+                ? AbortSignal.any([options.signal, controller.signal])
+                : controller.signal,
+            }
+          : options,
+        getRequestTimeoutMs(),
+        'text',
+        bustCache,
+        this.config.maxRetries,
+      );
+      if (streaming) {
+        // Include body consumption and retries so latency and TTFT share a start time.
+        response.latencyMs = Date.now() - start;
+      }
+      return { response, streamingMetrics };
+    } catch (error) {
+      // Stop all response branches, including any debug logger clone.
+      controller?.abort(error);
+      throw error;
+    }
   }
 
   id(): string {
@@ -2476,7 +2376,7 @@ export class HttpProvider implements ApiProvider {
         }
       } catch {
         logger.warn(
-          `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
+          '[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
         );
       }
     }
@@ -2773,16 +2673,11 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const isStreaming = requestsStreamingTransport(fetchOptions.body);
-
     const { response, streamingMetrics } = await this.fetchResponse(
       url,
       fetchOptions,
-      context,
-      isStreaming,
-      Boolean(multipartBody),
+      multipartBody ? true : (context?.bustCache ?? context?.debug),
     );
-
     const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     if (!(await this.validateStatus)(status)) {
@@ -2796,6 +2691,9 @@ export class HttpProvider implements ApiProvider {
     const ret: ProviderResponse = {};
     ret.raw = data;
     ret.latencyMs = latencyMs;
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
     ret.cached = cached;
     ret.metadata = {
       http: {
@@ -2823,10 +2721,6 @@ export class HttpProvider implements ApiProvider {
           renderedConfig.headers,
         );
       }
-    }
-
-    if (streamingMetrics) {
-      ret.streamingMetrics = streamingMetrics;
     }
 
     const rawText = data as string;
@@ -2860,10 +2754,6 @@ export class HttpProvider implements ApiProvider {
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
-
-    if (streamingMetrics) {
-      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
-    }
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -3009,15 +2899,11 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const isStreaming = requestsStreamingTransport(bodyContent);
-
     const { response, streamingMetrics } = await this.fetchResponse(
       url,
       fetchOptions,
-      context,
-      isStreaming,
+      context?.bustCache ?? context?.debug,
     );
-
     const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     logger.debug('[HTTP Provider]: Response received', {
@@ -3038,6 +2924,9 @@ export class HttpProvider implements ApiProvider {
     }
     const ret: ProviderResponse = {};
     ret.latencyMs = latencyMs;
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
     ret.cached = cached;
 
     // If we used a session endpoint, set the sessionId we used
@@ -3092,17 +2981,9 @@ export class HttpProvider implements ApiProvider {
       };
     }
 
-    if (streamingMetrics) {
-      ret.streamingMetrics = streamingMetrics;
-    }
-
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
-
-    if (streamingMetrics) {
-      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
-    }
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -3112,54 +2993,6 @@ export class HttpProvider implements ApiProvider {
       prompt,
       parsedData,
     );
-  }
-
-  /**
-   * Extracts completion text from parsed output with fallback to raw text
-   */
-  private getCompletionText(parsedOutput: any, rawText: string): string {
-    if (typeof parsedOutput === 'string') {
-      return parsedOutput;
-    }
-    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
-      return parsedOutput.output;
-    }
-    return rawText;
-  }
-
-  private populateStreamingCompletionMetrics(
-    streamingMetrics: StreamingMetrics,
-    parsedOutput: unknown,
-  ): void {
-    // Framing bytes do not represent completion text without an explicit transform.
-    if (!this.config.transformResponse && !this.config.responseParser) {
-      return;
-    }
-
-    const completionText = this.getDefiniteCompletionText(parsedOutput);
-    if (completionText === undefined) {
-      return;
-    }
-    streamingMetrics.completionChars = completionText.length;
-    if (streamingMetrics.multiChunkDelivery) {
-      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
-        completionText.length,
-        streamingMetrics.totalStreamTime,
-      );
-    }
-  }
-
-  private getDefiniteCompletionText(parsedOutput: unknown): string | undefined {
-    if (typeof parsedOutput === 'string') {
-      return parsedOutput;
-    }
-    if (parsedOutput !== null && typeof parsedOutput === 'object') {
-      const maybeOutput = (parsedOutput as { output?: unknown }).output;
-      if (typeof maybeOutput === 'string') {
-        return maybeOutput;
-      }
-    }
-    return undefined;
   }
 
   /**
@@ -3173,6 +3006,28 @@ export class HttpProvider implements ApiProvider {
     prompt: string,
     originalResponse?: unknown,
   ): Promise<ProviderResponse> {
+    const completionText =
+      typeof parsedOutput === 'string'
+        ? parsedOutput
+        : typeof parsedOutput?.output === 'string'
+          ? parsedOutput.output
+          : undefined;
+    const metrics = ret.streamingMetrics;
+    // Without an explicit transform the output can contain SSE framing.
+    if (
+      metrics &&
+      (this.config.transformResponse || this.config.responseParser) &&
+      completionText !== undefined
+    ) {
+      metrics.completionChars = completionText.length;
+      if (metrics.multiChunkDelivery) {
+        metrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+          completionText.length,
+          metrics.totalStreamTime,
+        );
+      }
+    }
+
     const originalTokenUsage =
       originalResponse &&
       typeof originalResponse === 'object' &&
@@ -3185,8 +3040,7 @@ export class HttpProvider implements ApiProvider {
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
       const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
-      const completionText = this.getCompletionText(parsedOutput, rawText);
-      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
+      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText ?? rawText);
     }
 
     const normalizedOutput = normalizeResponseTransformResult(parsedOutput);

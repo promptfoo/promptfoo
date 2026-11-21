@@ -45,6 +45,12 @@ describe('ttft assertion', () => {
     expect(() => handleTtft(params(undefined, 1000))).toThrow('no matching content');
   });
 
+  it.each([false, true])('rejects cached measurements with inverse=%s', (inverse) => {
+    const input = params(50, 100, inverse);
+    input.providerResponse = { ...input.providerResponse, cached: true };
+    expect(() => handleTtft(input)).toThrow('live response');
+  });
+
   it('requires streaming metrics', () => {
     const input = params(10, 1000);
     input.providerResponse = {};

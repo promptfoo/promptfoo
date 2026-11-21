@@ -99,7 +99,7 @@ export const HttpProviderConfigFieldsSchema = z.strictObject({
     .enum(['openai-chat', 'openai-responses', 'anthropic-messages'])
     .optional()
     .describe(
-      'SSE format used to detect first text output; omitted measures first non-whitespace body byte',
+      'SSE format used to detect first text output. Defaults to the first non-whitespace character',
     ),
   transformRequest: z
     .string()
@@ -181,6 +181,5 @@ export const HttpProviderConfigInputSchema: z.ZodType<
 export const HttpProviderConfigInputJsonSchema = z.toJSONSchema(HttpProviderConfigInputSchema, {
   target: 'draft-07',
   io: 'input',
-  unrepresentable: 'throw',
   reused: 'ref',
 });

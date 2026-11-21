@@ -2,6 +2,9 @@
  * Extended RequestInit options with additional features
  */
 export interface FetchOptions extends RequestInit {
+  /** Read a live body once via fetchWithCache, bypassing cache reuse and response logging. */
+  readBody?: (response: Response) => Promise<string>;
+
   /**
    * Resolve default authentication headers immediately before each HTTP attempt, including
    * retries. Explicit request headers take precedence (case-insensitively). The signal includes

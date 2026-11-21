@@ -686,7 +686,7 @@ tests:
 
 The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
 
-Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+Setting `transformToolsFormat` is important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
 
 ### Basic Configuration
 
@@ -1045,11 +1045,17 @@ The JKS file is processed using the `jks-js` library, which automatically:
 - Selects the appropriate key based on the alias (or uses the first available)
 
 :::info
-JKS support uses the optional `jks-js` runtime package. Install it with:
+JKS support requires the opt-in `jks-js` package, which is not installed with Promptfoo. Install it alongside a local Promptfoo installation with:
 
 ```bash
-npm install jks-js
+npm install promptfoo jks-js@^1.1.5
 ```
+
+Then run the local CLI with `npx promptfoo`. This also works if you previously used `npx promptfoo@latest` without a local installation.
+
+For a globally installed Promptfoo CLI, use `npm install -g promptfoo jks-js@^1.1.5`, or the global install command of the package manager used to install Promptfoo.
+
+To avoid this dependency, convert the keystore to PKCS#12/PFX with Java's [`keytool -importkeystore`](https://docs.oracle.com/en/java/javase/25/docs/specs/man/keytool.html), then configure `pfxPath` and `passphrase` instead. PEM certificates and keys are also supported.
 
 :::
 
@@ -1505,8 +1511,8 @@ providers:
 
 :::info Dependencies
 
-- **JKS support** uses the optional `jks-js` runtime package: `npm install jks-js`
-- **PFX support** uses the optional `pem` runtime package: `npm install pem`
+- **JKS support** requires the opt-in `jks-js` package: `npm install promptfoo jks-js@^1.1.5` (add `-g` for npm-global Promptfoo). See [JKS installation guidance](#using-jks-java-keystore-certificates) for other package managers.
+- **PFX archive signing** with `pfxPath` or `pfxContent` requires OpenSSL on your PATH. Builds that invoke OpenSSL directly also accept `OPENSSL_BIN` for a custom executable and need no npm package for PFX. Promptfoo 0.125.1 invokes OpenSSL through the optional `pem` package, included in standard npm installs. If your CLI reports that `pem` is missing, run `npm install pem` in the project that contains Promptfoo, or `npm install -g pem` for a global npm installation.
 
 :::
 
@@ -1740,50 +1746,39 @@ Streaming responses typically use one of these formats:
 
 Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md).
 
-### Time to First Token (TTFT) Measurement
+### Time to first token
 
-When `stream: true` is set in the request body, Promptfoo records timing metrics on every streamed response. TTFT here measures streamed text output; it does not measure time to the first audio packet or audio frame. See [the TTFT assertion docs](/docs/configuration/expected-outputs/deterministic#ttft) for precise definitions of each measured field.
+When the JSON request body contains `stream: true`, the HTTP provider measures the time from request dispatch to the first non-whitespace character. That character can belong to a metadata event. Set `streamFormat` to `openai-chat`, `openai-responses` or `anthropic-messages` to wait for the first displayed text. Both OpenAI formats count refusal text.
 
-Two measurement modes are supported:
-
-Set `streamFormat` to measure the first non-empty text or refusal delta:
+This example checks that text starts within two seconds and the complete response arrives within ten seconds.
 
 ```yaml
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
       method: POST
+      headers:
+        Authorization: 'Bearer {{env.OPENAI_API_KEY}}'
       body:
+        model: gpt-5.4-mini
+        reasoning_effort: none
         stream: true
-      streamFormat: openai-chat # or: openai-responses, anthropic-messages
-```
+        messages: [{ role: user, content: '{{prompt}}' }]
+      streamFormat: openai-chat
 
-Without `streamFormat`, TTFT measures the first non-whitespace response byte. This works across streaming formats, but may report earlier when metadata arrives before displayed text.
-
-Add TTFT assertions to your tests:
-
-```yaml
 defaultTest:
   assert:
     - type: ttft
-      threshold: 2000 # Fail if TTFT > 2 seconds
+      threshold: 2000
     - type: latency
-      threshold: 10000 # Fail if total response > 10 seconds
+      threshold: 10000
 ```
 
-**Config options**
+Each measurement bypasses the response cache. The request timeout covers the full body, up to 16 MiB. Format-specific detection accepts LF, CRLF and CR line endings and limits each event to 64 KiB until text arrives.
 
-| Option         | Type                                                          | Default | Purpose                                           |
-| -------------- | ------------------------------------------------------------- | ------- | ------------------------------------------------- |
-| `streamFormat` | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Detect the first displayed text for this protocol |
+### Parsing streaming responses
 
-When `stream: true` is set, response caching is disabled so each measurement reflects a live call. The OpenAI formats count refusal text as output. Format-specific detection accepts LF, CRLF, and CR line endings and rejects events larger than 64 KiB before the first text output.
-
-### Parsing Streaming Responses
-
-You will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
-
-Content-derived streaming metrics (`completionChars` and `tokensPerSecond`) are populated only when `transformResponse` (or the deprecated `responseParser`) explicitly returns the reconstructed completion. Without a transform, Promptfoo cannot distinguish plain-text completion bytes from SSE or NDJSON framing, so it leaves those fields unset rather than reporting misleading throughput.
+Use `transformResponse` to reconstruct the text from the full stream for scoring. When your transform returns a string or a string-valued `output`, promptfoo can report the completion length and estimate throughput. See [TTFT streaming metrics](/docs/configuration/expected-outputs/deterministic#ttft) for definitions.
 
 **Example streaming response format:**
 

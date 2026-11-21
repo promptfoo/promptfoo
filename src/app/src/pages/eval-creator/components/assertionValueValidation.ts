@@ -1,76 +1,7 @@
+import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
-const BASE_ASSERTION_TYPES = [
-  'agent-rubric',
-  'answer-relevance',
-  'bleu',
-  'classifier',
-  'contains',
-  'contains-all',
-  'contains-any',
-  'contains-html',
-  'contains-json',
-  'contains-sql',
-  'contains-xml',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'conversation-relevance',
-  'cost',
-  'equals',
-  'factuality',
-  'finish-reason',
-  'g-eval',
-  'gleu',
-  'guardrails',
-  'icontains',
-  'icontains-all',
-  'icontains-any',
-  'is-html',
-  'is-json',
-  'is-refusal',
-  'is-sql',
-  'is-valid-function-call',
-  'is-valid-openai-function-call',
-  'is-valid-openai-tools-call',
-  'is-xml',
-  'javascript',
-  'latency',
-  'levenshtein',
-  'llm-rubric',
-  'meteor',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'moderation',
-  'perplexity',
-  'perplexity-score',
-  'pi',
-  'python',
-  'regex',
-  'rouge-n',
-  'ruby',
-  'search-rubric',
-  'similar',
-  'similar:cosine',
-  'similar:dot',
-  'similar:euclidean',
-  'skill-used',
-  'starts-with',
-  'tool-call-f1',
-  'trace-error-spans',
-  'trace-span-count',
-  'trace-span-duration',
-  'trajectory:goal-success',
-  'trajectory:step-count',
-  'trajectory:tool-args-match',
-  'trajectory:tool-sequence',
-  'trajectory:tool-used',
-  'ttft',
-  'webhook',
-  'word-count',
-] as const satisfies AssertionType[];
-
-const BASE_ASSERTION_TYPE_SET = new Set<string>(BASE_ASSERTION_TYPES);
+const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
 const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
 
 function isSupportedAssertionType(type: string): boolean {
@@ -120,8 +51,12 @@ export const WORD_COUNT_ASSERTION_TYPES = new Set<AssertionType>(['word-count', 
 export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'bleu',
   'not-bleu',
+  'rouge-l',
+  'not-rouge-l',
   'rouge-n',
   'not-rouge-n',
+  'rouge-s',
+  'not-rouge-s',
   'similar',
   'not-similar',
 ]);
@@ -188,8 +123,12 @@ const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
   'not-model-graded-factuality',
   'pi',
   'not-pi',
+  'rouge-l',
+  'not-rouge-l',
   'rouge-n',
   'not-rouge-n',
+  'rouge-s',
+  'not-rouge-s',
   'search-rubric',
   'not-search-rubric',
   'select-best',
@@ -241,7 +180,7 @@ function hasNonBlankStringOrStringArray(value: unknown): boolean {
   return hasNonBlankString(value) || hasNonBlankStringArray(value);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -283,7 +222,7 @@ function getThresholdError(assertion: Assertion): string | undefined {
       }
 
       if (assertion.type === 'ttft' || assertion.type === 'not-ttft') {
-        return 'Enter a maximum TTFT in milliseconds, 0 or greater.';
+        return 'Enter a TTFT threshold in milliseconds, 0 or greater.';
       }
 
       return 'Enter a maximum cost, 0 or greater.';
@@ -379,6 +318,26 @@ function getWordCountError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
+function getTraceAttributeFiltersError(value: unknown): string | undefined {
+  if (!isRecord(value) || value.attributes === undefined) {
+    return undefined;
+  }
+  const attributes = value.attributes;
+  if (
+    !isRecord(attributes) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(attributes)) ||
+    Object.values(attributes).some(
+      (attribute) =>
+        typeof attribute !== 'string' &&
+        typeof attribute !== 'boolean' &&
+        !(typeof attribute === 'number' && Number.isFinite(attribute)),
+    )
+  ) {
+    return 'Enter trace attribute filters as a JSON object with string, boolean, or finite number values.';
+  }
+  return undefined;
+}
+
 function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
@@ -389,7 +348,7 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   ) {
     return 'Enter numeric trace span count limits.';
   }
-  return undefined;
+  return getTraceAttributeFiltersError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
@@ -405,7 +364,7 @@ function getTraceSpanDurationValueError(value: unknown): string | undefined {
   ) {
     return 'Enter a trace span percentile from 0 to 100.';
   }
-  return undefined;
+  return getTraceAttributeFiltersError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -453,6 +412,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   }
   if (assertion.type === 'trace-span-duration' || assertion.type === 'not-trace-span-duration') {
     return getTraceSpanDurationValueError(assertion.value);
+  }
+  if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
+    return getTraceAttributeFiltersError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-args-match' ||

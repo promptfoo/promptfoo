@@ -36,6 +36,9 @@ export const handleTtft = ({
     throw new Error('TTFT assertion must specify a non-negative number threshold in milliseconds');
   }
 
+  if (providerResponse?.cached) {
+    throw new Error('TTFT requires a live response. Rerun the eval with --no-cache');
+  }
   const streamingMetrics = providerResponse?.streamingMetrics;
   if (!streamingMetrics) {
     throw new Error(

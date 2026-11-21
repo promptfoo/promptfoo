@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   estimateStreamingTokensPerSecond,
   processStreamingResponse,
-} from '../../src/util/fetch/streaming';
+} from '../../src/providers/httpStreaming';
 
 const encoder = new TextEncoder();
 function stream(chunks: (string | Uint8Array)[], delay = 20, tailDelay = 0) {
@@ -69,6 +69,15 @@ describe('streaming response metrics', () => {
       text: '',
       streamingMetrics: { multiChunkDelivery: false },
     });
+  });
+
+  it('limits UTF-8 event bytes and the entire body after the first token', async () => {
+    await expect(collect(['data: ' + '🌍'.repeat(16 * 1024)], 'openai-chat')).rejects.toThrow(
+      'exceeds 64 KiB',
+    );
+    await expect(collect(['text', new Uint8Array(16 * 1024 * 1024)])).rejects.toThrow(
+      'exceeds 16 MiB',
+    );
   });
 
   it('releases the stream lock after read errors', async () => {

@@ -21,7 +21,7 @@ providers:
           - role: 'user'
             content: '{{prompt}}'
         stream: true # Enable streaming for TTFT measurement
-      # Measure first text output. Omit to measure the first response byte.
+      # Measure first text output. Omit to measure the first non-whitespace character.
       streamFormat: openai-chat
       transformResponse: |
         (json, text) => {
@@ -31,13 +31,14 @@ providers:
           }
 
           let content = '';
-          for (const line of String(text || '').split('\n')) {
+          for (const line of String(text || '').split(/\r\n?|\n/)) {
             const trimmed = line.trim();
-            if (!trimmed.startsWith('data: ')) continue;
-            if (trimmed === 'data: [DONE]') break;
+            if (!trimmed.startsWith('data:')) continue;
+            const payload = trimmed.slice(5).trimStart();
+            if (payload === '[DONE]') break;
 
             try {
-              const data = JSON.parse(trimmed.slice(6));
+              const data = JSON.parse(payload);
               const delta = data.choices?.[0]?.delta;
               content += delta?.content || delta?.refusal || '';
             } catch {
