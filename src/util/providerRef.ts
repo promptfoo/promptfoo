@@ -133,6 +133,8 @@ export function isProviderConfigFileReference(providerPath: string): boolean {
 
 /**
  * Reads a provider config file and normalizes single-provider and multi-provider files.
+ * An explicit base path also scopes nested configuration files; otherwise their
+ * caller scope is retained.
  * Returns a `wasArray` flag so callers can detect multi-provider files that require
  * `loadApiProviders` instead of `loadApiProvider`.
  */
@@ -153,7 +155,7 @@ export function readProviderConfigFile(
       `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}`,
     );
   }
-  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
+  const fileContent = maybeLoadConfigFromExternalFile(rawContent, undefined, basePath) as
     | ProviderOptions
     | ProviderOptions[];
   invariant(fileContent, `Provider config ${relativePath} is undefined`);

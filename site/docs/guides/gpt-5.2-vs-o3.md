@@ -135,7 +135,7 @@ tests:
         value: "output must state that the surgeon is the boy's father"
 ```
 
-This configuration sets up a comprehensive comparison between gpt-5.2 and o3 using a variety of riddles, with cost and latency requirements. We strongly encourage you to revise this with your own test cases and assertions!
+This configuration compares gpt-5.2 and o3 on riddles with cost and latency assertions. Replace the riddles with tasks from your application.
 
 ## Step 3: Run the Comparison
 

@@ -17,6 +17,7 @@ import { evaluate } from '../../../src/node/evaluate';
 import { nodeEvaluatorRuntime } from '../../../src/node/evaluatorRuntime';
 import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { TestSuiteSchema } from '../../../src/types/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
 import {
@@ -34,6 +35,7 @@ import {
   readTests,
   resolveTestsWatchPaths,
 } from '../../../src/util/testCaseReader';
+import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 import { mockProcessEnv } from '../utils';
 
 import type { TestCase, TestSuite, UnifiedConfig } from '../../../src/types/index';
@@ -78,14 +80,11 @@ describe('suite environment loading', () => {
       PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'false',
     });
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({
         choices: [{ message: { role: 'assistant', content: 'Hello' }, finish_reason: 'stop' }],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
   });
 
   afterEach(() => {
@@ -122,6 +121,63 @@ describe('suite environment loading', () => {
     );
     return configPath;
   }
+
+  it('combines prompt lists larger than the JavaScript function argument limit', async () => {
+    const prompts = Array.from({ length: 140_000 }, (_, index) => `prompt ${index}`);
+    const file = writeConfig('many-prompts', { prompts });
+    expect((await combineConfigs([file])).prompts).toEqual(prompts);
+  });
+
+  it('accepts numeric and boolean env values from config files', async () => {
+    const configPath = writeConfig('env-value-types', {
+      env: {
+        PROMPTFOO_EVAL_TIMEOUT_MS: 10000,
+        PROMPTFOO_INSECURE_SSL: true,
+        CUSTOM_RATIO: 0.5,
+        CUSTOM_NAME: 'plain',
+      } as unknown as UnifiedConfig['env'],
+    });
+
+    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(testSuite.env).toEqual({
+      PROMPTFOO_EVAL_TIMEOUT_MS: '10000',
+      PROMPTFOO_INSECURE_SSL: 'true',
+      CUSTOM_RATIO: '0.5',
+      CUSTOM_NAME: 'plain',
+    });
+    // The saved config keeps the values as authored.
+    expect(config.env).toMatchObject({
+      PROMPTFOO_EVAL_TIMEOUT_MS: 10000,
+      PROMPTFOO_INSECURE_SSL: true,
+    });
+    // `promptfoo validate` and `eval` report these issues to the user.
+    expect(TestSuiteSchema.safeParse(testSuite).error?.issues ?? []).toEqual([]);
+  });
+
+  it('gives providers and tests string env values before they are loaded', async () => {
+    // Providers that read their own env, as OpenClaw does for its gateway port, call string
+    // methods on these values while the config is still being resolved.
+    const configPath = writeConfig('env-value-types-providers', {
+      env: { OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true } as unknown as UnifiedConfig['env'],
+      providers: ['openclaw:main', 'echo'],
+      tests: [{ vars: { input: 'first' } }],
+    });
+
+    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(testSuite.providers.map((provider) => provider.id())).toEqual([
+      expect.stringContaining('openclaw'),
+      'echo',
+    ]);
+    for (const provider of testSuite.providers) {
+      expect((provider as { env?: unknown }).env ?? testSuite.env).toEqual({
+        OPENCLAW_GATEWAY_PORT: '18789',
+        FEATURE_FLAG: 'true',
+      });
+    }
+    expect(config.env).toEqual({ OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true });
+  });
 
   it('applies published tracing defaults to executable and saved file configurations', async () => {
     const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
@@ -294,14 +350,11 @@ describe('suite environment loading', () => {
         'id: openai:chat:test-model\nenv:\n  OPENAI_API_KEY: file-key\n  OPENAI_API_BASE_URL: https://file.example/v1\n',
       );
       const provider = location === 'typed' ? { text: providerPath } : providerPath;
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ message: { content: '{"pass":true,"score":1,"reason":"ok"}' } }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const result = await evaluate(
         {
           env: { OPENAI_API_KEY: 'suite-key' },
@@ -1452,7 +1505,7 @@ describe('suite environment loading', () => {
         `- vars: { source: ${name} }\n`,
       );
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      config.prompts = ['file://prompt.txt'];
+      config.prompts = ['file://prompt.txt', 'prompt.txt'];
       fs.writeFileSync(configPath, JSON.stringify(config));
       fs.writeFileSync(path.join(path.dirname(configPath), 'prompt.txt'), name);
     }
@@ -1467,7 +1520,8 @@ describe('suite environment loading', () => {
     const testNames = (config.tests as TestCase[]).map((test) => test.vars?.source);
     expect([...testNames].sort()).toEqual(names);
     expect(testNames.at(-1)).toBe('literal');
-    const { testSources } = await resolveConfigs({ config: [pattern, literal] }, {});
+    const { testSources, testSuite } = await resolveConfigs({ config: [pattern, literal] }, {});
+    expect(testSuite.prompts.map((prompt) => prompt.raw)).toEqual([testNames[0], ...testNames]);
     expect(testSources?.map((source) => source.basePath).sort()).toEqual(
       names.map((name) => path.join(tempDir, name)),
     );
@@ -2435,19 +2489,16 @@ describe('suite environment loading', () => {
           },
         ]),
       );
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           choices: [
             {
               message: { content: '{"pass":true,"score":1,"reason":"Correct"}' },
               finish_reason: 'stop',
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const result = await evaluate(
         {
           env: { OPENAI_API_BASE_URL: 'https://suite.example/v1', OPENAI_API_KEY: 'suite-key' },
