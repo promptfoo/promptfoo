@@ -16,6 +16,10 @@ export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
 const require = createRequire(import.meta.url);
 
+export function isTelemetryEnabled(): boolean {
+  return !getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+}
+
 let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
 
@@ -57,7 +61,6 @@ function getRuntimeMetadata() {
 }
 
 export class Telemetry {
-  private telemetryDisabledRecorded = false;
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -67,6 +70,9 @@ export class Telemetry {
   }
 
   initialize(): void {
+    if (this.disabled) {
+      return;
+    }
     if (this.id !== null) {
       return;
     }
@@ -109,26 +115,25 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+    return !isTelemetryEnabled();
   }
 
-  private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded) {
-      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
-      this.telemetryDisabledRecorded = true;
-    }
+  isTelemetryEnabled(): boolean {
+    return !this.disabled;
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    this.initialize();
     if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.sendEvent(eventName, properties);
+      return;
     }
+    this.initialize();
+    this.sendEvent(eventName, properties);
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (this.disabled) {
+      return;
+    }
     const ciFlag = isCI();
     const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {
