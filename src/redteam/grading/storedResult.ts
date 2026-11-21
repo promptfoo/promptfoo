@@ -65,7 +65,7 @@ export function getVerifiedInputMessages(messages: unknown, turns: number, promp
   }
   const selected = messages.slice(-2 * turns, -1);
   if (
-    selected.at(-1)?.content !== prompt ||
+    selected[selected.length - 1]?.content !== prompt ||
     selected.some(
       (message, index) =>
         message?.role !== (index % 2 === 0 ? 'user' : 'assistant') ||

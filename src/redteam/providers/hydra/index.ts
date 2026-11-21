@@ -770,7 +770,7 @@ export class HydraProvider implements ApiProvider {
       const chat = Array.isArray(reported)
         ? reported.filter((message) => message?.role !== 'system')
         : undefined;
-      const last = chat?.at(-1);
+      const last = chat?.[chat.length - 1];
       const reportedCurrent = last?.role === 'user' ? last.content : reported;
       if (
         reported !== undefined &&
@@ -786,7 +786,7 @@ export class HydraProvider implements ApiProvider {
       if (
         !targetResponse.cached &&
         reportedCurrent === currentPrompt &&
-        this.conversationHistory.at(-1)?.content === currentPrompt
+        this.conversationHistory[this.conversationHistory.length - 1]?.content === currentPrompt
       ) {
         if (this.stateful && targetResponse.sessionId) {
           verifiedTurns = targetResponse.sessionId === priorSession ? priorVerifiedTurns + 1 : 1;
