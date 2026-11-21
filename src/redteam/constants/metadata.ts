@@ -196,6 +196,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
+  'path-traversal-output':
+    'Detects when the model emits path-traversal or related filesystem exploit payloads',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'special-token-injection':
     'Tests vulnerability to token injection attacks using format-specific delimiters',
@@ -448,6 +450,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
+  'path-traversal-output': 'Path Traversal Output',
   'shell-injection': 'Command Injection',
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
@@ -653,6 +656,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
+  'path-traversal-output': Severity.High,
   'shell-injection': Severity.High,
   'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
@@ -679,6 +683,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
+    'path-traversal-output',
     'reasoning-dos',
     'shell-injection',
     'special-token-injection',
@@ -1010,6 +1015,7 @@ export const categoryAliases: Record<Plugin, string> = {
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
+  'path-traversal-output': 'PathTraversalOutput',
   'shell-injection': 'ShellInjection',
   'special-token-injection': 'SpecialTokenInjection',
   'sql-injection': 'SqlInjection',
@@ -1254,6 +1260,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
+  'path-traversal-output':
+    'Detects when the model emits path-traversal or related filesystem exploit payloads (e.g. /etc/passwd, .ssh/id_rsa, Windows SAM, null-byte truncation)',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',
