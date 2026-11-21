@@ -19,7 +19,12 @@ import {
   validateChatCompletionMessage,
 } from './openai/util';
 import { serializeProvider } from './serialization';
-import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
+import {
+  appendApiPath,
+  getRequestTimeoutMs,
+  throwIfAborted,
+  waitForPromiseWithAbort,
+} from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -83,15 +88,17 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       (getProviderEnvString(providerOptions.env, 'SNOWFLAKE_ACCOUNT_IDENTIFIER') ??
         getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER'));
 
-    if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
+    const configuredUrl = providerOptions.config?.apiBaseUrl;
+    if (configuredUrl && !URL.parse(configuredUrl)?.host) {
+      throw new Error('Snowflake apiBaseUrl must contain a host');
+    }
+    if (!accountIdentifier && !configuredUrl) {
       throw new Error(
         'Snowflake provider requires an account identifier. Set SNOWFLAKE_ACCOUNT_IDENTIFIER environment variable or specify accountIdentifier in config.',
       );
     }
 
-    // Construct the base URL from account identifier if not provided
-    const apiBaseUrl =
-      providerOptions.config?.apiBaseUrl || `https://${accountIdentifier}.snowflakecomputing.com`;
+    const apiBaseUrl = configuredUrl || `https://${accountIdentifier}.snowflakecomputing.com`;
 
     super(modelName, {
       ...providerOptions,
@@ -166,7 +173,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     try {
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
         await fetchWithCache<SnowflakeCortexResponse>(
-          `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
+          appendApiPath(this.getApiUrl(), 'api/v2/cortex/inference:complete'),
           {
             method: 'POST',
             headers: {

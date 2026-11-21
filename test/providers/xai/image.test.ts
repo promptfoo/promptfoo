@@ -105,11 +105,18 @@ describe('XAI Image Provider', () => {
       expect(provider.getApiUrlDefault()).toBe('https://eu-west-1.api.x.ai/v1');
     });
 
-    it('user-provided apiBaseUrl wins over region', () => {
+    it('sends requests to the user-provided apiBaseUrl before region', async () => {
       const provider = new XAIImageProvider('grok-imagine-image', {
-        config: { region: 'eu-west-1', apiBaseUrl: 'https://my-proxy.example.com/v1' },
+        config: {
+          apiKey: mockApiKey,
+          region: 'eu-west-1',
+          apiBaseUrl: 'https://my-proxy.example.com/v1///',
+        },
       });
-      expect(provider.getApiUrl()).toBe('https://my-proxy.example.com/v1');
+      await provider.callApi('Generate a cat');
+      expect(vi.mocked(callOpenAiImageApi).mock.calls[0][0]).toBe(
+        'https://my-proxy.example.com/v1/images/generations',
+      );
     });
 
     it('uses correct model mapping', () => {

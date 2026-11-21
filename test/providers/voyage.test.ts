@@ -35,7 +35,7 @@ describe('VoyageEmbeddingProvider', () => {
       name: 'explicit provider config',
       config: {
         apiKey: 'config-key',
-        apiBaseUrl: 'https://config.example/v1',
+        apiBaseUrl: 'https://config.example/v1/',
         headers: { 'X-Request-Namespace': 'voyage-fixture' },
       },
       providerEnv: {
@@ -51,7 +51,7 @@ describe('VoyageEmbeddingProvider', () => {
       config: {},
       providerEnv: {
         VOYAGE_API_KEY: 'provider-key',
-        VOYAGE_API_BASE_URL: 'https://provider.example/v1',
+        VOYAGE_API_BASE_URL: 'https://provider.example/v1///',
       },
       suiteEnv: { VOYAGE_API_KEY: 'suite-key', VOYAGE_API_BASE_URL: 'https://suite.example/v1' },
       expectedKey: 'provider-key',

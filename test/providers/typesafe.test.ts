@@ -114,12 +114,12 @@ describe('TypeSafeProvider', () => {
 
     it('sends an authenticated request to the configured base URL', async () => {
       mockAnswer({ type: 'noul', noul: 0.9 });
-      await createProvider({ apiBaseUrl: 'http://localhost:8080' }).callApi(
+      await createProvider({ apiBaseUrl: 'http://localhost:8080/proxy/' }).callApi(
         '',
         rubricContext('Is polite', 'Thanks!'),
       );
 
-      expect(lastRequest().url).toBe('http://localhost:8080/v1/systemone');
+      expect(lastRequest().url).toBe('http://localhost:8080/proxy/v1/systemone');
       expect(lastRequest().options).toMatchObject({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-key' },

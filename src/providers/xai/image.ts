@@ -7,7 +7,7 @@ import {
   formatOutput,
   OpenAiImageProvider,
 } from '../openai/image';
-import { getRequestTimeoutMs } from '../shared';
+import { appendApiPath, getRequestTimeoutMs } from '../shared';
 import { getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -183,7 +183,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
     const model = this.getApiModelName();
     const responseFormat = config.response_format || 'url';
     const isEdit = Boolean(config.image || config.images?.length || config.mask);
-    const endpoint = isEdit ? '/images/edits' : '/images/generations';
+    const endpoint = isEdit ? 'images/edits' : 'images/generations';
 
     const body: Record<string, any> = {
       model,
@@ -224,7 +224,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
     let latencyMs: number | undefined;
     try {
       ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
-        `${this.getApiUrl()}${endpoint}`,
+        appendApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),

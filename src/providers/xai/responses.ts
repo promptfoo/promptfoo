@@ -13,7 +13,7 @@ import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
-import { getRequestTimeoutMs } from '../shared';
+import { appendApiPath, getRequestTimeoutMs } from '../shared';
 import {
   assertXAIServiceTier,
   calculateXAICost,
@@ -437,24 +437,25 @@ export class XAIResponsesProvider implements ApiProvider {
     }
     const { body, config } = request;
 
-    logger.debug(`[xAI Responses] Calling ${this.getApiUrl()}/responses`, {
-      model: this.modelName,
-      hasTools: !!body.tools?.length,
-      toolTypes: body.tools?.map((t: any) => t.type),
-    });
-
     let data: any;
     let cached = false;
     let status: number;
     let statusText: string;
 
     try {
+      const url = appendApiPath(this.getApiUrl(), 'responses');
+      logger.debug('[xAI Responses] Calling API', {
+        url,
+        model: this.modelName,
+        hasTools: !!body.tools?.length,
+        toolTypes: body.tools?.map((t: any) => t.type),
+      });
       if (body.stream) {
         const timeoutMs = getRequestTimeoutMs();
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
         try {
-          const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
+          const response = await fetchWithProxy(url, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -489,7 +490,7 @@ export class XAIResponsesProvider implements ApiProvider {
         }
       } else {
         const response = await fetchWithCache(
-          `${this.getApiUrl()}/responses`,
+          url,
           {
             method: 'POST',
             headers: {

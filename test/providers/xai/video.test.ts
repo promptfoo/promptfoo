@@ -1062,12 +1062,13 @@ describe('XAI Video Provider', () => {
     });
 
     it('uses edit endpoint when video URL is provided', async () => {
+      const requestId = 'job/part?segment#fragment';
       const sourceVideoUrl = 'https://example.com/source.mp4';
 
       // Mock responses
       const createResponse = {
         ok: true,
-        json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+        json: vi.fn().mockResolvedValue({ request_id: requestId }),
       };
       const completedResponse = {
         ok: true,
@@ -1088,13 +1089,17 @@ describe('XAI Video Provider', () => {
 
       const provider = new XAIVideoProvider('grok-imagine-video', {
         config: { video: { url: sourceVideoUrl } },
+        env: { XAI_API_BASE_URL: 'https://gateway.example/v1///?tenant=one' },
       });
       await provider.callApi('Make the ball larger');
 
       // Verify the edit endpoint was used
       const calls = vi.mocked(fetch.fetchWithProxy).mock.calls;
       const createCall = calls[0];
-      expect(createCall[0]).toContain('/videos/edits');
+      expect(createCall[0]).toBe('https://gateway.example/v1/videos/edits?tenant=one');
+      expect(calls[1][0]).toBe(
+        'https://gateway.example/v1/videos/job%2Fpart%3Fsegment%23fragment?tenant=one',
+      );
 
       // Verify video URL was included
       const body = JSON.parse(createCall[1]?.body as string);
@@ -1241,7 +1246,7 @@ describe('XAI Video Provider', () => {
         });
         const configurations = [
           {
-            apiBaseUrl: 'https://one.example.com/v1',
+            apiBaseUrl: 'https://one.example.com/v1/',
             cacheNamespace: 'account-a',
             apiKey: 'key-account-a',
           },
@@ -1256,7 +1261,7 @@ describe('XAI Video Provider', () => {
             apiKey: 'key-account-b',
           },
           {
-            apiBaseUrl: 'https://one.example.com/v1',
+            apiBaseUrl: 'https://one.example.com/v1/',
             cacheNamespace: 'account-a',
             apiKey: 'rotated-key-account-a',
           },
@@ -2000,6 +2005,14 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Additional error scenarios', () => {
+    it('returns an error before sending credentials to a hostless base URL', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: { apiBaseUrl: 'https://?tenant=one' },
+      });
+      expect((await provider.callApi(mockPrompt)).error).toContain('Invalid provider API base URL');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('handles network exception during job creation', async () => {
       vi.mocked(fetch.fetchWithProxy).mockRejectedValueOnce(new Error('Network error'));
 
