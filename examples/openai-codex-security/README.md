@@ -10,7 +10,7 @@ cd openai-codex-security
 npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
-Native operations require supported Node.js, Python 3.10+, and Codex Security account/model access. The example uses a saved Codex login (`auth: chatgpt`); change both providers to `auth: api-key` to use process-environment API credentials. See [installation and authentication](https://www.promptfoo.dev/docs/providers/openai-codex-security/#installation-and-authentication).
+Native operations require Node.js `^22.22.2 || ^24.15.0 || ^26.0.0`, Python 3.10 or later, and Codex Security access for the account and model. The example uses a saved Codex login (`auth: chatgpt`). To use an API key from the process environment, change both providers to `auth: api-key`. See [installation and authentication](https://www.promptfoo.dev/docs/providers/openai-codex-security/#installation-and-authentication).
 
 Prepare clean source without installing or running Juice Shop:
 

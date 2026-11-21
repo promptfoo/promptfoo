@@ -16,7 +16,7 @@ This example demonstrates how to setup authentication with an HTTP provider usin
 
 ## Prerequisites
 
-- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - Either a PFX certificate file OR separate CRT and KEY files with a keypair for signing/verification
 
 ## Setup

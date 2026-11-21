@@ -33,7 +33,7 @@ Here's an example of what the red team report looks like:
 
 Before you begin, ensure you have:
 
-- **Node.js `>=22.22.0`** (Node.js 24 LTS recommended): [Download Node.js](https://nodejs.org/en/download/)
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - **Ollama**: Install Ollama from [ollama.ai](https://ollama.ai)
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 
