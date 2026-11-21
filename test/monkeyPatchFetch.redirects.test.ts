@@ -126,8 +126,12 @@ describe('Cloud authentication across redirects', () => {
         .intercept({ path: '/cache-start', method: 'GET' })
         .reply(302, '', { headers: { location: 'https://other.example.test/landing' } });
       echoHeaders('https://other.example.test');
+      // Supply the mock dispatcher after cache lookup so the request stays cacheable.
+      vi.spyOn(await import('../src/util/fetch/index'), 'fetchWithRetries').mockImplementation(
+        request,
+      );
       const dispatch = vi.spyOn(agent, 'dispatch');
-      const options = { headers: { [headerName]: credential }, dispatcher: agent };
+      const options = { headers: { [headerName]: credential } };
 
       const result = await fetchWithCache(`${origin}/cache-start`, options, 5000, 'json', {
         cacheKey: `cloud-auth-await-${change}`,
