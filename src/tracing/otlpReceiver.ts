@@ -953,7 +953,7 @@ export class OTLPReceiver {
 
   private parseAttributeValue(value: OTLPAttribute['value']): any {
     if (!value) {
-      return undefined;
+      throw new Error('Missing OTLP attribute value');
     }
     if (value.stringValue !== undefined) {
       return value.stringValue;
@@ -1100,7 +1100,9 @@ export class OTLPReceiver {
         throw new InvalidSpanEventError('Invalid OTLP span event attributes');
       }
       try {
-        return { name: event.name, timestamp, attributes: parseAttributes(event.attributes ?? []) };
+        const attributes =
+          event.attributes?.filter((entry: OTLPAttribute) => entry.value != null) ?? [];
+        return { name: event.name, timestamp, attributes: parseAttributes(attributes) };
       } catch {
         throw new InvalidSpanEventError('Invalid OTLP span event attributes');
       }
