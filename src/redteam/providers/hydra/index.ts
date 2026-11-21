@@ -47,6 +47,7 @@ import {
   accumulateGraderResult,
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  getCodingAgentTransformedAnswer,
   getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
@@ -927,9 +928,19 @@ export class HydraProvider implements ApiProvider {
             });
           }
 
+          const gradingPrompt = lastFinalAttackPrompt || nextMessage;
+          gradingContext.codingAgentTransformedAnswer = await getCodingAgentTransformedAnswer(
+            assertToUse,
+            targetResponse.output,
+            {
+              vars: targetContext?.vars ?? vars,
+              prompt: { label: gradingPrompt },
+              metadata: targetResponse.metadata,
+            },
+          );
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            lastFinalAttackPrompt || nextMessage,
+            gradingPrompt,
             targetResponse.output,
             test,
             targetProvider,
@@ -946,8 +957,9 @@ export class HydraProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt: lastFinalAttackPrompt || nextMessage,
+              prompt: gradingPrompt,
               output: targetResponse.output,
+              transformedAnswer: gradingContext.codingAgentTransformedAnswer,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },

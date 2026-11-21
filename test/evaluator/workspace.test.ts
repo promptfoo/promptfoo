@@ -296,7 +296,7 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     ).toEqual(['failed', 'incomplete']);
   });
 
-  it.each(['promptfoo:redteam:iterative:meta', 'promptfoo:redteam:hydra', 'custom-target'])(
+  it.each(['iterative:meta', 'hydra', 'best-of-n', 'custom-target'])(
     'captures relative evidence in the effective workspace for %s',
     async (overrideId) => {
       const marker = 'ROW_WORKSPACE_FIXTURE_RECEIPT';
@@ -311,10 +311,10 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
           return { output: 'Done.' };
         },
       };
-      const strategy = overrideId.startsWith('promptfoo:redteam:');
+      const strategy = overrideId !== 'custom-target';
       const override: ApiProvider = strategy
         ? {
-            id: () => overrideId,
+            id: () => `promptfoo:redteam:${overrideId}`,
             callApi: (prompt, context, options) =>
               context!.originalProvider!.callApi(prompt, context, options),
           }

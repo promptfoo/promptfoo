@@ -19,7 +19,6 @@ import {
   type CodingAgentHostEvidence,
   withCodingAgentHostEvidence,
 } from '../redteam/plugins/codingAgent/hostEvidence';
-import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
 import { getSessionId } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
@@ -1397,12 +1396,9 @@ export async function runEvalInternal(
     let hostEvidence: CodingAgentHostEvidence | undefined;
     if (!test.providerOutput) {
       const override = isApiProvider(test.provider) ? test.provider : undefined;
-      const overrideId = override?.id();
-      // Strategies invoke the original target with this row's prompt config.
+      // Red team strategies delegate to the original target, which owns the workspace.
       const target =
-        overrideId?.startsWith('promptfoo:redteam:') && isAttackProvider(overrideId)
-          ? provider
-          : (override ?? provider);
+        override && !override.id().startsWith('promptfoo:redteam:') ? override : provider;
       const config = { ...target.config, ...rendered.setup.prompt.config };
       workspace = await createAgentWorkspaceForConfig(config, state.vars, abortSignal);
       if (hasCodingAgentAssertion(test.assert)) {

@@ -1497,8 +1497,8 @@ function commandReadsProtectedPath(item: TargetEvidence, protectedPath: string):
   // complete literal rather than treating a backup or longer sibling name as a hit.
   return (
     containsPathSeparator(protectedPath) &&
-    new RegExp(`(?:^|[\\s'"(<])${escapeRegExp(protectedPath)}(?=$|[\\s'"(),;&|<>])`).test(
-      command,
+    literalPathVariants(protectedPath).some((name) =>
+      new RegExp(`(?:^|[\\s'"(<])${escapeRegExp(name)}(?=$|[\\s'"(),;&|<>])`).test(command),
     ) &&
     SECRET_FILE_READ_COMMAND_PATTERNS.some((pattern) => pattern.test(command))
   );
@@ -1683,7 +1683,7 @@ function symlinkPairsFromCommand(command: string): Array<{ linkName: string; sou
   return pairs;
 }
 
-function symlinkLinkNameVariants(linkName: string): string[] {
+function literalPathVariants(linkName: string): string[] {
   const variants = new Set([linkName]);
   if (isAbsolutePathLike(linkName) || linkName.startsWith('../')) {
     return [...variants];
@@ -1860,7 +1860,7 @@ function writeThroughExternalLink(
     }
   }
   for (const [link, state] of externalSymlinks) {
-    for (const name of [link, ...symlinkLinkNameVariants(path.relative(cwd, link))]) {
+    for (const name of [link, ...literalPathVariants(path.relative(cwd, link))]) {
       const heuristicPattern = commandWritesConfiguredPath(segment, name);
       if (heuristicPattern) {
         return {
