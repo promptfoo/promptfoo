@@ -41,7 +41,15 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
 import type { VarValue } from '../../types/shared';
-import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
+import type {
+  CompletionOptions,
+  Content,
+  FunctionCall,
+  FunctionDeclaration,
+  Part,
+  Schema,
+  Tool,
+} from './types';
 
 /**
  * Normalizes safety settings to use the correct Google API field name `threshold`.
@@ -517,7 +525,11 @@ export function stripExecutableToolFileReferences(
 export async function loadGoogleTools(
   tools: unknown,
   vars?: Record<string, VarValue>,
-  options: { skipExecutableToolFiles?: boolean; abortSignal?: AbortSignal } = {},
+  options: {
+    skipExecutableToolFiles?: boolean;
+    abortSignal?: AbortSignal;
+    schemaFormat?: ToolSchemaFormat;
+  } = {},
 ): Promise<Tool[]> {
   const requestTools = options.skipExecutableToolFiles
     ? stripExecutableToolFileReferences(tools, vars)
@@ -529,12 +541,10 @@ export async function loadGoogleTools(
         options.abortSignal,
       )
     : [];
-  const transformedTools = Array.isArray(loadedTools)
-    ? (transformTools(loadedTools, 'google') as Tool[])
-    : loadedTools
-      ? [loadedTools]
-      : [];
-  return normalizeTools(transformedTools);
+  const entries = loadedTools ? [loadedTools].flat() : [];
+  // Interactions accepts JSON Schema directly. generateContent strips unsupported constraints.
+  const prepared = options.schemaFormat === 'json' ? entries : transformTools(entries, 'google');
+  return normalizeTools(prepared as Tool[], options.schemaFormat);
 }
 
 function getServiceTierCacheRead(
@@ -1584,13 +1594,15 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
   };
 }
 
+type ToolSchemaFormat = 'gemini' | 'json';
+
 /**
  * Normalizes and sanitizes tools configuration for Gemini API compatibility.
  * - Canonicalizes snake_case aliases to camelCase for backwards compatibility
  * - Sanitizes function declaration schemas to remove unsupported JSON Schema properties
  *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
-export function normalizeTools(tools: Tool[]): Tool[] {
+export function normalizeTools(tools: Tool[], schemaFormat: ToolSchemaFormat = 'gemini'): Tool[] {
   // Canonical declarations take precedence even when a legacy alias appears in
   // an earlier tool entry. For duplicates using the same spelling, the first wins.
   const canonicalNames = new Set(
@@ -1649,7 +1661,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
 
     // Sanitize function declarations to remove unsupported schema properties
     // This fixes issues like GitHub #6902 where additionalProperties causes API errors
-    if (normalizedTool.functionDeclarations) {
+    if (normalizedTool.functionDeclarations && schemaFormat === 'gemini') {
       normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => ({
         ...fd,
         parameters: fd.parameters ? (sanitizeSchemaForGemini(fd.parameters) as Schema) : undefined,
@@ -1663,6 +1675,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
 export function loadFile(
   config_var: Tool[] | string | undefined,
   context_vars: Record<string, VarValue> | undefined,
+  schemaFormat?: ToolSchemaFormat,
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
@@ -1670,23 +1683,15 @@ export function loadFile(
   // 2. In a test variable that is used in the provider via a nunjucks:
   //    context_vars will contain a string of the contents of the file with whitespace.
   //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
-  const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
-  if (typeof fileContents === 'string') {
+  let contents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
+  if (typeof contents === 'string') {
     try {
-      const parsedContents = JSON.parse(fileContents);
-      return Array.isArray(parsedContents) ? normalizeTools(parsedContents) : parsedContents;
-    } catch (err) {
-      logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
-      return fileContents;
+      contents = JSON.parse(contents);
+    } catch {
+      return contents;
     }
   }
-
-  // If fileContents is already an array of tools, normalize them
-  if (Array.isArray(fileContents)) {
-    return normalizeTools(fileContents);
-  }
-
-  return fileContents;
+  return Array.isArray(contents) ? normalizeTools(contents, schemaFormat) : contents;
 }
 
 function getMimeTypeFromFtypBrand(brand: string): string | undefined {
@@ -2192,58 +2197,31 @@ export function geminiFormatAndSystemInstructions(
   return { contents, systemInstruction };
 }
 
-/**
- * Recursively traverses a JSON schema object and converts
- * uppercase type keywords (string values) to lowercase.
- * Handles nested objects and arrays within the schema.
- * Creates a deep copy to avoid modifying the original schema.
- *
- * @param {object | any} schemaNode - The current node (object or value) being processed.
- * @returns {object | any} - The processed node with type keywords lowercased.
- */
-function normalizeSchemaTypes(schemaNode: any): any {
-  // Handle non-objects (including null) and arrays directly by iterating/returning
-  if (typeof schemaNode !== 'object' || schemaNode === null) {
-    return schemaNode;
+const schemaTypes = new Set<string>([...VALID_SCHEMA_TYPES, 'NULL']);
+
+/** Translate Gemini schema types, including union members and nested properties. */
+function normalizeSchemaTypes(value: unknown, key?: string): unknown {
+  if (key === 'type' && typeof value === 'string' && schemaTypes.has(value)) {
+    return value.toLowerCase();
   }
-
-  if (Array.isArray(schemaNode)) {
-    return schemaNode.map(normalizeSchemaTypes); // Recurse for array elements
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeSchemaTypes(entry, key));
   }
-
-  // Create a new object to avoid modifying the original
-  const newNode: { [key: string]: any } = {};
-
-  for (const key in schemaNode) {
-    if (Object.prototype.hasOwnProperty.call(schemaNode, key)) {
-      const value = schemaNode[key];
-
-      if (key === 'type') {
-        if (
-          typeof value === 'string' &&
-          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
-        ) {
-          // Convert type value(s) to lowercase
-          newNode[key] = value.toLowerCase();
-        } else if (Array.isArray(value)) {
-          // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) =>
-            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
-              ? t.toLowerCase()
-              : t,
-          );
-        } else {
-          // Handle type used as function field rather than a schema type definition
-          newNode[key] = normalizeSchemaTypes(value);
-        }
-      } else {
-        // Recursively process nested objects/arrays
-        newNode[key] = normalizeSchemaTypes(value);
-      }
-    }
+  if (!value || typeof value !== 'object') {
+    return value;
   }
+  return Object.fromEntries(
+    Object.entries(value).map(([name, child]) => [name, normalizeSchemaTypes(child, name)]),
+  );
+}
 
-  return newNode;
+/** Interactions and local validation consume JSON Schema, unlike generateContent. */
+export function getFunctionParameterSchema(declaration: FunctionDeclaration): unknown {
+  return (
+    declaration.parametersJsonSchema ??
+    declaration.parameters_json_schema ??
+    normalizeSchemaTypes(declaration.parameters)
+  );
 }
 
 export function parseStringObject(input: string | any) {
@@ -2253,11 +2231,7 @@ export function parseStringObject(input: string | any) {
   return input;
 }
 
-export function validateFunctionCall(
-  output: string | object,
-  functions?: Tool[] | string,
-  vars?: Record<string, VarValue>,
-) {
+export function parseGoogleFunctionCalls(output: string | object): FunctionCall[] {
   let functionCalls: FunctionCall[];
   try {
     let parsedOutput: object | Content = parseStringObject(output);
@@ -2286,6 +2260,15 @@ export function validateFunctionCall(
     );
   }
 
+  return functionCalls;
+}
+
+export function validateFunctionCall(
+  output: string | object,
+  functions?: Tool[] | string,
+  vars?: Record<string, VarValue>,
+) {
+  const functionCalls = parseGoogleFunctionCalls(output);
   let interpolatedFunctions: Tool[];
   try {
     interpolatedFunctions = loadFile(functions, vars) as Tool[];
@@ -2311,7 +2294,15 @@ export function validateFunctionCall(
     throw new InvalidToolSchemaError('Expected valid function declarations in each tool');
   }
   const declarations = interpolatedFunctions?.flatMap((tool) => tool.functionDeclarations ?? []);
-  if (!declarations?.length) {
+  validateGoogleFunctionCalls(functionCalls, declarations ?? []);
+}
+
+/** Validate against already resolved schemas without rendering or loading them again. */
+export function validateGoogleFunctionCalls(
+  functionCalls: FunctionCall[],
+  declarations: FunctionDeclaration[],
+): void {
+  if (!declarations.length) {
     throw new InvalidToolSchemaError(
       `Called "${functionCalls[0].name}", but there is no function with that name`,
     );
@@ -2333,8 +2324,8 @@ export function validateFunctionCall(
         `Called "${functionName}", but there is no function with that name`,
       );
     }
-    if (functionSchema.parameters) {
-      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
+    const parameterSchema = getFunctionParameterSchema(functionSchema);
+    if (parameterSchema !== undefined) {
       let validate;
       try {
         validate = ajv.compile(parameterSchema as AnySchema);
@@ -2348,7 +2339,7 @@ export function validateFunctionCall(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
         );
       }
-    } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
+    } else if (JSON.stringify(functionArgs) !== '{}') {
       throw new InvalidToolCallError(
         `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
       );

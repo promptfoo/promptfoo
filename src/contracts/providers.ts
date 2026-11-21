@@ -171,7 +171,11 @@ export class InvalidToolCallError extends Error {
 
 export interface FunctionToolCallValidator {
   /** Throw InvalidToolCallError for invalid output. Other errors remain assertion failures. */
-  validateFunctionToolCall(output: string | object, vars?: Record<string, VarValue>): void;
+  validateFunctionToolCall(
+    output: string | object,
+    vars?: Record<string, VarValue>,
+    response?: ProviderResponse,
+  ): void;
 }
 
 export function hasFunctionToolCallValidator(
