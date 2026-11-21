@@ -5,9 +5,12 @@ import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
-import { createOpenAIEvalsId } from '../importers/openaiEvals/convert';
-import { parseImportFile } from '../importers/parse';
-import { IMPORT_SOURCE_OPENAI_EVALS } from '../importers/types';
+import {
+  createOpenAIEvalsId,
+  IMPORT_SOURCE_OPENAI_EVALS,
+  type OpenAIEvalsImportResult,
+  parseImportFile,
+} from '../importers';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
@@ -17,7 +20,6 @@ import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import type { Command } from 'commander';
-import type { OpenAIEvalsImportResult } from '../importers/openaiEvals';
 
 import type {
   EvaluateResult,
