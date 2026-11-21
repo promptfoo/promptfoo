@@ -271,6 +271,7 @@ describe('OTLPTracingExporter', () => {
         {
           text: 'Request failed: {"pass\\u0077ord":"opaque/value"}',
           array: 'Received {"\\u0061pi_key":["opaque/value"]}',
+          control: 'Received {"db\\tpassword":"opaque/value"}',
           publicText,
         },
         format,

@@ -684,10 +684,10 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
     if (!escapes && !encodedKey.includes('\\')) {
       continue;
     }
-    const key = encodedKey.replace(/(?<!\\)\\+u([\da-f]{4})/gi, (_, hex: string) =>
-      String.fromCharCode(Number.parseInt(hex, 16)),
+    const key = encodedKey.replace(/(?<!\\)\\+(?:u([\da-f]{4})|[bfnrt])/gi, (_, hex?: string) =>
+      hex ? String.fromCharCode(Number.parseInt(hex, 16)) : ' ',
     );
-    if (isCredentialAttributeKey(key)) {
+    if (isCredentialAttributeKey(key) || isCredentialAttributeKey(encodedKey)) {
       return '<redacted>';
     }
   }
