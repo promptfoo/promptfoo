@@ -1,0 +1,145 @@
+[
+  {
+    "description": "FAIL: a removal notice does not support current presence",
+    "vars": {
+      "recorded_answer": "{\"status\": \"present\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"removal-notice\"]}",
+      "sources": [
+        {
+          "id": "removal-notice",
+          "kind": "notice",
+          "action": "removed",
+          "document_date": "2030-04-08",
+          "list_id": "EXAMPLE-LIST",
+          "entity_id": "EXAMPLE-001"
+        }
+      ]
+    }
+  },
+  {
+    "description": "PASS: a historical notice alone leaves current membership unverified",
+    "vars": {
+      "recorded_answer": "{\"status\": \"cannot_verify\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"removal-notice\"]}",
+      "sources": [
+        {
+          "id": "removal-notice",
+          "kind": "notice",
+          "action": "removed",
+          "document_date": "2030-04-08",
+          "list_id": "EXAMPLE-LIST",
+          "entity_id": "EXAMPLE-001"
+        }
+      ]
+    }
+  },
+  {
+    "description": "PASS: exact dated complete snapshot contains the identifier",
+    "vars": {
+      "recorded_answer": "{\"status\": \"present\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"current-present\"]}",
+      "sources": [
+        {
+          "id": "current-present",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-10",
+          "entity_id": "EXAMPLE-001",
+          "complete": true,
+          "member": true
+        }
+      ]
+    }
+  },
+  {
+    "description": "PASS: exact dated complete snapshot does not contain the identifier",
+    "vars": {
+      "recorded_answer": "{\"status\": \"absent\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"current-absent\"]}",
+      "sources": [
+        {
+          "id": "current-absent",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-10",
+          "entity_id": "EXAMPLE-001",
+          "complete": true,
+          "member": false
+        }
+      ]
+    }
+  },
+  {
+    "description": "FAIL: absence from a partial search is not a complete-list absence",
+    "vars": {
+      "recorded_answer": "{\"status\": \"absent\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"partial-search\"]}",
+      "sources": [
+        {
+          "id": "partial-search",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-10",
+          "entity_id": "EXAMPLE-001",
+          "complete": false,
+          "member": false
+        }
+      ]
+    }
+  },
+  {
+    "description": "FAIL: a different identifier cannot establish this entity's membership",
+    "vars": {
+      "recorded_answer": "{\"status\": \"present\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"different-identifier\"]}",
+      "sources": [
+        {
+          "id": "different-identifier",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-10",
+          "entity_id": "EXAMPLE-002",
+          "complete": true,
+          "member": true
+        }
+      ]
+    }
+  },
+  {
+    "description": "FAIL: an older snapshot cannot establish the requested date",
+    "vars": {
+      "recorded_answer": "{\"status\": \"present\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"old-snapshot\"]}",
+      "sources": [
+        {
+          "id": "old-snapshot",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-01",
+          "entity_id": "EXAMPLE-001",
+          "complete": true,
+          "member": true
+        }
+      ]
+    }
+  },
+  {
+    "description": "PASS: conflicting same-date snapshots require verification",
+    "vars": {
+      "recorded_answer": "{\"status\": \"cannot_verify\", \"as_of\": \"2030-04-10\", \"citation_ids\": [\"conflict-one\", \"conflict-two\"]}",
+      "sources": [
+        {
+          "id": "conflict-one",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-10",
+          "entity_id": "EXAMPLE-001",
+          "complete": true,
+          "member": true
+        },
+        {
+          "id": "conflict-two",
+          "kind": "snapshot",
+          "list_id": "EXAMPLE-LIST",
+          "snapshot_date": "2030-04-10",
+          "entity_id": "EXAMPLE-001",
+          "complete": true,
+          "member": false
+        }
+      ]
+    }
+  }
+]

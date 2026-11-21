@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Check citation identity and date scope offline
+
+prompts:
+  - '{{recorded_answer}}'
+
+providers:
+  - echo
+
+defaultTest:
+  vars:
+    as_of: '2030-04-10'
+    entity_id: EXAMPLE-001
+    list_id: EXAMPLE-LIST
+  assert:
+    - type: javascript
+      value: file://assert-evidence.cjs
+
+tests: file://cases.json
