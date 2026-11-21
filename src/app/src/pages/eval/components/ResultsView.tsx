@@ -221,10 +221,7 @@ export function ResultsChartsSection({
               <AlertContent>
                 <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
                 <AlertDescription className="space-y-3">
-                  <p>
-                    We can show charts when the results include comparable prompts and chartable
-                    scores.
-                  </p>
+                  <p>Charts need at least one prompt and a meaningful set of scores.</p>
                   <ul className="list-disc pl-5 space-y-1">
                     {resultsChartsUnavailableReasons.map((reason) => (
                       <li key={reason}>{reason}</li>

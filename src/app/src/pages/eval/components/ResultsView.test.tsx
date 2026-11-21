@@ -344,9 +344,7 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
   expect(screen.queryByRole('button', { name: 'Why no charts?' })).toBeNull();
   expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   expect(
-    screen.queryByText(
-      'We can show charts when the results include comparable prompts and chartable scores.',
-    ),
+    screen.queryByText('Charts need at least one prompt and a meaningful set of scores.'),
   ).toBeNull();
 
   for (const reasonText of reasonTexts) {
@@ -360,9 +358,7 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
   expect(screen.queryByTestId('results-charts')).toBeNull();
   expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
   expect(
-    screen.getByText(
-      'We can show charts when the results include comparable prompts and chartable scores.',
-    ),
+    screen.getByText('Charts need at least one prompt and a meaningful set of scores.'),
   ).toBeInTheDocument();
 
   for (const reasonText of reasonTexts) {
@@ -996,17 +992,8 @@ describe('ResultsView Chart Rendering', () => {
     tableStoreValue = {
       ...tableStoreValue,
       table: {
-        head: {
-          prompts: [
-            {
-              label: 'Only Prompt',
-              provider: 'openai:gpt-4',
-              raw: 'Only Prompt',
-            },
-          ],
-          vars: ['input'],
-        },
-        body: [{ outputs: [{ score: 0.8 }] }],
+        ...createComparisonTable(),
+        body: [{ outputs: [{ score: 0 }, { score: 0 }] }],
       },
       config: {
         description: 'Ineligible Evaluation',
