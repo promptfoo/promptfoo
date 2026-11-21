@@ -1541,12 +1541,27 @@ describe('TestSuiteSchema', () => {
     });
 
     it.each([
+      'file://C:/path/to/file.py:function_name',
+      'file://C:\\path\\to\\file.js:function_name',
+      'file://d:/path/to/file.mjs:function_name',
+      'file:///C:/path/to/file.js:function_name',
+    ])('should accept Windows absolute extension path: %s', (extension) => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
       ['path/to/file.py:function_name', 'Missing file:// prefix'],
       ['file://path/to/file.txt:function_name', 'Invalid file extension'],
       ['file://path/to/file.py', 'Missing function name'],
+      ['hooks', 'Missing protocol and selector'],
       ['file://path/to/file.py:', 'Empty function name'],
       ['file://:function_name', 'Missing file path'],
       ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
+      ['file://C:/path/to/file.py', 'Missing function name after a Windows drive'],
+      ['file://C:/path/to/file.txt:function_name', 'Invalid file extension after a Windows drive'],
+      ['file://C:/path/to/file.py:function_name:extra_arg', 'Extra argument after a Windows drive'],
+      ['file:///C:/path/to/file.py', 'Missing function name after a canonical Windows drive'],
     ])('should reject invalid extension path: %s (%s)', (extension, _reason) => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
       expect(result.success).toBe(false);
