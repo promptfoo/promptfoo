@@ -225,6 +225,12 @@ export function getDirectory(): string {
   );
 }
 
+function getOwnExport(value: unknown, name: string): unknown {
+  return value != null && Object.prototype.hasOwnProperty.call(value, name)
+    ? (value as Record<string, unknown>)[name]
+    : undefined;
+}
+
 /**
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
@@ -256,7 +262,11 @@ export async function importModule(
 
     if (functionName) {
       logger.debug(`Returning named export: ${functionName}`);
-      return mod[functionName];
+      // Preserve normalized default members before checking a CJS wrapper or ESM namespace.
+      const source = [mod, importedModule?.default, importedModule].find(
+        (value) => value != null && Object.prototype.hasOwnProperty.call(value, functionName),
+      );
+      return getOwnExport(source, functionName);
     }
     return mod;
   } catch (err) {
@@ -282,9 +292,20 @@ export async function importModule(
 
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
+          const selectExport = (value: unknown) => {
+            // Mirror a native CJS function's default export without overriding own members.
+            if (
+              functionName === 'default' &&
+              typeof value === 'function' &&
+              !Object.prototype.hasOwnProperty.call(value, functionName)
+            ) {
+              return value;
+            }
+            return getOwnExport(value, functionName);
+          };
           return options?.cacheCjsFallback
-            ? Promise.resolve(mod).then((value) => value[functionName])
-            : mod[functionName];
+            ? Promise.resolve(mod).then(selectExport)
+            : selectExport(mod);
         }
         return mod;
       } catch (cjsErr) {
