@@ -8,18 +8,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeScanOutputFormat, type FileRecord } from '../../src/types/codeScan';
 
 describe('Scanner machine-readable output', () => {
+  const originalNodeVersion = process.versions.node;
+
   function mockScanner({
     initialLogLevel = 'info',
     loadConfigError,
     processDiffError,
     configApiHost,
     files = [],
+    dirtyFiles,
   }: {
     initialLogLevel?: string;
     loadConfigError?: Error;
     processDiffError?: Error;
     configApiHost?: string;
     files?: FileRecord[];
+    dirtyFiles?: Array<{ path: string }>;
   } = {}) {
     let currentLogLevel = initialLogLevel;
 
@@ -41,6 +45,8 @@ describe('Scanner machine-readable output', () => {
     }));
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
+      countUncommittedFiles: vi.fn().mockResolvedValue(dirtyFiles?.length ?? 0),
+      getDefaultBaseBranch: vi.fn().mockResolvedValue('main'),
     }));
     vi.doMock('../../src/codeScan/config/loader', async () => {
       const actual = await vi.importActual<typeof import('../../src/codeScan/config/loader')>(
@@ -60,11 +66,8 @@ describe('Scanner machine-readable output', () => {
         resolveGuidance: vi.fn().mockReturnValue(undefined),
       };
     });
-    vi.doMock('simple-git', () => ({
-      simpleGit: vi.fn(() => ({
-        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
-        revparse: vi.fn().mockResolvedValue('abc123'),
-      })),
+    vi.doMock('../../src/util/runCommand', () => ({
+      runCommand: vi.fn().mockResolvedValue({ stdout: 'abc123', stderr: '' }),
     }));
     vi.doMock('../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({
@@ -104,6 +107,7 @@ describe('Scanner machine-readable output', () => {
   }
 
   function mockMcpLifecycle(connectError?: Error) {
+    Object.defineProperty(process.versions, 'node', { value: '24.0.0' });
     const events: string[] = [];
     const mcpProcess = { pid: 1234 };
     let constructorArgs: unknown[] = [];
@@ -132,6 +136,16 @@ describe('Scanner machine-readable output', () => {
       events.push('stop');
     });
 
+    vi.doMock('../../src/codeScan/mcp/snapshot', () => ({
+      createFilesystemSnapshot: vi.fn(async () => ({
+        rootDir: '/private/snapshot',
+        checkout: '/test/repo',
+        commit: '1234',
+        dispose: async () => {
+          events.push('dispose-snapshot');
+        },
+      })),
+    }));
     vi.doMock('../../src/codeScan/mcp/filesystem', () => ({
       startFilesystemMcpServer: vi.fn(() => {
         events.push('start');
@@ -154,6 +168,7 @@ describe('Scanner machine-readable output', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(process.versions, 'node', { value: originalNodeVersion });
     vi.restoreAllMocks();
   });
 
@@ -312,6 +327,21 @@ describe('Scanner machine-readable output', () => {
     expect(getLogLevel()).toBe('debug');
   });
 
+  it('requires Node 24 before connecting for a full scan but permits diff-only scans on Node 22', async () => {
+    mockScanner();
+    Object.defineProperty(process.versions, 'node', { value: '22.22.0' });
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { createAgentClient } = await import('../../src/util/agent/agentClient');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: false });
+    expect(stderr).toHaveBeenCalledWith(expect.stringMatching(/Node.js 24.*--diffs-only/));
+    expect(createAgentClient).not.toHaveBeenCalled();
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+    expect(createAgentClient).toHaveBeenCalledOnce();
+  });
+
   it('preserves MCP setup and successful cleanup order without the facade', async () => {
     const { disconnect, socket, socketEmit } = mockScanner();
     const mcp = mockMcpLifecycle();
@@ -336,14 +366,28 @@ describe('Scanner machine-readable output', () => {
       'announce',
       'bridge-disconnect',
       'stop',
+      'dispose-snapshot',
       'client-disconnect',
     ]);
     expect(mcp.constructorArgs()).toEqual([mcp.mcpProcess, socket, 'test-session-id']);
     expect(socketEmit).toHaveBeenCalledWith('runner:hello', {
       session_id: 'test-session-id',
-      repo_root: expect.stringMatching(/test[/\\]repo$/),
+      repo_root: '/private/snapshot',
     });
     expect(mcp.stop).toHaveBeenCalledOnce();
+  });
+
+  it('avoids inspecting the working tree when a full scan has no eligible changes', async () => {
+    mockScanner();
+    mockMcpLifecycle();
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { countUncommittedFiles } = await import('../../src/codeScan/git/diff');
+    const { default: logger } = await import('../../src/logger');
+    await executeScan('/test/repo', { diffsOnly: false });
+    expect(countUncommittedFiles).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      'No eligible committed changes to scan in the selected directory.',
+    );
   });
 
   it('stops a failed MCP setup exactly once without announcing or disconnecting the bridge', async () => {
@@ -364,11 +408,60 @@ describe('Scanner machine-readable output', () => {
       'construct',
       'connect',
       'stop',
+      'dispose-snapshot',
       'client-disconnect',
     ]);
     expect(mcp.stop).toHaveBeenCalledOnce();
     expect(mcp.bridgeDisconnect).not.toHaveBeenCalled();
     expect(socketEmit).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: bridge failed');
+  });
+
+  describe('empty-scan messaging', () => {
+    const patchless: FileRecord = {
+      path: ':foo.ts',
+      status: 'M',
+      shaA: 'a',
+      shaB: 'b',
+      linesAdded: 0,
+      linesRemoved: 0,
+    };
+    it.each([
+      {
+        name: 'empty diff',
+        files: [],
+        dirtyFiles: [],
+        messages: ['No files to scan in main...HEAD', 'no net file changes'],
+      },
+      {
+        name: 'empty diff with uncommitted files',
+        files: [],
+        dirtyFiles: [{ path: 'index.js' }, { path: 'lib/util.js' }],
+        messages: ['2 uncommitted file(s)'],
+      },
+      {
+        name: 'skipped files with uncommitted work',
+        files: [{ ...patchless, path: 'package-lock.json', skipReason: 'denylist' as const }],
+        dirtyFiles: [{ path: 'src/index.ts' }],
+        messages: ['skipped: denylist', '1 uncommitted file(s)'],
+      },
+      {
+        name: 'unpatched records without skip reasons',
+        files: [patchless],
+        dirtyFiles: [],
+        messages: ['1 changed file(s) contain no scannable patches'],
+      },
+    ])('explains $name', async ({ files, dirtyFiles, messages }) => {
+      mockScanner({ files, dirtyFiles });
+      const { executeScan } = await import('../../src/codeScan/scanner/index');
+      const logger = (await import('../../src/logger')).default;
+      await executeScan('/test/repo', { diffsOnly: true });
+      for (const message of messages) {
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(message));
+      }
+      if (files.every((file) => !file.skipReason)) {
+        expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('skipped:'));
+      }
+    });
   });
 });

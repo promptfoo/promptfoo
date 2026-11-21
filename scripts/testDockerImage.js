@@ -217,6 +217,16 @@ def call_api(prompt, options, context):
   });
   modelAuditStub = stub;
 
+  const ephemeral = spawnSync('node', ['dist/src/server/index.js'], {
+    cwd: app,
+    env: { ...env, API_PORT: '0' },
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  assert.ifError(ephemeral.error);
+  assert.equal(ephemeral.status, 1);
+  assert.match(ephemeral.stdout + ephemeral.stderr, /API_PORT=0 is unsupported in Docker/);
+
   server = spawn('node', ['dist/src/server/index.js'], {
     cwd: app,
     env: { ...env, API_PORT: '3000', HOST: '127.0.0.1' },

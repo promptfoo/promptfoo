@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.21.0-alpine AS base
+FROM node:24.22.3-alpine AS base
 
 # Update Alpine packages to get latest security patches
 RUN apk upgrade --no-cache
@@ -79,6 +79,13 @@ RUN ln -s /app /app/node_modules/promptfoo && \
     ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf && \
     mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo
 
+# Alpine publishes fixes between rebuilds of the Node image, and the `apk upgrade` in the
+# base stage is replayed from the build cache until that image changes. A new value here
+# re-runs only this step, so the dependency and build layers stay cached. CI passes one
+# for every build.
+ARG OS_PACKAGE_REFRESH=
+RUN apk upgrade --no-cache
+
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 # Express puts the stack trace in its error pages unless this is set.
@@ -95,8 +102,7 @@ USER 100:101
 
 EXPOSE 3000
 
-# Set up healthcheck using Node, which is present in every stage. The probe resolves
-# the port the way the server does: API_PORT, or 15500 when it is blank or not a number.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const http = require('node:http'); const req = http.get({ host: '127.0.0.1', port: Number.parseInt(process.env.API_PORT, 10) || 15500, path: '/health' }, (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(5000, () => { req.destroy(); process.exit(1); });"
+# Match getDefaultPort(), including its rejection of ephemeral ports in containers.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const port = Number.parseInt(process.env.API_PORT, 10); if (port === 0) process.exit(1); require('node:http').get({ host: '127.0.0.1', port: port || 15500, path: '/health', signal: AbortSignal.timeout(5000) }, res => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1));"
 
 CMD ["node", "dist/src/server/index.js"]

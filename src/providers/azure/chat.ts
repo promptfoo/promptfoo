@@ -29,6 +29,7 @@ import {
   isGpt6Model,
   resolveGpt6ChatOutputCap,
 } from '../openai/gpt6';
+import { getOpenAICompletionTokenDetails } from '../openai/util';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -221,8 +222,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
-    const useModelDefaults =
-      gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
+    const useModelDefaults = gpt6Variant !== undefined && gpt6Variant !== 'astra';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
@@ -324,6 +324,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(gpt6Variant && config.verbosity ? { verbosity: config.verbosity } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options ? { prompt_cache_options: config.prompt_cache_options } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
@@ -369,7 +374,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         body.max_completion_tokens = outputCap;
       }
     }
-    applyGpt6RequestRules(body, capabilityModelName, 'chat');
+    applyGpt6RequestRules(body, capabilityModelName, 'chat', { isAzure: true });
 
     return {
       body,
@@ -402,7 +407,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
       topP: this.config.top_p,
-      stopSequences: this.config.stop,
+      stopSequences: typeof this.config.stop === 'string' ? [this.config.stop] : this.config.stop,
       frequencyPenalty: this.config.frequency_penalty,
       presencePenalty: this.config.presence_penalty,
       // Promptfoo context from test case if available
@@ -461,13 +466,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let latencyMs: number | undefined;
 
     try {
-      const url = config.dataSources
-        ? `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
-        : `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
+      const variant = getGpt6Variant(config.modelName ?? this.deploymentName);
+      const useV1 =
+        config.apiVersion === 'v1' || (!config.apiVersion && variant?.startsWith('6.2-'));
+      const chatPath = config.dataSources ? 'extensions/chat/completions' : 'chat/completions';
+      const url =
+        useV1 && !config.dataSources
+          ? `${this.getApiBaseUrl()}/openai/v1/chat/completions`
+          : `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/${chatPath}?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
 
       const {
         data: responseData,
@@ -628,6 +634,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         );
       }
 
+      const completionDetails = data.usage && getOpenAICompletionTokenDetails(data.usage);
       return {
         output,
         tokenUsage: cached
@@ -639,17 +646,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
                 cached: data.usage.prompt_tokens_details.cached_tokens,
               }),
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
+              ...(completionDetails ? { completionDetails } : {}),
             },
         cached,
         latencyMs,

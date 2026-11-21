@@ -86,6 +86,13 @@ describe('constants', () => {
       expect(getDefaultPort()).toBe(3000);
     });
 
+    it('rejects an ephemeral port only inside a container', () => {
+      mockProcessEnv({ API_PORT: '0' });
+      expect(getDefaultPort()).toBe(0);
+      mockProcessEnv({ PROMPTFOO_RUNNING_IN_DOCKER: '1' });
+      expect(getDefaultPort).toThrow('API_PORT=0 is unsupported in Docker');
+    });
+
     it('should handle invalid API_PORT value', () => {
       mockProcessEnv({ API_PORT: 'invalid' });
       expect(getDefaultPort()).toBe(15500);
