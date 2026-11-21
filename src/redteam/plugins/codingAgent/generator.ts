@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import {
   isPrivateVerifierField,
   sanitizeCodingAgentVerifierInputs,
@@ -1126,30 +1127,8 @@ const promptQualityGuidance = (
   return '';
 };
 
-const extractValidPrompt = (
-  test: TestCase,
-  injectVar: string,
-  config: PluginConfig,
-): string | undefined => {
-  const raw = test.vars?.[injectVar];
-  if (typeof raw !== 'string') {
-    return undefined;
-  }
-  const prompt = normalizeWhitespace(raw);
-  const visibleText = collectConfiguredFixturePaths(config).reduce(
-    (text, literal) => text.replaceAll(literal, ''),
-    prompt,
-  );
-  if (
-    prompt.length === 0 ||
-    !hasBalancedDelimiters(prompt) ||
-    FORBIDDEN_VISIBLE_PROMPT_PATTERN.test(visibleText)
-  ) {
-    return undefined;
-  }
-
-  return prompt;
-};
+const INVALID_DRAFT =
+  'Generated coding-agent tests may supply only the plain text prompt variable.';
 
 const escapeTemplateBraces = (value: string) =>
   value.replace(/[{}]/g, (brace) => `{{ "${brace}" }}`);
@@ -1564,20 +1543,86 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
     };
   }
 
-  postprocessRemoteTests(tests: TestCase[]): TestCase[] {
+  private validatedDraft(raw: string, local = false): string | undefined {
+    const inputs = local ? Object.keys(this.config.inputs ?? {}) : [];
+    // Reject dynamic references before variable loading, materialization or rendering.
+    const literal = (value: unknown) =>
+      typeof value === 'string' && !/^[[{]|file:\/\/|package:|\{[{%#]/i.test(value.trim());
+    let prompt = normalizeWhitespace(raw);
+    if (inputs.length) {
+      let fields: unknown;
+      try {
+        fields = JSON.parse(raw);
+      } catch {
+        throw new Error(INVALID_DRAFT);
+      }
+      if (
+        !fields ||
+        typeof fields !== 'object' ||
+        Array.isArray(fields) ||
+        inputs.includes(this.injectVar) ||
+        Object.keys(fields).length !== inputs.length ||
+        !inputs.every((key) => literal(Object.getOwnPropertyDescriptor(fields, key)?.value))
+      ) {
+        throw new Error(INVALID_DRAFT);
+      }
+      checkCodingAgentGeneration(fields, [{ id: this.id, config: this.verifierConfig }]);
+      // Materialize the checked map, never a second copy with hidden duplicate keys.
+      prompt = JSON.stringify(fields);
+    } else {
+      if (!literal(prompt)) {
+        throw new Error(INVALID_DRAFT);
+      }
+      checkCodingAgentGeneration(prompt, [{ id: this.id, config: this.verifierConfig }]);
+    }
+    const visibleText = collectConfiguredFixturePaths(this.config).reduce(
+      (text, literal) => text.replaceAll(literal, ''),
+      prompt,
+    );
+    if (
+      prompt.length === 0 ||
+      !hasBalancedDelimiters(prompt) ||
+      FORBIDDEN_VISIBLE_PROMPT_PATTERN.test(visibleText)
+    ) {
+      return undefined;
+    }
+
+    return prompt;
+  }
+
+  postprocessRemoteTests(tests: unknown[]): TestCase[] {
     this.config = this.getRemoteGenerationConfig();
     const minScore = minimumPromptScore(this.spec);
-    return tests.map((test) => {
-      const prompt = extractValidPrompt(test, this.injectVar, this.config);
+    // Accept the shared generator's declarative envelope but use only the
+    // exact prompt variable. All authority and grading metadata stay local.
+    const remoteTest = z.strictObject({
+      vars: z.strictObject({ [this.injectVar]: z.string() }),
+      metadata: z.unknown().optional(),
+      assert: z
+        .array(
+          z.strictObject({
+            type: z.literal(`promptfoo:redteam:${this.spec.id}`),
+            metric: z.string().optional(),
+            value: z.record(z.string(), z.unknown()).optional(),
+          }),
+        )
+        .max(1)
+        .optional(),
+    });
+    return tests.map((row) => {
+      const parsed = remoteTest.safeParse(row);
+      if (!parsed.success) {
+        throw new Error(INVALID_DRAFT);
+      }
+      const prompt = this.validatedDraft(parsed.data.vars[this.injectVar]);
       const score = prompt ? scorePrompt(this.spec, this.config, prompt) : -100;
       if (!prompt || score < minScore) {
         throw buildAdaptiveGenerationError(this.spec, tests.length, [], minScore);
       }
-      test.vars![this.injectVar] = prompt;
-      return {
-        ...this.withCodingAgentMetadata(test, score),
-        assert: this.getAssertions(prompt),
-      };
+      return this.withCodingAgentMetadata(
+        { vars: { [this.injectVar]: prompt }, assert: this.getAssertions(prompt) },
+        score,
+      );
     });
   }
 
@@ -1697,8 +1742,8 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
       );
 
       for (const test of generatedTests) {
-        const prompt = extractValidPrompt(test, this.injectVar, this.config);
-        if (!prompt || candidatesByPrompt.has(prompt)) {
+        const prompt = test.vars?.[this.injectVar];
+        if (typeof prompt !== 'string' || candidatesByPrompt.has(prompt)) {
           continue;
         }
 
@@ -1707,7 +1752,6 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
           continue;
         }
 
-        test.vars![this.injectVar] = prompt;
         candidatesByPrompt.set(prompt, {
           prompt,
           score,
@@ -1746,8 +1790,11 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
   protected override async promptsToTestCases(
     prompts: { __prompt: string }[],
   ): Promise<TestCase[]> {
-    const tests = await super.promptsToTestCases(prompts);
-
+    const checked = prompts.flatMap(({ __prompt }) => {
+      const prompt = this.validatedDraft(__prompt, true);
+      return prompt ? [{ __prompt: prompt }] : [];
+    });
+    const tests = await super.promptsToTestCases(checked);
     return tests.map((test) => this.withCodingAgentMetadata(test));
   }
 }

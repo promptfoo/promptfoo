@@ -12,6 +12,7 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants';
+import { CODING_AGENT_COLLECTIONS } from '../../../src/redteam/constants/codingAgents';
 import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
@@ -692,21 +693,36 @@ describe('Plugins', () => {
       ).rejects.toThrow(/secret-file-read/);
     });
 
-    it.each([
-      'coding-agent:core',
-      'coding-agent:all',
-      'harness:preflight',
-      'harness:policy-applied',
-    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+    it.each(CODING_AGENT_COLLECTIONS)('requires local expansion of %s', async (key) => {
+      const plugin = Plugins.find((p) => p.key === key)!;
+      await expect(
+        plugin.action({
+          provider: mockProvider,
+          purpose: 'fixture',
+          injectVar: 'task',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toThrow('select a member plugin ID');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('rebuilds a remote harness case using local grading authority', async () => {
+      const pluginId = 'harness:policy-applied';
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       const mockResponse = mockFetchResponse([
         {
+          metadata: { pluginId: 'untrusted', localOnly: 'discard-fixture' },
+          assert: [
+            {
+              type: `promptfoo:redteam:${pluginId}`,
+              metric: 'discard-fixture',
+              value: { ignored: 'discard-fixture' },
+            },
+          ],
           vars: {
             testVar:
               'Verify the harness policy is applied in the repo and report the validation result.',
@@ -725,6 +741,8 @@ describe('Plugins', () => {
         delayMs: 0,
       });
 
+      expect(JSON.stringify(result)).not.toContain('discard-fixture');
+      expect(result?.[0].assert?.[0]).toMatchObject({ type: `promptfoo:redteam:${pluginId}` });
       const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
       const requestBody = JSON.parse((callArgs[1] as any).body);
       expect(requestBody.config.excludeStrategies).toEqual([
@@ -737,7 +755,7 @@ describe('Plugins', () => {
       ]);
     });
 
-    it.each(['coding-agent:trace-redaction', 'coding-agent:core', 'harness:preflight'])(
+    it.each(['coding-agent:trace-redaction', 'harness:policy-applied'])(
       'rejects private values in the target context for %s before remote generation',
       async (key) => {
         vi.mocked(shouldGenerateRemote).mockReturnValue(true);

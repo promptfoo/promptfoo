@@ -21,6 +21,91 @@ function getSpec(id: (typeof LOCAL_CODING_AGENT_PLUGIN_SPECS)[number]['id']) {
 }
 
 describe('CodingAgentGeneratedPlugin', () => {
+  it.each([
+    { vars: { task: 'fixture' }, options: { transform: 'inert marker' } },
+    { vars: { task: 'fixture' }, assert: [{ type: 'javascript', value: 'inert marker' }] },
+    {
+      vars: { task: 'fixture' },
+      assert: [
+        { type: 'promptfoo:redteam:coding-agent:trace-redaction', transform: 'inert marker' },
+      ],
+    },
+    { vars: { task: 'fixture' }, provider: 'fixture' },
+    { vars: { task: 'fixture', other: { nested: 'fixture' } } },
+    { vars: { task: { nested: 'fixture' } } },
+    { vars: { task: 'file://fixture.txt' } },
+    { vars: { task: '{"nested":"fixture"}' } },
+    { vars: { task: 'A {{fixture}} placeholder' } },
+  ])(
+    'rejects remote test controls and nonliteral variables without evaluating them (%#)',
+    (row) => {
+      const callApi = vi.fn();
+      const plugin = new CodingAgentGeneratedPlugin(
+        { id: () => 'fixture', callApi },
+        'Local fixture',
+        'task',
+        getSpec('coding-agent:trace-redaction'),
+      );
+      expect(() => plugin.postprocessRemoteTests([row])).toThrow(
+        'only the plain text prompt variable',
+      );
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([' file://fixture.txt ', 'Describe {{fixture}}', 'package:fixture'])(
+    'rejects dynamic variables in locally generated drafts (%#)',
+    async (task) => {
+      const callApi = vi.fn();
+      const plugin = new CodingAgentGeneratedPlugin(
+        { id: () => 'fixture', callApi },
+        'Local fixture',
+        'task',
+        getSpec('coding-agent:trace-redaction'),
+      );
+      await expect(plugin['promptsToTestCases']([{ __prompt: task }])).rejects.toThrow(
+        'only the plain text prompt variable',
+      );
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    '{"task":"fixture","other":"extra"}',
+    '{"task":{"nested":"fixture"}}',
+    String.raw`{"task":"file\u003a//fixture.txt"}`,
+    String.raw`{"task":"\u007b\u007bfixture}}"}`,
+  ])('rejects untrusted local input maps before materialization (%#)', async (__prompt) => {
+    const callApi = vi.fn();
+    const plugin = new CodingAgentGeneratedPlugin(
+      { id: () => 'fixture', callApi },
+      'Local fixture',
+      '__prompt',
+      getSpec('coding-agent:trace-redaction'),
+      { inputs: { task: 'A fixture label' } },
+    );
+    await expect(plugin['promptsToTestCases']([{ __prompt }])).rejects.toThrow(
+      'only the plain text prompt variable',
+    );
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it('rejects remote test controls with aliases of private verifier values', () => {
+    const callApi = vi.fn();
+    const config = { language: 'en', canaries: ['PRIVATE_FIXTURE_VALUE'] };
+    const plugin = new CodingAgentGeneratedPlugin(
+      { id: () => 'fixture', callApi },
+      'Local fixture',
+      'task',
+      getSpec('coding-agent:trace-redaction'),
+      config,
+    );
+    expect(() =>
+      plugin.postprocessRemoteTests([{ vars: { task: 'Describe PRIVATE_FIXTURE_VALUE.' } }]),
+    ).toThrow('Invalid or private coding-agent generation data');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
   it.each(['artifacts/redteam-trace.json', 'artifacts/grader-output.json'])(
     'allows trusted fixture path %s',
     async (artifact) => {

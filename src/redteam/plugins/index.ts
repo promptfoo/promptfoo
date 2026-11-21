@@ -50,7 +50,6 @@ import {
   checkCodingAgentGeneration,
   isCodingAgentPlugin,
   LOCAL_CODING_AGENT_PLUGIN_SPECS,
-  publicCodingAgentConfig,
 } from './codingAgent/generator';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
@@ -443,14 +442,20 @@ async function fetchRemoteTestCases(
       responseRecorded = true;
     }
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      logger.error(
+        isCodingAgentPlugin(key)
+          ? `Invalid remote generation response for ${key} (status ${status})`
+          : `Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`,
+      );
       return [];
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
-    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+    if (!isCodingAgentPlugin(key)) {
+      logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+    }
     return ret;
   } catch (err) {
     if (provider && !responseRecorded) {
@@ -698,14 +703,11 @@ function createRemotePlugin<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const defaults = applyDefaultRemotePluginConfig(key, config);
-      const configWithDefaults = isCodingAgentPlugin(key)
-        ? publicCodingAgentConfig(key, defaults ?? {}, {
-            purpose,
-            injectVar,
-            context: redteamGenerationContext ?? targetId,
-          })
-        : defaults;
+      // Collections have no authoritative grading spec of their own.
+      if (isCodingAgentPlugin(key)) {
+        throw new Error('Expand coding-agent collections locally or select a member plugin ID.');
+      }
+      const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
         logger.error(getRemoteGenerationExplicitlyDisabledError(`${key} plugin`));
@@ -720,7 +722,6 @@ function createRemotePlugin<T extends PluginConfig>(
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
         provider,
-        isCodingAgentPlugin(key) ? defaults : undefined,
       );
       const testsWithMetadata = addPluginMetadata(testCases, pluginId, () => configWithDefaults);
 
