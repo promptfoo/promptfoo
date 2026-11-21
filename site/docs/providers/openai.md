@@ -489,7 +489,7 @@ The selected program is available in the provider response's `raw.access_program
 | `background`           | Create a background response; Promptfoo polls until it completes or times out.                                |
 | `stream`               | Request streaming; Promptfoo collects the stream into the eval result.                                        |
 
-Responses streams are limited to 64 MiB, 100,000 events, and 16,777,216 characters per event. Cancellation closes the stream reader. After a malformed event, accumulated text is returned only if a valid completed response confirms it.
+Responses streams are limited to 64 MiB, 100,000 events, and 16,777,216 characters per event. Cancellation closes the stream reader. After a malformed event, only a completed response can confirm the output. Explicit policy refusals still count as refusals. Promptfoo reads at most 64 KiB of the HTTP error body for a streaming request and skips event stream bodies in request logs.
 
 The provider response's `raw` field contains the Responses object, including `id` and `output` items. Its `metadata` includes extracted annotations and HTTP metadata. Use these fields when you need to inspect tool results or continue a conversation.
 
