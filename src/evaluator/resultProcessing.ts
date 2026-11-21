@@ -607,7 +607,8 @@ export function sanitizePromptForDb(prompt: Prompt): Prompt {
     return prompt;
   }
   try {
-    const { config, ...fields } = prompt;
+    // Object rest on Node 22 can invoke an excluded getter twice. Capture each field once.
+    const { config, ...fields } = { ...prompt };
     return {
       ...sanitizeForDbWithSecrets(fields, false),
       ...(config !== undefined && { config: sanitizePromptConfig(config) }),

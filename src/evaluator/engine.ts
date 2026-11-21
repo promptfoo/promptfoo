@@ -3488,18 +3488,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     firstResult: TResult,
     repeatCacheContext?: RepeatCacheContext,
   ): CallApiContextParams {
-    const providerId = firstResult.provider.id;
-    let originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
-    if (!originalProvider) {
-      const candidates = this.testSuite.providers.filter(
-        (provider) =>
-          sanitizeProviderIdForLog(provider.id()) === providerId &&
-          (!firstResult.provider.label || provider.label === firstResult.provider.label),
-      );
-      if (candidates.length > 1) {
+    const { id, label } = firstResult.provider;
+    let originalProvider: ApiProvider | undefined;
+    let originalId: string | undefined;
+    for (const provider of this.testSuite.providers) {
+      if (label && provider.label !== label) {
+        continue;
+      }
+      const candidateId = provider.id();
+      if (candidateId !== id && sanitizeProviderIdForLog(candidateId) !== id) {
+        continue;
+      }
+      if (originalId !== undefined && candidateId !== originalId) {
         throw new Error(AMBIGUOUS_PROVIDER_ID_MESSAGE);
       }
-      originalProvider = candidates[0];
+      originalId = candidateId;
+      originalProvider ??= provider;
     }
     return {
       getCache,
