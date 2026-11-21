@@ -143,6 +143,8 @@ assert:
 
 If no method is specified, it defaults to `get_assert`.
 
+These references also work when the assertion is defined in an external tests file (`tests: file://tests.yaml`); the script file is preserved for runtime execution instead of being inlined as text.
+
 This file will be called with an `output` string and an `AssertionValueFunctionContext` object (see above).
 It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
 

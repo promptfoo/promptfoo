@@ -382,6 +382,8 @@ module.exports = (output, { vars }) => {
 
 You can also use Javascript files in non-`javascript`-type asserts. For example, using a Javascript file in a `contains` assertion will check that the output contains the string returned by Javascript.
 
+A scalar script reference in an assertion value runs at assertion time, including in external test cases loaded with `tests: file://tests.yaml`. In an external test, a glob such as `value: file://expected/*.js` supplies an array of file contents to assertions such as `contains-all`. An existing file with brackets in its name is treated as a literal path. JavaScript assertions can select a string-named export such as `file://checks.mjs:grade:v2`. When a multi-colon name identifies an existing file, the literal path takes precedence.
+
 #### Python
 
 If the file ends in `.py`, the Python is executed:
