@@ -580,7 +580,9 @@ def create_tests(config):
 
 ## Loading Media Files
 
-Include images, PDFs, and other files as variables:
+To extract text from a PDF, install the optional parser alongside Promptfoo with `npm install promptfoo pdf-parse@^2.4.5`. Use the same package manager and installation scope for both packages.
+
+Include images, PDFs, and other files as variables.
 
 ```yaml title="promptfooconfig.yaml"
 tests:

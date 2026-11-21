@@ -541,11 +541,11 @@ assert:
   - type: is-sql
 ```
 
-SQL assertions require the optional `node-sql-parser` package. Install it alongside Promptfoo:
+SQL assertions require the optional `node-sql-parser` package. Install it with the same package manager and in the same location as Promptfoo. With npm, use one of these commands.
 
 ```bash
 npm install promptfoo node-sql-parser@^5.4.0
-# Or, for a global CLI installation:
+# For a global npm installation
 npm install -g promptfoo node-sql-parser@^5.4.0
 ```
 

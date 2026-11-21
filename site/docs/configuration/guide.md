@@ -214,11 +214,11 @@ tests:
       paper: file://pdfs/arxiv_1.pdf
 ```
 
-PDF text variables require the optional `pdf-parse` package. Install it alongside Promptfoo:
+PDF text variables require the optional `pdf-parse` package. Install it with the same package manager and in the same location as Promptfoo. With npm, use one of these commands.
 
 ```bash
 npm install promptfoo pdf-parse@^2.4.5
-# Or, for a global CLI installation:
+# For a global npm installation
 npm install -g promptfoo pdf-parse@^2.4.5
 ```
 
