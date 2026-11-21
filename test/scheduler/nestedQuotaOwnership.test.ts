@@ -49,7 +49,6 @@ describe('actual iterative manager child quota ownership', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected fixture transport'));
     registry = new RateLimitRegistry({ maxConcurrency: 1 });
     redteamProviderManager.clearProvider();
-    redteamProviderManager.setRateLimitRegistry(registry);
   });
 
   afterEach(async () => {
@@ -59,7 +58,6 @@ describe('actual iterative manager child quota ownership', () => {
     await vi.advanceTimersByTimeAsync(0);
     await Promise.all(pending.splice(0));
     redteamProviderManager.clearProvider();
-    redteamProviderManager.setRateLimitRegistry(undefined);
     registry.dispose();
     for (const provider of providers.splice(0)) {
       await provider.cleanup?.();
@@ -89,10 +87,12 @@ describe('actual iterative manager child quota ownership', () => {
     const state: { settled: boolean; value?: ProviderResponse; error?: unknown } = {
       settled: false,
     };
-    const done = withCacheEnabled(false, () =>
-      provider.callApi(prompt, context, {
-        abortSignal: controller.signal,
-      }),
+    const done = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+      withCacheEnabled(false, () =>
+        provider.callApi(prompt, context, {
+          abortSignal: controller.signal,
+        }),
+      ),
     ).then(
       (value) => {
         state.settled = true;
@@ -258,10 +258,13 @@ describe('actual iterative manager child quota ownership', () => {
       // absolute: the selected child waits 59.5 seconds from here, not a new minute.
       await vi.advanceTimersByTimeAsync(500);
       await redteamProviderManager.setGradingProvider(nextJudge);
-      const managedQuotaChild =
-        origin === 'attacker'
-          ? await redteamProviderManager.getProvider({ provider: quotaChild })
-          : await redteamProviderManager.getGradingProvider({ provider: quotaChild });
+      const managedQuotaChild = await withProviderCallExecutionContext(
+        { rateLimitRegistry: registry },
+        () =>
+          origin === 'attacker'
+            ? redteamProviderManager.getProvider({ provider: quotaChild })
+            : redteamProviderManager.getGradingProvider({ provider: quotaChild }),
+      );
       expect(isRateLimitWrapped(managedQuotaChild)).toBe(true);
       expect(getRateLimitKey(managedQuotaChild)).toBe(childKey);
       const childFollowup = start(managedQuotaChild, 'Independent follow-up to the limited child');
@@ -322,6 +325,7 @@ describe('actual iterative manager child quota ownership', () => {
       });
       const expectedKeys = [
         outerKey,
+        getRateLimitKey(target),
         getRateLimitKey(attackerA),
         getRateLimitKey(attackerB),
         getRateLimitKey(judgeA),
@@ -344,7 +348,7 @@ describe('actual iterative manager child quota ownership', () => {
     },
   );
 
-  it.each(['raw target', 'stale manager registry', 'already wrapped target', 'disabled'] as const)(
+  it.each(['raw target', 'already wrapped target', 'disabled'] as const)(
     'owns actual evaluator target quota with %s',
     async (mode) => {
       const staleRegistry = new RateLimitRegistry({ maxConcurrency: 1 });
@@ -352,9 +356,6 @@ describe('actual iterative manager child quota ownership', () => {
         vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'true');
         registry.dispose();
         registry = new RateLimitRegistry({ maxConcurrency: 1 });
-      }
-      if (mode === 'stale manager registry') {
-        redteamProviderManager.setRateLimitRegistry(staleRegistry);
       }
       const targetA = await chat('fixture-target-a');
       const targetB = await chat('fixture-target-b');
@@ -438,7 +439,10 @@ describe('actual iterative manager child quota ownership', () => {
         return { state, done };
       }
       try {
-        const first = evaluate(targetA, strategyA);
+        const first = await withProviderCallExecutionContext(
+          { rateLimitRegistry: staleRegistry },
+          async () => evaluate(targetA, strategyA),
+        );
         await first.done;
         expect(first.state.rows?.[0].success).toBe(true);
         expect(first.state.rows?.[0].response?.output).toBe('Hello.');

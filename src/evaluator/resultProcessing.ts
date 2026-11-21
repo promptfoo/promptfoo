@@ -59,7 +59,17 @@ export function projectOutputMetadata<T>(
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
+  stripGrading = false,
 ): T {
+  // Comparison recovery stores the previous verdict and reason in the row.
+  // Exports must not disclose it when grading or output has been stripped.
+  if (stripGrading || stripOutput) {
+    const internal = asRecord(asRecord(metadata)?.[PROMPTFOO_METADATA_KEY]);
+    if (internal?.comparisonError) {
+      const { comparisonError: _private, ...rest } = internal;
+      metadata = { ...metadata, [PROMPTFOO_METADATA_KEY]: rest };
+    }
+  }
   if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
   }
@@ -970,6 +980,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           shouldStripResponseOutput,
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          shouldStripGradingResult,
         ),
   } as T;
 }

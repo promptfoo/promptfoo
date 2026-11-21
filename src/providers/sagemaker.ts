@@ -1,9 +1,12 @@
-import { setTimeout as delayWithSignal } from 'node:timers/promises';
 import crypto from 'crypto';
 
 import { z } from 'zod';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import {
+  getProviderCallAbortSignal,
+  paceProviderCall,
+} from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
@@ -20,13 +23,6 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
-
-/**
- * Sleep utility function for implementing delays
- * @param ms Milliseconds to sleep
- * @returns Promise that resolves after the specified delay
- */
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function stringifyTransformResult(result: unknown): string | undefined {
   if (result === undefined || result === null) {
@@ -104,6 +100,7 @@ abstract class SageMakerGenericProvider {
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
+  readonly handlesOwnDelay = true;
   transform?: string | TransformFunction;
 
   // Custom provider ID, separate from the id() method
@@ -124,7 +121,7 @@ abstract class SageMakerGenericProvider {
     }
 
     this.config = config ?? {};
-    this.delay = delay || this.config.delay;
+    this.delay = delay ?? this.config.delay;
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
 
@@ -663,13 +660,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const abortSignal = getProviderCallAbortSignal(options?.abortSignal);
+    abortSignal?.throwIfAborted();
+
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
 
     const transformResult = await this.runTransformSafely(
       prompt,
@@ -715,6 +712,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(getCacheKey());
+      abortSignal?.throwIfAborted();
       if (cachedResult) {
         logger.debug(`Using cached SageMaker response for ${request.endpoint}`);
 
@@ -741,13 +739,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       }
     }
 
-    // Apply delay if specified and not using cached response
-    if (delayMs && delayMs > 0) {
-      logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
-      );
-      await sleep(delayMs);
-    }
+    await paceProviderCall(this, context?.originalProvider, abortSignal);
 
     // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance(request.region);
@@ -768,7 +760,10 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      abortSignal?.throwIfAborted();
+      const response = abortSignal
+        ? await runtime.send(command, { abortSignal })
+        : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -838,6 +833,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       return result;
     } catch (error: any) {
+      abortSignal?.throwIfAborted();
       logger.error(`SageMaker API error: ${error}`);
       return {
         error: `SageMaker API error: ${error.message || String(error)}`,
@@ -893,12 +889,11 @@ export class SageMakerEmbeddingProvider
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    const signal = options?.abortSignal;
+    const abortSignal = getProviderCallAbortSignal(options?.abortSignal);
+    abortSignal?.throwIfAborted();
+
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
 
     const transformResult = await this.runTransformSafely(
       text,
@@ -929,6 +924,7 @@ export class SageMakerEmbeddingProvider
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
+      abortSignal?.throwIfAborted();
       if (cachedResult) {
         logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
 
@@ -949,18 +945,7 @@ export class SageMakerEmbeddingProvider
       }
     }
 
-    // Apply delay if specified and not using cached response
-    if (delayMs && delayMs > 0) {
-      logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
-      );
-      await (signal
-        ? delayWithSignal(delayMs, undefined, { signal }).catch((error) => {
-            signal.throwIfAborted();
-            throw error;
-          })
-        : sleep(delayMs));
-    }
+    await paceProviderCall(this, context?.originalProvider, abortSignal);
 
     // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance();
@@ -1009,8 +994,9 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      const response = signal
-        ? await runtime.send(command, { abortSignal: signal })
+      abortSignal?.throwIfAborted();
+      const response = abortSignal
+        ? await runtime.send(command, { abortSignal })
         : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
@@ -1120,7 +1106,7 @@ export class SageMakerEmbeddingProvider
 
       return result;
     } catch (error: any) {
-      signal?.throwIfAborted();
+      abortSignal?.throwIfAborted();
       logger.error(`SageMaker embedding API error: ${error}`);
       return {
         error: `SageMaker embedding API error: ${error.message || String(error)}`,

@@ -87,6 +87,31 @@ describe('InMemoryEvaluationStore', () => {
     expect(await store.readCompletedIndexPairs({ excludeErrors: true })).toEqual(new Set(['3:4']));
   });
 
+  it('selects only interrupted grading from persisted target pairs', async () => {
+    const rows = [
+      ResultFailureReason.ERROR,
+      ResultFailureReason.NONE,
+      ResultFailureReason.ERROR,
+    ].map((failureReason, testIdx) =>
+      createEvaluateResult({
+        testIdx,
+        promptIdx: 0,
+        failureReason,
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'fixture',
+          metadata: { __promptfoo: { assertionGradingInterrupted: testIdx !== 2 } },
+        },
+      }),
+    );
+    const store = new InMemoryEvaluationStore(createEvaluation({ results: rows }));
+    expect(await store.readCompletedIndexPairs({ interruptedGradingOnly: true })).toEqual(
+      new Set(['0:0']),
+    );
+    expect((await store.readCompletedIndexPairs()).size).toBe(3);
+  });
+
   it('records final results with last-write-wins index semantics', () => {
     const initial = createEvaluateResult({ testIdx: 0, promptIdx: 1, score: 0 });
     const replacement = createEvaluateResult({ testIdx: 0, promptIdx: 1, score: 1 });

@@ -29,7 +29,7 @@ import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createDeferred } from '../util/utils';
-import { toPrompt } from './helpers';
+import { recordPacing, toPrompt, useEvaluationTimers } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 beforeEach(() => {
@@ -39,14 +39,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
 });
-
-function useEvaluationTimers() {
-  // Cancellation unwinds provider promises through setImmediate; keep that real
-  // while controlling the evaluation deadlines and target delays.
-  vi.useFakeTimers({
-    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
-  });
-}
 
 describeEvaluator('evaluator execution control', () => {
   it('evaluates with provider delay', async () => {
@@ -100,6 +92,7 @@ describeEvaluator('evaluator execution control', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
+    using _pacing = recordPacing();
     await evaluate(testSuite, evalRecord, { delay: evalDelay });
 
     expect(sleep).toHaveBeenCalledTimes(1);

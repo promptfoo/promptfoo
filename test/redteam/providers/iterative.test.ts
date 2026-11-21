@@ -195,7 +195,7 @@ describe('RedteamIterativeProvider', () => {
   });
 
   it.each(['AbortException', 'AbortError', 'string'] as const)(
-    'preserves caller reason at target entry after render: %s',
+    'stops before target dispatch after cancellation during render: %s',
     async (kind) => {
       const reason =
         kind === 'string'
@@ -246,13 +246,11 @@ describe('RedteamIterativeProvider', () => {
             abortSignal: fixture.controller.signal,
           }),
         );
-        await fixture.expectRejected(outcome);
-        expect(fixture.events).toEqual([
-          'attacker response',
-          'target render',
-          'caller abort',
-          'target entered',
-        ]);
+        expect(outcome.value).toBeUndefined();
+        expect(outcome.error).toBe(reason);
+        expect(fixture.target.callApi).not.toHaveBeenCalled();
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+        expect(fixture.events).toEqual(['attacker response', 'target render', 'caller abort']);
         expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
         expect(Object.values(registry.getMetrics())).toEqual([
           expect.objectContaining({

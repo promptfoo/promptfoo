@@ -14,6 +14,7 @@ import {
   type RateLimitExecuteOptions,
 } from './types';
 
+import type { RateLimitRegistryRef } from '../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -21,7 +22,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/providers';
-import type { RateLimitRegistry } from './rateLimitRegistry';
 
 /**
  * Symbol to mark providers that have already been wrapped.
@@ -185,7 +185,7 @@ export function createProviderRateLimitOptions(
  */
 export function wrapProviderWithRateLimiting(
   provider: ApiProvider,
-  registry: RateLimitRegistry,
+  registry: RateLimitRegistryRef,
 ): ApiProvider {
   // Don't double-wrap
   if (isRateLimitWrapped(provider)) {
@@ -239,7 +239,7 @@ export function wrapProviderWithRateLimiting(
  */
 export function wrapProvidersWithRateLimiting(
   providers: ApiProvider[],
-  registry: RateLimitRegistry,
+  registry: RateLimitRegistryRef,
 ): ApiProvider[] {
   return providers.map((provider) => wrapProviderWithRateLimiting(provider, registry));
 }

@@ -1,5 +1,7 @@
 import { PythonShell } from 'python-shell';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
+import { getProcessEnv } from '../../../src/envars';
 import logger from '../../../src/logger';
 import {
   pythonPromptFunction,
@@ -20,6 +22,10 @@ vi.mock('../../../src/logger', () => ({
     info: vi.fn(),
   },
 }));
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('pythonPromptFunction', () => {
   interface PythonContext {
@@ -57,6 +63,28 @@ describe('pythonPromptFunction', () => {
     ]);
   });
 
+  it('passes each invocation file environment to the legacy Python child', async () => {
+    const run = vi.mocked(PythonShell.run).mockResolvedValue(['ok']);
+    const context = { vars: {}, provider: { id: () => 'offline' } as ApiProvider };
+    await Promise.all(
+      ['first', 'second'].map((value) =>
+        cliState.withEnvFileOverrides(
+          { PROMPTFOO_PYTHON: 'python3', PROMPTFOO_TEST_MARKER: value },
+          async () => {
+            await Promise.resolve();
+            await pythonPromptFunctionLegacy('script.py', context);
+          },
+        ),
+      ),
+    );
+    expect(run.mock.calls.map(([, options]) => options?.env?.PROMPTFOO_TEST_MARKER)).toEqual([
+      'first',
+      'second',
+    ]);
+    expect(run.mock.calls.every(([, options]) => options?.pythonPath === 'python3')).toBe(true);
+    expect(getProcessEnv().PROMPTFOO_TEST_MARKER).toBeUndefined();
+  });
+
   it('should call legacy function with correct arguments', async () => {
     const filePath = 'path/to/script.py';
     const context = {
@@ -71,6 +99,7 @@ describe('pythonPromptFunction', () => {
     await expect(pythonPromptFunctionLegacy(filePath, context)).resolves.toBe('mocked result');
     expect(mockPythonShellRun).toHaveBeenCalledWith(filePath, {
       mode: 'text',
+      env: getProcessEnv(),
       pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
       args: [
         JSON.stringify({

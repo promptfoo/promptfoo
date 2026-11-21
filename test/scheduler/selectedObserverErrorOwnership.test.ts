@@ -40,7 +40,6 @@ describe('selected caller observer error through real iterative evaluation', () 
     vi.setSystemTime(new Date('2026-09-11T15:20:00.000Z'));
     registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
     redteamProviderManager.clearProvider();
-    redteamProviderManager.setRateLimitRegistry(registry);
   });
 
   afterEach(async () => {
@@ -50,7 +49,6 @@ describe('selected caller observer error through real iterative evaluation', () 
     await vi.advanceTimersByTimeAsync(0);
     await Promise.all(pending.splice(0));
     redteamProviderManager.clearProvider();
-    redteamProviderManager.setRateLimitRegistry(undefined);
     registry.dispose();
     for (const provider of providers.splice(0)) {
       await provider.cleanup?.();

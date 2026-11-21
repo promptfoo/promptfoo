@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -236,17 +236,21 @@ export default class EvalResult {
    */
   static async getCompletedIndexPairs(
     evalId: string,
-    opts?: { excludeErrors?: boolean },
+    opts?: { excludeErrors?: boolean; interruptedGradingOnly?: boolean },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
+    const whereClause = and(
+      eq(evalResultsTable.evalId, evalId),
+      opts?.excludeErrors
+        ? ne(evalResultsTable.failureReason, ResultFailureReason.ERROR)
+        : undefined,
+      opts?.interruptedGradingOnly
+        ? and(
+            eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+            sql`CASE WHEN json_valid(${evalResultsTable.gradingResult}) THEN json_extract(${evalResultsTable.gradingResult}, '$.metadata.__promptfoo.assertionGradingInterrupted') END = 1`,
+          )
+        : undefined,
+    );
 
     const rows = await db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
@@ -492,6 +496,7 @@ export default class EvalResult {
             shouldStripResponseOutput,
             this.response?.metadata,
             this.testCase.metadata,
+            shouldStripGradingResult,
           ),
       failureReason: this.failureReason,
     };

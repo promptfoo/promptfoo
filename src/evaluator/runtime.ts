@@ -1,4 +1,14 @@
-import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CompletedPrompt,
+  EvaluateResult,
+  ProviderResponse,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
+
+export type GradingProviderResolver = (provider: unknown) => Promise<ApiProvider | null>;
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -43,17 +53,28 @@ export interface EvaluationStore<
   appendResult(result: EvaluateResult): Promise<void>;
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean;
-  readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>>;
+  readCompletedIndexPairs(options?: {
+    excludeErrors?: boolean;
+    interruptedGradingOnly?: boolean;
+  }): Promise<Set<string>>;
   readFailedResultsByTestIdx(testIdx: number): Promise<TResult[]>;
   readResults(): Promise<Array<TResult | EvaluateResult>>;
   readResultsByTestIdx(testIdx: number): Promise<TResult[]>;
+  /** Restore transient grading inputs within this store's serialization and authorization boundary. */
+  resolveGradingInputs?(
+    response: ProviderResponse,
+    savedTest: AtomicTestCase,
+    currentTest: AtomicTestCase,
+    resolveGradingProvider: GradingProviderResolver,
+    result?: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>,
+  ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;
   save(): Promise<void>;
   saveResult(result: TResult): Promise<void>;
   setDurationMs(durationMs: number): void;
   setVars(vars: string[]): void;
-  toEvaluateResult(result: TResult | EvaluateResult): EvaluateResult;
+  toEvaluateResult(result: TResult | EvaluateResult, forGrading?: boolean): EvaluateResult;
 }
 
 export interface EvaluatorResultWriter {
