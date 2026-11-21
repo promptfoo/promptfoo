@@ -3,7 +3,6 @@ import { HttpProvider } from '../../src/providers/http';
 import { DEFAULT_RETRY_POLICY, shouldRetry } from '../../src/scheduler/retryPolicy';
 import * as fetchModule from '../../src/util/fetch';
 import * as monkeyPatchFetchModule from '../../src/util/fetch/monkeyPatchFetch';
-
 import { timedStream } from '../util/timedStream';
 
 function respondInChunks(chunks: string[], delayMs: number) {

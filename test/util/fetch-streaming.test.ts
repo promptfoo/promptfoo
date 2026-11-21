@@ -3,7 +3,6 @@ import {
   estimateStreamingTokensPerSecond,
   processStreamingResponse,
 } from '../../src/providers/httpStreaming';
-
 import { timedStream } from './timedStream';
 
 const encoder = new TextEncoder();
