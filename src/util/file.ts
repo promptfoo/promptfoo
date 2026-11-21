@@ -23,6 +23,49 @@ import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
+const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
+type VarsWithFileMimeTypes = Record<string, unknown> & {
+  [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
+};
+
+/** Preserve loaded-file provenance through object copies, outside serialized vars. */
+export function setLoadedFileMimeTypes(
+  vars: Record<string, unknown>,
+  mimeTypes?: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const current = (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  const next = new Map(mimeTypes);
+  if (!mimeTypes) {
+    // Rerenders keep only unchanged loaded values. Each render owns a fresh map so
+    // pruning or loading another file cannot mutate a sibling copy of vars.
+    for (const value of Object.values(vars)) {
+      if (typeof value === 'string') {
+        const mimeType = current?.get(value);
+        if (mimeType) {
+          next.set(value, mimeType);
+        }
+      }
+    }
+  }
+  if (next.size > 0) {
+    Object.defineProperty(vars, loadedFileMimeTypes, {
+      value: next,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    delete (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  }
+  return next;
+}
+
+export function getLoadedFileMimeType(
+  vars: Record<string, unknown>,
+  value: string,
+): string | undefined {
+  return (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes]?.get(value);
+}
+
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
@@ -36,7 +79,7 @@ const SCHEMA_TEMPLATE_KEYS = new Set([
   'schema',
 ]);
 
-function renderStructuredConfig(
+export function renderStructuredConfig(
   config: any,
   vars?: Record<string, VarValue>,
   allowStructured = true,
@@ -317,12 +360,17 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param basePath - Optional file resolution scope; inherits the caller scope when omitted
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
 ): any {
+  if (basePath !== undefined) {
+    return cliState.withBasePath(basePath, () => maybeLoadConfigFromExternalFile(config, context));
+  }
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
@@ -504,19 +552,24 @@ export function maybeLoadStructuredConfigFromExternalFileWithVars(
 }
 
 export function maybeLoadResponseSchemaFromExternalFileWithVars(
-  responseSchema: any,
+  responseSchema: unknown,
   vars?: Record<string, VarValue>,
-): any {
-  const insertedValues = new WeakSet<object>();
-  const rendered = renderStructuredConfig(responseSchema, vars, true, insertedValues);
-  const loaded = loadStructuredConfigFile(rendered, insertedValues);
-
-  // Render file contents once; inserted variable values must stay literal.
-  if (typeof rendered === 'string' && rendered.startsWith('file://')) {
-    return renderStructuredConfig(typeof loaded === 'string' ? JSON.parse(loaded) : loaded, vars);
+  load: (reference: string) => unknown = maybeLoadFromExternalFile,
+): unknown {
+  const rendered = renderStructuredConfig(responseSchema, vars);
+  if (typeof rendered !== 'string') {
+    return rendered;
   }
-
-  return loaded;
+  let loaded = load(rendered);
+  if (typeof loaded === 'string') {
+    try {
+      loaded = JSON.parse(loaded);
+    } catch (error) {
+      throw new Error(`Invalid JSON in responseSchema: ${error}`);
+    }
+  }
+  // Inline values have already been rendered. Only file contents are new authored input.
+  return rendered.startsWith('file://') ? renderStructuredConfig(loaded, vars) : loaded;
 }
 
 /**
@@ -590,21 +643,30 @@ export function maybeLoadResponseFormatFromExternalFile(
  *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
+ * @param abortSignal - Prevents starting executable tool functions after cancellation.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  * @throws {Error} If the loaded tools are in an invalid format
  */
 export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
+  abortSignal?: AbortSignal,
 ): Promise<any> {
+  abortSignal?.throwIfAborted();
   const insertedValues = new WeakSet<object>();
   return loadRenderedTools(
     renderStructuredConfig(tools, vars, true, insertedValues),
     insertedValues,
+    abortSignal,
   );
 }
 
-async function loadRenderedTools(rendered: any, insertedValues: WeakSet<object>): Promise<any> {
+async function loadRenderedTools(
+  rendered: any,
+  insertedValues: WeakSet<object>,
+  abortSignal?: AbortSignal,
+): Promise<any> {
+  abortSignal?.throwIfAborted();
   if (Array.isArray(rendered) && insertedValues.has(rendered)) {
     if (rendered.some((tool) => !tool || typeof tool !== 'object' || Array.isArray(tool))) {
       throw new Error('A substituted tool list must contain tool objects');
@@ -631,13 +693,14 @@ async function loadRenderedTools(rendered: any, insertedValues: WeakSet<object>)
           // Resolve Python path relative to config base directory (same as JavaScript)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
           logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
-          toolDefinitions = await runPython(absPath, functionName, []);
+          toolDefinitions = await runPython(absPath, functionName, [], { abortSignal });
         } else {
           // Use safeResolve for security (prevents path traversal)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
           logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
 
           const module = await importModule(absPath);
+          abortSignal?.throwIfAborted();
           const fn = module[functionName] || module.default?.[functionName];
 
           if (typeof fn !== 'function') {
@@ -672,6 +735,9 @@ async function loadRenderedTools(rendered: any, insertedValues: WeakSet<object>)
         );
         return toolDefinitions;
       } catch (err) {
+        if (abortSignal?.aborted && err === abortSignal.reason) {
+          throw err;
+        }
         const errorMessage = err instanceof Error ? err.message : String(err);
         const basePath = cliState.basePath || process.cwd();
         throw new Error(
@@ -699,10 +765,10 @@ async function loadRenderedTools(rendered: any, insertedValues: WeakSet<object>)
     }
   }
 
-  // Handle arrays by recursively processing each item
+  // Array entries are already rendered; only load their file references.
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => loadRenderedTools(item, insertedValues)),
+      rendered.map((item) => loadRenderedTools(item, insertedValues, abortSignal)),
     );
     return results.flat();
   }

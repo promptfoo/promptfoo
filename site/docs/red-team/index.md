@@ -39,7 +39,7 @@ From what we've seen so far, most regulations/standards support a systematic ben
 
 ## How LLM red teaming works
 
-The process of red teaming LLMs generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface and are stochastic in nature (i.e. they are not consistent from one generation to the next).
+Automation helps test many attack types and repeat cases when model outputs vary.
 
 A systematic approach looks like this:
 
@@ -51,10 +51,10 @@ A systematic approach looks like this:
 
 Once a process is set up, it can be applied in two primary ways:
 
-- **One-off runs**: Generate a comprehensive report that allows you to examine vulnerabilities and suggested mitigations.
-- **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline, ensuring ongoing safety as your application evolves.
+- **One-off runs**: Review findings and suggested mitigations from a scan.
+- **CI/CD integration**: Run tests in your deployment pipeline to detect regressions.
 
-The magic moment for managing AI risk usually comes after an organization is able to set up some continuous measurement of AI risk: whether through CI/CD, internal requirements, or some other form of scheduled runs.
+Schedule repeated runs or trigger them from CI/CD to compare findings over time.
 
 <div style={{ maxWidth: 760, margin: '0 auto' }}>
   ![llm security continuous monitoring](/img/continuous-monitoring.png)
@@ -288,7 +288,7 @@ In addition to red teaming, Discord deployed passive moderation and observabilit
 
 This case highlights several practical aspects of AI red teaming:
 
-1. **Comprehensive pre-deployment testing**: Test a wide range of adversarial inputs to uncover potential exploits before launch.
+1. **Pre-deployment testing**: Test adversarial inputs before launch.
 2. **Gradual rollouts**: Limit potential damage and gather real-world usage data through controlled, incremental deployment.
 3. **Continuous monitoring**: Develop a culture of continuous testing and risk monitoring to catch regressions.
 4. **User feedback loop**: Encourage users to report issues and feed these issues back into your red teaming setup.

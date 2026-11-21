@@ -1,103 +1,32 @@
 # google-vertex (Google Vertex AI Examples)
 
-Example configurations for testing Google Vertex AI models with promptfoo.
+The default eval uses Gemini to route support messages and checks the returned labels locally. The other configurations cover tool calls, images, search grounding, structured output, and partner models.
 
-You can run this example with:
+## Run the eval
 
-```bash
-npx promptfoo@latest init --example google-vertex
-cd google-vertex
-```
-
-## Purpose
-
-- Test Vertex AI's Gemini, Claude, and Llama models
-- Configure model-specific features and search grounding
-- Compare performance across different tasks
-
-## Prerequisites
-
-- Google Cloud account with Vertex AI API enabled
-- API credentials
-- Node.js >=22.22.0 (Node.js 24 LTS recommended)
-
-## Environment Variables
-
-- `GOOGLE_CLOUD_PROJECT` - Your Google Cloud project ID (`VERTEX_PROJECT_ID` is also supported)
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account credentials (optional)
-
-## Setup
-
-1. Install dependencies:
-
-   ```sh
-   npm install google-auth-library
-   ```
-
-2. Configure authentication:
-
-   ```sh
-   # User account (development)
-   gcloud auth application-default login
-
-   # Or service account
-   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
-   ```
-
-3. Set your project ID:
-   ```sh
-   export GOOGLE_CLOUD_PROJECT=your-project-id
-   ```
-
-## Configurations
-
-This example includes:
-
-- `promptfooconfig.gemini.yaml`: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, and earlier models with function calling, system instructions, and safety settings
-- `promptfooconfig.claude.yaml`: Claude Opus 5, Sonnet 5, Opus 4.6, Opus 4.1, and Haiku 4.5 reviewing code for issues
-- `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
-- `promptfooconfig.search.yaml`: Search grounding with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
-- `promptfooconfig.image.yaml`: Multimodal image inputs with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
-- `promptfooconfig.response-schema.yaml`: Response schemas with structured output
-
-The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
-3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite also support `us` and `eu`, at a 10%
-premium. The examples use `thinkingLevel` because these models no longer support
-manual sampling parameters such as `temperature`, `topP`, and `topK`.
-
-> Some example targets and the basic grading provider use Gemini 2.5 on Vertex.
-> Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes)
-> for retirement dates, and test supported replacements before they retire.
-
-## Running Examples
+Enable the Vertex AI API for your project and use an account with permission to invoke the selected model. For local development, sign in with Application Default Credentials:
 
 ```sh
-# Basic example
-promptfoo eval -c promptfooconfig.yaml
-
-# Model-specific examples
-promptfoo eval -c promptfooconfig.gemini.yaml
-promptfoo eval -c promptfooconfig.claude.yaml
-promptfoo eval -c promptfooconfig.llama.yaml
-
-# Search grounding tool and image understanding
-promptfoo eval -c promptfooconfig.search.yaml
-promptfoo eval -c promptfooconfig.image.yaml
-
-# Structured output with response schemas
-promptfoo eval -c promptfooconfig.response-schema.yaml
-
-# View results
-promptfoo view
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=your-project-id
+npx promptfoo@latest init --example google-vertex
+cd google-vertex
+npx promptfoo@latest eval
 ```
 
-## Expected Results
+If you already use a service account, you can set `GOOGLE_APPLICATION_CREDENTIALS` to its credentials file. The Gemini text examples set `expressMode: false` to use your project credentials even when a Gemini API key is present.
 
-Each configuration demonstrates different model capabilities, from function calling and tool use to safety features and real-time information retrieval.
+## Other configurations
 
-## Learn More
+Run `npx promptfoo@latest eval -c <filename>` to select a configuration.
 
-- [Vertex AI Provider Documentation](https://www.promptfoo.dev/docs/providers/vertex/)
-- [Google Cloud Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
-- [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding)
-- [Google documentation on Image Understanding](https://ai.google.dev/gemini-api/docs/image-understanding#inline-image)
+| File                                   | What it evaluates                                      |
+| -------------------------------------- | ------------------------------------------------------ |
+| `promptfooconfig.gemini.yaml`          | The tool Gemini selects and the airport code it passes |
+| `promptfooconfig.search.yaml`          | Responses grounded in Google Search                    |
+| `promptfooconfig.image.yaml`           | Image understanding                                    |
+| `promptfooconfig.response-schema.yaml` | Structured JSON output                                 |
+| `promptfooconfig.claude.yaml`          | Code review with Claude                                |
+| `promptfooconfig.llama.yaml`           | Llama on Model Garden                                  |
+
+Model IDs, access requirements, and supported locations vary by model. [Vertex provider guide](https://www.promptfoo.dev/docs/providers/vertex/) · [Google Cloud model lifecycle](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)

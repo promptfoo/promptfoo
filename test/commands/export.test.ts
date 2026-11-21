@@ -1,15 +1,18 @@
-import { EventEmitter } from 'events';
+import { randomBytes } from 'node:crypto';
+import { once } from 'node:events';
+import { setImmediate } from 'node:timers/promises';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
-import zlib from 'zlib';
+import { PassThrough } from 'stream';
 
 import { Command } from 'commander';
-import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { getLogDirectory, getLogFiles } from '../../src/util/logs';
 import { writeOutput } from '../../src/util/output';
+import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -59,42 +62,6 @@ vi.mock('../../src/util/logs', () => ({
   getLogFiles: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      createWriteStream: vi.fn(),
-    },
-    createWriteStream: vi.fn(),
-  };
-});
-
-vi.mock('fs/promises', () => ({
-  default: {
-    access: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn(),
-    stat: vi.fn(),
-  },
-  access: vi.fn().mockResolvedValue(undefined),
-  readFile: vi.fn(),
-  stat: vi.fn(),
-}));
-
-vi.mock('zlib', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('zlib')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      createGzip: vi.fn(),
-    },
-    createGzip: vi.fn(),
-    gzip: vi.fn(),
-  };
-});
-
 vi.mock('../../src/database', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -105,7 +72,6 @@ vi.mock('../../src/database', async (importOriginal) => {
 describe('exportCommand', () => {
   let program: Command;
   let mockEval: any;
-  const mockFsPromises = fsPromises as Mocked<typeof fsPromises>;
 
   beforeEach(() => {
     program = new Command();
@@ -232,21 +198,29 @@ describe('exportCommand', () => {
 
   describe('logs export', () => {
     const mockLogDir = '/test/config/logs';
+    const logFile = {
+      name: 'promptfoo-debug-2025-01-01.log',
+      path: `${mockLogDir}/promptfoo-debug-2025-01-01.log`,
+      mtime: new Date('2025-01-01T00:00:00.000Z'),
+      type: 'debug' as const,
+      size: 10,
+    };
     const mockGetLogDirectory = vi.mocked(getLogDirectory);
     const mockGetLogFiles = vi.mocked(getLogFiles);
 
     beforeEach(() => {
       mockGetLogDirectory.mockReturnValue(mockLogDir);
       mockGetLogFiles.mockResolvedValue([]);
-      mockFsPromises.access.mockResolvedValue(undefined);
-      // Reset all mocks for clean state
-      vi.clearAllMocks();
+      vi.spyOn(fsPromises, 'access').mockResolvedValue(undefined);
+      exportCommand(program);
+    });
+
+    afterEach(() => {
+      vi.mocked(fsPromises.access).mockRestore();
     });
 
     it('should handle missing log directory', async () => {
-      mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
-
-      exportCommand(program);
+      vi.mocked(fsPromises.access).mockRejectedValue(new Error('ENOENT'));
 
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
@@ -259,8 +233,6 @@ describe('exportCommand', () => {
     it('should handle no log files found', async () => {
       mockGetLogFiles.mockResolvedValue([]);
 
-      exportCommand(program);
-
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -269,85 +241,93 @@ describe('exportCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it('should handle invalid count parameter', async () => {
-      mockGetLogFiles.mockResolvedValue([
-        {
-          name: 'promptfoo-debug-2025-01-01.log',
-          path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
-          mtime: new Date(),
-          type: 'debug',
-          size: 1024,
-        },
-      ]);
+    it.each([
+      ['should handle invalid count parameter', 'invalid'],
+      ['should handle zero count parameter', '0'],
+    ])('%s', async (_title, count) => {
+      mockGetLogFiles.mockResolvedValue([logFile]);
 
-      exportCommand(program);
-
-      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', 'invalid']);
+      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', count]);
 
       expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
       expect(process.exitCode).toBe(1);
     });
 
-    it('should handle zero count parameter', async () => {
-      mockGetLogFiles.mockResolvedValue([
-        {
-          name: 'promptfoo-debug-2025-01-01.log',
-          path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
-          mtime: new Date(),
-          type: 'debug',
-          size: 1024,
-        },
-      ]);
-
-      exportCommand(program);
-
-      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', '0']);
-
-      expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
-      expect(process.exitCode).toBe(1);
-    });
-
-    it('should archive log files using async fs helpers', async () => {
-      const logPath = '/test/config/logs/promptfoo-debug-2025-01-01.log';
-      const output = new EventEmitter() as EventEmitter & {
-        on: typeof EventEmitter.prototype.on;
-      };
-      const gzip = {
-        end: vi.fn(() => output.emit('close')),
-        pipe: vi.fn(),
-        write: vi.fn(),
-        on: vi.fn(),
-      };
-
-      vi.mocked(fs.createWriteStream).mockReturnValue(output as unknown as fs.WriteStream);
-      vi.mocked(zlib.createGzip).mockReturnValue(gzip as unknown as zlib.Gzip);
-      mockGetLogFiles.mockResolvedValue([
-        {
-          name: 'promptfoo-debug-2025-01-01.log',
-          path: logPath,
-          mtime: new Date('2025-01-01T00:00:00.000Z'),
-          type: 'debug',
-          size: 12,
-        },
-      ]);
-      mockFsPromises.readFile.mockResolvedValue(Buffer.from('hello logs'));
-      mockFsPromises.stat.mockImplementation(async (filePath) => {
-        if (filePath === 'logs.gz') {
-          return { size: 123 } as fs.Stats;
-        }
-        return {
-          size: 10,
-          mtime: new Date('2025-01-01T00:00:00.000Z'),
-        } as fs.Stats;
-      });
-
-      exportCommand(program);
-
-      await program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
-
-      expect(mockFsPromises.readFile).toHaveBeenCalledWith(logPath);
-      expect(mockFsPromises.stat).toHaveBeenCalledWith(logPath);
+    it('pauses reading log files while the archive destination is backpressured', async () => {
+      const content = randomBytes(128 * 1024);
+      const files = Array.from({ length: 12 }, (_, i) => ({
+        ...logFile,
+        path: `${logFile.path}.${i}`,
+      }));
+      mockGetLogFiles.mockResolvedValue(files);
+      using readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValue(content);
+      using _stat = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+        size: content.length,
+        mtime: logFile.mtime,
+      } as fs.Stats);
+      const output = new PassThrough({ highWaterMark: 1 });
+      using _write = vi
+        .spyOn(fs, 'createWriteStream')
+        .mockReturnValue(output as unknown as fs.WriteStream);
+      const command = program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
+      try {
+        await Promise.race([once(output, 'readable'), command]);
+        await setImmediate();
+        expect(output.writableNeedDrain).toBe(true);
+        expect(readFile.mock.calls.length).toBeLessThan(files.length);
+      } finally {
+        output.resume();
+        await command;
+      }
+      expect(readFile.mock.calls.map(([file]) => file)).toEqual(files.map(({ path }) => path));
       expect(logger.info).toHaveBeenCalledWith('Log files have been collected in: logs.gz');
     });
+
+    it.each([
+      ['readFile', new Error('disk full'), 'Failed to collect logs: Error: disk full'],
+      ['stat', undefined, 'ERR_STREAM_PREMATURE_CLOSE'],
+    ] as const)(
+      'stops collecting logs if the destination closes during %s',
+      async (pending, error, message) => {
+        const output = new PassThrough();
+        using _write = vi
+          .spyOn(fs, 'createWriteStream')
+          .mockReturnValue(output as unknown as fs.WriteStream);
+        using readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.alloc(0));
+        using stat = vi
+          .spyOn(fsPromises, 'stat')
+          .mockResolvedValue({ size: 0, mtime: logFile.mtime } as fs.Stats);
+        mockGetLogFiles.mockResolvedValue([logFile, { ...logFile, path: `${logFile.path}.next` }]);
+        const rotated = createDeferred<never>();
+        const fileOps = { readFile, stat };
+        fileOps[pending].mockImplementationOnce(() => {
+          output.destroy(error);
+          return rotated.promise;
+        });
+        const command = program.parseAsync([
+          'node',
+          'test',
+          'export',
+          'logs',
+          '--output',
+          'logs.gz',
+        ]);
+        try {
+          await vi.waitFor(() =>
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(message)),
+          );
+          expect(process.exitCode).toBe(1);
+        } finally {
+          rotated.reject(Object.assign(new Error('rotated'), { code: 'ENOENT' }));
+          await command;
+        }
+        await setImmediate();
+        expect(readFile).toHaveBeenCalledExactlyOnceWith(logFile.path);
+        expect(stat).toHaveBeenCalledExactlyOnceWith(logFile.path);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          expect.stringMatching(/Created log archive:|Log files have been collected/),
+        );
+      },
+    );
   });
 });
