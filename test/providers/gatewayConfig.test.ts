@@ -102,6 +102,28 @@ describe('gateway provider config handling', () => {
   });
 
   describe('cloudera', () => {
+    it('rejects a missing domain before constructing the default URL', async () => {
+      await expect(loadApiProvider('cloudera:my-model')).rejects.toThrow(
+        /Cloudera provider requires a domain/,
+      );
+    });
+
+    it('allows an explicit apiBaseUrl without a domain', async () => {
+      const provider = await loadApiProvider('cloudera:my-model', {
+        options: { config: { apiBaseUrl: 'https://proxy.example.com/v1' } },
+      });
+      expect(provider).toHaveProperty('config.apiBaseUrl', 'https://proxy.example.com/v1');
+    });
+
+    it('allows an explicit apiHost without a domain', async () => {
+      const provider = await loadApiProvider('cloudera:my-model', {
+        options: { config: { apiHost: 'proxy.example.com' } },
+      });
+      expect((provider as typeof provider & { getApiUrl(): string }).getApiUrl()).toBe(
+        'https://proxy.example.com/v1',
+      );
+    });
+
     it('honors an explicit apiBaseUrl instead of rebuilding it from domain/namespace', async () => {
       const provider = await loadApiProvider('cloudera:my-model', {
         options: {
@@ -127,6 +149,13 @@ describe('gateway provider config handling', () => {
         'https://d.example.com/namespaces/serving-default/endpoints/my-model/v1',
       );
       expect(provider).toHaveProperty('config.apiKeyEnvar', 'CDP_TOKEN');
+    });
+
+    it('does not fall back to the ambient domain when the scoped domain is empty', async () => {
+      vi.stubEnv('CDP_DOMAIN', 'process.example.com');
+      await expect(
+        loadApiProvider('cloudera:my-model', { options: { env: { CDP_DOMAIN: '' } } }),
+      ).rejects.toThrow(/Cloudera provider requires a domain/);
     });
 
     it('reads a scoped domain and token after config validation', async () => {

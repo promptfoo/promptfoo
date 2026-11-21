@@ -277,19 +277,17 @@ describe('provider environment scopes', () => {
       },
     );
 
-    it('preserves the existing empty provider endpoint behavior', async () => {
+    it('rejects an empty provider endpoint without falling back to another scope', async () => {
       const loading = loadApiProvider(route, {
         env: values('suite'),
         options: { env: { [endpointKey]: '' } },
       });
-      if (route.startsWith('snowflake:')) {
-        await expect(loading).rejects.toThrow('Snowflake provider requires an account identifier');
-        expect(fetchWithCache).not.toHaveBeenCalled();
-      } else {
-        const provider = await loading;
-        expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
-        expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(url('registered'));
-      }
+      await expect(loading).rejects.toThrow(
+        route.startsWith('snowflake:')
+          ? 'Snowflake provider requires an account identifier'
+          : 'Cloudera provider requires a domain',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
 
