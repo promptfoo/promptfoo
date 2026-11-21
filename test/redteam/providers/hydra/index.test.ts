@@ -272,15 +272,20 @@ describe('HydraProvider', () => {
       'cached',
       'error',
       'wrong role',
+      'rendered',
       'unreported',
     ])('binds earlier context only to verified live turns (%s)', async (mode) => {
       const stateful = mode !== 'replay';
       const user = { role: 'user' as const, content: 'Describe the color' };
       const assistant = { role: 'assistant' as const, content: 'Blue' };
+      const rendered = `Question: ${user.content}`;
+      if (mode === 'rendered') {
+        vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue(rendered);
+      }
       mockAgentProvider.callApi.mockResolvedValue({ output: user.content });
       mockTargetProvider.callApi
         .mockResolvedValueOnce({
-          prompt: [user],
+          prompt: mode === 'rendered' ? rendered : [user],
           output: assistant.content,
           sessionId: 'first',
           cached: mode === 'cached',
@@ -295,6 +300,7 @@ describe('HydraProvider', () => {
                   ? [user]
                   : [user, assistant, user],
           }),
+          ...(mode === 'rendered' && { prompt: [{ ...user, content: rendered }] }),
           output: 'Green',
           sessionId: mode === 'changed session' ? 'second' : 'first',
         });
@@ -316,6 +322,7 @@ describe('HydraProvider', () => {
         expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
         return;
       }
+      expect(result.error).toBeUndefined();
       const transcript =
         mode === 'replay' || mode === 'session'
           ? 'User: Describe the color\n\nAssistant: Blue'

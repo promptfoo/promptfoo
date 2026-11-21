@@ -775,7 +775,7 @@ export class HydraProvider implements ApiProvider {
       if (
         reported !== undefined &&
         reportedCurrent !== currentPrompt &&
-        !(typeof reported === 'string' && !this.stateful && reported === finalTargetPrompt)
+        reportedCurrent !== finalTargetPrompt
       ) {
         lastTargetResponse = {
           ...targetResponse,
