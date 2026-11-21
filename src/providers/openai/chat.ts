@@ -13,6 +13,7 @@ import {
 } from '../../util/fetch/responseHeadersObserver';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { renderVarsInObject } from '../../util/index';
+import { readProviderErrorText } from '../fetch';
 import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
@@ -39,6 +40,7 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost, usesAzureOpenAiBilling } from './billing';
+import { readOpenAiChatStream } from './chatStream';
 import {
   applyGpt6RequestRules,
   getGpt6ChatReasoningEffort,
@@ -876,7 +878,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data: string;
               transcript: string;
               format?: string;
-            };
+            } | null;
           };
         }
       >;
@@ -930,7 +932,29 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
     try {
       // Streaming deadlines and latency include body consumption, not just headers.
-      const responseFormat = this.getChatResponseFormat(body);
+      const adapterFormat = this.getChatResponseFormat(body);
+      const streaming = adapterFormat === 'json' && (body.stream ?? config.stream) === true;
+      if (streaming) {
+        if (body.modalities?.includes('audio')) {
+          return {
+            error:
+              'Streaming Chat Completions do not support audio output. Set stream: false when requesting the audio modality.',
+          };
+        }
+        if (body.tools?.some((tool) => tool.type === 'custom')) {
+          return {
+            error:
+              'Streaming Chat Completions support function tools only. Set stream: false for custom tools.',
+          };
+        }
+        body.stream = true;
+        const options = body.stream_options;
+        body.stream_options = {
+          ...(typeof options === 'object' && !Array.isArray(options) ? options : {}),
+          include_usage: true,
+        };
+      }
+      const responseFormat = streaming ? 'text' : adapterFormat;
       const streamStartTime = responseFormat === 'text' ? Date.now() : undefined;
       const streamController = responseFormat === 'text' ? new AbortController() : undefined;
       const timeout = getRequestTimeoutMs();
@@ -967,6 +991,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             body: JSON.stringify(body),
             ...(getAuthHeaders ? { getAuthHeaders } : {}),
             ...(requestSignal ? { signal: requestSignal } : {}),
+            ...(streaming && {
+              readBody: (response: Response) => {
+                status = response.status;
+                statusText = response.statusText;
+                responseHeaders = Object.fromEntries(response.headers);
+                return response.ok
+                  ? readOpenAiChatStream(response)
+                  : readProviderErrorText(response);
+              },
+            }),
           },
           timeout,
           responseFormat,
@@ -996,6 +1030,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ));
       } finally {
         clearTimeout(streamTimeout);
+        if (streaming) {
+          streamController?.abort();
+        }
       }
       if (streamStartTime !== undefined && !cached) {
         latencyMs = Date.now() - streamStartTime;
@@ -1042,7 +1079,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       const choiceError =
-        (this.usesOpenRouter() ||
+        (streaming ||
+          this.usesOpenRouter() ||
           (gatewayErrorFormat && getOpenAiGatewayErrorType(data) !== undefined)) &&
         !data?.error
           ? getOpenAiChatChoiceError(data)
@@ -1066,7 +1104,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      if (status < 200 || status >= 300) {
+      if (status < 200 || status >= 300 || (streaming && data?.error)) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
         const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
 
@@ -1101,9 +1139,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           };
         }
 
+        const cost = streaming ? this.calculateResponseCost(data, config, cached) : undefined;
         return {
           error: errorMessage,
+          ...(streaming && {
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            cached,
+            latencyMs,
+            raw: data,
+          }),
+          ...(cost === undefined ? {} : { cost }),
           metadata: {
+            ...(streaming && this.getProviderResponseMetadata(data)),
             ...(rateLimitKind ? { rateLimitKind } : {}),
             http: {
               status,

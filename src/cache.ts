@@ -736,7 +736,7 @@ async function fetchAndReadBody(
   isIdempotent: boolean,
   logEnabled: boolean,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
-): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
+): Promise<{ respText: string | object; resp: Response; fetchLatencyMs: number }> {
   const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
   const body = options.body ?? (url instanceof Request ? url.body : null);
   const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
@@ -748,7 +748,9 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await readWithResponseDeadline(resp, () => resp.text());
+      const respText = await readWithResponseDeadline(resp, () =>
+        options.readBody ? options.readBody(resp) : resp.text(),
+      );
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (
@@ -796,12 +798,14 @@ async function fetchAndReadBody(
 function parseFetchResponse(
   url: RequestInfo,
   response: Response,
-  responseText: string,
+  responseText: string | object,
   format: 'json' | 'text',
   sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ): unknown {
   try {
-    return format === 'json' ? JSON.parse(responseText) : responseText;
+    return format === 'json' && typeof responseText === 'string'
+      ? JSON.parse(responseText)
+      : responseText;
   } catch (err) {
     const message = `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}:`;
     if (sanitizeResponse) {
@@ -937,7 +941,8 @@ export async function fetchWithCache<T = unknown>(
   );
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, repeatIndex, cacheKey: providedCacheKey, sanitizeResponse } = cacheOptions;
+  const { repeatIndex, cacheKey: providedCacheKey, sanitizeResponse } = cacheOptions;
+  const bust = Boolean(cacheOptions.bust || fetchOptions.readBody);
   const logEnabled =
     new Headers(getFetchWithProxyHeaders(url, fetchOptions)).get('x-promptfoo-silent') !== 'true';
 

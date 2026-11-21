@@ -565,6 +565,10 @@ async function peekRateLimitBody(
   if (!text) {
     return undefined;
   }
+  if (Buffer.byteLength(text) >= RATE_LIMIT_BODY_PEEK_BYTES) {
+    // The bounded clone stopped reading before EOF. Release the other branch too.
+    void response.body?.cancel().catch(() => undefined);
+  }
 
   try {
     return JSON.parse(text);
@@ -615,11 +619,9 @@ export async function readBoundedText(
       total += bounded.byteLength;
     }
   } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      // Reader cancellation can fail if the stream is already closed; safe to ignore.
-    }
+    // Cancelling a cloned stream waits for its sibling, which may still be unread.
+    void reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
   const merged = new Uint8Array(total);
   let offset = 0;
@@ -734,6 +736,8 @@ async function handleRateLimitedResponse(
   if (isHardRateLimit) {
     const body = await peekRateLimitBody(response, logEnabled, signal);
     rateLimitError = buildHttpRateLimitError(response, body);
+  } else {
+    void response.body?.cancel().catch(() => undefined);
   }
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
@@ -817,10 +821,12 @@ export async function fetchWithRetries(
       );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
+        void response.body?.cancel().catch(() => undefined);
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
-      if (response && isRateLimited(response)) {
+      // A live completion may exhaust the remaining quota. Retrying it duplicates a paid request.
+      if (response && !(options.readBody && response.ok) && isRateLimited(response)) {
         await handleRateLimitedResponse(
           response,
           url,
