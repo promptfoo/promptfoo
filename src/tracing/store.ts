@@ -47,6 +47,33 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
+/** Exclude grader spans and their descendants, even if a child did not inherit the role. */
+function targetSpans(rows: (typeof spansTable.$inferSelect)[]) {
+  const graders = new Set(
+    rows
+      .filter((row) => row.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader')
+      .map((row) => row.spanId),
+  );
+  if (!graders.size) {
+    return rows;
+  }
+  const children = new Map<string, string[]>();
+  for (const { parentSpanId, spanId } of rows) {
+    if (parentSpanId) {
+      const siblings = children.get(parentSpanId) ?? [];
+      siblings.push(spanId);
+      children.set(parentSpanId, siblings);
+    }
+  }
+  // Iteration visits newly added IDs exactly once, including when the trace contains a cycle.
+  for (const id of graders) {
+    for (const child of children.get(id) ?? []) {
+      graders.add(child);
+    }
+  }
+  return rows.filter((row) => !graders.has(row.spanId));
+}
+
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
@@ -242,7 +269,7 @@ export class TraceStore {
 
   async getTrace(
     traceId: string,
-    options: TraceAttributeSanitizationOptions = {},
+    options: TraceAttributeSanitizationOptions & { excludeGraders?: boolean } = {},
   ): Promise<TraceData | null> {
     const { sanitizeAttributes: shouldSanitize = true } = options;
 
@@ -271,7 +298,9 @@ export class TraceStore {
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata ?? undefined,
-        spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+        spans: (options.excludeGraders ? targetSpans(spans) : spans).map((span) =>
+          serializeSpan(span, shouldSanitize),
+        ),
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
@@ -358,47 +387,15 @@ export class TraceStore {
         .where(eq(spansTable.traceId, traceId))
         .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
-      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
-      const graderOwnedSpanIds = new Map<string, boolean>();
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
-      for (const row of rows) {
+      for (const row of includeInternalSpans ? rows : targetSpans(rows)) {
         if (earliestStartTime && row.startTime < earliestStartTime) {
           continue;
         }
 
         const rawAttributes = row.attributes ?? {};
-
-        if (!includeInternalSpans) {
-          let ancestor: typeof spansTable.$inferSelect | undefined = row;
-          const visitedSpanIds = new Set<string>();
-          let belongsToGrader = false;
-
-          while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
-            const cached = graderOwnedSpanIds.get(ancestor.spanId);
-            if (cached !== undefined) {
-              belongsToGrader = cached;
-              break;
-            }
-
-            visitedSpanIds.add(ancestor.spanId);
-            if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
-              belongsToGrader = true;
-              break;
-            }
-
-            ancestor = ancestor.parentSpanId ? rowsBySpanId.get(ancestor.parentSpanId) : undefined;
-          }
-
-          for (const spanId of visitedSpanIds) {
-            graderOwnedSpanIds.set(spanId, belongsToGrader);
-          }
-
-          if (belongsToGrader) {
-            continue;
-          }
-        }
 
         const spanData = serializeSpan(row, shouldSanitize, rawAttributes);
 

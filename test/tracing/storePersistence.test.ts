@@ -255,6 +255,9 @@ describe('TraceStore span persistence', () => {
       },
     ]);
 
+    const target = await traceStore.getTrace('grader-descendants', { excludeGraders: true });
+    expect(target?.spans.map((span) => span.spanId)).toEqual(['target']);
+    expect((await traceStore.getTrace('grader-descendants'))?.spans).toHaveLength(5);
     await expect(
       traceStore.getSpans('grader-descendants', { includeInternalSpans: false }),
     ).resolves.toEqual([expect.objectContaining({ spanId: 'target' })]);

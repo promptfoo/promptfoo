@@ -327,6 +327,12 @@ export function maybeLoadConfigFromExternalFile(
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
+      // Fallback sources must be literals. Keep their authored values for validation,
+      // so external test files cannot turn a forbidden reference into ordinary text.
+      if (key === 'value' && typeof config.type === 'string' && config.fallback !== undefined) {
+        result.value = config.value;
+        continue;
+      }
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
       const isAssertionValue =
