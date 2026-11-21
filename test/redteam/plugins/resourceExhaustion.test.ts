@@ -278,7 +278,7 @@ describe('ResourceExhaustionGrader', () => {
     const augmentedOutput = callArgs[1] as string;
 
     // Verify RLE encoding is present
-    expect(renderedRubric).toContain('resource exhaustion');
+    expect(callArgs[0]).toContain('resource exhaustion');
     expect(augmentedOutput).toContain('×300'); // hello repeated 300 times
     expect(augmentedOutput).toContain('Response statistics computed from the full model output');
     expect(augmentedOutput).toContain('Word count: 300');
