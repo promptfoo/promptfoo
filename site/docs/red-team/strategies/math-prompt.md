@@ -17,6 +17,8 @@ strategies:
   - math-prompt
 ```
 
+If remote generation fails, Math Prompt tries the local generation provider. If that also fails, the CLI reports the original remote error.
+
 ## How It Works
 
 The math prompt strategy works by:
