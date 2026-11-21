@@ -148,10 +148,22 @@ const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
 
 /** Redact known credentials, URLs, and credential fields in upstream diagnostics. */
 export function redactDiagnosticText(text: string, credentials: Iterable<string>): string {
-  // Serialized diagnostics may escape URL slashes more than once.
-  const source = redactCredentials(text, credentials)
-    .replace(/\\+\//g, '/')
-    .replace(DIAGNOSTIC_URL, (url) => sanitizeUrlForLogging(url));
+  // Preserve literal backslashes in known credentials before normalizing JSON-escaped
+  // slashes. Apply bearer-token rules afterwards so a slash cannot split a token.
+  if (text.includes('\\/')) {
+    const slash = /(?<!\\)\\+\//g;
+    const forms = [...credentials].sort((a, b) => b.length - a.length);
+    for (const credential of forms) {
+      if (credential.includes('\\/')) {
+        text = redactCredential(text, credential);
+      }
+    }
+    text = text.replace(slash, '/');
+    credentials = forms.map((credential) => credential.replace(slash, '/'));
+  }
+  const source = redactCredentials(text, credentials).replace(DIAGNOSTIC_URL, (url) =>
+    sanitizeUrlForLogging(url),
+  );
   let redacted = '';
   let copied = 0;
   for (const match of source.matchAll(CREDENTIAL_FIELD)) {

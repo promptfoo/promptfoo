@@ -139,6 +139,13 @@ describe('redactDiagnosticText', () => {
     expect(redactDiagnosticText(`failed ${credential}`, [credential])).toBe(`failed ${REDACTED}`);
   });
 
+  it('redacts escaped credentials before inspecting bearer tokens', () => {
+    const credentials = new Set(['abc/defgh']).values();
+    expect(redactDiagnosticText('failed abc\\/defgh; Bearer abc\\\\/defgh', credentials)).toBe(
+      'failed [REDACTED]; Bearer [REDACTED]',
+    );
+  });
+
   it.each([1, 2, 4])('redacts URLs with %i levels of slash escaping', (levels) => {
     const text = 'https://synthetic-user:synthetic-pass@api.test/v1';
     const escaped = text.replaceAll('/', '\\'.repeat(levels) + '/');
