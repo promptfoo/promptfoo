@@ -5,10 +5,10 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example openai-codex-sdk/skill-comparison
 cd openai-codex-sdk/skill-comparison
-npm install @openai/codex-sdk@^0.156.1
+npm install promptfoo @openai/codex-sdk@^0.156.1
 ```
 
-Requires Node.js >=22.22.0 and either `OPENAI_API_KEY`/`CODEX_API_KEY` or a [Codex login](../README.md#setup).
+Requires a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support) and either `OPENAI_API_KEY`/`CODEX_API_KEY` or a [Codex login](../README.md#setup).
 
 ## Overview
 

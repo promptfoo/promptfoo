@@ -27,9 +27,17 @@ type ParseNodeEngineVersionOptions = {
 declare const __PROMPTFOO_NODE_ENGINE_RANGE__: string | undefined;
 declare const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: NodeEngineComparator[][] | undefined;
 
-const fallbackNodeEngineRange = '>=22.22.0';
+const fallbackNodeEngineRange = '^22.22.2 || ^24.15.0 || >=26';
 const fallbackNodeEngineComparatorSets: NodeEngineComparator[][] = [
-  [{ operator: '>=', version: '22.22.0' }],
+  [
+    { operator: '>=', version: '22.22.2' },
+    { operator: '<', version: '23.0.0' },
+  ],
+  [
+    { operator: '>=', version: '24.15.0' },
+    { operator: '<', version: '25.0.0' },
+  ],
+  [{ operator: '>=', version: '26.0.0' }],
 ];
 
 const nodeEngineRange =
@@ -63,16 +71,8 @@ function compareNodeEngineVersion(
   left: NodeEngineVersionTuple,
   right: NodeEngineVersionTuple,
 ): number {
-  for (let index = 0; index < left.length; index++) {
-    if (left[index] > right[index]) {
-      return 1;
-    }
-    if (left[index] < right[index]) {
-      return -1;
-    }
-  }
-
-  return 0;
+  const index = left.findIndex((part, index) => part !== right[index]);
+  return index === -1 ? 0 : left[index] > right[index] ? 1 : -1;
 }
 
 function satisfiesNodeEngineComparator(
@@ -107,12 +107,10 @@ function isSupportedNodeEngineVersion(currentVersion: string): boolean | null {
     return null;
   }
 
-  return nodeEngineComparatorSets.some(
-    (comparatorSet) =>
-      comparatorSet.length === 0 ||
-      comparatorSet.every((comparator) =>
-        satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
-      ),
+  return nodeEngineComparatorSets.some((comparatorSet) =>
+    comparatorSet.every((comparator) =>
+      satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
+    ),
   );
 }
 

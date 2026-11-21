@@ -156,23 +156,17 @@ describe('getAndCheckProvider', () => {
     expect(provider?.id()).toBe('openai:foo');
   });
 
-  it('should throw an error when the provider does not match the type', async () => {
+  it('reports a missing modality without copying the configured provider into the error', async () => {
+    const apiKey = 'synthetic-grader-secret';
     const providerTypeMap: ProviderTypeMap = {
       embedding: {
         id: 'openai:embedding:foo',
+        config: { apiKey },
       },
     };
-    await expect(
-      getGradingProvider('text', providerTypeMap, DefaultGradingProvider),
-    ).rejects.toThrow(
-      new Error(
-        `Invalid provider definition for output type 'text': ${JSON.stringify(
-          providerTypeMap,
-          null,
-          2,
-        )}`,
-      ),
-    );
+    const result = getGradingProvider('text', providerTypeMap, DefaultGradingProvider);
+    await expect(result).rejects.toThrow("Invalid provider definition for output type 'text'");
+    await expect(result).rejects.not.toThrow(apiKey);
   });
 });
 

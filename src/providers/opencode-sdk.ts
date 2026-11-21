@@ -4,6 +4,7 @@ import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
+import { parseTraceParent } from '@opentelemetry/core';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
@@ -16,6 +17,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { AgenticRunQueue } from './agenticRunQueue';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { classifyProviderSdkRateLimit } from './fetch';
 import {
@@ -25,6 +27,7 @@ import {
   redactDiagnosticText,
 } from './providerLogging';
 import { providerRegistry } from './providerRegistry';
+import { waitForPromiseWithAbort } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -371,6 +374,13 @@ export interface OpenCodeSDKConfig {
   persist_sessions?: boolean;
 
   /**
+   * Restart the owned server when the request traceparent changes. Serializes calls
+   * and disables caching. Incompatible with external or persistent/forked sessions.
+   * @default false
+   */
+  restart_server_per_call?: boolean;
+
+  /**
    * MCP server configuration
    */
   mcp?: Record<string, OpenCodeMCPServerConfig>;
@@ -428,7 +438,7 @@ interface OpenCodeClient {
     ) => Promise<OpenCodeSdkResult<Record<string, unknown>>>;
     prompt: (
       parameters: Record<string, unknown>,
-      options?: Record<string, unknown>,
+      options?: { signal: AbortSignal },
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     messages: (
       parameters: Record<string, unknown>,
@@ -465,7 +475,10 @@ interface OpenCodeSDKModule {
     config?: Record<string, unknown>;
     env?: Record<string, string>;
   }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
-  createOpencodeClient: (options: { baseUrl: string }) => OpenCodeClient;
+  createOpencodeClient: (options: {
+    baseUrl: string;
+    headers?: Record<string, string>;
+  }) => OpenCodeClient;
 }
 
 interface LoadedOpenCodeSDKModule extends OpenCodeSDKModule {
@@ -810,9 +823,13 @@ function addOpenCodeUrlCredentials(value: unknown, add: (value: unknown) => void
     add(part);
     add(safeDecodeURIComponent(part));
   }
-  for (const parameter of parameters.split(/[?#&;]/).filter((item) => item.includes('='))) {
-    const parameterValue = parameter.slice(parameter.indexOf('=') + 1);
+  for (const parameter of parameters.split(/[?#&;]/).filter(Boolean)) {
+    // Bare query or fragment tokens can end in Base64 padding.
+    const parameterValue = /^[^=]+={1,2}$/.test(parameter)
+      ? parameter
+      : parameter.slice(parameter.indexOf('=') + 1);
     add(parameterValue);
+    add(safeDecodeURIComponent(parameterValue));
     add(safeDecodeURIComponent(parameterValue.replace(/\+/g, ' ')));
   }
 }
@@ -850,23 +867,6 @@ function addOpenCodeMcpCredentials(
       }
     }
   }
-}
-
-function hasDynamicOpenCodeMcpCommand(server: unknown): boolean {
-  const mcp = asRecord(server);
-  return (
-    mcp?.type === 'local' &&
-    Array.isArray(mcp.command) &&
-    mcp.command
-      .slice(1)
-      .some(
-        (argument) =>
-          typeof argument === 'string' &&
-          /\$(?:[\w{(])|\x60|\b(?:process\.env|(?:Deno|Bun)\.env|os\.environ|ENV\s*[\[.]|\w+\.join\s*\(|\w+\.toString\s*\()|(?:^|\s)(?:\||(?:printf|base64)\b)/.test(
-            argument,
-          ),
-      )
-  );
 }
 
 /**
@@ -1141,6 +1141,48 @@ function normalizeStructuredText(value: string): string | undefined {
   return tryParseJson(fencedJsonMatch[1]);
 }
 
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  return Boolean(traceparent && parseTraceParent(traceparent));
+}
+
+const OPENCODE_TRACEPARENT_ENV = 'OPENCODE_TRACEPARENT';
+
+function setProcessEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, key);
+  } else {
+    Object.assign(process.env, { [key]: value });
+  }
+}
+
+/**
+ * The SDK reads process.env synchronously when it starts the server. Apply overrides
+ * until the startup function returns its promise, then restore the parent environment.
+ * The real-SDK contract test guards this timing assumption across SDK upgrades.
+ */
+export function spawnWithServerEnv<T>(
+  serverEnv: Record<string, string | undefined>,
+  spawn: () => Promise<T>,
+): Promise<T> {
+  const restore: [string, string | undefined][] = [];
+  try {
+    for (const [key, value] of Object.entries(serverEnv)) {
+      if (process.env[key] !== value) {
+        restore.push([key, process.env[key]]);
+        setProcessEnvValue(key, value);
+      }
+    }
+    return spawn();
+  } finally {
+    for (const [key, value] of restore) {
+      setProcessEnvValue(key, value);
+    }
+  }
+}
+
+/** Serialize server replacement with the calls using that server. */
+const SERVER_LIFECYCLE_QUEUE_KEY = 'opencode:sdk:server-lifecycle';
+
 /**
  * Helper to load the OpenCode SDK ESM module
  *
@@ -1196,6 +1238,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   private providerId = 'opencode:sdk';
   private opencodeModule?: LoadedOpenCodeSDKModule;
+  private opencodeModuleLoad?: Promise<LoadedOpenCodeSDKModule>;
   private client?: OpenCodeClient;
   private clientConfig?: OpenCodeSDKConfig;
   private clientInitialization?: Promise<void>;
@@ -1207,7 +1250,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private withholdMcpDiagnostics = false;
   private sessions = new Map<string, OpenCodeSessionHandle>(); // cacheKey -> session, oldest first
   private readonly sessionsForCleanup = new Set<OpenCodeSessionHandle>();
-  private sessionQueues = new Map<string, Promise<void>>();
+  private sessionQueues = new AgenticRunQueue('OpenCode SDK session wait aborted');
   private readonly remoteWork = new Set<Promise<unknown>>();
   private readonly remoteSessionAborts = new Set<() => Promise<void>>();
   private readonly processTermination = new AbortController();
@@ -1216,6 +1259,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private readonly pendingTempDirs = new Set<string>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
+  private missingTraceparentWarningEmitted = false;
+  private activeTraceparent?: string;
   private serverHasRepositoryEnv = false;
 
   constructor(
@@ -1243,24 +1288,37 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return config.apiKey;
     }
 
+    let env = this.env;
+    if (os.platform() === 'win32' && env) {
+      // Match the alias ordering used when building the spawned server environment.
+      // Preflight must recognize the winning credential before the server starts.
+      const configuredEnv = env;
+      env = {};
+      for (const key of Object.keys(configuredEnv).sort()) {
+        if (configuredEnv[key] !== undefined) {
+          env[key.toUpperCase()] = configuredEnv[key];
+        }
+      }
+    }
+
     // Check provider-specific env vars based on provider_id
     const providerId =
       typeof config?.provider_id === 'string' ? config.provider_id.toLowerCase() : undefined;
     if (providerId === 'anthropic') {
-      return this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+      return env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     }
     if (providerId === 'openai') {
-      return this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+      return env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
     }
     if (providerId === 'google') {
-      return this.env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
+      return env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
     }
 
     // Fall back to common env vars
     return (
-      this.env?.ANTHROPIC_API_KEY ||
+      env?.ANTHROPIC_API_KEY ||
       getEnvString('ANTHROPIC_API_KEY') ||
-      this.env?.OPENAI_API_KEY ||
+      env?.OPENAI_API_KEY ||
       getEnvString('OPENAI_API_KEY')
     );
   }
@@ -1287,7 +1345,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
             await this.deleteSession(session, client);
             this.sessionsForCleanup.delete(session);
           } catch (error) {
-            logger.debug(`Failed to delete persistent session ${session.id}`, {
+            logger.debug('Failed to delete persistent session', {
               error: this.formatCallError(error, this.config),
             });
           }
@@ -1373,6 +1431,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.closeLocalServer();
     if (!this.server) {
       this.client = undefined;
+      this.activeTraceparent = undefined;
+      this.serverHasRepositoryEnv = false;
     }
     await Promise.all([...this.pendingTempDirs].map((dir) => this.removeTempDir(dir)));
     this.updateRegistry();
@@ -1404,50 +1464,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
   }
 
-  private async waitForRequest<T>(request: Promise<T>, signal: AbortSignal): Promise<T> {
-    if (signal.aborted) {
-      void request.catch(() => {});
-      signal.throwIfAborted();
-    }
-    let onAbort!: () => void;
-    const aborted = new Promise<never>((_, reject) => {
-      onAbort = () => reject(signal.reason);
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
-    try {
-      return await Promise.race([request, aborted]);
-    } finally {
-      signal.removeEventListener('abort', onAbort);
-    }
-  }
-
-  private getHistorySignal(
-    caller: AbortSignal | undefined,
-    remote: boolean,
-  ): AbortSignal | undefined {
-    if (!remote) {
-      return caller;
-    }
-    const processSignal = this.processTermination.signal;
-    return caller ? AbortSignal.any([caller, processSignal]) : processSignal;
-  }
-
-  private promptSession(
-    client: OpenCodeClient,
-    parameters: Record<string, unknown>,
-    remote: boolean,
-  ): Promise<OpenCodeSdkResult<OpenCodePromptResponse>> {
-    if (!remote) {
-      return client.session.prompt(parameters);
-    }
-    const signal = this.processTermination.signal;
-    const request =
-      this.opencodeModule?.apiVersion === 'v2'
-        ? client.session.prompt(parameters, { signal })
-        : client.session.prompt({ ...parameters, signal });
-    return this.waitForRequest(request, signal);
-  }
-
   private async abortRemoteSession(
     client: OpenCodeClient,
     parameters: Record<string, unknown>,
@@ -1456,77 +1472,34 @@ export class OpenCodeSDKProvider implements ApiProvider {
       throw new Error('OpenCode SDK does not expose session cancellation');
     }
     const controller = new AbortController();
+    const processSignal = this.processTermination.signal;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<void>((resolve) => {
-      timer = setTimeout(() => {
-        controller.abort();
-        resolve();
-      }, SESSION_ABORT_TIMEOUT_MS);
-    });
+    // A live session may be reused only after cancellation settles. Process exit is bounded.
+    const startDeadline = () => {
+      timer = setTimeout(() => controller.abort(), SESSION_ABORT_TIMEOUT_MS);
+    };
+    if (processSignal.aborted) {
+      startDeadline();
+    } else {
+      processSignal.addEventListener('abort', startDeadline, { once: true });
+    }
     try {
       const request =
         this.opencodeModule?.apiVersion === 'v2'
           ? client.session.abort(parameters, { signal: controller.signal })
           : client.session.abort({ ...parameters, signal: controller.signal });
-      await Promise.race([
-        request.then((result) => {
-          const envelope = asRecord(result);
-          if (
-            result !== true &&
-            (envelope?.data !== true || envelope.error || asRecord(envelope.response)?.ok === false)
-          ) {
-            throw new Error('OpenCode did not acknowledge session cancellation');
-          }
-        }),
-        deadline,
-      ]);
+      const result = await waitForPromiseWithAbort(request, controller.signal);
+      const envelope = asRecord(result);
+      if (
+        result !== true &&
+        (envelope?.data !== true || envelope.error || asRecord(envelope.response)?.ok === false)
+      ) {
+        throw new Error('OpenCode did not acknowledge session cancellation');
+      }
     } finally {
+      processSignal.removeEventListener('abort', startDeadline);
       clearTimeout(timer);
     }
-  }
-
-  private setupSessionCancellation(
-    client: OpenCodeClient,
-    session: OpenCodeSessionContext,
-    config: OpenCodeSDKConfig,
-    abortSignal: AbortSignal | undefined,
-    tracksRemote: boolean,
-  ): { listener?: () => void; releaseRemote?: () => void } {
-    if ((!client.session.abort || !abortSignal) && !tracksRemote) {
-      return {};
-    }
-    const abortParams = this.buildAbortSessionParameters(session.sessionId, session.sessionQuery);
-    const logAbortError = (error: unknown) => {
-      logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}`, {
-        error: this.formatCallError(error, config),
-      });
-    };
-    let remoteAbort: Promise<void> | undefined;
-    const abortRemote = () =>
-      (remoteAbort ??= this.abortRemoteSession(client, abortParams).catch(logAbortError));
-    let releaseRemote: (() => void) | undefined;
-    if (tracksRemote) {
-      this.remoteSessionAborts.add(abortRemote);
-      releaseRemote = () => {
-        this.remoteSessionAborts.delete(abortRemote);
-      };
-    }
-    let listener: (() => void) | undefined;
-    if (abortSignal && client.session.abort) {
-      listener = () => {
-        if (tracksRemote) {
-          void abortRemote();
-          return;
-        }
-        try {
-          client.session.abort?.(abortParams).catch(logAbortError);
-        } catch (error) {
-          logAbortError(error);
-        }
-      };
-      abortSignal.addEventListener('abort', listener, { once: true });
-    }
-    return { listener, releaseRemote };
   }
 
   private async removeTempDir(workingDir: string): Promise<void> {
@@ -1544,34 +1517,38 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   /** Keep configured credentials and their encoded forms for subsequent diagnostics. */
   private rememberCredentials(config: OpenCodeSDKConfig): void {
-    const add = (value: unknown) => {
+    const remember = (value: unknown, strong: boolean) => {
       if (typeof value !== 'string' || !value.trim()) {
         return;
       }
-      for (const form of new Set([value, value.trim()])) {
+      const addForm = (form: string) => {
         this.knownCredentials.add(form);
-        this.knownCredentials.add(JSON.stringify(form).slice(1, -1));
-        this.knownCredentials.add(new URLSearchParams({ form }).toString().slice('form='.length));
+        if (strong && form.length >= 4 && form.length < 8) {
+          this.shortCredentials.add(form);
+        }
+      };
+      for (const form of new Set([value, value.trim()])) {
+        addForm(form);
+        addForm(JSON.stringify(form).slice(1, -1));
+        addForm(new URLSearchParams({ form }).toString().slice('form='.length));
         try {
-          this.knownCredentials.add(encodeURIComponent(form));
+          addForm(encodeURIComponent(form));
         } catch {
           // Lone surrogates cannot be URI-encoded; the raw and JSON forms are still covered.
         }
       }
     };
-    const addStrong = (value: unknown) => {
-      add(value);
-      if (typeof value === 'string' && value.length >= 4 && value.length < 8) {
-        this.shortCredentials.add(value);
-      }
-    };
+    const add = (value: unknown) => remember(value, false);
+    const addStrong = (value: unknown) => remember(value, true);
     addStrong(config.apiKey);
     addStrong(this.getApiKey(config));
     addOpenCodeUrlCredentials(config.baseUrl, addStrong);
     for (const server of Object.values(asRecord(config.mcp) ?? {})) {
       addOpenCodeMcpCredentials(server, add, addStrong);
-      this.withholdMcpDiagnostics ||= hasDynamicOpenCodeMcpCommand(server);
       const mcp = asRecord(server);
+      // Both local commands and remote servers can transform credentials, including stored OAuth tokens.
+      this.withholdMcpDiagnostics ||=
+        (mcp?.type === 'local' || mcp?.type === 'remote') && mcp.enabled !== false;
       if (mcp?.type === 'local') {
         Object.values(asRecord(mcp.environment) ?? {}).forEach(addStrong);
       } else if (mcp?.type === 'remote') {
@@ -1599,13 +1576,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const details = parseOpenCodeError(error, transportStatus);
     if (this.withholdMcpDiagnostics && details.message) {
       details.message =
-        'Upstream diagnostic withheld because a local MCP command may transform credentials';
+        'Upstream diagnostic withheld because an MCP server may transform credentials';
     }
-    let text = describeOpenCodeError(details);
-    for (const credential of this.shortCredentials) {
-      text = text.split(credential).join('[REDACTED]');
-    }
-    return redactDiagnosticText(text, this.knownCredentials)
+    return redactDiagnosticText(
+      describeOpenCodeError(details),
+      this.knownCredentials,
+      this.shortCredentials,
+    )
       .replace(/[\r\n]+/g, ' ')
       .slice(0, 500);
   }
@@ -1740,12 +1717,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
     });
   }
 
-  private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
-    const serverEnv: Record<string, string> = {};
+  /** An undefined value removes a variable while the server starts. */
+  private buildServerEnv(
+    config: OpenCodeSDKConfig,
+    traceparent?: string,
+  ): Record<string, string | undefined> {
+    const serverEnv: Record<string, string | undefined> = {};
+    const processEnv = getProcessEnv();
+    const isWindows = os.platform() === 'win32';
+    const canonicalKeys = new Map<string, string>();
+    const envKey = (key: string): string => {
+      if (!isWindows) {
+        return key;
+      }
+      const normalized = key.toUpperCase();
+      const existing = canonicalKeys.get(normalized);
+      if (existing) {
+        return existing;
+      }
+      canonicalKeys.set(normalized, key);
+      return key;
+    };
 
-    for (const [key, value] of Object.entries(getProcessEnv())) {
+    for (const [key, value] of Object.entries(processEnv)) {
       if (value !== undefined) {
-        serverEnv[key] = value;
+        serverEnv[envKey(key)] = value;
       }
     }
 
@@ -1753,21 +1749,33 @@ export class OpenCodeSDKProvider implements ApiProvider {
       for (const key of Object.keys(this.env).sort()) {
         const value = this.env[key];
         if (value !== undefined) {
-          serverEnv[key] = value;
+          serverEnv[envKey(key)] = value;
         }
       }
     }
 
     if (config.log_level === 'debug' || isDebugMode()) {
-      serverEnv.DEBUG = serverEnv.DEBUG || 'opencode:*';
+      const debugKey = envKey('DEBUG');
+      serverEnv[debugKey] = serverEnv[debugKey] || 'opencode:*';
       logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
     }
 
+    const pathKey = envKey('PATH');
     const homeDir = os.homedir();
     const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
-    if (!serverEnv.PATH?.includes(opencodeBinPath)) {
-      serverEnv.PATH = `${opencodeBinPath}:${serverEnv.PATH ?? ''}`;
+    if (!serverEnv[pathKey]?.split(path.delimiter).includes(opencodeBinPath)) {
+      serverEnv[pathKey] = [opencodeBinPath, serverEnv[pathKey]]
+        .filter(Boolean)
+        .join(path.delimiter);
       logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
+    }
+
+    const traceparentKey = envKey(OPENCODE_TRACEPARENT_ENV);
+    // Restart mode owns the trace context; otherwise preserve an ambient value.
+    if (config.restart_server_per_call) {
+      serverEnv[traceparentKey] = isValidTraceparent(traceparent) ? traceparent : undefined;
+    } else if (isValidTraceparent(traceparent) && !serverEnv[traceparentKey]) {
+      serverEnv[traceparentKey] = traceparent;
     }
 
     if (assertIsolatedWorkingDir(config)) {
@@ -1908,13 +1916,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<boolean> {
     if (!session.cancelledDeletion) {
       const signal = AbortSignal.timeout(SESSION_ABORT_TIMEOUT_MS);
-      session.cancelledDeletion = this.waitForRequest(
+      session.cancelledDeletion = waitForPromiseWithAbort(
         this.deleteSession(session, client, signal),
         signal,
       ).then(
         () => true,
         (error) => {
-          logger.debug(`Failed to delete cancelled OpenCode session ${session.id}`, {
+          logger.debug('Failed to delete cancelled OpenCode session', {
             error: this.formatCallError(error, this.config),
           });
           return false;
@@ -1939,7 +1947,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
     } catch (error) {
       this.sessionsForCleanup.add(session);
-      logger.debug(`Failed to delete non-persistent session ${session.id}`, {
+      logger.debug('Failed to delete non-persistent session', {
         error: this.formatCallError(error, config),
       });
     }
@@ -1967,13 +1975,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
   }
 
-  private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
-    const config: OpenCodeSDKConfig = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
-    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
-    // The SDK starts its server with process.env and ignores its env option.
+  private assertServerWorkspace(config: OpenCodeSDKConfig, inIsolatedWorkspace: boolean): void {
+    // A reused server must not retain repository selectors from an earlier call.
     if (
       inIsolatedWorkspace &&
       !config.baseUrl &&
@@ -1986,6 +1989,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
           'before starting the provider.',
       );
     }
+  }
+
+  private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
+    const config: OpenCodeSDKConfig = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
+    this.assertServerWorkspace(config, inIsolatedWorkspace);
 
     if (config.apiKey !== this.config.apiKey) {
       throw new Error(
@@ -1998,9 +2010,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
       );
     }
 
+    if (Boolean(config.restart_server_per_call) !== Boolean(this.config.restart_server_per_call)) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call is provider-level configuration and cannot be overridden per prompt',
+      );
+    }
+
     if (config.workspace && !config.baseUrl && !config.working_dir) {
       throw new Error('OpenCode SDK workspace support requires either baseUrl or working_dir');
     }
+
+    this.validateTraceRestartConfiguration(config);
 
     if (config.apiKey && !config.provider_id && !config.baseUrl) {
       logger.warn(
@@ -2045,20 +2065,70 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
-    if (!this.opencodeModule) {
-      this.opencodeModule = await loadOpenCodeSDK();
+  private validateTraceRestartConfiguration(config: OpenCodeSDKConfig): void {
+    if (!config.restart_server_per_call) {
+      return;
     }
+
+    if (config.baseUrl) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call cannot be combined with baseUrl; the provider must own the server.',
+      );
+    }
+
+    if (config.port !== undefined && config.port !== 0) {
+      throw new Error(
+        'OpenCode SDK restart_server_per_call requires an automatically assigned port; omit port or set it to 0.',
+      );
+    }
+
+    const conflicting = [
+      config.persist_sessions ? 'persist_sessions' : undefined,
+      config.session_id ? 'session_id' : undefined,
+      config.parent_session_id ? 'parent_session_id' : undefined,
+    ].filter(Boolean);
+    if (conflicting.length > 0) {
+      throw new Error(
+        `OpenCode SDK restart_server_per_call cannot preserve session state with: ${conflicting.join(', ')}.`,
+      );
+    }
+  }
+
+  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
+    if (this.opencodeModule) {
+      return this.opencodeModule;
+    }
+
+    // Share concurrent loads and allow a later retry if resolution fails.
+    if (!this.opencodeModuleLoad) {
+      this.opencodeModuleLoad = loadOpenCodeSDK().catch((err) => {
+        this.opencodeModuleLoad = undefined;
+        throw err;
+      });
+    }
+    this.opencodeModule = await this.opencodeModuleLoad;
     return this.opencodeModule;
   }
 
-  private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+  private async ensureClient(config: OpenCodeSDKConfig, traceparent?: string): Promise<void> {
     const opencodeModule = await this.ensureOpenCodeModule();
 
     this.validateSessionPolicyConfiguration(config);
 
+    const desiredTraceparent = isValidTraceparent(traceparent) ? traceparent : undefined;
+    const restartsPerCall = Boolean(config.restart_server_per_call);
+
     if (this.client) {
-      return;
+      if (!restartsPerCall || this.activeTraceparent === desiredTraceparent) {
+        return;
+      }
+      logger.debug(
+        `[OpenCode SDK] Restarting server to re-parent spans (traceparent ${this.activeTraceparent ?? 'none'} -> ${desiredTraceparent ?? 'none'})`,
+      );
+      await this.shutdown();
+      // Sessions lived on the server we just stopped; their handles are now dangling.
+      this.sessions.clear();
+      this.sessionsForCleanup.clear();
     }
     if (this.clientInitialization !== undefined) {
       return this.clientInitialization;
@@ -2075,6 +2145,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return;
       }
 
+      const serverEnv = this.buildServerEnv(config, desiredTraceparent);
+      const passThroughEnv: Record<string, string> = {};
+      for (const [key, value] of Object.entries(serverEnv)) {
+        if (value !== undefined) {
+          passThroughEnv[key] = value;
+        }
+      }
+
       const serverOptions: {
         hostname: string;
         port: number;
@@ -2086,8 +2164,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
         hostname: config.hostname ?? '127.0.0.1',
         port: config.port ?? 0,
         timeout: config.timeout ?? 30000,
+        env: passThroughEnv,
         signal: this.processTermination.signal,
-        env: this.buildServerEnv(config),
       };
 
       const serverConfig = this.buildServerConfig(config);
@@ -2095,26 +2173,45 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      this.serverHasRepositoryEnv = hasRepositoryEnv(process.env);
+      this.serverHasRepositoryEnv = hasRepositoryEnv(serverEnv);
       const { signal } = serverOptions;
       signal.throwIfAborted();
       try {
         providerRegistry.register(this);
-        const started = createOpencode(serverOptions).then((opencode) => {
-          this.client = opencode.client;
-          this.clientConfig = config;
-          this.server = opencode.server;
-          if (signal.aborted) {
-            this.closeLocalServer();
-            if (this.server) {
-              this.processShutdown = undefined;
-              providerRegistry.register(this);
+        const started = spawnWithServerEnv(serverEnv, () => createOpencode(serverOptions)).then(
+          (opencode) => {
+            this.clientConfig = config;
+            this.server = opencode.server;
+            if (signal.aborted) {
+              this.closeLocalServer();
+              if (this.server) {
+                this.processShutdown = undefined;
+                providerRegistry.register(this);
+              }
+              signal.throwIfAborted();
             }
-            signal.throwIfAborted();
-          }
-          logger.debug(`OpenCode server started at ${opencode.server.url}`);
-        });
-        await this.waitForRequest(started, signal);
+            const authEnv =
+              os.platform() === 'win32'
+                ? Object.fromEntries(
+                    Object.entries(serverEnv).map(([key, value]) => [key.toUpperCase(), value]),
+                  )
+                : serverEnv;
+            const password = authEnv.OPENCODE_SERVER_PASSWORD;
+            // createOpencode does not authenticate its client when the spawned server
+            // enables Basic auth. Use the same effective credentials as that server.
+            this.client = password
+              ? createOpencodeClient({
+                  baseUrl: opencode.server.url,
+                  headers: {
+                    Authorization: `Basic ${Buffer.from(`${authEnv.OPENCODE_SERVER_USERNAME ?? 'opencode'}:${password}`).toString('base64')}`,
+                  },
+                })
+              : opencode.client;
+            this.activeTraceparent = desiredTraceparent;
+            logger.debug(`OpenCode server started at ${opencode.server.url}`);
+          },
+        );
+        await waitForPromiseWithAbort(started, signal);
       } catch (error) {
         if (!this.server && !this.pendingTempDirs.size) {
           providerRegistry.unregister(this);
@@ -2125,6 +2222,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.clientInitialization = initialization;
     try {
       await initialization;
+    } catch (error) {
+      // Initialization may fail after the server starts but before its client is ready.
+      await this.shutdown();
+      throw error;
     } finally {
       if (this.clientInitialization === initialization) {
         this.clientInitialization = undefined;
@@ -2230,7 +2331,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!processSignal) {
       return created;
     }
-    return this.waitForRequest(this.trackRemoteWork(created), processSignal);
+    return waitForPromiseWithAbort(this.trackRemoteWork(created), processSignal);
   }
 
   private buildPromptBody(config: OpenCodeSDKConfig, prompt: string): Record<string, unknown> {
@@ -2421,7 +2522,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
             ...(abortSignal ? { signal: abortSignal } : {}),
           });
     const messagesResult = await (abortSignal
-      ? this.waitForRequest(request, abortSignal)
+      ? waitForPromiseWithAbort(request, abortSignal)
       : request);
     const messages = unwrapOpenCodeResult(messagesResult) ?? [];
     // Bound the slice with both a start anchor (parentID → user message that
@@ -2434,7 +2535,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const redactId = (id: string) =>
       this.withholdMcpDiagnostics || id.length > 4_096
         ? '[REDACTED]'
-        : redactDiagnosticText(id, this.knownCredentials);
+        : redactDiagnosticText(id, this.knownCredentials, this.shortCredentials);
     if (startIndex === -1) {
       logger.debug(
         `[OpenCode SDK] Parent message ${redactId(parentId)} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
@@ -2463,36 +2564,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return generateCacheKey('opencode:sdk:explicit-session', { sessionId: config.session_id });
     }
     return config.persist_sessions ? this.buildSessionKey(config, workingDir) : undefined;
-  }
-
-  private async runSerializedSessionCall<T>(
-    queueKey: string | undefined,
-    abortSignal: AbortSignal | undefined,
-    run: () => Promise<T>,
-  ): Promise<T> {
-    if (!queueKey) {
-      return run();
-    }
-
-    const previous = (this.sessionQueues.get(queueKey) ?? Promise.resolve()).catch(() => undefined);
-    let release: () => void = () => {};
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.then(() => current);
-    this.sessionQueues.set(queueKey, queued);
-    void queued.finally(() => {
-      if (this.sessionQueues.get(queueKey) === queued) {
-        this.sessionQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await (abortSignal ? this.waitForRequest(previous, abortSignal) : previous);
-      return await run();
-    } finally {
-      release();
-    }
   }
 
   private buildProviderResponse(
@@ -2673,11 +2744,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const remote = Boolean(config.baseUrl);
-    let ephemeralSession: OpenCodeSessionHandle | undefined;
-    let sessionClient: OpenCodeClient | undefined;
-    let abortListener: (() => void) | undefined;
-    let releaseRemoteCreation: (() => void) | undefined;
-    let releaseRemoteSession: (() => void) | undefined;
+    const perCallTracing = Boolean(config.restart_server_per_call);
 
     try {
       this.buildEffectivePermissionRules(config);
@@ -2691,18 +2758,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
         );
       }
 
+      if (
+        perCallTracing &&
+        !isValidTraceparent(context?.traceparent) &&
+        !this.missingTraceparentWarningEmitted
+      ) {
+        this.missingTraceparentWarningEmitted = true;
+        logger.warn(
+          '[OpenCode SDK] restart_server_per_call has no valid trace context. Enable tracing.enabled to correlate spans; calls remain serialized and uncached.',
+        );
+      }
+
       const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
       const statefulSession = Boolean(config.session_id || config.persist_sessions);
       const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
       const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
       const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
+      // Cached responses cannot emit spans for the current request.
       const cacheResult =
         inIsolatedWorkspace ||
         statefulSession ||
         hasPermissionRules ||
         sensitiveMcpConfig ||
-        sensitiveBaseUrl
-          ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+        sensitiveBaseUrl ||
+        perCallTracing
+          ? { shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
                 // The unversioned cache can contain assistant errors or filtered text as successes.
@@ -2723,24 +2803,35 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return cachedResponse;
       }
 
-      if (callOptions?.abortSignal?.aborted || this.processTermination.signal.aborted) {
+      const abortSignal = callOptions?.abortSignal;
+      const processSignal = this.processTermination.signal;
+      const remoteSignal = abortSignal
+        ? AbortSignal.any([abortSignal, processSignal])
+        : processSignal;
+      const transportSignal = remote ? remoteSignal : abortSignal;
+      if (remoteSignal.aborted) {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
-      await this.ensureClient(config);
-      const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
-      return await this.runSerializedSessionCall(
-        sessionQueueKey,
-        callOptions?.abortSignal,
-        async () => {
-          // The session belongs to this client even if a concurrent shutdown replaces it.
+      // Protect server replacement for the full session lifecycle.
+      const sessionQueueKey = perCallTracing
+        ? SERVER_LIFECYCLE_QUEUE_KEY
+        : this.getSessionQueueKey(config, workingDir);
+      return await this.sessionQueues.run(sessionQueueKey, remoteSignal, async (turn) => {
+        let ephemeralSession: OpenCodeSessionHandle | undefined;
+        let abortListener: (() => void) | undefined;
+        let releaseCreation: (() => void) | undefined;
+        let releaseRemoteSession: (() => void) | undefined;
+        let sessionClient: OpenCodeClient | undefined;
+        try {
+          await this.ensureClient(config, context?.traceparent);
+          this.assertServerWorkspace(config, inIsolatedWorkspace);
           const client = this.client;
           sessionClient = client;
-          const processSignal = this.processTermination.signal;
           const session = await this.getOrCreateSession(config, workingDir);
           ephemeralSession = session.ephemeralSession;
-          releaseRemoteCreation = session.releaseCreation;
-          if (callOptions?.abortSignal?.aborted || this.processTermination.signal.aborted) {
+          releaseCreation = session.releaseCreation;
+          if (remoteSignal.aborted) {
             return { error: 'OpenCode SDK call aborted before it started' };
           }
 
@@ -2750,28 +2841,65 @@ export class OpenCodeSDKProvider implements ApiProvider {
             session.sessionId,
             session.sessionQuery,
           );
-          logger.debug(`OpenCode SDK prompt options:`, promptOptions);
 
           if (!client) {
             throw new Error('OpenCode SDK client is not initialized');
           }
 
-          // Ask the server to stop on cancellation, but wait for the prompt to return
-          // before another call reuses the session.
-          const abortSignal = callOptions?.abortSignal;
-          const cancellation = this.setupSessionCancellation(
-            client,
-            session,
-            config,
-            abortSignal,
-            remote,
-          );
-          abortListener = cancellation.listener;
-          releaseRemoteSession = cancellation.releaseRemote;
-          releaseRemoteCreation?.();
-          releaseRemoteCreation = undefined;
+          // Cancel the transport on both SDK versions and ask v2 to stop the remote session.
+          if (
+            remote ||
+            (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2')
+          ) {
+            const abortParams = this.buildAbortSessionParameters(
+              session.sessionId,
+              session.sessionQuery,
+            );
+            const logAbortError = (error: unknown) => {
+              logger.debug('[OpenCode SDK] Failed to abort session', {
+                error: this.formatCallError(error, config),
+              });
+            };
+            let pendingAbort: Promise<void> | undefined;
+            const cancelRemote = () =>
+              (pendingAbort ??= this.trackRemoteWork(
+                this.abortRemoteSession(client, abortParams).catch(logAbortError),
+              ));
+            if (remote) {
+              this.remoteSessionAborts.add(cancelRemote);
+              releaseRemoteSession = () => this.remoteSessionAborts.delete(cancelRemote);
+            }
+            if (abortSignal && client.session.abort) {
+              abortListener = () => {
+                try {
+                  turn.releaseAfter = remote
+                    ? cancelRemote()
+                    : client.session.abort?.(abortParams).catch(logAbortError);
+                } catch (error) {
+                  logAbortError(error);
+                }
+              };
+              abortSignal.addEventListener('abort', abortListener, { once: true });
+            }
+          }
+          releaseCreation?.();
+          releaseCreation = undefined;
 
-          const response = await this.promptSession(client, promptOptions, remote);
+          const request = transportSignal
+            ? this.opencodeModule?.apiVersion === 'v2'
+              ? client.session.prompt(promptOptions, { signal: transportSignal })
+              : client.session.prompt({ ...promptOptions, signal: transportSignal })
+            : client.session.prompt(promptOptions);
+          let response: Awaited<typeof request>;
+          try {
+            response = await waitForPromiseWithAbort(request, remoteSignal);
+          } finally {
+            // Neither a late prompt nor a session-wide abort may interrupt the next turn.
+            if (remoteSignal.aborted) {
+              turn.releaseAfter = Promise.allSettled([request, turn.releaseAfter]);
+            }
+          }
+
           // The prompt has returned, so an abort from here on must not ask the
           // server to kill the session it already answered.
           if (abortListener && abortSignal) {
@@ -2784,6 +2912,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           if (abortSignal?.aborted || processSignal.aborted) {
             return { error: 'OpenCode SDK call aborted' };
           }
+
           const promptError = getOpenCodePromptError(response);
           if (promptError) {
             return isOpenCodeContentFilterRefusal(promptError)
@@ -2798,7 +2927,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // skipped whenever the skill tool is denied and no skill parts can exist.
           let allSessionParts: OpenCodePromptPart[] = [];
           if (this.isSkillToolEnabled(config)) {
-            const historySignal = this.getHistorySignal(abortSignal, remote);
+            const historySignal = transportSignal;
             try {
               allSessionParts = await this.fetchCurrentPromptParts(
                 client,
@@ -2823,22 +2952,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
             allSessionParts,
           );
           await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-          logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
           return providerResponse;
-        },
-      );
+        } finally {
+          if (abortListener && abortSignal) {
+            abortSignal.removeEventListener('abort', abortListener);
+          }
+          releaseCreation?.();
+          releaseRemoteSession?.();
+          if (ephemeralSession) {
+            await this.cleanupEphemeralSession(ephemeralSession, sessionClient, config);
+          }
+        }
+      });
     } catch (error) {
       return this.handleCallError(error, config, callOptions);
     } finally {
-      if (abortListener && callOptions?.abortSignal) {
-        callOptions.abortSignal.removeEventListener('abort', abortListener);
-      }
-      releaseRemoteCreation?.();
-      releaseRemoteSession?.();
-      if (ephemeralSession) {
-        await this.cleanupEphemeralSession(ephemeralSession, sessionClient, config);
-      }
-
       // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
         await this.removeTempDir(workingDir);

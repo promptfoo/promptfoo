@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache, fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { loadClaudeCodeCredential } from '../../src/providers/anthropic/claudeCodeAuth';
@@ -11,9 +11,29 @@ import {
   MetaResponsesProvider,
 } from '../../src/providers/meta';
 import { filterProviders } from '../../src/util/eval/filterProviders';
+import { createApiKeyOptions } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import type { OpenAiCompletionOptions } from '../../src/providers/openai/types';
+import type { CallApiContextParams } from '../../src/types/index';
+
+const createHelloMessageRequest = () => ({
+  method: 'post',
+  path: '/v1/messages',
+  body: {
+    model: 'muse-spark-1.1',
+    max_tokens: 1,
+    messages: [{ role: 'user', content: 'Hello' }],
+  },
+});
+
+const createEmptyMessagesRequest = () => ({
+  method: 'post',
+  path: '/v1/messages',
+  body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
+});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -436,6 +456,117 @@ describe('MetaProvider request body shaping', () => {
   });
 });
 
+describe('Meta Chat effective-model request consistency', () => {
+  it.each([
+    ['provider', 'muse-spark-1.1', 'muse-spark-1.3'],
+    ['prompt', 'muse-spark-1.1', 'muse-spark-1.3'],
+    ['provider', 'muse-spark-1.3', 'muse-spark-1.1'],
+    ['prompt', 'muse-spark-1.3', 'muse-spark-1.1'],
+  ])(
+    'preserves direct request fields through %s override from %s to %s',
+    async (scope, from, to) => {
+      const config = {
+        apiKey: 'meta-fixture-key',
+        apiBaseUrl: 'https://meta-proxy.example/v1',
+        reasoning_effort: 'low' as const,
+        max_completion_tokens: 4096,
+        temperature: 0.4,
+      };
+      const direct = asChat(createMetaProvider(`meta:chat:${to}`, { config }));
+      const overridden = asChat(
+        createMetaProvider(`meta:chat:${from}`, {
+          config: { ...config, passthrough: { model: scope === 'provider' ? to : from } },
+        }),
+      );
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: { raw: 'Hello', label: 'test', config: { passthrough: { model: to } } },
+            }
+          : undefined;
+      const { body: baseline } = await direct.getOpenAiBody('Hello');
+      const { body } = await overridden.getOpenAiBody('Hello', context);
+
+      expect(baseline).toMatchObject({
+        model: to,
+        reasoning_effort: 'low',
+        max_completion_tokens: 4096,
+        temperature: 0.4,
+      });
+      expect(body).toEqual(baseline);
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(overridden.modelName).toBe(from);
+      expect(overridden.id()).toBe(`meta:chat:${from}`);
+      expect(overridden.getApiUrl()).toBe(config.apiBaseUrl);
+      expect(overridden.getApiKey()).toBe(config.apiKey);
+    },
+  );
+
+  it.each(['provider', 'prompt'])(
+    'preserves direct defaults through %s model override',
+    async (scope) => {
+      const direct = asChat(createMetaProvider('meta:chat:muse-spark-1.3'));
+      const overridden = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.1', {
+          config: scope === 'provider' ? { passthrough: { model: 'muse-spark-1.3' } } : {},
+        }),
+      );
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Hello',
+                label: 'test',
+                config: { passthrough: { model: 'muse-spark-1.3' } },
+              },
+            }
+          : undefined;
+      const { body: baseline } = await direct.getOpenAiBody('Hello');
+      const { body } = await overridden.getOpenAiBody('Hello', context);
+
+      expect(baseline.temperature).toBe(0);
+      expect(body).toEqual(baseline);
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
+
+  it.each(['provider', 'prompt'])(
+    'retains local effort validation through %s model override',
+    async (scope) => {
+      const direct = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.3', { config: { reasoning_effort: 'none' } }),
+      );
+      const overridden = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.1', {
+          config: {
+            reasoning_effort: 'none',
+            ...(scope === 'provider' ? { passthrough: { model: 'muse-spark-1.3' } } : {}),
+          },
+        }),
+      );
+      const context =
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Hello',
+                label: 'test',
+                config: { passthrough: { model: 'muse-spark-1.3' } },
+              },
+            }
+          : undefined;
+
+      await expect(direct.getOpenAiBody('Hello')).rejects.toThrow(/reasoning_effort 'none'/);
+      await expect(overridden.getOpenAiBody('Hello', context)).rejects.toThrow(
+        /reasoning_effort 'none'/,
+      );
+    },
+  );
+});
+
 // Cost for 1,000 input tokens (400 cached) and 500 output tokens.
 const museSparkPricingCases = [
   { modelName: 'muse-spark-1.1', expectedCost: 0.002935 },
@@ -503,28 +634,21 @@ describe('calculateMetaCost', () => {
 });
 
 describe('MetaProvider callApi cost', () => {
-  const okResponse = {
-    data: {
-      choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
-      usage: {
-        total_tokens: 1500,
-        prompt_tokens: 1000,
-        completion_tokens: 500,
-        prompt_tokens_details: { cached_tokens: 400 },
-      },
+  const okResponse = createMockFetchResponse({
+    choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+    usage: {
+      total_tokens: 1500,
+      prompt_tokens: 1000,
+      completion_tokens: 500,
+      prompt_tokens_details: { cached_tokens: 400 },
     },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  });
 
   it.each(museSparkPricingCases)(
     'calculates Chat Completions cost including cached tokens for $modelName',
     async ({ modelName, expectedCost }) => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-      const provider = createMetaProvider(`meta:chat:${modelName}`, {
-        config: { apiKey: 'LLM|1|k' },
-      });
+      const provider = createMetaProvider(`meta:chat:${modelName}`, createApiKeyOptions('LLM|1|k'));
       const result = await provider.callApi('Say hi');
       expect(result.cost).toBeCloseTo(expectedCost, 12);
     },
@@ -532,18 +656,14 @@ describe('MetaProvider callApi cost', () => {
 
   it('leaves cost undefined for unknown models without user pricing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider('meta:chat:muse-future', {
-      config: { apiKey: 'LLM|1|k' },
-    });
+    const provider = createMetaProvider('meta:chat:muse-future', createApiKeyOptions('LLM|1|k'));
     const result = await provider.callApi('Say hi');
     expect(result.cost).toBeUndefined();
   });
 
   it('honours prompt-level cost overrides like the base billing path', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
-      config: { apiKey: 'LLM|1|k' },
-    });
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', createApiKeyOptions('LLM|1|k'));
     const result = await provider.callApi('Say hi', {
       prompt: { raw: 'Say hi', label: 'test', config: { cost: 0 } },
       vars: {},
@@ -558,9 +678,7 @@ describe('MetaProvider callApi cost', () => {
       status: 429,
       statusText: 'Too Many Requests',
     } as any);
-    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
-      config: { apiKey: 'LLM|1|k' },
-    });
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', createApiKeyOptions('LLM|1|k'));
     const result = await provider.callApi('Say hi');
     expect(result.error).toBeTruthy();
     expect(result.cost).toBeUndefined();
@@ -568,9 +686,7 @@ describe('MetaProvider callApi cost', () => {
 
   it('does not fill cost for cached responses', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({ ...okResponse, cached: true } as any);
-    const provider = createMetaProvider('meta:chat:muse-spark-1.1', {
-      config: { apiKey: 'LLM|1|k' },
-    });
+    const provider = createMetaProvider('meta:chat:muse-spark-1.1', createApiKeyOptions('LLM|1|k'));
     const result = await provider.callApi('Say hi');
     expect(result.cached).toBe(true);
     expect(result.cost).toBeUndefined();
@@ -640,6 +756,20 @@ describe('MetaResponsesProvider', () => {
 });
 
 describe('MetaResponsesProvider request body shaping', () => {
+  it('preserves Meta reasoning capabilities for a passthrough model override', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: {
+        passthrough: { model: 'muse-spark-1.2' },
+        reasoning_effort: 'xhigh',
+      },
+    });
+
+    const { body } = await (provider as any).getOpenAiBody('Hello');
+
+    expect(body.model).toBe('muse-spark-1.2');
+    expect(body.reasoning).toEqual({ effort: 'xhigh' });
+    expect(body.max_output_tokens).toBeUndefined();
+  });
   it.each([0, null, undefined, 512])(
     'preserves canonical Responses passthrough cap %s and removes chat aliases',
     async (cap) => {
@@ -772,6 +902,145 @@ describe('MetaResponsesProvider request body shaping', () => {
     });
 
     await expect((provider as any).getOpenAiBody('Hello')).rejects.toThrow(/logprobs/);
+  });
+});
+
+// These fixtures compare existing local estimates; they do not certify vendor prices.
+describe.each(['chat', 'responses'] as const)('Meta %s effective-model billing', (mode) => {
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  afterEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  async function invoke(
+    model: string,
+    config: OpenAiCompletionOptions = {},
+    context?: CallApiContextParams,
+    cached = false,
+  ) {
+    const data =
+      mode === 'chat'
+        ? {
+            choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+            usage: {
+              total_tokens: 1500,
+              prompt_tokens: 1000,
+              completion_tokens: 500,
+              prompt_tokens_details: { cached_tokens: 400 },
+            },
+          }
+        : {
+            id: 'resp_meta_fixture',
+            object: 'response',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                status: 'completed',
+                content: [{ type: 'output_text', text: 'hi' }],
+              },
+            ],
+            usage: {
+              total_tokens: 1500,
+              input_tokens: 1000,
+              output_tokens: 500,
+              input_tokens_details: { cached_tokens: 400 },
+            },
+          };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data,
+      cached,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+    const provider = createMetaProvider(`meta:${mode}:${model}`, {
+      config: {
+        apiKey: 'meta-fixture-key',
+        apiBaseUrl: 'https://meta-proxy.example/v1',
+        ...config,
+      },
+    });
+    const result = await provider.callApi('Say hi', context);
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls.at(-1)!;
+    expect(url).toBe(
+      `https://meta-proxy.example/v1/${mode === 'chat' ? 'chat/completions' : 'responses'}`,
+    );
+    expect(new Headers(request?.headers).get('authorization')).toBe('Bearer meta-fixture-key');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('hi');
+    return { result, body: JSON.parse(request?.body as string) };
+  }
+
+  it.each([
+    ['provider', 'muse-spark-1.1', 'muse-spark-1.3-contributor', 0.0001608],
+    ['prompt', 'muse-spark-1.1', 'muse-spark-1.3-contributor', 0.0001608],
+    ['provider', 'muse-spark-1.3-contributor', 'muse-spark-1.1', 0.002935],
+    ['prompt', 'muse-spark-1.3-contributor', 'muse-spark-1.1', 0.002935],
+  ] as const)(
+    'uses the effective local price row for %s override from %s to %s',
+    async (scope, from, to, expected) => {
+      const direct = await invoke(to);
+      const overridden = await invoke(
+        from,
+        { passthrough: { model: scope === 'provider' ? to : from } },
+        scope === 'prompt'
+          ? {
+              vars: {},
+              prompt: { raw: 'Say hi', label: 'test', config: { passthrough: { model: to } } },
+            }
+          : undefined,
+      );
+
+      expect(direct.body.model).toBe(to);
+      expect(overridden.body.model).toBe(to);
+      expect(direct.result.cost).toBeCloseTo(expected, 12);
+      expect(overridden.result.cost).toBeCloseTo(expected, 12);
+      expect(overridden.result.tokenUsage).toEqual(direct.result.tokenUsage);
+    },
+  );
+
+  it('does not borrow the configured model price for an unknown effective model', async () => {
+    const { body, result } = await invoke('muse-spark-1.1', {
+      passthrough: { model: 'muse-future' },
+    });
+    expect(body.model).toBe('muse-future');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('combines a partial explicit rate with the effective local price row', async () => {
+    const { body, result } = await invoke('muse-spark-1.1', {
+      passthrough: { model: 'muse-spark-1.3-contributor' },
+      outputCost: 4 / 1e6,
+    });
+    expect(body.model).toBe('muse-spark-1.3-contributor');
+    expect(result.cost).toBeCloseTo(0.0020608, 12);
+  });
+
+  it('preserves explicit zero cost and response-cache behavior with a model override', async () => {
+    const config = { passthrough: { model: 'muse-spark-1.3-contributor' } };
+    const explicit = await invoke('muse-spark-1.1', { ...config, cost: 0 });
+    const cached = await invoke('muse-spark-1.1', config, undefined, true);
+    const cachedExplicit = await invoke('muse-spark-1.1', { ...config, cost: 0 }, undefined, true);
+    expect(explicit.result.cost).toBe(0);
+    expect(cached.result.cached).toBe(true);
+    expect(cached.result.cost).toBeUndefined();
+    expect(cachedExplicit.result.cost).toBe(0);
+  });
+
+  it('uses the configured model when prompt passthrough replaces the provider model override', async () => {
+    const { body, result } = await invoke(
+      'muse-spark-1.1',
+      {
+        passthrough: { model: 'muse-spark-1.3-contributor' },
+      },
+      { vars: {}, prompt: { raw: 'Say hi', label: 'test', config: { passthrough: {} } } },
+    );
+    expect(body.model).toBe('muse-spark-1.1');
+    expect(result.cost).toBeCloseTo(0.002935, 12);
   });
 });
 
@@ -936,15 +1205,7 @@ describe('MetaMessagesProvider', () => {
     });
     try {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
-      const { req } = await (provider as any).anthropic.buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: {
-          model: 'muse-spark-1.1',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'Hello' }],
-        },
-      });
+      const { req } = await (provider as any).anthropic.buildRequest(createHelloMessageRequest());
       const headers = new Headers(req.headers);
       expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
       expect(headers.has('x-proxy-secret')).toBe(false);
@@ -962,11 +1223,7 @@ describe('MetaMessagesProvider', () => {
     });
     try {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
-      const { req } = await (provider as any).anthropic.buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
-      });
+      const { req } = await (provider as any).anthropic.buildRequest(createEmptyMessagesRequest());
       const headers = new Headers(req.headers);
 
       expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
@@ -985,11 +1242,7 @@ describe('MetaMessagesProvider', () => {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
         env: { ANTHROPIC_CUSTOM_HEADERS: 'authorization: Bearer scoped-secret' },
       }) as MetaMessagesProvider;
-      const { req } = await (provider.anthropic as any).buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
-      });
+      const { req } = await (provider.anthropic as any).buildRequest(createEmptyMessagesRequest());
 
       expect(req.headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
     } finally {
@@ -1020,15 +1273,7 @@ describe('MetaMessagesProvider', () => {
 
     try {
       const provider = createMetaProvider('meta:messages:muse-spark-1.1') as MetaMessagesProvider;
-      const { req } = await (provider as any).anthropic.buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: {
-          model: 'muse-spark-1.1',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'Hello' }],
-        },
-      });
+      const { req } = await (provider as any).anthropic.buildRequest(createHelloMessageRequest());
 
       expect(new Headers(req.headers).has('x-proxy-secret')).toBe(false);
     } finally {
@@ -1056,11 +1301,9 @@ describe('MetaMessagesProvider', () => {
         const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
           env,
         }) as MetaMessagesProvider;
-        const { req } = await (provider.anthropic as any).buildRequest({
-          method: 'post',
-          path: '/v1/messages',
-          body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
-        });
+        const { req } = await (provider.anthropic as any).buildRequest(
+          createEmptyMessagesRequest(),
+        );
         const headers = new Headers(req.headers);
 
         expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
@@ -1106,9 +1349,10 @@ describe('MetaMessagesProvider', () => {
         },
       });
       try {
-        const provider = createMetaProvider(`meta:messages:${modelName}`, {
-          config: { apiKey: 'LLM|1|k' },
-        });
+        const provider = createMetaProvider(
+          `meta:messages:${modelName}`,
+          createApiKeyOptions('LLM|1|k'),
+        );
         const result = await provider.callApi('Say hi');
         expect(result.cost).toBeCloseTo(expectedCost, 12);
       } finally {
@@ -1127,9 +1371,10 @@ describe('MetaMessagesProvider', () => {
         tokenUsage: { cached: 1500, total: 1500 },
       });
     try {
-      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
-        config: { apiKey: 'LLM|1|k' },
-      });
+      const provider = createMetaProvider(
+        'meta:messages:muse-spark-1.1',
+        createApiKeyOptions('LLM|1|k'),
+      );
       const errored = await provider.callApi('Say hi');
       expect(errored.error).toBeTruthy();
       expect(errored.cost).toBeUndefined();
@@ -1146,9 +1391,10 @@ describe('MetaMessagesProvider', () => {
       tokenUsage: { total: 1500, prompt: 1000, completion: 500 },
     });
     try {
-      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
-        config: { apiKey: 'LLM|1|k' },
-      });
+      const provider = createMetaProvider(
+        'meta:messages:muse-spark-1.1',
+        createApiKeyOptions('LLM|1|k'),
+      );
       const result = await provider.callApi('Say hi');
       expect(result.error).toBeTruthy();
       expect(result.cost).toBeCloseTo((1000 * 1.25 + 500 * 4.25) / 1e6, 12);

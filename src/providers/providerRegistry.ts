@@ -50,6 +50,7 @@ export class ProviderRegistry {
   private readonly releasingResource = new AsyncLocalStorage<{
     state: ResourceState;
     registration: number;
+    forced: boolean;
   }>();
   private readonly providers = new WeakMap<IdleCleanupProvider, ProviderState>();
   private readonly ownedProviders = new Set<ProviderState>();
@@ -262,6 +263,14 @@ export class ProviderRegistry {
     this.ensureShutdownHandlers();
   }
 
+  /** Keep an unsuccessful idle cleanup eligible for one final process-shutdown attempt. */
+  retainForProcessShutdown(resource: CleanupProvider): void {
+    // Forced cleanup (including beforeExit) must not re-register a permanent failure.
+    if (!this.processShuttingDown && !this.releasingResource.getStore()?.forced) {
+      this.register(resource);
+    }
+  }
+
   unregister(resource: CleanupProvider): void {
     const state = this.resources.get(resource);
     if (state) {
@@ -272,6 +281,10 @@ export class ProviderRegistry {
       state.registered = false;
       this.forgetResource(state);
     }
+  }
+
+  has(resource: unknown): boolean {
+    return this.resources.get(resource as CleanupProvider)?.registered === true;
   }
 
   /** Close the currently known resources; embedded callers can continue using the registry. */
@@ -575,19 +588,20 @@ export class ProviderRegistry {
     };
     let actual: Promise<void> | undefined;
     let processActual: Promise<void> | undefined;
-    const invoke = (shutdown: () => Promise<void>) => {
+    // Start synchronously. Direct reuse must never race a deferred shutdown.
+    const invoke = async (shutdown: () => Promise<void>, forced: boolean) => {
       const registration = state.registration;
       state.registered = false;
-      return Promise.resolve()
-        .then(() => this.releasingResource.run({ state, registration }, shutdown))
-        .catch((error) => {
-          logger.warn('Error shutting down provider: ' + String(error));
-        });
+      try {
+        await this.releasingResource.run({ state, registration, forced }, shutdown);
+      } catch (error) {
+        logger.warn('Error shutting down provider: ' + String(error));
+      }
     };
     const start = (forceShutdown = false) => {
       if (forceShutdown && this.processShuttingDown && state.resource.shutdownForProcess) {
         if (!processActual) {
-          processActual = invoke(() => state.resource.shutdownForProcess!());
+          processActual = invoke(() => state.resource.shutdownForProcess!(), true);
           if (!actual) {
             actual = processActual.then(complete);
             processActual = actual;
@@ -600,7 +614,8 @@ export class ProviderRegistry {
           actual = Promise.resolve();
           complete();
         } else {
-          actual = invoke(() => state.resource.shutdown()).then(complete);
+          actual = promise;
+          void invoke(() => state.resource.shutdown(), force || forceShutdown).then(complete);
         }
       }
       return actual;
@@ -652,7 +667,8 @@ export class ProviderRegistry {
     };
     process.once('SIGINT', () => void shutdown('SIGINT'));
     process.once('SIGTERM', () => void shutdown('SIGTERM'));
-    process.once('beforeExit', () => void shutdown('beforeExit'));
+    // beforeExit can schedule more work in an embedded host; only termination is permanent.
+    process.on('beforeExit', () => void this.shutdownAll());
   }
 }
 

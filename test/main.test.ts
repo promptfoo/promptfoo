@@ -56,11 +56,6 @@ vi.mock('undici', async () => ({
   getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
-// Mock code scan commands to avoid ESM import issues with execa
-vi.mock('../src/codeScan', () => ({
-  codeScansCommand: vi.fn(),
-}));
-
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
 let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
