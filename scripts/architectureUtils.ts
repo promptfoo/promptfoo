@@ -62,6 +62,26 @@ export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
 }
 
+function normalizeSourceRoot(repoRoot: string, root: unknown): string {
+  if (typeof root !== 'string' || !root.trim() || path.isAbsolute(root)) {
+    throw new Error(
+      `Architecture root "${String(root)}" must be a nonempty repository-relative path.`,
+    );
+  }
+  const relative = normalizePath(path.relative(repoRoot, path.resolve(repoRoot, root)));
+  if (relative === '..' || relative.startsWith('../')) {
+    throw new Error(`Architecture root "${root}" must be inside the repository.`);
+  }
+  let current = repoRoot;
+  for (const segment of relative.split('/').filter(Boolean)) {
+    current = path.join(current, segment);
+    if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error(`Architecture root "${root}" must not traverse a symbolic link.`);
+    }
+  }
+  return relative || '.';
+}
+
 function validateLayerDefinition(
   repoRoot: string,
   configPath: string,
@@ -100,6 +120,7 @@ function validateLayerDefinition(
     );
   }
 
+  layer.roots = layer.roots.map((root) => normalizeSourceRoot(repoRoot, root));
   return layer.roots.map((root) => {
     if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
       throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
@@ -432,6 +453,9 @@ export function resolveInternalModule(
   aliases: Record<string, string> = {},
   additionalRoots: string[] = [],
 ): string | undefined {
+  if (isBuiltin(specifier)) {
+    return undefined;
+  }
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
     .find((alias) => specifier === alias || specifier.startsWith(`${alias}/`));
