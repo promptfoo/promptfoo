@@ -15,10 +15,7 @@ const traceId = 'abcdef0123456789abcdef0123456789';
 const parentSpanId = '0123456789abcdef';
 const directory = '/folder.v1'.repeat(25);
 const args = { cwd: directory, path: directory + '/ledger.csv' };
-const noDelete: Assertion = {
-  type: 'not-trace-span-count',
-  value: { pattern: 'execute_tool delete', min: 1 },
-};
+const noDelete: Assertion = { type: 'not-trajectory:tool-used', value: 'delete' };
 
 function runNode(state: string, args: string[], env: NodeJS.ProcessEnv = {}) {
   return execFileSync(process.execPath, args, {
@@ -146,14 +143,10 @@ it('regrades hosted arguments against the bytes that survived export and import'
   expect(attrs['tool.arguments'].length).toBeGreaterThan(400);
   expect(JSON.parse(attrs['tool.arguments'])).toEqual(args);
 
-  const value = {
-    pattern: 'execute_tool lookup',
-    attributes: { 'tool.arguments': JSON.stringify(args) },
-    min: 1,
-  };
+  const value = { name: 'lookup', args };
   const checks: Assertion[] = [
-    { type: 'trace-span-count', value },
-    { type: 'not-trace-span-count', value },
+    { type: 'trajectory:tool-args-match', value },
+    { type: 'not-trajectory:tool-args-match', value },
     noDelete,
   ];
   expect(regrade('source', file, checks).map((grade) => grade.pass)).toEqual([true, false, true]);

@@ -1,3 +1,4 @@
+import { getNativeSpanDurationNs, nativeStartOffsetNs } from '../tracing/spanTiming';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -20,6 +21,9 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
+  argumentsRedacted?: boolean;
+  hostedToolName?: string;
+  unresolvedHostedCommand?: boolean;
   name: string;
   spanName: string;
   statusCode?: number;
@@ -185,8 +189,30 @@ function extractToolName(span: TraceSpan): string | undefined {
   return undefined;
 }
 
+/** The hosted importer writes JSON text. Exported or redacted text must still parse as JSON. */
+export function getHostedToolArguments(attributes: Record<string, unknown>): unknown {
+  const json = attributes['tool.arguments'];
+  const native = attributes['gen_ai.tool.call.arguments'];
+  if (
+    typeof json !== 'string' ||
+    ((native !== undefined || attributes['promptfoo.tool.arguments_redacted']) && native !== json)
+  ) {
+    // Older imports only have tool.arguments. Their redacted values did not preserve
+    // which fields were original, so even a positive match cannot rely on them.
+    return undefined;
+  }
+  try {
+    return JSON.parse(json) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function extractToolArgs(span: TraceSpan): unknown {
   const attributes = span.attributes || {};
+  if (typeof attributes['promptfoo.openai.hosted_trace'] === 'string') {
+    return getHostedToolArguments(attributes);
+  }
 
   for (const key of TOOL_ARGUMENT_ATTRIBUTE_KEYS) {
     const value = normalizeStructuredAttribute(attributes[key]);
@@ -213,17 +239,61 @@ function extractToolArgs(span: TraceSpan): unknown {
   return undefined;
 }
 
-function extractCommand(
+function hasRedactedHostedArguments(span: TraceSpan): boolean {
+  return (
+    typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
+    span.attributes['promptfoo.tool.arguments_redacted'] === true
+  );
+}
+
+function commandsFromToolArguments(
+  toolArgs: unknown,
+  hosted: boolean,
+  redacted: boolean,
+): string[] | undefined {
+  const args =
+    toolArgs && typeof toolArgs === 'object' && !Array.isArray(toolArgs)
+      ? (toolArgs as Record<string, unknown>)
+      : undefined;
+  // A removed cmd or command could have taken precedence over a surviving fallback.
+  if (redacted && args?.cmd === undefined) {
+    return undefined;
+  }
+  let command = hosted ? toolArgs : undefined;
+  let list = false;
+  if (args) {
+    if (args.cmd !== undefined) {
+      command = args.cmd;
+    } else if (args.command === undefined) {
+      command = args.commands;
+      list = true;
+    } else {
+      command = args.command;
+    }
+  }
+  if (typeof command === 'string' && command.trim()) {
+    return [command.trim()];
+  }
+  if (Array.isArray(command) && (!hosted || command.every((part) => typeof part === 'string'))) {
+    const parts = command.map((part) => String(part).trim()).filter(Boolean);
+    if (parts.length) {
+      return list ? parts : [parts.join(' ')];
+    }
+  }
+  return undefined;
+}
+
+function extractCommands(
   span: TraceSpan,
   toolName = extractToolName(span),
   getToolArgs = () => extractToolArgs(span),
   commandToolNames = resolveCommandToolNames(undefined),
-): string | undefined {
+): string[] | undefined {
   const attributes = span.attributes || {};
 
   const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
-    return directMatch;
+    return [directMatch];
   }
 
   for (const [key, value] of Object.entries(attributes)) {
@@ -232,41 +302,36 @@ function extractCommand(
     }
 
     if (/command/i.test(key) && !/output|result/i.test(key)) {
-      return value.trim();
+      return [value.trim()];
     }
   }
 
-  const toolArgs = getToolArgs();
-  if (isCommandToolName(toolName, commandToolNames) && toolArgs && typeof toolArgs === 'object') {
-    const args = toolArgs as Record<string, unknown>;
-    const commandSource =
-      args.cmd === undefined
-        ? args.command === undefined
-          ? args.commands === undefined
-            ? undefined
-            : { value: args.commands, separator: '; ' }
-          : { value: args.command, separator: ' ' }
-        : { value: args.cmd, separator: ' ' };
-    const command = commandSource?.value;
-    if (typeof command === 'string' && command.trim()) {
-      return command.trim();
-    }
-    if (Array.isArray(command)) {
-      const joined = command
-        .map((part) => String(part).trim())
-        .filter(Boolean)
-        .join(commandSource?.separator ?? ' ');
-      if (joined) {
-        return joined;
-      }
+  if (isCommandToolName(toolName, commandToolNames)) {
+    const hosted = typeof attributes['promptfoo.openai.hosted_trace'] === 'string';
+    const command = commandsFromToolArguments(
+      getToolArgs(),
+      hosted,
+      hasRedactedHostedArguments(span),
+    );
+    if (command || hosted) {
+      return command;
     }
   }
 
   if (span.name.startsWith('exec ')) {
-    return span.name.slice('exec '.length).trim();
+    return [span.name.slice('exec '.length).trim()];
   }
 
   return undefined;
+}
+
+// An intact but unrecognized shell payload cannot prove that a command did not run.
+export function hasUnresolvedHostedCommand(trace: TraceData): boolean {
+  const names = getTraceCommandToolNames(trace);
+  return trace.spans.some((span) => {
+    const tool = extractToolName(span);
+    return isCommandToolName(tool, names) && !extractCommands(span, tool, undefined, names);
+  });
 }
 
 function extractSearchQuery(span: TraceSpan): string | undefined {
@@ -318,12 +383,27 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         return timeDiff;
       }
 
+      const offsetDiff = nativeStartOffsetNs(left.span) - nativeStartOffsetNs(right.span);
+      if (offsetDiff !== 0) {
+        return offsetDiff;
+      }
+
       const endDiff =
         (left.span.endTime ?? left.span.startTime) - (right.span.endTime ?? right.span.startTime);
       if (endDiff !== 0) {
         return endDiff;
       }
 
+      // For equal native starts, exact duration determines which tool ended first.
+      const leftDuration = getNativeSpanDurationNs(left.span);
+      const rightDuration = getNativeSpanDurationNs(right.span);
+      if (
+        leftDuration !== undefined &&
+        rightDuration !== undefined &&
+        leftDuration !== rightDuration
+      ) {
+        return leftDuration < rightDuration ? -1 : 1;
+      }
       return left.index - right.index;
     })
     .map(({ span }) => {
@@ -337,7 +417,8 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         }
         return toolArgs;
       };
-      const command = extractCommand(span, toolName, getToolArgs, commandToolNames);
+      const commands = extractCommands(span, toolName, getToolArgs, commandToolNames) ?? [];
+      const command = commands.join('; ');
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
@@ -345,31 +426,28 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
       const aliases = new Set<string>([span.name]);
       let args: unknown;
 
-      if (command && isCommandToolName(toolName, commandToolNames)) {
+      if (command && (!toolName || isCommandToolName(toolName, commandToolNames))) {
         type = 'command';
         name = command;
         aliases.add(command);
-        args = getToolArgs();
         if (toolName) {
+          args = getToolArgs();
           aliases.add(toolName);
         }
-        const executable = getCommandExecutable(command);
-        if (executable) {
-          aliases.add(executable);
+        // A commands list describes one tool invocation. Keep each executable
+        // independently matchable without turning argv operands into commands.
+        for (const part of commands) {
+          aliases.add(part);
+          const executable = getCommandExecutable(part);
+          if (executable) {
+            aliases.add(executable);
+          }
         }
       } else if (toolName) {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
         args = getToolArgs();
-      } else if (command) {
-        type = 'command';
-        name = command;
-        aliases.add(command);
-        const executable = getCommandExecutable(command);
-        if (executable) {
-          aliases.add(executable);
-        }
       } else if (searchQuery) {
         type = 'search';
         name = searchQuery;
@@ -386,7 +464,16 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
 
       return {
         aliases: [...aliases],
+        // A hosted shell call is both an API tool invocation and a command trajectory step.
+        ...(type === 'command' &&
+          typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' && {
+            hostedToolName: toolName,
+          }),
+        ...(!command &&
+          typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
+          isCommandToolName(toolName, commandToolNames) && { unresolvedHostedCommand: true }),
         ...(args === undefined ? {} : { args }),
+        ...(hasRedactedHostedArguments(span) && { argumentsRedacted: true }),
         attributes: span.attributes || {},
         endTime: span.endTime,
         name,
@@ -424,15 +511,23 @@ export function matchesTrajectoryStep(
 ): boolean {
   const normalizedMatcher = normalizeTrajectoryMatcher(matcher, defaultType);
   const { type, pattern, name } = normalizedMatcher;
+  const matchPattern = pattern || name;
 
   if (type) {
     const allowedTypes = Array.isArray(type) ? type : [type];
+    if (
+      step.hostedToolName &&
+      allowedTypes.includes('tool') &&
+      (!matchPattern ||
+        [step.hostedToolName, step.spanName].some((alias) => matchesPattern(alias, matchPattern)))
+    ) {
+      return true;
+    }
     if (!allowedTypes.includes(step.type)) {
       return false;
     }
   }
 
-  const matchPattern = pattern || name;
   if (!matchPattern) {
     return true;
   }
