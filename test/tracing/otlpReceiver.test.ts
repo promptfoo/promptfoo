@@ -1549,6 +1549,7 @@ describe('OTLPReceiver', () => {
               evaluationId,
               testCaseId: 'test-case',
               metadata: {
+                promptfooTraceEvidence: 'partial',
                 commandToolNames: [isSecond ? 'shell' : 'bash'],
                 otlpHttpRedactAttributes: [isSecond ? 'cookie' : 'authorization'],
               },
