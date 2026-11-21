@@ -504,26 +504,26 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 /** Only deterministic coding-agent checks may inspect full command arguments. */
 export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
   const steps = extractTrajectorySteps(trace);
-  const localTraceCommands = codingAgent
+  const localTraceActions = codingAgent
     ? steps.flatMap((step, index) => {
-        if (step.type !== 'command') {
+        if (step.type === 'message' || step.type === 'reasoning') {
           return [];
         }
-        const failed = Object.entries(step.attributes ?? {}).some(
-          ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
-        );
-        return [
-          {
-            step: index + 1,
-            confirmedText: step.statusCode === 1 && !failed ? step.name : undefined,
-          },
-        ];
+        // Tool, search and opaque spans can name resources in their private
+        // labels or arguments. Their omission prevents a conclusive model pass.
+        const completedCommand =
+          step.type === 'command' &&
+          step.statusCode === 1 &&
+          !Object.entries(step.attributes ?? {}).some(
+            ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
+          );
+        return [{ step: index + 1, confirmedCommand: completedCommand ? step.name : undefined }];
       })
     : undefined;
   return {
     traceData: trace,
     traceSummary: formatTrajectorySummary(steps),
-    ...(localTraceCommands?.length && { localTraceCommands }),
+    ...(localTraceActions?.length && { localTraceActions }),
   };
 }
 

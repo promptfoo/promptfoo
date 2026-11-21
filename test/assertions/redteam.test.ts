@@ -135,48 +135,55 @@ describe('redteam strategy result grading', () => {
     { statusCode: 1, exit: 1, confirmed: false },
     { statusCode: 2, exit: 0, confirmed: false },
     { statusCode: undefined, exit: undefined, confirmed: false },
-  ])(
-    'checks structured commands locally (status $statusCode, exit $exit)',
-    async ({ statusCode, exit, confirmed }) => {
-      const getResult = vi
-        .spyOn(RedteamGraderBase.prototype, 'getResult')
-        .mockRejectedValue(new Error('Private commands must remain local'));
-      const marker = 'private-fixture-only';
-      const result = await runAssertion({
-        assertion: { type: 'promptfoo:redteam:coding-agent:secret-env-read' },
-        prompt: 'Describe the fixture',
-        test: { vars: { secretEnvValue: marker } },
-        providerResponse: { output: 'I cannot help with that.' },
+    { statusCode: 1, exit: undefined, confirmed: false, kind: 'tool' },
+    { statusCode: 1, exit: undefined, confirmed: false, kind: 'search' },
+    { statusCode: 1, exit: undefined, confirmed: false, kind: 'opaque' },
+  ])('protects trace action details (case %#)', async ({ statusCode, exit, confirmed, kind }) => {
+    const getResult = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockRejectedValue(new Error('Private commands must remain local'));
+    const marker = 'private-fixture-only';
+    const result = await runAssertion({
+      assertion: { type: 'promptfoo:redteam:coding-agent:secret-env-read' },
+      prompt: 'Describe the fixture',
+      test: { vars: { secretEnvValue: marker } },
+      providerResponse: { output: 'I cannot help with that.' },
+      traceId: 'trace',
+      traceData: {
         traceId: 'trace',
-        traceData: {
-          traceId: 'trace',
-          evaluationId: 'eval',
-          testCaseId: 'case',
-          spans: [
-            {
-              spanId: 'one',
-              name: 'fixture',
-              startTime: 1,
-              statusCode,
-              attributes: {
-                'tool.name': 'local_shell',
-                'tool.arguments': { cmd: marker },
-                'command.exit_code': exit,
-              },
-            },
-          ],
-        },
-      });
-      expect(getResult).not.toHaveBeenCalled();
-      expect(result.pass).toBe(false);
-      expect(result.metadata).toMatchObject(
-        confirmed
-          ? { deterministicFailureKind: 'sensitive-value-observed' }
-          : { graderError: true, gradingIncomplete: true },
-      );
-      expect(JSON.stringify(result)).not.toContain(marker);
-    },
-  );
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: [
+          {
+            spanId: 'one',
+            name: marker,
+            startTime: 1,
+            statusCode,
+            attributes:
+              kind === 'tool'
+                ? { 'tool.name': 'read_file', 'tool.arguments': { path: marker } }
+                : kind === 'search'
+                  ? { 'search.query': marker }
+                  : kind === 'opaque'
+                    ? {}
+                    : {
+                        'tool.name': 'local_shell',
+                        'tool.arguments': { cmd: marker },
+                        'command.exit_code': exit,
+                      },
+          },
+        ],
+      },
+    });
+    expect(getResult).not.toHaveBeenCalled();
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toMatchObject(
+      confirmed
+        ? { deterministicFailureKind: 'sensitive-value-observed' }
+        : { graderError: true, gradingIncomplete: true },
+    );
+    expect(JSON.stringify(result)).not.toContain(marker);
+  });
 
   it.each([false, true])(
     'regrades saved text when fresh trace actions exist (%s)',

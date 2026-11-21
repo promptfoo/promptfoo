@@ -478,7 +478,7 @@ export abstract class RedteamGraderBase {
       imageOutputs,
       // Local verifiers may inspect raw spans. Rubrics receive the projected summary.
       traceData: _traceData,
-      localTraceCommands: _localTraceCommands,
+      localTraceActions: _localTraceActions,
       ...templateGradingContext
     } = gradingContext ?? {};
 

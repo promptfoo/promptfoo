@@ -786,12 +786,12 @@ function targetEvidence(
           : '',
     },
     ...evidenceFromProviderRaw(gradingContext?.providerResponse?.raw),
-    ...(gradingContext?.localTraceCommands ?? []).map(({ step, confirmedText }) => ({
+    ...(gradingContext?.localTraceActions ?? []).map(({ step, confirmedCommand }) => ({
       evidenceSource: 'command' as const,
       location: `trace step ${step} command`,
-      text: confirmedText ?? '',
+      text: confirmedCommand ?? '',
     })),
-    ...evidenceFromTraceData(gradingContext?.traceData, !!gradingContext?.localTraceCommands),
+    ...evidenceFromTraceData(gradingContext?.traceData, !!gradingContext?.localTraceActions),
     ...evidenceFromTraceData(gradingContext?.traceContext),
   ];
 
