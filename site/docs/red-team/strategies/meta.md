@@ -42,20 +42,16 @@ The meta-agent maintains memory across iterations to systematically explore diff
 
 This provides broader coverage of potential vulnerabilities at the cost of more API calls. Standard jailbreak refines a single approach repeatedly, while meta-agent explores multiple distinct approaches to find weaknesses.
 
-If a test case times out or is cancelled, its error result retains completed target responses and known probe/token usage. The partial history can include responses that were not yet graded; it does not establish that the target is safe. A completed internal grader verdict is retained with its matching response and strategy state; the interrupted row still reports an execution error. Work still in flight when cancellation occurs is not counted as completed evidence. After a CLI pause, `promptfoo eval --resume <evalId>` runs cells that have no completed work. Completed target or strategy work is retained and is not automatically replayed; use `--retry-errors` to rerun its error rows or per-test timeouts. Programmatic caller cancellation can leave resumable checkpoints, which are replaced when a new outcome is saved. Explicit retries and resumed attempts may produce different findings. If a `--retry-errors` run is paused, use `--retry-errors` again. Resume rebuilds prompt totals and expression-derived metrics from saved results. Function-valued derived metrics are not replayed; after an aggregate write failure, they retain their last saved values.
-
-Interrupted checkpoints also retain cumulative target `cost` and `incurredCost` when provided. Cached target responses use zero incurred cost unless the provider reports it explicitly. Unknown costs remain unknown. Normal strategy completion still does not aggregate target costs.
-
 ## Meta-Agent vs Standard Jailbreak
 
-| Aspect       | Meta-Agent                                  | Standard Iterative                    |
-| ------------ | ------------------------------------------- | ------------------------------------- |
-| **Approach** | Explores multiple distinct attack types     | Refines variations of single approach |
-| **Coverage** | Broad - tests different attack categories   | Deep - exhausts one approach          |
-| **Cost**     | Higher (more diverse attempts)              | Lower (focused refinement)            |
-| **Best For** | Finding any vulnerability in robust systems | Testing specific attack patterns      |
+| Aspect       | Meta-Agent                              | Standard Iterative                 |
+| ------------ | --------------------------------------- | ---------------------------------- |
+| **Approach** | Explores multiple distinct attack types | Refines variations of one approach |
+| **Coverage** | Tests different attack categories       | Focuses on one approach            |
+| **Cost**     | Higher (more diverse attempts)          | Lower (focused refinement)         |
+| **Best For** | Exploring alternative attack approaches | Testing specific attack patterns   |
 
-The meta-agent stops when the grader reports a failure or the maximum number of iterations is reached. It also stops with an error if remote multi-input generation returns an invalid prompt format.
+The meta-agent stops when the grader confirms a vulnerability or the maximum number of iterations is reached. A grader transport or parsing error is not a vulnerability verdict, so the strategy continues to the next iteration. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error. It also stops with an error if remote multi-input generation returns an invalid prompt format.
 
 If Cloud explicitly reports that the upstream provider rejected a coordination request as invalid JSON (`invalid_json`), the strategy stops and reports the error while retaining completed attempts. Other coordination errors continue through the existing retry and iteration behavior.
 
@@ -63,14 +59,14 @@ If Cloud explicitly reports that the upstream provider rejected a coordination r
 
 **Use `jailbreak:meta` when:**
 
-- Testing production systems where you need comprehensive coverage of attack types
+- Exploring multiple attack types against a target
 - Your guardrails might block obvious approaches but miss alternative attack angles
-- Cost is less critical than finding all potential vulnerabilities
+- You can spend more API calls exploring different approaches
 
 **Use standard `jailbreak` when:**
 
 - Running large-scale tests where API cost is a primary concern
-- Testing early-stage systems without sophisticated defenses
+- Refining a specific attack pattern
 - Cloud access is unavailable
 
 ## Related Concepts

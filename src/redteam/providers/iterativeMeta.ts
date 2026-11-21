@@ -9,10 +9,9 @@ import {
   type TraceContextData,
 } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
-import { sleep, sleepWithAbort } from '../../util/time';
+import { sleep } from '../../util/time';
 import {
   accumulateAttackerTokenUsage,
-  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
@@ -91,6 +90,8 @@ interface IterativeMetaMetadata {
     outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
@@ -176,15 +177,12 @@ export async function runMetaAgentRedteam({
 
   const sessionIds: string[] = [];
   const totalTokenUsage = createEmptyTokenUsage();
-  let completedTargetCost: number | undefined;
-  let completedTargetIncurredCost: number | undefined;
 
   let vulnerabilityAchieved = false;
   let bestPrompt: string | undefined = undefined;
   let bestResponse = '';
   let finalIteration = numIterations;
   let storedGraderResult: GradingResult | undefined = undefined;
-  let checkpointGraderResult: GradingResult | undefined;
   let stopReason: IterativeMetaMetadata['stopReason'] = 'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
   let failClosedError: string | undefined;
@@ -201,44 +199,7 @@ export async function runMetaAgentRedteam({
   // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
   let lastFinalAttackPrompt: string | undefined;
 
-  const completedTargetHistory: Array<
-    IterativeMetaMetadata['redteamHistory'][number] & Pick<TargetResponse, 'images' | 'isBase64'>
-  > = [];
-  const callOptions = options ? { ...options, onProgress: undefined } : undefined;
-  const publishProgress = () => {
-    if (options?.abortSignal?.aborted) {
-      return;
-    }
-    const tokenUsage = structuredClone(totalTokenUsage);
-    if (storedGraderResult?.tokensUsed) {
-      accumulateGradingTokenUsage(tokenUsage, storedGraderResult.tokensUsed, {
-        cached: storedGraderResult.metadata?.cachedResponse,
-      });
-    }
-    options?.onProgress?.({
-      output: lastResponse?.output,
-      error: lastResponse?.error,
-      audio: lastResponse?.audio,
-      images: lastResponse?.images,
-      tokenUsage,
-      cost: completedTargetCost,
-      incurredCost: completedTargetIncurredCost,
-      metadata: {
-        storedGraderResult: checkpointGraderResult,
-        finalIteration,
-        vulnerabilityAchieved,
-        stopReason,
-        redteamHistory: completedTargetHistory,
-        sessionIds,
-        traceSnapshots: traceSnapshots.map((trace) => formatTraceForMetadata(trace)),
-        redteamFinalPrompt: lastFinalAttackPrompt,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-      },
-    });
-  };
-
   for (let i = 0; i < numIterations; i++) {
-    options?.abortSignal?.throwIfAborted();
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
       iteration: i + 1,
       testRunId,
@@ -274,7 +235,10 @@ export async function runMetaAgentRedteam({
                 ? '[Hidden for privacy]'
                 : lastResponse.output,
               responseLength: lastResponse.output.length,
-              graderPassed: redteamHistory[i - 1].graderPassed || false,
+              graderPassed:
+                storedGraderResult?.metadata?.graderError === true
+                  ? undefined
+                  : redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
@@ -302,21 +266,17 @@ export async function runMetaAgentRedteam({
             })
           : {},
       },
-      callOptions,
+      options,
     );
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
     // Agent coordination calls are internal and should not count as target probes.
-    options?.abortSignal?.throwIfAborted();
     accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
-    publishProgress();
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
-      await (options?.abortSignal
-        ? sleepWithAbort(agentProvider.delay, options.abortSignal)
-        : sleep(agentProvider.delay));
+      await sleep(agentProvider.delay);
     }
 
     if (agentResp.error) {
@@ -392,7 +352,6 @@ export async function runMetaAgentRedteam({
       );
       if (lastTransformResult.tokenUsage) {
         accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
-        publishProgress();
       }
 
       if (lastTransformResult.error) {
@@ -500,63 +459,12 @@ export async function runMetaAgentRedteam({
           vars: updatedVars,
         }
       : iterationContext;
-    let checkpointedTurn: (typeof completedTargetHistory)[number] | undefined;
-    const checkpointTargetResponse = (response: TargetResponse) => {
-      if (!response.error) {
-        options?.abortSignal?.throwIfAborted();
-      }
-      // Delayed targets checkpoint before pacing; other targets checkpoint on return.
-      if (checkpointedTurn) {
-        return checkpointedTurn;
-      }
-      lastResponse = response;
-      // A previous verdict still contributes usage, but does not grade this response.
-      checkpointGraderResult = undefined;
-      accumulateResponseTokenUsage(totalTokenUsage, response);
-      if (response.cost !== undefined) {
-        completedTargetCost = (completedTargetCost ?? 0) + response.cost;
-      }
-      const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
-      if (incurredCost !== undefined) {
-        completedTargetIncurredCost = (completedTargetIncurredCost ?? 0) + incurredCost;
-      }
-      checkpointedTurn = {
-        prompt: attackPrompt,
-        promptAudio: lastTransformResult?.audio,
-        promptImage: lastTransformResult?.image,
-        output: response.output,
-        isBase64: response.isBase64,
-        images: response.images,
-        outputAudio: response.audio
-          ? { ...response.audio, format: response.audio.format || 'wav' }
-          : undefined,
-        outputImage:
-          response.image?.data && response.image?.format
-            ? { data: response.image.data, format: response.image.format }
-            : undefined,
-        graderPassed: undefined,
-        guardrails: response.guardrails,
-        score: 0,
-        inputVars: currentRenderInputVars,
-      };
-      if (!(response.error && response.tokenUsage?.numRequests === 0)) {
-        completedTargetHistory.push(checkpointedTurn);
-      }
-      publishProgress();
-      return checkpointedTurn;
-    };
-    options?.abortSignal?.throwIfAborted();
     const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       targetContext,
-      callOptions,
-      checkpointTargetResponse,
+      options,
     );
-    const completedTurn = checkpointTargetResponse(initialTargetResponse);
-    if (initialTargetResponse.error && options?.abortSignal?.aborted) {
-      break;
-    }
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
       {
@@ -566,16 +474,10 @@ export async function runMetaAgentRedteam({
       },
     );
     lastResponse = targetResponse;
-    completedTurn.output = targetResponse.output;
-    completedTurn.images = targetResponse.images;
-    completedTurn.outputAudio = targetResponse.audio
-      ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }
-      : undefined;
-    completedTurn.outputImage =
-      targetResponse.image?.data && targetResponse.image?.format
-        ? { data: targetResponse.image.data, format: targetResponse.image.format }
-        : undefined;
-    publishProgress();
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    if (targetResponse.error && options?.abortSignal?.aborted) {
+      break;
+    }
 
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
@@ -637,10 +539,6 @@ export async function runMetaAgentRedteam({
     if (sessionId) {
       sessionIds.push(sessionId);
     }
-
-    completedTurn.trace = traceContext ? formatTraceForMetadata(traceContext) : undefined;
-    completedTurn.traceSummary = computedTraceSummary;
-    publishProgress();
 
     // Grade the response
     let graderResult: GradingResult | undefined = undefined;
@@ -750,7 +648,6 @@ export async function runMetaAgentRedteam({
           pluginId: test.metadata?.pluginId,
           assertion: assertToUse,
         });
-        checkpointGraderResult = storedGraderResult;
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,
@@ -758,6 +655,11 @@ export async function runMetaAgentRedteam({
         });
       }
     }
+
+    const graderError =
+      graderResult?.metadata?.graderError === true
+        ? graderResult.reason || 'Grading failed'
+        : undefined;
 
     // Store in redteam history for Messages tab
     redteamHistory.push({
@@ -775,7 +677,11 @@ export async function runMetaAgentRedteam({
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy
-      graderPassed: graderResult?.pass,
+      graderPassed: graderError ? undefined : graderResult?.pass,
+      graderError,
+      gradingInputHash: graderError
+        ? storedGraderResult?.metadata?.redteamGradingInputHash
+        : undefined,
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
@@ -783,10 +689,8 @@ export async function runMetaAgentRedteam({
       inputVars: currentRenderInputVars,
     });
 
-    completedTurn.graderPassed = graderResult?.pass;
-
-    // Check if vulnerability was achieved
-    if (graderResult?.pass === false) {
+    // Only a valid grader verdict can establish a vulnerability.
+    if (graderResult?.pass === false && !graderError) {
       vulnerabilityAchieved = true;
       bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
       bestResponse = targetResponse.output;
@@ -796,17 +700,11 @@ export async function runMetaAgentRedteam({
       logger.debug('[IterativeMeta] Vulnerability achieved!', {
         iteration: i + 1,
       });
-    }
 
-    publishProgress();
-    if (vulnerabilityAchieved) {
       break;
     }
   }
 
-  if (!lastResponse?.error) {
-    options?.abortSignal?.throwIfAborted();
-  }
   const error = agentRequestError || failClosedError || lastResponse?.error;
   return preserveSelectedError(
     {

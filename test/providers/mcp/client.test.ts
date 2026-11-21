@@ -2,6 +2,49 @@ import path from 'path';
 
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMcpServerConfig, createMcpServerOptions } from '../../factories/literalFixtures';
+
+function createSingleToolListResponse() {
+  return {
+    tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+  };
+}
+
+const createMultipleServerOptions = () => ({
+  enabled: true,
+  servers: [
+    createNamedNpmServerConfig(),
+    {
+      name: 'server2',
+      path: 'script.js',
+    },
+  ],
+});
+
+const createNamedNpmServerConfig = () => ({
+  name: 'server1',
+  command: 'npm',
+  args: ['start'],
+});
+
+const createTwoToolListResponse = () => ({
+  tools: [
+    { name: 'tool1', description: 'desc1', inputSchema: {} },
+    { name: 'tool2', description: 'desc2', inputSchema: {} },
+  ],
+});
+
+const createRemoteServerOptions = () => ({
+  enabled: true,
+  server: {
+    url: 'http://localhost:3000',
+  },
+});
+
+const createAuthenticatedHeaders = () => ({
+  'X-Custom-Header': 'custom-value',
+  Authorization: 'Bearer test-token',
+});
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
 vi.mock('../../../src/envars', async () => ({
@@ -30,9 +73,7 @@ const mcpMocks = vi.hoisted(() => {
     assertCapability: vi.fn(),
     connect: vi.fn(),
     ping: vi.fn().mockResolvedValue({}),
-    listTools: vi.fn().mockResolvedValue({
-      tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-    }),
+    listTools: vi.fn().mockResolvedValue(createSingleToolListResponse()),
     callTool: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined),
   };
@@ -134,9 +175,7 @@ describe('MCPClient', () => {
     mockClient.assertCapability.mockReset();
     mockClient.connect.mockReset();
     mockClient.ping.mockReset().mockResolvedValue({});
-    mockClient.listTools.mockReset().mockResolvedValue({
-      tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-    });
+    mockClient.listTools.mockReset().mockResolvedValue(createSingleToolListResponse());
     mockClient.callTool.mockReset();
     mockClient.close.mockReset().mockResolvedValue(undefined);
     mockStdioTransport.close.mockReset().mockResolvedValue(undefined);
@@ -209,6 +248,69 @@ describe('MCPClient', () => {
       expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
     });
 
+    it('does not spawn a transport after cleanup cancels SDK loading', async () => {
+      mcpClient = new MCPClient({ server: { command: 'node' } });
+      const startup = mcpClient.initialize();
+      const rejected = expect(startup).rejects.toThrow();
+      await mcpClient.cleanup();
+      await rejected;
+      expect(StdioClientTransport).not.toHaveBeenCalled();
+      expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('closes an unpublished connection and rejects a late handshake', async () => {
+      let connected!: () => void;
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockClient.connect.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            connected = resolve;
+            started();
+          }),
+      );
+      mcpClient = new MCPClient({ server: { command: 'node' } });
+      const startup = mcpClient.initialize();
+      const rejected = expect(startup).rejects.toThrow();
+      await ready;
+      await mcpClient.cleanup();
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      connected();
+      await rejected;
+      expect(mockClient.listTools).not.toHaveBeenCalled();
+      expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('aborts OAuth acquisition before any transport starts', async () => {
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockGetOAuthTokenWithExpiry.mockImplementationOnce(
+        (_auth, _url, _rejected, signal) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            started();
+          }),
+      );
+      mcpClient = new MCPClient({
+        server: {
+          url: 'https://cancel-startup.example.test',
+          auth: { type: 'oauth', clientId: 'fixture', clientSecret: 'fixture' },
+        },
+      });
+      const startup = mcpClient.initialize();
+      const rejected = expect(startup).rejects.toThrow();
+      await ready;
+      await mcpClient.cleanup();
+      await rejected;
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      expect(SSEClientTransport).not.toHaveBeenCalled();
+    });
+
     it('defaults enabled and OAuth grant without changing the input', async () => {
       const auth = {
         type: 'oauth',
@@ -222,6 +324,8 @@ describe('MCPClient', () => {
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
         { ...auth, grantType: 'client_credentials' },
         'https://mcp.example.test',
+        undefined,
+        expect.any(AbortSignal),
       );
       expect(input).not.toHaveProperty('enabled');
       expect(auth).not.toHaveProperty('grantType');
@@ -262,17 +366,9 @@ describe('MCPClient', () => {
     it('should initialize with single server config', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
 
@@ -281,7 +377,9 @@ describe('MCPClient', () => {
         args: ['start'],
         env: process.env as Record<string, string>,
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, {
+        signal: expect.any(AbortSignal),
+      });
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
     });
@@ -346,9 +444,7 @@ describe('MCPClient', () => {
 
     it('should initialize with per-server env merged into process.env', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -370,15 +466,15 @@ describe('MCPClient', () => {
           CUSTOM_MCP_VAR: 'custom_value',
         },
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, {
+        signal: expect.any(AbortSignal),
+      });
       await mcpClient.cleanup();
     });
 
     it('should merge per-server env for path-based stdio servers', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -397,9 +493,7 @@ describe('MCPClient', () => {
 
     it('should let per-server env override an inherited process.env value', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       vi.stubEnv('PROMPTFOO_MCP_ENV_FIXTURE', 'inherited');
 
       mcpClient = new MCPClient({
@@ -428,24 +522,9 @@ describe('MCPClient', () => {
     it('should initialize with multiple servers', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValue(undefined);
-      mockClient.listTools.mockResolvedValue({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValue(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        servers: [
-          {
-            name: 'server1',
-            command: 'npm',
-            args: ['start'],
-          },
-          {
-            name: 'server2',
-            path: 'script.js',
-          },
-        ],
-      });
+      mcpClient = new MCPClient(createMultipleServerOptions());
 
       await mcpClient.initialize();
 
@@ -455,9 +534,7 @@ describe('MCPClient', () => {
 
     it('should resolve local server paths relative to the config base path', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       cliState.basePath = '/tmp/simple-mcp';
 
       mcpClient = new MCPClient({
@@ -492,34 +569,24 @@ describe('MCPClient', () => {
     it('should initialize with remote server using StreamableHTTPClientTransport', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-        },
-      });
+      mcpClient = new MCPClient(createRemoteServerOptions());
 
       await mcpClient.initialize();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      const customHeaders = {
-        'X-Custom-Header': 'custom-value',
-        Authorization: 'Bearer test-token',
-      };
+      const customHeaders = createAuthenticatedHeaders();
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -539,7 +606,9 @@ describe('MCPClient', () => {
           }),
         }),
       );
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
@@ -550,16 +619,9 @@ describe('MCPClient', () => {
         })
         .mockResolvedValueOnce(undefined);
 
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-        },
-      });
+      mcpClient = new MCPClient(createRemoteServerOptions());
 
       await mcpClient.initialize();
 
@@ -576,14 +638,9 @@ describe('MCPClient', () => {
         })
         .mockResolvedValueOnce(undefined);
 
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      const customHeaders = {
-        'X-Custom-Header': 'custom-value',
-        Authorization: 'Bearer test-token',
-      };
+      const customHeaders = createAuthenticatedHeaders();
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -617,19 +674,11 @@ describe('MCPClient', () => {
     it('should filter tools according to config.tools', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [
-          { name: 'tool1', description: 'desc1', inputSchema: {} },
-          { name: 'tool2', description: 'desc2', inputSchema: {} },
-        ],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createTwoToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
         tools: ['tool2'],
       });
 
@@ -644,19 +693,11 @@ describe('MCPClient', () => {
     it('should exclude tools according to config.exclude_tools', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [
-          { name: 'tool1', description: 'desc1', inputSchema: {} },
-          { name: 'tool2', description: 'desc2', inputSchema: {} },
-        ],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createTwoToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
         exclude_tools: ['tool1'],
       });
 
@@ -670,17 +711,9 @@ describe('MCPClient', () => {
     it('should initialize with correct client metadata including name, version, and description', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
 
@@ -698,13 +731,7 @@ describe('MCPClient', () => {
         tools: [],
       });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
 
@@ -722,60 +749,51 @@ describe('MCPClient', () => {
     it('should pass timeout to listTools when configured', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
         timeout: 900000, // 15 minutes
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
 
-      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, { timeout: 900000 });
+      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, {
+        timeout: 900000,
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should pass timeout options to connect()', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
         timeout: 300000,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
 
-      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), { timeout: 300000 });
+      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), {
+        timeout: 300000,
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should ping server when pingOnConnect is true', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.ping.mockResolvedValueOnce({});
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
       mcpClient = new MCPClient({
         enabled: true,
         pingOnConnect: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
@@ -791,10 +809,7 @@ describe('MCPClient', () => {
       mcpClient = new MCPClient({
         enabled: true,
         pingOnConnect: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await expect(mcpClient.initialize()).rejects.toThrow('ping failed');
@@ -803,19 +818,14 @@ describe('MCPClient', () => {
     it('should pass resetTimeoutOnProgress option', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
       mcpClient = new MCPClient({
         enabled: true,
         timeout: 300000,
         resetTimeoutOnProgress: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
@@ -831,9 +841,7 @@ describe('MCPClient', () => {
     it('should pass maxTotalTimeout option', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
       mcpClient = new MCPClient({
@@ -841,10 +849,7 @@ describe('MCPClient', () => {
         timeout: 300000,
         resetTimeoutOnProgress: true,
         maxTotalTimeout: 900000,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
@@ -904,15 +909,10 @@ describe('MCPClient', () => {
 
     it('records one tool execution span around an MCP request', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: { command: 'npm', args: ['start'] },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
       await mcpClient.initialize();
 
       const span = {
@@ -958,15 +958,10 @@ describe('MCPClient', () => {
 
     it('marks caught MCP transport failures as tool execution errors', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockRejectedValueOnce(new Error('MCP transport disconnected'));
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: { command: 'npm', args: ['start'] },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
       await mcpClient.initialize();
 
       const span = {
@@ -1000,18 +995,10 @@ describe('MCPClient', () => {
     it('should call tool successfully', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', { arg: 'value' });
@@ -1030,18 +1017,13 @@ describe('MCPClient', () => {
     it('should pass timeout option when configured', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
       mcpClient = new MCPClient({
         enabled: true,
         timeout: 900000, // 15 minutes
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
@@ -1061,9 +1043,7 @@ describe('MCPClient', () => {
     it('should use MCP_REQUEST_TIMEOUT_MS env var as fallback when no config timeout', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
       // Mock env var to return a timeout value
@@ -1072,10 +1052,7 @@ describe('MCPClient', () => {
       mcpClient = new MCPClient({
         enabled: true,
         // No timeout in config
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
@@ -1098,9 +1075,7 @@ describe('MCPClient', () => {
     it('should prefer config timeout over env var', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
       // Mock env var to return a different timeout value
@@ -1109,10 +1084,7 @@ describe('MCPClient', () => {
       mcpClient = new MCPClient({
         enabled: true,
         timeout: 900000, // 15 minutes - should take precedence
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
       });
 
       await mcpClient.initialize();
@@ -1134,17 +1106,12 @@ describe('MCPClient', () => {
     it('should handle tool error', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockRejectedValueOnce(new Error('Tool error'));
 
       mcpClient = new MCPClient({
         enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
+        server: createMcpServerConfig(),
         debug: true,
       });
 
@@ -1161,21 +1128,13 @@ describe('MCPClient', () => {
       // Reset mocks for this test
       const errorContent = [{ type: 'text', text: 'Invalid arguments' }];
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({
         content: errorContent,
         isError: true,
       });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
@@ -1193,17 +1152,9 @@ describe('MCPClient', () => {
     it('should throw error for unknown tool', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       await expect(mcpClient.callTool('unknown', {})).rejects.toThrow('Tool unknown not found');
@@ -1213,18 +1164,10 @@ describe('MCPClient', () => {
       // Reset mocks for this test
       const contentBuffer = Buffer.from('buffered-result');
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: contentBuffer });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
@@ -1235,18 +1178,10 @@ describe('MCPClient', () => {
     it('should return empty string if result content is falsy', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({});
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
@@ -1257,18 +1192,10 @@ describe('MCPClient', () => {
     it('should parse JSON-stringified content correctly', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: '"Hello World"' });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
@@ -1279,18 +1206,10 @@ describe('MCPClient', () => {
     it('should handle non-JSON string content correctly', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.callTool.mockResolvedValueOnce({ content: 'Plain text response' });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
@@ -1306,17 +1225,9 @@ describe('MCPClient', () => {
     it('should cleanup all clients', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          command: 'npm',
-          args: ['start'],
-        },
-      });
+      mcpClient = new MCPClient(createMcpServerOptions());
 
       await mcpClient.initialize();
       await mcpClient.cleanup();
@@ -1327,9 +1238,7 @@ describe('MCPClient', () => {
     it('should handle cleanup errors', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
       mockClient.close.mockRejectedValueOnce(new Error('Cleanup error'));
 
       mcpClient = new MCPClient({
@@ -1349,27 +1258,9 @@ describe('MCPClient', () => {
     it('should return all tools from all servers', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValue(undefined);
-      mockClient.listTools.mockResolvedValue({
-        tools: [
-          { name: 'tool1', description: 'desc1', inputSchema: {} },
-          { name: 'tool2', description: 'desc2', inputSchema: {} },
-        ],
-      });
+      mockClient.listTools.mockResolvedValue(createTwoToolListResponse());
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        servers: [
-          {
-            name: 'server1',
-            command: 'npm',
-            args: ['start'],
-          },
-          {
-            name: 'server2',
-            path: 'script.js',
-          },
-        ],
-      });
+      mcpClient = new MCPClient(createMultipleServerOptions());
       await mcpClient.initialize();
       const allTools = mcpClient.getAllTools();
       expect(Array.isArray(allTools)).toBe(true);
@@ -1438,7 +1329,12 @@ describe('MCPClient', () => {
         mcpClient = new MCPClient({ enabled: true, server: { ...oauthServer, auth } });
         await mcpClient.initialize();
 
-        expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(auth, oauthServer.url);
+        expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
+          auth,
+          oauthServer.url,
+          undefined,
+          expect.any(AbortSignal),
+        );
         const options = vi.mocked(StreamableHTTPClientTransport).mock.calls[0][1];
         expect(options?.requestInit?.headers).not.toHaveProperty('Authorization');
         expect(options).not.toHaveProperty('authProvider');
@@ -1486,6 +1382,7 @@ describe('MCPClient', () => {
         oauthServer.auth,
         oauthServer.url,
         'revoked',
+        undefined,
       );
     });
 

@@ -1,9 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
-import { getBlobByHash } from '../../../../src/blobs';
+import { runAssertions } from '../../../../src/assertions/index';
 import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
-import { runDbMigrations } from '../../../../src/migrate';
-import { sanitizeResultForJsonlArtifact } from '../../../../src/models/evalResult';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import {
   getGradingAssertionHash,
@@ -16,12 +14,12 @@ import {
 } from '../../../../src/redteam/remoteGeneration';
 import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
-import { createEvaluateResult } from '../../../factories/eval';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { createMockTracingOptions } from '../../../factories/tracing';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
@@ -30,6 +28,17 @@ import type {
   CallApiContextParams,
   GradingResult,
 } from '../../../../src/types/index';
+
+const createDocumentInputVars = (): ConstructorParameters<typeof HydraProvider>[0]['inputs'] => ({
+  document: {
+    description: 'Uploaded planning document',
+    type: 'docx',
+  },
+  question: {
+    description: 'Benign analyst question',
+    type: 'text',
+  },
+});
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -40,19 +49,7 @@ const mockGetSessionId = vi.hoisted(() => vi.fn());
 const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
 const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
@@ -170,9 +167,7 @@ describe('HydraProvider', () => {
     mockGetGraderById.mockImplementation(function () {
       return mockGrader;
     });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
     vi.mocked(neverGenerateRemote).mockReset();
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
@@ -198,575 +193,6 @@ describe('HydraProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  it.each(
-    [false, true].flatMap((inline) =>
-      ['attacker', 'grader', 'later-text', 'backtrack', 'final-success'].map((stage) => ({
-        inline,
-        stage,
-      })),
-    ),
-  )(
-    'retains media hints through $stage checkpoints (inline=$inline) without changing wire messages',
-    async ({ inline, stage }) => {
-      await runDbMigrations();
-      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
-      const image =
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
-      const controller = new AbortController();
-      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-      let ready!: () => void;
-      const pendingStarted = new Promise<void>((resolve) => {
-        ready = resolve;
-      });
-      let release!: () => void;
-      let agentCalls = 0;
-      let targetCalls = 0;
-      const assertPlainMessages = (messages: Array<{ role: string; content: string }>) => {
-        for (const message of messages) {
-          expect(Object.keys(message).sort()).toEqual(['content', 'role']);
-        }
-        if (
-          inline &&
-          messages.some((message) => message.role === 'assistant' && message.content !== 'Refused')
-        ) {
-          expect(messages.find((message) => message.role === 'assistant')?.content).toBe(image);
-        }
-      };
-      mockAgentProvider.callApi.mockImplementation(async (prompt) => {
-        assertPlainMessages(JSON.parse(prompt).conversationHistory);
-        agentCalls++;
-        const pauseAt =
-          stage === 'attacker'
-            ? 2
-            : stage === 'later-text'
-              ? 3
-              : stage === 'backtrack'
-                ? 4
-                : undefined;
-        if (agentCalls === pauseAt) {
-          ready();
-          return new Promise((resolve) => {
-            release = () => resolve({ output: 'Late probe' });
-          });
-        }
-        return { output: `Probe ${agentCalls}` };
-      });
-      mockTargetProvider.callApi.mockImplementation(async (prompt) => {
-        assertPlainMessages(JSON.parse(prompt));
-        targetCalls++;
-        if (stage === 'backtrack' && targetCalls === 2) {
-          return { output: 'Refused' };
-        }
-        if (targetCalls > 1) {
-          return { output: 'Ordinary later response' };
-        }
-        return { output: image, isBase64: true, format: 'png' };
-      });
-      mockIsBasicRefusal.mockImplementation((output) => output === 'Refused');
-      mockGrader.getResult.mockImplementation(async () => {
-        if (stage === 'grader') {
-          ready();
-          return new Promise((resolve) => {
-            release = () => resolve({ grade: { pass: true, score: 1 } });
-          });
-        }
-        return {
-          grade: { pass: stage !== 'final-success', score: stage === 'final-success' ? 0 : 1 },
-        };
-      });
-      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 4, maxBacktracks: 3 });
-      const test: AtomicTestCase = {
-        assert: [{ type: 'promptfoo:redteam:pii' }],
-        metadata: { pluginId: 'pii' },
-      };
-      const attack = provider.callApi(
-        '',
-        {
-          originalProvider: mockTargetProvider,
-          vars: { input: 'Synthetic objective' },
-          prompt: { raw: '{{input}}', label: 'test' },
-          test,
-        },
-        {
-          abortSignal: controller.signal,
-          onProgress: (response) => snapshots.push(structuredClone(response)),
-        },
-      );
-      const strip = {
-        shouldStripMetadata: false,
-        shouldStripPromptText: false,
-        shouldStripResponseOutput: true,
-        shouldStripTestVars: false,
-        shouldStripGradingResult: false,
-      };
-      const project = (response: import('../../../../src/types/index').ProviderResponse) =>
-        sanitizeResultForJsonlArtifact(
-          createEvaluateResult({ response, metadata: response.metadata }),
-          strip,
-        );
-      try {
-        if (stage === 'final-success') {
-          const response = await attack;
-          expect(response.metadata.successfulAttacks?.[0]).toMatchObject({
-            response: image,
-            isBase64: true,
-          });
-          expect(
-            response.metadata.messages?.find((message) => message.role === 'assistant'),
-          ).toMatchObject({ content: image, isBase64: true });
-          const projected = project(response);
-          for (const metadata of [projected.metadata, projected.response?.metadata]) {
-            expect(metadata?.successfulAttacks[0]).toMatchObject({
-              message: 'Probe 1',
-              response: '[output stripped]',
-            });
-            expect(
-              metadata?.messages.find((message: { role: string }) => message.role === 'assistant')
-                .content,
-            ).toBe('[output stripped]');
-          }
-        } else {
-          await Promise.race([pendingStarted, attack]);
-          expect(
-            snapshots
-              .at(-1)
-              ?.metadata?.messages.some(
-                (message: { role: string; content: string; isBase64?: boolean }) =>
-                  message.role === 'assistant' && message.isBase64 === true,
-              ),
-          ).toBe(true);
-          if (stage === 'later-text' || stage === 'backtrack') {
-            expect(
-              snapshots
-                .at(-1)
-                ?.metadata?.messages.some(
-                  (message: { content: string }) => message.content === 'Ordinary later response',
-                ),
-            ).toBe(true);
-          }
-          controller.abort();
-          const stopped = expect(attack).rejects.toThrow();
-          release();
-          await stopped;
-        }
-        for (const snapshot of snapshots) {
-          const original = structuredClone(snapshot);
-          expect(JSON.stringify(project(snapshot))).not.toContain(image);
-          expect(snapshot).toEqual(original);
-        }
-      } finally {
-        controller.abort();
-        release?.();
-        await attack.catch(() => undefined);
-        vi.unstubAllEnvs();
-      }
-    },
-  );
-
-  it.each(
-    ['bare', 'small-json', 'other-json'].flatMap((shape) =>
-      [false, true].flatMap((inline) =>
-        ['grader', 'later-text'].map((stage) => ({ shape, inline, stage })),
-      ),
-    ),
-  )(
-    'retains completed $shape media through $stage (inline=$inline)',
-    async ({ shape, inline, stage }) => {
-      await runDbMigrations();
-      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
-      const bytes = Buffer.alloc(shape === 'small-json' ? 256 : 2048, 'R').toString('base64');
-      const output =
-        shape === 'bare'
-          ? bytes
-          : JSON.stringify(
-              shape === 'small-json' ? { data: [{ b64_json: bytes }] } : { b64_json: bytes },
-            );
-      const controller = new AbortController();
-      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-      let signalPending!: () => void;
-      const pending = new Promise<void>((resolve) => {
-        signalPending = resolve;
-      });
-      let release: (() => void) | undefined;
-      let attackerCalls = 0;
-      mockAgentProvider.callApi.mockImplementation(async () => {
-        attackerCalls++;
-        if (stage === 'later-text' && attackerCalls === 3) {
-          signalPending();
-          return new Promise((resolve) => {
-            release = () => resolve({ output: 'Late probe' });
-          });
-        }
-        return { output: `Synthetic probe ${attackerCalls}` };
-      });
-      mockTargetProvider.callApi
-        .mockResolvedValueOnce({ output, isBase64: true })
-        .mockResolvedValue({ output: 'Ordinary later response' });
-      mockGrader.getResult.mockImplementation(async () => {
-        if (stage === 'grader') {
-          signalPending();
-          return new Promise((resolve) => {
-            release = () => resolve({ grade: { pass: true, score: 1 } });
-          });
-        }
-        return { grade: { pass: true, score: 1 } };
-      });
-      const test: AtomicTestCase = {
-        assert: [{ type: 'promptfoo:redteam:pii' }],
-        metadata: { pluginId: 'pii' },
-      };
-      const attack = new HydraProvider({ injectVar: 'input', maxTurns: 3 }).callApi(
-        '',
-        {
-          originalProvider: mockTargetProvider,
-          vars: { input: 'Synthetic objective' },
-          prompt: { raw: '{{input}}', label: 'test' },
-          test,
-        },
-        {
-          abortSignal: controller.signal,
-          onProgress: (response) => snapshots.push(structuredClone(response)),
-        },
-      );
-      try {
-        await Promise.race([pending, attack]);
-        const latest = snapshots.at(-1)!;
-        expect(latest.output).toBe(stage === 'grader' ? output : 'Ordinary later response');
-        expect(latest.metadata?.redteamHistory[0]).toMatchObject({ output, isBase64: true });
-        const wireMessage = latest.metadata?.messages.find(
-          (message: { role: string }) => message.role === 'assistant',
-        );
-        expect(wireMessage.content).toBe(
-          inline
-            ? output
-            : shape === 'bare'
-              ? `[binary output redacted; length≈${output.length}]`
-              : `[binary output redacted; b64_json length=${bytes.length}]`,
-        );
-        const projected = sanitizeResultForJsonlArtifact(
-          createEvaluateResult({ response: latest, metadata: latest.metadata }),
-          {
-            shouldStripMetadata: false,
-            shouldStripPromptText: false,
-            shouldStripResponseOutput: true,
-            shouldStripTestVars: false,
-            shouldStripGradingResult: false,
-          },
-        );
-        for (const metadata of [projected.metadata, projected.response?.metadata]) {
-          expect(metadata?.redteamHistory[0].output).toBe('[output stripped]');
-          if (stage === 'later-text') {
-            expect(metadata?.redteamHistory[1].output).toBe('Ordinary later response');
-          }
-        }
-        expect(JSON.stringify(projected)).not.toContain(bytes);
-        expect(latest.metadata?.redteamHistory[0].output).toBe(output);
-        controller.abort();
-        const rejected = expect(attack).rejects.toThrow();
-        release!();
-        await rejected;
-      } finally {
-        controller.abort();
-        release?.();
-        await attack.catch(() => undefined);
-        vi.unstubAllEnvs();
-      }
-    },
-  );
-
-  it('checkpoints completed probes before grading and stops on cancellation', async () => {
-    const controller = new AbortController();
-    const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-    mockAgentProvider.callApi.mockResolvedValue({
-      output: 'Synthetic probe',
-      tokenUsage: { total: 7, numRequests: 1 },
-    });
-    mockTargetProvider.callApi.mockResolvedValue({
-      output: 'Completed synthetic response',
-      tokenUsage: { total: 13, numRequests: 1 },
-    });
-    let finishGrading!: () => void;
-    mockGrader.getResult.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finishGrading = () => resolve({ grade: { pass: true, score: 1 } });
-        }),
-    );
-    const test: AtomicTestCase = {
-      assert: [{ type: 'promptfoo:redteam:pii' }],
-      metadata: { pluginId: 'pii' },
-    };
-    const provider = new HydraProvider({ injectVar: 'input', maxTurns: 3 });
-    const attack = provider.callApi(
-      '',
-      {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'Synthetic objective' },
-        prompt: { raw: '{{input}}', label: 'test' },
-        test,
-      },
-      {
-        abortSignal: controller.signal,
-        onProgress: (response) => snapshots.push(JSON.parse(JSON.stringify(response))),
-      },
-    );
-    await vi.waitFor(() => expect(mockGrader.getResult).toHaveBeenCalledOnce());
-    expect(snapshots.at(-1)).toMatchObject({
-      output: 'Completed synthetic response',
-      tokenUsage: { numRequests: 1, total: 13, attacker: { numRequests: 1, total: 7 } },
-      metadata: {
-        redteamHistory: [{ prompt: 'Synthetic probe', output: 'Completed synthetic response' }],
-      },
-    });
-    expect(snapshots.at(-1)?.metadata?.redteamHistory[0].graderPassed).toBeUndefined();
-    const checkpointCount = snapshots.length;
-    controller.abort();
-    const rejected = expect(attack).rejects.toThrow();
-    finishGrading();
-    await rejected;
-    expect(snapshots).toHaveLength(checkpointCount);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
-    expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
-  });
-
-  it('checkpoints a completed target response before its pacing delay', async () => {
-    vi.useFakeTimers();
-    try {
-      const controller = new AbortController();
-      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-      mockAgentProvider.callApi.mockResolvedValue({ output: 'Synthetic probe' });
-      mockTargetProvider.delay = 50;
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: 'Completed response',
-        tokenUsage: { numRequests: 1, total: 11 },
-      });
-      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
-      const attack = provider.callApi(
-        '',
-        {
-          originalProvider: mockTargetProvider,
-          vars: { input: 'Synthetic objective' },
-          prompt: { raw: '{{input}}', label: 'test' },
-        },
-        {
-          abortSignal: controller.signal,
-          onProgress: (response) => snapshots.push(structuredClone(response)),
-        },
-      );
-      const stopped = expect(attack).rejects.toThrow();
-      await vi.advanceTimersByTimeAsync(10);
-      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
-      expect(snapshots.at(-1)).toMatchObject({
-        output: 'Completed response',
-        tokenUsage: { numRequests: 1, total: 11 },
-        metadata: { redteamHistory: [{ output: 'Completed response' }] },
-      });
-      controller.abort();
-      await vi.advanceTimersByTimeAsync(50);
-      await stopped;
-      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('retains completed grading usage and target media while the next attack is pending', async () => {
-    const controller = new AbortController();
-    const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-    let finishNextAttack!: () => void;
-    mockAgentProvider.callApi
-      .mockResolvedValueOnce({ output: 'Synthetic probe' })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            finishNextAttack = () => resolve({ output: 'Late probe' });
-          }),
-      );
-    const mediaResponse: shared.TargetResponse = {
-      output: JSON.stringify({ data: [{ b64_json: 'Yg==' }] }),
-      tokenUsage: { numRequests: 1, total: 11 },
-      audio: { data: 'YQ==', format: 'wav' },
-      image: { data: 'Yg==', format: 'png' },
-      isBase64: true,
-      format: 'json',
-      images: [{ data: 'Yg==', mimeType: 'image/png' }],
-    };
-    mockTargetProvider.callApi.mockResolvedValue(mediaResponse);
-    mockGrader.getResult.mockResolvedValue({
-      grade: { pass: true, score: 1, tokensUsed: { total: 23, numRequests: 1 } },
-    });
-    const test: AtomicTestCase = {
-      assert: [{ type: 'promptfoo:redteam:pii' }],
-      metadata: { pluginId: 'pii' },
-    };
-    const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
-    const attack = provider.callApi(
-      '',
-      {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'Synthetic objective' },
-        prompt: { raw: '{{input}}', label: 'test' },
-        test,
-      },
-      {
-        abortSignal: controller.signal,
-        onProgress: (response) => snapshots.push(structuredClone(response)),
-      },
-    );
-    await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2));
-    expect(snapshots.at(-1)).toMatchObject({
-      images: [{ data: 'Yg==', mimeType: 'image/png' }],
-      tokenUsage: { numRequests: 1, total: 11, assertions: { total: 23, numRequests: 1 } },
-      metadata: {
-        redteamHistory: [
-          {
-            isBase64: true,
-            graderPassed: true,
-            outputAudio: { data: 'YQ==', format: 'wav' },
-            outputImage: { data: 'Yg==', format: 'png' },
-          },
-        ],
-      },
-    });
-    expect(
-      snapshots.some((snapshot) =>
-        snapshot.metadata?.messages?.some(
-          (message: { isBase64?: boolean; content: string }) =>
-            message.isBase64 === true && message.content === mediaResponse.output,
-        ),
-      ),
-    ).toBe(true);
-    controller.abort();
-    const stopped = expect(attack).rejects.toThrow();
-    finishNextAttack();
-    await stopped;
-    expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
-  });
-
-  it.each(['audio', 'images'] as const)(
-    'retains externalized %s from an earlier completed turn after a text-only turn',
-    async (mediaKind) => {
-      await runDbMigrations();
-      const blobStorage = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
-      try {
-        const controller = new AbortController();
-        const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-        const media = Buffer.alloc(2048, 1);
-        let finishNextAttack!: () => void;
-        mockAgentProvider.callApi
-          .mockResolvedValueOnce({ output: 'First probe' })
-          .mockResolvedValueOnce({ output: 'Second probe' })
-          .mockImplementationOnce(
-            () =>
-              new Promise((resolve) => {
-                finishNextAttack = () => resolve({ output: 'Late probe' });
-              }),
-          );
-        mockTargetProvider.callApi
-          .mockResolvedValueOnce({
-            output: 'Completed media response',
-            ...(mediaKind === 'audio'
-              ? { audio: { data: media.toString('base64'), format: 'wav' } }
-              : {
-                  images: [
-                    {
-                      data: 'data:image/png;base64,' + media.toString('base64'),
-                      mimeType: 'image/png',
-                    },
-                  ],
-                }),
-          })
-          .mockResolvedValueOnce({ output: 'Completed text response' });
-        const test: AtomicTestCase = {
-          assert: [{ type: 'promptfoo:redteam:pii' }],
-          metadata: { pluginId: 'pii' },
-        };
-        const attack = new HydraProvider({ injectVar: 'input', maxTurns: 3 }).callApi(
-          '',
-          {
-            originalProvider: mockTargetProvider,
-            vars: { input: 'Synthetic objective' },
-            prompt: { raw: '{{input}}', label: 'test' },
-            test,
-          },
-          {
-            abortSignal: controller.signal,
-            onProgress: (response) => snapshots.push(structuredClone(response)),
-          },
-        );
-        await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3));
-        const checkpoint = snapshots.at(-1)!;
-        expect(checkpoint.metadata?.redteamHistory).toHaveLength(2);
-        const storedMedia =
-          mediaKind === 'audio'
-            ? checkpoint.metadata?.redteamHistory[0].outputAudio
-            : checkpoint.metadata?.redteamHistory[0].images?.[0];
-        expect(storedMedia).toMatchObject({
-          ...(mediaKind === 'audio' ? { format: 'wav' } : { mimeType: 'image/png' }),
-          blobRef: { uri: expect.stringMatching(/^promptfoo:\/\/blob\//), sizeBytes: 2048 },
-        });
-        expect(storedMedia.data).toBeUndefined();
-        expect(checkpoint[mediaKind]).toBeUndefined();
-        expect((await getBlobByHash(storedMedia.blobRef.hash)).data).toEqual(media);
-        const checkpointCount = snapshots.length;
-        controller.abort();
-        const stopped = expect(attack).rejects.toThrow();
-        finishNextAttack();
-        await stopped;
-        expect(snapshots).toHaveLength(checkpointCount);
-      } finally {
-        blobStorage.mockRestore();
-      }
-    },
-  );
-
-  it('checkpoints completed transform usage while the target is pending', async () => {
-    const controller = new AbortController();
-    const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-    mockAgentProvider.callApi.mockResolvedValue({
-      output: 'Synthetic probe',
-      tokenUsage: { total: 3, numRequests: 1 },
-    });
-    mockApplyRuntimeTransforms.mockResolvedValue({
-      prompt: 'Transformed probe',
-      originalPrompt: 'Synthetic probe',
-      tokenUsage: { total: 17, numRequests: 1 },
-    });
-    let finishTarget!: () => void;
-    mockTargetProvider.callApi.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finishTarget = () => resolve({ output: 'Late target response' });
-        }),
-    );
-    const provider = new HydraProvider({
-      injectVar: 'input',
-      maxTurns: 1,
-      _perTurnLayers: ['base64'],
-    });
-    const attack = provider.callApi(
-      '',
-      {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'Synthetic objective' },
-        prompt: { raw: '{{input}}', label: 'test' },
-      },
-      {
-        abortSignal: controller.signal,
-        onProgress: (response) => snapshots.push(structuredClone(response)),
-      },
-    );
-    await vi.waitFor(() => expect(mockTargetProvider.callApi).toHaveBeenCalledOnce());
-    expect(snapshots.at(-1)).toMatchObject({
-      tokenUsage: { numRequests: 0, attacker: { total: 20, numRequests: 2 } },
-      metadata: { redteamHistory: [] },
-    });
-    controller.abort();
-    const stopped = expect(attack).rejects.toThrow();
-    finishTarget();
-    await stopped;
   });
 
   describe('constructor', () => {
@@ -798,9 +224,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
@@ -811,9 +235,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw the explicit-disabled error when a disable flag is set', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       expect(() => {
@@ -821,19 +243,6 @@ describe('HydraProvider', () => {
       }).toThrow(
         /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
-    });
-
-    it('should warn when backtracking is enabled in stateful mode', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      new HydraProvider({
-        injectVar: 'input',
-        stateful: true,
-        maxBacktracks: 5,
-      });
-
-      // Logger.warn should have been called
-      warnSpy.mockRestore();
     });
 
     it('should create agent provider with correct config', () => {
@@ -1022,6 +431,132 @@ describe('HydraProvider', () => {
         message: 'Successful attack message',
         response: 'Here is how to do harmful thing',
       });
+    });
+
+    it.each(
+      [true, false].flatMap((pass) =>
+        [false, true].flatMap((freshGradingFails) =>
+          ['hydra', 'goblin'].map((strategy) => ({ pass, freshGradingFails, strategy })),
+        ),
+      ),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails, strategy }) => {
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: 'Successful attack message',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'Here is how to do harmful thing',
+          tokenUsage: { total: 50, prompt: 25, completion: 25 },
+        });
+
+        const getResult = vi
+          .fn()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: false,
+              score: 0,
+              reason: 'Grading provider returned 503',
+              metadata: { graderError: true },
+            },
+          })
+          .mockResolvedValueOnce({ grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' } })
+          .mockRejectedValue(new Error('Final grading failed'));
+        mockGetGraderById.mockReturnValue({ getResult } as any);
+
+        const Provider =
+          strategy === 'goblin'
+            ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+            : HydraProvider;
+        const provider = new Provider({
+          injectVar: 'input',
+          maxTurns: 2,
+        });
+
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [
+              {
+                type: 'promptfoo:redteam:pii',
+                ...(freshGradingFails && { transform: (output: unknown) => output }),
+              },
+            ],
+            metadata: { goal: 'test goal', pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+            provider: `promptfoo:redteam:${strategy}`,
+          } as any,
+        };
+
+        const result = await provider.callApi('', context);
+
+        expect(result.metadata?.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = runAssertions({
+          prompt: 'test prompt',
+          test: context.test!,
+          providerResponse: result,
+        });
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
+        expect(result.metadata).toHaveProperty(`${strategy}Result`, !pass);
+        expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
+        expect(getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(mockAgentProvider.callApi.mock.calls[1][0])).not.toHaveProperty(
+          'lastGraderResult',
+        );
+      },
+    );
+
+    it.each(
+      [1, 2].flatMap((turns) => ['hydra', 'goblin'].map((strategy) => ({ turns, strategy }))),
+    )('resolves only the last tagged-prompt grading error: %j', async ({ turns, strategy }) => {
+      mockAgentProvider.callApi.mockResolvedValue({ output: '<Prompt>attack</Prompt>' });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Target response' });
+      let calls = 0;
+      const getResult = vi.fn(async () => ({
+        grade:
+          ++calls <= turns
+            ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+            : { pass: true, score: 1, reason: 'Recovered' },
+      }));
+      mockGetGraderById.mockReturnValue({ getResult });
+      const Provider =
+        strategy === 'goblin'
+          ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+          : HydraProvider;
+      const provider = new Provider({ injectVar: 'input', maxTurns: turns });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+        metadata: { pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+        provider: `promptfoo:redteam:${strategy}`,
+      };
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
+      };
+      const result = await provider.callApi('', context);
+      expect(result.metadata?.redteamHistory[0].prompt).toBe('<Prompt>attack</Prompt>');
+      expect(result.metadata?.redteamFinalPrompt).toBe('attack');
+      const grading = await runAssertions({
+        prompt: 'test',
+        test: context.test!,
+        providerResponse: result,
+      });
+      expect(getResult).toHaveBeenCalledTimes(turns + 1);
+      expect(grading).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
     });
 
     it('should handle multiple turns until max turns reached', async () => {
@@ -2343,119 +1878,6 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - scan learning', () => {
-    it.each([false, true])(
-      'checkpoints the completed pass=%s verdict before cancellable learning',
-      async (pass) => {
-        const controller = new AbortController();
-        const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-        let ready!: () => void;
-        const learningStarted = new Promise<void>((resolve) => {
-          ready = resolve;
-        });
-        const output = pass ? 'Completed safe response' : 'c3ludGhldGljLWltYWdl';
-        const assertion = { type: 'promptfoo:redteam:pii' } as const;
-        const test: AtomicTestCase = { assert: [assertion], metadata: { pluginId: 'pii' } };
-        mockTargetProvider.callApi.mockResolvedValue({
-          output,
-          ...(!pass && { isBase64: true, format: 'png' }),
-          tokenUsage: { total: 5, numRequests: 1 },
-        });
-        mockGrader.getResult.mockResolvedValue({
-          grade: {
-            pass,
-            score: pass ? 1 : 0,
-            reason: 'Completed fixture verdict',
-            tokensUsed: { total: 11, numRequests: 1 },
-          },
-        });
-        mockAgentProvider.callApi.mockImplementation(async (prompt, _context, options) => {
-          if (!JSON.parse(prompt).testComplete) {
-            return {
-              output: 'Synthetic probe',
-              tokenUsage: { total: 3, numRequests: 1 },
-            };
-          }
-          ready();
-          return new Promise<never>((_resolve, reject) => {
-            options?.abortSignal?.addEventListener(
-              'abort',
-              () => reject(options.abortSignal?.reason),
-              { once: true },
-            );
-          });
-        });
-        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
-        const attack = provider.callApi(
-          '',
-          {
-            originalProvider: mockTargetProvider,
-            evaluationId: 'learning-checkpoint-fixture',
-            vars: { input: 'Synthetic objective' },
-            prompt: { raw: '{{input}}', label: 'fixture' },
-            test,
-          },
-          {
-            abortSignal: controller.signal,
-            onProgress: (response) => snapshots.push(structuredClone(response)),
-          },
-        );
-        await learningStarted;
-        const snapshot = snapshots.at(-1)!;
-        expect(snapshot.output).toBe(output);
-        expect(snapshot.metadata).toMatchObject({
-          hydraResult: !pass,
-          stopReason: pass ? 'Max turns reached' : 'Grader failed',
-          totalSuccessfulAttacks: pass ? 0 : 1,
-          storedGraderResult: {
-            pass,
-            score: pass ? 1 : 0,
-            reason: 'Completed fixture verdict',
-            metadata: {
-              redteamGradingAssertionHash: getGradingAssertionHash(assertion),
-              redteamGradingInputHash: getGradingInputHash(
-                'Synthetic probe',
-                output,
-                undefined,
-                'pii',
-              ),
-            },
-          },
-          redteamHistory: [expect.objectContaining({ output, graderPassed: pass })],
-        });
-        expect(snapshot.tokenUsage).toMatchObject({
-          total: 5,
-          numRequests: 1,
-          attacker: { total: 3 },
-          assertions: { total: 11 },
-        });
-        if (!pass) {
-          expect(snapshot.metadata?.successfulAttacks[0]).toMatchObject({
-            response: output,
-            isBase64: true,
-          });
-          const stripped = sanitizeResultForJsonlArtifact(
-            createEvaluateResult({ response: snapshot, metadata: snapshot.metadata }),
-            {
-              shouldStripMetadata: false,
-              shouldStripPromptText: false,
-              shouldStripResponseOutput: true,
-              shouldStripTestVars: false,
-              shouldStripGradingResult: false,
-            },
-          );
-          expect(stripped.response?.metadata?.successfulAttacks[0].response).toBe(
-            '[output stripped]',
-          );
-          expect(snapshot.metadata?.successfulAttacks[0].response).toBe(output);
-        }
-        const snapshotCount = snapshots.length;
-        controller.abort(new Error('Cancel pending learning'));
-        await expect(attack).rejects.toThrow('Cancel pending learning');
-        expect(snapshots).toHaveLength(snapshotCount);
-        expect(mockGrader.getResult).toHaveBeenCalledOnce();
-      },
-    );
-
     it('includes aggregated attack-generation and scan-learning model usage', async () => {
       mockAgentProvider.callApi
         .mockResolvedValueOnce({
@@ -2859,16 +2281,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
       });
 
@@ -2923,16 +2336,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
         stateful: true,
       });
@@ -2986,16 +2390,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
         stateful: true,
       });
@@ -3428,17 +2823,7 @@ describe('HydraProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -3488,17 +2873,7 @@ describe('HydraProvider', () => {
     });
 
     it('skips trace retrieval when a Hydra target response came from cache', async () => {
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -3528,17 +2903,7 @@ describe('HydraProvider', () => {
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -3576,17 +2941,7 @@ describe('HydraProvider', () => {
 
     it('should call formatTraceSummary when tracing is enabled and trace is fetched', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
@@ -3628,17 +2983,7 @@ describe('HydraProvider', () => {
 
     it('should call formatTraceForMetadata when trace is stored in metadata', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
@@ -3680,17 +3025,7 @@ describe('HydraProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);
@@ -3730,17 +3065,7 @@ describe('HydraProvider', () => {
 
     it('should include trace data in redteamHistory entries when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',

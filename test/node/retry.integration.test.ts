@@ -12,8 +12,12 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
-import { recalculatePromptMetrics } from '../../src/node/promptMetrics';
-import { deleteErrorResults, getErrorResultIds, retryCommand } from '../../src/node/retry';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+  retryCommand,
+} from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
 
@@ -518,21 +522,11 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
-      let resultWriteFailed = false;
-      vi.spyOn(Eval.prototype, 'addResult').mockImplementationOnce(async () => {
-        resultWriteFailed = true;
-        throw new Error('simulated result persistence failure');
-      });
-      const fetchResultsBatched = Eval.prototype.fetchResultsBatched;
-      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementation(async function* (
-        this: Eval,
-        ...args
-      ) {
-        // Startup reconciliation must succeed; fail the artifact restore after its write fails.
-        if (resultWriteFailed) {
-          throw new Error('simulated artifact restore failure');
-        }
-        yield* fetchResultsBatched.call(this, ...args);
+      vi.spyOn(Eval.prototype, 'addResult').mockRejectedValueOnce(
+        new Error('simulated result persistence failure'),
+      );
+      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementationOnce(async function* () {
+        throw new Error('simulated artifact restore failure');
       });
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
@@ -1240,8 +1234,8 @@ describe('retry command', () => {
 
       await recalculatePromptMetrics(evalRecord);
 
-      // Verify the metric projection retains the streaming batch size.
-      expect(fetchSpy).toHaveBeenCalledWith(1000, { projection: 'metrics' });
+      // Verify fetchResultsBatched was called with batch size 1000
+      expect(fetchSpy).toHaveBeenCalledWith(1000);
       expect(fetchSpy).toHaveBeenCalledTimes(1);
 
       fetchSpy.mockRestore();

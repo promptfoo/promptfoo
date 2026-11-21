@@ -60,11 +60,9 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
 
+A grader transport or parsing error is not recorded as a successful attack. Hydra continues within its configured turn limit to seek a valid verdict. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error.
+
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
-
-If a test case times out or is cancelled, its error result retains completed target responses and known probe/token usage. The partial history can include responses that were not yet graded; it does not establish that the target is safe. A completed internal grader verdict is retained with its matching response even if the later learning request is interrupted; the row still reports an execution error. Work still in flight when cancellation occurs is not counted as completed evidence. After a CLI pause, `promptfoo eval --resume <evalId>` runs cells that have no completed work. Completed target or strategy work is retained and is not automatically replayed; use `--retry-errors` to rerun its error rows or per-test timeouts. Programmatic caller cancellation can leave resumable checkpoints, which are replaced when a new outcome is saved. Explicit retries and resumed attempts may produce different findings. If a `--retry-errors` run is paused, use `--retry-errors` again. Resume rebuilds prompt totals and expression-derived metrics from saved results. Function-valued derived metrics are not replayed; after an aggregate write failure, they retain their last saved values.
-
-Interrupted checkpoints also retain cumulative target `cost` and `incurredCost` when provided. Cached target responses use zero incurred cost unless the provider reports it explicitly. Unknown costs remain unknown. Normal strategy completion still does not aggregate target costs.
 
 ## Hydra vs Other Agentic Strategies
 

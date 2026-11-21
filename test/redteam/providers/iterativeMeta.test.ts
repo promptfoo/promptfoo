@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBlobByHash } from '../../../src/blobs';
-import * as blobExtractor from '../../../src/blobs/extractor';
+import { runAssertions } from '../../../src/assertions/index';
 import { runEval } from '../../../src/evaluator';
-import { runDbMigrations } from '../../../src/migrate';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
 } from '../../../src/redteam/providers/iterativeMeta';
@@ -15,16 +13,15 @@ import {
   createTokenUsage,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createMockTracingOptions } from '../../factories/tracing';
 import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockGetTargetResponse = vi.hoisted(() =>
-  vi.fn<typeof import('../../../src/redteam/providers/shared').getTargetResponse>(),
-);
 const mockGetGradingProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetTargetResponse = vi.hoisted(() => vi.fn<(...args: any[]) => Promise<any>>());
 
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -70,19 +67,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
@@ -158,288 +143,6 @@ describe('RedteamIterativeMetaProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-  });
-
-  it('checkpoints a completed probe while its grader is still running', async () => {
-    const controller = new AbortController();
-    const snapshots: ProviderResponse[] = [];
-    mockGetTargetResponse.mockResolvedValue({
-      output: 'Completed synthetic response',
-      tokenUsage: { numRequests: 1, total: 13 },
-    });
-    let finishGrading!: () => void;
-    const grader = {
-      getResult: vi.fn(
-        () =>
-          new Promise((resolve) => {
-            finishGrading = () => resolve({ grade: { pass: true, score: 1 } });
-          }),
-      ),
-    };
-    mockGetGraderById.mockReturnValue(grader);
-    const attack = runMetaAgentRedteam({
-      filters: undefined,
-      injectVar: 'query',
-      numIterations: 3,
-      options: {
-        abortSignal: controller.signal,
-        onProgress: (response) => snapshots.push(JSON.parse(JSON.stringify(response))),
-      },
-      prompt: { raw: '{{query}}', label: 'test' },
-      agentProvider: mockAgentProvider,
-      gradingProvider: mockGradingProvider,
-      targetProvider: mockTargetProvider,
-      test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
-      vars: { query: 'Synthetic objective' },
-    });
-    await vi.waitFor(() => expect(grader.getResult).toHaveBeenCalledOnce());
-    expect(snapshots.at(-1)).toMatchObject({
-      output: 'Completed synthetic response',
-      tokenUsage: { numRequests: 1, total: 13, attacker: { numRequests: 1, total: 100 } },
-      metadata: { redteamHistory: [{ output: 'Completed synthetic response' }] },
-    });
-    expect(snapshots.at(-1)?.metadata?.redteamHistory[0].graderPassed).toBeUndefined();
-    const checkpointCount = snapshots.length;
-    controller.abort();
-    const rejected = expect(attack).rejects.toThrow();
-    finishGrading();
-    await rejected;
-    expect(snapshots).toHaveLength(checkpointCount);
-    expect(mockGetTargetResponse).toHaveBeenCalledOnce();
-    expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
-  });
-
-  it('checkpoints a completed target response before its pacing delay', async () => {
-    const actual = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
-      '../../../src/redteam/providers/shared',
-    );
-    mockGetTargetResponse.mockImplementation(actual.getTargetResponse);
-    vi.useFakeTimers();
-    try {
-      const controller = new AbortController();
-      const snapshots: ProviderResponse[] = [];
-      mockTargetProvider.delay = 50;
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: 'Completed response',
-        tokenUsage: { numRequests: 1, total: 11 },
-      });
-      const attack = runMetaAgentRedteam({
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 2,
-        options: {
-          abortSignal: controller.signal,
-          onProgress: (response) => snapshots.push(structuredClone(response)),
-        },
-        prompt: { raw: '{{query}}', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        vars: { query: 'Synthetic objective' },
-      });
-      const stopped = expect(attack).rejects.toThrow();
-      await vi.advanceTimersByTimeAsync(10);
-      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
-      expect(snapshots.at(-1)).toMatchObject({
-        output: 'Completed response',
-        tokenUsage: { numRequests: 1, total: 11 },
-        metadata: { redteamHistory: [{ output: 'Completed response' }] },
-      });
-      controller.abort();
-      await vi.advanceTimersByTimeAsync(50);
-      await stopped;
-      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('retains completed grading usage and target media while the next attack is pending', async () => {
-    const controller = new AbortController();
-    const snapshots: ProviderResponse[] = [];
-    let finishNextAttack!: () => void;
-    mockAgentProvider.callApi
-      .mockResolvedValueOnce({ output: 'Synthetic probe' })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            finishNextAttack = () => resolve({ output: 'Late probe' });
-          }),
-      );
-    mockGetTargetResponse.mockResolvedValue({
-      output: JSON.stringify({ data: [{ b64_json: 'Yg==' }] }),
-      tokenUsage: { numRequests: 1, total: 11 },
-      audio: { data: 'YQ==', format: 'wav' },
-      image: { data: 'Yg==', format: 'png' },
-      isBase64: true,
-      format: 'json',
-      images: [{ data: 'Yg==', mimeType: 'image/png' }],
-    });
-    mockGetGraderById.mockReturnValue({
-      getResult: vi.fn().mockResolvedValue({
-        grade: { pass: true, score: 1, tokensUsed: { total: 23, numRequests: 1 } },
-      }),
-    });
-    const attack = runMetaAgentRedteam({
-      filters: undefined,
-      injectVar: 'query',
-      numIterations: 2,
-      options: {
-        abortSignal: controller.signal,
-        onProgress: (response) => snapshots.push(structuredClone(response)),
-      },
-      prompt: { raw: '{{query}}', label: 'test' },
-      agentProvider: mockAgentProvider,
-      gradingProvider: mockGradingProvider,
-      targetProvider: mockTargetProvider,
-      test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
-      vars: { query: 'Synthetic objective' },
-    });
-    await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2));
-    expect(snapshots.at(-1)).toMatchObject({
-      images: [{ data: 'Yg==', mimeType: 'image/png' }],
-      tokenUsage: { numRequests: 1, total: 11, assertions: { total: 23, numRequests: 1 } },
-      metadata: {
-        redteamHistory: [
-          {
-            isBase64: true,
-            graderPassed: true,
-            outputAudio: { data: 'YQ==', format: 'wav' },
-            outputImage: { data: 'Yg==', format: 'png' },
-          },
-        ],
-      },
-    });
-    controller.abort();
-    const stopped = expect(attack).rejects.toThrow();
-    finishNextAttack();
-    await stopped;
-    expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
-  });
-
-  it.each(['audio', 'images'] as const)(
-    'retains externalized %s from an earlier completed turn after a text-only turn',
-    async (mediaKind) => {
-      await runDbMigrations();
-      const blobStorage = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
-      try {
-        const controller = new AbortController();
-        const snapshots: import('../../../src/types/index').ProviderResponse[] = [];
-        const media = Buffer.alloc(2048, 1);
-        let finishNextAttack!: () => void;
-        mockAgentProvider.callApi
-          .mockResolvedValueOnce({ output: 'First probe' })
-          .mockResolvedValueOnce({ output: 'Second probe' })
-          .mockImplementationOnce(
-            () =>
-              new Promise((resolve) => {
-                finishNextAttack = () => resolve({ output: 'Late probe' });
-              }),
-          );
-        mockGetTargetResponse
-          .mockResolvedValueOnce({
-            output: 'Completed media response',
-            ...(mediaKind === 'audio'
-              ? { audio: { data: media.toString('base64'), format: 'wav' } }
-              : {
-                  images: [
-                    {
-                      data: 'data:image/png;base64,' + media.toString('base64'),
-                      mimeType: 'image/png',
-                    },
-                  ],
-                }),
-          })
-          .mockResolvedValueOnce({ output: 'Completed text response' });
-        const attack = runMetaAgentRedteam({
-          filters: undefined,
-          injectVar: 'query',
-          numIterations: 3,
-          options: {
-            abortSignal: controller.signal,
-            onProgress: (response) => snapshots.push(structuredClone(response)),
-          },
-          prompt: { raw: '{{query}}', label: 'test' },
-          agentProvider: mockAgentProvider,
-          gradingProvider: mockGradingProvider,
-          targetProvider: mockTargetProvider,
-          test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
-          vars: { query: 'Synthetic objective' },
-        });
-        await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3));
-        const checkpoint = snapshots.at(-1)!;
-        expect(checkpoint.metadata?.redteamHistory).toHaveLength(2);
-        const storedMedia =
-          mediaKind === 'audio'
-            ? checkpoint.metadata?.redteamHistory[0].outputAudio
-            : checkpoint.metadata?.redteamHistory[0].images?.[0];
-        expect(storedMedia).toMatchObject({
-          ...(mediaKind === 'audio' ? { format: 'wav' } : { mimeType: 'image/png' }),
-          blobRef: { uri: expect.stringMatching(/^promptfoo:\/\/blob\//), sizeBytes: 2048 },
-        });
-        expect(storedMedia.data).toBeUndefined();
-        expect(checkpoint[mediaKind]).toBeUndefined();
-        expect((await getBlobByHash(storedMedia.blobRef.hash)).data).toEqual(media);
-        const checkpointCount = snapshots.length;
-        controller.abort();
-        const stopped = expect(attack).rejects.toThrow();
-        finishNextAttack();
-        await stopped;
-        expect(snapshots).toHaveLength(checkpointCount);
-      } finally {
-        blobStorage.mockRestore();
-      }
-    },
-  );
-
-  it('checkpoints completed transform usage while the target is pending', async () => {
-    const transforms = await import('../../../src/redteam/shared/runtimeTransform');
-    const transformSpy = vi.spyOn(transforms, 'applyRuntimeTransforms').mockResolvedValue({
-      prompt: 'Transformed probe',
-      originalPrompt: 'Synthetic probe',
-      tokenUsage: { total: 17, numRequests: 1 },
-    });
-    try {
-      const controller = new AbortController();
-      const snapshots: ProviderResponse[] = [];
-      mockAgentProvider.callApi.mockResolvedValue({
-        output: 'Synthetic probe',
-        tokenUsage: { total: 3, numRequests: 1 },
-      });
-      let finishTarget!: () => void;
-      mockGetTargetResponse.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            finishTarget = () => resolve({ output: 'Late target response' });
-          }),
-      );
-      const attack = runMetaAgentRedteam({
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 1,
-        perTurnLayers: ['base64'],
-        options: {
-          abortSignal: controller.signal,
-          onProgress: (response) => snapshots.push(structuredClone(response)),
-        },
-        prompt: { raw: '{{query}}', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        vars: { query: 'Synthetic objective' },
-      });
-      await vi.waitFor(() => expect(mockGetTargetResponse).toHaveBeenCalledOnce());
-      expect(snapshots.at(-1)).toMatchObject({
-        tokenUsage: { numRequests: 0, attacker: { total: 20, numRequests: 2 } },
-        metadata: { redteamHistory: [] },
-      });
-      controller.abort();
-      const stopped = expect(attack).rejects.toThrow();
-      finishTarget();
-      await stopped;
-    } finally {
-      transformSpy.mockRestore();
-    }
   });
 
   describe('constructor', () => {
@@ -793,6 +496,127 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.vulnerabilityAchieved).toBe(true);
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
+
+    it.each(
+      [true, false].flatMap((pass) => [
+        { pass, freshGradingFails: false },
+        { pass, freshGradingFails: true },
+      ]),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails }) => {
+        const mockGrader = {
+          getResult: vi
+            .fn<any>()
+            .mockResolvedValueOnce({
+              grade: {
+                pass: false,
+                score: 0,
+                reason: 'Grading provider returned 503',
+                metadata: { graderError: true },
+              },
+            })
+            .mockResolvedValueOnce({
+              grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' },
+            })
+            .mockRejectedValue(new Error('Final grading failed')),
+        };
+
+        mockGetGraderById.mockReturnValue(mockGrader);
+
+        const test: AtomicTestCase = {
+          vars: { query: 'test' },
+          assert: [
+            {
+              type: 'promptfoo:redteam:harmful',
+              metric: 'Harmful',
+              ...(freshGradingFails && { transform: (output: unknown) => output }),
+            },
+          ],
+          metadata: { pluginId: 'harmful', strategyId: 'jailbreak:meta' },
+          provider: 'promptfoo:redteam:iterative:meta',
+        };
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: 'test', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 2,
+          options: undefined,
+          prompt: { raw: 'test', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { query: 'test' },
+        });
+
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = runAssertions({ prompt: 'test', test, providerResponse: result });
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
+        expect(result.metadata.vulnerabilityAchieved).toBe(!pass);
+        expect(result.metadata.finalIteration).toBe(2);
+        expect(mockGrader.getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
+        const nextRequest = JSON.parse(mockAgentProvider.callApi.mock.calls[1][0]);
+        expect(nextRequest.lastAttempt).not.toHaveProperty('graderPassed');
+        expect(nextRequest.lastAttempt.graderReason).toBe('Grading provider returned 503');
+      },
+    );
+
+    it.each([1, 2])(
+      'resolves only the last layered grading error after %i turns',
+      async (turns) => {
+        let calls = 0;
+        const getResult = vi.fn(async () => ({
+          grade:
+            ++calls <= turns
+              ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+              : { pass: true, score: 1, reason: 'Recovered' },
+        }));
+        mockGetGraderById.mockReturnValue({ getResult });
+        const test: AtomicTestCase = {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+          metadata: { pluginId: 'pii', strategyId: 'jailbreak:meta' },
+          provider: 'promptfoo:redteam:iterative:meta',
+        };
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: test.vars!,
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+            test,
+          },
+          injectVar: 'query',
+          numIterations: turns,
+          filters: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: test.vars!,
+          perTurnLayers: ['base64'],
+        });
+        expect(result.metadata.redteamFinalPrompt).not.toBe(
+          result.metadata.redteamHistory[0].prompt,
+        );
+        const grading = await runAssertions({ prompt: 'test', test, providerResponse: result });
+        expect(getResult).toHaveBeenCalledTimes(turns + 1);
+        expect(grading).toMatchObject({ pass: true, score: 1 });
+        expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
+      },
+    );
 
     it('passes target provider raw response into the grader', async () => {
       const mockGrader = {
@@ -1822,17 +1646,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -1876,17 +1690,7 @@ describe('RedteamIterativeMetaProvider', () => {
     });
 
     it('skips trace retrieval when an iterative-meta target response came from cache', async () => {
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
 
       const result = await runMetaAgentRedteam({
@@ -1914,17 +1718,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       const result = await runMetaAgentRedteam({
         context: {
@@ -2072,17 +1866,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);

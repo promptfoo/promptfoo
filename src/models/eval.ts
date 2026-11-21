@@ -14,7 +14,6 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
@@ -30,6 +29,7 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
@@ -37,6 +37,7 @@ import {
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { calculateRepeatStability, RepeatStabilityCalculator } from '../util/eval/repeatStability';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
@@ -62,15 +63,16 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
-  type EvalResultMetrics,
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
+  persistRepeatMetadata,
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
+import { generateIdFromPrompt } from './prompt';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -96,6 +98,46 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
+
+export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+  for (const prompt of prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = generateIdFromPrompt(prompt);
+    await tx
+      .insert(promptsTable)
+      .values({ id: promptId, prompt: label })
+      .onConflictDoNothing()
+      .run();
+    await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
+}
+
+export async function insertEvalDatasetAndTags(
+  tx: EvalRelationDb,
+  evalId: string,
+  dataset: typeof datasetsTable.$inferInsert,
+  config: Pick<UnifiedConfig, 'tags'>,
+) {
+  await tx.insert(datasetsTable).values(dataset).onConflictDoNothing().run();
+  await tx
+    .insert(evalsToDatasetsTable)
+    .values({ evalId, datasetId: dataset.id })
+    .onConflictDoNothing()
+    .run();
+  logger.debug(`Inserting dataset ${dataset.id}`);
+
+  if (config.tags) {
+    for (const [name, value] of Object.entries(config.tags)) {
+      const tagId = sha256(`${name}:${value}`);
+      await tx.insert(tagsTable).values({ id: tagId, name, value }).onConflictDoNothing().run();
+      await tx.insert(evalsToTagsTable).values({ evalId, tagId }).onConflictDoNothing().run();
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -345,6 +387,7 @@ export default class Eval {
   // instance is what lets later grading build on earlier grading instead of a stale row.
   private failedEvalResults = new Map<string, EvalResult>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
+  private observedRepeatedResults = false;
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -524,30 +567,7 @@ export default class Eval {
         })
         .run();
 
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
-
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
+      await insertEvalPrompts(tx, evalId, renderedPrompts);
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
@@ -555,7 +575,11 @@ export default class Eval {
           .values(
             opts.results?.map((r) => ({
               ...r,
-              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              metadata: persistTraceMetadata(
+                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+                r.traceId,
+                r.evaluationId,
+              ),
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -564,52 +588,7 @@ export default class Eval {
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: config.tests,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
-
-          await tx
-            .insert(tagsTable)
-            .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          await tx
-            .insert(evalsToTagsTable)
-            .values({
-              evalId,
-              tagId,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          logger.debug(`Inserting tag ${tagId}`);
-        }
-      }
+      await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: config.tests }, config);
     });
 
     invalidateEvaluationCache(evalId);
@@ -760,7 +739,10 @@ export default class Eval {
     return convertResultsToTable(await this.toResultsFile());
   }
 
-  async addResult(result: EvaluateResult, options?: { replaceId?: string }) {
+  async addResult(result: EvaluateResult) {
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatedResults = true;
+    }
     const httpStatus = result.response?.metadata?.http?.status;
     if (
       this.observedTargetErrorStatus === undefined &&
@@ -771,30 +753,13 @@ export default class Eval {
     }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
-      ...(options?.replaceId && { replaceId: options.replaceId }),
     });
-    // A later resume can reuse this Eval instance after a persistence failure. This saved
-    // row supersedes all recovery copies, including checkpoints buffered after another failure.
-    const key = getResultIndexKey(result);
-    this.failedResults.delete(key);
-    this.failedEvalResults.delete(key);
-    this.finalJsonlResults.delete(key);
     if (!this.persisted) {
       // We're only going to keep results in memory if the eval isn't persisted in the database
       // This is to avoid memory issues when running large evaluations
-      const index = options?.replaceId
-        ? this.results.findIndex((row) => row.id === options.replaceId)
-        : -1;
-      if (index >= 0) {
-        this.results[index] = newResult;
-      } else {
-        this.results.push(newResult);
-      }
+      this.results.push(newResult);
     }
     if (this.persisted) {
-      if (options?.replaceId) {
-        this.clearResults();
-      }
       // Notify watchers that new results are available, passing the eval ID
       notifyEvaluationChanged(this.id);
     }
@@ -802,10 +767,19 @@ export default class Eval {
 
   recordFinalJsonlResult(result: EvaluateResult) {
     this.finalJsonlResults.set(getResultIndexKey(result), result);
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatedResults = true;
+    }
   }
 
   getFinalJsonlResults() {
     return Array.from(this.finalJsonlResults.values());
+  }
+
+  async getObservedRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    // Read final grading from the existing result store. Retaining each raw response
+    // here both defeats persisted-eval batching and reports stale comparison verdicts.
+    return this.observedRepeatedResults ? this.getRepeatStability() : undefined;
   }
 
   recordResultPersistenceFailure(result: EvaluateResult) {
@@ -845,15 +819,7 @@ export default class Eval {
     return reconstructed;
   }
 
-  fetchResultsBatched(
-    batchSize: number,
-    options: { projection: 'metrics' },
-  ): AsyncGenerator<EvalResultMetrics[], void>;
-  fetchResultsBatched(batchSize?: number): AsyncGenerator<EvalResult[], void>;
-  async *fetchResultsBatched(
-    batchSize: number = 100,
-    options?: { projection: 'metrics' },
-  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[], void> {
+  async *fetchResultsBatched(batchSize: number = 100) {
     if (!this.persisted) {
       for (let offset = 0; offset < this.results.length; offset += batchSize) {
         yield this.results.slice(offset, offset + batchSize);
@@ -861,10 +827,8 @@ export default class Eval {
       return;
     }
 
-    if (options?.projection === 'metrics') {
-      yield* EvalResult.findManyByEvalIdBatched(this.id, { batchSize, projection: 'metrics' });
-    } else {
-      yield* EvalResult.findManyByEvalIdBatched(this.id, { batchSize });
+    for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
+      yield batch;
     }
   }
 
@@ -943,8 +907,8 @@ export default class Eval {
     }
   }
 
-  async fetchResultsByTestIdx(testIdx: number, promptIdx?: number) {
-    return await EvalResult.findManyByEvalId(this.id, { testIdx, promptIdx });
+  async fetchResultsByTestIdx(testIdx: number) {
+    return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
   /**
@@ -1445,7 +1409,11 @@ export default class Eval {
         .values(
           results.map((r) => ({
             ...r,
-            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            metadata: persistTraceMetadata(
+              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+              r.traceId,
+              r.evaluationId,
+            ),
             evalId: this.id,
           })),
         )
@@ -1498,6 +1466,9 @@ export default class Eval {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
+      if (prompt.metrics?.testCacheHitCount) {
+        stats.cacheHits = (stats.cacheHits ?? 0) + prompt.metrics.testCacheHitCount;
+      }
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
@@ -1508,6 +1479,32 @@ export default class Eval {
     );
 
     return stats;
+  }
+
+  async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    if (this.useOldResults()) {
+      return calculateRepeatStability(this.oldResults?.results ?? []);
+    }
+
+    const calculator = new RepeatStabilityCalculator();
+    // Failed writes and their finalized comparisons are already retained for artifact
+    // recovery. Prefer those authoritative rows over stale or missing database rows.
+    const recovered = new Map<string, EvalResult | EvaluateResult>(this.failedResults);
+    for (const [key, result] of this.failedEvalResults) {
+      recovered.set(key, result);
+    }
+    for (const [key, result] of this.finalJsonlResults) {
+      recovered.set(key, result);
+    }
+    for await (const batch of this.fetchResultsBatched()) {
+      for (const result of batch) {
+        const key = getResultIndexKey(result);
+        calculator.addResult(recovered.get(key) ?? result);
+        recovered.delete(key);
+      }
+    }
+    calculator.addResults(recovered.values());
+    return calculator.getSummary();
   }
 
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
@@ -1530,12 +1527,23 @@ export default class Eval {
 
     const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
+    const calculator = new RepeatStabilityCalculator();
+    const results = this.results.map((result) => {
+      const exported = result.toEvaluateResult(stripFlags);
+      // Output stripping must not turn cached grading into independent samples.
+      // Keep projected labels in the summary while using the original cache evidence.
+      calculator.addResult({ ...exported, gradingResult: result.gradingResult });
+      return exported;
+    });
+    const repeatStability = calculator.getSummary();
+
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
+      results,
       stats,
+      ...(repeatStability && { repeatStability }),
     };
   }
 

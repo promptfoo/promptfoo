@@ -84,6 +84,36 @@ describe('migrate', () => {
       });
     });
 
+    it('rereads the journal when another caller applies the same pending migrations', async () => {
+      const { createClient } = await import('@libsql/client');
+      const { drizzle } = await import('drizzle-orm/libsql');
+      const { migrate } = await vi.importActual<typeof import('drizzle-orm/libsql/migrator')>(
+        'drizzle-orm/libsql/migrator',
+      );
+      const client = createClient({ url: ':memory:' });
+      try {
+        const db = drizzle(client);
+        const migrationsFolder = path.resolve(import.meta.dirname, '../drizzle');
+        mockGetDirectory.mockReturnValue(path.resolve(import.meta.dirname, '../src'));
+        mockGetDb.mockResolvedValue(db);
+        mockMigrate.mockImplementation(migrate);
+
+        const applyBatch = client.migrate.bind(client);
+        vi.spyOn(client, 'migrate').mockImplementationOnce(async (statements) => {
+          await migrate(db, { migrationsFolder });
+          return applyBatch(statements);
+        });
+
+        const { runDbMigrations } = await import('../src/migrate');
+        await runDbMigrations();
+        const journal = await client.execute('SELECT hash FROM __drizzle_migrations');
+        expect(journal.rows.length).toBeGreaterThan(0);
+        expect(new Set(journal.rows.map((row) => row.hash)).size).toBe(journal.rows.length);
+      } finally {
+        client.close();
+      }
+    });
+
     it('should run migrations from bundled server directory (dist/server/src)', async () => {
       const bundledDir = '/project/dist/server/src/some/path';
       mockGetDirectory.mockReturnValue(bundledDir);
@@ -158,9 +188,24 @@ describe('migrate', () => {
       const { runDbMigrations } = await import('../src/migrate');
       await expect(runDbMigrations()).rejects.toThrow('Migration failed: syntax error');
 
+      expect(mockMigrate).toHaveBeenCalledTimes(1);
+
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Database migration failed:'),
       );
+    });
+
+    it('still reports a schema error when the journal has not advanced', async () => {
+      const error = Object.assign(new Error('table datasets already exists'), {
+        name: 'LibsqlBatchError',
+        code: 'SQLITE_ERROR',
+      });
+      mockGetDirectory.mockReturnValue('/project/src');
+      mockMigrate.mockRejectedValue(error);
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await expect(runDbMigrations()).rejects.toBe(error);
+      expect(mockMigrate).toHaveBeenCalledTimes(2);
     });
 
     it('should pass the correct database instance to migrate', async () => {

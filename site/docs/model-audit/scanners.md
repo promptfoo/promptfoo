@@ -220,7 +220,7 @@ This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files 
 - **Compression validation**: Checks for reasonable tensor sizes and prevents decompression bombs
 
 **Why it matters:**
-GGUF/GGML files are increasingly popular for distributing large language models. While generally safer than pickle formats, they can still contain malicious metadata or be crafted to cause resource exhaustion attacks. The scanner ensures these files are structurally sound and don't contain hidden threats.
+GGUF/GGML files can contain suspicious metadata or malformed tensors that exhaust resources. The scanner checks file structure, metadata, and configured resource limits.
 
 ## Joblib Scanner
 
@@ -305,7 +305,7 @@ This scanner validates NumPy binary array files for integrity issues and potenti
 - **Dimension limits**: Enforces reasonable limits on array dimensions to prevent DoS attacks
 
 **Why it matters:**
-While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial-of-service attacks. The scanner ensures arrays are safe to load and don't contain hidden threats.
+NumPy object arrays can contain pickled Python objects, and large arrays can exhaust memory. The scanner checks data types, headers, sizes, and dimensions.
 
 ## OCI Layer Scanner
 
@@ -321,7 +321,7 @@ This scanner examines OCI (Open Container Initiative) and Docker manifest files 
 - **Path validation**: Prevents directory traversal attacks during layer extraction
 
 **Why it matters:**
-Container images are increasingly used to distribute ML models and datasets. These containers can contain multiple layers with various file types, potentially hiding malicious models within what appears to be a legitimate container image. The scanner ensures that all model files within container layers are safe.
+Model files can be hidden inside container layers. The scanner extracts supported layers and applies the relevant file scanners to their contents.
 
 ## Manifest Scanner
 
@@ -426,7 +426,7 @@ This scanner examines ZIP archives and their contents recursively.
 - **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial-of-service attacks
 
 **Why it matters:**
-ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
+ZIP archives can contain traversal paths, nested payloads, or files that exhaust resources on extraction. The scanner checks archive entries and scans their contents within configured limits.
 
 ## TAR Scanner
 
@@ -504,7 +504,7 @@ This scanner examines SafeTensors format files, which are designed to be a safer
 - **Offset integrity**: Ensures tensor data offsets are contiguous and within file bounds
 
 **Why it matters:**
-While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata. The scanner ensures the format integrity and metadata safety.
+SafeTensors files can still contain malformed headers or suspicious metadata. The scanner validates the structure and checks metadata for suspicious patterns.
 
 ## PaddlePaddle Scanner
 
@@ -563,11 +563,11 @@ This scanner performs security checks on PMML (Predictive Model Markup Language)
 - **Well-formedness Validation**: Ensures XML structure integrity and UTF-8 encoding compliance
 
 **Why it matters:**
-PMML files are XML-based and can be exploited through XML vulnerabilities like XXE attacks. Extension elements can contain arbitrary content that might execute scripts or access external resources. The scanner ensures PMML files don't contain hidden security threats while maintaining model functionality.
+PMML files can contain XML entity declarations, external references, or scripts in extension elements. The scanner checks for these patterns and validates the XML structure.
 
 ## Auto Format Detection
 
-ModelAudit includes comprehensive file format detection for ambiguous file extensions, particularly `.bin` files, which can contain different types of model data:
+ModelAudit detects file formats from content when extensions are ambiguous, particularly for `.bin` files:
 
 - **Pickle format**: Detected by pickle protocol magic bytes (\x80\x02, \x80\x03, etc.)
 - **SafeTensors format**: Detected by JSON header structure and metadata patterns
@@ -619,7 +619,7 @@ AI/ML projects often combine components with different licenses. AGPL requires s
 
 ## Network Communication Detection
 
-ModelAudit includes comprehensive detection of network communication capabilities that could be used for data exfiltration or command & control:
+ModelAudit checks for network operations that could support data exfiltration or command and control:
 
 **Detection capabilities:**
 

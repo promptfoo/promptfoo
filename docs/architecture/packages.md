@@ -9,6 +9,7 @@ model the internal boundaries that would support a future multi-package split.
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
 | `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
+| `validation`       | `src/validation`                                                 | Portable extension and range validation helpers |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -62,6 +63,12 @@ nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
 
 ## Layer Dependency Ratchet
 
+`src/validation` contains the file-extension and filter-range helpers used by
+configuration schemas, with no Node or package dependencies. The original
+`src/util/fileExtensions` and `src/util/filterRange` paths re-export the same
+functions and extension array. Range warnings stay in
+`src/util/filterRangeWarn.ts`.
+
 Each private layer declares its currently allowed dependencies in
 `architecture/layers.json`. The current graph still has transitional edges, so
 the allowlist records today's honest baseline rather than pretending the final
@@ -80,7 +87,7 @@ comparison-result saves, and final evaluation persistence. The default
 dependency-light state implementation for embedded evaluators and focused tests.
 `src/node/evaluatorRuntime.ts` continues to own JSONL writer construction and
 resume append behavior. The evaluator orchestrates evaluation behavior without
-importing the concrete `Eval` model. Checkpoint replacement uses the optional `EvaluationStore.replaceResult` operation, implemented directly by the Node and in-memory stores. Custom stores that omit it retain their durable checkpoint and enter the existing persistence-failure recovery path instead of silently appending a duplicate.
+importing the concrete `Eval` model.
 
 `src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
 The imports from `src/envars.ts` and `src/server/server.ts` replace external

@@ -10,10 +10,9 @@ import {
   type TraceContextData,
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
-import { sleep, sleepWithAbort } from '../../../util/time';
+import { sleep } from '../../../util/time';
 import {
   accumulateAttackerTokenUsage,
-  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -91,8 +90,8 @@ interface HydraMetadata extends BaseRedteamMetadata {
     turn: number;
     message: string;
     response: string;
-    isBase64?: boolean;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
@@ -104,8 +103,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
     outputAudio?: MediaData;
     outputImage?: MediaData;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -341,47 +343,20 @@ export class HydraProvider implements ApiProvider {
     this.conversationHistory = [];
     this.sessionId = undefined;
     const sessionIds: string[] = [];
-    const successfulAttacks: Array<{
-      turn: number;
-      message: string;
-      response: string;
-      isBase64?: boolean;
-      traceSummary?: string;
-    }> = [];
+    const successfulAttacks: NonNullable<HydraMetadata['successfulAttacks']> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
-    let completedTargetCost: number | undefined;
-    let completedTargetIncurredCost: number | undefined;
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
-    let checkpointGraderResult: GradingResult | undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
-    let lastResponseMessages: Array<Message & Pick<TargetResponse, 'isBase64'>> = [];
-    // Keep classification out of the provider-facing transcript. Message objects survive
-    // prefix retention and backtracking; only metadata snapshots receive the media hint.
-    const binaryMessages = new WeakSet<Message>();
-    const getCheckpointMessages = () =>
-      this.conversationHistory.map((message) =>
-        binaryMessages.has(message) ? { ...message, isBase64: true } : message,
-      );
+    let lastResponseMessages: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      graderPassed: boolean | undefined;
-      trace?: Record<string, unknown>;
-      traceSummary?: string;
-      inputVars?: Record<string, string>;
-    }> = [];
+    const redteamHistory: HydraMetadata['redteamHistory'] = [];
     let lastTransformResult: TransformResult | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
@@ -389,54 +364,6 @@ export class HydraProvider implements ApiProvider {
 
     // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
     let lastFinalAttackPrompt: string | undefined;
-
-    // Include every completed probe in checkpoints, even responses that are
-    // backtracked or still awaiting grading. Keep normal grading history intact.
-    const completedTargetHistory: Array<
-      (typeof redteamHistory)[number] & Pick<TargetResponse, 'images' | 'isBase64'>
-    > = [];
-    const callOptions = options ? { ...options, onProgress: undefined } : undefined;
-    const publishProgress = () => {
-      if (options?.abortSignal?.aborted) {
-        return;
-      }
-      const tokenUsage = structuredClone(totalTokenUsage);
-      if (storedGraderResult?.tokensUsed) {
-        accumulateGradingTokenUsage(tokenUsage, storedGraderResult.tokensUsed, {
-          cached: storedGraderResult.metadata?.cachedResponse,
-        });
-      }
-      options?.onProgress?.({
-        output: lastTargetResponse?.output,
-        isBase64: lastTargetResponse?.isBase64,
-        format: lastTargetResponse?.format,
-        error: lastTargetResponse?.error,
-        tokenUsage,
-        cost: completedTargetCost,
-        incurredCost: completedTargetIncurredCost,
-        guardrails: lastTargetResponse?.guardrails,
-        audio: lastTargetResponse?.audio,
-        images: lastTargetResponse?.images,
-        metadata: {
-          redteamHistory: completedTargetHistory,
-          storedGraderResult: checkpointGraderResult,
-          [`${this.providerOptions.metadataPrefix}Result`]: vulnerabilityAchieved,
-          stopReason,
-          successfulAttacks,
-          totalSuccessfulAttacks: successfulAttacks.length,
-          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-          messages: lastResponseMessages,
-          sessionIds,
-          [`${this.providerOptions.metadataPrefix}RoundsCompleted`]: lastResponseMessages.filter(
-            (message) => message.role === 'user',
-          ).length,
-          [`${this.providerOptions.metadataPrefix}BacktrackCount`]: backtrackCount,
-          traceSnapshots: traceSnapshots.map((trace) => formatTraceForMetadata(trace)),
-          redteamFinalPrompt: lastFinalAttackPrompt,
-          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        },
-      });
-    };
 
     // Find the grader
     const { getGraderById } = await import('../../graders');
@@ -451,7 +378,6 @@ export class HydraProvider implements ApiProvider {
     let previousTraceSummary: string | undefined;
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
-      options?.abortSignal?.throwIfAborted();
       logger.debug(`${this.logPrefix} Turn ${turn}/${this.maxTurns}`);
 
       // Build request for cloud agent
@@ -475,7 +401,7 @@ export class HydraProvider implements ApiProvider {
         conversationHistory: conversationHistoryForCloud,
         ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
-          turn > 1 && storedGraderResult
+          turn > 1 && storedGraderResult && storedGraderResult.metadata?.graderError !== true
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,
@@ -501,18 +427,14 @@ export class HydraProvider implements ApiProvider {
           },
           vars: {},
         },
-        callOptions,
+        options,
       );
 
       // Agent coordination calls are internal and should not count as target probes.
-      options?.abortSignal?.throwIfAborted();
       accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
-      publishProgress();
 
       if (this.agentProvider.delay) {
-        await (options?.abortSignal
-          ? sleepWithAbort(this.agentProvider.delay, options.abortSignal)
-          : sleep(this.agentProvider.delay));
+        await sleep(this.agentProvider.delay);
       }
 
       if (agentResp.error) {
@@ -664,7 +586,6 @@ export class HydraProvider implements ApiProvider {
         );
         if (lastTransformResult.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
-          publishProgress();
         }
 
         // Skip turn if transform failed
@@ -747,64 +668,18 @@ export class HydraProvider implements ApiProvider {
             },
           }
         : context;
-      let checkpointedTurn: (typeof completedTargetHistory)[number] | undefined;
-      const checkpointTargetResponse = (response: TargetResponse) => {
-        if (!response.error) {
-          options?.abortSignal?.throwIfAborted();
-        }
-        // Delayed targets checkpoint before pacing; other targets checkpoint on return.
-        if (checkpointedTurn) {
-          return checkpointedTurn;
-        }
-        lastTargetResponse = response;
-        // A previous verdict still contributes usage, but does not grade this response.
-        checkpointGraderResult = undefined;
-        if (!(response.error && response.tokenUsage?.numRequests === 0)) {
-          lastResponseMessages = [
-            ...getCheckpointMessages(),
-            { role: 'assistant', content: response.output || '', isBase64: response.isBase64 },
-          ];
-        }
-        accumulateResponseTokenUsage(totalTokenUsage, response);
-        if (response.cost !== undefined) {
-          completedTargetCost = (completedTargetCost ?? 0) + response.cost;
-        }
-        const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
-        if (incurredCost !== undefined) {
-          completedTargetIncurredCost = (completedTargetIncurredCost ?? 0) + incurredCost;
-        }
-        checkpointedTurn = {
-          prompt: nextMessage,
-          promptAudio: lastTransformResult?.audio,
-          promptImage: lastTransformResult?.image,
-          output: response.output,
-          isBase64: response.isBase64,
-          images: response.images,
-          outputAudio: response.audio
-            ? { ...response.audio, format: response.audio.format || 'wav' }
-            : undefined,
-          outputImage:
-            response.image?.data && response.image?.format
-              ? { data: response.image.data, format: response.image.format }
-              : undefined,
-          graderPassed: undefined,
-          inputVars: currentRenderInputVars,
-        };
-        if (!(response.error && response.tokenUsage?.numRequests === 0)) {
-          completedTargetHistory.push(checkpointedTurn);
-        }
-        publishProgress();
-        return checkpointedTurn;
-      };
-      options?.abortSignal?.throwIfAborted();
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
         targetContext,
-        callOptions,
-        checkpointTargetResponse,
+        options,
       );
-      const completedTurn = checkpointTargetResponse(targetResponse);
+      lastTargetResponse = targetResponse;
+      lastResponseMessages = [
+        ...this.conversationHistory,
+        { role: 'assistant', content: targetResponse.output || '' },
+      ];
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
       }
@@ -930,25 +805,11 @@ export class HydraProvider implements ApiProvider {
           : targetResponse.output;
 
       // Add response to conversation history
-      const assistantMessage: Message = { role: 'assistant', content: historyOutput };
-      this.conversationHistory.push(assistantMessage);
-      if (targetResponse.isBase64 === true) {
-        binaryMessages.add(assistantMessage);
-      }
-      lastResponseMessages = getCheckpointMessages();
-
-      completedTurn.output = targetResponse.output;
-      completedTurn.images = targetResponse.images;
-      completedTurn.outputAudio = targetResponse.audio
-        ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }
-        : undefined;
-      completedTurn.outputImage =
-        targetResponse.image?.data && targetResponse.image?.format
-          ? { data: targetResponse.image.data, format: targetResponse.image.format }
-          : undefined;
-      completedTurn.trace = traceContext ? formatTraceForMetadata(traceContext) : undefined;
-      completedTurn.traceSummary = computedTraceSummary;
-      publishProgress();
+      this.conversationHistory.push({
+        role: 'assistant',
+        content: historyOutput,
+      });
+      lastResponseMessages = [...this.conversationHistory];
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
@@ -1091,7 +952,6 @@ export class HydraProvider implements ApiProvider {
               assertion: assertToUse,
             },
           );
-          checkpointGraderResult = storedGraderResult;
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,
@@ -1099,6 +959,11 @@ export class HydraProvider implements ApiProvider {
           });
         }
       }
+
+      const graderError =
+        graderResult?.metadata?.graderError === true
+          ? graderResult.reason || 'Grading failed'
+          : undefined;
 
       // Store in redteam history (with audio/image if transforms were applied)
       redteamHistory.push({
@@ -1110,37 +975,33 @@ export class HydraProvider implements ApiProvider {
           ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
           : undefined,
         // Note: outputImage would come from provider if model responds with image
-        graderPassed: graderResult?.pass,
+        graderPassed: graderError ? undefined : graderResult?.pass,
+        graderError,
+        gradingInputHash: graderError
+          ? storedGraderResult?.metadata?.redteamGradingInputHash
+          : undefined,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
 
-      completedTurn.graderPassed = graderResult?.pass;
-
-      // Check if vulnerability was achieved
-      if (graderResult?.pass === false) {
+      // Only a valid grader verdict can establish a vulnerability.
+      if (graderResult?.pass === false && !graderError) {
         vulnerabilityAchieved = true;
         successfulAttacks.push({
           turn,
           message: nextMessage,
           response: targetResponse.output,
-          isBase64: targetResponse.isBase64,
           traceSummary: computedTraceSummary,
         });
         stopReason = 'Grader failed';
 
         logger.debug(`${this.logPrefix} Vulnerability achieved!`, { turn });
-        publishProgress();
         break;
       }
-      publishProgress();
     }
 
-    if (!lastTargetResponse?.error) {
-      options?.abortSignal?.throwIfAborted();
-    }
     // Update scan learnings
     if (scanId && !options?.abortSignal?.aborted) {
       try {
@@ -1165,12 +1026,10 @@ export class HydraProvider implements ApiProvider {
             },
             vars: {},
           },
-          callOptions,
+          options,
         );
         // Learning update is an internal cloud call, not a target probe.
-        options?.abortSignal?.throwIfAborted();
         accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
-        publishProgress();
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {
@@ -1179,13 +1038,9 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
-    if (!lastTargetResponse?.error) {
-      options?.abortSignal?.throwIfAborted();
-    }
     const messages = lastResponseMessages.map((msg) => ({
       role: msg.role,
       content: msg.content,
-      ...(msg.isBase64 === true && { isBase64: true }),
     })) as Record<string, any>[];
     const targetProbeCount = totalTokenUsage.numRequests ?? 0;
     const roundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
