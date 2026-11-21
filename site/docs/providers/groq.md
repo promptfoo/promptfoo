@@ -419,6 +419,8 @@ For more details on the Responses API, see [Groq's Responses API documentation](
 
 GPT-OSS models on Groq support server-side built-in tools. Add a built-in tool to `tools`, and Groq runs the tool calls and returns the final answer. See [Groq Built-In Tools](https://console.groq.com/docs/tool-use/built-in-tools) for the models that support each tool.
 
+<a id="compound-models-automatic-tools"></a>
+
 ### Code Execution
 
 `openai/gpt-oss-120b` and `openai/gpt-oss-20b` run Python with the `code_interpreter` tool:
