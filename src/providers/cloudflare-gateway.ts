@@ -59,25 +59,17 @@ export interface CloudflareGatewayProviderOptions extends ProviderOptions {
   config?: CloudflareGatewayConfig;
 }
 
-/**
- * Provider configuration for routing through Cloudflare AI Gateway
- */
-interface GatewayProviderConfig {
-  /** Default environment variable for the provider's API key */
-  apiKeyEnvar: string;
-}
-
 // The factory uses Anthropic Messages for anthropic; every other supported native
 // route must accept OpenAI Chat Completions. Azure also needs resource/deployment IDs.
-const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
-  openai: { apiKeyEnvar: 'OPENAI_API_KEY' },
-  anthropic: { apiKeyEnvar: 'ANTHROPIC_API_KEY' },
-  groq: { apiKeyEnvar: 'GROQ_API_KEY' },
-  'perplexity-ai': { apiKeyEnvar: 'PERPLEXITY_API_KEY' },
-  mistral: { apiKeyEnvar: 'MISTRAL_API_KEY' },
-  'azure-openai': { apiKeyEnvar: 'AZURE_OPENAI_API_KEY' },
-  grok: { apiKeyEnvar: 'XAI_API_KEY' },
-};
+const API_KEY_ENV_VARS = new Map([
+  ['openai', 'OPENAI_API_KEY'],
+  ['anthropic', 'ANTHROPIC_API_KEY'],
+  ['groq', 'GROQ_API_KEY'],
+  ['perplexity-ai', 'PERPLEXITY_API_KEY'],
+  ['mistral', 'MISTRAL_API_KEY'],
+  ['azure-openai', 'AZURE_OPENAI_API_KEY'],
+  ['grok', 'XAI_API_KEY'],
+]);
 
 /**
  * Get a custom environment variable value safely
@@ -256,16 +248,11 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
     modelName: string,
     providerOptions: CloudflareGatewayProviderOptions,
   ) {
-    const providerConfig = Object.prototype.hasOwnProperty.call(
-      PROVIDER_CONFIGS,
-      underlyingProvider,
-    )
-      ? PROVIDER_CONFIGS[underlyingProvider]
-      : undefined;
-    if (!providerConfig) {
+    const defaultKeyEnvar = API_KEY_ENV_VARS.get(underlyingProvider);
+    if (!defaultKeyEnvar) {
       throw new Error(
         `Unsupported Cloudflare AI Gateway provider: "${underlyingProvider}". ` +
-          `Supported providers: ${Object.keys(PROVIDER_CONFIGS).join(', ')}`,
+          `Supported providers: ${[...API_KEY_ENV_VARS.keys()].join(', ')}`,
       );
     }
     invariant(
@@ -316,7 +303,7 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
       finalGatewayUrl = `${gatewayUrl}?api-version=${apiVersion}`;
     } else {
       // For non-Azure providers, use standard Bearer auth
-      apiKeyEnvar = providerOptions.config?.apiKeyEnvar || providerConfig.apiKeyEnvar;
+      apiKeyEnvar = providerOptions.config?.apiKeyEnvar || defaultKeyEnvar;
     }
 
     const config: OpenAiCompletionOptions = {
