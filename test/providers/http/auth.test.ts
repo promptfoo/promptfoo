@@ -1532,49 +1532,52 @@ describe('HttpProvider - File Auth', () => {
     );
   });
 
-  it('should load Python auth files using get_auth by default', async () => {
-    vi.mocked(runPython).mockResolvedValue({
-      token: 'python-token',
-    });
+  it.each(['get-token.py', 'get-token.PY'])(
+    'should load Python auth file %s using get_auth by default',
+    async (authFile) => {
+      vi.mocked(runPython).mockResolvedValue({
+        token: 'python-token',
+      });
 
-    const provider = new HttpProvider(mockUrl, {
-      config: {
-        method: 'GET',
-        headers: createBearerTokenHeaders(),
-        auth: {
-          type: 'file',
-          path: './auth/get-token.py',
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+          headers: createBearerTokenHeaders(),
+          auth: {
+            type: 'file',
+            path: `./auth/${authFile}`,
+          },
         },
-      },
-    });
+      });
 
-    await provider.callApi('test prompt', createAuthContext('test prompt', 'test prompt'));
+      await provider.callApi('test prompt', createAuthContext('test prompt', 'test prompt'));
 
-    expect(runPython).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', './auth/get-token.py'),
-      'get_auth',
-      [
-        expect.objectContaining({
-          vars: expect.objectContaining({
-            prompt: 'test prompt',
+      expect(runPython).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', `./auth/${authFile}`),
+        'get_auth',
+        [
+          expect.objectContaining({
+            vars: expect.objectContaining({
+              prompt: 'test prompt',
+            }),
           }),
+        ],
+      );
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: 'Bearer python-token',
+          }),
+          method: 'GET',
         }),
-      ],
-    );
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      mockUrl,
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          authorization: 'Bearer python-token',
-        }),
-        method: 'GET',
-      }),
-      expect.any(Number),
-      'text',
-      undefined,
-      undefined,
-    );
-  });
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    },
+  );
 
   it('should reuse a non-expiring file auth token across requests', async () => {
     const authFn = vi.fn().mockResolvedValue({

@@ -1,9 +1,17 @@
+import fs from 'fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider';
 import { getResolvedRelativePath } from '../../src/util/file';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  const mocked = { ...actual, existsSync: vi.fn(actual.existsSync) };
+  return { ...mocked, default: mocked };
+});
 
 // Mock the getResolvedRelativePath function
 vi.mock('../../src/util/file', async (importOriginal) => {
@@ -61,6 +69,54 @@ describe('scriptBasedProvider', () => {
       expect(factory.test('file://path/script.js')).toBe(true);
       expect(factory.test('file://path/script.js:function')).toBe(true);
       expect(factory.test('file://path/script.py')).toBe(false);
+    });
+
+    it('should match file extensions case-insensitively', () => {
+      const factory = createScriptBasedProviderFactory('test', 'py', MockProvider as any);
+
+      expect(factory.test('file://path/provider.PY')).toBe(true);
+      expect(factory.test('file://path/provider.Py:call')).toBe(true);
+      expect(factory.test('file://path/provider.js')).toBe(false);
+    });
+
+    it('should match only the script extension before a selector', () => {
+      const goFactory = createScriptBasedProviderFactory('golang', 'go', MockProvider as any);
+      const pythonFactory = createScriptBasedProviderFactory('python', 'py', MockProvider as any);
+
+      expect(goFactory.test('file://path/provider.py:Class.GO')).toBe(false);
+      expect(goFactory.test('file://path/provider.go:CallApi')).toBe(true);
+      expect(goFactory.test('file://path/provider.rb:Class.go')).toBe(false);
+      expect(pythonFactory.test('file://path/provider.rb:Class.py')).toBe(false);
+      expect(goFactory.test('file://path.go:archive/provider.py')).toBe(false);
+      expect(pythonFactory.test('file://path/provider.PY:custom_call')).toBe(true);
+    });
+
+    it('should distinguish Python filenames containing a Ruby marker using existing files', () => {
+      const pythonFactory = createScriptBasedProviderFactory('python', 'py', MockProvider as any);
+      const rubyFactory = createScriptBasedProviderFactory('ruby', 'rb', MockProvider as any);
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => String(filePath).endsWith('provider.rb:backup.py'));
+      try {
+        expect(pythonFactory.test('file://provider.rb:backup.py:call_api')).toBe(true);
+        expect(rubyFactory.test('file://provider.rb:backup.py:call_api')).toBe(false);
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
+    it('should keep actual Ruby files ahead of Python-looking selectors', () => {
+      const pythonFactory = createScriptBasedProviderFactory('python', 'py', MockProvider as any);
+      const rubyFactory = createScriptBasedProviderFactory('ruby', 'rb', MockProvider as any);
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => String(filePath).endsWith('provider.rb'));
+      try {
+        expect(pythonFactory.test('file://provider.rb:Provider.PY')).toBe(false);
+        expect(rubyFactory.test('file://provider.rb:Provider.PY')).toBe(true);
+      } finally {
+        existsSpy.mockRestore();
+      }
     });
 
     it('should extract script path correctly when using prefix pattern', async () => {

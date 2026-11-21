@@ -1,6 +1,11 @@
 /** Supported JavaScript and TypeScript extensions. */
 export const JAVASCRIPT_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
 
+export type FileReferenceParseOptions = {
+  includeRuby?: boolean;
+  fileExists?: (filePath: string) => boolean;
+};
+
 /** Matches JavaScript and TypeScript extensions case-insensitively. */
 export function isJavascriptFile(filePath: string): boolean {
   return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`, 'i').test(filePath);
@@ -64,4 +69,151 @@ export function isAudioFile(filePath: string): boolean {
   ];
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return audioExtensions.includes(fileExtension);
+}
+
+/**
+ * Checks if a file has a Python source extension.
+ *
+ * @param filePath - The path of the file to check.
+ * @returns True if the file has a Python source extension, false otherwise.
+ */
+export function isPythonFile(filePath: string, options: { reference?: boolean } = {}): boolean {
+  const basenameStart = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1;
+  const basename = filePath.slice(basenameStart);
+  return (!options.reference || !/[?#]/.test(basename)) && basename.toLowerCase().endsWith('.py');
+}
+
+/** Applies URL-lookalike filtering only while recognizing a file reference. */
+function isPythonFileReference(filePath: string): boolean {
+  return isPythonFile(filePath, { reference: true });
+}
+
+/**
+ * Parses a Python file path with an optional function selector.
+ */
+export function parsePythonFileReference(
+  filePath: string,
+  options: FileReferenceParseOptions = {},
+): { filePath: string; functionName?: string } | undefined {
+  const separator = filePath.lastIndexOf(':');
+  if (separator > 1) {
+    const candidateFilePath = filePath.slice(0, separator);
+    const functionName = filePath.slice(separator + 1);
+    if (
+      (options.includeRuby === false ? undefined : parseRubyFileReference(filePath)) ||
+      (isJavascriptFile(candidateFilePath) &&
+        functionName.length > 0 &&
+        !/[\\/]/.test(functionName))
+    ) {
+      return undefined;
+    }
+    if (isPythonFileReference(candidateFilePath)) {
+      const parts = functionName.split('.');
+      if (parts.length <= 2 && parts.every((part) => part.length > 0 && !/[\\/:?#]/.test(part))) {
+        return { filePath: candidateFilePath, functionName };
+      }
+    }
+  }
+
+  return isPythonFileReference(filePath) ? { filePath } : undefined;
+}
+
+/**
+ * Parses a Ruby file path with an optional namespaced method selector.
+ */
+export function parseRubyFileReference(
+  filePath: string,
+): { filePath: string; functionName: string } | undefined {
+  const rubyMarker = filePath.lastIndexOf('.rb:');
+  if (rubyMarker === -1) {
+    return undefined;
+  }
+
+  const rubySeparator = rubyMarker + '.rb'.length;
+  const functionName = filePath.slice(rubySeparator + 1);
+  if (!functionName || /[\\/]/.test(functionName)) {
+    return undefined;
+  }
+
+  return {
+    filePath: filePath.slice(0, rubySeparator),
+    functionName,
+  };
+}
+
+/**
+ * Splits a script file path from its optional function selector.
+ *
+ * Prefer the rightmost JavaScript file boundary, preserving colons in file
+ * names. The remaining suffix is an export key: it may contain colons or end
+ * in a source extension (`module.exports['check:detail']`, `exports['score.js']`).
+ * A drive prefix or a colon followed by a path segment is not a separator.
+ */
+export function parseExecutableFileReference(
+  filePath: string,
+  options: FileReferenceParseOptions = {},
+): {
+  filePath: string;
+  functionName?: string;
+} {
+  // Prefer the rightmost JavaScript file boundary before considering Ruby or
+  // Python. A selector such as 'check.rb:detail' is an export key, not a file.
+  let separator = filePath.lastIndexOf(':');
+  let javascriptFallback: { filePath: string; functionName: string } | undefined;
+  while (separator > 1) {
+    const candidateFilePath = filePath.slice(0, separator);
+    const functionName = filePath.slice(separator + 1);
+    if (
+      isJavascriptFile(candidateFilePath) &&
+      functionName.length > 0 &&
+      !functionName.includes('\\')
+    ) {
+      javascriptFallback ??= { filePath: candidateFilePath, functionName };
+      if (!options.fileExists || options.fileExists(candidateFilePath)) {
+        return { filePath: candidateFilePath, functionName };
+      }
+    }
+    separator = filePath.lastIndexOf(':', separator - 1);
+  }
+  const rubyReference =
+    options.includeRuby === false ? undefined : parseRubyFileReference(filePath);
+  const pythonCandidate = parsePythonFileReference(filePath, { includeRuby: false });
+  if (options.fileExists) {
+    const pythonExists =
+      pythonCandidate !== undefined && options.fileExists(pythonCandidate.filePath);
+    const rubyExists = rubyReference !== undefined && options.fileExists(rubyReference.filePath);
+    if (pythonCandidate && pythonExists && !rubyExists) {
+      return pythonCandidate;
+    }
+    if (rubyReference && rubyExists && !pythonExists) {
+      return rubyReference;
+    }
+  }
+  if (options.fileExists && javascriptFallback) {
+    const completeDataFileExists =
+      !isJavascriptFile(filePath) &&
+      !isPythonFile(filePath, { reference: true }) &&
+      !filePath.endsWith('.rb') &&
+      options.fileExists(filePath);
+    if (completeDataFileExists) {
+      return { filePath };
+    }
+    return javascriptFallback;
+  }
+
+  if (rubyReference) {
+    return rubyReference;
+  }
+
+  const pythonReference = parsePythonFileReference(filePath, options);
+  if (pythonReference) {
+    return pythonReference;
+  }
+
+  return { filePath };
+}
+
+/** Canonical Windows file URLs prefix the drive with a slash; POSIX paths may literally start with /C:/. */
+export function normalizeWindowsFileUrlPath(filePath: string, platform: string): string {
+  return platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(filePath) ? filePath.slice(1) : filePath;
 }

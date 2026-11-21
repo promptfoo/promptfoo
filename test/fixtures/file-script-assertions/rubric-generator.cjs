@@ -10,6 +10,10 @@ module.exports.expectedValue = () => 'expected string';
 // For deterministic testing - script returns a known value
 module.exports.knownValue = () => 'SCRIPT_OUTPUT_12345';
 
+// Export keys may themselves contain colons; the selector is everything after the file name
+module.exports['check:detail'] = () => 'COLON_EXPORT_54321';
+module.exports['check.rb:detail'] = () => 'RUBY_LOOKING_EXPORT_54321';
+
 // Returns an object for llm-rubric (which accepts objects)
 module.exports.rubricObject = () => ({
   role: 'system',
