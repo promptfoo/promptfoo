@@ -62,5 +62,25 @@ Reply in {{language}}. Use only the supplied account facts and do not claim an a
 Then remove the canned `reply` column from the CSV. The rubrics already use
 `customer_message`, `context`, and `language`, so the grading side needs no changes.
 
+## Offline handoff example
+
+`promptfooconfig.handoff.yaml` uses `echo` to replay nine synthetic support decisions. Each case in `handoff-tests.json` supplies the observed facts and the response to grade. All nine should pass without API credentials.
+
+After initializing the example, run:
+
+```sh
+npx promptfoo@latest eval -c promptfooconfig.handoff.yaml --no-cache -o handoff-results.json
+```
+
+From the repository root, use the local CLI:
+
+```sh
+npm run local -- eval -c examples/eval-customer-support-rubric/promptfooconfig.handoff.yaml --no-cache -o handoff-results.json
+```
+
+A customer request for a person, missing or conflicting sources, or a business exception requires a handoff. It stays `pending` until an authorized receiver receives the context and acknowledges it. Approving a refund or a price change is a separate decision. The fixtures all require `businessApproved: false`. If a source is missing or conflicting, or a business exception still needs approval, the response must list unresolved work.
+
+JSON Schema checks the response shape. The `handoff_contract` assertion checks the decision against the supplied facts. To try a failing case, change a pending response to `accepted`. When adapting the example to a live provider, get authorization and acknowledgement from the receiving system.
+
 Based on an evaluation study of Spanish telecoms and energy support chatbots:
 https://github.com/kakkarprerna/support-bot-eval
