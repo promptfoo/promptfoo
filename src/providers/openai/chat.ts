@@ -941,14 +941,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               'Streaming Chat Completions do not support audio output. Set stream: false when requesting the audio modality.',
           };
         }
-        if (body.tools?.some((tool: OpenAI.ChatCompletionTool) => tool.type === 'custom')) {
+        if (body.tools?.some((tool) => tool.type === 'custom')) {
           return {
             error:
               'Streaming Chat Completions support function tools only. Set stream: false for custom tools.',
           };
         }
         body.stream = true;
-        body.stream_options = { ...body.stream_options, include_usage: true };
+        const options = body.stream_options;
+        body.stream_options = {
+          ...(typeof options === 'object' && !Array.isArray(options) ? options : {}),
+          include_usage: true,
+        };
       }
       const responseFormat = streaming ? 'text' : adapterFormat;
       const streamStartTime = responseFormat === 'text' ? Date.now() : undefined;

@@ -1162,27 +1162,30 @@ describe('Streaming API', () => {
     expect(result.output).toBe('Hello');
   });
 
-  it('should include stream_options in request body', async () => {
-    const sseChunks = [
-      'data: {"choices":[{"delta":{"content":"Test"}}]}\n\n',
-      'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\n',
-      'data: [DONE]\n\n',
-    ];
+  it.each([undefined, 'invalid'])(
+    'requests usage with stream_options=%s',
+    async (stream_options) => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Test"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n\n',
+        'data: [DONE]\n\n',
+      ];
 
-    mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
+      mockFetchWithRetries.mockResolvedValue(new Response(createMockSSEStream(sseChunks)));
 
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { stream: true },
-    });
-    await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true, passthrough: { stream_options } },
+      });
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
 
-    expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-    const callArgs = mockFetchWithRetries.mock.calls[0];
-    const requestBody = JSON.parse(callArgs[1]?.body as string);
-    expect(requestBody.stream).toBe(true);
-    expect(requestBody.stream_options).toEqual({ include_usage: true });
-    expect(callArgs[1]?.signal).toBeInstanceOf(AbortSignal);
-  });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetchWithRetries.mock.calls[0];
+      const requestBody = JSON.parse(callArgs[1]?.body as string);
+      expect(requestBody.stream).toBe(true);
+      expect(requestBody.stream_options).toEqual({ include_usage: true });
+      expect(callArgs[1]?.signal).toBeInstanceOf(AbortSignal);
+    },
+  );
 
   it('should reject streaming audio output rather than returning incomplete media', async () => {
     const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5', {
