@@ -12,6 +12,7 @@ import { sha256 } from '../util/createHash';
 import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -79,9 +80,10 @@ export class GolangProvider implements ApiProvider {
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
+    const sanitizedContext = sanitizeScriptContext('GolangProvider', context);
     const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    )}:${JSON.stringify(sanitizedContext?.vars)}`;
     const cache = await getCache();
     let cachedResult;
 
@@ -94,20 +96,8 @@ export class GolangProvider implements ApiProvider {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       return { ...JSON.parse(cachedResult), cached: true };
     } else {
-      if (context) {
-        // Remove properties not useful in Golang and non-serializable objects
-        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-        delete context.getCache;
-        delete context.logger;
-        delete context.filters; // NunjucksFilterMap contains functions
-        delete context.originalProvider; // ApiProvider object with methods
-      }
-
       const args =
-        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
-      logger.debug(
-        `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
+        apiType === 'call_api' ? [prompt, this.options, sanitizedContext] : [prompt, this.options];
       const functionName = this.functionName || apiType;
 
       let tempDir: string | undefined;
