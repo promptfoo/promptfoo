@@ -3,7 +3,10 @@ const { createWarningLoggerModule } = await vi.hoisted(
 );
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cloudConfig } from '../../../src/globalConfig/cloud';
+import logger from '../../../src/logger';
 import { addRetryTestCases, deduplicateTests } from '../../../src/redteam/strategies/retry';
+import { makeRequest } from '../../../src/util/cloud';
 
 import type { TestCase, TestCaseWithPlugin } from '../../../src/types/index';
 
@@ -159,9 +162,8 @@ describe('deduplicateTests', () => {
 });
 
 describe('addRetryTestCases', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
   });
 
@@ -202,8 +204,6 @@ describe('addRetryTestCases', () => {
   });
 
   it.each(['empty', 'unavailable'])('returns cloud failures when SQLite is %s', async (state) => {
-    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
-    const { makeRequest } = await import('../../../src/util/cloud');
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     vi.mocked(makeRequest).mockResolvedValue(
       new Response(
@@ -211,14 +211,16 @@ describe('addRetryTestCases', () => {
           results: [
             {
               testCase: {
-                vars: { prompt: 'cloud failure' },
+                vars: { prompt: 'cloud failure', companion: 'file://ignored.txt' },
                 assert: [{ type: 'equals', value: 'expected', metric: 'Bias/base64' }],
                 metadata: {
                   pluginId: 'bias:age',
                   strategyId: 'base64',
                   strategyConfig: { oldConfig: true },
                 },
-                provider: { id: 'old-target' },
+                provider: { id: 'file://ignored.ts', config: { injectVar: 'prompt' } },
+                options: { transform: 'file://ignored.ts' },
+                assertScoringFunction: 'file://ignored.ts',
               },
               response: {},
               evalId: 'cloud-eval',
@@ -232,11 +234,15 @@ describe('addRetryTestCases', () => {
       limit.mockRejectedValueOnce(new Error('SQLite unavailable'));
     }
 
-    const result = await addRetryTestCases(
-      [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'bias:age' } }],
-      'prompt',
-      { targetIds: ['new-target'], numTests: 3 },
-    );
+    const test: TestCaseWithPlugin = {
+      vars: { prompt: 'seed', companion: 'local' },
+      assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
+      metadata: { pluginId: 'bias:age' },
+    };
+    const result = await addRetryTestCases([test], 'prompt', {
+      targetIds: ['new-target'],
+      numTests: 3,
+    });
 
     expect(makeRequest).toHaveBeenCalledWith(
       'results/failed-tests?pluginId=bias%3Aage&targetId=new-target&limit=3',
@@ -244,7 +250,7 @@ describe('addRetryTestCases', () => {
     );
     expect(result).toEqual([
       {
-        vars: { prompt: 'cloud failure' },
+        vars: { prompt: 'cloud failure', companion: 'local' },
         assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
         metadata: {
           pluginId: 'bias:age',
@@ -257,11 +263,79 @@ describe('addRetryTestCases', () => {
     ]);
   });
 
+  it('replays only a compatible Cloud text input on the current plugin template', async () => {
+    const test = { metadata: { pluginId: 'bias:age' }, vars: { message: 'seed' } };
+    const row = { testCase: test, evalId: 'eval-abc-2026-10-01T12:34:56' };
+    const agent = {
+      ...row,
+      testCase: { ...test, metadata: { ...test.metadata, strategyId: 'jailbreak:meta' } },
+    };
+    const results = [
+      null,
+      { ...row, targetId: 'different' },
+      { ...row, provider: { id: 'different' } },
+      { ...row, success: true },
+      { ...row, evalId: 'file://ignored' },
+      { ...row, testCase: { ...test, metadata: { pluginId: 'other' } } },
+      { ...row, testCase: { ...test, assert: [{ type: 'javascript', value: 'true' }] } },
+      ...['unknown', 'goat', 'image'].map((strategyId) => ({
+        ...row,
+        testCase: { ...test, metadata: { ...test.metadata, strategyId } },
+      })),
+      ...[
+        'FILE://ignored',
+        'package:ignored',
+        'x {{ env.X }}',
+        ' ["input"]',
+        '{"k":1}',
+        '',
+        [],
+      ].map((message) => ({
+        ...row,
+        testCase: { ...test, vars: { message } },
+      })),
+      agent,
+      { ...agent, response: { metadata: { redteamFinalPrompt: 'file://ignored' } } },
+      { ...agent, response: { metadata: { redteamFinalPrompt: 'final prompt' } } },
+    ];
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(Response.json({ results }));
+    limit.mockResolvedValue([]);
+
+    const retries = await addRetryTestCases([test], 'message', {
+      targetIds: ['target'],
+      numTests: results.length,
+    });
+    expect(retries).toEqual([
+      {
+        vars: { message: 'final prompt' },
+        metadata: {
+          ...test.metadata,
+          originalEvalId: row.evalId,
+          strategyId: 'jailbreak:meta',
+          retry: true,
+        },
+      },
+    ]);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped incompatible Cloud'));
+  });
+
+  it('skips ambiguous Cloud templates without suppressing local cases', async () => {
+    const test = { metadata: { pluginId: 'bias:age' }, vars: { prompt: 'seed' } };
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(
+      Response.json({ results: [{ testCase: test, evalId: 'cloud' }] }),
+    );
+    limit.mockResolvedValue([{ testCase: test, evalId: 'local' }]);
+    const retries = await addRetryTestCases([test, { ...test, options: { repeat: 2 } }], 'prompt', {
+      targetIds: ['target'],
+    });
+    expect(retries.map((retry) => retry.metadata?.originalEvalId)).toEqual(['local']);
+  });
+
   it.each(['duplicate', 'empty', 'http-error', 'network-error'])(
     'should retain local failures when cloud returns %s',
     async (cloudResult) => {
-      const { cloudConfig } = await import('../../../src/globalConfig/cloud');
-      const { makeRequest } = await import('../../../src/util/cloud');
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       const storedTestCase = {
         vars: { prompt: 'stored failure' },
