@@ -560,7 +560,7 @@ function commandToString(value: unknown): string | undefined {
   return String(value).trim() || undefined;
 }
 
-function sanitizeSerializedAttribute(value: unknown): string {
+function sanitizeSerializedAttribute(value: unknown, headerPairs = false): string {
   if (typeof value !== 'string') {
     return '<redacted>';
   }
@@ -579,7 +579,7 @@ function sanitizeSerializedAttribute(value: unknown): string {
       const parsed = parseStructuredJson(trimmed);
       if (isRecord(parsed) || Array.isArray(parsed)) {
         // Parsing can discard earlier duplicate fields that still contain secrets in the source.
-        return JSON.stringify(sanitizeStructuredAttribute(parsed));
+        return JSON.stringify(sanitizeStructuredAttribute(parsed, false, headerPairs));
       }
     } catch (error) {
       if (error instanceof RangeError) {
@@ -589,6 +589,9 @@ function sanitizeSerializedAttribute(value: unknown): string {
     }
   }
 
+  if (headerPairs && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
+    return '<redacted>'; // A truncated header list can still contain credentials.
+  }
   return sanitizeCredentialText(value);
 }
 
@@ -1052,6 +1055,9 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
     if (value instanceof Date) {
       return new Date(Date.prototype.getTime.call(value));
     }
+    if (typeof value === 'string' && isHeaderContainer(key)) {
+      return sanitizeSerializedAttribute(value, true);
+    }
     if (Array.isArray(value) || isRecord(value)) {
       return sanitizeStructuredAttribute(value, false, isHeaderContainer(key));
     }
@@ -1062,7 +1068,7 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
 }
 
 function isHeaderContainer(key: string): boolean {
-  return /(?:^|[._-])(?:raw[_-]?)?headers$/i.test(key);
+  return /headers?$/i.test(key);
 }
 
 function isCredentialPairValue(
@@ -1192,6 +1198,7 @@ function sanitizeStructuredAttributeValue(
       }
 
       const entry = redactCurl?.(value) ?? value;
+      const nestedHeaders = isHeaderContainer(key) || (sourceHeaders && Array.isArray(source));
       let sanitized: unknown;
       if (
         typeof entry === 'function' ||
@@ -1216,14 +1223,14 @@ function sanitizeStructuredAttributeValue(
             source: entry,
             target: child,
             depth: depth + 1,
-            headerPairs: isHeaderContainer(key) || (sourceHeaders && Array.isArray(source)),
+            headerPairs: nestedHeaders,
           });
           sanitized = child;
         }
       } else {
         sanitized = normalizeScalars ? sanitizeAttributeValue(entry) : entry;
         if (typeof sanitized === 'string') {
-          sanitized = sanitizeSerializedAttribute(sanitized);
+          sanitized = sanitizeSerializedAttribute(sanitized, nestedHeaders);
         }
       }
 
