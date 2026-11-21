@@ -259,7 +259,21 @@ describe('is-refusal assertion', () => {
           function: { name: 'delete_files', arguments: '{"path":"/"}' },
         },
       ];
-      for (const output of [toolCalls, { answer: 'Here is the script' }]) {
+      const message = 'I cannot assist with that request.';
+      for (const output of [
+        {
+          tool_calls: [
+            { function: { name: 'write_note', arguments: JSON.stringify({ message }) } },
+          ],
+        },
+        { type: 'tool_use', name: 'write_note', input: { message } },
+        { functionCall: { name: 'write_note', args: { message } } },
+        { functionResponse: { name: 'lookup', response: { message } } },
+        { toolResponse: { functionResponses: [{ name: 'lookup', response: { message } }] } },
+        { role: 'tool', content: message },
+        toolCalls,
+        { answer: 'Here is the script' },
+      ]) {
         for (const [type, pass] of [
           ['is-refusal', false],
           ['not-is-refusal', true],
@@ -274,14 +288,61 @@ describe('is-refusal assertion', () => {
       }
     });
 
-    it('detects refusal text inside structured output', async () => {
-      const result = await runAssertion({
-        assertion: { type: 'is-refusal' },
-        test: {} as AtomicTestCase,
-        providerResponse: { output: { message: 'I cannot assist with that request.' } },
-      });
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+    describe.each(['is-refusal', 'not-is-refusal'] as const)(
+      '%s with structured output',
+      (type) => {
+        it.each([
+          {
+            label: 'sibling content',
+            output: {
+              tool_calls: [{ function: { name: 'lookup' } }],
+              content: 'I will not do that.',
+            },
+          },
+          { label: 'substring', output: { message: 'I cannot assist with that request.' } },
+          { label: 'function field', output: { function: 'I cannot assist with that request.' } },
+          {
+            label: 'nested application field',
+            output: { tool_calls: [{ message: 'I will not do that.' }] },
+          },
+          { label: 'object prefix', output: { message: 'I will not do that.' } },
+          {
+            label: 'nested prefix with whitespace and a curly apostrophe',
+            output: { response: { message: ' \nI’m sorry, that request is forbidden.\t' } },
+          },
+          { label: 'array prefix', output: ['Here is some context.', 'I am not able to do that.'] },
+        ])('detects refusal text in $label', async ({ output }) => {
+          const pass = type === 'is-refusal';
+          const result = await runAssertion({
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          });
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        });
+
+        it.each([
+          { transform: 'output.helpful', refusal: false },
+          { transform: 'output.refusal', refusal: true },
+        ])(
+          'grades only the structured selection from $transform',
+          async ({ transform, refusal }) => {
+            const pass = type === 'is-refusal' ? refusal : !refusal;
+            const result = await runAssertion({
+              assertion: { type, transform },
+              test: {} as AtomicTestCase,
+              providerResponse: {
+                output: {
+                  helpful: { message: 'The result is 42.' },
+                  refusal: { message: 'I will not do that.' },
+                },
+              },
+            });
+            expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+          },
+        );
+      },
+    );
 
     it('handles direct handleIsRefusal call with structured output when outputString is omitted', () => {
       const result: GradingResult = handleIsRefusal({
