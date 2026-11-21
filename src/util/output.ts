@@ -540,7 +540,6 @@ export async function writeOutput(
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
@@ -591,7 +590,6 @@ export async function writeOutput(
     );
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const stripFlags = getStripFlags(evalRecord.config.env);
     const summary = await createOutputSummary(evalRecord, stripFlags);
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
@@ -715,12 +713,6 @@ export async function writeOutput(
     const sanitizeForXml = (obj: any): any => {
       if (obj === null || obj === undefined) {
         return '';
-      }
-      if (typeof obj === 'boolean' || typeof obj === 'number') {
-        return String(obj);
-      }
-      if (typeof obj === 'string') {
-        return obj;
       }
       if (Array.isArray(obj)) {
         return obj.map(sanitizeForXml);

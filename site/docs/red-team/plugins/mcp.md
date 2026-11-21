@@ -9,38 +9,19 @@ description: Red team MCP implementations by testing function exploits and tool 
 
 The Model Context Protocol (MCP) Plugin tests whether agentic systems using MCP are vulnerable to function call exploits, system prompt leakage, unauthorized tool discovery, or other MCP-specific attacks.
 
-The [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) covers tool misuse under ASI02 and compromised tools or servers under ASI04. Promptfoo includes this plugin in both framework mappings.
+Promptfoo includes `mcp` in the ASI02 (tool misuse) and ASI04 (supply chain) presets for the [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/).
 
 ## Purpose
 
-MCP enables AI models to use tools, maintain context, and perform complex interactions. However, these capabilities introduce unique vulnerabilities. The MCP Plugin specifically tests for:
-
-1. Exploits that compromise the integrity of function calling mechanisms
-2. Attacks that extract sensitive system information
-3. Techniques that manipulate tool usage in unintended ways
-4. Methods to bypass security controls in MCP implementations
+Use this plugin to check whether a prompt can induce an agent to misuse an MCP tool or disclose private details about it.
 
 ## How it Works
 
-The MCP Plugin:
-
-1. Generates attack prompts designed to exploit MCP-specific vulnerabilities
-2. Analyzes model responses for signs of successful exploitation
-3. Checks the model's handling of tool calls
-4. Tests tool invocation boundaries and privilege controls
+Promptfoo sends generated prompts to the agent. The grader looks for evidence in the final response. It does not modify tool descriptions, inspect MCP servers or registries, or check messages between agents.
 
 ## Attack Vectors
 
-The plugin tests for the following MCP-specific attack vectors:
-
-1. **Function Discovery**: Tricking agents to expose hidden functions
-2. **Parameter Injection**: Crafting malicious inputs to inject unwanted parameters
-3. **Function Call Manipulation**: Inducing unauthorized calls or response handling
-4. **Excessive Function Calling**: Exploiting recursion or coercion of function call for denial of service
-5. **System Information Leakage**: Extracting internal system details
-6. **Function Output Manipulation**: Causing misinterpretation of function results
-7. **Tool Metadata Injection**: Smuggling instructions through tool names or descriptions
-8. **Unauthorized Tool Invocation / Privilege Escalation**: Testing access control boundaries
+The grader flags exposed internal tool metadata or instructions, evidence of unauthorized tool calls or privilege escalation, and successful parameter injection.
 
 ## Configuration
 
@@ -127,14 +108,7 @@ redteam:
 
 ## Working With Results
 
-The test results will show:
-
-- The attack prompt attempted
-- The model's response
-- An assessment of whether the attack was successful
-- The specific vulnerability that was exploited (if any)
-
-A successful attack (failed test) is indicated when the model's response demonstrates a vulnerability, such as revealing hidden functions, executing unauthorized tool calls, or leaking system information.
+Review the prompt, response, and grader's reasoning. Check the tool or server logs to confirm what actually ran. A passing result can miss activity absent from the response.
 
 ## Mitigations
 

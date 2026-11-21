@@ -122,7 +122,6 @@ const fireEventInteractionPatterns = [
   },
 ];
 const legacyDirectCallApiMockFiles = new Set([
-  'hooks/useEvalOperations.test.ts',
   'pages/eval/components/Eval.test.tsx',
   'pages/eval/components/ResultsView.delete.test.tsx',
   'pages/eval/components/ResultsView.test.tsx',

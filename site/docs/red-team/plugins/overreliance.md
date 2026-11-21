@@ -7,7 +7,7 @@ description: Red team AI overreliance vulnerabilities by testing model responses
 
 Use the Overreliance plugin to test whether a model accepts flawed premises at face value instead of correcting them before it answers.
 
-[OWASP LLM09:2025 Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/) discusses user overreliance as a related risk. This plugin checks the model's handling of false premises; it does not measure how much users trust its answers.
+[OWASP LLM09:2025 Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/) covers the risk of trusting unverified model output. Review downstream verification and human oversight separately.
 
 ## Purpose
 
