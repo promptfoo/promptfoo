@@ -118,6 +118,18 @@ After installation, you can start using promptfoo by running:
 
 This will guide you through the process of creating a `promptfooconfig.yaml` file.
 
+## Updating Promptfoo
+
+For a global npm installation on macOS or Linux, run:
+
+```bash
+promptfoo update
+```
+
+The command verifies that the active CLI belongs to npm's global package directory before asking npm to install its latest release. For other package managers, local dependencies, containers, temporary installations such as `npx`, and Windows, it prints manual instructions.
+
+Use `promptfoo update --check` to check without installing. Use `promptfoo update --force` to override disabled update checks. Updates wait for npm to finish and preserve npm settings from the launch environment, including registry and install-script policy. The updater does not accept interactive input; use npm directly if your installation requires a prompt.
+
 For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
 
 ## Uninstall Promptfoo

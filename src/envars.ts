@@ -1,3 +1,4 @@
+import './updates/initialProcessEnvironment';
 import {
   getEnvOverridesProvider,
   getExplicitProviderEnv,
