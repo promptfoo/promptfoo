@@ -490,6 +490,7 @@ async function runAssertionInternal({
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
+  const baseType = getAssertionBaseType(assertion);
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
@@ -556,7 +557,11 @@ async function runAssertionInternal({
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
+  }
+  if (
+    Array.isArray(renderedValue) &&
+    (Array.isArray(assertion.value) || baseType === 'trajectory:tool-set')
+  ) {
     // Process each element in the array
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
@@ -572,8 +577,6 @@ async function runAssertionInternal({
   // Centralized script output resolution
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
-  const baseType = getAssertionBaseType(assertion);
-
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
     if (typeof valueFromScript === 'function') {

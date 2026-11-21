@@ -151,6 +151,17 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it('blocks invalid tool sets before submitting an eval', () => {
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['echo'],
+      tests: [{ assert: [{ type: 'trajectory:tool-set', value: '[' }] }],
+    });
+    renderWithProvider(<RunTestSuiteButton />);
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
+    expect(screen.getByText(/array of tool names/)).toBeVisible();
+  });
+
   it('should be enabled for scalar provider, prompt, and test configs', () => {
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',

@@ -1,19 +1,18 @@
-import { toolSetError } from '../contracts/validators/trajectoryToolSet';
+import { ToolNamesSchema, toolSetMessage } from '../contracts/validators/trajectoryToolSet';
 import { getToolNameFromAttributes } from '../tracing/toolAttributes';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
-  const value = params.renderedValue ?? params.assertion.value;
-  const error = toolSetError(value);
-  if (error) {
-    throw new Error(error);
+  const parsed = ToolNamesSchema.safeParse(params.renderedValue ?? params.assertion.value);
+  if (!parsed.success) {
+    throw new Error(toolSetMessage);
   }
   const trace = params.assertionValueContext.trace;
   if (!trace || !Array.isArray(trace.spans)) {
     throw new Error('No trace data available for trajectory:tool-set assertion');
   }
-  const expected = new Set(value as string[]);
+  const expected = new Set(parsed.data.map((name) => name.trim()));
   const actual = new Set(
     trace.spans
       .map((span) => getToolNameFromAttributes(span.attributes ?? {}))
@@ -28,7 +27,7 @@ export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult 
     score: pass ? 1 : 0,
     reason: matches
       ? `Observed tool set matches${params.inverse ? ', which fails the inverse assertion' : ''}.`
-      : `Tool set differs. Missing: ${missing.join(', ') || '(none)'}. Unexpected: ${extra.join(', ') || '(none)'}.`,
+      : `Tool set differs. Missing: ${JSON.stringify(missing)}. Unexpected: ${JSON.stringify(extra)}.`,
     assertion: params.assertion,
   };
 };

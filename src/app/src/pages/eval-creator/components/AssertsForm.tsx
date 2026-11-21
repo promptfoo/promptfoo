@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { isToolSet, toolSetError } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -124,10 +125,6 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
-function isToolSet(type: AssertionType): boolean {
-  return type === 'trajectory:tool-set' || type === 'not-trajectory:tool-set';
-}
-
 function parseArrayValue(value: Assertion['value']): Assertion['value'] {
   if (typeof value === 'string') {
     try {
@@ -203,9 +200,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? {
                             ...a,
                             type: newValue as AssertionType,
-                            value: isToolSet(newValue as AssertionType)
-                              ? parseArrayValue(a.value)
-                              : a.value,
+                            value: isToolSet(newValue) ? parseArrayValue(a.value) : a.value,
                           }
                         : a,
                     );
@@ -236,6 +231,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   </Label>
                   <Textarea
                     id={`assert-value-${index}`}
+                    aria-invalid={Boolean(toolSetError(assert))}
                     placeholder={
                       isToolSet(assert.type)
                         ? '["search", "summarize"]'

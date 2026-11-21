@@ -1,6 +1,12 @@
-import { toolSetError } from '@promptfoo/contracts/validators/trajectoryToolSet';
+import {
+  isToolSet,
+  toolSetError,
+  toolSetMessage,
+} from '@promptfoo/contracts/validators/trajectoryToolSet';
 import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
+
+export { isToolSet, toolSetError, toolSetMessage };
 
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
 const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
@@ -389,9 +395,21 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
   return undefined;
 }
 
+export function hasInvalidToolSet(test: unknown): boolean {
+  return (
+    isRecord(test) &&
+    Array.isArray(test.assert) &&
+    test.assert.some(
+      (assertion) =>
+        assertion &&
+        (assertion.type === 'assert-set' ? hasInvalidToolSet(assertion) : toolSetError(assertion)),
+    )
+  );
+}
+
 function getStructuredValueError(assertion: Assertion): string | undefined {
-  if (assertion.type === 'trajectory:tool-set' || assertion.type === 'not-trajectory:tool-set') {
-    return toolSetError(assertion.value);
+  if (isToolSet(assertion.type)) {
+    return toolSetError(assertion);
   }
 
   if (

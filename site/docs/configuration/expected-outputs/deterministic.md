@@ -804,7 +804,9 @@ assert:
     value: [search_orders, compose_reply]
 ```
 
-Names are literal and case-sensitive. Use `[]` to require no attributed tool calls. Missing trace data produces an error; an empty trace has an empty tool set. The failure reason lists missing and unexpected tool names without arguments.
+Names are literal and case-sensitive. Promptfoo trims leading and trailing whitespace from both expected and observed names. Use `[]` to require no attributed tool calls. Missing trace data produces an error, even for the inverse assertion. A successfully collected trace with no tool calls has an empty set. The failure reason lists missing and unexpected names without arguments.
+
+Inline arrays and JSON or YAML arrays loaded from `file://` can reference test variables. In CSV expected-output cells, use a JSON array such as `trajectory:tool-set:["search_orders"]`.
 
 Use `trajectory:tool-used` with a list when additional tools are allowed. Use `not-trajectory:tool-set` to require a different set, or `trajectory:tool-sequence` when order matters.
 

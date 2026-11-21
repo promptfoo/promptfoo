@@ -19,7 +19,7 @@
   "core -> providers": 24,
   "core -> redteam": 10,
   "core -> validation": 1,
-  "legacy-contracts -> contracts": 21,
+  "legacy-contracts -> contracts": 22,
   "legacy-contracts -> legacy-runtime": 3,
   "legacy-contracts -> redteam": 10,
   "legacy-contracts -> validation": 3,
