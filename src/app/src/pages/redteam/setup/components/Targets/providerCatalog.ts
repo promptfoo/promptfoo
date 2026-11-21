@@ -286,7 +286,7 @@ const providerCatalog: ProviderTypeOption[] = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-6.1 Sol, GPT-6 Luna and Astra, and GPT-5.6 Terra',
+    description: 'GPT-6.2 Astra and Sol, GPT-6.1 Terra, and GPT-6 Luna',
     tag: 'providers',
     recommended: true,
     defaultId: DEFAULT_OPENAI_TARGET_ID,
@@ -406,6 +406,22 @@ const providerCatalog: ProviderTypeOption[] = [
     tag: 'providers',
     defaultId: 'openrouter:openai/gpt-6-sol',
     editor: 'foundation',
+  },
+  {
+    value: 'litellm',
+    label: 'LiteLLM',
+    description: 'Models configured on your LiteLLM proxy',
+    tag: 'providers',
+    defaultId: 'litellm:openai/gpt-6.2-sol',
+    editor: 'custom',
+  },
+  {
+    value: 'vercel',
+    label: 'Vercel AI Gateway',
+    description: 'OpenAI, Anthropic, and other models through Vercel',
+    tag: 'providers',
+    defaultId: 'vercel:openai/gpt-6.2-sol',
+    editor: 'custom',
   },
   {
     value: 'fireworks',
@@ -586,6 +602,16 @@ export const allProviderOptions = providerCatalog
     // Otherwise sort alphabetically
     return a.label.localeCompare(b.label);
   });
+export function isModelProviderId(id: string): boolean {
+  const separator = id.indexOf(':');
+  if (separator < 0 || separator === id.length - 1) {
+    return false;
+  }
+  // Match the provider family so agent and endpoint subtypes keep their full IDs.
+  const family = getProviderType(id.slice(0, separator));
+  return providerCatalog.some((option) => option.tag === 'providers' && option.value === family);
+}
+
 export function getProviderEditorKind(type?: string): ProviderEditorKind | undefined {
   return (
     allProviderOptions.find((option) => option.value === type)?.editor ??
