@@ -334,12 +334,11 @@ describe('getGradingProvider', () => {
   });
 
   describe('error handling', () => {
-    it('should throw error when provider is an array', async () => {
-      const providerArray = ['openai:gpt-4'];
-
-      await expect(getGradingProvider('text', providerArray as any, null)).rejects.toThrow(
-        'Provider must be an object or string, but received an array',
-      );
+    it('reports a nested array without copying the provider configuration', async () => {
+      const grader = { id: 'openai:chat:grader', config: { apiKey: 'synthetic-grader-secret' } };
+      const result = getGradingProvider('text', [grader] as any, null);
+      await expect(result).rejects.toThrow('received an array');
+      await expect(result).rejects.not.toThrow(grader.config.apiKey);
     });
 
     it('should throw error for invalid provider definition', async () => {
