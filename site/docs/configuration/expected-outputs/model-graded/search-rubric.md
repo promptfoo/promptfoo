@@ -35,7 +35,11 @@ assert:
   # Using llm-rubric with a web-search capable provider
   - type: llm-rubric
     value: 'Contains current stock price for Apple (AAPL) within $5'
-    provider: openai:responses:gpt-5.1 # Must configure web search tool
+    provider:
+      id: openai:responses:gpt-6.2-sol
+      config:
+        tools:
+          - type: web_search
 
   # Using search-rubric (automatically selects a web-search provider)
   - type: search-rubric
@@ -83,16 +87,16 @@ defaultTest:
 
 ### 2. OpenAI with Web Search
 
-OpenAI's responses API supports web search through the `web_search_preview` tool:
+GPT-6.2 Sol and Astra support the `web_search` tool on the OpenAI Responses API.
 
 ```yaml
 defaultTest:
   options:
     provider:
-      id: openai:responses:gpt-5.1
+      id: openai:responses:gpt-6.2-sol
       config:
         tools:
-          - type: web_search_preview
+          - type: web_search
 ```
 
 ### 3. Perplexity

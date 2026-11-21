@@ -134,7 +134,7 @@ function describeApiError({ code, type, message }: LiveApiError): string {
 function decodeBase64(value: string): Buffer | undefined {
   const bytes = Buffer.from(value, 'base64');
   const canonical = bytes.toString('base64');
-  return value === canonical || value === canonical.replace(/=+$/, '') ? bytes : undefined;
+  return value === canonical || value === canonical.replace(/={1,2}$/, '') ? bytes : undefined;
 }
 
 function readErrorMessage(body: string): string | undefined {
@@ -1028,6 +1028,7 @@ export class LiveSession {
         completionDetails: details,
       });
       const cost = calculateOpenAIUsageCost(model, this.options.config, usage, {
+        createdAt: response.created_at,
         serviceTier:
           response.service_tier ??
           (config?.type === 'responses' ? config.responses.service_tier : undefined),

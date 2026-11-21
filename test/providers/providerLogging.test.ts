@@ -50,9 +50,20 @@ describe('credential redaction', () => {
     ).toBe(`${REDACTED} Bearer ${REDACTED} ${REDACTED}`);
   });
 
+  it('omits both ends of partially overlapping credentials', () => {
+    expect(redactCredentials('pre-middle-tail', ['pre-middle', 'middle-tail'])).toBe(REDACTED);
+  });
+
   it('redacts short upstream authorization tokens', () => {
     expect(redactCredentials('Bearer abc123; Basic dTpw; Bearer z', [])).toBe(
       `Bearer ${REDACTED}; Basic ${REDACTED}; Bearer ${REDACTED}`,
+    );
+  });
+
+  it('omits the entire upstream token when it contains a known credential', () => {
+    const message = 'Bearer demo-key-rest; Basic pre-demo-key-rest; sk-demo-key-private';
+    expect(redactCredentials(message, ['demo-key'])).toBe(
+      'Bearer [REDACTED]; Basic [REDACTED]; [REDACTED]',
     );
   });
 
@@ -111,6 +122,7 @@ describe('redactDiagnosticText', () => {
       JSON.stringify(JSON.stringify(JSON.stringify({ FAL_KEY: 'upstream-1 "upstream-2"' }))),
     ],
     ['multi-token authorization', 'Authorization: Token upstream-1 upstream-2; context'],
+    ['prototype-like field name', '__proto__.Authorization: Token upstream-1; context'],
     [
       'digest authorization',
       'Proxy-Authorization: Digest username="upstream-1", response="upstream-2"',
@@ -121,6 +133,15 @@ describe('redactDiagnosticText', () => {
       'URL userinfo and query',
       'GET https://upstream-1:upstream-2@api.test/v1?access_token=upstream-3',
     ],
+    [
+      'multiline quoted fields',
+      'token="upstream-1\nupstream-2"; api_key=\'upstream-3\r\nupstream-4\'',
+    ],
+    ['multiline escaped fields', 'password=\\"upstream-1\nupstream-2\\"'],
+    ['credential arrays', '{"credentials":["upstream-1","upstream-2"]}'],
+    ['nested credential objects', '{"token":{"value":["upstream-1"]}}'],
+    ['incomplete credential objects', 'secret = {name: "upstream-1"'],
+    ['partly redacted fields', 'password="' + REDACTED + 'upstream-1"'],
     ['unterminated quoted values', 'Authorization: "Token upstream-1'],
   ])('redacts upstream-only %s', (_label, text) => {
     const redacted = redactDiagnosticText(`${text} useful context`, []);
@@ -128,9 +149,45 @@ describe('redactDiagnosticText', () => {
     expect(redacted).not.toMatch(/upstream-|sk-proj-/);
   });
 
-  it('redacts configured credentials before normalizing escaped slashes', () => {
+  it.each([
+    ['Authorization', 'Digest username="user;name", response="upstream-1"'],
+    ['Proxy-Authorization', 'Digest username="escaped\\";name",\r\n\tresponse="upstream-1"'],
+    ['Authorization', 'AWS4-HMAC-SHA256 SignedHeaders=host;date, Signature=upstream-1'],
+    ['Cookie', 'sid="user,name"; other=upstream-1'],
+    ['Set-Cookie', 'sid=first; Expires=Wed, 21 Oct, sid=upstream-1'],
+  ])('masks the complete %s header while preserving the next line (%#)', (name, header) => {
+    expect(redactDiagnosticText(name + ': ' + header + '\r\nstatus=400', [])).toBe(
+      name + ': ' + REDACTED + '\r\nstatus=400',
+    );
+  });
+
+  it.each(['\\secret', 'left\\right', 'left\\;right', 'left\\ right'])(
+    'masks backslashes in a bare credential and preserves the next field (%#)',
+    (value) => {
+      expect(redactDiagnosticText('PASSWORD=' + value + '; status=400', [])).toBe(
+        'PASSWORD=' + REDACTED + '; status=400',
+      );
+    },
+  );
+
+  it('preserves literal backslash credential matching when normalizing escaped slashes', () => {
     const credential = 'synthetic\\/credential';
     expect(redactDiagnosticText(`failed ${credential}`, [credential])).toBe(`failed ${REDACTED}`);
+  });
+
+  it('redacts longer credentials before shorter literal slash variants', () => {
+    const literal = 'abc\\/def';
+    const credentials = [literal, 'prefix-abc/def-private'];
+    expect(redactDiagnosticText('prefix-abc\\/def-private; xabc\\/defy', credentials)).toBe(
+      '[REDACTED]; x[REDACTED]y',
+    );
+  });
+
+  it('redacts escaped credentials before inspecting bearer tokens', () => {
+    const credentials = new Set(['abc/defgh']).values();
+    expect(redactDiagnosticText('failed abc\\/defgh; Bearer abc\\\\/defgh', credentials)).toBe(
+      'failed [REDACTED]; Bearer [REDACTED]',
+    );
   });
 
   it.each([1, 2, 4])('redacts URLs with %i levels of slash escaping', (levels) => {
