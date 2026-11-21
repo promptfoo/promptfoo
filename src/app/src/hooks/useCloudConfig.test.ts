@@ -31,8 +31,6 @@ describe('useCloudConfig', () => {
   beforeEach(() => {
     client = new QueryClient();
     resetCallApiMock();
-    // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
-    // Only use fake timers in specific tests that need timer control
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
@@ -48,6 +46,7 @@ describe('useCloudConfig', () => {
   it('should set data and isLoading=false on successful API call', async () => {
     const mockCloudConfig = {
       appUrl: 'https://app.promptfoo.com',
+      isEnterprise: false,
       isEnabled: true,
     };
 
@@ -128,6 +127,7 @@ describe('useCloudConfig', () => {
   it('should fetch cloud config on mount', async () => {
     const mockCloudConfig = {
       appUrl: 'https://app.promptfoo.com',
+      isEnterprise: false,
       isEnabled: false,
     };
 
@@ -146,9 +146,32 @@ describe('useCloudConfig', () => {
     );
   });
 
+  it.each([
+    ['https://enterprise.example', true],
+    ['https://app.promptfoo.com', false],
+    [null, false],
+  ])('infers enterprise status for legacy app URL %s', async (appUrl, isEnterprise) => {
+    mockCallApiResponse({ appUrl, isEnabled: true });
+    const { result } = mount();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.data).toEqual({ appUrl, isEnabled: true, isEnterprise });
+  });
+
+  it.each(['not-a-url', 'javascript:void(0)', 'https://user:password@example.com'])(
+    'rejects an invalid dashboard URL %s',
+    async (appUrl) => {
+      mockCallApiResponse({ appUrl, isEnabled: true });
+      const { result } = mount();
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.data).toBeNull();
+      expect(result.current.error).not.toBeNull();
+    },
+  );
+
   it('should only call the API once on mount and not on rerender', async () => {
     const mockCloudConfig = {
       appUrl: 'https://app.promptfoo.com',
+      isEnterprise: false,
       isEnabled: true,
     };
 

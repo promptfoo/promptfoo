@@ -5476,8 +5476,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "appUrl": { "type": "string" },
-                    "isEnabled": { "type": "boolean" }
+                    "appUrl": { "type": ["string", "null"], "format": "uri" },
+                    "isEnabled": { "type": "boolean" },
+                    "isEnterprise": { "type": "boolean" }
                   },
                   "required": ["appUrl", "isEnabled"]
                 }

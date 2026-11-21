@@ -7,8 +7,8 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import useCloudConfig from './useCloudConfig';
 
-const enabled = { appUrl: 'https://cloud-a.example', isEnabled: true };
-const disabled = { appUrl: 'https://cloud-b.example', isEnabled: false };
+const enabled = { appUrl: 'https://cloud-a.example', isEnabled: true, isEnterprise: true };
+const disabled = { appUrl: 'https://cloud-b.example', isEnabled: false, isEnterprise: true };
 const initialUser = useUserStore.getState();
 
 function deferred() {
