@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { getMeteorOptions } from './meteorOptions';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -35,14 +36,6 @@ async function ensureNaturalPackage(): Promise<void> {
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
-
-interface MeteorAssertion {
-  type: string;
-  threshold?: number;
-  alpha?: number;
-  beta?: number;
-  gamma?: number;
-}
 
 function generateEnums(candidate: string[], reference: string[]): [WordPair[], WordPair[]] {
   if (typeof candidate === 'string') {
@@ -242,7 +235,10 @@ export async function handleMeteorAssertion({
   inverse,
   outputString,
   renderedValue,
-}: AssertionParams): Promise<GradingResult> {
+}: Pick<
+  AssertionParams,
+  'assertion' | 'inverse' | 'outputString' | 'renderedValue'
+>): Promise<GradingResult> {
   // Validate inputs
   invariant(
     typeof renderedValue === 'string' ||
@@ -253,12 +249,7 @@ export async function handleMeteorAssertion({
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
 
   // Get parameters from assertion or use defaults
-  const meteorAssertion = assertion as unknown as MeteorAssertion;
-  const alpha = meteorAssertion.alpha ?? 0.9;
-  const beta = meteorAssertion.beta ?? 3.0;
-  const gamma = meteorAssertion.gamma ?? 0.5;
-  const threshold = meteorAssertion.threshold ?? 0.5;
-
+  const { alpha, beta, gamma, threshold } = getMeteorOptions(assertion);
   const score = await calculateMeteorScore(outputString, references, alpha, beta, gamma);
 
   const pass = inverse ? score < threshold : score >= threshold;
@@ -268,7 +259,9 @@ export async function handleMeteorAssertion({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : inverse
+        ? `METEOR score ${score} met threshold ${threshold} (expected it not to)`
+        : `METEOR score ${score} did not meet threshold ${threshold}`,
     assertion,
   };
 }

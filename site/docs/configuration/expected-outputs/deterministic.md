@@ -61,6 +61,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [meteor](#meteor)                                               | METEOR score meets a given threshold; requires `natural`           |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
@@ -1556,7 +1557,7 @@ METEOR evaluates text by:
 1. Matching unigrams (words) between the generated text and reference(s) using:
    - Exact matches (surface forms)
    - Word stems (e.g., "running" → "run")
-   - Semantic meanings
+   - WordNet synonyms (e.g., "couch" and "sofa")
 2. Computing a final score (0.0 to 1.0) based on:
    - Unigram precision (accuracy of matched words)
    - Unigram recall (coverage of reference words)
@@ -1570,9 +1571,11 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
+By default, `meteor` passes when its similarity score is at least 0.5. `not-meteor` passes when the score is below the threshold and reports `1 - similarity` as its score. A failing `not-meteor` reason states that the similarity met the threshold.
 
 #### Custom Threshold
+
+`threshold`, `alpha`, and `gamma` must be finite numbers between 0 and 1 (inclusive). `beta` must be a finite, nonnegative number. Their defaults are 0.5, 0.9, 0.5, and 3.0, respectively. Invalid options are rejected before scoring.
 
 Set your own threshold based on your quality requirements:
 

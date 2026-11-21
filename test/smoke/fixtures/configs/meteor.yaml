@@ -1,0 +1,25 @@
+providers:
+  - echo
+
+prompts:
+  - '{{text}}'
+
+tests:
+  - vars:
+      text: walking couch
+    assert:
+      - type: meteor
+        value: walked sofa
+        threshold: 0.9
+  - vars:
+      text: walking couch
+    assert:
+      - type: not-meteor
+        value: walked sofa
+        threshold: 0.9
+  - vars:
+      text: the dog ran quickly
+    assert:
+      - type: not-meteor
+        value: a feline walks slowly
+        threshold: 0.9
