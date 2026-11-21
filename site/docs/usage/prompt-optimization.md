@@ -76,7 +76,7 @@ promptfoo optimize --validation-split 0.2
 With `0.2`, promptfoo searches on roughly 80% of the configured tests and judges candidate adoption on the held-out 20%. The split is optional and may be any value greater than `0` and less than or equal to `0.5`.
 
 :::note
-Validation splitting requires explicit `tests`. If your config uses `scenarios`, expand them into explicit test cases before passing `--validation-split`.
+Validation splitting requires explicit `tests`. If your config uses `scenarios`, expand them into explicit test cases before passing `--validation-split`. When `filterRange` is set, validation splitting also requires a suite without extensions, because `beforeAll` hooks can change the selected rows. Resolve the test list first, or omit the split.
 :::
 
 ## Practical guidance
