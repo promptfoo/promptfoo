@@ -767,6 +767,23 @@ function usesStandaloneWorkbookLoader(source: string, basePath: string): boolean
   );
 }
 
+/** Scalar YAML is loaded as a glob, even when the extension belongs to a sheet selector. */
+function usesStandaloneTestsLoader(source: string, basePath: string, scalar: boolean): boolean {
+  if (scalar && (source.endsWith('yaml') || source.endsWith('yml'))) {
+    return source.startsWith('az://');
+  }
+  const local = source.replace(/^file:\/\//, '');
+  const script = stripFunctionSuffix(local);
+  return (
+    isRemoteTestsReference(source) ||
+    (scalar && (!hasGlobMagic(local) || fs.existsSync(path.resolve(basePath, local)))) ||
+    script !== local ||
+    isJavascriptFile(script) ||
+    script.endsWith('.py') ||
+    usesStandaloneWorkbookLoader(local, basePath)
+  );
+}
+
 async function readTestsWithEnv(
   tests: TestSuiteConfig['tests'],
   basePath: string,
@@ -787,21 +804,11 @@ async function readTestsWithEnv(
 
   if (typeof tests === 'string') {
     const source = renderEnvOnlyInObject(tests);
-    if (source.startsWith('az://')) {
-      return loadStandalone(source);
-    }
-    // Points to a tests file with multiple test cases
-    if (source.endsWith('yaml') || source.endsWith('yml')) {
-      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
-    }
-    const withoutScheme = source.replace(/^file:\/\//, '');
-    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
-      // Preserve standalone parsing for literal files, including names with glob characters.
-      return loadStandalone(source);
-    }
-    // Use the original reference so the array loader renders env templates consistently.
-    tests = [tests];
-  } else if (
+    return usesStandaloneTestsLoader(source, basePath, true)
+      ? loadStandalone(source)
+      : loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
+  }
+  if (
     typeof tests === 'object' &&
     tests !== null &&
     !Array.isArray(tests) &&
@@ -827,17 +834,7 @@ async function readTestsWithEnv(
   for (const entry of tests) {
     const globOrTest = typeof entry === 'string' ? renderEnvOnlyInObject(entry) : entry;
     if (typeof globOrTest === 'string') {
-      // Extract path without function name (Windows-aware)
-      const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
-      const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
-      // Read standalone sources, then resolve provider and vars references for local rows.
-      if (
-        isRemoteTestsReference(globOrTest) ||
-        isJavascriptFile(pathWithoutFunction) ||
-        pathWithoutFunction.endsWith('.py') ||
-        usesStandaloneWorkbookLoader(pathWithoutScheme, basePath) ||
-        pathWithoutFunction !== pathWithoutScheme
-      ) {
+      if (usesStandaloneTestsLoader(globOrTest, basePath, false)) {
         ret.push(...(await loadStandalone(globOrTest)));
       } else {
         // Resolve globs for other file types
@@ -914,7 +911,11 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  kind: 'standalone' | 'tests' | 'vars' | 'config' = 'config',
+): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -922,7 +923,17 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  if (hasGlobMagic(withoutScheme)) {
+  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
+  const withoutFunction = stripFunctionSuffix(withoutSheet);
+  const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
+  const filePath = isScript ? withoutFunction : withoutSheet;
+  // Test sources prefer existing literal files. Raw vars paths always go through globSync.
+  if (
+    kind === 'vars' ||
+    (kind !== 'standalone' &&
+      hasGlobMagic(withoutScheme) &&
+      (kind !== 'tests' || !fs.existsSync(resolved)))
+  ) {
     const matches = globSync(
       path.resolve(
         escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
@@ -937,12 +948,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
     // happens to contain a glob metacharacter.
   }
 
-  // A concrete path. Only strip a `:functionName` suffix for script references, so that
-  // a vars file whose name legally contains a colon is still watched in full.
-  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
-  const withoutFunction = stripFunctionSuffix(withoutSheet);
-  const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
-  return [isScript ? withoutFunction : withoutSheet];
+  return [filePath];
 }
 
 /**
@@ -1051,19 +1057,18 @@ export function resolveTestsWatchPaths(
       // A tests file may itself point at more files, e.g. a case with
       // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
       // config is built, so collect them here as well.
-      const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
-      const useSourceDirectory =
-        Array.isArray(tests) ||
-        source.endsWith('yaml') ||
-        source.endsWith('yml') ||
-        (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
-      return resolveTestsFileReference(entry, basePath).flatMap((file) => [
+      const standalone = usesStandaloneTestsLoader(
+        renderEnvOnlyInObject(entry),
+        basePath,
+        !Array.isArray(tests),
+      );
+      return resolveTestsFileReference(
+        entry,
+        basePath,
+        standalone ? 'standalone' : 'tests',
+      ).flatMap((file) => [
         file,
-        ...collectNestedFileReferences(
-          file,
-          basePath,
-          useSourceDirectory ? path.dirname(file) : basePath,
-        ),
+        ...collectNestedFileReferences(file, basePath, standalone ? basePath : path.dirname(file)),
       ]);
     }
     if (!entry || typeof entry !== 'object') {
@@ -1071,7 +1076,7 @@ export function resolveTestsWatchPaths(
     }
     if ('path' in entry && typeof entry.path === 'string') {
       return [
-        ...resolveTestsFileReference(entry.path, basePath),
+        ...resolveTestsFileReference(entry.path, basePath, 'standalone'),
         ...collectConfigFileReferences((entry as { config?: unknown }).config, basePath),
       ];
     }
@@ -1082,7 +1087,7 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath, 'vars') : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
