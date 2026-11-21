@@ -182,9 +182,11 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        const optsWithAliases = normalizeTagOption(
-          opts as EvalCommandOptions & { tag?: Record<string, string> },
-        );
+        const optsWithAliases = normalizeTagOption({
+          ...opts,
+          // Commander may consume common options on the parent command.
+          envPath: command.optsWithGlobals().envPath,
+        } as EvalCommandOptions & { tag?: Record<string, string> });
         // Commander defaults a lone `--no-cache` to `true`. Only an explicit flag should
         // override the loaded config's `commandLineOptions.cache` / `evaluateOptions.cache`.
         if (command.getOptionValueSource('cache') !== 'cli') {
@@ -239,11 +241,17 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
         );
       }
+      const ordinaryEval = !program.parent;
+      const cmdOpts = { ...validatedOpts } as Partial<CommandLineOptions & Command>;
+      if (ordinaryEval && command.getOptionValueSource('delay') !== 'cli') {
+        delete cmdOpts.delay;
+      }
       await doEval(
-        validatedOpts as Partial<CommandLineOptions & Command>,
+        cmdOpts,
         defaultConfig,
         defaultConfigPath,
         { ...evaluateOptions, eventSource: 'cli' },
+        ordinaryEval,
       );
     });
 
