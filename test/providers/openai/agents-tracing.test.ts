@@ -256,6 +256,9 @@ describe('OTLPTracingExporter', () => {
     async (format) => {
       const { attributes, payload } = await exportCustomData(
         {
+          joined: "curl -''u bot:opaque/value https://host",
+          escaped: "c\\url --us''er bot:opaque/value https://host",
+          expansion: 'curl --us$(echo er) bot:opaque/value https://host',
           command: 'echo public&&/usr/bin/curl -u bot:opaque/value https://host',
           nested: "sh -c 'curl --proxy-user bot:opaque/value https://host'",
           args: ['bash', '-lc', 'echo public\ncurl -ubot:opaque/value https://host'],
@@ -263,6 +266,7 @@ describe('OTLPTracingExporter', () => {
         format,
       );
       expect(JSON.stringify(payload)).not.toContain('opaque/value');
+      expect(attributes.expansion).toBe('<redacted>');
       expect(attributes.command).toBe('echo public&&/usr/bin/curl -u <redacted> https://host');
     },
   );
@@ -308,14 +312,17 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)(
-    'withholds embedded JSON containing escaped credential keys in %s',
+    'withholds embedded fields with escaped or punctuated credential keys in %s',
     async (format) => {
-      const publicText = 'Reply: {"st\\u0061tus":"ok"}';
+      const publicText = 'Reply: {"city name":"London","st\\u0061tus":"ok"}';
       const { attributes, payload } = await exportCustomData(
         {
           text: 'Request failed: {"pass\\u0077ord":"opaque/value"}',
           array: 'Received {"\\u0061pi_key":["opaque/value"]}',
           control: 'Received {"db\\tpassword":"opaque/value"}',
+          spaced: 'Request failed: {"api key":"opaque/value"}',
+          toml: "Request: 'database password' = 'opaque/value'",
+          native: { 'api key': 'opaque/value', 'pass\\u0077ord': 'opaque/value' },
           publicText,
         },
         format,

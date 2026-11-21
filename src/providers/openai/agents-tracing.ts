@@ -679,18 +679,16 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
     return '<redacted>';
   }
 
-  // Embedded JSON can escape the delimiters, the key, or both. Decode key
-  // characters for classification only. The surrounding text isn't trusted JSON.
-  for (const [, escapes, encodedKey] of value.matchAll(
-    /(?<!\\)(\\*)"((?:[^"\\]|\\+[^"\\])*)\\*"\s*:/g,
+  // Simple quoted fields can retain surrounding text. For ambiguous fields
+  // classify the entire key, then withhold the text instead of guessing value boundaries.
+  for (const [, escapes, double, single, first] of value.matchAll(
+    /(?<!\\)(\\*)(?:"([^"]*)"|'([^']*)')\s*[:=]\s*(?=(\S|$))/g,
   )) {
-    if (!escapes && !encodedKey.includes('\\')) {
+    const key = double ?? single;
+    if (!escapes && /^[A-Za-z_][\w.-]*$/.test(key) && (first === '"' || first === "'")) {
       continue;
     }
-    const key = encodedKey.replace(/(?<!\\)\\+(?:u([\da-f]{4})|[bfnrt])/gi, (_, hex?: string) =>
-      hex ? String.fromCharCode(Number.parseInt(hex, 16)) : ' ',
-    );
-    if (isCredentialAttributeKey(key) || isCredentialAttributeKey(encodedKey)) {
+    if (isCredentialAttributeKey(key.replace(/(?<!\\)\\+$/, ''))) {
       return '<redacted>';
     }
   }
@@ -698,7 +696,10 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
   const command = value.replace(/\\\r?\n/g, '');
-  if (/\bcurl\b/i.test(command)) {
+  if (containsCurl(command)) {
+    if (SHELL_EXPANSION.test(command)) {
+      return '<redacted>'; // Variable and command expansion cannot be classified safely.
+    }
     const redactCurl = curlArgumentRedactor();
     value = command.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
   }
@@ -819,27 +820,39 @@ function hasEncodedCredential(raw: string): boolean {
 }
 
 // Keep adjacent quoted and escaped fragments in the same shell argument.
+const SHELL_EXPANSION = /[$\x60]|[<>]\(/;
 const COMMAND_WORDS = /[;&|\r\n]+|(?:[^;&|\s"'\\]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"?|'[^']*'?)+/g;
+
+// Join literal shell fragments for classification only. Never evaluate shell syntax.
+function unquoteShellWord(word: string) {
+  return word.replace(/['"\\]/g, '');
+}
+
+function containsCurl(text: string, plain = unquoteShellWord(text)) {
+  return /\bcurl\b/i.test(text) || /\bcurl\b/i.test(plain);
+}
 
 // Recognize curl after wrappers and command separators in a single pass.
 function curlArgumentRedactor() {
   let curl = false;
+  let ambiguous = false;
   let maskNext = false;
   return (word: unknown) => {
     if (typeof word === 'string' && /^[;&|\r\n]+$/.test(word)) {
       curl = false;
+      ambiguous = false;
       maskNext = false;
       return;
     }
-    if (maskNext) {
+    if (maskNext || ambiguous) {
       maskNext = false;
       return '<redacted>';
     }
     if (typeof word !== 'string') {
       return;
     }
-    const arg = word.replace(/^(["'])(.*)\1$/s, '$2');
-    if (/\bcurl\b/i.test(arg)) {
+    const arg = unquoteShellWord(word);
+    if (containsCurl(word, arg)) {
       // A quoted shell program can hide both the option and its operand in one word.
       if (/\s/.test(arg) && arg.includes('-')) {
         return '<redacted>';
@@ -848,6 +861,10 @@ function curlArgumentRedactor() {
     }
     if (!curl) {
       return;
+    }
+    if (SHELL_EXPANSION.test(arg)) {
+      ambiguous = true;
+      return '<redacted>';
     }
     // curl permits short options without operands before the credential flag.
     const flag =
@@ -925,6 +942,18 @@ function redactQuotedCredentials(value: string): string {
 }
 
 function isCredentialAttributeKey(key: string): boolean {
+  if (key.includes('\\')) {
+    const decoded = key.replace(/(?<!\\)\\+(?:u([\da-f]{4})|[bfnrt])/gi, (_, hex?: string) =>
+      hex ? String.fromCharCode(Number.parseInt(hex, 16)) : ' ',
+    );
+    if (decoded !== key && isCredentialName(decoded)) {
+      return true;
+    }
+  }
+  return isCredentialName(key);
+}
+
+function isCredentialName(key: string): boolean {
   if (/^(?:x-session-id|(?:code|pkce)[_.-]?verifier)$/i.test(key)) {
     return true;
   }
