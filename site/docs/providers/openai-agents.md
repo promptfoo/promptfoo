@@ -63,23 +63,24 @@ implicit default as a stable eval input.
 
 ## Configuration Options
 
-| Parameter          | Description                                                                         | Default               |
-| ------------------ | ----------------------------------------------------------------------------------- | --------------------- |
-| `agent`            | Agent definition (inline object or `file://path`)                                   | -                     |
-| `tools`            | Additional tool definitions (inline array or `file://path`)                         | -                     |
-| `handoffs`         | Additional handoff definitions (inline array or `file://path`)                      | -                     |
-| `maxTurns`         | Maximum conversation turns; set `null` to disable the SDK turn limit                | 10                    |
-| `model`            | Override model specified in agent definition                                        | -                     |
-| `modelSettings`    | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings   | -                     |
-| `inputGuardrails`  | Additional input guardrails (inline array or `file://`)                             | -                     |
-| `outputGuardrails` | Additional output guardrails (inline array or `file://`)                            | -                     |
-| `session`          | Persistent SDK session definition, instance, factory, or `file://` export           | -                     |
-| `sandbox`          | Sandbox runtime config, local client definition, factory, or `file://` export       | -                     |
-| `runOptions`       | Additional non-streaming SDK `run()` options such as `conversationId` or filters    | -                     |
-| `executeTools`     | Execute function tools normally (`real`) or replace them with mocked results        | `real`                |
-| `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
-| `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
-| `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
+| Parameter          | Description                                                                          | Default               |
+| ------------------ | ------------------------------------------------------------------------------------ | --------------------- |
+| `agent`            | Agent definition (inline object or `file://path`)                                    | -                     |
+| `tools`            | Additional tool definitions (inline array or `file://path`)                          | -                     |
+| `handoffs`         | Additional handoff definitions (inline array or `file://path`)                       | -                     |
+| `maxTurns`         | Maximum conversation turns; set `null` to disable the SDK turn limit                 | 10                    |
+| `model`            | Override model specified in agent definition                                         | -                     |
+| `modelSettings`    | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings    | -                     |
+| `inputGuardrails`  | Additional input guardrails (inline array or `file://`)                              | -                     |
+| `outputGuardrails` | Additional output guardrails (inline array or `file://`)                             | -                     |
+| `session`          | Persistent SDK session definition, instance, factory, or `file://` export            | -                     |
+| `sandbox`          | Sandbox runtime config, local client definition, factory, or `file://` export        | -                     |
+| `runOptions`       | Additional non-streaming SDK `run()` options such as `conversationId` or filters     | -                     |
+| `executeTools`     | Execute function tools normally (`real`) or replace them with mocked results         | `real`                |
+| `includeToolCalls` | Include observed SDK function-call requests and result presence in response metadata | false                 |
+| `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false  | -                     |
+| `tracing`          | Enable Promptfoo OTLP export for SDK spans                                           | false                 |
+| `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                       | http://localhost:4318 |
 
 `config.model` and `config.modelSettings` are execution overrides. When present, each option
 replaces the corresponding field on the initial agent and every handoff agent, including agents
@@ -87,6 +88,65 @@ loaded from a file. Omit either option to preserve that field from each agent de
 
 Agents invoked independently by guardrails, tool callbacks, or `Agent.asTool()` keep their own
 model and settings. Configure those agents directly when comparing models across a nested workflow.
+
+## Assert on observed function calls
+
+Set `includeToolCalls: true` to collect function-call requests from the Agents SDK's
+`newItems` stream in `providerResponse.metadata.toolCalls`. Unlike reading a final
+answer for tool names, this lets assertions distinguish two identical answers with
+different tool behavior. This is opt-in: the default provider response is unchanged.
+
+```yaml
+providers:
+  - id: openai:agents:inventory
+    config:
+      agent: file://./agents/inventory-agent.ts
+      includeToolCalls: true
+
+tests:
+  - vars:
+      query: What items are in my inventory?
+    assert:
+      - type: javascript
+        value: |
+          const calls = context.metadata?.toolCalls;
+          return Array.isArray(calls) && calls.some(call =>
+            call.name === 'check_inventory' &&
+            call.arguments?.playerId === 'player1' &&
+            call.resultPresent === true &&
+            call.executionMode === 'real');
+      - type: contains
+        value: Potion
+```
+
+Each function-call record has `callId`, `name`, `rawArguments`,
+`argumentParseStatus` (`parsed`, `invalid`, or `missing`), `resultPresent`, and
+`executionMode` (`real`, `mock`, or `disabled`). When JSON parsing succeeds,
+`arguments` contains the parsed value (which need not be an object). Available SDK
+`callStatus` and `resultStatus` are also retained. Calls retain request order;
+outputs are correlated by call ID, not by tool name or list order. An unanswered
+call is still included with `resultPresent: false`. Hosted, computer and shell
+tool types are not represented as function calls.
+
+**Result presence is evidence of an SDK result item, not proof that application
+logic succeeded.** Mocked results remain labeled `mock`. Arguments may include
+sensitive data; enable collection only when appropriate for evaluation storage.
+Tool-result bodies, SDK clients, sessions and agent objects are never copied into
+this metadata. The `tool-call-f1` assertion reads final output by default, not
+this metadata. To compare observed tool names instead, project them with an
+assertion transform (the names-only comparison intentionally ignores repeated calls):
+
+```yaml
+assert:
+  - type: tool-call-f1
+    value: ['check_inventory']
+    transform: |
+      return JSON.stringify({
+        tool_calls: context.metadata.toolCalls.map(call => ({
+          function: { name: call.name }
+        }))
+      })
+```
 
 ## File-Based Configuration
 

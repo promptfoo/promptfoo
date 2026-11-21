@@ -82,6 +82,13 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
   executeTools?: boolean | 'mock' | 'real';
 
   /**
+   * Include serializable SDK function-call requests and completion evidence in
+   * ProviderResponse.metadata.toolCalls. Arguments may contain sensitive data;
+   * disabled by default. Tool result bodies are never collected.
+   */
+  includeToolCalls?: boolean;
+
+  /**
    * Mock tool responses (when executeTools is 'mock' or false)
    * Key is tool name, value is the mocked response
    */
@@ -133,6 +140,19 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
    * current SDK run options can be supplied here.
    */
   runOptions?: OpenAiAgentsRunOptions;
+}
+
+/** A function-call request observed in the Agents SDK run; not proof of business success. */
+export interface OpenAiAgentToolCallRecord {
+  callId: string;
+  name: string;
+  rawArguments?: string;
+  arguments?: unknown;
+  argumentParseStatus: 'parsed' | 'invalid' | 'missing';
+  callStatus?: string;
+  resultPresent: boolean;
+  resultStatus?: string;
+  executionMode: 'real' | 'mock' | 'disabled';
 }
 
 export type OpenAiAgentsRetryPolicyPreset =
