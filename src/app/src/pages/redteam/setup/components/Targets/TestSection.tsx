@@ -124,52 +124,47 @@ const TestSection: React.FC<TestSectionProps> = ({
 
         {testResult && (
           <div className="space-y-3">
-            {/* Result Alert */}
-            {(testResult.success || testResult.changes_needed) && (
-              <Alert
-                variant={
-                  testResult.changes_needed
-                    ? 'warning'
-                    : testResult.success
-                      ? 'success'
-                      : 'destructive'
-                }
-              >
-                {testResult.changes_needed ? (
-                  <AlertCircle className="size-4" />
-                ) : testResult.success ? (
-                  <CheckCircle className="size-4" />
-                ) : (
-                  <AlertCircle className="size-4" />
-                )}
-                <AlertContent>
-                  <AlertDescription className="text-sm">
-                    <p className="font-medium">
-                      {testResult.changes_needed
-                        ? 'Configuration Changes Needed'
-                        : testResult.success
-                          ? 'Test Passed'
-                          : 'Test Failed'}
-                    </p>
-                    <p className="mt-1">{testResult.message}</p>
+            <Alert
+              variant={
+                testResult.changes_needed
+                  ? 'warning'
+                  : testResult.success
+                    ? 'success'
+                    : 'destructive'
+              }
+            >
+              {testResult.success && !testResult.changes_needed ? (
+                <CheckCircle className="size-4" />
+              ) : (
+                <AlertCircle className="size-4" />
+              )}
+              <AlertContent>
+                <AlertDescription className="text-sm">
+                  <p className="font-medium">
+                    {testResult.changes_needed
+                      ? 'Configuration Changes Needed'
+                      : testResult.success
+                        ? 'Test Passed'
+                        : 'Test Failed'}
+                  </p>
+                  <p className="mt-1">{testResult.message}</p>
 
-                    {testResult.changes_needed_suggestions &&
-                      testResult.changes_needed_suggestions.length > 0 && (
-                        <div className="mt-2 rounded-md bg-background/50 p-2">
-                          <p className="mb-1.5 font-medium">Suggested Changes</p>
-                          <ul className="m-0 list-disc space-y-0.5 pl-4">
-                            {testResult.changes_needed_suggestions.map(
-                              (suggestion: string, index: number) => (
-                                <li key={index}>{suggestion}</li>
-                              ),
-                            )}
-                          </ul>
-                        </div>
-                      )}
-                  </AlertDescription>
-                </AlertContent>
-              </Alert>
-            )}
+                  {testResult.changes_needed_suggestions &&
+                    testResult.changes_needed_suggestions.length > 0 && (
+                      <div className="mt-2 rounded-md bg-background/50 p-2">
+                        <p className="mb-1.5 font-medium">Suggested Changes</p>
+                        <ul className="m-0 list-disc space-y-0.5 pl-4">
+                          {testResult.changes_needed_suggestions.map(
+                            (suggestion: string, index: number) => (
+                              <li key={index}>{suggestion}</li>
+                            ),
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
 
             {/* Request and Response Details */}
             <Collapsible

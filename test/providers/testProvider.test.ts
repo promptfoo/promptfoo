@@ -7,6 +7,7 @@ import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { createEvaluateResult } from '../factories/eval';
 import { createTestOutput } from '../factories/literalFixtures';
 import { mockGlobal } from '../util/utils';
 
@@ -419,6 +420,51 @@ describe('Provider Test Functions', () => {
     });
 
     describe('failed connectivity tests', () => {
+      it.each([
+        { offline: false, error: 'Connection timeout', response: {} },
+        { offline: false, error: '', response: { error: 'Connection timeout' } },
+        { offline: true, error: null, response: { error: 'Connection timeout' } },
+      ])(
+        'keeps a local provider error when offline=$offline',
+        async ({ offline, error, response }) => {
+          mockSummary.results = [
+            createEvaluateResult({
+              error,
+              response,
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+            }),
+          ];
+          vi.mocked(neverGenerateRemote).mockReturnValue(offline);
+          (fetchWithProxy as Mock).mockResolvedValue({
+            ok: true,
+            json: async () => createSuccessfulProbeResult(),
+          });
+          expect(await testProviderConnectivity({ provider: mockProvider })).toMatchObject({
+            success: false,
+            error: 'Connection timeout',
+            message: 'Provider returned error: Connection timeout',
+          });
+          if (!offline) {
+            expect(JSON.parse((fetchWithProxy as Mock).mock.calls[0][1].body).error).toBe(
+              'Connection timeout',
+            );
+          }
+        },
+      );
+
+      it('reports a requested configuration change without a success message', async () => {
+        mockSummary.results = [createEvaluateResult()];
+        (fetchWithProxy as Mock).mockResolvedValue({
+          ok: true,
+          json: async () => ({ changes_needed: true }),
+        });
+        expect(await testProviderConnectivity({ provider: mockProvider })).toMatchObject({
+          success: false,
+          message: 'The provider configuration needs changes.',
+        });
+      });
+
       it('should handle provider call failure', async () => {
         const mockResult: EvaluateResult = {
           promptIdx: 0,

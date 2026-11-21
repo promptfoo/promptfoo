@@ -126,21 +126,24 @@ export async function testProviderConnectivity({
       providerId: provider.id,
     });
 
-    // Extract session ID
     const sessionId = provider.getSessionId?.() ?? result.response?.sessionId ?? vars.sessionId;
 
-    // If remote grading is disabled, return basic success
+    const providerError = result.error || result.response?.error;
+    const details = {
+      providerResponse: result.response,
+      transformedRequest: result.response?.metadata?.transformedRequest,
+      sessionId,
+    };
+
     if (neverGenerateRemote()) {
       logger.debug('[testProviderConnectivity] Remote grading disabled, returning raw result');
       return {
-        success: !result.error,
-        message: result.error
-          ? `Provider returned error: ${result.error}`
+        success: !providerError,
+        message: providerError
+          ? `Provider returned error: ${providerError}`
           : 'Provider test completed. Remote grading disabled - please review the response manually.',
-        error: result.error || undefined,
-        providerResponse: result.response,
-        transformedRequest: result.response?.metadata?.transformedRequest,
-        sessionId,
+        error: providerError || undefined,
+        ...details,
       };
     }
 
@@ -162,7 +165,7 @@ export async function testProviderConnectivity({
           config: provider.config,
           providerResponse: result.response?.raw,
           parsedResponse: result.response?.output,
-          error: result.error,
+          error: providerError ?? result.error,
           headers: result.response?.metadata?.http?.headers,
         }),
       });
@@ -177,34 +180,34 @@ export async function testProviderConnectivity({
           success: false,
           message: 'Error evaluating the results. Please review the provider response manually.',
           error: 'Remote evaluation failed',
-          providerResponse: result.response,
-          transformedRequest: result.response?.metadata?.transformedRequest,
-          sessionId,
+          ...details,
         };
       }
 
-      const testAnalyzerResponseObj = await testAnalyzerResponse.json();
-
-      const errorMsg = result.error ?? result.response?.error ?? testAnalyzerResponseObj.error;
+      const analysis = await testAnalyzerResponse.json();
+      const errorMsg = providerError || analysis.error;
+      const analysisFailed = Boolean(analysis.error || analysis.changes_needed);
+      const message =
+        providerError && !analysisFailed
+          ? `Provider returned error: ${providerError}`
+          : analysis.message ||
+            errorMsg ||
+            (analysisFailed
+              ? 'The provider configuration needs changes.'
+              : "Test successfully completed. We've verified that the provider is working correctly.");
 
       return {
-        success: !testAnalyzerResponseObj.error && !testAnalyzerResponseObj.changes_needed,
-        message:
-          testAnalyzerResponseObj.message ||
-          testAnalyzerResponseObj.error ||
-          errorMsg ||
-          "Test successfully completed. We've verified that the provider is working correctly.",
+        success: !providerError && !analysisFailed,
+        message,
         error: errorMsg
           ? errorMsg.substring(0, 100) + (errorMsg.length > 100 ? '...' : '')
           : undefined,
-        providerResponse: result.response,
-        transformedRequest: result.response?.metadata?.transformedRequest,
-        sessionId,
-        analysis: testAnalyzerResponseObj.changes_needed
+        ...details,
+        analysis: analysis.changes_needed
           ? {
-              changes_needed: testAnalyzerResponseObj.changes_needed,
-              changes_needed_reason: testAnalyzerResponseObj.changes_needed_reason,
-              changes_needed_suggestions: testAnalyzerResponseObj.changes_needed_suggestions,
+              changes_needed: analysis.changes_needed,
+              changes_needed_reason: analysis.changes_needed_reason,
+              changes_needed_suggestions: analysis.changes_needed_suggestions,
             }
           : undefined,
       };
@@ -219,9 +222,7 @@ export async function testProviderConnectivity({
         success: false,
         message: 'Error evaluating the results. Please review the provider response manually.',
         error: errorMessage,
-        providerResponse: result.response,
-        transformedRequest: result.response?.metadata?.transformedRequest,
-        sessionId,
+        ...details,
       };
     }
   } catch (error) {

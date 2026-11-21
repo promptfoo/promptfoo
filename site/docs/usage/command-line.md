@@ -607,6 +607,8 @@ The command will exit with code `1` if validation fails, making it useful for CI
 
 ### `promptfoo validate target`
 
+A provider error fails the connectivity check, even when the response analyzer reports success or remote grading is disabled.
+
 | Option                | Description                                      |
 | --------------------- | ------------------------------------------------ |
 | `-t, --target <id>`   | Provider ID or cloud UUID to test                |
