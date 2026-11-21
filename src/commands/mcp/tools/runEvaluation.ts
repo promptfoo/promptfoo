@@ -186,6 +186,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           const { config, testSuite } = await resolveConfigs(
             {
               config: configPaths,
+              filterPrompts: promptFilter === undefined ? undefined : '',
             },
             defaultConfig,
           );
@@ -401,6 +402,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           // For simple cases without any filtering, use doEval directly
           const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
+            filterPrompts: promptFilter === '' ? '' : undefined,
             maxConcurrency,
             repeat,
             delay,
