@@ -900,6 +900,57 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it.each([
+      {
+        value: { name: 'missing_tool', max: 0 },
+        inverse: false,
+        pass: true,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 0-0)',
+      },
+      {
+        value: { name: 'search_orders', max: 0 },
+        inverse: false,
+        pass: false,
+        reason:
+          'Matched tool "search_orders" 1 time(s) (expected 0-0). Matches: tool:search_orders',
+      },
+      {
+        value: { name: 'missing_tool', max: 2 },
+        inverse: false,
+        pass: true,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 0-2)',
+      },
+      {
+        value: { name: 'missing_tool', max: 2 },
+        inverse: true,
+        pass: false,
+        reason: 'Tool "missing_tool" matched 0 time(s), which violates the inverse assertion',
+      },
+      {
+        value: { name: 'missing_tool', max: 2, min: '2' },
+        inverse: false,
+        pass: false,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 1-2)',
+      },
+    ])(
+      'handles the tool count $value with inverse=$inverse',
+      ({ value, inverse, pass, reason }) => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-used',
+          inverse,
+          assertion: { type: inverse ? 'not-trajectory:tool-used' : 'trajectory:tool-used', value },
+          renderedValue: value,
+        };
+        expect(handleTrajectoryToolUsed(params)).toEqual({
+          pass,
+          score: Number(pass),
+          reason,
+          assertion: params.assertion,
+        });
+      },
+    );
+
     it('fails when required tools are missing', () => {
       const params: AssertionParams = {
         ...defaultParams,
