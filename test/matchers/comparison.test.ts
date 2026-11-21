@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { matchesSelectBest } from '../../src/matchers/comparison';
 import { createMockProvider } from '../factories/provider';
 
@@ -15,6 +15,102 @@ function createSelectBestProvider(output: string): ApiProvider {
 }
 
 describe('matchesSelectBest', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    '2',
+    '**2**',
+    'Text 2',
+    '<Text index="2"> fits best.',
+    'Text 2 is best. I choose 2.',
+    'Text 2 is best for the 2025 criteria.',
+    'Comparing all 3 texts, I choose 2.',
+    'Confidence 0.9: text 2 is best.',
+    'Rubric v1: text 2 is best.',
+  ])('selects the only distinct output index in %j', async (output) => {
+    const result = await matchesSelectBest('best answer', ['A', 'B', 'C'], {
+      provider: createSelectBestProvider(output),
+    });
+
+    expect(result.map(({ pass }) => pass)).toEqual([false, false, true]);
+    expect(result.map(({ score }) => score)).toEqual([0, 0, 1]);
+  });
+
+  it.each(['-1', '+1', '−1', '0.9', '.9', '1e2', 'v1', '0,1', '0-2'])(
+    'does not read a numeric fragment in %j as an output index',
+    async (output) => {
+      const result = await matchesSelectBest('best answer', ['A', 'B', 'C'], {
+        provider: createSelectBestProvider(output),
+      });
+
+      expect(result.every(({ pass, score }) => !pass && score === 0)).toBe(true);
+      expect(result[0].reason).toMatch(/^Invalid select-best verdict:/);
+    },
+  );
+
+  it.each([
+    [3, 'Text 0 is too long and text 1 is vague, so the best fit is 2.'],
+    [3, 'Text 1 repeats the question; text 2 answers it. Best: 2'],
+    [3, 'The best fit is 2. Text 0 and text 1 miss the tone.'],
+    [3, 'Text 0 covers 2 of the 3 requested points; text 1 covers all of them. Best: 1'],
+    [3, "Output 1 wins, scoring 9/10 against output 0's 7/10."],
+    [3, 'Using the 2 criteria, text 0 wins.'],
+    [12, 'Output 10 is best; output 2 is second.'],
+    [3, 'After eliminating 0 and 2, the winner is 1.'],
+    [3, 'Text 0 says "I have 2 dogs", which is irrelevant; text 1 answers the question. Best: 1'],
+  ] as const)(
+    'rejects multiple candidate indexes among %i outputs in %j',
+    async (outputCount, output) => {
+      const outputs = Array.from({ length: outputCount }, (_value, index) => 'Output ' + index);
+      const result = await matchesSelectBest('best answer', outputs, {
+        provider: createSelectBestProvider(output),
+      });
+
+      expect(result).toHaveLength(outputCount);
+      for (const grade of result) {
+        expect(grade).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Ambiguous select-best verdict: multiple output indexes',
+        });
+      }
+    },
+  );
+
+  it('preserves the documented limitation for a lone incidental index without a verdict', async () => {
+    const result = await matchesSelectBest('best answer', ['A', 'B', 'C'], {
+      provider: createSelectBestProvider("Text 2's opening is strong."),
+    });
+
+    expect(result.map(({ pass }) => pass)).toEqual([false, false, true]);
+    expect(result.map(({ score }) => score)).toEqual([0, 0, 1]);
+  });
+
+  it('preserves cache provenance and independent results for an ambiguous verdict', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: 'Text 0 is too long. Text 1 is best.',
+        cached: true,
+        tokenUsage: { total: 7, prompt: 3, completion: 4 },
+      },
+    });
+
+    const result = await matchesSelectBest('best answer', ['A', 'B'], { provider });
+
+    expect(result[0]).not.toBe(result[1]);
+    for (const grade of result) {
+      expect(grade).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Ambiguous select-best verdict: multiple output indexes',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 7, prompt: 3, completion: 4, cached: 7 },
+      });
+    }
+  });
+
   it('should parse multi-digit verdict indexes', async () => {
     const provider = createSelectBestProvider('10');
     const outputs = Array.from({ length: 12 }, (_value, index) => `Output ${index}`);
