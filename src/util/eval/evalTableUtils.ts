@@ -122,19 +122,8 @@ function formatNamedScoreValue(value: number | undefined): string {
   return typeof value === 'number' && !Number.isNaN(value) ? value.toFixed(2) : '';
 }
 
-/**
- * Build a per-prompt list of `Metric: <name>` column names, deduplicated and
- * sorted with `localeCompare`. Shared shell for both the row-scanning helper
- * (WebUI path) and the aggregate-reading helper (streaming CLI path); see the
- * two call sites below.
- */
-function collectMetricNamesByPrompt<T>(
-  items: T[],
-  namesFor: (item: T, index: number) => Iterable<string>,
-): string[][] {
-  return items.map((item, index) =>
-    [...new Set(namesFor(item, index))].sort((a, b) => a.localeCompare(b)),
-  );
+function compareMetricNames(a: string, b: string): number {
+  return a.localeCompare(b);
 }
 
 /**
@@ -149,8 +138,8 @@ function collectNamedScoreNamesByPrompt(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 }): string[][] {
-  return collectMetricNamesByPrompt(table.head.prompts, (_, promptIndex) => {
-    const names: string[] = [];
+  return table.head.prompts.map((_, promptIndex) => {
+    const names = new Set<string>();
     for (const row of table.body) {
       const namedScores = row.outputs[promptIndex]?.namedScores;
       if (!namedScores) {
@@ -158,11 +147,11 @@ function collectNamedScoreNamesByPrompt(table: {
       }
       for (const [name, value] of Object.entries(namedScores)) {
         if (typeof value === 'number' && !Number.isNaN(value)) {
-          names.push(name);
+          names.add(name);
         }
       }
     }
-    return names;
+    return [...names].sort(compareMetricNames);
   });
 }
 
@@ -183,12 +172,14 @@ function collectNamedScoreNamesByPrompt(table: {
  * the latter requires a row-scan pre-pass.
  */
 function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
-  return collectMetricNamesByPrompt(prompts, (prompt) => {
+  return prompts.map((prompt) => {
     const counts = (prompt as CompletedPrompt).metrics?.namedScoresCount;
     if (!counts) {
       return [];
     }
-    return Object.keys(counts).filter((name) => (counts[name] ?? 0) > 0);
+    return Object.keys(counts)
+      .filter((name) => (counts[name] ?? 0) > 0)
+      .sort(compareMetricNames);
   });
 }
 
@@ -262,7 +253,6 @@ function scanBatchForDiscovery(
 }
 
 type StreamRow = {
-  testIdx: number;
   vars: string[];
   outputs: Array<{
     text: string;
@@ -304,7 +294,6 @@ function batchToStreamRows(
     let row = rowsByTestIdx.get(result.testIdx);
     if (!row) {
       row = {
-        testIdx: result.testIdx,
         vars: varNames.map((varName) => {
           const value = result.testCase?.vars?.[varName];
           return value === undefined ? '' : String(value);
@@ -540,18 +529,9 @@ export function evalTableToCsv(
   const hasDescriptions = table.body.some((row) => row.test.description);
 
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
-  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
-    hasDescriptions,
-    isRedteam,
-    namedScoreNamesByPrompt,
-  });
-
-  const csvRows = [
-    headers,
-    ...table.body.map((row) =>
-      tableRowToCsvValues(row, { hasDescriptions, isRedteam, namedScoreNamesByPrompt }),
-    ),
-  ];
+  const columnOptions = { hasDescriptions, isRedteam, namedScoreNamesByPrompt };
+  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, columnOptions);
+  const csvRows = [headers, ...table.body.map((row) => tableRowToCsvValues(row, columnOptions))];
 
   return csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env));
 }
@@ -809,9 +789,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const hasDescriptions = accumulator.hasDescriptions;
   for (const promptIndex of fallbackPromptIndices) {
     const names = accumulator.metricNamesByPrompt.get(promptIndex);
-    namedScoreNamesByPrompt[promptIndex] = names
-      ? [...names].sort((a, b) => a.localeCompare(b))
-      : [];
+    namedScoreNamesByPrompt[promptIndex] = names ? [...names].sort(compareMetricNames) : [];
   }
 
   const headerPrompts = projectTable

@@ -768,12 +768,6 @@ export async function writeOutput(
       if (obj === null || obj === undefined) {
         return '';
       }
-      if (typeof obj === 'boolean' || typeof obj === 'number') {
-        return String(obj);
-      }
-      if (typeof obj === 'string') {
-        return obj;
-      }
       if (Array.isArray(obj)) {
         return obj.map(sanitizeForXml);
       }

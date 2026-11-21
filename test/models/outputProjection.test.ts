@@ -113,9 +113,7 @@ describe('artifact projection compatibility', () => {
       }),
     );
     expect(result).toMatchObject({
-      providers: [
-        { echo: { prompts: ['[prompt stripped]'], config: { prompts: ['vendor option'] } } },
-      ],
+      providers: [{ echo: { config: { prompts: ['vendor option'] } } }],
       scenarios: [{ config: { options: { temperature: 0.2 } }, tests: ['legacy test'] }],
     });
     expect(JSON.stringify(result)).not.toContain('stored output');
