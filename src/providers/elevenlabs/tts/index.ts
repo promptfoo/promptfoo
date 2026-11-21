@@ -5,7 +5,7 @@ import { ElevenLabsCache } from '../cache';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { encodeAudio, saveAudioFile } from './audio';
-import { applyPronunciationDictionary, createPronunciationDictionary } from './pronunciation';
+import { createPronunciationDictionary } from './pronunciation';
 import {
   calculateStreamingMetrics,
   combineStreamingChunks,
@@ -113,6 +113,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
           this.config.pronunciationRules,
         );
         this.config.pronunciationDictionaryId = dictionary.id;
+        this.config.pronunciationDictionaryVersionId = dictionary.version_id;
         logger.debug('[ElevenLabs TTS] Pronunciation dictionary created', {
           dictionaryId: dictionary.id,
         });
@@ -139,6 +140,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         logger.warn('[ElevenLabs TTS] Pronunciation dictionary failed, proceeding without it');
         delete this.config.pronunciationRules;
         delete this.config.pronunciationDictionaryId;
+        delete this.config.pronunciationDictionaryVersionId;
       }
     }
   }
@@ -177,8 +179,17 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     }
 
     // Check cache first
+    // Generated dictionaries get new IDs on each provider initialization. Key their
+    // effective rules in a stable field order so identical speech remains reusable.
+    const pronunciationRules = this.config.pronunciationRules?.length
+      ? this.config.pronunciationRules.map((rule) =>
+          rule.phoneme
+            ? { word: rule.word, phoneme: rule.phoneme, alphabet: rule.alphabet ?? 'ipa' }
+            : { word: rule.word, pronunciation: rule.pronunciation },
+        )
+      : undefined;
     const cacheKey = this.cache.generateKey('tts', {
-      requestVersion: 3,
+      requestVersion: 4,
       text: prompt,
       voiceId: this.config.voiceId,
       modelId: this.config.modelId,
@@ -186,6 +197,12 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       outputFormat: this.config.outputFormat,
       optimizeStreamingLatency: this.config.optimizeStreamingLatency,
       seed: this.config.seed,
+      ...(pronunciationRules
+        ? { pronunciationRules }
+        : {
+            pronunciationDictionaryId: this.config.pronunciationDictionaryId,
+            pronunciationDictionaryVersionId: this.config.pronunciationDictionaryVersionId,
+          }),
     });
 
     const cached = isCacheEnabled() ? await this.cache.get<TTSResponse>(cacheKey) : null;
@@ -201,19 +218,22 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         Accept: 'audio/mpeg',
       };
 
-      // Apply pronunciation dictionary if configured
-      if (this.config.pronunciationDictionaryId) {
-        Object.assign(headers, applyPronunciationDictionary(this.config.pronunciationDictionaryId));
-        logger.debug('[ElevenLabs TTS] Applying pronunciation dictionary', {
-          dictionaryId: this.config.pronunciationDictionaryId,
-        });
-      }
-
       // Build request body, filtering out undefined values
       const requestBody: Record<string, any> = {
         text: prompt,
         model_id: this.config.modelId,
       };
+
+      if (this.config.pronunciationDictionaryId) {
+        requestBody.pronunciation_dictionary_locators = [
+          {
+            pronunciation_dictionary_id: this.config.pronunciationDictionaryId,
+            ...(this.config.pronunciationDictionaryVersionId && {
+              version_id: this.config.pronunciationDictionaryVersionId,
+            }),
+          },
+        ];
+      }
 
       if (this.config.voiceSettings) {
         requestBody.voice_settings = this.config.voiceSettings;
@@ -374,6 +394,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Future features (not yet implemented)
       streaming: config?.streaming || false,
       pronunciationDictionaryId: config?.pronunciationDictionaryId,
+      pronunciationDictionaryVersionId: config?.pronunciationDictionaryVersionId,
       pronunciationRules: config?.pronunciationRules,
       voiceDesign: config?.voiceDesign,
       voiceRemix: config?.voiceRemix,
@@ -404,7 +425,14 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         voiceSettings: this.config.voiceSettings,
         baseUrl: this.config.baseUrl?.replace('https:', 'wss:').replace('http:', 'ws:'),
         pronunciationDictionaryLocators: this.config.pronunciationDictionaryId
-          ? [{ pronunciation_dictionary_id: this.config.pronunciationDictionaryId }]
+          ? [
+              {
+                pronunciation_dictionary_id: this.config.pronunciationDictionaryId,
+                ...(this.config.pronunciationDictionaryVersionId && {
+                  version_id: this.config.pronunciationDictionaryVersionId,
+                }),
+              },
+            ]
           : undefined,
       };
 
