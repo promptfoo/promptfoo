@@ -49,12 +49,10 @@ module.exports = class OpenAIProvider {
   }
 
   async callApi(prompt, context, options) {
-    options?.abortSignal?.throwIfAborted();
     const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
-        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
