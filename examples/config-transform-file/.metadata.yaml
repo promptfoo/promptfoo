@@ -1,0 +1,5 @@
+title: 'Output Transforms with External Functions'
+description: 'Using external JavaScript or Python files to transform LLM outputs before evaluation'
+tags:
+  - Configuration
+  - Python

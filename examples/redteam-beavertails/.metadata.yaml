@@ -1,0 +1,4 @@
+title: 'BeaverTails Safety Benchmark'
+description: 'Evaluate AI safety boundaries using the BeaverTails dataset of 330k harmful prompts with subcategory filtering'
+tags:
+  - Red Teaming

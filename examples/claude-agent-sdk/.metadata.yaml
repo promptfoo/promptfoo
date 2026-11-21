@@ -1,0 +1,6 @@
+title: 'Claude Agent SDK'
+description: 'Run agentic evals with the Claude Agent SDK (Claude Code) including file access, MCP integration, structured output, and red team security testing.'
+tags:
+  - Agents
+  - MCP
+  - Red Teaming

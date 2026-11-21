@@ -19,7 +19,8 @@ Each example needs:
 1. Directory with clear name
 2. `README.md` starting with `# folder-name (Human Readable Name)`
 3. `promptfooconfig.yaml` with schema reference
-4. Instructions using `npx promptfoo@latest init --example <name>`
+4. `.metadata.yaml` with `title`, `description`, and `tags` for the docs examples gallery
+5. Instructions using `npx promptfoo@latest init --example <name>`
 
 ## Configuration Format
 

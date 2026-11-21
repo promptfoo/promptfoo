@@ -1,0 +1,5 @@
+title: 'Groq Provider'
+description: 'Evaluate Llama and GPT-OSS models on Groq with function calling and reasoning'
+tags:
+  - Providers
+  - Tool Use

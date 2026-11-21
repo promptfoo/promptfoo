@@ -1,0 +1,5 @@
+title: 'OpenTelemetry Tracing'
+description: 'Validate trace spans, durations, and errors using OTEL instrumentation with promptfoo'
+tags:
+  - Integrations
+  - Python

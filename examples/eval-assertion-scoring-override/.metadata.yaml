@@ -1,0 +1,5 @@
+title: 'Assertion Scoring Function Override'
+description: 'Override the default scoring function with custom JavaScript and Python implementations'
+tags:
+  - Evaluation
+  - Python

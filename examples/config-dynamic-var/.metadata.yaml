@@ -1,0 +1,5 @@
+title: 'Dynamic Variable Generation'
+description: 'Generating variable values at runtime using Python scripts that receive test context'
+tags:
+  - Configuration
+  - Python

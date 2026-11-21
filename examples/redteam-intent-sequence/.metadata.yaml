@@ -1,0 +1,5 @@
+title: 'Red Team Intent Sequences'
+description: 'Hardcode multi-step prompt sequences to test if models can be led through a chain of intents toward harmful outputs'
+tags:
+  - Red Teaming
+  - Multi-turn
