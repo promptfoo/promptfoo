@@ -861,6 +861,33 @@ describe('PiProvider', () => {
     }
   });
 
+  it('finds a trusted executable and removes unsafe entries from its child PATH', async () => {
+    const { getProjectPathCheck: check, resolveAgentExecutable: resolve } = await vi.importActual<
+      typeof import('../../src/providers/agentExecutable')
+    >('../../src/providers/agentExecutable');
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-bins-')));
+    try {
+      const project = path.join(root, 'project');
+      const workspace = path.join(project, 'src');
+      fs.mkdirSync(workspace, { recursive: true });
+      fs.writeFileSync(path.join(project, '.git'), 'gitdir: ../git');
+      const executable = path.join(root, process.platform === 'win32' ? 'pi.exe' : 'pi');
+      fs.writeFileSync(executable, '', { mode: 0o700 });
+
+      const isLocal = await check(workspace);
+      const env: NodeJS.ProcessEnv = {
+        Path: ['', '.', project, path.join(root, 'missing'), root].join(path.delimiter),
+      };
+      expect(await resolve('pi', env, isLocal)).toBe(executable);
+      expect(env.PATH).toBe(root);
+      expect(env.Path).toBeUndefined();
+      expect(await resolve('missing', env, isLocal)).toBeUndefined();
+      expect(await resolve(executable, {}, isLocal)).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   describe('timeouts and aborts', () => {
     it.each(['timeout', 'abort', 'overflow', 'coalesced overflow', 'nonzero', 'incomplete'])(
       'retains completed usage when a later turn ends through %s',
