@@ -23,6 +23,7 @@ import {
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
+import { configRequiresTraceRedaction } from './util/verifierPrivacy';
 
 import type {
   EnvOverrides,
@@ -351,7 +352,10 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   );
   const author = getAuthor(suiteAuthor);
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, {
+        ...(configRequiresTraceRedaction(constructedTestSuite) && { privatePrompts: true }),
+        author,
+      })
     : new Eval(unifiedConfig, { author });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>

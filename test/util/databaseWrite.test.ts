@@ -4,8 +4,10 @@ import { updateSignalFile } from '../../src/database/signal';
 import { datasetsTable, evalsTable, promptsTable, tagsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import { sha256 } from '../../src/util/createHash';
 import {
   clearStandaloneEvalCache,
+  getDatasetFromHash,
   getStandaloneEvals,
   writeResultsToDatabase,
 } from '../../src/util/database';
@@ -14,6 +16,8 @@ import {
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateSummaryV2 } from '../factories/eval';
+
+import type { UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -48,6 +52,55 @@ describe('evaluation database writes', () => {
     await db.run('DELETE FROM tags');
     clearStandaloneEvalCache();
   });
+
+  it.each([
+    'promptfoo:redteam:coding-agent:trace-redaction',
+    'promptfoo:redteam:coding-agent:repo-prompt-injection',
+  ] as const)(
+    'removes old %s dataset receipts without changing identity or source tests',
+    async (type) => {
+      const secret = 'PRIVATE_IMPORTED_RECEIPT';
+      const config: Partial<UnifiedConfig> = {
+        tests: [
+          {
+            vars: { report: 'Public report' },
+            assert: [
+              {
+                type,
+                value: { rawReceipt: secret, rawReceiptPath: 'receipts/fixture.txt' },
+              },
+            ],
+          },
+        ],
+      };
+      const original = structuredClone(config);
+      const datasetId = sha256(JSON.stringify(config.tests));
+      const db = await getDb();
+      await db
+        .insert(datasetsTable)
+        .values({ id: datasetId, tests: config.tests, createdAt: 123 })
+        .run();
+      await writeResultsToDatabase(createEvaluateSummaryV2(), config);
+
+      const [dataset] = await db.select().from(datasetsTable).all();
+      const [evaluation] = await db.select().from(evalsTable).all();
+      expect(dataset.id).toBe(datasetId);
+      const index = await getDatasetFromHash(datasetId);
+      expect(index?.id).toBe(datasetId);
+      expect(JSON.stringify(index)).not.toContain(secret);
+      expect(JSON.stringify(dataset.tests)).not.toContain(secret);
+      const reference = JSON.stringify([dataset.tests, evaluation.config]);
+      expect(reference.includes('receipts/fixture.txt')).toBe(!type.endsWith('trace-redaction'));
+      expect(dataset.createdAt).toBe(123);
+      expect(dataset.tests).toMatchObject([
+        {
+          vars: type.endsWith('trace-redaction') ? {} : { report: 'Public report' },
+        },
+      ]);
+      expect(JSON.stringify(evaluation.config)).not.toContain(secret);
+      expect(config).toEqual(original);
+    },
+  );
 
   it.each(['Eval.create', 'writeResultsToDatabase'])(
     '%s rolls back related rows when a dependent insert fails',

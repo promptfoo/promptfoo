@@ -977,6 +977,44 @@ describe('OTLPReceiver', () => {
       });
     });
 
+    it('accepts only existing public contexts in a privacy-sensitive suite', async () => {
+      receiver.registerTracePolicy({ evaluationId: 'private-suite', requireExistingTrace: true });
+      const emit = () =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'a'.repeat(32),
+                        spanId: 'b'.repeat(16),
+                        name: 'synthetic span',
+                        startTimeUnixNano: '1000000000',
+                        attributes: [
+                          { key: 'evaluation.id', value: { stringValue: 'private-suite' } },
+                          { key: 'test.case.id', value: { stringValue: '0-0' } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      await emit();
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({ privateForensicEvidence: true });
+      await emit();
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({});
+      await emit();
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+    });
+
     it('uses registered evaluation policy for receiver-created traces on a shared receiver', async () => {
       const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
       (sharedReceiver as any).traceStore = mockTraceStore;

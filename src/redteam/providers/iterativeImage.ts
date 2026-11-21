@@ -13,6 +13,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { getPrivateIterationContext } from '../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -21,7 +22,9 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  gradeRedactionResponse,
   isTargetCallAbortError,
+  PrivateVerificationError,
   preserveSelectedError,
   redteamProviderManager,
   type TargetResponse,
@@ -32,6 +35,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Inputs,
   NunjucksFilterMap,
   Prompt,
@@ -265,6 +269,12 @@ async function runRedteamConversation({
   // Assume redteam provider is also a vision model
   const visionProvider = redteamProvider;
   const nunjucks = getNunjucksEngine();
+  const privateContext = getPrivateIterationContext(context, { vars, prompt, test });
+  const redactTrace = Boolean(privateContext);
+  if (privateContext) {
+    context = privateContext;
+    ({ vars, prompt, test } = context);
+  }
   const goal = vars[injectVar];
 
   // Store the original vars and transformVars config
@@ -287,6 +297,9 @@ async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
+  let mediaRedactionError: string | undefined;
+  const storedGraderResults: Record<number, GradingResult> = {};
+  let storedGraderResult: GradingResult | undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
@@ -390,11 +403,17 @@ async function runRedteamConversation({
         targetContext,
         options,
       );
-      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      });
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+      storedGraderResult =
+        (await gradeRedactionResponse(
+          targetPrompt,
+          targetResponse,
+          test && { ...test, vars: targetContext?.vars ?? iterationVars },
+          storedGraderResults,
+        )) ?? storedGraderResult;
+      if (targetResponse.metadata?.redactionMediaOmitted === true) {
+        mediaRedactionError ??= targetResponse.error;
+      }
       lastResponse = targetResponse;
       // Count the target request even when the target returns an error.
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -407,6 +426,9 @@ async function runRedteamConversation({
         continue;
       }
 
+      if (redactTrace) {
+        continue;
+      }
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
       const url = targetResponse.output.match(urlRegex);
       let imageDescription;
@@ -578,9 +600,14 @@ async function runRedteamConversation({
         continue;
       }
     } catch (err) {
-      // Re-throw abort errors to properly cancel the operation
-      if (isTargetCallAbortError(err, options?.abortSignal)) {
+      if (
+        err instanceof PrivateVerificationError ||
+        isTargetCallAbortError(err, options?.abortSignal)
+      ) {
         throw err;
+      }
+      if (redactTrace) {
+        throw new PrivateVerificationError('Private target verification failed');
       }
       logger.error(`Iteration ${i + 1} failed: ${err}`);
       continue;
@@ -594,6 +621,12 @@ async function runRedteamConversation({
         (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
       prompt: targetPrompt || undefined,
       metadata: {
+        ...(mediaRedactionError && { redactionMediaOmitted: true }),
+        ...(redactTrace && {
+          storedGraderResult,
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         finalIteration,
         highestScore,
         redteamHistory,
@@ -602,7 +635,9 @@ async function runRedteamConversation({
         bestImageDescription: bestResponse?.imageDescription,
       },
       tokenUsage: totalTokenUsage,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      ...(mediaRedactionError || lastResponse?.error
+        ? { error: mediaRedactionError || lastResponse?.error }
+        : {}),
     },
     lastResponse,
   );

@@ -764,7 +764,7 @@ export const AssertionTypeSchema = z.union([
   BaseAssertionTypesSchema,
   NotPrefixedAssertionTypesSchema,
   SpecialAssertionTypesSchema,
-  z.custom<RedteamAssertionTypes>(),
+  z.custom<RedteamAssertionTypes | NotPrefixed<RedteamAssertionTypes>>(),
 ]);
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;

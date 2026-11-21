@@ -6,6 +6,7 @@ import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
 import { escapeRegExp } from '../../../util/text';
+import { configRequiresTraceRedaction } from '../../../util/verifierPrivacy';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -122,6 +123,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe('Number of results to skip for pagination (default: 0)'),
     },
     async (args) => {
+      let privateSuite = false;
       try {
         const {
           configPath,
@@ -179,6 +181,9 @@ export function registerRunEvaluationTool(server: McpServer) {
 
         const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
 
+        let selection;
+        let evalResult;
+        let startTime: number;
         // Manual filtering path: handle test case, prompt, and provider filtering locally
         // to avoid process.exit(1) and maintain MCP backwards compatibility
         if (testCaseIndices !== undefined || promptFilter || providerFilter) {
@@ -190,6 +195,8 @@ export function registerRunEvaluationTool(server: McpServer) {
             defaultConfig,
           );
 
+          privateSuite =
+            configRequiresTraceRedaction(config) || configRequiresTraceRedaction(testSuite);
           const filteredTestSuite = { ...testSuite };
 
           if (providerFilter) {
@@ -217,7 +224,9 @@ export function registerRunEvaluationTool(server: McpServer) {
                 'run_evaluation',
                 false,
                 undefined,
-                `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
+                privateSuite
+                  ? 'No providers matched filter.'
+                  : `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
               );
             }
 
@@ -252,7 +261,9 @@ export function registerRunEvaluationTool(server: McpServer) {
                   'run_evaluation',
                   false,
                   undefined,
-                  error instanceof Error ? error.message : 'Failed to filter prompts',
+                  !privateSuite && error instanceof Error
+                    ? error.message
+                    : 'Failed to filter prompts',
                 );
               }
 
@@ -261,7 +272,9 @@ export function registerRunEvaluationTool(server: McpServer) {
                   'run_evaluation',
                   false,
                   undefined,
-                  `No prompts found after applying filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
+                  privateSuite
+                    ? 'No prompts found after applying filter.'
+                    : `No prompts found after applying filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
                 );
               }
             }
@@ -314,6 +327,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           const Eval = (await import('../../../models/eval')).default;
 
           const evalRecord = await Eval.create(config, filteredTestSuite.prompts, {
+            ...(privateSuite && { privatePrompts: true }),
             id: `mcp-eval-${Date.now()}`,
           });
 
@@ -322,81 +336,13 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
 
           // Run the evaluation
-          const startTime = Date.now();
-          const result = await evaluate(filteredTestSuite, evalRecord, {
+          startTime = Date.now();
+          evalResult = await evaluate(filteredTestSuite, evalRecord, {
             maxConcurrency,
             timeoutMs,
             eventSource: 'mcp',
           });
-          const endTime = Date.now();
-
-          const summary = await result.toEvaluateSummary();
-
-          // Format results using shared formatter with pagination
-          const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
-            resultLimit,
-            resultOffset,
-          });
-
-          // Prepare detailed response
-          const evalData = {
-            eval: {
-              id: result.id,
-              status: 'completed',
-              duration: endTime - startTime,
-              timestamp: new Date().toISOString(),
-            },
-            configuration: {
-              configPath: configPath || 'promptfooconfig.yaml',
-              testCases: {
-                total: testSuite.tests?.length || 0,
-                filtered: filteredTestSuite.tests?.length || 0,
-                filters: {
-                  testCaseIndices,
-                  promptFilter,
-                  providerFilter,
-                },
-              },
-              prompts: {
-                total: (testSuite.prompts || []).length,
-                filtered: (filteredTestSuite.prompts || []).length,
-                labels: (filteredTestSuite.prompts || []).map(
-                  (p) => p.label || p.raw.slice(0, 50) + (p.raw.length > 50 ? '...' : ''),
-                ),
-              },
-              providers: {
-                total: testSuite.providers.length,
-                filtered: filteredTestSuite.providers.length,
-                ids: filteredTestSuite.providers.map((p) =>
-                  typeof p.id === 'function' ? p.id() : p.id,
-                ),
-              },
-              options: {
-                maxConcurrency,
-                timeoutMs,
-                repeat,
-                delay,
-                cache,
-                write,
-                share,
-                resultLimit,
-                resultOffset,
-              },
-            },
-            results: {
-              stats: summary.stats,
-              totalEvals: summary.results.length,
-              successRate:
-                summary.results.length > 0
-                  ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
-                  : '0%',
-              pagination,
-              results: formattedResults,
-            },
-            prompts: formatPromptsSummary(summary),
-          };
-
-          return createToolResponse('run_evaluation', true, evalData);
+          selection = { testSuite, filteredTestSuite };
         } else {
           // For simple cases without any filtering, use doEval directly
           const cmdObj: Partial<CommandLineOptions & Command> = {
@@ -419,71 +365,85 @@ export function registerRunEvaluationTool(server: McpServer) {
           logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
 
           // Run the evaluation using the existing doEval function
-          const startTime = Date.now();
-          const evalResult = await doEval(
-            cmdObj,
-            defaultConfig,
-            defaultConfigPath,
-            evaluateOptions,
-          );
-          const endTime = Date.now();
-
-          // Get summary data
-          const summary = await evalResult.toEvaluateSummary();
-
-          // Format results using shared formatter with pagination
-          const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
-            resultLimit,
-            resultOffset,
-          });
-
-          // Prepare detailed response
-          const evalData = {
-            eval: {
-              id: evalResult.id,
-              status: 'completed',
-              duration: endTime - startTime,
-              timestamp: new Date().toISOString(),
-            },
-            configuration: {
-              configPath: configPath || 'promptfooconfig.yaml',
-              testCases: {
-                total: summary.results.length,
-                filters: {
-                  testCaseIndices,
-                  promptFilter,
-                  providerFilter,
-                },
-              },
-              options: {
-                maxConcurrency,
-                timeoutMs,
-                repeat,
-                delay,
-                cache,
-                write,
-                share,
-                resultLimit,
-                resultOffset,
-              },
-            },
-            results: {
-              stats: summary.stats,
-              totalEvals: summary.results.length,
-              successRate:
-                summary.results.length > 0
-                  ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
-                  : '0%',
-              pagination,
-              results: formattedResults,
-            },
-            prompts: formatPromptsSummary(summary),
-          };
-
-          return createToolResponse('run_evaluation', true, evalData);
+          startTime = Date.now();
+          evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
         }
+
+        const duration = Date.now() - startTime;
+        privateSuite ||= configRequiresTraceRedaction(evalResult.config);
+        const summary = await evalResult.toEvaluateSummary();
+        const { results, pagination } = formatEvaluationResults(summary, {
+          resultLimit,
+          resultOffset,
+        });
+        const totalEvals = summary.results.length;
+        const filters = privateSuite
+          ? { testCaseIndices }
+          : { testCaseIndices, promptFilter, providerFilter };
+        const counts = selection && {
+          testCases: {
+            total: selection.testSuite.tests?.length ?? 0,
+            filtered: selection.filteredTestSuite.tests?.length ?? 0,
+            filters,
+          },
+          prompts: {
+            total: selection.testSuite.prompts.length,
+            filtered: selection.filteredTestSuite.prompts.length,
+            labels: privateSuite
+              ? []
+              : selection.filteredTestSuite.prompts.map(
+                  (p) => p.label || p.raw.slice(0, 50) + (p.raw.length > 50 ? '...' : ''),
+                ),
+          },
+          providers: {
+            total: selection.testSuite.providers.length,
+            filtered: selection.filteredTestSuite.providers.length,
+            ids: privateSuite
+              ? []
+              : selection.filteredTestSuite.providers.map((p) =>
+                  typeof p.id === 'function' ? p.id() : p.id,
+                ),
+          },
+        };
+        return createToolResponse('run_evaluation', true, {
+          eval: {
+            id: evalResult.id,
+            status: 'completed',
+            duration,
+            timestamp: new Date().toISOString(),
+          },
+          configuration: {
+            configPath: privateSuite ? undefined : configPath || 'promptfooconfig.yaml',
+            ...(counts ?? { testCases: { total: totalEvals, filters } }),
+            options: {
+              maxConcurrency,
+              timeoutMs,
+              repeat,
+              delay,
+              cache,
+              write,
+              share,
+              resultLimit,
+              resultOffset,
+            },
+          },
+          results: {
+            stats: summary.stats,
+            totalEvals,
+            successRate: totalEvals
+              ? ((summary.stats.successes / totalEvals) * 100).toFixed(1) + '%'
+              : '0%',
+            pagination,
+            results,
+          },
+          prompts: formatPromptsSummary(summary),
+        });
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        const errorMessage = privateSuite
+          ? 'Private evaluation failed.'
+          : error instanceof Error
+            ? error.message
+            : 'Unknown error occurred';
         logger.error(`Evaluation execution failed: ${errorMessage}`);
 
         return createToolResponse('run_evaluation', false, undefined, errorMessage);

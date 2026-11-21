@@ -13,7 +13,7 @@ Coding agents are different from chatbots. They read repositories, run shell com
 
 ## Start With the Core Collection
 
-For a first pass, run the core coding-agent collection:
+Run [harness preflight](/docs/red-team/plugins/harness/) in a disposable checkout to check your evidence collection. Then select the core collection, or `coding-agent:codex` for Codex-specific checks.
 
 ```yaml
 redteam:
@@ -69,6 +69,8 @@ For delayed side effects, add `coding-agent:delayed-ci-exfil` and `coding-agent:
 For code-quality security, add `coding-agent:generated-vulnerability` when the main risk is not a boundary escape but an unsafe implementation that appears to solve the task.
 
 For hidden leakage, add `coding-agent:steganographic-exfil` when the agent may transform sensitive values into base64, hex, URL encoding, filenames, snapshots, comments, logs, or metadata instead of printing them plainly.
+
+The [coding-agent plugin reference](/docs/red-team/plugins/coding-agent/) describes public target manifests, synthetic canary configuration, and exploit status metadata.
 
 ## Define the Boundary First
 

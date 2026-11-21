@@ -12,6 +12,13 @@ import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
+import {
+  getAssertionLeaves,
+  getRedactionOutcome,
+  TRACE_REDACTION_ASSERTIONS,
+  TRUSTED_REDACTION_GRADER,
+} from '../util/traceRedaction';
+import { sanitizeRedactionGrade } from '../util/verifierPrivacy';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
@@ -173,12 +180,69 @@ function createInitialGradingContext({
   return gradingContext;
 }
 
+// Only a local strategy can vouch for a response it has already discarded. Never
+// consult remote tracking, a model or ordinary target-supplied grades on this path.
+async function verifyRedaction({
+  assertion,
+  baseType,
+  inverse,
+  test,
+  prompt,
+  outputString,
+  provider,
+  renderedValue,
+  providerResponse,
+  assertionValueContext,
+}: AssertionParams): Promise<GradingResult> {
+  const metadata = providerResponse.metadata;
+  invariant(
+    !providerResponse.cached && !providerResponse.error,
+    'Fresh verifier evidence required.',
+  );
+  let verdict: GradingResult;
+  if (metadata?.redactionContentOmitted || metadata?.redactionMediaOmitted) {
+    const leaves = getAssertionLeaves(assertionValueContext.test.assert);
+    const index = leaves.indexOf(assertion);
+    const unique = leaves.filter((a) => a.type.replace(/^not-/, '') === baseType).length === 1;
+    const stored = metadata.storedGraderResults
+      ? metadata.storedGraderResults[index]
+      : unique && metadata.storedGraderResult;
+    invariant(
+      index >= 0 &&
+        stored &&
+        stored.assertion?.type === assertion.type &&
+        Object.getOwnPropertyDescriptor(stored.assertion, TRUSTED_REDACTION_GRADER)?.value === true,
+      'The original response is unavailable for local verification.',
+    );
+    verdict = stored;
+  } else {
+    const grader = getGraderById(baseType);
+    invariant(grader, 'Unknown local verifier.');
+    const { grade } = await grader.getResult(
+      prompt ?? '',
+      outputString,
+      test,
+      provider,
+      renderedValue,
+      undefined,
+      undefined,
+      { providerResponse, traceData: assertionValueContext.trace },
+    );
+    verdict = grade;
+  }
+  const { pass } = getRedactionOutcome(verdict, inverse);
+  return sanitizeRedactionGrade({ ...verdict, assertion, pass, score: pass ? 1 : 0 });
+}
+
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
  */
 export const handleRedteam = async (
-  {
+  params: AssertionParams,
+  claimStoredGradingUsage: () => boolean = () => true,
+): Promise<GradingResult> => {
+  const {
     assertion,
     baseType,
     test,
@@ -188,9 +252,10 @@ export const handleRedteam = async (
     renderedValue,
     providerResponse,
     assertionValueContext,
-  }: AssertionParams,
-  claimStoredGradingUsage: () => boolean = () => true,
-): Promise<GradingResult> => {
+  } = params;
+  if (TRACE_REDACTION_ASSERTIONS.has(baseType)) {
+    return verifyRedaction(params);
+  }
   // Skip grading if stored result exists from strategy execution for this specific assertion
   const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
   const reportedConversation = getTargetConversation(providerResponse.prompt);

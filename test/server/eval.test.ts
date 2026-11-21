@@ -5,6 +5,7 @@ import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { setupTestServer } from '../util/testServer';
 
@@ -114,7 +115,45 @@ describe('eval routes', () => {
     });
   });
 
+  it('refuses to replay protected prompts without their privacy assertions', async () => {
+    const evaluation = await Eval.create({ providers: ['echo'] }, [], { privatePrompts: true });
+    testEvalIds.add(evaluation.id);
+    const res = await api.post('/api/eval/replay').send({
+      evaluationId: evaluation.id,
+      prompt: 'PRIVATE_REPLAY_PROMPT',
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).not.toContain('PRIVATE_REPLAY_PROMPT');
+  });
+
   describe('post("/:evalId/results/:id/rating")', () => {
+    it('returns only projected grading details when a private result is rated', async () => {
+      const prompt = createCompletedPrompt();
+      const evaluation = await Eval.create(
+        { defaultTest: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] } },
+        [prompt],
+        { completedPrompts: [prompt] },
+      );
+      testEvalIds.add(evaluation.id);
+      await evaluation.addResult(createEvaluateResult({ prompt }));
+      const [result] = await evaluation.getResults();
+      invariant(result.id, 'Result ID is required');
+      const res = await api
+        .post(`/api/eval/${evaluation.id}/results/${result.id}/rating`)
+        .send({ pass: false, score: 0, reason: 'PRIVATE_RATING_DETAILS' });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: result.id,
+        evalId: evaluation.id,
+        success: false,
+        score: 0,
+      });
+      expect(JSON.stringify(res.body)).not.toContain('PRIVATE_RATING_DETAILS');
+      expect(JSON.stringify(await EvalResult.findById(result.id))).not.toContain(
+        'PRIVATE_RATING_DETAILS',
+      );
+    });
+
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
       const evalB = await EvalFactory.create();

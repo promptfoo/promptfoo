@@ -23,6 +23,7 @@ import {
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
+import { isPrivateEvaluation } from './util/privateEvaluation';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -83,6 +84,10 @@ export function getCacheTtlMs(): number {
  * ```
  */
 export function getCache() {
+  // Direct consumers must not read or write the shared cache for a private row.
+  if (isPrivateEvaluation()) {
+    return createCache();
+  }
   const namespace = cacheNamespaceStorage.getStore()?.namespace;
   if (namespace) {
     return getNamespacedCache(namespace);
@@ -293,7 +298,7 @@ export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: ()
 }
 
 function getEffectiveCacheEnabled() {
-  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
+  return !isPrivateEvaluation() && (cacheEnabledStorage.getStore()?.enabled ?? enabled);
 }
 
 export type FetchWithCacheResult<T> = {

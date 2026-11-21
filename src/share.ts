@@ -279,10 +279,11 @@ async function sendEvalRecord(
   const { oldResults: _oldResults, ...evalFields } = evalRecord;
   let evalData: Record<string, unknown> = {
     ...evalFields,
+    vars: evalRecord.vars,
     config: redactedConfig,
-    prompts: evalRecord.prompts.map((prompt) =>
-      stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
-    ),
+    prompts: evalRecord
+      .getPrompts()
+      .map((prompt) => stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText))),
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
   };

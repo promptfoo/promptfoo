@@ -30,6 +30,7 @@ import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
 import { createOutputData } from '../../src/util/output';
+import { createLegacyRedactionSummary } from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -284,6 +285,35 @@ describe('importCommand', () => {
       expect(importedEval!.durationMs).toBe(4321);
       expect(importedEval!.generationDurationMs).toBe(123);
       expect(importedEval!.evaluationDurationMs).toBe(4198);
+    });
+
+    it('drops unowned attachments and applies inherited privacy before a v3 import', async () => {
+      const marker = 'SYNTHETIC_IMPORT_RECEIPT';
+      const data = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../__fixtures__/sample-export.json'), 'utf-8'),
+      );
+      data.config.defaultTest = {
+        assert: [
+          { type: 'promptfoo:redteam:coding-agent:trace-redaction', value: { rawReceipt: marker } },
+        ],
+      };
+      data.results.prompts[0].label = marker;
+      data.results.results[0].response.output = marker;
+      data.vars = [marker];
+      data.runtimeOptions = { filterPattern: marker };
+      data.traces = [
+        { traceId: 'imported', testCaseId: 'unknown', metadata: { text: marker }, spans: [] },
+      ];
+      tempFilePath = path.join(__dirname, `temp-private-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(data));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      const imported = await Eval.findById(data.evalId);
+      expect(imported).toBeDefined();
+      expect(imported!.vars).not.toContain(marker);
+      expect(JSON.stringify(imported!.runtimeOptions ?? {})).not.toContain(marker);
+      expect(JSON.stringify(await imported!.toEvaluateSummary())).not.toContain(marker);
+      expect(await new TraceStore().getTracesByEvaluation(data.evalId)).toEqual([]);
     });
 
     it('should import traces and attach them to the imported eval', async () => {
@@ -943,6 +973,31 @@ describe('importCommand', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('redacts both result copies when importing legacy privacy checks', async () => {
+      const id = 'eval-legacy-privacy';
+      tempFilePath = path.join(__dirname, `temp-legacy-privacy-${Date.now()}.json`);
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          id,
+          author: 'PRIVATE_LEGACY_RECEIPT',
+          description: 'PRIVATE_LEGACY_RECEIPT',
+          config: { description: 'PRIVATE_LEGACY_RECEIPT' },
+          results: createLegacyRedactionSummary('promptfoo:redteam:coding-agent:trace-redaction'),
+        }),
+      );
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      const db = await getDb();
+      const stored = await db.select().from(evalsTable).where(sql`${evalsTable.id} = ${id}`).get();
+      expect(stored).toBeDefined();
+      expect(JSON.stringify(stored)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(stored)).toContain('ordinary output');
+      const imported = (await Eval.findById(id))!;
+      expect((await imported.toEvaluateSummary()).version).toBe(2);
     });
 
     it('should import legacy table-backed eval exports', async () => {

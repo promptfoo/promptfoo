@@ -12,7 +12,11 @@ import {
   createSelectedToolErrorTarget,
 } from '../../util/selectedToolErrorTarget';
 
-import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  ProviderResponse,
+} from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/logger', async (importOriginal) => ({
@@ -34,16 +38,12 @@ vi.mock('../../../src/util/time', () => ({
 }));
 
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => ({
-  preserveSelectedError: (
-    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
-  ).preserveSelectedError,
-  isTargetCallAbortError: (
-    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
-  ).isTargetCallAbortError,
+  ...(await importOriginal<typeof import('../../../src/redteam/providers/shared')>()),
   redteamProviderManager: {
     getProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
+  gradeRedactionResponse: vi.fn(),
   externalizeResponseForRedteamHistory: vi
     .fn()
     .mockImplementation(async (response: unknown) => response),
@@ -511,6 +511,115 @@ describe('RedteamIterativeImageProvider', () => {
     // Target errors should still count as one target probe request.
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
+
+  it.each(['cached', 'failed'])(
+    'cannot reuse a passing privacy grade after a %s image turn',
+    async (kind) => {
+      const actual = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      const { gradeRedactionResponse } = await import('../../../src/redteam/providers/shared');
+      vi.mocked(gradeRedactionResponse).mockResolvedValueOnce({
+        pass: true,
+        score: 1,
+        reason: 'verified',
+      });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Review', prompt: 'Inspect report' }),
+      });
+      vi.mocked(getTargetResponse).mockResolvedValueOnce({ output: 'Report' });
+      if (kind === 'failed') {
+        vi.mocked(getTargetResponse).mockRejectedValueOnce(new Error('private fixture detail'));
+      } else {
+        vi.mocked(getTargetResponse).mockResolvedValueOnce({ output: 'Report', cached: true });
+        vi.mocked(gradeRedactionResponse).mockImplementationOnce(actual.gradeRedactionResponse);
+      }
+      await expect(
+        new RedteamIterativeProvider({}).callApi('Inspect', {
+          originalProvider: mockTargetProvider,
+          vars: { goal: 'Inspect report' },
+          prompt: { label: 'Report', raw: '{{goal}}' },
+          test: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+          } as AtomicTestCase,
+        }),
+      ).rejects.toThrow(
+        kind === 'failed' ? /^Private target verification failed$/ : /fresh target/,
+      );
+      expect(getTargetResponse).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('grades private text probes and carries the local privacy verdict', async () => {
+    const shared = await import('../../../src/redteam/providers/shared');
+    const externalize = vi.mocked(shared.externalizeResponseForRedteamHistory);
+    const previous = externalize.getMockImplementation();
+    const grade = { pass: false, score: 0, reason: 'Protected receipt disclosed' };
+    const gradePrivate = vi.mocked(shared.gradeRedactionResponse);
+    gradePrivate.mockImplementation(async (_prompt, _response, _test, grades) => {
+      grades[0] = grade;
+      return grade;
+    });
+    externalize.mockResolvedValue({
+      output: '[Response omitted for trace/artifact redaction.]',
+      metadata: { redactionContentOmitted: true },
+    });
+    mockRedteamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ improvement: 'Try again', prompt: 'Inspect report' }),
+    });
+    vi.mocked(getTargetResponse).mockResolvedValue({ output: 'PRIVATE_IMAGE_STRATEGY_RECEIPT' });
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          value: { rawReceipt: 'PRIVATE_IMAGE_STRATEGY_RECEIPT' },
+        },
+      ],
+    };
+    try {
+      const result = await new RedteamIterativeProvider({}).callApi('test', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Inspect report' },
+        prompt: { raw: '{{goal}}', label: 'report' },
+        test,
+      });
+      expect(gradePrivate).toHaveBeenCalledTimes(2);
+      expect(result.metadata).toMatchObject({
+        storedGraderResult: grade,
+        storedGraderResults: { 0: grade },
+        redactionContentOmitted: true,
+      });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_IMAGE_STRATEGY_RECEIPT');
+    } finally {
+      externalize.mockImplementation(previous!);
+      gradePrivate.mockReset();
+    }
+  });
+
+  it.each([false, true])(
+    'retains only unrecoverable media errors across probes: %s',
+    async (media) => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Try again', prompt: 'Inspect report' }),
+      });
+      vi.mocked(getTargetResponse).mockReset();
+      vi.mocked(getTargetResponse)
+        .mockResolvedValue({ output: 'Clean report' })
+        .mockResolvedValueOnce({
+          output: 'Omitted',
+          error: 'First probe failed',
+          ...(media && { metadata: { redactionMediaOmitted: true } }),
+        });
+      const result = await new RedteamIterativeProvider({}).callApi('test', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Inspect report' },
+        prompt: { raw: '{{goal}}', label: 'test' },
+      });
+      expect(getTargetResponse).toHaveBeenCalledTimes(2);
+      expect(result.error).toBe(media ? 'First probe failed' : undefined);
+      expect(result.metadata?.redactionMediaOmitted).toBe(media ? true : undefined);
+    },
+  );
 
   it('should include metadata with iteration results', async () => {
     vi.mocked(mockRedteamProvider.callApi)

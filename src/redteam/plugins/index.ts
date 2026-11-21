@@ -45,6 +45,12 @@ import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
+import {
+  CodingAgentGeneratedPlugin,
+  checkCodingAgentGeneration,
+  isCodingAgentPlugin,
+  LOCAL_CODING_AGENT_PLUGIN_SPECS,
+} from './codingAgent/generator';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
@@ -173,7 +179,7 @@ function applyDefaultRemotePluginConfig(
 ): PluginConfig | undefined {
   const configWithDefaultExamples = applyDefaultGraderExamples(key, config);
 
-  if (!key.startsWith('coding-agent:')) {
+  if (!isCodingAgentPlugin(key)) {
     return configWithDefaultExamples;
   }
 
@@ -370,6 +376,7 @@ async function fetchRemoteTestCases(
   config: PluginConfig,
   redteamGenerationContext?: RedteamGenerationContext | string,
   provider?: ApiProvider,
+  verifierConfig?: PluginConfig,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -404,10 +411,15 @@ async function fetchRemoteTestCases(
     n,
     purpose,
     task: key,
+    targetManifest: (configForRemote as Record<string, unknown>).targetManifest,
     ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
   });
+
+  if (verifierConfig) {
+    checkCodingAgentGeneration(body, [{ id: key, config: verifierConfig }]);
+  }
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
@@ -430,14 +442,20 @@ async function fetchRemoteTestCases(
       responseRecorded = true;
     }
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      logger.error(
+        isCodingAgentPlugin(key)
+          ? `Invalid remote generation response for ${key} (status ${status})`
+          : `Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`,
+      );
       return [];
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
-    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+    if (!isCodingAgentPlugin(key)) {
+      logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+    }
     return ret;
   } catch (err) {
     if (provider && !responseRecorded) {
@@ -466,7 +484,7 @@ function createPluginFactory<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      let configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      let configWithDefaults = applyDefaultRemotePluginConfig(key, config as T);
       // Send the constraint to remote generation and retain it for every strategy turn.
       if (key === 'tool-discovery') {
         configWithDefaults = {
@@ -489,17 +507,29 @@ function createPluginFactory<T extends PluginConfig>(
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
+      const plugin = isCodingAgentPlugin(key)
+        ? new PluginClass(provider, purpose, injectVar, configWithDefaults as T)
+        : undefined;
+      const generationConfig =
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.getRemoteGenerationConfig(redteamGenerationContext ?? targetId)
+          : configWithDefaults;
       const testCases = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
         n,
-        configWithDefaults ?? {},
+        generationConfig ?? {},
         redteamGenerationContext ?? targetId,
         provider,
+        plugin instanceof CodingAgentGeneratedPlugin ? configWithDefaults : undefined,
       );
 
-      return addPluginMetadata(testCases, pluginId, () => configWithDefaults);
+      const processed =
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.postprocessRemoteTests(testCases)
+          : testCases;
+      return addPluginMetadata(processed, pluginId, () => generationConfig);
     },
   };
 }
@@ -513,6 +543,21 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  ...LOCAL_CODING_AGENT_PLUGIN_SPECS.map((spec) =>
+    createPluginFactory(
+      class extends CodingAgentGeneratedPlugin {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
+          super(provider, purpose, injectVar, spec, config);
+        }
+      },
+      spec.id,
+    ),
+  ),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
@@ -658,6 +703,10 @@ function createRemotePlugin<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
+      // Collections have no authoritative grading spec of their own.
+      if (isCodingAgentPlugin(key)) {
+        throw new Error('Expand coding-agent collections locally or select a member plugin ID.');
+      }
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {

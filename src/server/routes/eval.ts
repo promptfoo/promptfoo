@@ -24,6 +24,7 @@ import {
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { configRequiresTraceRedaction, sanitizeRedactionResult } from '../../util/verifierPrivacy';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -601,6 +602,12 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // Replay discards the suite's assertions and would return the unfiltered provider reply.
+    if (configRequiresTraceRedaction(eval_.config)) {
+      res.status(403).json({ error: 'Replay is disabled for evaluations with protected prompts' });
+      return;
+    }
+
     // Get the provider configuration from the eval
     const providers = eval_.config.providers;
     if (!providers) {
@@ -796,7 +803,9 @@ evalRouter.post(
       await result.save();
       await eval_.save();
 
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      res.json(
+        EvalSchemas.SubmitRating.Response.parse({ ...sanitizeRedactionResult(result), evalId }),
+      );
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

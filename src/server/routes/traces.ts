@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import logger from '../../logger';
+import Eval from '../../models/eval';
 import { getTraceStore } from '../../tracing/store';
 import { TracesSchemas } from '../../types/api/traces';
 import { replyValidationError } from '../utils/errors';
@@ -19,13 +20,17 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
     const { evaluationId } = paramsResult.data;
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
-    const traceStore = getTraceStore();
-    const traces = await traceStore.getTracesByEvaluation(evaluationId);
+    const evaluation = await Eval.findById(evaluationId);
+    const traces = evaluation
+      ? await evaluation.getTraces({ normalizeSpans: false, throwOnError: true })
+      : (await getTraceStore().getTracesByEvaluation(evaluationId)).filter(
+          (trace) => trace.metadata?.privateForensicEvidence !== true,
+        );
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
     res.json(TracesSchemas.GetByEval.Response.parse({ traces }));
-  } catch (error) {
-    logger.error(`[TracesRoute] Error fetching traces: ${error}`);
+  } catch {
+    logger.error('[TracesRoute] Error fetching traces');
     res.status(500).json({ error: 'Failed to fetch traces' });
   }
 });
@@ -45,15 +50,21 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     const traceStore = getTraceStore();
     const trace = await traceStore.getTrace(traceId);
 
-    if (!trace) {
+    if (!trace || trace.metadata?.privateForensicEvidence === true) {
+      res.status(404).json({ error: 'Trace not found' });
+      return;
+    }
+
+    const evaluation = await Eval.findById(trace.evaluationId);
+    if (evaluation && (await evaluation.isTracePrivate(trace))) {
       res.status(404).json({ error: 'Trace not found' });
       return;
     }
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
     res.json(TracesSchemas.Get.Response.parse({ trace }));
-  } catch (error) {
-    logger.error(`[TracesRoute] Error fetching trace: ${error}`);
+  } catch {
+    logger.error('[TracesRoute] Error fetching trace');
     res.status(500).json({ error: 'Failed to fetch trace' });
   }
 });

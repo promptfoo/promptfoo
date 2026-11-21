@@ -151,6 +151,7 @@ describe('index.ts exports', () => {
     'PluginConfigSchema',
     'PolicyObjectSchema',
     'ProvidersSchema',
+    'RedteamTargetManifestSchema',
     'ResultFailureReason',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',

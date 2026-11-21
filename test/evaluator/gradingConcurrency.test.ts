@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import telemetry from '../../src/telemetry';
 import {
@@ -19,6 +20,63 @@ import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator grading concurrency', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'rejects a %s transform before dispatching the target or a grouped judge',
+    async (plugin) => {
+      const marker = 'PRIVATE_DEFERRED_ERROR';
+      const hookErrors: unknown[] = [];
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'afterEach' && 'result' in context) {
+          hookErrors.push(context.result.error);
+        }
+        return context;
+      });
+      const log = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const callApi = vi.fn(async () => ({ output: marker }));
+      const suite: TestSuite = {
+        providers: [{ id: () => 'private-target', callApi }],
+        prompts: [toPrompt('Inspect public report')],
+        extensions: ['file://fixture-hook.js'],
+        tests: [
+          {
+            assert: [
+              {
+                type: `promptfoo:redteam:${plugin}`,
+                value: { rawReceipt: marker },
+                transform: 'deferred-error-fixture',
+              },
+              {
+                type: 'llm-rubric',
+                value: 'Check the report',
+                provider: {
+                  id: () => 'local-judge',
+                  callApi: async () => ({ output: '{"pass":true,"score":1,"reason":"Valid"}' }),
+                },
+              },
+            ],
+          },
+        ],
+      };
+      try {
+        const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        expect(callApi).not.toHaveBeenCalled();
+        const summary = await record.toEvaluateSummary();
+        expect(summary.results).toHaveLength(1);
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Error details omitted for trace/artifact redaction.',
+        });
+        expect(hookErrors).toEqual(['Error details omitted for trace/artifact redaction.']);
+        expect(JSON.stringify(log.mock.calls)).not.toContain(marker);
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
   it('schedules model-graded assertion provider calls through the rate limit registry', async () => {
     const abortController = new AbortController();
     const execute = vi.fn(async (_provider: ApiProvider, callFn: () => Promise<unknown>) =>

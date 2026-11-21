@@ -112,7 +112,10 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          metadata: trace.metadata,
+          metadata:
+            trace.metadata?.privateForensicEvidence === true
+              ? { privateForensicEvidence: true }
+              : trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
@@ -132,17 +135,16 @@ export class TraceStore {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
       const db = await this.getDatabase();
 
-      // Only verify trace exists if not skipping the check (for OTLP scenarios)
-      if (options?.skipTraceCheck) {
-        logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
-      } else {
-        logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
-        const trace = await db
-          .select()
-          .from(tracesTable)
-          .where(eq(tracesTable.traceId, traceId))
-          .limit(1);
-
+      // Imports and delayed OTLP batches must respect older traces marked as private.
+      const trace = await db
+        .select()
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId))
+        .limit(1);
+      if (trace[0]?.metadata?.privateForensicEvidence === true) {
+        return { stored: false, reason: 'Trace is private' };
+      }
+      if (!options?.skipTraceCheck) {
         if (trace.length === 0) {
           const message =
             `[TraceStore] Trace ${traceId} not found, skipping ${spans.length} spans. ` +
@@ -214,22 +216,24 @@ export class TraceStore {
 
       // Get spans for each trace
       const tracesWithSpans = await Promise.all(
-        traces.map(async (trace) => {
-          logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
-          const spans = await db
-            .select()
-            .from(spansTable)
-            .where(eq(spansTable.traceId, trace.traceId));
-          logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${trace.traceId}`);
+        traces
+          .filter((trace) => trace.metadata?.privateForensicEvidence !== true)
+          .map(async (trace) => {
+            logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
+            const spans = await db
+              .select()
+              .from(spansTable)
+              .where(eq(spansTable.traceId, trace.traceId));
+            logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${trace.traceId}`);
 
-          return {
-            traceId: trace.traceId,
-            evaluationId: trace.evaluationId,
-            testCaseId: trace.testCaseId,
-            metadata: trace.metadata ?? undefined,
-            spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
-          };
-        }),
+            return {
+              traceId: trace.traceId,
+              evaluationId: trace.evaluationId,
+              testCaseId: trace.testCaseId,
+              metadata: trace.metadata ?? undefined,
+              spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+            };
+          }),
       );
 
       logger.debug(`[TraceStore] Returning ${tracesWithSpans.length} traces with spans`);
@@ -256,7 +260,7 @@ export class TraceStore {
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
-      if (traces.length === 0) {
+      if (traces.length === 0 || traces[0].metadata?.privateForensicEvidence === true) {
         logger.debug(`[TraceStore] Trace ${traceId} not found`);
         return null;
       }
@@ -288,6 +292,9 @@ export class TraceStore {
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
+      if (traces[0]?.metadata?.privateForensicEvidence === true) {
+        return { privateForensicEvidence: true };
+      }
       return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
@@ -355,7 +362,10 @@ export class TraceStore {
       const rows = await (await this.getDatabase())
         .select()
         .from(spansTable)
-        .where(eq(spansTable.traceId, traceId))
+        .where(sql`${spansTable.traceId} = ${traceId} AND NOT EXISTS (
+          SELECT 1 FROM ${tracesTable} WHERE ${tracesTable.traceId} = ${traceId}
+          AND json_extract(${tracesTable.metadata}, '$.privateForensicEvidence') = 1
+        )`)
         .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
       const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));

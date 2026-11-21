@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, or, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -19,6 +19,7 @@ import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvalRuntimeOptions,
   type EvalSummary,
@@ -43,8 +44,8 @@ import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/f
 import invariant from '../util/invariant';
 import {
   sanitizeConfigForOutput,
+  sanitizeConfigForPersistence,
   sanitizeRuntimeOptions,
-  sanitizeTracingConfigForPersistence,
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -52,6 +53,13 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import {
+  configHasCodingAgentVerifier,
+  configRequiresTraceRedaction,
+  sanitizeRedactionPrompt,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../util/verifierPrivacy';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -70,6 +78,7 @@ import EvalResult, {
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
+  sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 import { generateIdFromPrompt } from './prompt';
@@ -120,9 +129,17 @@ export async function insertEvalDatasetAndTags(
   tx: EvalRelationDb,
   evalId: string,
   dataset: typeof datasetsTable.$inferInsert,
-  config: Pick<UnifiedConfig, 'tags'>,
+  config: Partial<UnifiedConfig>,
 ) {
-  await tx.insert(datasetsTable).values(dataset).onConflictDoNothing().run();
+  const insert = tx.insert(datasetsTable).values(dataset);
+  if (configHasCodingAgentVerifier(config)) {
+    // Upgrade an older unsanitized copy in place without changing its identity or creation time.
+    await insert
+      .onConflictDoUpdate({ target: datasetsTable.id, set: { tests: sql`excluded.tests` } })
+      .run();
+  } else {
+    await insert.onConflictDoNothing().run();
+  }
   await tx
     .insert(evalsToDatasetsTable)
     .values({ evalId, datasetId: dataset.id })
@@ -206,16 +223,41 @@ export function combineFilterConditions(
   }, filterConditions[0].condition);
 }
 
+// Legacy rows can contain private provider metadata. The filter menus query JSON
+// directly, without passing through EvalResult's projection. Include nested assertions.
+const privateTypes = sql.join(
+  [...TRACE_REDACTION_ASSERTIONS].flatMap((id) => {
+    const name = id.replace('promptfoo:redteam:', '');
+    return [id, name, `not-${id}`, `not-${name}`].map((type) => sql`${type}`);
+  }),
+  sql`, `,
+);
+const publicTest = sql`
+  CASE WHEN json_valid(eval_results.metadata) THEN
+    coalesce(json_extract(eval_results.metadata, '$.privatePrompts'), 0) != 1
+    AND coalesce(json_extract(eval_results.metadata, '$.pluginId'), '') NOT IN (${privateTypes})
+  ELSE 1 END
+  AND coalesce(json_extract(test_case, '$.metadata.privatePrompts'), 0) != 1
+  AND coalesce(json_extract(test_case, '$.metadata.pluginId'), '') NOT IN (${privateTypes})
+  AND NOT EXISTS (
+    SELECT 1 FROM json_tree(test_case, '$.assert')
+    WHERE key = 'type' AND atom IN (${privateTypes})
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM json_tree(CASE WHEN json_valid(grading_result) THEN grading_result END)
+    WHERE (key IN ('type', 'pluginId') AND atom IN (${privateTypes}))
+      OR (key = 'privatePrompts' AND atom = 1)
+  )
+`;
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = await getDb();
 
-    // Handle empty array case to avoid SQL syntax error
-    if (evals.length === 0) {
+    const evalIds = evals.filter((e) => !configRequiresTraceRedaction(e.config)).map((e) => e.id);
+    if (!evalIds.length) {
       return {};
     }
-
-    const evalIds = evals.map((e) => e.id);
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
@@ -223,7 +265,7 @@ export class EvalQueries {
       FROM (
         SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
         FROM eval_results
-        WHERE eval_id IN (${sql.join(evalIds, sql`, `)})
+        WHERE eval_id IN (${sql.join(evalIds, sql`, `)}) AND ${publicTest}
       ) t, json_each(t.vars) j
     `;
 
@@ -250,7 +292,7 @@ export class EvalQueries {
       FROM (
         SELECT json_extract(eval_results.test_case, '$.vars') as vars
         FROM eval_results
-        WHERE eval_results.eval_id = ${evalId}
+        WHERE eval_results.eval_id = ${evalId} AND ${publicTest}
       ) t, json_each(t.vars) j
     `;
 
@@ -284,6 +326,7 @@ export class EvalQueries {
         SELECT DISTINCT j.key FROM (
           SELECT metadata FROM eval_results
           WHERE eval_id IN (${sql.join(allEvalIds, sql`, `)})
+            AND ${publicTest}
             AND metadata IS NOT NULL
             AND metadata != '{}'
             AND json_valid(metadata)
@@ -334,6 +377,7 @@ export class EvalQueries {
           json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
         FROM ${evalResultsTable}
         WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${publicTest}
           AND ${evalResultsTable.metadata} IS NOT NULL
           AND ${evalResultsTable.metadata} != '{}'
           AND json_valid(${evalResultsTable.metadata})
@@ -357,6 +401,237 @@ export class EvalQueries {
   }
 }
 
+// Older imports may record the privacy assertion only on the suite or its test catalog.
+function projectRow<T extends { testIdx: number; testCase: AtomicTestCase }>(
+  result: T,
+  config: Partial<UnifiedConfig>,
+): T {
+  const { testCase, testIdx } = result;
+  if (
+    (config.defaultTest &&
+      !testCase?.options?.disableDefaultAsserts &&
+      configRequiresTraceRedaction(config.defaultTest)) ||
+    (!testCase?.assert?.length &&
+      Array.isArray(config.tests) &&
+      configRequiresTraceRedaction(config.tests[testIdx]))
+  ) {
+    result = {
+      ...result,
+      testCase: {
+        ...testCase,
+        metadata: { ...testCase?.metadata, privatePrompts: true },
+      },
+    };
+  }
+  return sanitizeRedactionResult(result);
+}
+
+function importedRow(row: EvalResult, config: Partial<UnifiedConfig>, evalId: string) {
+  const result = projectRow(row, config);
+  return {
+    ...result,
+    evalId,
+    metadata: persistTraceMetadata(
+      persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
+      result.traceId,
+      result.evaluationId,
+    ),
+  };
+}
+
+function count(value: number) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+// Catalog metrics can contain copies of provider-reported numbers and grader-defined labels.
+function redactCatalogPrompt<T extends Prompt>(prompt: T): T {
+  const projected = sanitizeRedactionPrompt(prompt);
+  const metrics = (prompt as Partial<CompletedPrompt>).metrics;
+  if (!metrics) {
+    return projected;
+  }
+  const testPassCount = count(metrics.testPassCount);
+  return {
+    ...projected,
+    metrics: {
+      score: testPassCount,
+      testPassCount,
+      testFailCount: count(metrics.testFailCount),
+      testErrorCount: count(metrics.testErrorCount),
+      assertPassCount: count(metrics.assertPassCount),
+      assertFailCount: count(metrics.assertFailCount),
+      namedScores: {},
+      namedScoresCount: {},
+      cost: 0,
+      totalLatencyMs: 0,
+      tokenUsage: createEmptyTokenUsage(),
+    },
+  };
+}
+
+/** A legacy import can mark ownership on a row without marking its shared prompt config. */
+export function configForLegacyResults(config: Partial<UnifiedConfig>, results: EvaluateSummaryV2) {
+  if (
+    !configRequiresTraceRedaction(config) &&
+    (results.results?.some(configRequiresTraceRedaction) ||
+      results.table?.body?.some(configRequiresTraceRedaction))
+  ) {
+    return { ...config, metadata: { ...config.metadata, privatePrompts: true } };
+  }
+  return config;
+}
+
+/** Legacy summaries duplicate results in table cells; redact both public copies together. */
+export function sanitizeLegacyResults(
+  summary: EvaluateSummaryV2,
+  config: Partial<UnifiedConfig> = {},
+): EvaluateSummaryV2 {
+  const table = summary.table;
+  const promptCount = table?.head?.prompts?.length || 1;
+  const verifierTests = new Map<number, AtomicTestCase>();
+  const disabledDefaults = new Set<number>();
+  const defaults = typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
+  let defaultTest = configHasCodingAgentVerifier(defaults) ? defaults : undefined;
+  const remember = (testIdx: number, test?: AtomicTestCase, row?: unknown) => {
+    if (row && !configRequiresTraceRedaction(test) && configRequiresTraceRedaction(row)) {
+      test = { ...test, metadata: { ...test?.metadata, privatePrompts: true } };
+    }
+    if (test?.options?.disableDefaultAsserts === true) {
+      disabledDefaults.add(testIdx);
+    }
+    if (
+      test &&
+      configHasCodingAgentVerifier(test) &&
+      (!configRequiresTraceRedaction(verifierTests.get(testIdx)) ||
+        configRequiresTraceRedaction(test))
+    ) {
+      verifierTests.set(testIdx, test);
+    }
+  };
+  if (Array.isArray(config.tests)) {
+    config.tests.forEach((test, index) => {
+      if (test && typeof test === 'object' && !('path' in test)) {
+        remember(index, test as AtomicTestCase);
+      }
+    });
+  }
+  for (const [index, row] of (table?.body ?? []).entries()) {
+    const testIdx = row.testIdx ?? index;
+    remember(testIdx, row.test);
+    for (const output of row.outputs ?? []) {
+      remember(testIdx, output.testCase, output);
+    }
+  }
+  for (const [index, result] of (summary.results ?? []).entries()) {
+    remember(result.testIdx ?? Math.floor(index / promptCount), result.testCase, result);
+  }
+  // Catalogs can be populated before any row succeeds, including unused prompt columns.
+  const privateCatalog =
+    configRequiresTraceRedaction(config) ||
+    [...verifierTests.values()].some(configRequiresTraceRedaction);
+  if (!defaultTest && verifierTests.size === 0) {
+    // Older imports sometimes retain only the suite marker, with no row ownership.
+    if (!privateCatalog) {
+      return summary;
+    }
+    defaultTest = { metadata: { privatePrompts: true } };
+  }
+  const redact = <T extends { testCase?: AtomicTestCase }>(value: T, testIdx: number): T => {
+    const rowTest = verifierTests.get(testIdx);
+    const rowDefault = disabledDefaults.has(testIdx) ? undefined : defaultTest;
+    const inherited = configRequiresTraceRedaction(rowDefault)
+      ? rowDefault
+      : (rowTest ?? rowDefault);
+    const testCase = value.testCase;
+    if (!inherited) {
+      return value;
+    }
+    return sanitizeResultForJsonlArtifact({
+      ...value,
+      testCase: {
+        ...inherited,
+        ...testCase,
+        ...(configRequiresTraceRedaction(inherited) && {
+          metadata: { ...testCase?.metadata, privatePrompts: true },
+        }),
+        assert:
+          configHasCodingAgentVerifier(testCase) &&
+          (configRequiresTraceRedaction(testCase) || !configRequiresTraceRedaction(inherited))
+            ? testCase!.assert
+            : [...(inherited.assert ?? []), ...(testCase?.assert ?? [])],
+      },
+    });
+  };
+  const results = summary.results?.map((result, index) =>
+    redact(result, result.testIdx ?? Math.floor(index / promptCount)),
+  );
+  const body = table?.body?.map((row, index) => {
+    const testIdx = row.testIdx ?? index;
+    if ((!defaultTest || disabledDefaults.has(testIdx)) && !verifierTests.has(testIdx)) {
+      return row;
+    }
+    const projected = redact(
+      {
+        testCase: row.test,
+        vars: Object.fromEntries((table.head?.vars ?? []).map((name, i) => [name, row.vars?.[i]])),
+      },
+      testIdx,
+    );
+    return {
+      ...(configRequiresTraceRedaction(projected.testCase) ? { testIdx } : row),
+      test: projected.testCase,
+      vars: row.vars?.map((_, i) => projected.vars[table.head?.vars?.[i]] ?? ''),
+      outputs: row.outputs?.map((output) => {
+        const redacted = redact({ ...output, prompt: { raw: output.prompt } }, testIdx);
+        const privateResponse = configRequiresTraceRedaction(redacted.testCase);
+        return {
+          ...redacted,
+          prompt: redacted.prompt.raw,
+          ...(privateResponse && {
+            pass: output.pass,
+            provider: '[provider omitted]',
+            text: '[Response omitted for trace/artifact redaction.]',
+            audio: undefined,
+            video: undefined,
+            images: undefined,
+          }),
+        };
+      }),
+    };
+  });
+  const prompts = privateCatalog
+    ? table?.head?.prompts?.map(redactCatalogPrompt)
+    : table?.head?.prompts;
+  return {
+    ...summary,
+    ...(privateCatalog && {
+      stats: {
+        successes: count(summary.stats?.successes),
+        failures: count(summary.stats?.failures),
+        errors: count(summary.stats?.errors),
+        tokenUsage: createEmptyTokenUsage(),
+      },
+      ...('prompts' in summary &&
+        Array.isArray(summary.prompts) && {
+          prompts: summary.prompts.map(redactCatalogPrompt),
+        }),
+      ...('repeatStability' in summary && { repeatStability: undefined }),
+    }),
+    results,
+    ...(table && {
+      table: {
+        head: {
+          prompts,
+          vars: privateCatalog
+            ? (table.head?.vars ?? []).map((_, i) => `Variable ${i + 1}`)
+            : table.head?.vars,
+        },
+        body,
+      },
+    }),
+  };
+}
+
 export default class Eval {
   id: string;
   createdAt: number;
@@ -367,9 +642,31 @@ export default class Eval {
   results: EvalResult[];
   datasetId?: string;
   prompts: CompletedPrompt[];
-  oldResults?: EvaluateSummaryV2;
+  #oldResults?: EvaluateSummaryV2;
+
+  get oldResults() {
+    return this.#oldResults;
+  }
+
+  set oldResults(results: EvaluateSummaryV2 | undefined) {
+    if (results) {
+      this.config = configForLegacyResults(this.config, results);
+    }
+    this.#oldResults = results && sanitizeLegacyResults(results, this.config);
+  }
+
   persisted: boolean;
-  vars: string[];
+  #vars: string[] = [];
+
+  // Keys supplied by imported results can themselves reproduce private values.
+  get vars() {
+    return configRequiresTraceRedaction(this.config) ? [] : this.#vars;
+  }
+
+  set vars(names: string[]) {
+    this.#vars = configRequiresTraceRedaction(this.config) ? [] : names;
+  }
+
   _resultsLoaded: boolean = false;
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
@@ -476,7 +773,7 @@ export default class Eval {
     }
 
     // backfill vars
-    if (!eval_.vars || eval_.vars.length === 0) {
+    if (!eval_.vars?.length && !configRequiresTraceRedaction(evalInstance.config)) {
       const vars = await EvalQueries.getVarsFromEval(id);
       evalInstance.setVars(vars);
       await EvalQueries.setVars(id, vars);
@@ -495,8 +792,10 @@ export default class Eval {
         description: evalsTable.description,
         config: evalsTable.config,
         prompts: evalsTable.prompts,
+        datasetId: evalsToDatasetsTable.datasetId,
       })
       .from(evalsTable)
+      .leftJoin(evalsToDatasetsTable, eq(evalsToDatasetsTable.evalId, evalsTable.id))
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
       .all();
@@ -507,6 +806,7 @@ export default class Eval {
           createdAt: new Date(e.createdAt),
           author: e.author,
           description: e.description || undefined,
+          datasetId: e.datasetId ?? undefined,
           prompts: e.prompts || [],
           persisted: true,
         }),
@@ -525,6 +825,8 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: EvalRuntimeOptions;
       completedPrompts?: CompletedPrompt[];
+      /** Resolved tests may require privacy even when config.tests only references a file. */
+      privatePrompts?: boolean;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -539,6 +841,11 @@ export default class Eval {
     const db = await getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
+    if (opts?.privatePrompts || opts?.results?.some(configRequiresTraceRedaction)) {
+      config = { ...config, metadata: { ...config.metadata, privatePrompts: true } };
+    }
+    const privatePrompts = configRequiresTraceRedaction(config);
+    const persistedConfig = sanitizeConfigForPersistence(config);
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
@@ -557,30 +864,30 @@ export default class Eval {
           id: evalId,
           createdAt: createdAt.getTime(),
           author,
-          description: config.description,
-          config: sanitizeTracingConfigForPersistence(config),
+          description: persistedConfig.description,
+          config: persistedConfig,
           results: durationResults,
-          vars: opts?.vars || [],
+          vars: privatePrompts ? [] : opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
-          prompts: opts?.completedPrompts || [],
+          prompts: privatePrompts
+            ? (opts?.completedPrompts?.map(redactCatalogPrompt) ?? [])
+            : (opts?.completedPrompts ?? []),
           isRedteam: config.redteam !== undefined,
         })
         .run();
 
-      await insertEvalPrompts(tx, evalId, renderedPrompts);
+      await insertEvalPrompts(
+        tx,
+        evalId,
+        privatePrompts ? renderedPrompts.map(redactCatalogPrompt) : renderedPrompts,
+      );
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
           .values(
-            opts.results?.map((r) => ({
-              ...r,
-              metadata: persistTraceMetadata(
-                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
-                r.traceId,
-                r.evaluationId,
-              ),
-              evalId,
+            opts.results.map((row) => ({
+              ...importedRow(row, config, evalId),
               id: crypto.randomUUID(),
             })),
           )
@@ -588,7 +895,12 @@ export default class Eval {
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: config.tests }, config);
+      await insertEvalDatasetAndTags(
+        tx,
+        evalId,
+        { id: datasetId, tests: persistedConfig.tests },
+        persistedConfig,
+      );
     });
 
     invalidateEvaluationCache(evalId);
@@ -629,6 +941,9 @@ export default class Eval {
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
+    if (configRequiresTraceRedaction(config)) {
+      this.prompts = this.prompts.map(redactCatalogPrompt);
+    }
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
@@ -654,16 +969,17 @@ export default class Eval {
   setTable(table: EvaluateTable) {
     invariant(this.version() < 4, 'Eval is not version 3');
     invariant(this.oldResults, 'Old results not found');
-    this.oldResults.table = table;
+    this.oldResults = { ...this.oldResults, table };
   }
 
   async save() {
     const db = await getDb();
+    const config = sanitizeConfigForPersistence(this.config);
     const updateObj: Record<string, unknown> = {
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config,
       isRedteam: this.config.redteam !== undefined,
-      prompts: this.prompts,
-      description: this.config.description,
+      prompts: this.getPrompts(),
+      description: config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
@@ -672,7 +988,9 @@ export default class Eval {
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      updateObj.results = this.oldResults;
+      const legacy = sanitizeLegacyResults(this.oldResults, this.config);
+      updateObj.results = legacy;
+      updateObj.prompts = legacy.table?.head.prompts || [];
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
@@ -727,19 +1045,27 @@ export default class Eval {
   getPrompts() {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.table?.head.prompts || [];
+      return sanitizeLegacyResults(this.oldResults, this.config).table?.head.prompts || [];
     }
-    return this.prompts;
+    return configRequiresTraceRedaction(this.config)
+      ? this.prompts.map(redactCatalogPrompt)
+      : this.prompts;
   }
 
   async getTable(): Promise<EvaluateTable> {
     if (this.useOldResults()) {
-      return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
+      return (
+        (this.oldResults && sanitizeLegacyResults(this.oldResults, this.config).table) || {
+          head: { prompts: [], vars: [] },
+          body: [],
+        }
+      );
     }
     return convertResultsToTable(await this.toResultsFile());
   }
 
   async addResult(result: EvaluateResult) {
+    result = projectRow(result, this.config);
     if (result.repeatGroupId !== undefined) {
       this.observedRepeatedResults = true;
     }
@@ -766,6 +1092,7 @@ export default class Eval {
   }
 
   recordFinalJsonlResult(result: EvaluateResult) {
+    result = projectRow(result, this.config);
     this.finalJsonlResults.set(getResultIndexKey(result), result);
     if (result.repeatGroupId !== undefined) {
       this.observedRepeatedResults = true;
@@ -783,6 +1110,7 @@ export default class Eval {
   }
 
   recordResultPersistenceFailure(result: EvaluateResult) {
+    result = projectRow(result, this.config);
     this.resultPersistenceFailed = true;
     const key = getResultIndexKey(result);
     // Keep the row so comparison assertions (max-score / select-best) can still grade the
@@ -1340,7 +1668,7 @@ export default class Eval {
       const bodyEnd = Date.now();
       logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
       return {
-        head: { prompts: this.prompts, vars },
+        head: { prompts: this.getPrompts(), vars },
         body,
         totalCount,
         filteredCount,
@@ -1387,14 +1715,26 @@ export default class Eval {
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
-    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
+    return {
+      head: { prompts: this.getPrompts(), vars },
+      body,
+      totalCount,
+      filteredCount,
+      id: this.id,
+    };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
-    this.prompts = prompts;
+    this.prompts = configRequiresTraceRedaction(this.config)
+      ? prompts.map(redactCatalogPrompt)
+      : prompts;
     if (this.persisted) {
       const db = await getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      await db
+        .update(evalsTable)
+        .set({ prompts: this.prompts })
+        .where(eq(evalsTable.id, this.id))
+        .run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       notifyEvaluationChanged(this.id);
@@ -1406,17 +1746,7 @@ export default class Eval {
       const db = await getDb();
       await db
         .insert(evalResultsTable)
-        .values(
-          results.map((r) => ({
-            ...r,
-            metadata: persistTraceMetadata(
-              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
-              r.traceId,
-              r.evaluationId,
-            ),
-            evalId: this.id,
-          })),
-        )
+        .values(results.map((row) => importedRow(row, this.config, this.id)))
         .run();
       notifyEvaluationChanged(this.id);
     }
@@ -1439,7 +1769,7 @@ export default class Eval {
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.results;
+      return sanitizeLegacyResults(this.oldResults, this.config).results;
     }
     await this.loadResults();
     this._resultsLoaded = true;
@@ -1462,7 +1792,7 @@ export default class Eval {
       evaluationDurationMs: this.evaluationDurationMs,
     };
 
-    for (const prompt of this.prompts) {
+    for (const prompt of this.getPrompts()) {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
@@ -1475,7 +1805,9 @@ export default class Eval {
 
     accumulateGenerationTokenUsage(
       stats.tokenUsage,
-      this.config.metadata?.generationAccounting?.tokenUsage,
+      configRequiresTraceRedaction(this.config)
+        ? undefined
+        : this.config.metadata?.generationAccounting?.tokenUsage,
     );
 
     return stats;
@@ -1483,7 +1815,7 @@ export default class Eval {
 
   async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
     if (this.useOldResults()) {
-      return calculateRepeatStability(this.oldResults?.results ?? []);
+      return calculateRepeatStability(await this.getResults());
     }
 
     const calculator = new RepeatStabilityCalculator();
@@ -1511,11 +1843,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
+        ...sanitizeLegacyResults(this.oldResults, this.config),
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
-        stats: this.oldResults.stats,
       };
     }
     if (this.results.length === 0) {
@@ -1525,7 +1855,9 @@ export default class Eval {
     const stats = await this.getStats();
     const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
+    const prompts = this.getPrompts().map((p) =>
+      projectPrompt(p, stripFlags.shouldStripPromptText),
+    );
 
     const calculator = new RepeatStabilityCalculator();
     const results = this.results.map((result) => {
@@ -1547,13 +1879,111 @@ export default class Eval {
     };
   }
 
-  async getTraces(): Promise<TraceData[]> {
+  private async privateTraceFilter(trace?: TraceData) {
+    // Earlier versions could store unmarked spans linked by row indices, IDs or metadata.
+    const requireLinkedTrace = configRequiresTraceRedaction(this.config);
+    const publicTraceIds = new Set<string>();
+    const privateTraceIds = new Set<string>();
+    const privateTestCaseIds = new Set<string>();
+    const excludePrivateTrace = (
+      result: Pick<EvaluateResult, 'testCase' | 'testIdx' | 'promptIdx'> & {
+        privateRow?: number;
+        traceId?: string | null;
+      },
+    ) => {
+      if (!result.privateRow && !configRequiresTraceRedaction(result.testCase)) {
+        if (result.traceId) {
+          publicTraceIds.add(result.traceId);
+        }
+        return;
+      }
+      if (result.traceId) {
+        privateTraceIds.add(result.traceId);
+      }
+      privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
+      const testCaseId = result.testCase.metadata?.testCaseId;
+      if (typeof testCaseId === 'string') {
+        privateTestCaseIds.add(testCaseId);
+      }
+      if ('id' in result.testCase && typeof result.testCase.id === 'string') {
+        privateTestCaseIds.add(result.testCase.id);
+      }
+    };
+    for (const result of this.failedResults.values()) {
+      excludePrivateTrace(result);
+    }
+    if (this.useOldResults() || !this.persisted) {
+      const results = this.useOldResults() ? await this.getResults() : this.results;
+      results.forEach(excludePrivateTrace);
+    } else {
+      // Fetch only linkage and ownership, never the response or grading payloads.
+      const db = await getDb();
+      const traceIdColumn = sql<string | null>`CASE WHEN json_valid(${evalResultsTable.metadata})
+        THEN json_extract(${evalResultsTable.metadata}, '$.__promptfoo.traceLinkage.traceId') END`;
+      const matching =
+        trace &&
+        or(
+          eq(traceIdColumn, trace.traceId),
+          sql`${evalResultsTable.testIdx} || '-' || ${evalResultsTable.promptIdx} = ${trace.testCaseId}`,
+          sql`json_extract(${evalResultsTable.testCase}, '$.metadata.testCaseId') = ${trace.testCaseId}`,
+          sql`json_extract(${evalResultsTable.testCase}, '$.id') = ${trace.testCaseId}`,
+        );
+      for (let offset = 0; ; offset += 250) {
+        const rows = await db
+          .select({
+            testCase: evalResultsTable.testCase,
+            traceId: traceIdColumn,
+            privateRow: requireLinkedTrace ? sql<number>`NOT (${publicTest})` : sql<number>`1`,
+            testIdx: evalResultsTable.testIdx,
+            promptIdx: evalResultsTable.promptIdx,
+          })
+          .from(evalResultsTable)
+          .where(
+            and(
+              eq(evalResultsTable.evalId, this.id),
+              matching,
+              requireLinkedTrace ? undefined : sql`NOT (${publicTest})`,
+            ),
+          )
+          .orderBy(evalResultsTable.id)
+          .limit(250)
+          .offset(offset);
+        rows.forEach(excludePrivateTrace);
+        if (rows.length < 250) {
+          break;
+        }
+      }
+    }
+    return (candidate: TraceData) =>
+      candidate.metadata?.privateForensicEvidence === true ||
+      privateTraceIds.has(candidate.traceId) ||
+      privateTestCaseIds.has(candidate.testCaseId) ||
+      (requireLinkedTrace && !publicTraceIds.has(candidate.traceId));
+  }
+
+  async isTracePrivate(trace: TraceData): Promise<boolean> {
+    if (trace.metadata?.privateForensicEvidence === true) {
+      return true;
+    }
+    const isPrivate = await this.privateTraceFilter(trace);
+    return isPrivate(trace);
+  }
+
+  async getTraces(
+    options: { normalizeSpans?: boolean; throwOnError?: boolean } = {},
+  ): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
-
-      // Transform trace data to match the expected schema
-      return tracesData.map((trace: TraceData) => ({
+      if (!tracesData.length) {
+        return [];
+      }
+      const isPrivate = await this.privateTraceFilter();
+      const publicTraces = tracesData.filter((trace) => !isPrivate(trace));
+      if (options.normalizeSpans === false) {
+        return publicTraces;
+      }
+      return publicTraces.map((trace: TraceData) => ({
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
@@ -1587,7 +2017,10 @@ export default class Eval {
         }),
       }));
     } catch (error) {
-      logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
+      if (options.throwOnError) {
+        throw error;
+      }
+      logger.debug(`Failed to fetch traces for eval ${this.id}`);
       return [];
     }
   }
@@ -1648,10 +2081,10 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
+    const newConfig = structuredClone(sanitizeConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
-    const newPrompts = structuredClone(this.prompts);
+    const newPrompts = structuredClone(this.getPrompts());
     const newVars = this.vars ? structuredClone(this.vars) : [];
     const author = getAuthor();
 
@@ -1668,7 +2101,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: sanitizeTracingConfigForPersistence(newConfig),
+          config: newConfig,
           results: {},
           prompts: newPrompts,
           vars: newVars,
@@ -1765,14 +2198,17 @@ export default class Eval {
 
         // Map to new eval with new IDs and timestamps
         const now = Date.now();
-        const copiedResults = batch.map((result) => ({
-          ...result,
-          id: crypto.randomUUID(),
-          evalId: newEvalId,
-          createdAt: now,
-          metadata: stripTraceLinkageFromMetadata(result.metadata),
-          updatedAt: now,
-        }));
+        const copiedResults = batch.map((row) => {
+          const result = projectRow(row, this.config);
+          return {
+            ...result,
+            id: crypto.randomUUID(),
+            evalId: newEvalId,
+            createdAt: now,
+            metadata: stripTraceLinkageFromMetadata(result.metadata),
+            updatedAt: now,
+          };
+        });
 
         // Insert batch
         await tx.insert(evalResultsTable).values(copiedResults).run();

@@ -8,6 +8,7 @@ import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
+import { isPrivateEvaluation } from './util/privateEvaluation';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 // Named construction also works when the CommonJS bundle loads Chalk as an ES module.
@@ -212,7 +213,7 @@ export function setLogLevel(level: LogLevel) {
 }
 
 export function isDebugEnabled(): boolean {
-  return getLogLevel() === 'debug';
+  return !isPrivateEvaluation() && getLogLevel() === 'debug';
 }
 
 /**
@@ -391,8 +392,7 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
-    // Prevent new writes once shutdown starts
-    if (isLoggerShuttingDown) {
+    if (isLoggerShuttingDown || isPrivateEvaluation()) {
       return;
     }
 
@@ -451,6 +451,9 @@ export async function logRequestResponse(options: {
   response?: Response | null;
   error?: boolean;
 }): Promise<void> {
+  if (isPrivateEvaluation()) {
+    return;
+  }
   const { url, requestBody, requestMethod, response, error } = options;
 
   const logMethod = error ? logger.error : logger.debug;

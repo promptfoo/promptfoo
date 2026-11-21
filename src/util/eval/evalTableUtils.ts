@@ -1,5 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
+import { configRequiresTraceRedaction } from '../verifierPrivacy';
 
 import type Eval from '../../models/eval';
 import type {
@@ -745,7 +746,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const { isRedteam = false, write } = options;
   const env = eval_.config?.env;
   const varNames = eval_.vars;
-  const prompts = eval_.prompts;
+  const prompts = configRequiresTraceRedaction(eval_.config) ? eval_.getPrompts() : eval_.prompts;
   const numPrompts = prompts.length;
   // Derive metric column names from `namedScoresCount` so derived/aggregate-only
   // metrics don't introduce columns that the WebUI path would omit.

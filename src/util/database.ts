@@ -14,7 +14,13 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId, insertEvalDatasetAndTags, insertEvalPrompts } from '../models/eval';
+import Eval, {
+  configForLegacyResults,
+  createEvalId,
+  insertEvalDatasetAndTags,
+  insertEvalPrompts,
+  sanitizeLegacyResults,
+} from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { getStripFlags } from '../models/evalResult';
 import {
@@ -31,7 +37,7 @@ import { sha256 } from './createHash';
 import {
   restoreAzureBlobSasTokens,
   sanitizeConfigForOutput,
-  sanitizeTracingConfigForPersistence,
+  sanitizeConfigForPersistence,
 } from './sanitizer';
 import {
   getCachedStandaloneEvals,
@@ -53,6 +59,9 @@ export async function writeResultsToDatabase(
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = createEvalId(createdAt);
   const db = await getDb();
+  config = configForLegacyResults(config, results);
+  const persistedConfig = sanitizeConfigForPersistence(config);
+  results = sanitizeLegacyResults(results, config);
 
   await db.transaction(async (tx) => {
     await tx
@@ -61,8 +70,8 @@ export async function writeResultsToDatabase(
         id: evalId,
         createdAt: createdAt.getTime(),
         author: getAuthor(),
-        description: config.description,
-        config: sanitizeTracingConfigForPersistence(config),
+        description: persistedConfig.description,
+        config: persistedConfig,
         results,
         isRedteam: config.redteam !== undefined,
       })
@@ -78,7 +87,7 @@ export async function writeResultsToDatabase(
 
     // Record dataset relation
     const datasetId = sha256(JSON.stringify(config.tests || []));
-    const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+    const testsForStorage = Array.isArray(persistedConfig.tests) ? persistedConfig.tests : [];
 
     // Log when non-array tests are converted to empty array for database storage
     if (config.tests && !Array.isArray(config.tests)) {
@@ -90,7 +99,12 @@ export async function writeResultsToDatabase(
       );
     }
 
-    await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: testsForStorage }, config);
+    await insertEvalDatasetAndTags(
+      tx,
+      evalId,
+      { id: datasetId, tests: testsForStorage },
+      persistedConfig,
+    );
   });
 
   notifyEvaluationChanged(evalId);
@@ -156,7 +170,7 @@ async function getPromptsWithPredicate(
   for (const eval_ of evals_) {
     const timestamp = eval_.createdAt;
     const createdAt = new Date(timestamp).toISOString();
-    const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    const datasetId = eval_.datasetId ?? sha256(JSON.stringify(eval_.config.tests || []));
     if (predicate(datasetId)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
@@ -208,8 +222,8 @@ export async function getTestCases(limit = DEFAULT_QUERY_LIMIT): Promise<TestCas
       continue;
     }
 
-    // Hash the stored tests so output stripping does not change dataset identity.
-    const id = sha256(JSON.stringify(config.tests || []));
+    // Projected test inputs no longer hash to the original dataset ID.
+    const id = evl.datasetId ?? sha256(JSON.stringify(config.tests || []));
     const dataset = (groupedTestCases[id] ??= {
       id,
       count: 0,

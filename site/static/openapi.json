@@ -4132,6 +4132,71 @@
                         "type": "object",
                         "properties": {
                           "examples": { "type": "array", "items": { "type": "string" } },
+                          "targetManifest": {
+                            "type": "object",
+                            "properties": {
+                              "name": { "type": "string" },
+                              "kind": { "type": "string" },
+                              "files": { "type": "array", "items": { "type": "string" } },
+                              "commands": { "type": "array", "items": { "type": "string" } },
+                              "tools": { "type": "array", "items": { "type": "string" } },
+                              "frameworks": { "type": "array", "items": { "type": "string" } },
+                              "allowedPaths": { "type": "array", "items": { "type": "string" } },
+                              "sensitivePaths": { "type": "array", "items": { "type": "string" } },
+                              "dataSources": { "type": "array", "items": { "type": "string" } },
+                              "dataSinks": { "type": "array", "items": { "type": "string" } },
+                              "notes": { "type": "array", "items": { "type": "string" } }
+                            }
+                          },
+                          "agenticAttackProfile": {
+                            "type": "object",
+                            "properties": {
+                              "runtimeKind": { "type": "string" },
+                              "conversationMode": {
+                                "type": "string",
+                                "enum": ["single-turn-task", "multi-turn-chat", "stateful-chat"]
+                              },
+                              "preserveConcreteTask": { "type": "boolean" },
+                              "requiresTraceEvidence": { "type": "boolean" },
+                              "targetManifest": {
+                                "type": "object",
+                                "properties": {
+                                  "name": { "type": "string" },
+                                  "kind": { "type": "string" },
+                                  "files": { "type": "array", "items": { "type": "string" } },
+                                  "commands": { "type": "array", "items": { "type": "string" } },
+                                  "tools": { "type": "array", "items": { "type": "string" } },
+                                  "frameworks": { "type": "array", "items": { "type": "string" } },
+                                  "allowedPaths": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                  },
+                                  "sensitivePaths": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                  },
+                                  "dataSources": { "type": "array", "items": { "type": "string" } },
+                                  "dataSinks": { "type": "array", "items": { "type": "string" } },
+                                  "notes": { "type": "array", "items": { "type": "string" } }
+                                }
+                              },
+                              "strategyHints": {
+                                "type": "object",
+                                "properties": {
+                                  "avoidGoalRewriting": { "type": "boolean" },
+                                  "avoidInventedContext": { "type": "boolean" },
+                                  "preserveSourceSinkBoundary": { "type": "boolean" },
+                                  "hydra": {
+                                    "type": "object",
+                                    "properties": { "sendCurrentTurnOnly": { "type": "boolean" } }
+                                  }
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "required": ["runtimeKind"],
+                            "additionalProperties": {}
+                          },
                           "graderExamples": {
                             "type": "array",
                             "items": {

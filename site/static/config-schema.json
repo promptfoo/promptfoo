@@ -53,22 +53,22 @@
           "$ref": "#/definitions/__schema40"
         },
         "writeLatestResults": {
-          "$ref": "#/definitions/__schema70"
-        },
-        "tracing": {
           "$ref": "#/definitions/__schema71"
         },
-        "basePath": {
-          "$ref": "#/definitions/__schema76"
+        "tracing": {
+          "$ref": "#/definitions/__schema72"
         },
-        "evaluateOptions": {
+        "basePath": {
           "$ref": "#/definitions/__schema77"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema78"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema79"
+          "$ref": "#/definitions/__schema80"
         },
         "targets": {
-          "$ref": "#/definitions/__schema80"
+          "$ref": "#/definitions/__schema81"
         }
       },
       "required": ["prompts"],
@@ -1708,11 +1708,19 @@
             }
           ]
         },
+        "targetManifest": {
+          "description": "Files, commands, tools, paths, and data boundaries available to the target",
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema69"
+            }
+          ]
+        },
         "graderExamples": {
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema69"
+              "$ref": "#/definitions/__schema70"
             }
           ]
         }
@@ -1897,20 +1905,48 @@
         "bias:race",
         "bola",
         "cca",
+        "coding-agent:agents-md-injection",
         "coding-agent:all",
+        "coding-agent:approval-bypass",
+        "coding-agent:approval-misrepresentation",
         "coding-agent:automation-poisoning",
+        "coding-agent:child-agent-bypass",
+        "coding-agent:claim-validation-mismatch",
+        "coding-agent:codex",
+        "coding-agent:codex-config-poisoning",
+        "coding-agent:codex-home-poisoning",
+        "coding-agent:codex-rules-poisoning",
+        "coding-agent:connector-data-overreach",
+        "coding-agent:connector-parameter-exfil",
         "coding-agent:core",
         "coding-agent:delayed-ci-exfil",
+        "coding-agent:dependency-confusion",
+        "coding-agent:externalized-execution",
         "coding-agent:generated-vulnerability",
+        "coding-agent:least-privilege-drift",
+        "coding-agent:lifecycle-script-execution",
+        "coding-agent:markdown-url-exfil",
+        "coding-agent:mcp-config-poisoning",
+        "coding-agent:mcp-confused-deputy",
+        "coding-agent:mcp-resource-injection",
         "coding-agent:network-egress-bypass",
         "coding-agent:procfs-credential-read",
+        "coding-agent:replay-bundle-completeness",
         "coding-agent:repo-prompt-injection",
         "coding-agent:sandbox-read-escape",
         "coding-agent:sandbox-write-escape",
         "coding-agent:secret-env-read",
         "coding-agent:secret-file-read",
+        "coding-agent:self-approval-bypass",
+        "coding-agent:skill-poisoning",
         "coding-agent:steganographic-exfil",
+        "coding-agent:terminal-control-injection",
+        "coding-agent:terminal-network-exfil",
         "coding-agent:terminal-output-injection",
+        "coding-agent:thread-memory-leak",
+        "coding-agent:trace-completeness",
+        "coding-agent:trace-log-exfil",
+        "coding-agent:trace-redaction",
         "coding-agent:verifier-sabotage",
         "competitors",
         "contracts",
@@ -2003,6 +2039,21 @@
         "harmful:unsafe-practices",
         "harmful:violent-crime",
         "harmful:weapons:ied",
+        "harness:artifact-redaction",
+        "harness:cleanup",
+        "harness:grader-injection-resistance",
+        "harness:known-bad-agent",
+        "harness:known-good-agent",
+        "harness:network-trap-coverage",
+        "harness:policy-applied",
+        "harness:preflight",
+        "harness:replay-completeness",
+        "harness:resource-budget",
+        "harness:result-integrity",
+        "harness:secret-placement",
+        "harness:state-reset",
+        "harness:version-attestation",
+        "harness:workspace-isolation",
         "hijacking",
         "illegal-activity",
         "imitation",
@@ -2196,20 +2247,48 @@
         "bias:race",
         "bola",
         "cca",
+        "coding-agent:agents-md-injection",
         "coding-agent:all",
+        "coding-agent:approval-bypass",
+        "coding-agent:approval-misrepresentation",
         "coding-agent:automation-poisoning",
+        "coding-agent:child-agent-bypass",
+        "coding-agent:claim-validation-mismatch",
+        "coding-agent:codex",
+        "coding-agent:codex-config-poisoning",
+        "coding-agent:codex-home-poisoning",
+        "coding-agent:codex-rules-poisoning",
+        "coding-agent:connector-data-overreach",
+        "coding-agent:connector-parameter-exfil",
         "coding-agent:core",
         "coding-agent:delayed-ci-exfil",
+        "coding-agent:dependency-confusion",
+        "coding-agent:externalized-execution",
         "coding-agent:generated-vulnerability",
+        "coding-agent:least-privilege-drift",
+        "coding-agent:lifecycle-script-execution",
+        "coding-agent:markdown-url-exfil",
+        "coding-agent:mcp-config-poisoning",
+        "coding-agent:mcp-confused-deputy",
+        "coding-agent:mcp-resource-injection",
         "coding-agent:network-egress-bypass",
         "coding-agent:procfs-credential-read",
+        "coding-agent:replay-bundle-completeness",
         "coding-agent:repo-prompt-injection",
         "coding-agent:sandbox-read-escape",
         "coding-agent:sandbox-write-escape",
         "coding-agent:secret-env-read",
         "coding-agent:secret-file-read",
+        "coding-agent:self-approval-bypass",
+        "coding-agent:skill-poisoning",
         "coding-agent:steganographic-exfil",
+        "coding-agent:terminal-control-injection",
+        "coding-agent:terminal-network-exfil",
         "coding-agent:terminal-output-injection",
+        "coding-agent:thread-memory-leak",
+        "coding-agent:trace-completeness",
+        "coding-agent:trace-log-exfil",
+        "coding-agent:trace-redaction",
         "coding-agent:verifier-sabotage",
         "competitors",
         "contracts",
@@ -2302,6 +2381,21 @@
         "harmful:unsafe-practices",
         "harmful:violent-crime",
         "harmful:weapons:ied",
+        "harness:artifact-redaction",
+        "harness:cleanup",
+        "harness:grader-injection-resistance",
+        "harness:known-bad-agent",
+        "harness:known-good-agent",
+        "harness:network-trap-coverage",
+        "harness:policy-applied",
+        "harness:preflight",
+        "harness:replay-completeness",
+        "harness:resource-budget",
+        "harness:result-integrity",
+        "harness:secret-placement",
+        "harness:state-reset",
+        "harness:version-attestation",
+        "harness:workspace-isolation",
         "hijacking",
         "illegal-activity",
         "imitation",
@@ -2658,6 +2752,71 @@
       }
     },
     "__schema69": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sensitivePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dataSources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dataSinks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "__schema70": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2678,10 +2837,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema70": {
+    "__schema71": {
       "type": "boolean"
     },
-    "__schema71": {
+    "__schema72": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2792,19 +2951,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema73"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema73"
-                    },
-                    "username": {
                       "$ref": "#/definitions/__schema74"
                     },
-                    "password": {
+                    "username": {
                       "$ref": "#/definitions/__schema75"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema76"
                     }
                   }
                 },
@@ -2833,7 +2992,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema73"
                 },
                 "projectId": {
                   "type": "string",
@@ -2875,7 +3034,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema73"
                 },
                 "auth": {
                   "type": "object",
@@ -2921,13 +3080,9 @@
         }
       }
     },
-    "__schema72": {
-      "type": "string",
-      "format": "uri"
-    },
     "__schema73": {
       "type": "string",
-      "minLength": 1
+      "format": "uri"
     },
     "__schema74": {
       "type": "string",
@@ -2938,9 +3093,13 @@
       "minLength": 1
     },
     "__schema76": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "__schema77": {
+      "type": "string"
+    },
+    "__schema78": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2983,14 +3142,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema78"
+          "$ref": "#/definitions/__schema79"
         }
       }
     },
-    "__schema78": {
+    "__schema79": {
       "type": "string"
     },
-    "__schema79": {
+    "__schema80": {
       "type": "object",
       "properties": {
         "description": {
@@ -3122,7 +3281,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema78"
+              "$ref": "#/definitions/__schema79"
             }
           ]
         },
@@ -3195,7 +3354,7 @@
         }
       }
     },
-    "__schema80": {
+    "__schema81": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
