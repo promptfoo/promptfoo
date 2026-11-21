@@ -565,6 +565,10 @@ async function peekRateLimitBody(
   if (!text) {
     return undefined;
   }
+  if (Buffer.byteLength(text) >= RATE_LIMIT_BODY_PEEK_BYTES) {
+    // The bounded clone stopped reading before EOF. Release the other branch too.
+    void response.body?.cancel().catch(() => undefined);
+  }
 
   try {
     return JSON.parse(text);
@@ -732,8 +736,9 @@ async function handleRateLimitedResponse(
   if (isHardRateLimit) {
     const body = await peekRateLimitBody(response, logEnabled, signal);
     rateLimitError = buildHttpRateLimitError(response, body);
+  } else {
+    void response.body?.cancel().catch(() => undefined);
   }
-  void response.body?.cancel().catch(() => undefined);
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying

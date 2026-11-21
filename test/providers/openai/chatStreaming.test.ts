@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { readOpenAiChatStream } from '../../../src/providers/openai/chatStream';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
@@ -185,6 +186,7 @@ describe('Streaming API', () => {
   it.each(['timeout', 'caller'])(
     'terminates a stalled body on %s and releases its reader',
     async (cause) => {
+      vi.spyOn(logger, 'error').mockImplementation(() => logger);
       vi.useFakeTimers();
       const restoreEnv = mockProcessEnv({ REQUEST_TIMEOUT_MS: '25' });
       try {
@@ -916,9 +918,11 @@ describe('Streaming API', () => {
       JSON.stringify([{ role: 'user', content: 'Read the file' }]),
     );
 
-    expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
-      path: 'fixtures/missing.txt',
-    });
+    expect(mcpClient.callTool).toHaveBeenCalledWith(
+      'read_file',
+      { path: 'fixtures/missing.txt' },
+      undefined,
+    );
     expect(result.output).toBe('MCP Tool Error (read_file): File not found');
   });
 
@@ -961,7 +965,7 @@ describe('Streaming API', () => {
 
     expect(result.output).toContain('invalid_prompt');
     expect(result.isRefusal).toBe(true);
-    expect(result.guardrails).toEqual({ flagged: true, flaggedInput: true });
+    expect(result.guardrails).toMatchObject({ flagged: true, flaggedInput: true });
   });
 
   it('should preserve structured quota errors from streaming request retries', async () => {
@@ -1181,8 +1185,8 @@ describe('Streaming API', () => {
   });
 
   it('should reject streaming audio output rather than returning incomplete media', async () => {
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-audio-preview', {
-      config: { stream: true },
+    const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5', {
+      config: { stream: true, modalities: ['audio'] },
     });
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Speak' }]));
 
