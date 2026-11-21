@@ -428,7 +428,8 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         throwIfAborted(abortSignal);
         if (this.operation === 'ConverseStream') {
           // On a disconnect the SDK can finish iteration after a valid text delta.
-          const lastMessage = events.at(events.at(-1)?.metadata ? -2 : -1);
+          const last = events[events.length - 1];
+          const lastMessage = last?.metadata ? events[events.length - 2] : last;
           if (!lastMessage?.messageStop?.stopReason) {
             throw new Error('Incomplete Bedrock ConverseStream: missing messageStop');
           }
