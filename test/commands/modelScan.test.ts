@@ -1587,7 +1587,9 @@ describe('Sharing behavior', () => {
       save: vi.fn(),
     };
     const createdAudit = { id: 'new-audit' };
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(existingAudit as any);
+    vi.mocked(ModelAudit.findByRevision)
+      .mockResolvedValueOnce(existingAudit as any)
+      .mockResolvedValueOnce(null);
     vi.mocked(ModelAudit.create).mockResolvedValue(createdAudit as any);
     const results = {
       ...JSON.parse(VALID_SCAN_OUTPUT),
@@ -1609,10 +1611,10 @@ describe('Sharing behavior', () => {
 
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(getHuggingFaceMetadata).toHaveBeenCalledTimes(2);
-    expect(ModelAudit.findByRevision).toHaveBeenCalledExactlyOnceWith(
-      'test-owner/test-model',
-      'before-scan',
-    );
+    expect(vi.mocked(ModelAudit.findByRevision).mock.calls).toEqual([
+      ['test-owner/test-model', 'before-scan'],
+      ['test-owner/test-model', null, 'new-content'],
+    ]);
     expect(existingAudit.save).not.toHaveBeenCalled();
     expect(existingAudit).toMatchObject({ revisionSha: 'before-scan', contentHash: 'old-content' });
     expect(ModelAudit.create).toHaveBeenCalledExactlyOnceWith(
