@@ -9,42 +9,30 @@ interface PageMetaOptions {
 export function usePageMeta({ title, description, image }: PageMetaOptions) {
   useEffect(() => {
     const defaultTitle = document.title;
-    const descriptionTag = document.querySelector('meta[name="description"]');
-    const defaultDescription = descriptionTag?.getAttribute('content') || '';
-    const ogTitleTag = document.querySelector('meta[property="og:title"]');
-    const defaultOgTitle = ogTitleTag?.getAttribute('content') || '';
-    const ogDescriptionTag = document.querySelector('meta[property="og:description"]');
-    const defaultOgDescription = ogDescriptionTag?.getAttribute('content') || '';
-    const ogImageTag = document.querySelector('meta[property="og:image"]');
-    const defaultOgImage = ogImageTag?.getAttribute('content') || '';
+    // Capture every original value before writing: multiple selectors can match one element.
+    const metaTags = (
+      [
+        ['meta[name="description"]', description],
+        ['meta[property="og:title"]', `${title} | promptfoo`],
+        ['meta[property="og:description"]', description],
+        ['meta[property="og:image"]', image],
+      ] as const
+    ).map(([selector, content]) => {
+      const element = document.querySelector(selector);
+      return { element, content, original: element?.getAttribute('content') || '' };
+    });
 
     document.title = `${title} | promptfoo`;
-    if (description && descriptionTag) {
-      descriptionTag.setAttribute('content', description);
-    }
-    if (ogTitleTag) {
-      ogTitleTag.setAttribute('content', `${title} | promptfoo`);
-    }
-    if (description && ogDescriptionTag) {
-      ogDescriptionTag.setAttribute('content', description);
-    }
-    if (image && ogImageTag) {
-      ogImageTag.setAttribute('content', image);
+    for (const { element, content } of metaTags) {
+      if (content) {
+        element?.setAttribute('content', content);
+      }
     }
 
     return () => {
       document.title = defaultTitle;
-      if (descriptionTag) {
-        descriptionTag.setAttribute('content', defaultDescription);
-      }
-      if (ogTitleTag) {
-        ogTitleTag.setAttribute('content', defaultOgTitle);
-      }
-      if (ogDescriptionTag) {
-        ogDescriptionTag.setAttribute('content', defaultOgDescription);
-      }
-      if (ogImageTag) {
-        ogImageTag.setAttribute('content', defaultOgImage);
+      for (const { element, original } of metaTags) {
+        element?.setAttribute('content', original);
       }
     };
   }, [title, description, image]);

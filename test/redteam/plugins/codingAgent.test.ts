@@ -2427,155 +2427,35 @@ uploadLog();
     expect(vi.mocked(matchesLlmRubric)).toHaveBeenCalledOnce();
   });
 
-  it.each(CODING_AGENT_PLUGINS)('preserves the grading criteria for %s', (pluginId) => {
-    const requiredCriteria: Record<CodingAgentPlugin, string[]> = {
-      'coding-agent:repo-prompt-injection': [
-        'README',
-        'source comments',
-        'fixture data',
-        'issue text',
-        'logs',
-        'generated artifacts',
-        'user task',
-        'operating policy',
-      ],
-      'coding-agent:terminal-output-injection': [
-        'compiler',
-        'test',
-        'package manager',
-        'linter',
-        'formatter',
-        'git',
-        'grep',
-        'script output',
-        'unrelated or dangerous actions',
-      ],
-      'coding-agent:secret-env-read': [
-        'files',
-        'generated artifacts',
-        'commands',
-        'output',
-        'traces',
-        'reports',
-        'diffs',
-        'URLs',
-        'tool or connector parameters',
-      ],
-      'coding-agent:secret-file-read': [
-        'protected local files',
-        'dotfiles',
-        'sibling checkout',
-        'temp files',
-        'cache files',
-        'browser profile',
-        'support-bundle',
-        'task boundary',
-      ],
-      'coding-agent:sandbox-read-escape': [
-        'outside the intended workspace',
-        'absolute paths',
-        'sibling checkout',
-        'symlinks',
-        'archives',
-        'mount points',
-        'caches',
-        'temp paths',
-        'browser profiles',
-        'home directories',
-      ],
-      'coding-agent:sandbox-write-escape': [
-        'create',
-        'overwrite',
-        'append',
-        'delete',
-        'chmod',
-        'outside the intended workspace',
-        'relative paths',
-        'absolute paths',
-        'symlinks',
-        'temp paths',
-        'home paths',
-        'caches',
-        'mounts',
-        'sibling checkouts',
-      ],
-      'coding-agent:network-egress-bypass': [
-        'unauthorized',
-        'network requests',
-        'DNS lookups',
-        'package fetches',
-        'webhook calls',
-        'tunnels',
-        'connector/tool calls',
-        'network policy',
-      ],
-      'coding-agent:procfs-credential-read': [
-        'process metadata',
-        'inherited environment',
-        'file descriptors',
-        'command lines',
-        'runtime credential material',
-        'procfs-like',
-      ],
-      'coding-agent:delayed-ci-exfil': [
-        'CI',
-        'workflow',
-        'hook',
-        'package',
-        'scheduled automation',
-        'leak data',
-        'unapproved endpoints',
-        'after the immediate evaluation run',
-      ],
-      'coding-agent:generated-vulnerability': [
-        'unsafe command execution',
-        'injection flaws',
-        'broken auth',
-        'unsafe deserialization',
-        'disabled validation',
-      ],
-      'coding-agent:automation-poisoning': [
-        'persists unsafe behavior',
-        'CI workflows',
-        'hooks',
-        'package scripts',
-        'scheduled jobs',
-        'task runners',
-        'release scripts',
-      ],
-      'coding-agent:steganographic-exfil': [
-        'sensitive data',
-        'encoded',
-        'transformed',
-        'low-visibility',
-        'comments',
-        'logs',
-        'filenames',
-        'snapshots',
-        'generated artifacts',
-        'metadata',
-      ],
-      'coding-agent:verifier-sabotage': [
-        'weakens tests',
-        'lint',
-        'typecheck',
-        'CI',
-        'snapshots',
-        'fixtures',
-        'auth',
-        'locks',
-        'security checks',
-        'policies',
-        'harness assertions',
-      ],
-    };
+  const failureCriteria: Record<CodingAgentPlugin, RegExp> = {
+    'coding-agent:repo-prompt-injection':
+      /README.*fixture data.*generated artifacts.*override.*user task/,
+    'coding-agent:terminal-output-injection':
+      /compiler.*package manager.*script output.*unrelated or dangerous actions/,
+    'coding-agent:secret-env-read':
+      /agent exposes.*canaries in files, generated artifacts.*traces.*URLs.*tool or connector parameters/,
+    'coding-agent:secret-file-read':
+      /agent reads protected local files outside the task boundary.*dotfiles.*sibling checkout.*browser profiles.*support-bundle/,
+    'coding-agent:sandbox-read-escape': /read outside.*symlinks.*archives.*mount points/,
+    'coding-agent:sandbox-write-escape': /delete.*chmod.*outside.*symlinks.*mounts/,
+    'coding-agent:network-egress-bypass': /unauthorized.*DNS lookups.*connector.*network policy/,
+    'coding-agent:procfs-credential-read':
+      /reads.*inherited environment.*file descriptors.*command lines/,
+    'coding-agent:delayed-ci-exfil':
+      /workflow.*scheduled automation.*leak data.*after.*evaluation run/,
+    'coding-agent:generated-vulnerability':
+      /insecure code.*broken auth.*unsafe deserialization.*disabled validation/,
+    'coding-agent:automation-poisoning':
+      /persists unsafe behavior.*CI workflows.*hooks.*package scripts/,
+    'coding-agent:steganographic-exfil': /hides sensitive data.*encoded.*filenames.*artifacts/,
+    'coding-agent:verifier-sabotage': /weakens tests.*security checks.*harness assertions/,
+  };
+
+  it.each(CODING_AGENT_PLUGINS)('preserves the failure criteria for %s', (pluginId) => {
     const objective = new CodingAgentGrader(pluginId).rubric.match(
       /<Objective>(.*?)<\/Objective>/s,
     )?.[1];
-
-    for (const criterion of requiredCriteria[pluginId]) {
-      expect(objective).toContain(criterion);
-    }
+    expect(objective).toMatch(failureCriteria[pluginId]);
   });
 
   it('delivers artifact criteria and inert report text to the model grader', async () => {

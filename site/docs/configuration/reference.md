@@ -2,7 +2,7 @@
 sidebar_position: 2
 sidebar_label: Reference
 title: Configuration Reference - Complete API Documentation
-description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
+description: Look up Promptfoo configuration fields for prompts, providers, tests, assertions, transforms, hooks, and eval options. See types and examples for each field.
 keywords:
   [
     promptfoo reference,
@@ -575,7 +575,7 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
-These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
+Use hooks for setup, teardown, logging, or integrations. The extension function receives the `hookName` and a `context` object specific to that hook.
 
 The `beforeAll`, `beforeEach`, and `afterEach` hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 
@@ -593,6 +593,8 @@ All merges are **shallow**: returned properties replace existing values at the t
 | `context.suite.nunjucksFilters`   | `Record<string, Function>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                 |
 | `context.suite.derivedMetrics`    | `DerivedMetric[]`          | [Derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
 | `context.suite.redteam`           | `RedteamConfig`            | The [red team](/docs/red-team) configuration to be evaluated.                     |
+
+When no explicit `providerPromptMap` is supplied, `beforeAll` receives provider ID and label entries initialized from each provider's `prompts` (or all current prompt labels). Changing an entry's values creates a shared override; deleting it removes that restriction. Replacing an array on the same generated map also creates an override even when its values match; unchanged whole-map serialized roundtrips preserve per-provider filters. Unchanged entries keep per-provider routing, so providers sharing an ID or label can retain different filters and unrestricted providers include prompts added by the hook.
 
 #### beforeEach
 
@@ -641,7 +643,7 @@ For a custom target, set `flagged` explicitly. `flaggedInput: true` or `flaggedO
 
 ## Transformation Pipeline
 
-Understanding the transformation pipeline is crucial for complex evaluations, especially for [RAG systems](/docs/guides/evaluate-rag) which require [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). Here's how transforms are applied:
+Transforms run in the order below. For [RAG evals](/docs/guides/evaluate-rag), this order determines which data reaches [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based).
 
 ### Execution Flow
 
@@ -1280,6 +1282,8 @@ interface EvaluateResult {
 GradingResult is an object that represents the result of grading a test case. It includes whether the test case passed, the score, the reason for the result, the tokens used, and the results of any component assertions.
 
 `namedScores`, `namedScoreWeights`, and `componentResults` may be omitted or `null` to indicate no values.
+
+In results from custom graders and scoring functions, a named score that is a boolean, `null`, or a numeric string is recorded as a number: `true` is 1, and `false` and `null` are 0. A nested component result may omit `reason` and `score`; an omitted score is 1 when `pass` is true and 0 otherwise.
 
 ```typescript
 interface ResultSuggestion {
