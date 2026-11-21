@@ -133,11 +133,11 @@ export class RubyProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
+    const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
-    )}:${safeJsonStringify(context?.vars)}`;
-    logger.debug(`RubyProvider cache key: ${cacheKey}`);
+    )}:${safeJsonStringify(sanitizedContext?.vars)}`;
 
     const cache = await getCache();
     let cachedResult;
@@ -159,8 +159,6 @@ export class RubyProvider implements ApiProvider {
 
       return applyCachedCallApiMetadata(apiType, parsedResult, 'Ruby');
     } else {
-      const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
-
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content
       const optionsWithProcessedConfig = {
@@ -173,10 +171,6 @@ export class RubyProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      logger.debug(
-        `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-
       const functionName = this.functionName || apiType;
       const result = await runRuby(absPath, functionName, args, {
         rubyExecutable: this.config.rubyExecutable,
@@ -188,7 +182,6 @@ export class RubyProvider implements ApiProvider {
       const hasError = hasScriptResultError(result);
 
       if (isCacheEnabled() && !hasError) {
-        logger.debug(`RubyProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(

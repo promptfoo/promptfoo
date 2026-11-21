@@ -220,7 +220,9 @@ describe('PythonProvider', () => {
         filters: { uppercase: () => '' },
       };
 
+      context.vars = { context };
       await provider.callApi('test prompt', context);
+      expect(context.vars.context).toBe(context);
 
       // Input context is preserved for callers that reuse it across turns.
       expect(context.originalProvider).toBe(originalProvider);
@@ -232,7 +234,7 @@ describe('PythonProvider', () => {
       expect(mockPoolInstance.execute).toHaveBeenCalledWith('call_api', [
         'test prompt',
         { config: {} },
-        { someContext: true },
+        { someContext: true, vars: { context: undefined } },
       ]);
     });
 
