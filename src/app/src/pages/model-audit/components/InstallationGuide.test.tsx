@@ -19,23 +19,17 @@ describe('InstallationGuide', () => {
     );
   });
 
-  it('states the Python versions that ModelAudit supports', () => {
+  it('links to the current package requirements and installation instructions', () => {
     render(
       <TooltipProvider>
         <InstallationGuide onRetryCheck={vi.fn()} isChecking={false} />
       </TooltipProvider>,
     );
 
-    expect(screen.getByText(/Python 3\.10 to 3\.13/)).toBeInTheDocument();
-  });
-
-  it('links the installation guide to the installation section of the docs', () => {
-    render(
-      <TooltipProvider>
-        <InstallationGuide onRetryCheck={vi.fn()} isChecking={false} />
-      </TooltipProvider>,
+    expect(screen.getByRole('link', { name: 'Python requirements on PyPI' })).toHaveAttribute(
+      'href',
+      'https://pypi.org/project/modelaudit/',
     );
-
     expect(screen.getByRole('link', { name: 'installation guide' })).toHaveAttribute(
       'href',
       'https://www.promptfoo.dev/docs/model-audit/#installation',

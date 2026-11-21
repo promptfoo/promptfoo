@@ -34,6 +34,15 @@ import fs from 'fs/promises';
 
 import { getLogFiles } from '../../../../src/util/logs';
 
+// Capture a fresh registration after each test configures its mocks.
+async function captureLogTool(name: 'registerListLogsTool' | 'registerReadLogsTool') {
+  const tools = await import('../../../../src/commands/mcp/tools/logs');
+  const mockServer = { tool: vi.fn() };
+  tools[name](mockServer as any);
+  expect(mockServer.tool).toHaveBeenCalledOnce();
+  return { handler: mockServer.tool.mock.calls[0][2], mockServer };
+}
+
 describe('logs MCP tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,17 +74,8 @@ describe('logs MCP tools', () => {
       vi.mocked(getLogFiles).mockResolvedValue(mockLogFiles);
 
       // Import tool after mocks are set up
-      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
-
       // Create a mock server to capture the registered tool
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerListLogsTool(mockServer as any);
+      const { handler, mockServer } = await captureLogTool('registerListLogsTool');
 
       expect(mockServer.tool).toHaveBeenCalledWith(
         'list_logs',
@@ -84,7 +84,7 @@ describe('logs MCP tools', () => {
       );
 
       // Execute the handler
-      const result = await registeredHandler!({ type: 'all', page: 1, pageSize: 20 });
+      const result = await handler({ type: 'all', page: 1, pageSize: 20 });
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -98,18 +98,9 @@ describe('logs MCP tools', () => {
     it('should return empty result when no log files exist', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([]);
 
-      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerListLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerListLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ type: 'all' });
+      const result = await handler({ type: 'all' });
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -131,18 +122,9 @@ describe('logs MCP tools', () => {
 
       vi.mocked(getLogFiles).mockResolvedValue(mockLogFiles);
 
-      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerListLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerListLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ type: 'debug' });
+      const result = await handler({ type: 'debug' });
 
       expect(getLogFiles).toHaveBeenCalledWith('debug');
       expect(result.isError).toBe(false);
@@ -151,18 +133,9 @@ describe('logs MCP tools', () => {
     it('should handle errors gracefully', async () => {
       vi.mocked(getLogFiles).mockRejectedValue(new Error('Permission denied'));
 
-      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerListLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerListLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ type: 'all' });
+      const result = await handler({ type: 'all' });
 
       expect(result.isError).toBe(true);
       const response = JSON.parse(result.content[0].text);
@@ -188,18 +161,9 @@ describe('logs MCP tools', () => {
       const mockLines = ['2024-01-15 [INFO] Test log line 1', '2024-01-15 [ERROR] Test error'];
       mockReadLastLines.mockResolvedValue(mockLines);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({});
+      const result = await handler({});
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -215,18 +179,9 @@ describe('logs MCP tools', () => {
 
       mockReadLastLines.mockResolvedValue(['Test line']);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ file: 'debug-2024-01-15' });
+      const result = await handler({ file: 'debug-2024-01-15' });
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -236,18 +191,9 @@ describe('logs MCP tools', () => {
     it('should return error when file not found', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ file: 'nonexistent-file.log' });
+      const result = await handler({ file: 'nonexistent-file.log' });
 
       expect(result.isError).toBe(true);
       const response = JSON.parse(result.content[0].text);
@@ -258,18 +204,9 @@ describe('logs MCP tools', () => {
     it('should return error when no logs exist for type', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([]);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ type: 'error' });
+      const result = await handler({ type: 'error' });
 
       expect(result.isError).toBe(true);
       const response = JSON.parse(result.content[0].text);
@@ -283,18 +220,9 @@ describe('logs MCP tools', () => {
 
       mockReadFirstLines.mockResolvedValue(['First line', 'Second line']);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ head: true, lines: 2 });
+      const result = await handler({ head: true, lines: 2 });
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -313,18 +241,9 @@ describe('logs MCP tools', () => {
       ];
       mockReadLastLines.mockResolvedValue(mockLines);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
-
-      const result = await registeredHandler!({ grep: 'ERROR' });
+      const result = await handler({ grep: 'ERROR' });
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -341,19 +260,10 @@ describe('logs MCP tools', () => {
       const mockLines = ['Test [ERROR] line', 'Test [INFO] line'];
       mockReadLastLines.mockResolvedValue(mockLines);
 
-      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
-
-      let registeredHandler: ((args: any) => Promise<any>) | null = null;
-      const mockServer = {
-        tool: vi.fn((_name: string, _schema: any, handler: (args: any) => Promise<any>) => {
-          registeredHandler = handler;
-        }),
-      };
-
-      registerReadLogsTool(mockServer as any);
+      const { handler } = await captureLogTool('registerReadLogsTool');
 
       // Invalid regex should fall back to substring match
-      const result = await registeredHandler!({ grep: '[ERROR' }); // Invalid regex
+      const result = await handler({ grep: '[ERROR' }); // Invalid regex
 
       expect(result.isError).toBe(false);
       const response = JSON.parse(result.content[0].text);
@@ -367,14 +277,12 @@ describe('logs MCP tools', () => {
     it('should register both list_logs and read_logs tools', async () => {
       const { registerLogTools } = await import('../../../../src/commands/mcp/tools/logs');
 
-      const registeredTools: string[] = [];
       const mockServer = {
-        tool: vi.fn((name: string) => {
-          registeredTools.push(name);
-        }),
+        tool: vi.fn(),
       };
 
       registerLogTools(mockServer as any);
+      const registeredTools = mockServer.tool.mock.calls.map(([name]) => name);
 
       expect(registeredTools).toContain('list_logs');
       expect(registeredTools).toContain('read_logs');

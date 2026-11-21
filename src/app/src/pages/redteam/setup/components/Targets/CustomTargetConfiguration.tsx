@@ -59,6 +59,16 @@ interface ProviderConfig {
 const getProviderConfig = (providerType?: string): ProviderConfig => {
   const initialConfig = providerType ? createDefaultProvider(providerType) : undefined;
   const initialGuidance: Record<string, { title: string; helpText: string }> = {
+    litellm: {
+      title: 'LiteLLM',
+      helpText:
+        'Enter a model name served by your proxy. Set LITELLM_API_BASE and, if required, LITELLM_API_KEY on the Promptfoo server.',
+    },
+    vercel: {
+      title: 'Vercel AI Gateway',
+      helpText:
+        'Use a gateway model ID such as vercel:openai/gpt-6.2-astra. Set AI_GATEWAY_API_KEY on the Promptfoo server.',
+    },
     together: {
       title: 'Together AI',
       helpText: 'Use a Together-hosted model ID. Configure TOGETHER_API_KEY.',
