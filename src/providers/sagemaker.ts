@@ -1720,15 +1720,24 @@ abstract class SageMakerGenericProvider {
     return this.config?.acceptType || 'application/json';
   }
 
+  // The registry sets transform from the top-level option, even when it is absent.
+  // Capture absence as null so a later edit cannot activate a default parameter.
+  protected get inputTransform() {
+    return this.transform ?? this.config.transform ?? null;
+  }
+
   /**
    * Apply transformation to a prompt if a transform function is specified
    * @param prompt The original prompt to transform
    * @param context Optional context information for the transformation
    * @returns The transformed prompt, or the original if no transformation is applied
    */
-  async applyTransformation(prompt: string, context?: CallApiContextParams): Promise<string> {
-    // If no transform is specified, return the original prompt
-    if (!this.transform) {
+  async applyTransformation(
+    prompt: string,
+    context?: CallApiContextParams,
+    transformFn = this.inputTransform,
+  ): Promise<string> {
+    if (!transformFn) {
       return prompt;
     }
 
@@ -1739,8 +1748,6 @@ abstract class SageMakerGenericProvider {
         prompt: context?.prompt || { raw: prompt },
         uuid: `sagemaker-${this.endpointName}-${Date.now()}`,
       };
-
-      const transformFn = this.transform;
 
       logger.debug(`Applying transform to prompt for SageMaker endpoint ${this.getEndpointName()}`);
 
@@ -1797,7 +1804,7 @@ abstract class SageMakerGenericProvider {
       // mistakes don't silently run the endpoint against the untransformed prompt.
       // Inline-string and file:// transforms keep the legacy best-effort contract
       // (log and fall through) so existing SageMaker configs aren't regressed.
-      if (typeof this.transform === 'function') {
+      if (typeof transformFn === 'function') {
         throw error;
       }
       logger.error(`Error applying transform to prompt: ${error}`);
@@ -1814,9 +1821,10 @@ abstract class SageMakerGenericProvider {
     input: string,
     context: CallApiContextParams | undefined,
     errorPrefix: string,
+    transformFn: string | TransformFunction | null,
   ): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
     try {
-      return { ok: true, value: await this.applyTransformation(input, context) };
+      return { ok: true, value: await this.applyTransformation(input, context, transformFn) };
     } catch (transformError) {
       const message = `${errorPrefix}: ${getTransformErrorMessage(transformError)}`;
       logger.error(message);
@@ -2174,7 +2182,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     const payloadParameters = this.getPayloadParameters();
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Import cache functions dynamically to avoid circular dependencies
+    const transformFn = this.inputTransform;
     const { isCacheEnabled, getCache } = await import('../cache');
 
     abortSignal.throwIfAborted();
@@ -2182,6 +2190,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       prompt,
       context,
       'SageMaker transform error',
+      transformFn,
     );
     abortSignal.throwIfAborted();
     if (!transformResult.ok) {
@@ -2438,7 +2447,7 @@ export class SageMakerEmbeddingProvider
     };
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Import cache functions dynamically to avoid circular dependencies
+    const transformFn = this.inputTransform;
     const { isCacheEnabled, getCache } = await import('../cache');
 
     abortSignal.throwIfAborted();
@@ -2446,6 +2455,7 @@ export class SageMakerEmbeddingProvider
       text,
       context,
       'SageMaker embedding transform error',
+      transformFn,
     );
     abortSignal.throwIfAborted();
     if (!transformResult.ok) {

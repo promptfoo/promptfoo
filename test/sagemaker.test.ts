@@ -1409,7 +1409,7 @@ describe('SageMakerEmbeddingProvider - Extended Tests', () => {
 
     const result = await provider.callEmbeddingApi('test text');
 
-    expect(transformSpy).toHaveBeenCalledWith('test text', undefined);
+    expect(transformSpy).toHaveBeenCalledWith('test text', undefined, provider.transform);
     expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
   });
 });

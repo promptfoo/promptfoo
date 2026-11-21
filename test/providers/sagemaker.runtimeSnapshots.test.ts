@@ -189,6 +189,30 @@ describe('SageMaker initialization policy snapshot', () => {
     const expected = kind === 'completion' ? { output: 'offline response' } : { embedding: [1, 0] };
     const drift = 'SageMaker shared AWS profile files changed during initialization';
 
+    it.each(['provider', 'config'])(
+      'keeps the original %s transform and its failure policy',
+      async (scope) => {
+        const provider = createProvider('named');
+        const source = scope === 'provider' ? provider : provider.config;
+        source.transform = async () => {
+          throw new Error('transform unavailable');
+        };
+        const requests = interceptSageMaker(provider);
+        const pending = invoke(provider, 'private input');
+        source.transform = undefined;
+        expect(await pending).toMatchObject({
+          error: expect.stringContaining('transform unavailable'),
+        });
+        expect(requests).toHaveLength(0);
+        const next = invoke(provider, 'later');
+        source.transform = () => {
+          throw new Error('too late');
+        };
+        expect(await next).toMatchObject(expected);
+        expect(requests).toHaveLength(1);
+      },
+    );
+
     it.each([
       ['named', 'config'],
       ['named', 'credentials'],
