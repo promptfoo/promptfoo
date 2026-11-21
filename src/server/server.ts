@@ -47,6 +47,7 @@ import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
+import { defaultErrorHandler } from './utils/defaultErrorHandler';
 import { replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
@@ -125,6 +126,13 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  app.get('/api/openapi.json', async (_req, res) => {
+    const { default: spec } = await import('../../site/static/openapi.json', {
+      with: { type: 'json' },
+    });
+    res.json({ ...spec, info: { ...spec.info, version: VERSION }, servers: [{ url: '/' }] });
+  });
+
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
@@ -362,6 +370,7 @@ export function createApp() {
   app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
+  app.use(defaultErrorHandler);
   return app;
 }
 
