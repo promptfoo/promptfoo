@@ -43,7 +43,7 @@ export function listCommand(program: Command) {
         });
 
       const columnWidths = {
-        'eval id': 32,
+        'eval id': 33,
         description: 25,
         prompts: 10,
         vars: 12,
