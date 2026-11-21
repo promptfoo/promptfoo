@@ -60,6 +60,7 @@ import {
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
+  matchResultSearch,
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
@@ -1163,20 +1164,21 @@ export default class Eval {
       }
     }
 
-    // Add search condition if searchQuery is provided
-    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const searchPattern = `%${opts.searchQuery}%`;
-
+    const query = opts.searchQuery;
+    if (query?.trim()) {
       const searchConditions = [
-        sql`response LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
-        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
-        // (trace linkage) so a query can't match on internal data the UI never shows.
-        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
+        matchResultSearch(sql`response`, query, 'response'),
+        matchResultSearch(sql`json_extract(grading_result, '$.reason')`, query, 'text'),
+        matchResultSearch(sql`json_extract(grading_result, '$.comment')`, query, 'text'),
+        matchResultSearch(sql`json_extract(named_scores, '$')`, query, 'json'),
+        // Exclude trace linkage and other internal metadata from the searchable fields.
+        matchResultSearch(
+          sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`})`,
+          query,
+          'json',
+        ),
+        matchResultSearch(sql`json_extract(test_case, '$.vars')`, query, 'vars'),
+        matchResultSearch(sql`json_extract(test_case, '$.metadata')`, query, 'json'),
       ];
 
       const searchClause = sql.join(searchConditions, sql` OR `);
