@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLogLevel, globalLogCallback, setLogCallback, setLogLevel } from '../../../src/logger';
-import { clearConfigCache, loadDefaultConfig } from '../../../src/util/config/default';
+import { loadDefaultConfig } from '../../../src/util/config/default';
 
 // Exercise the real filesystem, module loader, and logger callback together.
 describe('default config discovery logging', () => {
@@ -18,14 +18,12 @@ describe('default config discovery logging', () => {
     previousLogLevel = getLogLevel();
     previousLogCallback = globalLogCallback;
     logCallback.mockReset();
-    clearConfigCache();
     setLogCallback(logCallback);
   });
 
   afterEach(() => {
     setLogCallback(previousLogCallback);
     setLogLevel(previousLogLevel);
-    clearConfigCache();
     fs.rmSync(tempDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
@@ -40,20 +38,7 @@ describe('default config discovery logging', () => {
         defaultConfigPath: undefined,
       });
 
-      if (level === 'info') {
-        expect(logCallback).not.toHaveBeenCalled();
-      } else {
-        for (const extension of ['cjs', 'cts', 'js', 'mjs', 'mts', 'ts']) {
-          expect(logCallback).toHaveBeenCalledWith(
-            expect.stringContaining(`promptfooconfig.${extension}`),
-          );
-        }
-        expect(logCallback).not.toHaveBeenCalledWith(
-          expect.stringMatching(
-            /ERR_MODULE_NOT_FOUND|Cannot find module|ESM import failed|\n\s+at /,
-          ),
-        );
-      }
+      expect(logCallback).not.toHaveBeenCalled();
     },
   );
 

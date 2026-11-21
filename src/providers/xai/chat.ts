@@ -4,7 +4,6 @@ import { preserveResponseHeadersObserverErrorResponse } from '../../util/fetch/r
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
-import { registerOpenAiRequestType } from '../requestAttribution';
 import { serializeProvider } from '../serialization';
 import {
   clampCachedTokens,
@@ -1035,8 +1034,6 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     }
   }
 }
-
-registerOpenAiRequestType(XAIProvider.prototype, 'chat');
 
 export function createXAIProvider(
   providerPath: string,

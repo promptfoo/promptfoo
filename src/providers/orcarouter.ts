@@ -1,10 +1,8 @@
-import { type EnvVarKey, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -81,7 +79,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     const envar = this.config?.apiKeyEnvar || 'ORCAROUTER_API_KEY';
     return (
       this.config.apiKey ||
-      this.env?.[envar as keyof EnvOverrides] ||
+      getProviderEnvString(this.env, envar) ||
       getEnvString(envar as EnvVarKey)
     );
   }
@@ -185,8 +183,6 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     return !reasoningUpstreamRejectsTemperature(this.modelName);
   }
 }
-
-registerOpenAiRequestType(OrcaRouterProvider.prototype, 'chat');
 
 /**
  * Whether an OrcaRouter upstream model name belongs to a reasoning family that

@@ -7,13 +7,13 @@ import {
   collectFileMetadata,
   extractTextFromPDF,
   getExtensionHookName,
-  getRenderedInputVariables,
   renderPrompt,
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -122,6 +122,10 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+
 const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
@@ -140,6 +144,7 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runPython).mockReset();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -328,6 +333,15 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
     });
 
+    it('should accept an empty string from an external JavaScript variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.js' };
+
+      mockDynamicModule('/path/to/empty.js', () => ({ output: '' }));
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
     it('should load external js package in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = {
@@ -348,6 +362,63 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
     });
+
+    it('should accept an empty string from a package variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'package:@promptfoo/fake:emptyVariable' };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        emptyVariable: () => ({ output: '' }),
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it('should accept an empty string from an external Python variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.py' };
+
+      vi.mocked(runPython).mockResolvedValueOnce({ output: '' });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string JavaScript variable output %j',
+      async (output) => {
+        mockDynamicModule('/path/to/variable.js', () => ({ output }));
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.js' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string package variable output %j',
+      async (output) => {
+        mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+          variable: () => ({ output }),
+        });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'package:@promptfoo/fake:variable' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string Python variable output %j',
+      async (output) => {
+        vi.mocked(runPython).mockResolvedValueOnce({ output });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.py' }, {}),
+        ).rejects.toThrow(output == null ? 'did not return any output' : 'must be a string');
+      },
+    );
 
     it('should throw a clear error when a package variable does not export a function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
@@ -1985,383 +2056,5 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toContain(httpUrl);
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
-  });
-});
-
-describe('getRenderedInputVariables', () => {
-  const vars = {
-    question: 'User question',
-    user_context: 'supplied@example.com',
-    unused: 'unused@example.com',
-  };
-  const prompt = { raw: '{{question | trim}}', label: 'question' };
-
-  it('requires both prompt construction and body forwarding for injected text', () => {
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'question',
-        { forwardsPrompt: false, body: { fixed: 'Hello' } },
-        prompt,
-      ),
-    ).toEqual({ vars: {}, forwardsPrompt: false });
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'question',
-        { forwardsPrompt: false, body: { question: '{{prompt}}', context: '{{user_context}}' } },
-        prompt,
-      ),
-    ).toEqual({
-      vars: { question: vars.question, user_context: vars.user_context },
-      forwardsPrompt: true,
-    });
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'question',
-        { forwardsPrompt: false, body: { question: '{{question}}' } },
-        { raw: 'Fixed text.', label: 'fixed' },
-      ),
-    ).toEqual({ vars: {}, forwardsPrompt: true });
-  });
-
-  it('does not infer interpolation from object keys or conditional body output', () => {
-    for (const body of [
-      { '{{user_context}}': 'fixed' },
-      JSON.stringify({ '{{user_context}}': 'fixed' }),
-      '{% if false %}{{user_context}}{% endif %}',
-    ]) {
-      expect(
-        getRenderedInputVariables(vars, 'question', { forwardsPrompt: false, body }, prompt).vars,
-      ).toEqual({});
-    }
-  });
-
-  it.each([
-    '{"prompt":"{{prompt}}","context":"{{user_context}}"}',
-    '{"prompt":"{{prompt}}","context":"{{user_context}}","other":"{% unfinished"}',
-  ])('leaves serialized HTTP body templates unattributed: %s', (body) => {
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'question',
-        { forwardsPrompt: false, body },
-        prompt,
-        undefined,
-        vars.question,
-      ),
-    ).toEqual({ vars: {}, forwardsPrompt: false });
-  });
-
-  it('does not credit HTTP reserved aliases or overwritten inject variables as side inputs', () => {
-    const result = getRenderedInputVariables(
-      { question: vars.question, token: 'not-the-auth-token' },
-      'token',
-      { forwardsPrompt: false, body: { input: '{{token}}' }, reservedVariables: ['token'] },
-      prompt,
-    );
-    expect(result).toEqual({ vars: {}, forwardsPrompt: false });
-  });
-});
-
-describe('rendered input serialization boundaries', () => {
-  it.each(['Private operator instructions.', 'data:image/png;base64,opaque', 7, false])(
-    'proves rendering with other variables without attributing their value: %s',
-    async (sibling) => {
-      const prompt = {
-        raw: JSON.stringify({ context: '{{sibling}}', question: '{{input}}' }),
-        label: 'mixed variables',
-      };
-      const inputVars = { input: 'supplied@example.com' };
-      const renderVariables = { ...inputVars, sibling };
-      const rendered = await renderPrompt(prompt, renderVariables, undefined, undefined, ['input']);
-      expect(JSON.parse(rendered).question).toBe(inputVars.input);
-      expect(
-        getRenderedInputVariables(
-          inputVars,
-          'input',
-          { forwardsPrompt: true },
-          prompt,
-          undefined,
-          rendered,
-          renderVariables,
-        ).vars,
-      ).toEqual(inputVars);
-    },
-  );
-
-  it.each(['User: {{\n input\n}}', '{#\ncomment\n#}\n{{input}}'])(
-    'omits text prompts made literal by the renderer: %s',
-    async (raw) => {
-      const prompt = { raw, label: 'raw wrapping' };
-      const vars = { input: 'hidden@example.com' };
-      const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
-      expect(rendered).not.toContain(vars.input);
-      expect(
-        getRenderedInputVariables(
-          vars,
-          'input',
-          { forwardsPrompt: true },
-          prompt,
-          undefined,
-          rendered,
-        ).vars,
-      ).toEqual({});
-    },
-  );
-
-  it('retains a real interpolation outside an existing raw block', async () => {
-    const prompt = {
-      raw: '{% raw %}Literal {{ignored}}{% endraw %} {{input}}',
-      label: 'existing raw block',
-    };
-    const vars = { input: 'supplied@example.com' };
-    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
-    expect(rendered).toBe('Literal {{ignored}} supplied@example.com');
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'input',
-        { forwardsPrompt: true },
-        prompt,
-        undefined,
-        rendered,
-      ).vars,
-    ).toEqual(vars);
-  });
-
-  it.each([
-    ['PROMPTFOO_DISABLE_TEMPLATING', '{{input}}'],
-    ['PROMPTFOO_DISABLE_JSON_AUTOESCAPE', 'User: {{\n input\n}}'],
-  ])('omits inputs left literal with %s', async (option, raw) => {
-    const restore = mockProcessEnv({ [option]: 'true' });
-    try {
-      const prompt = { raw, label: 'disabled renderer mode' };
-      const vars = { input: 'hidden@example.com' };
-      const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
-      expect(rendered).not.toContain(vars.input);
-      expect(
-        getRenderedInputVariables(
-          vars,
-          'input',
-          { forwardsPrompt: true },
-          prompt,
-          undefined,
-          rendered,
-        ).vars,
-      ).toEqual({});
-    } finally {
-      restore();
-    }
-  });
-
-  it('preserves supported JSON leaf rendering without applying text-path raw wrapping', async () => {
-    const prompt = { raw: JSON.stringify({ content: 'User: {{\n input\n}}' }), label: 'JSON leaf' };
-    const vars = { input: 'supplied@example.com' };
-    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
-    expect(JSON.parse(rendered).content).toBe('User: supplied@example.com');
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'input',
-        { forwardsPrompt: true },
-        prompt,
-        undefined,
-        rendered,
-      ).vars,
-    ).toEqual(vars);
-  });
-
-  it('does not credit JSON fields discarded by the renderer object copy', async () => {
-    const prompt = {
-      raw: '[{"role":"user","content":"Hello.","__proto__":{"secret":"{{input}}"}}]',
-      label: 'discarded field',
-    };
-    const vars = { input: 'hidden@example.com' };
-    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
-    expect(rendered).not.toContain(vars.input);
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'input',
-        { forwardsPrompt: true },
-        prompt,
-        undefined,
-        rendered,
-      ).vars,
-    ).toEqual({});
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'question',
-        { forwardsPrompt: false, body: JSON.parse('{"__proto__":{"secret":"{{input}}"}}') },
-        { raw: 'Hello.', label: 'fixed' },
-        undefined,
-        'Hello.',
-      ).vars,
-    ).toEqual({});
-  });
-
-  it.each([
-    ['- role: user\n  content: {{input}}', 'Hello. # hidden@example.com'],
-    ['{{input}}', '- role: user\n  content: Hello. # hidden@example.com'],
-  ])('omits YAML-parsed prompts from static attribution: %s', async (raw, input) => {
-    const prompt = { raw, label: 'YAML' };
-    const rendered = await renderPrompt(prompt, { input }, undefined, undefined, ['input']);
-    expect(
-      getRenderedInputVariables(
-        { input },
-        'input',
-        { forwardsPrompt: true, parsesPrompt: true },
-        prompt,
-        undefined,
-        rendered,
-      ),
-    ).toEqual({ vars: {}, forwardsPrompt: false });
-  });
-
-  it.each([false, undefined])(
-    'retains literal YAML when chat parsing is %s',
-    async (parsesPrompt) => {
-      const prompt = { raw: '{{input}}', label: 'literal YAML' };
-      const input = '- role: user\n  content: Hello. # supplied@example.test';
-      const rendered = await renderPrompt(prompt, { input }, undefined, undefined, ['input']);
-      expect(
-        getRenderedInputVariables(
-          { input },
-          'input',
-          { forwardsPrompt: true, parsesPrompt },
-          prompt,
-          undefined,
-          rendered,
-        ),
-      ).toEqual({ vars: { input }, forwardsPrompt: true });
-    },
-  );
-
-  it('does not credit a JSON interpolation when a malformed sibling leaves it unrendered', async () => {
-    const prompt = {
-      raw: '{"content":"{{input}}","other":"{% unfinished"}',
-      label: 'malformed leaf',
-    };
-    const vars = { input: 'hidden@example.com' };
-    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
-    expect(JSON.parse(rendered).content).toBe('{{input}}');
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'input',
-        { forwardsPrompt: true },
-        prompt,
-        undefined,
-        rendered,
-      ).vars,
-    ).toEqual({});
-  });
-
-  it('does not credit JSON contributions discarded by a custom-filter render fallback', async () => {
-    const prompt = {
-      raw: '{"content":"{{input}}","other":"{{other | custom}}"}',
-      label: 'custom leaf',
-    };
-    const vars = { input: 'hidden@example.com","content":"Hello.', other: 'other' };
-    const filters = { custom: (value: string) => value };
-    const rendered = await renderPrompt(prompt, vars, filters, undefined, Object.keys(vars));
-    expect(JSON.parse(rendered).content).toBe('Hello.');
-    expect(
-      getRenderedInputVariables(vars, 'input', { forwardsPrompt: true }, prompt, filters, rendered)
-        .vars,
-    ).toEqual({});
-  });
-
-  it('ignores JSON prompt keys while retaining interpolated values', () => {
-    const vars = { input: 'supplied@example.com' };
-    const request = { forwardsPrompt: true };
-    expect(
-      getRenderedInputVariables(vars, 'input', request, {
-        raw: '{"{{input}}":"Fixed text"}',
-        label: 'key',
-      }).vars,
-    ).toEqual({});
-    expect(
-      getRenderedInputVariables(vars, 'input', request, {
-        raw: '{"text":"{{input}}"}',
-        label: 'value',
-      }).vars,
-    ).toEqual(vars);
-  });
-
-  it('omits text templates that construct JSON with potentially discarded members', () => {
-    const vars = { input: '"discarded@example.com","email":"fixed"' };
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'input',
-        { forwardsPrompt: true },
-        {
-          raw: '{"email": {{input}}}',
-          label: 'text JSON',
-        },
-        undefined,
-        '{"email":"discarded@example.com","email":"fixed"}',
-      ).vars,
-    ).toEqual({});
-  });
-
-  it('retains plain-text template contributions when no JSON conversion is possible', () => {
-    const vars = { input: 'supplied@example.com' };
-    expect(
-      getRenderedInputVariables(
-        vars,
-        'input',
-        { forwardsPrompt: true },
-        {
-          raw: 'Contact: {{input}}',
-          label: 'text',
-        },
-        undefined,
-        'Contact: supplied@example.com',
-      ).vars,
-    ).toEqual(vars);
-  });
-
-  it('does not assume JSON value escaping when that renderer option is disabled', () => {
-    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
-    try {
-      const vars = { input: 'supplied@example.com' };
-      expect(
-        getRenderedInputVariables(
-          vars,
-          'input',
-          { forwardsPrompt: true },
-          {
-            raw: '{"{{input}}":"Fixed text"}',
-            label: 'key',
-          },
-          undefined,
-          '{"supplied@example.com":"Fixed text"}',
-        ).vars,
-      ).toEqual({});
-    } finally {
-      restore();
-    }
-  });
-
-  it.each([
-    '{"email":"{{user_context}}","email":"fixed"}',
-    '{"email":"{{user_context}}"}',
-    '{{prefix}}{"email":"{{user_context}}"}',
-  ])('does not prove a side variable through an embedded JSON body leaf: %s', (payload) => {
-    expect(
-      getRenderedInputVariables(
-        { user_context: 'supplied@example.com","email":"fixed' },
-        'input',
-        { forwardsPrompt: false, body: { payload } },
-        { raw: 'Hello.', label: 'fixed' },
-        undefined,
-        'Hello.',
-      ).vars,
-    ).toEqual({});
   });
 });

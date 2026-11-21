@@ -1,10 +1,9 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -28,11 +27,14 @@ function getCloudflareApiConfig(
   env?: EnvOverrides,
 ): { accountId: string; apiToken: string } {
   const namedApiToken = config?.apiKeyEnvar
-    ? (env?.[config.apiKeyEnvar] ?? getEnvString(config.apiKeyEnvar as EnvVarKey))
+    ? (getProviderEnvString(env, config.apiKeyEnvar) ??
+      getEnvString(config.apiKeyEnvar as EnvVarKey))
     : undefined;
   const apiTokenCandidate =
     config?.apiKey ||
-    (namedApiToken ?? env?.CLOUDFLARE_API_KEY ?? getEnvString('CLOUDFLARE_API_KEY'));
+    (namedApiToken ??
+      getProviderEnvString(env, 'CLOUDFLARE_API_KEY') ??
+      getEnvString('CLOUDFLARE_API_KEY'));
 
   invariant(
     apiTokenCandidate,
@@ -40,11 +42,14 @@ function getCloudflareApiConfig(
   );
 
   const namedAccountId = config?.accountIdEnvar
-    ? (env?.[config.accountIdEnvar] ?? getEnvString(config.accountIdEnvar as EnvVarKey))
+    ? (getProviderEnvString(env, config.accountIdEnvar) ??
+      getEnvString(config.accountIdEnvar as EnvVarKey))
     : undefined;
   const accountIdCandidate =
     config?.accountId ||
-    (namedAccountId ?? env?.CLOUDFLARE_ACCOUNT_ID ?? getEnvString('CLOUDFLARE_ACCOUNT_ID'));
+    (namedAccountId ??
+      getProviderEnvString(env, 'CLOUDFLARE_ACCOUNT_ID') ??
+      getEnvString('CLOUDFLARE_ACCOUNT_ID'));
 
   invariant(
     accountIdCandidate,
@@ -127,8 +132,6 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   }
 }
 
-registerOpenAiRequestType(CloudflareAiChatCompletionProvider.prototype, 'chat');
-
 export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
   private cloudflareConfig: CloudflareAiConfig;
   private modelType = 'completion';
@@ -156,8 +159,6 @@ export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
     return cloudflareToJSON(this, () => this.modelType);
   }
 }
-
-registerOpenAiRequestType(CloudflareAiCompletionProvider.prototype, 'completion');
 
 export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   private cloudflareConfig: CloudflareAiConfig;

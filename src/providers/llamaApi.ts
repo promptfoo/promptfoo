@@ -1,5 +1,4 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -36,8 +35,6 @@ export class LlamaApiProvider extends OpenAiChatCompletionProvider {
     };
   }
 }
-
-registerOpenAiRequestType(LlamaApiProvider.prototype, 'chat');
 
 /**
  * Creates a Llama API provider using OpenAI-compatible endpoints

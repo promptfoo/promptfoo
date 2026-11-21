@@ -1,7 +1,6 @@
 import { renderVarsInObject } from '../util/index';
 import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
@@ -243,8 +242,6 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
     );
   }
 }
-
-registerOpenAiRequestType(MoonshotProvider.prototype, 'chat');
 
 export function createMoonshotProvider(
   providerPath: string,

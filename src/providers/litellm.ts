@@ -4,7 +4,6 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { hasOpenAiGatewayCredentials } from './openai/util';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type {
   ApiEmbeddingProvider,
@@ -110,7 +109,10 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
  */
 class LiteLLMChatProvider extends LiteLLMProviderWrapper {
   constructor(modelName: string, options: ProviderOptions) {
-    const provider = new OpenAiChatCompletionProvider(modelName, options);
+    const provider = new OpenAiChatCompletionProvider(modelName, {
+      ...options,
+      bridgesGpt62ChatTools: true,
+    });
     super(provider, 'chat', options.id);
     // Bind getApiKey if it exists
     if (provider.getApiKey) {
@@ -131,8 +133,6 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
     }
   }
 }
-
-registerOpenAiRequestType(LiteLLMCompletionProvider.prototype, 'completion');
 
 /**
  * LiteLLM Embedding Provider
@@ -162,8 +162,6 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
 
 // For backward compatibility, export the chat provider as LiteLLMProvider
 export class LiteLLMProvider extends LiteLLMChatProvider {}
-
-registerOpenAiRequestType(LiteLLMProvider.prototype, 'chat');
 
 /**
  * Creates a LiteLLM provider using OpenAI-compatible endpoints

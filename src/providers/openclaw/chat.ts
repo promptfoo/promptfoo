@@ -1,5 +1,4 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { registerOpenAiRequestType } from '../requestAttribution';
 import {
   buildOpenClawCallContext,
   buildOpenClawHeaders,
@@ -99,5 +98,3 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
     return resolveOpenClawBillingModelName(config) || this.modelName;
   }
 }
-
-registerOpenAiRequestType(OpenClawChatProvider.prototype, 'chat');

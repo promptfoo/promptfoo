@@ -2,10 +2,10 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
-  ATTRIBUTED_CONVERSATION_VERSION,
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
+  getVerifiedInputMessages,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
@@ -30,7 +30,12 @@ import type {
  * Returns whether some (but not all) turns have grader errors.
  * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
  */
-function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
+function analyzeGraderErrors(
+  redteamHistory:
+    | Array<{ graderError?: string; prompt?: string; output?: string; gradingInputHash?: string }>
+    | undefined,
+  coveredTurn?: { prompt: string; output: string; gradingInputHash: string },
+): {
   hasAnyErrors: boolean;
   allTurnsHaveErrors: boolean;
 } {
@@ -39,7 +44,16 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   }
 
   const turnsWithErrors = redteamHistory.filter(
-    (turn) => turn.graderError && turn.graderError.length > 0,
+    (turn, index) =>
+      turn?.graderError &&
+      turn.graderError.length > 0 &&
+      !(
+        coveredTurn &&
+        index === redteamHistory.length - 1 &&
+        (turn.gradingInputHash
+          ? turn.gradingInputHash === coveredTurn.gradingInputHash
+          : turn.prompt === coveredTurn.prompt && turn.output === coveredTurn.output)
+      ),
   );
   const hasAnyErrors = turnsWithErrors.length > 0;
   const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
@@ -178,36 +192,15 @@ export const handleRedteam = async (
   }: AssertionParams,
   claimStoredGradingUsage: () => boolean = () => true,
 ): Promise<GradingResult> => {
-  const providerId = getConfiguredProviderId(test, provider);
-  const usesHydraHistory =
-    providerId === 'promptfoo:redteam:hydra' ||
-    providerId === 'promptfoo:redteam:goblin' ||
-    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
-      test.metadata?.strategyId ?? '',
-    );
-  const hasAttributedHistory =
-    usesHydraHistory &&
-    providerResponse.metadata?.redteamConversationHistoryVersion ===
-      ATTRIBUTED_CONVERSATION_VERSION;
-  const hasOutdatedHistory =
-    usesHydraHistory &&
-    providerResponse.metadata?.redteamConversationHistoryVersion !== undefined &&
-    !hasAttributedHistory;
   // Skip grading if stored result exists from strategy execution for this specific assertion
-  const savedConversation = getTargetConversation(
-    providerResponse.metadata?.messages,
-    hasAttributedHistory ? providerResponse.metadata?.redteamCurrentTurnStart : undefined,
-  );
+  const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
   const reportedConversation = getTargetConversation(providerResponse.prompt);
   const hasFinalPrompt =
     typeof providerResponse.metadata?.redteamFinalPrompt === 'string' &&
     providerResponse.metadata.redteamFinalPrompt.trim();
   let conversation = savedConversation;
   let gradingMessages = providerResponse.metadata?.messages;
-  if (
-    !hasFinalPrompt ||
-    (!savedConversation.lastUserPrompt && savedConversation.currentTurnStart === undefined)
-  ) {
+  if (!hasFinalPrompt || !savedConversation.lastUserPrompt) {
     if (typeof providerResponse.prompt === 'string' && providerResponse.prompt.trim()) {
       // A reported string supplies no prior turns. Do not combine it with unrelated
       // saved messages unless the strategy supplied an authoritative final prompt.
@@ -220,32 +213,31 @@ export const handleRedteam = async (
       gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
   }
-  if (usesHydraHistory && (!hasAttributedHistory || conversation !== savedConversation)) {
-    // Old Hydra/Goblin records contain raw attacks, including unsent variables.
-    // The marker also cannot transfer to a different reported-prompt source.
-    // Preserve current-turn-only grading and cache inputs in either case.
-    conversation = { lastUserPrompt: conversation.lastUserPrompt };
-    gradingMessages = undefined;
-  }
-  const { lastUserPrompt, conversationTranscript, currentTurnStart } = conversation;
-  const usesAttributedPrompt =
-    hasAttributedHistory &&
-    conversation === savedConversation &&
-    Array.isArray(gradingMessages) &&
-    gradingMessages.every(
-      (message) =>
-        (message?.role === 'user' || message?.role === 'assistant') &&
-        typeof message.content === 'string',
+  const { lastUserPrompt } = conversation;
+  let { conversationTranscript } = conversation;
+  const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
+  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
+
+  // Legacy strategy rows expose reporting history without proof of target input.
+  const providerId = getConfiguredProviderId(test, provider);
+  const requiresVerifiedContext =
+    providerId === 'promptfoo:redteam:hydra' ||
+    providerId === 'promptfoo:redteam:goblin' ||
+    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
+      test.metadata?.strategyId ?? '',
     );
-  let effectivePrompt: string;
-  if (usesAttributedPrompt) {
-    // The raw attack remains useful for display, but cannot establish that the
-    // target received it. An absent attributed current input is deliberately empty.
-    effectivePrompt = lastUserPrompt ?? '';
-  } else {
-    const reportedPrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
-    invariant(reportedPrompt, `Grader ${baseType} must have a prompt`);
-    effectivePrompt = reportedPrompt;
+
+  if (requiresVerifiedContext) {
+    const marker = providerResponse.metadata?.redteamVerifiedContext;
+    gradingMessages = getVerifiedInputMessages(gradingMessages, marker?.turns, effectivePrompt);
+    if (
+      marker &&
+      (!gradingMessages ||
+        marker.hash !== getGradingInputHash(effectivePrompt, '', gradingMessages))
+    ) {
+      throw new Error('Cannot verify saved target conversation for grading.');
+    }
+    conversationTranscript = getTargetConversation(gradingMessages).conversationTranscript;
   }
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
@@ -257,17 +249,10 @@ export const handleRedteam = async (
       : undefined;
   if (
     hasStrategyGrade &&
-    !hasOutdatedHistory &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
-      getGradingInputHash(
-        effectivePrompt,
-        outputString,
-        gradingMessages,
-        test.metadata?.pluginId,
-        currentTurnStart,
-      )
+      getGradingInputHash(effectivePrompt, outputString, gradingMessages, test.metadata?.pluginId)
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
@@ -303,9 +288,6 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript,
   });
-  if (usesHydraHistory) {
-    gradingContext.includeConversationTranscript = true;
-  }
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,
@@ -364,6 +346,22 @@ export const handleRedteam = async (
       );
     }
 
+    // A fresh verdict resolves only the matching final turn, not earlier ungraded attempts.
+    const { hasAnyErrors } = analyzeGraderErrors(
+      isAttackProvider(providerId ?? '') ? providerResponse.metadata?.redteamHistory : undefined,
+      grade.metadata?.graderError === true
+        ? undefined
+        : {
+            prompt: effectivePrompt,
+            output: outputString,
+            gradingInputHash: getGradingInputHash(
+              effectivePrompt,
+              outputString,
+              requiresVerifiedContext ? gradingMessages : undefined,
+              test.metadata?.pluginId,
+            ),
+          },
+    );
     const gradeWithUsage = tokensUsed ? withGradingUsage(grade, tokensUsed) : grade;
     return {
       ...gradeWithUsage,
@@ -380,9 +378,18 @@ export const handleRedteam = async (
         // Pass through all test metadata for redteam
         ...test.metadata,
         ...gradeWithUsage.metadata,
+        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
     };
   } catch (error) {
+    // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
+    if (
+      providerId === 'promptfoo:redteam:iterative:meta' ||
+      providerId === 'promptfoo:redteam:hydra' ||
+      providerId === 'promptfoo:redteam:goblin'
+    ) {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as

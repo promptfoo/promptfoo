@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { createCache } from 'cache-manager';
 import {
   afterAll,
   afterEach,
@@ -19,10 +20,12 @@ import {
   fetchWithCache,
   getCache,
   getHeadersForCacheKey,
+  getScopedCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
+import { createDiskCache } from '../src/cache/storage';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
@@ -175,19 +178,13 @@ vi.mock('cache-manager', () => ({
   }),
 }));
 
-// Mock keyv and keyv-file with proper class constructors
-vi.mock('keyv', () => {
-  return {
-    Keyv: class MockKeyv {},
-  };
-});
+// The storage suite exercises real packages; these tests exercise the cache policy layer.
+vi.mock('../src/cache/storage', () => ({ createDiskCache: vi.fn() }));
 
-vi.mock('keyv-file', () => {
-  return {
-    __esModule: true,
-    KeyvFile: class MockKeyvFile {},
-    default: class MockKeyvFile {},
-  };
+beforeEach(() => {
+  vi.mocked(createDiskCache)
+    .mockReset()
+    .mockImplementation((_filename, ttl) => createCache({ ttl, refreshThreshold: 0 }));
 });
 
 const mockFetchWithRetriesResponse = (
@@ -246,17 +243,19 @@ describe('cache configuration', () => {
       delete: expect.any(Function),
       clear: expect.any(Function),
     });
-    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
+    expect(createDiskCache).not.toHaveBeenCalled();
   });
 
   it('should use disk cache in non-test environment', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
-    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
     const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(createDiskCache).toHaveBeenCalledWith(
+      path.join(expectedCachePath, 'cache.json'),
+      cacheModule.getCacheTtlMs(),
+    );
     expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
@@ -317,16 +316,13 @@ describe('cache configuration', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
   });
 
-  it('should respect cache configuration from environment', async () => {
-    mockProcessEnv({ PROMPTFOO_CACHE_MAX_FILE_COUNT: '100' });
+  it('converts the configured cache TTL from seconds to milliseconds', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_TTL: '3600' });
-    mockProcessEnv({ PROMPTFOO_CACHE_MAX_SIZE: '1000000' });
     mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
-    const cache = cacheModule.getCache();
-    // Should have disk cache store
-    expect(cache.stores.length).toBeGreaterThan(0);
+    cacheModule.getCache();
+    expect(createDiskCache).toHaveBeenLastCalledWith(expect.any(String), 3_600_000);
   });
 
   it('should handle cache directory creation when it exists', async () => {
@@ -359,61 +355,6 @@ describe('fetchWithCache', () => {
 
   afterAll(() => {
     enableCache(); // Reset to default state
-  });
-
-  describe('native redirect evidence', () => {
-    it.each([false, true])(
-      'preserves redirected=%s through coalescing, cache hits, and data updates',
-      async (redirected) => {
-        const upstream = new Response(JSON.stringify(response));
-        Object.defineProperty(upstream, 'redirected', { value: redirected });
-        mockFetchWithRetries.mockResolvedValueOnce(upstream);
-        const options = { cacheKey: 'redirect-evidence' };
-        const [first, coalesced] = await Promise.all([
-          fetchWithCache(url, {}, 1000, 'json', options),
-          fetchWithCache(url, {}, 1000, 'json', options),
-        ]);
-        expect(first.redirected).toBe(redirected);
-        expect(coalesced).toMatchObject({ coalesced: true, redirected });
-        await first.updateCache?.({ data: 'completed' }, 201, 'Created');
-        const cached = await fetchWithCache(url, {}, 1000, 'json', options);
-        expect(cached).toMatchObject({
-          cached: true,
-          redirected,
-          data: { data: 'completed' },
-          status: 201,
-        });
-        expect(mockFetchWithRetries).toHaveBeenCalledOnce();
-      },
-    );
-
-    it.each([false, true])(
-      'preserves redirected=%s when bypassing the cache',
-      async (redirected) => {
-        const upstream = new Response(JSON.stringify(response));
-        Object.defineProperty(upstream, 'redirected', { value: redirected });
-        mockFetchWithRetries.mockResolvedValueOnce(upstream);
-        expect(await fetchWithCache(url, {}, 1000, 'json', { bust: true })).toMatchObject({
-          cached: false,
-          redirected,
-        });
-      },
-    );
-
-    it('keeps an unknown legacy redirect value unknown after a cache update', async () => {
-      await getCache().set(
-        'fetch:v3:legacy-redirect',
-        JSON.stringify({ data: response, status: 200, statusText: 'OK' }),
-      );
-      const options = { cacheKey: 'legacy-redirect' };
-      const first = await fetchWithCache(url, {}, 1000, 'json', options);
-      expect(first.cached).toBe(true);
-      expect(first.redirected).toBeUndefined();
-      await first.updateCache?.({ data: 'completed' }, 200, 'OK');
-      const updated = await fetchWithCache(url, {}, 1000, 'json', options);
-      expect(updated.redirected).toBeUndefined();
-      expect(mockFetchWithRetries).not.toHaveBeenCalled();
-    });
   });
 
   describe('response sanitization', () => {
@@ -806,6 +747,20 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
+    it('shares nested namespace policy across separately loaded module copies', async () => {
+      vi.resetModules();
+      const otherCacheModule = await import('../src/cache');
+      await withCacheNamespace('external-provider', async () => {
+        expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+        await otherCacheModule.withCacheNamespace('sample:1', async () => {
+          expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+          expect(getScopedCacheKey('sample')).not.toBe('sample');
+        });
+      });
+      expect(otherCacheModule.getScopedCacheKey('sample')).toBe('sample');
+      expect(getScopedCacheKey('sample')).toBe('sample');
+    });
+
     it('should scope cache disabling to the current async context', async () => {
       expect(isCacheEnabled()).toBe(true);
 
@@ -1171,24 +1126,18 @@ describe('fetchWithCache', () => {
       await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow('Error parsing response');
     });
 
-    it('should handle request timeout', async () => {
-      vi.useFakeTimers();
-      const mockTimeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(mockFetchWithRetriesResponse(true, response)), 2000);
-      });
-      mockFetchWithRetries.mockImplementationOnce(() => mockTimeoutPromise as Promise<Response>);
+    it('forwards the request timeout and propagates a transport timeout', async () => {
+      const timeoutError = new Error('Request timed out');
+      mockFetchWithRetries.mockRejectedValueOnce(timeoutError);
 
-      const fetchPromise = fetchWithCache(url, {}, 100);
-
-      await expect(
-        Promise.race([
-          fetchPromise,
-          new Promise((_, reject) => {
-            vi.advanceTimersByTime(150);
-            reject(new Error('timeout'));
-          }),
-        ]),
-      ).rejects.toThrow('timeout');
+      await expect(fetchWithCache(url, {}, 100)).rejects.toBe(timeoutError);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        expect.any(Object),
+        100,
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should handle network errors', async () => {

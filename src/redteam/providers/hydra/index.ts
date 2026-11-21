@@ -1,6 +1,6 @@
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
-import { getRenderedInputVariables, renderPrompt } from '../../../evaluatorHelpers';
+import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -16,8 +16,12 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { ATTRIBUTED_CONVERSATION_VERSION, getTargetConversation } from '../../grading/storedResult';
-import { getTextInputVariables, materializeInputVariablesWithMetadata } from '../../inputVariables';
+import {
+  getGradingInputHash,
+  getTargetConversation,
+  getVerifiedInputMessages,
+} from '../../grading/storedResult';
+import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
@@ -48,7 +52,6 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
-  getTargetRequestTemplates,
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
@@ -80,9 +83,6 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
-  redteamConversationHistoryVersion: typeof ATTRIBUTED_CONVERSATION_VERSION;
-  /** Prior role/content record count when the current input is unattributed. */
-  redteamCurrentTurnStart?: number;
   hydraRoundsCompleted?: number;
   hydraBacktrackCount?: number;
   hydraResult?: boolean;
@@ -95,6 +95,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     message: string;
     response: string;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
@@ -106,8 +107,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
     outputAudio?: MediaData;
     outputImage?: MediaData;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -343,12 +347,7 @@ export class HydraProvider implements ApiProvider {
     this.conversationHistory = [];
     this.sessionId = undefined;
     const sessionIds: string[] = [];
-    const successfulAttacks: Array<{
-      turn: number;
-      message: string;
-      response: string;
-      traceSummary?: string;
-    }> = [];
+    const successfulAttacks: NonNullable<HydraMetadata['successfulAttacks']> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
@@ -358,23 +357,12 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Message[] = [];
-    let lastCurrentTurnStart: number | undefined;
-    const statefulGradingHistory: Message[] = [];
+    let verifiedTurns = 0;
+    let verifiedContext: { turns: number; hash: string } | undefined;
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      graderPassed: boolean | undefined;
-      trace?: Record<string, unknown>;
-      traceSummary?: string;
-      inputVars?: Record<string, string>;
-    }> = [];
+    const redteamHistory: HydraMetadata['redteamHistory'] = [];
     let lastTransformResult: TransformResult | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
@@ -419,7 +407,7 @@ export class HydraProvider implements ApiProvider {
         conversationHistory: conversationHistoryForCloud,
         ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
-          turn > 1 && storedGraderResult
+          turn > 1 && storedGraderResult && storedGraderResult.metadata?.graderError !== true
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,
@@ -540,12 +528,6 @@ export class HydraProvider implements ApiProvider {
 
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
-      // Body fields can forward generated variables independently of replay.
-      let injectedInputVars = {
-        ...(currentRenderInputVars || {}),
-        [this.injectVar]: processedMessage,
-      };
-      let renderVariables = vars;
 
       if (this.stateful) {
         // Stateful: send only the new message with sessionId
@@ -564,17 +546,12 @@ export class HydraProvider implements ApiProvider {
           ...(currentRenderInputVars || {}),
         };
 
-        injectedInputVars = {
-          [this.injectVar]: escapedMessage,
-          ...(currentRenderInputVars ?? {}),
-        };
-        renderVariables = updatedVars;
         targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
           filters,
           targetProvider,
-          [this.injectVar, ...Object.keys(currentRenderInputVars ?? {})], // Keep generated input literal
+          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
       } else {
         // Stateless: send full conversation history as JSON
@@ -703,98 +680,17 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
+      const priorVerifiedTurns = verifiedTurns;
+      const priorSession = this.sessionId;
+      // An interrupted, cached, or failed probe cannot extend live session history.
+      verifiedTurns = 0;
+      verifiedContext = undefined;
       lastTargetResponse = targetResponse;
-      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-      if (targetResponse.error && targetResponse.tokenUsage?.numRequests === 0) {
-        // A local rejection never reached the target and cannot supply context.
-        this.conversationHistory.pop();
-        if (options?.abortSignal?.aborted) {
-          break;
-        }
-        continue;
-      }
-      const requestTemplates = await getTargetRequestTemplates(
-        targetProvider,
-        finalTargetPrompt,
-        targetResponse,
-        targetContext,
-      );
-      const { vars: deliveredInputVars, forwardsPrompt } = getRenderedInputVariables(
-        getTextInputVariables(injectedInputVars, this.config.inputs),
-        this.injectVar,
-        requestTemplates,
-        // Hydra constructs replay/layer payloads directly. Stateful requests
-        // additionally require proof through the configured prompt template.
-        this.stateful && !lastTransformResult ? prompt : undefined,
-        filters,
-        finalTargetPrompt,
-        renderVariables,
-      );
-      // Text layers replace the replay payload; media layers include its text
-      // history. A provider that drops the payload cannot establish that history.
-      const replaysHistory =
-        forwardsPrompt &&
-        (lastTransformResult?.audio ||
-          lastTransformResult?.image ||
-          (!this.stateful && !lastTransformResult));
-      let currentGradingInputVars = deliveredInputVars;
-      if (lastTransformResult && forwardsPrompt && !replaysHistory) {
-        // The layer replaces the injected prompt, but separately forwarded
-        // generated variables still reached the target through their own fields.
-        // No original template interpolations prove delivery through a layer;
-        // an empty template leaves only the helper's direct body evidence.
-        const { vars: sideInputVars } = getRenderedInputVariables(
-          getTextInputVariables(injectedInputVars, this.config.inputs),
-          this.injectVar,
-          requestTemplates,
-          { raw: '', label: 'layer-output' },
-          undefined,
-          finalTargetPrompt,
-          renderVariables,
-        );
-        currentGradingInputVars = {
-          ...sideInputVars,
-          ...getRenderedInputVariables(
-            { [this.injectVar]: lastTransformResult.prompt },
-            this.injectVar,
-            requestTemplates,
-            undefined,
-            undefined,
-            finalTargetPrompt,
-          ).vars,
-        };
-      }
-      const currentGradingContent = replaysHistory
-        ? processedMessage
-        : currentRenderInputVars
-          ? Object.keys(currentGradingInputVars).length > 0
-            ? JSON.stringify(currentGradingInputVars)
-            : undefined
-          : currentGradingInputVars[this.injectVar];
-      const currentGradingMessages: Message[] =
-        currentGradingContent === undefined
-          ? []
-          : [{ role: 'user', content: currentGradingContent }];
-      const gradingMessages: Message[] = replaysHistory
-        ? [...this.conversationHistory]
-        : this.stateful
-          ? [...statefulGradingHistory, ...currentGradingMessages]
-          : currentGradingMessages;
-      // Unknown or normalized blank input must not hide the prior verified turns
-      // or make the last one look current when the result is graded again later.
-      lastCurrentTurnStart = getTargetConversation(currentGradingMessages).lastUserPrompt
-        ? undefined
-        : replaysHistory
-          ? this.conversationHistory.length - 1
-          : this.stateful
-            ? statefulGradingHistory.length
-            : undefined;
-      const { lastUserPrompt: attributedCurrentPrompt = '', conversationTranscript } =
-        getTargetConversation(gradingMessages, lastCurrentTurnStart);
       lastResponseMessages = [
-        ...gradingMessages,
+        ...this.conversationHistory,
         { role: 'assistant', content: targetResponse.output || '' },
       ];
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
       }
@@ -872,6 +768,45 @@ export class HydraProvider implements ApiProvider {
         targetResponse.output = '[Target provided empty response - likely refused]';
       }
 
+      // Trust only input reported by the target adapter. Never search arbitrary
+      // transport fields, system instructions, or assistant output for a match.
+      const reported = targetResponse.prompt;
+      const chat = Array.isArray(reported)
+        ? reported.filter((message) => message?.role !== 'system')
+        : undefined;
+      const last = chat?.at(-1);
+      const reportedCurrent = last?.role === 'user' ? last.content : reported;
+      if (
+        reported !== undefined &&
+        reportedCurrent !== lastFinalAttackPrompt &&
+        !(typeof reported === 'string' && !this.stateful && reported === finalTargetPrompt)
+      ) {
+        lastTargetResponse = {
+          ...targetResponse,
+          error: 'Target-reported input does not identify the current user turn.',
+        };
+        break;
+      }
+      if (
+        !targetResponse.cached &&
+        reportedCurrent === lastFinalAttackPrompt &&
+        this.conversationHistory.at(-1)?.content === lastFinalAttackPrompt
+      ) {
+        if (this.stateful && targetResponse.sessionId) {
+          verifiedTurns = targetResponse.sessionId === priorSession ? priorVerifiedTurns + 1 : 1;
+        } else if (
+          !this.stateful &&
+          chat?.length === this.conversationHistory.length &&
+          chat.every(
+            (message, i) =>
+              message?.role === this.conversationHistory[i].role &&
+              message.content === this.conversationHistory[i].content,
+          )
+        ) {
+          verifiedTurns = (chat.length + 1) / 2;
+        }
+      }
+
       // Capture sessionId if stateful
       if (this.stateful && targetResponse.sessionId) {
         this.sessionId = targetResponse.sessionId;
@@ -924,12 +859,17 @@ export class HydraProvider implements ApiProvider {
         role: 'assistant',
         content: historyOutput,
       });
-      lastResponseMessages = [...gradingMessages, { role: 'assistant', content: historyOutput }];
-      if (this.stateful) {
-        statefulGradingHistory.push(...currentGradingMessages, {
-          role: 'assistant',
-          content: historyOutput,
-        });
+      lastResponseMessages = [...this.conversationHistory];
+      const gradingMessages = getVerifiedInputMessages(
+        lastResponseMessages,
+        verifiedTurns,
+        lastFinalAttackPrompt,
+      );
+      if (gradingMessages) {
+        verifiedContext = {
+          turns: verifiedTurns,
+          hash: getGradingInputHash(lastFinalAttackPrompt, '', gradingMessages),
+        };
       }
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
@@ -990,11 +930,12 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Keep prior conversation separate from the current prompt and response.
+          // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
-            conversationTranscript,
-            includeConversationTranscript: true,
+            ...(gradingMessages && {
+              conversationTranscript: getTargetConversation(gradingMessages).conversationTranscript,
+            }),
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
@@ -1052,7 +993,7 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            attributedCurrentPrompt,
+            lastFinalAttackPrompt || nextMessage,
             targetResponse.output,
             test,
             targetProvider,
@@ -1069,11 +1010,10 @@ export class HydraProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt: attributedCurrentPrompt,
+              prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
-              messages: lastResponseMessages,
-              currentTurnStart: lastCurrentTurnStart,
               pluginId: test.metadata?.pluginId,
+              messages: gradingMessages,
               assertion: assertToUse,
             },
           );
@@ -1085,6 +1025,11 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
+      const graderError =
+        graderResult?.metadata?.graderError === true
+          ? graderResult.reason || 'Grading failed'
+          : undefined;
+
       // Store in redteam history (with audio/image if transforms were applied)
       redteamHistory.push({
         prompt: nextMessage,
@@ -1095,15 +1040,19 @@ export class HydraProvider implements ApiProvider {
           ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
           : undefined,
         // Note: outputImage would come from provider if model responds with image
-        graderPassed: graderResult?.pass,
+        graderPassed: graderError ? undefined : graderResult?.pass,
+        graderError,
+        gradingInputHash: graderError
+          ? storedGraderResult?.metadata?.redteamGradingInputHash
+          : undefined,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
 
-      // Check if vulnerability was achieved
-      if (graderResult?.pass === false) {
+      // Only a valid grader verdict can establish a vulnerability.
+      if (graderResult?.pass === false && !graderError) {
         vulnerabilityAchieved = true;
         successfulAttacks.push({
           turn,
@@ -1179,7 +1128,7 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
-    return preserveSelectedError<HydraResponse>(
+    return preserveSelectedError(
       {
         output: lastTargetResponse?.output || '',
         ...(failClosedError
@@ -1190,7 +1139,7 @@ export class HydraProvider implements ApiProvider {
         metadata: {
           sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
           messages,
-          redteamConversationHistoryVersion: ATTRIBUTED_CONVERSATION_VERSION,
+          ...(verifiedContext && { redteamVerifiedContext: verifiedContext }),
           ...strategyMetadata,
           stopReason,
           successfulAttacks,
@@ -1204,9 +1153,6 @@ export class HydraProvider implements ApiProvider {
               : undefined,
           ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
           redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
-          ...(lastCurrentTurnStart === undefined
-            ? {}
-            : { redteamCurrentTurnStart: lastCurrentTurnStart }),
         },
         tokenUsage: totalTokenUsage,
         guardrails: lastTargetResponse?.guardrails,

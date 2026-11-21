@@ -1,6 +1,5 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -20,7 +19,7 @@ export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvid
     // https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-openai-inference-protocol-using-curl.html
     const domain =
       providerOptions.config?.domain ||
-      providerOptions.env?.CDP_DOMAIN ||
+      getProviderEnvString(providerOptions.env, 'CDP_DOMAIN') ||
       getEnvString('CDP_DOMAIN');
     const namespace = providerOptions.config?.namespace || 'serving-default';
     const endpoint = providerOptions.config?.endpoint || modelName;
@@ -37,5 +36,3 @@ export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvid
     });
   }
 }
-
-registerOpenAiRequestType(ClouderaAiChatCompletionProvider.prototype, 'chat');

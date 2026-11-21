@@ -216,6 +216,98 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]).not.toHaveProperty('cacheScope');
   });
 
+  it.each([
+    {
+      model: 'gpt-6.2-astra',
+      apiBaseUrl: 'https://api.openai.com/v1',
+      betaHeader: 'other=v1',
+      query: '?beta=true',
+      useOpenAiBeta: true,
+      gradeRootOnly: true,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://gateway.example/v1?tenant=team&beta=true',
+      betaHeader: 'other=v1,responses_multi_agent=v1',
+      query: '?tenant=team&beta=true',
+      useOpenAiBeta: true,
+      gradeRootOnly: true,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://gateway.example/v1?tenant=team',
+      betaHeader: 'other=v1',
+      query: '?tenant=team',
+      useOpenAiBeta: false,
+      gradeRootOnly: false,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://resource.openai.azure.com/openai/v1?api-version=preview',
+      query: '?api-version=preview',
+      useOpenAiBeta: false,
+      gradeRootOnly: true,
+    },
+    {
+      model: 'gpt-6.2-sol',
+      apiBaseUrl: 'https://resource.openai.azure.com.example/openai/v1?api-version=preview',
+      query: '?api-version=preview',
+      useOpenAiBeta: false,
+      gradeRootOnly: false,
+    },
+  ])(
+    'uses the Responses multi-agent contract for $apiBaseUrl',
+    async ({ model, apiBaseUrl, betaHeader, query, useOpenAiBeta, gradeRootOnly }) => {
+      const message = (agent: string, phase: string, text: string) => ({
+        type: 'message',
+        role: 'assistant',
+        agent: { agent_name: agent },
+        phase,
+        content: [{ type: 'output_text', text }],
+      });
+      const output = [
+        message('/root', 'commentary', 'Checking the references.'),
+        message('/root/researcher', 'final_answer', 'Child result'),
+        message('/root', 'final_answer', 'Final answer'),
+      ];
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce(createMockFetchResponse({ id: 'resp_agents', status: 'queued' }))
+        .mockResolvedValueOnce(
+          createMockFetchResponse({ id: 'resp_agents', status: 'completed', output }),
+        );
+      const provider = new OpenAiResponsesProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl,
+          background: true,
+          headers: betaHeader ? { 'openai-beta': betaHeader } : undefined,
+          passthrough: { multi_agent: { enabled: true, max_concurrent_subagents: 2 } },
+        },
+      });
+
+      const result = await provider.callApi('Review the references.');
+      const [create, poll] = vi.mocked(cache.fetchWithCache).mock.calls;
+      const basePath = new URL(apiBaseUrl).pathname;
+      expect(new URL(String(create[0])).pathname).toBe(`${basePath}/responses`);
+      expect(new URL(String(poll[0])).pathname).toBe(`${basePath}/responses/resp_agents`);
+      expect(JSON.parse(String(create[1]?.body))).toMatchObject({
+        model,
+        multi_agent: { enabled: true, max_concurrent_subagents: 2 },
+      });
+      for (const call of [create, poll]) {
+        expect(new URL(String(call[0])).search).toBe(query);
+        expect(new Headers(call[1]?.headers).get('openai-beta')).toBe(
+          useOpenAiBeta ? 'other=v1,responses_multi_agent=v1' : (betaHeader ?? null),
+        );
+      }
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        gradeRootOnly ? 'Final answer' : 'Checking the references.\nChild result\nFinal answer',
+      );
+      expect(result.raw.output).toEqual(output);
+    },
+  );
+
   it('should use the effective passthrough model for capabilities and billing', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
@@ -459,60 +551,52 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
-  it.each([false, true, undefined])(
-    'should retain creation redirect evidence %s while polling a queued background response',
-    async (redirected) => {
-      const updateCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(cache.fetchWithCache)
-        .mockResolvedValueOnce({
-          ...createMockFetchResponse({
-            id: 'resp_background',
-            status: 'queued',
-            output: [],
-            usage: null,
-          }),
-          updateCache,
-          redirected,
-        })
-        .mockResolvedValueOnce({
-          ...createMockFetchResponse({
-            id: 'resp_background',
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'Background result' }],
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-          }),
-          redirected: !redirected,
-        });
-      const provider = new OpenAiResponsesProvider('gpt-5.5', createBackgroundOptions());
-
-      const result = await provider.callApi('A long task');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Background result');
-      expect(result.metadata?.http?.redirected).toBe(redirected);
-      expect(updateCache).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'resp_background', status: 'completed' }),
-        200,
-        'OK',
-        undefined,
+  it('should poll a queued background response until it is ready to grade', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        updateCache,
+      })
+      .mockResolvedValueOnce(
+        createMockFetchResponse({
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        }),
       );
-      expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
-        2,
-        'https://api.openai.com/v1/responses/resp_background',
-        expect.objectContaining({ method: 'GET' }),
-        expect.any(Number),
-        'json',
-        true,
-        undefined,
-      );
-    },
-  );
+    const provider = new OpenAiResponsesProvider('gpt-5.5', createBackgroundOptions());
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Background result');
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      'https://api.openai.com/v1/responses/resp_background',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
 
   it('should honor the eval timeout for a background response on a standard model', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '600000' });
@@ -1939,7 +2023,7 @@ describe('OpenAiResponsesProvider request building', () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '100' });
     const originalNow = Date.now;
     let now = originalNow();
-    const timeouts: number[] = [];
+    const timeouts: Array<Parameters<typeof cache.fetchWithCache>[2]> = [];
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     try {
       vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options, timeout) => {
@@ -2043,93 +2127,68 @@ describe('OpenAiResponsesProvider request building', () => {
     }
   });
 
-  it.each([false, true])(
-    'preserves a late subscriber deadline and replacement evidence (recreated=%s)',
-    async (recreated) => {
-      setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
-      let now = Date.now();
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
-      let notifyFirstPoll: (() => void) | undefined;
-      let releaseFirstPoll: (() => void) | undefined;
-      const firstPollStarted = new Promise<void>((resolve) => {
-        notifyFirstPoll = resolve;
-      });
-      const firstPollGate = new Promise<void>((resolve) => {
-        releaseFirstPoll = resolve;
-      });
-      let polls = 0;
-      let expired = false;
-      const oldUpdateCache = vi.fn().mockResolvedValue(undefined);
-      const replacementUpdateCache = vi.fn().mockResolvedValue(undefined);
-      const replacementId = 'resp_replaced_late_deadline';
-      vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
-        if (options?.method === 'POST') {
-          return {
-            ...createMockFetchResponse({
-              id: expired ? replacementId : 'resp_late_deadline',
-              status: 'queued',
-              output: [],
-              usage: null,
-            }),
-            cached: recreated && !expired,
-            redirected: expired,
-            updateCache: expired ? replacementUpdateCache : oldUpdateCache,
-            deleteFromCache: vi.fn().mockResolvedValue(undefined),
-          };
-        }
-        polls++;
-        if (polls === 1) {
-          notifyFirstPoll?.();
-          await firstPollGate;
-          if (recreated) {
-            expired = true;
-            return createMockFetchResponse(
-              { error: { message: 'Expired job' } },
-              { status: 404, statusText: 'Not Found' },
-            );
-          }
-        }
-        if (polls === (recreated ? 2 : 1)) {
-          now += 90;
-          return createMockFetchResponse({
-            id: expired ? replacementId : 'resp_late_deadline',
-            status: 'in_progress',
-            output: [],
-            usage: null,
-          });
-        }
+  it('should preserve the polling deadline of a late background subscriber', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    let notifyFirstPoll: (() => void) | undefined;
+    let releaseFirstPoll: (() => void) | undefined;
+    const firstPollStarted = new Promise<void>((resolve) => {
+      notifyFirstPoll = resolve;
+    });
+    const firstPollGate = new Promise<void>((resolve) => {
+      releaseFirstPoll = resolve;
+    });
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      if (options?.method === 'POST') {
         return createMockFetchResponse({
-          id: expired ? replacementId : 'resp_late_deadline',
-          status: 'completed',
-          output: [createResponseMessage('Completed for late subscriber')],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          id: 'resp_late_deadline',
+          status: 'queued',
+          output: [],
+          usage: null,
         });
-      });
-      const provider = new OpenAiResponsesProvider('gpt-4.1', createProjectBackgroundOptions());
-
-      try {
-        const first = provider.callApi('Shared deadline task');
-        await firstPollStarted;
-        now += 55;
-        const second = provider.callApi('Shared deadline task');
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        releaseFirstPoll?.();
-        const [firstResult, secondResult] = await Promise.all([first, second]);
-
-        expect(firstResult.error).toContain(
-          `Background response ${recreated ? replacementId : 'resp_late_deadline'} timed out after 140ms.`,
-        );
-        expect(secondResult.error).toBeUndefined();
-        expect(secondResult.output).toBe('Completed for late subscriber');
-        expect(secondResult.metadata?.http?.redirected).toBe(recreated);
-        expect(recreated ? replacementUpdateCache : oldUpdateCache).toHaveBeenCalledOnce();
-        expect(recreated ? oldUpdateCache : replacementUpdateCache).not.toHaveBeenCalled();
-        expect(polls).toBe(recreated ? 3 : 2);
-      } finally {
-        nowSpy.mockRestore();
       }
-    },
-  );
+      polls++;
+      if (polls === 1) {
+        notifyFirstPoll?.();
+        await firstPollGate;
+        now += 90;
+        return createMockFetchResponse({
+          id: 'resp_late_deadline',
+          status: 'in_progress',
+          output: [],
+          usage: null,
+        });
+      }
+      return createMockFetchResponse({
+        id: 'resp_late_deadline',
+        status: 'completed',
+        output: [createResponseMessage('Completed for late subscriber')],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      });
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', createProjectBackgroundOptions());
+
+    try {
+      const first = provider.callApi('Shared deadline task');
+      await firstPollStarted;
+      now += 55;
+      const second = provider.callApi('Shared deadline task');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releaseFirstPoll?.();
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      expect(firstResult.error).toContain(
+        'Background response resp_late_deadline timed out after 140ms.',
+      );
+      expect(secondResult.error).toBeUndefined();
+      expect(secondResult.output).toBe('Completed for late subscriber');
+      expect(polls).toBe(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
 
   it('should cancel and evict an upstream background response when polling times out', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
@@ -2226,7 +2285,6 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-    const oldUpdateCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
@@ -2235,7 +2293,7 @@ describe('OpenAiResponsesProvider request building', () => {
         status: 200,
         statusText: 'OK',
         deleteFromCache,
-        updateCache: oldUpdateCache,
+        updateCache,
       })
       .mockResolvedValueOnce(
         createMockFetchResponse(
@@ -2243,15 +2301,9 @@ describe('OpenAiResponsesProvider request building', () => {
           { status: 404, statusText: 'Not Found' },
         ),
       )
-      .mockResolvedValueOnce({
-        ...createMockFetchResponse({
-          id: 'resp_retried',
-          status: 'queued',
-          output: [],
-          usage: null,
-        }),
-        updateCache,
-      })
+      .mockResolvedValueOnce(
+        createMockFetchResponse({ id: 'resp_retried', status: 'queued', output: [], usage: null }),
+      )
       .mockResolvedValueOnce(
         createMockFetchResponse({
           id: 'resp_retried',
@@ -2268,7 +2320,6 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.output).toBe('Recovered background result');
     expect(result.cached).toBe(false);
     expect(deleteFromCache).toHaveBeenCalledOnce();
-    expect(oldUpdateCache).not.toHaveBeenCalled();
     expect(updateCache).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'resp_retried', status: 'completed' }),
       200,
@@ -2288,7 +2339,6 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should transparently replace a cached queued background response when its upstream ID is gone', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-    const oldUpdateCache = vi.fn().mockResolvedValue(undefined);
     const updateCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
@@ -2297,7 +2347,7 @@ describe('OpenAiResponsesProvider request building', () => {
         status: 200,
         statusText: 'OK',
         deleteFromCache,
-        updateCache: oldUpdateCache,
+        updateCache,
       })
       .mockResolvedValueOnce(
         createMockFetchResponse(
@@ -2305,15 +2355,14 @@ describe('OpenAiResponsesProvider request building', () => {
           { status: 410, statusText: 'Gone' },
         ),
       )
-      .mockResolvedValueOnce({
-        ...createMockFetchResponse({
+      .mockResolvedValueOnce(
+        createMockFetchResponse({
           id: 'resp_retried_after_gone',
           status: 'queued',
           output: [],
           usage: null,
         }),
-        updateCache,
-      })
+      )
       .mockResolvedValueOnce(
         createMockFetchResponse({
           id: 'resp_retried_after_gone',
@@ -2330,7 +2379,6 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.output).toBe('Recovered background result');
     expect(result.cached).toBe(false);
     expect(deleteFromCache).toHaveBeenCalledOnce();
-    expect(oldUpdateCache).not.toHaveBeenCalled();
     expect(updateCache).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'resp_retried_after_gone', status: 'completed' }),
       200,
@@ -2462,7 +2510,7 @@ describe('OpenAiResponsesProvider request building', () => {
     const originalNow = Date.now;
     let now = originalNow();
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const timeouts: number[] = [];
+    const timeouts: Array<Parameters<typeof cache.fetchWithCache>[2]> = [];
     try {
       vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options, timeout) => {
         if (String(url).endsWith('/responses') && options?.method === 'POST') {
@@ -2778,77 +2826,43 @@ describe('OpenAiResponsesProvider request building', () => {
     );
   });
 
-  it.each([
-    [true, false],
-    [true, true],
-    [false, false],
-    [false, true],
-  ])(
-    'retains streamed creation evidence (background=%s, redirected=%s)',
-    async (background, redirected) => {
-      const stream = `data: ${JSON.stringify({
-        type: 'response.completed',
-        response: {
-          id: 'resp_stream_background',
-          status: 'completed',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Streamed background result' }],
-            },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-        },
-      })}\n\ndata: [DONE]\n\n`;
-      const upstream = new Response(stream, {
-        status: 200,
-        headers: { 'Content-Type': 'text/event-stream' },
-      });
-      Object.defineProperty(upstream, 'redirected', { value: redirected });
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(upstream);
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: stream,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        redirected,
-      });
-      const provider = new OpenAiResponsesProvider('gpt-4.1', {
-        config: { apiKey: 'test-key', background, stream: true, maxRetries: 0 },
-      });
+  it('should consume a completed streamed background response', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        `data: ${JSON.stringify({
+          type: 'response.completed',
+          response: {
+            id: 'resp_stream_background',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Streamed background result' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+        })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    });
 
-      const result = await provider.callApi('Stream the background task');
+    const result = await provider.callApi('Stream the background task');
 
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Streamed background result');
-      expect(result.cached).toBe(false);
-      expect(result.metadata?.http?.redirected).toBe(redirected);
-      if (background) {
-        expect(fetchWithRetries).toHaveBeenCalledWith(
-          expect.stringContaining('/responses'),
-          expect.objectContaining({
-            method: 'POST',
-            body: expect.stringContaining('"stream":true'),
-          }),
-          expect.any(Number),
-          0,
-        );
-      } else {
-        expect(cache.fetchWithCache).toHaveBeenCalledWith(
-          expect.stringContaining('/responses'),
-          expect.objectContaining({
-            method: 'POST',
-            body: expect.stringContaining('"stream":true'),
-          }),
-          expect.any(Number),
-          'text',
-          true,
-          0,
-        );
-      }
-    },
-  );
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Streamed background result');
+    expect(result.cached).toBe(false);
+    expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"stream":true') }),
+      expect.any(Number),
+      0,
+    );
+  });
 
   it('should cancel a streamed background request when the eval is aborted', async () => {
     const controller = new AbortController();
@@ -3451,13 +3465,13 @@ describe('OpenAiResponsesProvider request building', () => {
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     const { body: gpt56Body } = await new OpenAiResponsesProvider('gpt-5.6', {
-      config: { apiKey: 'test-key', prompt_cache_options: { mode: 'explicit', ttl: '30m' } },
+      config: { apiKey: 'test-key', prompt_cache_options: { mode: 'explicit', ttl: '12h' } },
     }).getOpenAiBody('Test prompt');
 
     expect(body.prompt_cache_key).toBe('shared-prefix');
     expect(body.prompt_cache_retention).toBe('24h');
     expect(body.include).toEqual(['web_search_call.results', 'reasoning.encrypted_content']);
-    expect(gpt56Body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '30m' });
+    expect(gpt56Body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '12h' });
   });
 
   it('should handle store parameter correctly', async () => {

@@ -16,12 +16,12 @@ import {
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
@@ -40,7 +40,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config || {};
@@ -138,12 +138,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     let data,
       cached = false,
-      status: number,
-      statusText: string,
-      redirected: boolean | undefined,
       latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs, status, statusText, redirected } = (await fetchWithCache(
+      ({ data, cached, latencyMs } = (await fetchWithCache(
         appendOpenAiApiPath(this.getApiUrl(), 'completions'),
         {
           method: 'POST',
@@ -166,9 +163,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data),
+      };
+    }
+    if (!data?.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
     try {
@@ -182,7 +185,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        metadata: { http: { status, statusText, redirected } },
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
           serviceTier: data.service_tier ?? body.service_tier,

@@ -1,6 +1,5 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -61,7 +60,7 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
   getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      this.env?.HELICONE_API_KEY ||
+      getProviderEnvString(this.env, 'HELICONE_API_KEY') ||
       getEnvString('HELICONE_API_KEY') ||
       'placeholder-api-key'
     );
@@ -78,5 +77,3 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
     return `[Helicone AI Gateway ${baseUrl}]`;
   }
 }
-
-registerOpenAiRequestType(HeliconeGatewayProvider.prototype, 'chat');

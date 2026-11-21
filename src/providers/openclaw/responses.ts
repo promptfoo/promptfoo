@@ -1,5 +1,4 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
-import { registerOpenAiRequestType } from '../requestAttribution';
 import {
   buildOpenClawCallContext,
   buildOpenClawHeaders,
@@ -161,5 +160,3 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     };
   }
 }
-
-registerOpenAiRequestType(OpenClawResponsesProvider.prototype, 'responses');

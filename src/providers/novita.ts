@@ -3,13 +3,12 @@ import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider } from '../types/index';
 import type { ProviderCreatorOptions } from './creator';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 const NOVITA_API_BASE_URL = 'https://api.novita.ai/openai/v1';
 const NOVITA_API_KEY_ENV_VAR = 'NOVITA_API_KEY';
@@ -22,7 +21,7 @@ type NovitaProviderOptions = {
 };
 
 function getNovitaApiKey(
-  config: OpenAiCompletionOptions,
+  config: OpenAiSharedOptions,
   env: EnvOverrides | undefined,
 ): string | undefined {
   if (config.apiKey !== undefined) {
@@ -44,7 +43,7 @@ function getNovitaConfig(
   };
 }
 
-function getNovitaMissingApiKeyErrorMessage(config: OpenAiCompletionOptions): string {
+function getNovitaMissingApiKeyErrorMessage(config: OpenAiSharedOptions): string {
   return `Novita API key is not set. Set the ${config.apiKeyEnvar ?? NOVITA_API_KEY_ENV_VAR} environment variable or add \`apiKey\` to the provider config.`;
 }
 
@@ -77,8 +76,6 @@ export class NovitaChatCompletionProvider extends OpenAiChatCompletionProvider {
   }
 }
 
-registerOpenAiRequestType(NovitaChatCompletionProvider.prototype, 'chat');
-
 export class NovitaCompletionProvider extends OpenAiCompletionProvider {
   constructor(modelName: string, options: NovitaProviderOptions = {}) {
     super(modelName, {
@@ -107,8 +104,6 @@ export class NovitaCompletionProvider extends OpenAiCompletionProvider {
     return getNovitaMissingApiKeyErrorMessage(this.config);
   }
 }
-
-registerOpenAiRequestType(NovitaCompletionProvider.prototype, 'completion');
 
 export class NovitaEmbeddingProvider extends OpenAiEmbeddingProvider {
   declare config: OpenAiCompletionOptions;

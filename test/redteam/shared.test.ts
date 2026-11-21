@@ -4,7 +4,7 @@ import * as os from 'os';
 import path from 'path';
 
 import * as yaml from 'js-yaml';
-import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doEval } from '../../src/node/doEval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
@@ -117,40 +117,27 @@ vi.mock('js-yaml', async (importOriginal) => {
 vi.mock('os');
 
 describe('doRedteamRun', () => {
-  const mockDate = new Date('2023-01-01T00:00:00.000Z');
-  let dateNowSpy: MockInstance;
-
   beforeEach(() => {
     vi.resetAllMocks();
 
-    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
     vi.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });
     vi.mocked(loadDefaultConfig).mockResolvedValue({
       defaultConfig: {},
       defaultConfigPath: 'promptfooconfig.yaml',
     });
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fsPromises.access).mockResolvedValue(undefined);
     vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
     vi.mocked(fsPromises.writeFile).mockResolvedValue();
-    vi.mocked(os.tmpdir).mockImplementation(function () {
-      return '/tmp';
-    });
-    vi.mocked(fs.mkdirSync).mockImplementation(function () {
-      return '';
-    });
+    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    vi.mocked(fs.mkdirSync).mockReturnValue('');
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
-    vi.mocked(yaml.dump).mockImplementation(function () {
-      return 'mocked-yaml-content';
-    });
+    vi.mocked(yaml.dump).mockReturnValue('mocked-yaml-content');
     vi.mocked(doGenerateRedteam).mockResolvedValue({});
   });
 
   afterEach(() => {
     vi.resetAllMocks();
-    dateNowSpy.mockRestore();
   });
 
   it('should use default config path when not specified', async () => {
@@ -255,113 +242,57 @@ describe('doRedteamRun', () => {
       providers: [{ id: 'test-provider' }],
     };
 
-    it('should create timestamped temporary file in current directory when loadedFromCloud is true', async () => {
-      await doRedteamRun({
-        liveRedteamConfig: mockConfig,
-        loadedFromCloud: true,
-      });
+    it.each([
+      { loadedFromCloud: true, directory: '.' },
+      { loadedFromCloud: false, directory: path.normalize('/tmp') },
+      { loadedFromCloud: undefined, directory: path.normalize('/tmp') },
+    ])(
+      'writes the live config in $directory for loadedFromCloud=$loadedFromCloud',
+      async ({ loadedFromCloud, directory }) => {
+        await doRedteamRun({ liveRedteamConfig: mockConfig, loadedFromCloud });
 
-      const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
-      const expectedPath = path.join('', expectedFilename);
+        const [[filename, contents, options]] = vi.mocked(fsPromises.writeFile).mock.calls;
+        expect(path.dirname(String(filename))).toBe(directory);
+        expect(path.basename(String(filename))).toMatch(/^redteam-.+\.yaml$/);
+        expect(contents).toBe('mocked-yaml-content');
+        expect(options).toEqual({ flag: 'wx', mode: 0o600 });
+        expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
+        expect(doGenerateRedteam).toHaveBeenCalledWith(
+          expect.objectContaining({ config: filename, output: filename }),
+        );
+      },
+    );
 
-      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
-        recursive: true,
-      });
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
-      expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
-      expect(doGenerateRedteam).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: expectedPath,
-          output: expectedPath,
-        }),
-      );
-    });
+    it('keeps each live config when two runs start in the same millisecond', async () => {
+      const disk = await vi.importActual<typeof fsPromises>('fs/promises');
+      const realOs = await vi.importActual<typeof os>('os');
+      const realYaml = await vi.importActual<typeof yaml>('js-yaml');
+      using _clock = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+      const directory = await disk.mkdtemp(path.join(realOs.tmpdir(), 'promptfoo-redteam-'));
+      vi.mocked(os.tmpdir).mockReturnValue(directory);
+      vi.mocked(fsPromises.writeFile).mockImplementation(disk.writeFile);
+      vi.mocked(yaml.dump).mockImplementation(realYaml.dump);
 
-    it('should create redteam.yaml file in system temp directory when loadedFromCloud is false', async () => {
-      await doRedteamRun({
-        liveRedteamConfig: mockConfig,
-        loadedFromCloud: false,
-      });
+      const first = { ...mockConfig, description: 'first run' };
+      const second = { ...mockConfig, description: 'second run' };
+      // Finish the second run before the first generator reads its config.
+      vi.mocked(doGenerateRedteam)
+        .mockImplementationOnce(async ({ config }) => {
+          await doRedteamRun({ liveRedteamConfig: second });
+          expect(yaml.load(await disk.readFile(config!, 'utf8'))).toEqual(first);
+          return {};
+        })
+        .mockImplementationOnce(async ({ config }) => {
+          expect(yaml.load(await disk.readFile(config!, 'utf8'))).toEqual(second);
+          return {};
+        });
 
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
-      const expectedFilePrefix = path.join('/tmp', 'redteam-');
-
-      expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
-        recursive: true,
-      });
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining(expectedFilePrefix),
-        'mocked-yaml-content',
-      );
-      expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
-      expect(doGenerateRedteam).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: expect.stringContaining(expectedFilePrefix),
-          output: expect.stringContaining(expectedFilePrefix),
-        }),
-      );
-    });
-
-    it('should create redteam.yaml file in system temp directory when loadedFromCloud is undefined', async () => {
-      await doRedteamRun({
-        liveRedteamConfig: mockConfig,
-        // loadedFromCloud is undefined
-      });
-
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
-      const expectedFilePrefix = path.join('/tmp', 'redteam-');
-
-      expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
-        recursive: true,
-      });
-      expect(fsPromises.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining(expectedFilePrefix),
-        'mocked-yaml-content',
-      );
-      expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
-      expect(doGenerateRedteam).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: expect.stringContaining(expectedFilePrefix),
-          output: expect.stringContaining(expectedFilePrefix),
-        }),
-      );
-    });
-
-    it('should generate unique timestamped filenames when loadedFromCloud is true', async () => {
-      const firstTimestamp = mockDate.getTime();
-      const secondTimestamp = firstTimestamp + 1000;
-
-      // First call
-      await doRedteamRun({
-        liveRedteamConfig: mockConfig,
-        loadedFromCloud: true,
-      });
-
-      // Update mock timestamp for second call
-      dateNowSpy.mockReturnValue(secondTimestamp);
-
-      // Second call
-      await doRedteamRun({
-        liveRedteamConfig: mockConfig,
-        loadedFromCloud: true,
-      });
-
-      const firstExpectedPath = path.join('', `redteam-${firstTimestamp}.yaml`);
-      const secondExpectedPath = path.join('', `redteam-${secondTimestamp}.yaml`);
-
-      // Verify different filenames were generated
-      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
-        1,
-        firstExpectedPath,
-        'mocked-yaml-content',
-      );
-      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
-        2,
-        secondExpectedPath,
-        'mocked-yaml-content',
-      );
+      try {
+        await doRedteamRun({ liveRedteamConfig: first });
+        expect(doGenerateRedteam).toHaveBeenCalledTimes(2);
+      } finally {
+        await disk.rm(directory, { recursive: true, force: true });
+      }
     });
 
     it('should use liveRedteamConfig.commandLineOptions when provided', async () => {
@@ -391,22 +322,27 @@ describe('doRedteamRun', () => {
       );
     });
 
-    it('should log debug information when processing liveRedteamConfig', async () => {
-      // Get the mocked logger
+    it('logs the live config path while keeping its contents private', async () => {
       const mockLogger = (await import('../../src/logger')).default;
+      const privatePrompt = 'private-prompt-for-log-test';
+      const apiKey = 'private-provider-key-for-log-test';
 
       await doRedteamRun({
-        liveRedteamConfig: mockConfig,
+        liveRedteamConfig: {
+          prompts: [privatePrompt],
+          providers: [{ id: 'test-provider', config: { apiKey } }],
+        },
         loadedFromCloud: true,
+        verbose: true,
       });
 
-      const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
-      const expectedPath = path.join('', expectedFilename);
-
+      const [[expectedPath]] = vi.mocked(fsPromises.writeFile).mock.calls;
       expect(mockLogger.debug).toHaveBeenCalledWith(`Using live config from ${expectedPath}`);
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        `Live config: ${JSON.stringify(mockConfig, null, 2)}`,
-      );
+      for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+        const messages = JSON.stringify(vi.mocked(mockLogger[level]).mock.calls);
+        expect(messages).not.toContain(privatePrompt);
+        expect(messages).not.toContain(apiKey);
+      }
     });
   });
 

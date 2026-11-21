@@ -1,5 +1,4 @@
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -240,8 +239,6 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     };
   }
 }
-
-registerOpenAiRequestType(PerplexityProvider.prototype, 'chat');
 
 /**
  * Creates a Perplexity API provider

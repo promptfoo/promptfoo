@@ -1,6 +1,5 @@
 import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { registerOpenAiRequestType } from '../requestAttribution';
 import { serializeProvider } from '../serialization';
 import {
   assertGroqChatServiceTier,
@@ -77,7 +76,7 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
       }
       delete body.max_tokens;
     }
-    const groqConfig = this.config as GroqCompletionOptions;
+    const groqConfig = config as GroqCompletionOptions;
 
     // Add Groq-specific reasoning parameters
     if (groqConfig.reasoning_format !== undefined) {
@@ -112,5 +111,3 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return serializeProvider(this, 'groq', () => this.apiKey);
   }
 }
-
-registerOpenAiRequestType(GroqProvider.prototype, 'chat');

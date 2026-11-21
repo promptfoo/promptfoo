@@ -1,7 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { isGpt6Model } from './openai/gpt6';
-import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 
 import type {
@@ -284,7 +283,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     }
 
     // Add TrueFoundry-specific body parameters (MCP servers, iteration limit)
-    const tfBody: Record<string, any> = {
+    const tfBody: typeof body = {
       ...body,
     };
 
@@ -332,8 +331,6 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     return serializeProvider(this, 'truefoundry');
   }
 }
-
-registerOpenAiRequestType(TrueFoundryProvider.prototype, 'chat');
 
 /**
  * TrueFoundry Embedding Provider

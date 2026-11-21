@@ -338,14 +338,7 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
         cost: 0.05,
         isRefusal: true,
         guardrails: { flagged: true, flaggedInput: true },
-        metadata: {
-          http: {
-            status: 400,
-            statusText: 'Bad Request',
-            headers: responseHeaders,
-            redirected: false,
-          },
-        },
+        metadata: { http: { status: 400, statusText: 'Bad Request', headers: responseHeaders } },
       });
       expect(result).not.toHaveProperty('error');
       expect(events).toEqual(abort ? ['body complete', 'caller aborted'] : ['body complete']);
@@ -395,12 +388,7 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
     ).resolves.toEqual({
       error: `API error: 503 Service Unavailable\n${JSON.stringify(payload)}`,
       metadata: {
-        http: {
-          status: 503,
-          statusText: 'Service Unavailable',
-          headers: responseHeaders,
-          redirected: false,
-        },
+        http: { status: 503, statusText: 'Service Unavailable', headers: responseHeaders },
       },
     });
     expect(response.bodyUsed).toBe(true);

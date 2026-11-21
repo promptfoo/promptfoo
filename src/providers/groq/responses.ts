@@ -1,6 +1,5 @@
 import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
-import { registerOpenAiRequestType } from '../requestAttribution';
 import { serializeProvider } from '../serialization';
 import {
   assertGroqResponsesServiceTier,
@@ -80,5 +79,3 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
     return serializeProvider(this, 'groq:responses', () => this.apiKey);
   }
 }
-
-registerOpenAiRequestType(GroqResponsesProvider.prototype, 'responses');

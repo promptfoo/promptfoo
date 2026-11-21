@@ -42,6 +42,19 @@ describe('novaOutputFromMessage', () => {
     const result = novaOutputFromMessage(response);
     expect(result).toBeUndefined();
   });
+
+  it('should handle message without content without throwing', () => {
+    const response = {
+      output: {
+        message: {
+          role: 'assistant',
+        },
+      },
+    };
+
+    const result = novaOutputFromMessage(response);
+    expect(result).toBeUndefined();
+  });
 });
 
 describe('novaParseMessages', () => {

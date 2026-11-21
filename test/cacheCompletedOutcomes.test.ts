@@ -141,14 +141,7 @@ describe('enabled cache completed HTTP outcomes', () => {
                 guardrails: { flagged: true, flaggedInput: true },
               }
             : { error: message }),
-          metadata: {
-            http: {
-              status: failure.status,
-              statusText: failure.statusText,
-              headers,
-              redirected: false,
-            },
-          },
+          metadata: { http: { status: failure.status, statusText: failure.statusText, headers } },
         });
         expect(events).toEqual(
           boundary === 'body'

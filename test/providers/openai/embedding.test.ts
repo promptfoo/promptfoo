@@ -156,10 +156,18 @@ describe('OpenAI Provider', () => {
 
       expect(result.embedding).toEqual([0.25, -0.5, 1]);
       expect(result.latencyMs).toBe(15);
-      expect(result.cost).toBeCloseTo(cached ? 0 : 10 * configuredEmbeddingCostPerToken, 12);
+      expect(result.cost).toBeCloseTo(10 * configuredEmbeddingCostPerToken, 12);
+      expect(result.cached).toBe(cached);
       expect(result.tokenUsage).toEqual(
         cached
-          ? { total: 10, cached: 10 }
+          ? {
+              total: 10,
+              prompt: 10,
+              completion: 0,
+              cached: 10,
+              numRequests: 0,
+              incurredTokenUsage: {},
+            }
           : { total: 10, prompt: 10, completion: 0, numRequests: 1 },
       );
     });

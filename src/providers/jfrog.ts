@@ -1,5 +1,4 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -28,5 +27,3 @@ export class JfrogMlChatCompletionProvider extends OpenAiChatCompletionProvider 
     });
   }
 }
-
-registerOpenAiRequestType(JfrogMlChatCompletionProvider.prototype, 'chat');

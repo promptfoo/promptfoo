@@ -1,7 +1,6 @@
 import { getEnvString, getProviderEnvString } from '../envars';
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 
 import type { EnvVarKey } from '../envars';
@@ -135,5 +134,3 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
     return serializeProvider(this, 'mlflow-gateway');
   }
 }
-
-registerOpenAiRequestType(MlflowGatewayChatCompletionProvider.prototype, 'chat');

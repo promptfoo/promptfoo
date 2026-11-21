@@ -1,7 +1,6 @@
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { ProviderOptions } from '../types/index';
 
@@ -255,8 +254,6 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
     super(modelName, getAlibabaProviderOptions(modelName, options));
   }
 }
-
-registerOpenAiRequestType(AlibabaChatCompletionProvider.prototype, 'chat');
 
 export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
   constructor(modelName: string, options: ProviderOptions = {}) {

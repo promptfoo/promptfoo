@@ -3,7 +3,6 @@ import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
-import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
@@ -193,7 +192,7 @@ function applyMetaResponsesOutputCap(
 
 function assertSupportedMetaRequest(
   body: Record<string, unknown>,
-  config: OpenAiCompletionOptions,
+  config: { stop?: unknown; stream?: unknown; logit_bias?: unknown },
 ): void {
   if (config.stop !== undefined || 'stop' in body) {
     throw new Error(
@@ -237,7 +236,9 @@ function assertSupportedMetaRequest(
 // is kept, sourced from config alone.
 function applyMetaSamplingHygiene(
   body: Record<string, unknown>,
-  config: OpenAiCompletionOptions,
+  config: Partial<
+    Record<'temperature' | 'top_p' | 'presence_penalty' | 'frequency_penalty', unknown>
+  > & { omitDefaults?: boolean },
   passthrough: Record<string, unknown>,
   samplingKeys: Array<'top_p' | 'presence_penalty' | 'frequency_penalty'>,
 ): void {
@@ -449,8 +450,6 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 }
 
-registerOpenAiRequestType(MetaProvider.prototype, 'chat');
-
 // Meta's /v1/responses endpoint follows the OpenAI Responses API shape,
 // supports search grounding (tools: [{type: 'web_search'}]), and is the only
 // Meta endpoint whose reasoning persists across turns.
@@ -557,8 +556,6 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     return cost === undefined ? billed : { ...billed, cost };
   }
 }
-
-registerOpenAiRequestType(MetaResponsesProvider.prototype, 'responses');
 
 // Meta also serves an Anthropic-compatible Messages endpoint — the surface
 // Anthropic-format coding agents like Claude Code use. It authenticates with
