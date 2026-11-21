@@ -21,7 +21,10 @@ vi.mock('node:fs', async (importOriginal) => ({
 }));
 const npm = '/usr/local/lib/node_modules/npm/bin/npm-cli.js';
 function runtimePath(value: unknown) {
-  return String(value).endsWith('/npm') ? npm : String(value);
+  if (value === process.execPath) {
+    return '/usr/local/bin/node';
+  }
+  return value === '/usr/local/bin/npm' ? npm : String(value);
 }
 let directory: string;
 beforeEach(() => {
@@ -81,7 +84,7 @@ describe('global npm verification', () => {
       if (p === process.argv[1]) {
         return '/usr/local/lib/node_modules/promptfoo/dist/src/main.js';
       }
-      return String(p).endsWith('/npm') ? '/workspace/npm/bin/npm-cli.js' : String(p);
+      return p === '/usr/local/bin/npm' ? '/workspace/npm/bin/npm-cli.js' : runtimePath(p);
     });
     expect(getInstallationInfo('/workspace/nested', {}).canUpdate).toBe(false);
     expect(execFileSync).not.toHaveBeenCalled();
