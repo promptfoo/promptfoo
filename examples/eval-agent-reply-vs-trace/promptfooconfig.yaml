@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Check agent replies against traced tool calls
+
+prompts:
+  - '{{scenario}}'
+
+providers:
+  - file://provider.js
+
+defaultTest:
+  assert:
+    # If the reply says the refund was issued, the trace must show the call.
+    - type: assert-set
+      threshold: 0.5
+      assert:
+        - type: not-icontains-any
+          value: ['refund has been issued', 'I have refunded']
+        - type: trajectory:tool-args-match
+          value:
+            name: issue_refund
+            args:
+              order_id: '123'
+    # If the reply declines, the trace must not show the call.
+    - type: assert-set
+      threshold: 0.5
+      assert:
+        - type: not-icontains-any
+          value: ['cannot issue a refund', "can't refund"]
+        - type: not-trajectory:tool-used
+          value: issue_refund
+
+tests:
+  # These two pass: the reply and the trace agree.
+  - vars: { scenario: says-done-did-it }
+  - vars: { scenario: declines-did-nothing }
+  # These two fail on purpose: the reply and the trace disagree.
+  - vars: { scenario: says-done-did-nothing }
+  - vars: { scenario: declines-did-it-anyway }
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
