@@ -13,6 +13,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   'ascii-smuggling': `${BASE_DOCS_URL}/ascii-smuggling/`,
   bfla: `${BASE_DOCS_URL}/bfla/`,
   bola: `${BASE_DOCS_URL}/bola/`,
+  'data-structure-injection': `${BASE_DOCS_URL}/data-structure-injection/`,
   'debug-access': `${BASE_DOCS_URL}/debug-access/`,
   hijacking: `${BASE_DOCS_URL}/hijacking/`,
   'indirect-prompt-injection': `${BASE_DOCS_URL}/indirect-prompt-injection/`,

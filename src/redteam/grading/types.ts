@@ -29,3 +29,6 @@ export interface RedteamGradingContext {
     queryParams: Record<string, string>;
   }>;
 }
+
+/** The grader cannot produce a verdict because the target did not provide required evidence. */
+export class RedteamEvidenceUnavailableError extends Error {}
