@@ -6,7 +6,6 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -22,14 +21,16 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import {
-  createDecompressionInterceptor,
-  stripDecompressionHeaders,
-} from '../util/fetch/decompress';
+  assertFipsTlsVerification,
+  createTlsAgent,
+  readFipsCaCertificate,
+} from '../util/fetch/tls';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
   pathExists,
 } from '../util/file';
+import { isFipsEnabled } from '../util/fips';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -66,6 +67,7 @@ import {
 } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+import type { Dispatcher } from 'undici';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -435,6 +437,11 @@ export async function generateSignature(
         break;
       }
       case 'jks': {
+        if (isFipsEnabled()) {
+          throw new Error(
+            'JKS certificate import is not supported in FIPS mode. Use a PEM private key instead.',
+          );
+        }
         // Check for keystore password in config first, then fallback to environment variable
         const keystorePassword =
           signatureAuth.keystorePassword ||
@@ -514,6 +521,11 @@ export async function generateSignature(
         );
 
         if (hasPfxPath || hasPfxContent) {
+          if (isFipsEnabled()) {
+            throw new Error(
+              'PFX/PKCS12 certificate import is not supported in FIPS mode. Use a PEM private key instead.',
+            );
+          }
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword =
             signatureAuth.pfxPassword ||
@@ -1485,9 +1497,27 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
   return Math.ceil(words.length * multiplier);
 }
 
-/**
- * Creates an HTTPS agent with TLS configuration for secure connections
- */
+function validateFipsTlsConfig(
+  tlsConfig: {
+    rejectUnauthorized?: boolean;
+    pfx?: unknown;
+    pfxPath?: string;
+    jksPath?: string;
+    jksContent?: string;
+  } = {},
+): void {
+  if (!isFipsEnabled()) {
+    return;
+  }
+  assertFipsTlsVerification(tlsConfig.rejectUnauthorized);
+  if (tlsConfig.jksPath || tlsConfig.jksContent || tlsConfig.pfx || tlsConfig.pfxPath) {
+    throw new Error(
+      'JKS and PFX/PKCS12 certificate import is not supported in FIPS mode. Use PEM cert/key and CA certificates instead.',
+    );
+  }
+}
+
+/** Creates an HTTPS agent with TLS configuration for secure connections. */
 async function createHttpsAgent(
   tlsConfig: z.infer<typeof TlsCertificateSchema>,
 ): Promise<Dispatcher> {
@@ -1668,14 +1698,7 @@ async function createHttpsAgent(
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Compose the decompress interceptor like the shared pooled agents do — on
-  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
-  // response body comes back to callers as raw compressed bytes.
-  return new Agent({
-    connect: tlsOptions,
-  })
-    .compose(createDecompressionInterceptor())
-    .compose(stripDecompressionHeaders());
+  return createTlsAgent(tlsOptions);
 }
 
 export class HttpProvider implements ApiProvider {
@@ -1692,8 +1715,7 @@ export class HttpProvider implements ApiProvider {
   private signatureCache = new LRUCache<string, RequestSignature>({ max: MAX_AUTH_CACHE_ENTRIES });
   private authTokenCache = new Map<string, CachedAuthToken>();
   private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
-  private httpsAgent?: Dispatcher;
-  private httpsAgentPromise?: Promise<Dispatcher>;
+  private httpsAgent?: { promise: Promise<Dispatcher>; ca?: string; fips: boolean; users: number };
   /**
    * Tracks session IDs that were fetched from the session endpoint.
    * Used to distinguish sessions we created from client-generated UUIDs.
@@ -1705,6 +1727,8 @@ export class HttpProvider implements ApiProvider {
   private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
+    // Check raw input before schema parsing can strip legacy TLS fields.
+    validateFipsTlsConfig(options.config?.tls);
     this.config = HttpProviderConfigSchema.parse(options.config);
     validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
@@ -1877,27 +1901,16 @@ export class HttpProvider implements ApiProvider {
         tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
       }
 
-      // Make the token request
-      const httpsAgent = await this.getHttpsAgent();
-      const fetchOptions: any = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: tokenRequestBody.toString(),
-      };
-
-      if (httpsAgent) {
-        fetchOptions.dispatcher = httpsAgent;
-      }
-
-      const response = await fetchWithCache(
+      // Token requests bypass the cache and must not be retried.
+      const response = await this.fetch(
         oauthConfig.tokenUrl,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        true, // Always bust cache for token requests
-        0, // No retries for token requests
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: tokenRequestBody.toString(),
+        },
+        true,
+        0,
       );
 
       if (response.status < 200 || response.status >= 300) {
@@ -2200,30 +2213,8 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug(`[HTTP Provider Session]: Calling session endpoint ${method} ${sanitizeUrl(url)}`);
 
-    // Get HTTPS agent if configured
-    const httpsAgent = await this.getHttpsAgent();
-
-    const fetchOptions: any = {
-      method,
-      headers,
-    };
-
-    if (body) {
-      fetchOptions.body = body;
-    }
-
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-    }
-
-    const response = await fetchWithCache(
-      url,
-      fetchOptions,
-      getRequestTimeoutMs(),
-      'text',
-      true, // Always bust cache for session requests
-      this.config.maxRetries,
-    );
+    // Session endpoints must always issue a fresh request.
+    const response = await this.fetch(url, { method, headers, ...(body && { body }) }, true);
 
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
@@ -2255,31 +2246,70 @@ export class HttpProvider implements ApiProvider {
     return sessionId;
   }
 
-  private async getHttpsAgent(): Promise<Dispatcher | undefined> {
-    if (!this.config.tls) {
-      return undefined;
+  private async fetch(
+    url: string,
+    options: RequestInit,
+    bustCache?: boolean,
+    maxRetries = this.config.maxRetries,
+  ) {
+    const timeout = getRequestTimeoutMs();
+    const send = (dispatcher?: Dispatcher) =>
+      fetchWithCache(
+        url,
+        dispatcher ? { ...options, dispatcher } : options,
+        timeout,
+        'text',
+        bustCache,
+        maxRetries,
+      );
+
+    const tls = this.config.tls;
+    validateFipsTlsConfig(tls);
+    if (!tls) {
+      return send();
     }
 
-    // If agent is already created, return it
-    if (this.httpsAgent) {
-      return this.httpsAgent;
+    const fips = isFipsEnabled();
+    const ca =
+      fips && tls.caPath && !tls.ca
+        ? await readFipsCaCertificate(
+            safeResolve(cliState.basePath || '', tls.caPath),
+            options.signal ?? undefined,
+            timeout,
+          )
+        : undefined;
+    const close = (promise: Promise<Dispatcher>) => {
+      void promise
+        .then((agent) => agent.close())
+        .catch(() => {
+          logger.debug('[HTTP Provider] Failed to close the previous HTTPS agent');
+        });
+    };
+
+    let entry = this.httpsAgent;
+    if (!entry || entry.fips !== fips || entry.ca !== ca) {
+      const promise = createHttpsAgent(ca ? { ...tls, ca } : tls);
+      if (entry?.users === 0) {
+        close(entry.promise);
+      }
+      entry = { fips, ca, promise, users: 0 };
+      this.httpsAgent = entry;
     }
 
-    // If agent creation is in progress, wait for it
-    if (this.httpsAgentPromise != null) {
-      return this.httpsAgentPromise;
-    }
-
-    // Create the agent
-    this.httpsAgentPromise = createHttpsAgent(this.config.tls);
+    // Hold the checked dispatcher through creation, retry backoff and the final read.
+    entry.users++;
+    let dispatcher: Dispatcher | undefined;
     try {
-      this.httpsAgent = await this.httpsAgentPromise;
-      logger.debug('[HTTP Provider] HTTPS agent created successfully');
-      return this.httpsAgent;
-    } catch (err) {
-      // Clear the promise so we can retry
-      this.httpsAgentPromise = undefined;
-      throw err;
+      dispatcher = await entry.promise;
+      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+      return await send(dispatcher);
+    } finally {
+      entry.users--;
+      if (!dispatcher && this.httpsAgent === entry) {
+        this.httpsAgent = undefined;
+      } else if (dispatcher && entry.users === 0 && this.httpsAgent !== entry) {
+        close(entry.promise);
+      }
     }
   }
 
@@ -2580,8 +2610,6 @@ export class HttpProvider implements ApiProvider {
         )
       : undefined;
 
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
@@ -2603,37 +2631,18 @@ export class HttpProvider implements ApiProvider {
         }),
     };
 
-    // Add HTTPS agent as dispatcher if configured
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
-    }
-
-    let data,
-      cached = false,
+    const {
+      data,
+      cached,
       status,
       statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        multipartBody ? true : (context?.bustCache ?? context?.debug),
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+      headers: responseHeaders,
+      latencyMs,
+    } = await this.fetch(
+      url,
+      fetchOptions,
+      multipartBody ? true : (context?.bustCache ?? context?.debug),
+    );
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2835,9 +2844,6 @@ export class HttpProvider implements ApiProvider {
       },
     );
 
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
-
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
@@ -2845,37 +2851,14 @@ export class HttpProvider implements ApiProvider {
       ...(bodyContent && { body: bodyContent }),
     };
 
-    // Add HTTPS agent as dispatcher if configured
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
-    }
-
-    let data,
-      cached = false,
+    const {
+      data,
+      cached,
       status,
       statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+      headers: responseHeaders,
+      latencyMs,
+    } = await this.fetch(url, fetchOptions, context?.bustCache ?? context?.debug);
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,

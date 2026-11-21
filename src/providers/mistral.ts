@@ -11,6 +11,7 @@ import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { fingerprintCacheIdentity } from './cacheFingerprint';
 import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -280,7 +281,7 @@ function getMistralCacheKey(
 ): string {
   const prefix = `mistral:${kind}:${model}`;
   const endpointHash = hashMistralCacheValue({ apiUrl });
-  const authNamespace = createHmac('sha256', apiKey).update(MISTRAL_CACHE_HASH_KEY).digest('hex');
+  const authNamespace = fingerprintCacheIdentity(apiKey, MISTRAL_CACHE_HASH_KEY);
   return `${prefix}:${endpointHash}:${authNamespace}:${hashMistralCacheValue(request)}`;
 }
 

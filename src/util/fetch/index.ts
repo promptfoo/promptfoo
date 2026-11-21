@@ -1,5 +1,3 @@
-import * as fsPromises from 'node:fs/promises';
-import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
@@ -13,6 +11,7 @@ import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sha256 } from '../createHash';
+import { isFipsEnabled } from '../fips';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
@@ -27,6 +26,7 @@ import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { assertFipsDispatcher, resolveTlsOptions } from './tls';
 
 import type { FetchOptions } from './types';
 
@@ -87,15 +87,19 @@ function getConnectionPoolSize(): number {
   return cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
 }
 
+function closeAgent(dispatcher: Dispatcher): void {
+  void Promise.resolve(dispatcher.close?.()).catch(() => {
+    logger.debug('Failed to close an evicted HTTP dispatcher');
+  });
+}
+
 /**
  * Close cached dispatchers on shutdown and between tests.
  */
 export function clearAgentCache(): void {
   activeAgents.clear(); // Outstanding calls close their dispatcher on last release.
   for (const agent of idleAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
+    closeAgent(agent);
   }
   idleAgents.clear();
 }
@@ -122,7 +126,9 @@ function acquireAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ActiveAg
   const connections = getConnectionPoolSize();
   const headersTimeout = getRequestTimeoutMs();
   // Hash the effective settings so cache keys don't retain proxy credentials or CA bundles.
-  const key = sha256(JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout]));
+  const key = sha256(
+    JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout, isFipsEnabled()]),
+  );
   const active = activeAgents.get(key);
   if (active) {
     active.users++;
@@ -142,7 +148,7 @@ function releaseAgent(entry: ActiveAgent): void {
   }
   if (activeAgents.get(entry.key) !== entry) {
     // clearAgentCache ran while this request was pending.
-    void entry.dispatcher.close();
+    closeAgent(entry.dispatcher);
     return;
   }
   activeAgents.delete(entry.key);
@@ -151,7 +157,7 @@ function releaseAgent(entry: ActiveAgent): void {
     const [key, oldest] = idleAgents.entries().next().value!;
     idleAgents.delete(key);
     // Undici drains outstanding response bodies before closing the dispatcher.
-    void oldest.close();
+    closeAgent(oldest);
   }
 }
 
@@ -234,7 +240,7 @@ export async function fetchWithProxy(
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
-  const finalOptions: FetchOptions & { dispatcher?: Dispatcher } = {
+  const finalOptions: FetchOptions = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
@@ -284,30 +290,15 @@ export async function fetchWithProxy(
     }
   }
 
+  assertFipsDispatcher(finalOptions.dispatcher);
+  const resolved =
+    finalOptions.dispatcher && !isFipsEnabled()
+      ? {}
+      : resolveTlsOptions(logEnabled, combinedSignal);
+  const tlsOptions = resolved instanceof Promise ? await resolved : resolved;
   // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
   if (finalOptions.dispatcher) {
     return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
-  }
-
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      if (logEnabled) {
-        logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-      }
-    } catch (e) {
-      if (logEnabled) {
-        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-      }
-    }
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
