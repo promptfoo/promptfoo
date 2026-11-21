@@ -14,7 +14,8 @@ vi.mock('@app/utils/api');
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  isFilterApplied: (await importOriginal<typeof import('./store')>()).isFilterApplied,
   useTableStore: vi.fn(),
   useResultsViewSettingsStore: vi.fn(),
 }));

@@ -7,7 +7,6 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import type { EvaluateTable } from '@promptfoo/types';
 
 const {
@@ -35,7 +34,8 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  isFilterApplied: (await importOriginal<typeof import('./store')>()).isFilterApplied,
   useTableStore: vi.fn(),
   useResultsViewSettingsStore: vi.fn(),
 }));
@@ -372,9 +372,14 @@ describe('Eval', () => {
   });
 
   it('should not show the error state when a newer table request replaced its load', async () => {
-    // The store reports a request that another one replaced. Had it failed, that would say
-    // nothing about the table the newer request produced.
-    const fetchEvalDataMock = vi.fn().mockResolvedValue(SUPERSEDED_TABLE_REQUEST);
+    const fetchEvalDataMock = vi.fn(async () => {
+      await Promise.resolve();
+      (useTableStore as any).getState.mockReturnValue({
+        ...useTableStore.getState(),
+        activeEvalQuery: { evalId: 'test-eval', options: { filterMode: 'failures' } },
+      });
+      return null;
+    });
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
       fetchEvalData: fetchEvalDataMock,
@@ -729,6 +734,50 @@ describe('Eval', () => {
       'eval-of-this-endpoint',
     );
     expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('other-eval');
+  });
+
+  it('refreshes the same paginated, searched result set after a saved rating or comment', async () => {
+    const options = {
+      pageIndex: 2,
+      pageSize: 100,
+      filterMode: 'failures',
+      searchText: 'needle',
+      filters: [
+        {
+          id: 'f',
+          type: 'metadata',
+          operator: 'exists',
+          field: 'category',
+          value: '',
+          logicOperator: 'and',
+          sortIndex: 0,
+        },
+      ],
+    };
+    (useTableStore as any).getState.mockReturnValue({
+      ...useTableStore.getState(),
+      filters: { values: {} },
+      activeEvalQuery: { evalId: 'retried-eval', options },
+    });
+    vi.mocked(useTableStore).mockReturnValue({ ...baseMockTableStore, evalId: 'retried-eval' });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'retried-eval' }] }),
+    } as Response);
+    render(
+      <MemoryRouter>
+        <Eval fetchId="retried-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('update')?.({ evalId: 'retried-eval' });
+    });
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenLastCalledWith('retried-eval', {
+      ...options,
+      skipSettingEvalId: true,
+      skipLoadingState: true,
+    });
   });
 
   it('does not navigate away for a scoped background socket update', async () => {

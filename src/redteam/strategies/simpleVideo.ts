@@ -9,6 +9,7 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { runCommand } from '../../util/runCommand';
 import { neverGenerateRemote } from '../remoteGeneration';
+import { appendPluginMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 
@@ -83,11 +84,7 @@ export function escapeDrawtextString(text: string): string {
     .replace(/%/g, '%%'); // Percent: drawtext uses %{} expansion; %% is the literal
 }
 
-async function createTempVideoEnvironment(): Promise<{
-  tempDir: string;
-  outputPath: string;
-  cleanup: () => Promise<void>;
-}> {
+async function createTempVideoEnvironment() {
   const tempDir = path.join(os.tmpdir(), 'promptfoo-video');
   await fsPromises.mkdir(tempDir, { recursive: true });
 
@@ -104,11 +101,7 @@ async function createTempVideoEnvironment(): Promise<{
     }
   };
 
-  return { tempDir, outputPath, cleanup };
-}
-
-export function getFallbackBase64(text: string): string {
-  return Buffer.from(text).toString('base64');
+  return { outputPath, cleanup };
 }
 
 async function textToVideo(text: string): Promise<string> {
@@ -149,7 +142,7 @@ async function textToVideo(text: string): Promise<string> {
     }
   } catch (error) {
     logger.error(`Error generating video from text: ${error}`);
-    return getFallbackBase64(text);
+    return Buffer.from(text).toString('base64');
   }
 }
 
@@ -225,12 +218,7 @@ export async function addVideoToBase64(
 
         videoTestCases.push({
           ...testCase,
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.type?.startsWith('promptfoo:redteam:')
-              ? `${assertion.type?.split(':').pop() || assertion.metric}/Video-Encoded`
-              : assertion.metric,
-          })),
+          assert: appendPluginMetricSuffix(testCase, 'Video-Encoded'),
           vars: {
             ...testCase.vars,
             [injectVar]: base64Video,

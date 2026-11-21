@@ -13,8 +13,12 @@ import { useLocation, useNavigate } from 'react-router';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
-import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
+import {
+  isFilterApplied,
+  type ResultsFilter,
+  useResultsViewSettingsStore,
+  useTableStore,
+} from './store';
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
@@ -149,34 +153,40 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters } = useTableStore.getState();
+        const { filters, activeEvalQuery } = useTableStore.getState();
+        const queryOptions =
+          isBackgroundUpdate && activeEvalQuery?.evalId === id
+            ? activeEvalQuery.options
+            : {
+                filterMode: filterModeRef.current,
+                searchText: new URLSearchParams(window.location.search).get('search') ?? '',
+                filters: Object.values(filters.values).filter(isFilterApplied),
+              };
 
-        const data = await fetchEvalData(id, {
+        const pending = fetchEvalData(id, {
+          ...queryOptions,
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode: filterModeRef.current,
-          // The table owns the search box, but this load must not drop an active search.
-          searchText: new URLSearchParams(window.location.search).get('search') ?? '',
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
         });
 
-        if (data === SUPERSEDED_TABLE_REQUEST) {
-          // A newer request replaced this one and decides what the page shows. Whether this
-          // one would have failed no longer matters.
+        // The store sets the active query as soon as a foreground request starts.
+        const query = useTableStore.getState().activeEvalQuery;
+        const data = await pending;
+        if (!isBackgroundUpdate && query !== useTableStore.getState().activeEvalQuery) {
           return true;
         }
         if (!data) {
-          setFailed(true);
+          if (!isBackgroundUpdate) {
+            setFailed(true);
+          }
           return false;
         }
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        if (!isBackgroundUpdate) {
+          setFailed(true);
+        }
         return false;
       }
     },

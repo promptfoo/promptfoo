@@ -305,6 +305,6 @@ For additional guidance, consider checking out:
 
 Stay updated on generative AI red teaming by:
 
-- [Joining our Discord](https://discord.com/invite/promptfoo)
+- [Joining our Discord](https://discord.gg/gHPS9jjfbs)
 - Following our [blog](/blog/)
 - [Scheduling a demo](/contact/) to learn how Promptfoo can help secure your AI applications

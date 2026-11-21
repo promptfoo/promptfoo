@@ -502,6 +502,8 @@ function normalizePrompt(
 }
 
 export class OpenInterpreterProvider implements ApiProvider {
+  private useGeneration = 0;
+
   readonly config: OpenInterpreterConfig;
   readonly env?: EnvOverrides;
 
@@ -532,14 +534,13 @@ export class OpenInterpreterProvider implements ApiProvider {
         id: this.providerId,
         config: toCodexAppServerConfig(initialConfig, this.interpreterHome),
         env: this.env,
+        registerForCleanup: false,
       });
+      providerRegistry.register(this);
     } catch (error) {
       this.removeTemporaryHome();
       throw error;
     }
-
-    providerRegistry.unregister(this.delegate);
-    providerRegistry.register(this);
   }
 
   id(): string {
@@ -563,6 +564,9 @@ export class OpenInterpreterProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    this.useGeneration++;
+    providerRegistry.register(this);
+
     // cleanup() removes the temporary INTERPRETER_HOME; recreate it so the
     // provider stays usable when a long-lived process reuses it afterwards.
     if (this.temporaryHome && !fs.existsSync(this.temporaryHome)) {
@@ -664,19 +668,22 @@ export class OpenInterpreterProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    const useGeneration = this.useGeneration;
+    providerRegistry.unregister(this);
     try {
       await this.delegate.cleanup();
-    } finally {
-      this.removeTemporaryHome();
+      // A replacement process may still be using this home while the old one closes.
+      if (useGeneration === this.useGeneration) {
+        this.removeTemporaryHome();
+      }
+    } catch (error) {
+      providerRegistry.register(this);
+      throw error;
     }
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   private removeTemporaryHome(): void {

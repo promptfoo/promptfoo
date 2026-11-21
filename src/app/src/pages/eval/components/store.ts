@@ -1,6 +1,6 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -8,23 +8,18 @@ import {
   makeDefaultPolicyName,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
-import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateStats,
-  EvaluateSummaryV2,
   EvaluateTable,
   PromptMetrics,
   RedteamPluginObject,
-  ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/react-table';
@@ -212,24 +207,16 @@ interface FetchEvalOptions {
   filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
-  /**
-   * Marks a background refresh, such as a socket update while an eval is running. It does
-   * not show the loading state, and it reloads the view the table last asked for instead
-   * of the view described by these options.
-   */
   skipLoadingState?: boolean;
   filters?: ResultsFilter[];
 }
 
-/** The page of results a table request asks the server for. */
-interface TableView {
+type EvalTableQuery = {
   evalId: string;
-  pageIndex: number;
-  pageSize: number;
-  filterMode: EvalResultsFilterMode;
-  searchText: string;
-  filters: ResultsFilter[];
-}
+  options: Required<
+    Pick<FetchEvalOptions, 'pageIndex' | 'pageSize' | 'filterMode' | 'searchText' | 'filters'>
+  >;
+};
 
 interface ColumnState {
   selectedColumns: string[];
@@ -287,7 +274,6 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -318,15 +304,9 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
-  fetchEvalData: (
-    id: string,
-    options?: FetchEvalOptions,
-  ) => Promise<EvalTableDTO | null | typeof SUPERSEDED_TABLE_REQUEST>;
+  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+  activeEvalQuery: EvalTableQuery | null;
   isFetching: boolean;
-  /** The foreground table request that turned `isFetching` on, until a response settles it. */
-  loadingRequestId: number | null;
-  /** The view of the last foreground table request, which background refreshes reload. */
-  lastTableView: TableView | null;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -533,38 +513,34 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
   ),
 );
 
-// Helper function to determine if a filter is applied
-const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolean => {
-  if (filter.type === 'metadata') {
-    // For metadata filters with exists operator, only field is required
-    if (filter.operator === 'exists') {
-      return Boolean(filter.field);
-    }
-    // For other metadata operators, both field and value are required
+export function isFilterApplied(filter: Partial<ResultsFilter>): boolean {
+  if (
+    (filter.type === 'metadata' && filter.operator === 'exists') ||
+    (filter.type === 'metric' && filter.operator === 'is_defined')
+  ) {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metadata' || filter.type === 'metric') {
     return Boolean(filter.value && filter.field);
   }
-  if (filter.type === 'metric') {
-    // For metric filters with is_defined operator, only field is required
-    if (filter.operator === 'is_defined') {
-      return Boolean(filter.field);
-    }
-    // For metric filters with comparison operators, both field and value are required
-    return Boolean(filter.value && filter.field);
-  }
-  // For non-metadata/non-metric filters, value is required
   return Boolean(filter.value);
+}
+
+const clearFilters = (prevState: TableState) => ({
+  filters: {
+    ...prevState.filters,
+    values: {},
+    appliedCount: 0,
+  },
+});
+
+type ForegroundEvalRequest = {
+  query: EvalTableQuery;
+  settled: Promise<void>;
+  settle: () => void;
 };
 
-// Table requests overlap when the user changes a filter, the search text or the page while
-// an earlier request is still in flight. A later request describes a more recent UI state,
-// so a response is not applied once the response to a request issued after it has been.
-// An earlier response is still applied while the later request is pending, because that
-// request can fail, as a background refresh that overtook the user's own request can.
-let latestTableRequestId = 0;
-/** The most recently issued request whose response has been applied. */
-let appliedTableRequestId = 0;
-/** The eval of the most recently issued request. Responses for another eval are not applied. */
-let latestTableEvalId: string | undefined;
+let foregroundEvalRequest: ForegroundEvalRequest | null = null;
 
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
@@ -592,57 +568,6 @@ export const useTableStore = create<TableState>()(
       }));
     },
 
-    setTableFromResultsFile: async (resultsFile: ResultsFile) => {
-      if (resultsFile.version && resultsFile.version >= 4) {
-        const table = convertResultsToTable(resultsFile);
-
-        // Build async options
-        const [redteamOptions, policyIdToNameMap] = await Promise.all([
-          buildRedteamFilterOptions(resultsFile.config, table),
-          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
-        ]);
-
-        set((prevState) => ({
-          table,
-          version: resultsFile.version,
-          highlightedResultsCount: computeHighlightCount(table),
-          userRatedResultsCount: computeUserRatedCount(table),
-          filters: {
-            ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(table),
-              metadata: [],
-              ...redteamOptions,
-            },
-            policyIdToNameMap,
-          },
-        }));
-      } else {
-        const results = resultsFile.results as EvaluateSummaryV2;
-
-        // Build async options
-        const [redteamOptions, policyIdToNameMap] = await Promise.all([
-          buildRedteamFilterOptions(resultsFile.config, results.table),
-          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
-        ]);
-
-        set((prevState) => ({
-          table: results.table,
-          version: resultsFile.version,
-          highlightedResultsCount: computeHighlightCount(results.table),
-          userRatedResultsCount: computeUserRatedCount(results.table),
-          filters: {
-            ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(results.table),
-              metadata: [],
-              ...redteamOptions,
-            },
-            policyIdToNameMap,
-          },
-        }));
-      }
-    },
     config: null,
     setConfig: (config: Partial<UnifiedConfig> | null) => set(() => ({ config })),
 
@@ -661,66 +586,53 @@ export const useTableStore = create<TableState>()(
     userRatedResultsCount: 0,
 
     isFetching: false,
-    loadingRequestId: null,
-    lastTableView: null,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
     shouldHighlightSearchText: false,
+    activeEvalQuery: null,
 
     fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
-      const { skipSettingEvalId = false, skipLoadingState = false } = options;
+      const {
+        pageIndex = 0,
+        pageSize = 50,
+        // Default to current store value to keep initial load consistent with UI state
+        filterMode = get().filterMode,
+        searchText = '',
+        skipSettingEvalId = false,
+        skipLoadingState = false,
+        filters = [],
+      } = options;
 
-      // A background refresh must not change what the table shows. It supersedes the
-      // request the table has in flight, so it reloads that request's view: the same page,
-      // filters and search. Otherwise a socket update would put page one, unfiltered, under
-      // controls that still show the user's page and search.
-      const lastView = get().lastTableView;
-      const view: TableView =
-        skipLoadingState && lastView?.evalId === id
-          ? lastView
-          : {
-              evalId: id,
-              pageIndex: options.pageIndex ?? 0,
-              pageSize: options.pageSize ?? 50,
-              // Default to current store value to keep initial load consistent with UI state
-              filterMode: options.filterMode ?? get().filterMode,
-              searchText: options.searchText ?? '',
-              filters: options.filters ?? [],
-            };
-      const { pageIndex, pageSize, filterMode, searchText, filters } = view;
+      const query: EvalTableQuery = {
+        evalId: id,
+        options: { pageIndex, pageSize, filterMode, searchText, filters },
+      };
+      const pendingForeground = foregroundEvalRequest;
+      if (
+        skipLoadingState &&
+        pendingForeground?.query.evalId === id &&
+        JSON.stringify(pendingForeground.query.options) === JSON.stringify(query.options)
+      ) {
+        // Let the selected page commit before refreshing it. A failed refresh
+        // must not discard an otherwise successful foreground page load.
+        await pendingForeground.settled;
+        if (get().activeEvalQuery !== pendingForeground.query) {
+          return null;
+        }
+      }
+
+      let request: ForegroundEvalRequest | null = null;
+      if (!skipLoadingState) {
+        let settle!: () => void;
+        const settled = new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+        request = { query, settled, settle };
+        foregroundEvalRequest = request;
+      }
 
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
-      const requestId = ++latestTableRequestId;
-      latestTableEvalId = id;
-      // The API endpoint this request goes to. Another endpoint can have an eval of the
-      // same id, so the id alone does not say whose table a response is.
-      const endpoint = useApiConfig.getState().apiBaseUrl;
-      const isLatestRequest = () => requestId === latestTableRequestId;
-      /**
-       * Whether this response must not be applied: the response to a request issued after it
-       * has been, or the page has moved on to another eval or another API endpoint, whose
-       * table this is not.
-       */
-      const isSuperseded = () =>
-        requestId < appliedTableRequestId ||
-        id !== latestTableEvalId ||
-        endpoint !== useApiConfig.getState().apiBaseUrl;
-      // The loading state belongs to the foreground request that turned it on. It ends when
-      // a response is applied for that request or a later one, since the table then shows
-      // data at least as recent as that request asked for, or when that request itself ends
-      // without being applied: it failed, or its response was superseded.
-      const settleLoading = (isOwnEnd = false) => {
-        const { loadingRequestId } = get();
-        const isSettled = isOwnEnd
-          ? loadingRequestId === requestId
-          : loadingRequestId !== null && loadingRequestId <= requestId;
-        return isSettled ? { isFetching: false, loadingRequestId: null } : {};
-      };
-      // A failure is the caller's failure unless the table has moved on without this request.
-      // A later request that is still pending does not excuse it: that one can fail as well,
-      // and its caller may not report it.
-      const failureOutcome = () => (isSuperseded() ? SUPERSEDED_TABLE_REQUEST : null);
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
@@ -729,9 +641,8 @@ export const useTableStore = create<TableState>()(
       }
 
       set({
-        ...(skipLoadingState
-          ? {}
-          : { isFetching: true, loadingRequestId: requestId, lastTableView: view }),
+        activeEvalQuery: query,
+        isFetching: skipLoadingState ? get().isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -790,14 +701,10 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
-          if (isSuperseded()) {
-            // The request is over, so the loading state it turned on is too, although its
-            // response is not applied. No later response may be left to end it: a refresh
-            // for another eval makes this request ineligible, and can then fail itself.
-            set(settleLoading(true));
-            return SUPERSEDED_TABLE_REQUEST;
+          // A socket refresh or page change may have started a newer request.
+          if (get().activeEvalQuery !== query) {
+            return data;
           }
-          appliedTableRequestId = requestId;
 
           set((prevState) => ({
             table: data.table,
@@ -809,7 +716,6 @@ export const useTableStore = create<TableState>()(
             version: data.version,
             author: data.author,
             evalId: skipSettingEvalId ? get().evalId : id,
-            ...settleLoading(),
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
@@ -831,19 +737,25 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        set(settleLoading(true));
-        return failureOutcome();
+        return null;
       } catch (error) {
         console.error('Error fetching eval data:', error);
-        set({
-          ...settleLoading(true),
-          ...(isLatestRequest() && {
+        if (get().activeEvalQuery === query) {
+          set({
             isStreaming: false,
             metadataKeysLoading: false,
             currentMetadataKeysRequest: null,
-          }),
-        });
-        return failureOutcome();
+          });
+        }
+        return null;
+      } finally {
+        if (request) {
+          if (foregroundEvalRequest === request) {
+            foregroundEvalRequest = null;
+            set({ isFetching: false });
+          }
+          request.settle();
+        }
       }
     },
 
@@ -928,23 +840,11 @@ export const useTableStore = create<TableState>()(
     },
 
     removeAllFilters: () => {
-      set((prevState) => ({
-        filters: {
-          ...prevState.filters,
-          values: {},
-          appliedCount: 0,
-        },
-      }));
+      set(clearFilters);
     },
 
     resetFilters: () => {
-      set((prevState) => ({
-        filters: {
-          ...prevState.filters,
-          values: {},
-          appliedCount: 0,
-        },
-      }));
+      set(clearFilters);
     },
 
     updateFilter: (filter: ResultsFilter) => {
