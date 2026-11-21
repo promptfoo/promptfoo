@@ -1,4 +1,6 @@
-import { fetchWithProxy } from '../util/fetch/index';
+import { fetchWithProxy, readBoundedText } from '../util/fetch/index';
+
+export { readBoundedText };
 
 export function fetchWithProviderProxy(
   url: Parameters<typeof fetchWithProxy>[0],

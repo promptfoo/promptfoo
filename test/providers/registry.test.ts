@@ -19,6 +19,18 @@ import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisio
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
+describe('MiniMax video routing', () => {
+  it.each([
+    ['minimax:video', 'MiniMax-H3'],
+    ['minimax:video:', 'MiniMax-H3'],
+    ['minimax:video:MiniMax-H3-Lite', 'MiniMax-H3-Lite'],
+  ])('loads %s with the requested video model', async (id, modelName) => {
+    const provider = await loadApiProvider(id, { options: { config: { duration: 4 } } });
+    expect(provider.constructor.name).toBe('MiniMaxVideoProvider');
+    expect(provider).toMatchObject({ modelName, config: { duration: 4 } });
+  });
+});
+
 describe('Bedrock Runtime OpenAI API routing', () => {
   it.each([
     ['chat', 'BedrockRuntimeChatProvider', 'openai.gpt-oss-120b-1:0'],
