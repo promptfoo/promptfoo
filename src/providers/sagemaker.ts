@@ -71,6 +71,26 @@ function stringifyTransformResult(result: unknown): string | undefined {
   return typeof result === 'object' ? JSON.stringify(result) : String(result);
 }
 
+/** An incomplete selector must never switch a request to an ambient AWS identity. */
+function assertCredentialSelection({
+  accessKeyId,
+  secretAccessKey,
+  sessionToken,
+  profile,
+}: SageMakerConfig) {
+  if (accessKeyId?.trim() && secretAccessKey?.trim()) {
+    return;
+  }
+  if (profile?.trim() && !(accessKeyId && secretAccessKey)) {
+    return;
+  }
+  if ([accessKeyId, secretAccessKey, sessionToken, profile].some((value) => value !== undefined)) {
+    throw new Error(
+      'SageMaker requires both accessKeyId and secretAccessKey or a nonempty profile.',
+    );
+  }
+}
+
 const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'custom'] as const;
 /**
  * Zod schema for validating SageMaker options
@@ -663,6 +683,7 @@ abstract class SageMakerGenericProvider {
     environment?: CredentialScope['environment'],
     files?: SharedFileInputs,
   ): Promise<AwsCredentialIdentity | RuntimeConfigAwsCredentialIdentityProvider | undefined> {
+    assertCredentialSelection(config);
     const { accessKeyId, secretAccessKey, sessionToken, profile } = config;
     if (accessKeyId && secretAccessKey) {
       logger.debug('Using explicit credentials from config');
@@ -1232,6 +1253,9 @@ abstract class SageMakerGenericProvider {
       secretAccessKey: this.config.secretAccessKey,
       sessionToken: this.config.sessionToken,
     };
+    if (!borrowedRuntime) {
+      assertCredentialSelection(credentialConfig);
+    }
     const environment = Object.fromEntries(
       [...CREDENTIAL_ENV_VARS, ...DEFAULTS_ENV_VARS, 'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME'].map(
         (name) => [name, process.env[name]],

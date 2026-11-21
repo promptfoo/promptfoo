@@ -1329,6 +1329,20 @@ describe.each(['completion', 'embedding'] as const)(
       },
     );
 
+    it.each([
+      { accessKeyId: 'synthetic-id' },
+      { accessKeyId: 'synthetic-id', secretAccessKey: '' },
+      { sessionToken: 'synthetic-token' },
+      { profile: ' ' },
+    ])('rejects incomplete credentials before cache or ambient SDK lookup (%#)', async (config) => {
+      vi.stubEnv('AWS_ACCESS_KEY_ID', 'SYNTHETIC_AMBIENT');
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'synthetic-secret');
+      const provider = createProvider(config);
+      await expect(call(provider)).rejects.toThrow('requires both accessKeyId and secretAccessKey');
+      expect(mockCacheGet).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it('keeps pre-transform input out of cache records and diagnostics', async () => {
       const provider = createProvider({
         region: 'us-east-1',
