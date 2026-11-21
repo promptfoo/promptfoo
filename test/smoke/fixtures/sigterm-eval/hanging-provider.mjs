@@ -22,7 +22,8 @@ export default class HangingProvider {
       return new Promise(() => {});
     }
     return new Promise((resolve) => {
-      process.once('SIGTERM', () => {
+      const signal = process.env.SIGTERM_SMOKE_SETTLE_SIGNAL === 'SIGINT' ? 'SIGINT' : 'SIGTERM';
+      process.once(signal, () => {
         setTimeout(() => {
           settling.end();
           clearInterval(keepAlive);

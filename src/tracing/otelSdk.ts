@@ -30,6 +30,7 @@ interface OtelHandlers {
   sigTermHandler: (() => void) | null;
   sigIntHandler: (() => void) | null;
   beforeExitHandler: (() => Promise<void>) | null;
+  activeCliInterrupts: number;
   registered: boolean;
 }
 
@@ -41,10 +42,23 @@ function getHandlers(): OtelHandlers {
       sigTermHandler: null,
       sigIntHandler: null,
       beforeExitHandler: null,
+      activeCliInterrupts: 0,
       registered: false,
     };
   }
-  return globalAny[OTEL_HANDLERS_KEY]!;
+  const handlers = globalAny[OTEL_HANDLERS_KEY]!;
+  // Other loaded package versions can share a registry created before this field existed.
+  handlers.activeCliInterrupts ??= 0;
+  return handlers;
+}
+
+/** A CLI run owns tracing shutdown while it drains providers after Ctrl-C. */
+export function deferOtelSigintShutdown(): () => void {
+  const handlers = getHandlers();
+  handlers.activeCliInterrupts++;
+  return () => {
+    handlers.activeCliInterrupts--;
+  };
 }
 
 /**
@@ -142,7 +156,9 @@ export function initializeOtel(config: OtelConfig): void {
     void flushOtel();
   };
   handlers.sigIntHandler = () => {
-    void shutdown('SIGINT');
+    if (handlers.activeCliInterrupts === 0) {
+      void shutdown('SIGINT');
+    }
   };
   handlers.beforeExitHandler = async () => {
     await flushOtel();
