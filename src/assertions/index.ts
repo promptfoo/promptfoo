@@ -37,7 +37,7 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { parseAssertionFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -497,19 +497,14 @@ async function runAssertionInternal({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
+      const {
+        filePath: scriptPath,
+        functionName,
+        isJavascript,
+      } = parseAssertionFileUrl(renderedValue);
+      const filePath = path.resolve(basePath, scriptPath);
 
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
-
-      if (isJavascriptFile(filePath)) {
+      if (isJavascript) {
         // Load errors (missing file or export) are config mistakes and still throw.
         const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
         try {

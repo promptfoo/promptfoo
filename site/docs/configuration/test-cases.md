@@ -312,6 +312,8 @@ input,__expected
 "What's the weather?","llm-rubric: Provides weather information"
 ```
 
+JavaScript file references can select a named export, for example `file://checks.mjs:checkOutput`.
+
 Values without a type prefix default to `equals`:
 
 | `__expected` value                | Assertion type               |
