@@ -16,7 +16,7 @@ import {
 } from './generic';
 import type { AgentCreateParams } from '@anthropic-ai/sdk/resources/beta/agents/agents';
 import type { EnvironmentCreateParams } from '@anthropic-ai/sdk/resources/beta/environments/environments';
-import type { BetaManagedAgentsSessionEvent } from '@anthropic-ai/sdk/resources/beta/sessions/events';
+import type { BetaManagedAgentsSessionEvent as SessionEvent } from '@anthropic-ai/sdk/resources/beta/sessions/events';
 import type {
   BetaManagedAgentsSessionUsage,
   SessionCreateParams,
@@ -27,37 +27,14 @@ import type { ProviderResponse } from '../../contracts/providers';
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
 import type { AnthropicBaseOptions } from './types';
 
-// The public October 2026 workflow API is newer than the pinned SDK's types, which
-// gain it in @anthropic-ai/sdk 0.133.0. Until that version is adopted this extension
-// stays local; request bodies are forwarded by the SDK unchanged.
-type AgentRoster = NonNullable<AgentCreateParams['multiagent']>['agents'];
-type AgentDelegation =
-  | { type: 'disabled' }
-  | {
-      type: 'enabled';
-      inline_agents?: { type: 'enabled' | 'disabled' };
-      predefined_agents?: AgentRoster;
-    };
-type AgentDefinition = Omit<AgentCreateParams, 'multiagent' | 'betas' | 'workspace_id'> & {
-  multiagent?:
-    | AgentCreateParams['multiagent']
-    | {
-        type: 'multiagent_20261001';
-        workflows?: AgentDelegation;
-        subagents?: AgentDelegation;
-        advisor?: { type: 'disabled' } | { type: 'enabled'; model: string };
-      };
-};
-type WorkflowEvent = {
+type WorkflowEvent = Extract<SessionEvent, { type: `workflow_run.${string}` }>;
+type WorkflowError = { type: string; message: string };
+type WorkflowRun = {
   id: string;
-  type: `workflow_run.${string}`;
-  workflow_run_id: string | null;
   name?: string;
-  result?: { type: string; error?: { type: string; message: string } };
-  error?: { type: string; message: string };
+  status: string;
+  result?: { type: string; error?: WorkflowError };
 };
-type WorkflowRun = { id: string; name?: string; status: string; result?: WorkflowEvent['result'] };
-type SessionEvent = BetaManagedAgentsSessionEvent | WorkflowEvent;
 
 class SessionState {
   output?: string;
@@ -72,21 +49,27 @@ class SessionState {
   /** The agent gave up on a turn, but an ending notice can still start another. */
   gaveUp = false;
   /** Workflow starts the server refused. No run exists for these to end. */
-  startErrors: { type: string; message: string }[] = [];
-  toolCalls: { id: string; name: string; input: unknown; output?: unknown; is_error?: boolean }[] =
-    [];
+  startErrors: WorkflowError[] = [];
+  toolCalls: { id: string; name: string; is_error?: boolean }[] = [];
+
+  constructor(private readonly secrets: ReadonlySet<string>) {}
+
+  // Hosted diagnostics can echo request credentials or contain additional private fields.
+  private safeError(error: WorkflowError): WorkflowError {
+    return { type: scrub(error.type, this.secrets), message: scrub(error.message, this.secrets) };
+  }
 
   recordWorkflow(event: WorkflowEvent): void {
     const id = event.workflow_run_id;
     if (!id) {
       if (event.type === 'workflow_run.error' && event.error) {
-        this.startErrors.push(event.error);
+        this.startErrors.push(this.safeError(event.error));
       }
       return;
     }
-    const run = this.runs.get(id) ?? { id, status: 'created' };
-    if (event.name) {
-      run.name = event.name;
+    const run = this.runs.get(id) ?? { id: scrub(id, this.secrets), status: 'created' };
+    if (event.type === 'workflow_run.created' && event.name) {
+      run.name = scrub(event.name, this.secrets);
     }
     if (
       ['workflow_run.created', 'workflow_run.status_running', 'workflow_run.status_idle'].includes(
@@ -98,7 +81,13 @@ class SessionState {
     } else if (event.type === 'workflow_run.status_ended') {
       this.openRuns.delete(id);
       run.status = 'ended';
-      run.result = event.result;
+      if (event.result) {
+        run.result = {
+          type: scrub(event.result.type, this.secrets),
+          ...(event.result.type === 'error' &&
+            event.result.error && { error: this.safeError(event.result.error) }),
+        };
+      }
       this.noticeOwed = true;
       // The answer is what the agent says once it has been told how the run ended.
       this.output = undefined;
@@ -131,7 +120,10 @@ class SessionState {
       case 'agent.tool_use':
       case 'agent.mcp_tool_use':
       case 'agent.custom_tool_use':
-        this.toolCalls.push({ id: event.id, name: event.name, input: event.input });
+        this.toolCalls.push({
+          id: scrub(event.id, this.secrets),
+          name: scrub(event.name, this.secrets),
+        });
         if (event.type === 'agent.custom_tool_use' || event.evaluated_permission === 'ask') {
           throw new Error(
             `Claude Managed Agents requires client action for tool event ${event.id}; custom tools and permission confirmations are not supported`,
@@ -142,9 +134,9 @@ class SessionState {
       case 'agent.mcp_tool_result': {
         const toolUseId =
           event.type === 'agent.mcp_tool_result' ? event.mcp_tool_use_id : event.tool_use_id;
-        const call = this.toolCalls.find((tool) => tool.id === toolUseId);
+        const id = scrub(toolUseId, this.secrets);
+        const call = this.toolCalls.find((tool) => tool.id === id);
         if (call) {
-          call.output = event.content;
           call.is_error = event.is_error ?? false;
         }
         break;
@@ -190,7 +182,6 @@ class SessionState {
       throw new Error('Claude Managed Agents event stream ended before the session completed');
     }
     // A failed run or a refused start explains a missing answer, so it is reported first.
-    // The server writes this error text itself; it carries no content from a run.
     const failedRun = [...this.runs.values()].find((run) => run.result?.type !== 'completed');
     if (failedRun) {
       const cause = failedRun.result?.error;
@@ -214,7 +205,7 @@ class SessionState {
 interface ManagedAgentsOptions extends AnthropicBaseOptions {
   agent_id?: string;
   agent_version?: number;
-  agent?: AgentDefinition;
+  agent?: Omit<AgentCreateParams, 'betas' | 'workspace_id'>;
   environment_id?: string;
   environment?: Omit<EnvironmentCreateParams, 'betas' | 'workspace_id'>;
   session?: Pick<SessionCreateParams, 'budget' | 'resources' | 'vault_ids' | 'metadata' | 'title'>;
@@ -331,6 +322,8 @@ function addSecret(found: Set<string>, value: string, minLength: number): void {
   for (const form of [value, value.trim()]) {
     if (form.length >= minLength) {
       found.add(form);
+      found.add(JSON.stringify(form).slice(1, -1));
+      found.add(encodeURIComponent(Buffer.from(form).toString()));
     }
   }
 }
@@ -397,7 +390,7 @@ function callSecrets(
       addSecret(secrets, candidate, isCredentialHeader(name, candidate) ? 4 : 8);
     }
   }
-  return secrets;
+  return new Set([...secrets].sort((a, b) => b.length - a.length));
 }
 
 /**
@@ -433,12 +426,12 @@ function mayHaveArrived(error: unknown): boolean {
 }
 
 /** Removes the credentials this call sent, then anything else shaped like one. */
-function scrub(text: string, secrets: Iterable<string>): string {
+function scrub(text: string, secrets: Iterable<string>, limit = 500): string {
   let scrubbed = text;
   for (const secret of secrets) {
-    scrubbed = scrubbed.split(secret).join('[REDACTED]');
+    scrubbed = scrubbed.replaceAll(secret, '[REDACTED]');
   }
-  return sanitizeBody(scrubbed).slice(0, 500);
+  return sanitizeBody(scrubbed).slice(0, limit);
 }
 
 /**
@@ -539,8 +532,7 @@ function applyUsage(response: ProviderResponse, usage?: BetaManagedAgentsSession
 }
 
 /**
- * The SDK's SSE allowlist drops workflow_run.* and session.usage events, so the raw
- * response is read here. Returns when the connection closes; a connection that fails
+ * Read named workflow and usage events with a bounded event size. A connection that fails
  * or closes part-way through an event throws StreamInterrupted.
  */
 async function* readEvents(response: Response, signal: AbortSignal): AsyncGenerator<SessionEvent> {
@@ -577,7 +569,7 @@ async function* readEvents(response: Response, signal: AbortSignal): AsyncGenera
         buffer = buffer.slice(newline.index + newline[0].length);
         if (line.startsWith('data:')) {
           const text = line.slice(5).replace(/^ /, '');
-          eventSize += text.length;
+          eventSize += Buffer.byteLength(text) + 1;
           data.push(text);
         } else if (line === '') {
           if (data.length) {
@@ -590,7 +582,7 @@ async function* readEvents(response: Response, signal: AbortSignal): AsyncGenera
           throw new Error('Claude Managed Agents stream event exceeds 16 MiB');
         }
       }
-      if (buffer.length + eventSize > 16 * 1024 * 1024) {
+      if (Buffer.byteLength(buffer) + eventSize > 16 * 1024 * 1024) {
         throw new Error('Claude Managed Agents stream event exceeds 16 MiB');
       }
       if (done) {
@@ -662,7 +654,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
     const signal = options?.abortSignal
       ? AbortSignal.any([controller.signal, options.abortSignal])
       : controller.signal;
-    const state = new SessionState();
+    const state = new SessionState(secrets);
     const metadata: Record<string, unknown> = { workflowRuns: [], toolCalls: state.toolCalls };
     const response: ProviderResponse = { metadata, cached: false };
     const { headers, betas: configBetas } = splitBetaHeader(config.headers);
@@ -774,8 +766,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
 
       await this.followSession(sessionId, stream, state, { params, read, signal });
       signal.throwIfAborted();
-      const output = state.finalOutput();
-      response.output = output;
+      response.output = scrub(state.finalOutput(), secrets, Infinity);
       // Authoritative totals include every workflow thread and hosted runtime cost.
       // Telemetry failure must not discard the answer, but the call's deadline and
       // cancellation cover this read like any other.
@@ -796,7 +787,7 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
         metadata.http = { status: error.status, ...(headers && { headers }) };
       }
       response.error = signal.aborted
-        ? abortReason(options?.abortSignal?.aborted === true, timeoutMs, state)
+        ? scrub(abortReason(options?.abortSignal?.aborted === true, timeoutMs, state), secrets)
         : describeError(error, secrets);
       // A 401, 403, or 404 aborts the eval before its result rows are shown.
       if (metadata.http && !signal.aborted && !this.loggedErrors.has(response.error)) {
@@ -808,11 +799,11 @@ export class AnthropicManagedAgentsProvider extends AnthropicGenericProvider {
       await stream?.body?.cancel().catch(() => {});
       controller.abort();
       metadata.workflowRuns = [...state.runs.values()];
-      metadata.openWorkflowRunIds = [...state.openRuns];
+      metadata.openWorkflowRunIds = [...state.openRuns].map((id) => scrub(id, secrets));
       if (state.startErrors.length) {
         metadata.workflowStartErrors = state.startErrors;
       }
-      metadata.stopReason = state.stopReason;
+      metadata.stopReason = state.stopReason && scrub(state.stopReason, secrets);
       const settledUsage = await this.cleanupResources(
         config,
         { params, headers, secrets },

@@ -1315,6 +1315,43 @@ describe('Claude Managed Agents', () => {
     },
   );
 
+  it.each(['start', 'end'])(
+    'removes credentials and private fields from workflow %s errors',
+    async (stage) => {
+      const token = 'private/credential+value';
+      const error = {
+        type: 'workflow_error',
+        message: `Failed ${token} ${encodeURIComponent(token)}`,
+        private: 'sensitive detail',
+      };
+      const f = setup({ config: { ...config, headers: { Authorization: `Bearer ${token}` } } }, [
+        ...(stage === 'start'
+          ? [{ type: 'workflow_run.error', workflow_run_id: null, error }]
+          : [
+              { type: 'workflow_run.created', workflow_run_id: 'run', name: token },
+              {
+                type: 'workflow_run.status_ended',
+                workflow_run_id: 'run',
+                result: { type: 'error', error, private: 'sensitive detail' },
+              },
+            ]),
+        message('partial'),
+        idle(),
+      ]);
+      const result = await f.provider.callApi('test');
+      expect(result.error).toContain('workflow_error');
+      for (const secret of [token, encodeURIComponent(token), 'sensitive detail']) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+      }
+    },
+  );
+
+  it('redacts credential echoes in answers without truncating normal output', async () => {
+    const text = 'word '.repeat(200);
+    const f = setup({}, [message(`${text}test-key`), idle()]);
+    expect((await f.provider.callApi('test')).output).toBe(`${text}[REDACTED]`);
+  });
+
   it('reports a workflow start the server refused, which leaves no run to wait for', async () => {
     const refusal = {
       type: 'max_workflow_runs_error',
@@ -1446,20 +1483,8 @@ describe('Claude Managed Agents', () => {
       idle(),
     ]);
     expect((await f.provider.callApi('test')).metadata?.toolCalls).toEqual([
-      {
-        id: 'bash',
-        name: 'bash',
-        input: { command: 'echo ok' },
-        output: [{ type: 'text', text: 'ok' }],
-        is_error: false,
-      },
-      {
-        id: 'mcp',
-        name: 'lookup',
-        input: {},
-        output: [{ type: 'text', text: 'found' }],
-        is_error: false,
-      },
+      { id: 'bash', name: 'bash', is_error: false },
+      { id: 'mcp', name: 'lookup', is_error: false },
     ]);
   });
 

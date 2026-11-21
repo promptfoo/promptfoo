@@ -5,6 +5,7 @@ import {
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { getGovCloudClaudePricing, selectBedrockTokenRates } from './pricing';
 import { isBedrockRuntimeMessagesModel } from './routing';
 import { BedrockTokenProvider } from './tokenProvider';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -22,7 +23,7 @@ const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set([
   'anthropic-version',
 ]);
 const BEDROCK_NATIVE_HOSTNAME =
-  /^(?:[a-z0-9-]+\.)?bedrock(?:-mantle|-runtime)?(?:-fips)?\.[a-z0-9-]+(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/;
+  /^(?:[a-z0-9-]+\.)?bedrock(?:-mantle|-runtime)?(?:-fips)?\.([a-z0-9-]+)(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/;
 
 function isConfiguredBedrockProxy(apiBaseUrl: string | undefined): boolean {
   if (!apiBaseUrl) {
@@ -56,8 +57,8 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
       typeof config.extra_body?.model === 'string' ? config.extra_body.model : this.modelName;
     let endpointRegion: string | undefined;
     try {
-      endpointRegion = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(
-        new URL(this.getApiBaseUrl() ?? '').hostname,
+      endpointRegion = BEDROCK_NATIVE_HOSTNAME.exec(
+        new URL(this.getApiBaseUrl() ?? '').hostname.replace(/\.+$/, ''),
       )?.[1];
     } catch {
       // Opaque provisioned endpoints retain the factory's resolved billing region.
@@ -65,19 +66,31 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
     const region =
       endpointRegion ??
       resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION);
-    const usesGovCloudOpusPricing =
-      modelName === 'anthropic.claude-opus-4-8' &&
-      (region === 'us-gov-west-1' || region === 'us-gov-east-1');
-    // AWS publishes these GovCloud rates directly. Selecting them at billing time
-    // preserves prompt-level flat overrides and avoids the commercial 1.1 premium.
-    const pricingConfig =
-      usesGovCloudOpusPricing && config.cost == null
-        ? {
-            ...config,
-            inputCost: config.inputCost ?? 6 / 1e6,
-            outputCost: config.outputCost ?? 30 / 1e6,
-          }
-        : config;
+    // The Haiku 4.5 model card lists Mantle in GovCloud West, but the AWS pricing table
+    // does not publish a corresponding Standard rate. Accept a complete explicit estimate.
+    if (
+      modelName === 'anthropic.claude-haiku-4-5' &&
+      region.startsWith('us-gov-') &&
+      config.cost == null &&
+      (config.inputCost == null || config.outputCost == null)
+    ) {
+      return undefined;
+    }
+    const regionalPricing = getGovCloudClaudePricing(modelName, region);
+    if (!regionalPricing || config.cost != null) {
+      return super.calculateMessageCost(config, message, modelName);
+    }
+    const usage = message.usage;
+    const totalInput =
+      (usage?.input_tokens ?? 0) +
+      (usage?.cache_read_input_tokens ?? 0) +
+      (usage?.cache_creation_input_tokens ?? 0);
+    const rates = selectBedrockTokenRates(modelName, regionalPricing, totalInput);
+    const pricingConfig = {
+      ...config,
+      inputCost: config.inputCost ?? rates.input / 1e6,
+      outputCost: config.outputCost ?? rates.output / 1e6,
+    };
     return super.calculateMessageCost(pricingConfig, message, modelName);
   }
 
@@ -121,12 +134,14 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   }
 
   getApiBaseUrl(): string {
+    const region = resolveBedrockMantleRegion(
+      this.config,
+      this.env,
+      DEFAULT_BEDROCK_ANTHROPIC_REGION,
+    );
     return (
       this.config.apiBaseUrl ||
-      getBedrockAnthropicBaseUrl(
-        resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION),
-        isBedrockRuntimeMessagesModel(this.modelName),
-      )
+      getBedrockAnthropicBaseUrl(region, isBedrockRuntimeMessagesModel(this.modelName, region))
     );
   }
 
@@ -186,11 +201,30 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  // AWS's Fable 5.1 model card lists Mantle only in GovCloud West. Commercial
+  if (
+    !config.apiBaseUrl &&
+    region === 'us-gov-east-1' &&
+    [
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-opus-5-5',
+      'anthropic.claude-sonnet-5-5',
+    ].includes(modelName)
+  ) {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" uses Mantle only in us-gov-west-1 within GovCloud. ` +
+        `For GovCloud East, use "bedrock:messages:us-gov.${modelName}" with the Runtime Messages endpoint.`,
+    );
+  }
+
+  // These model cards list Mantle only in GovCloud West. Commercial
   // regions use the Runtime Messages endpoint with a US or global inference profile.
   if (
     !config.apiBaseUrl &&
-    modelName === 'anthropic.claude-fable-5-1' &&
+    [
+      'anthropic.claude-fable-5-1',
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-sonnet-5-5',
+    ].includes(modelName) &&
     region !== 'us-gov-west-1'
   ) {
     throw new Error(
@@ -225,7 +259,7 @@ export function createBedrockAnthropicMessagesProvider(
 
   const apiBaseUrl =
     config.apiBaseUrl ||
-    getBedrockAnthropicBaseUrl(region, isBedrockRuntimeMessagesModel(modelName));
+    getBedrockAnthropicBaseUrl(region, isBedrockRuntimeMessagesModel(modelName, region));
 
   const resolvedConfig = { ...config, region, apiBaseUrl };
   return new BedrockAnthropicMessagesProvider(modelName, {

@@ -21,9 +21,14 @@ vi.mock('natural', () => ({
   },
 }));
 
-function score(outputString: string, renderedValue: string | string[], inverse = false) {
+function score(
+  outputString: string,
+  renderedValue: string | string[],
+  inverse = false,
+  parameters: { threshold?: number; alpha?: number; beta?: number; gamma?: number } = {},
+) {
   return handleMeteorAssertion({
-    assertion: { type: 'meteor', threshold: 0.5 },
+    assertion: { type: 'meteor', threshold: 0.5, ...parameters },
     outputString,
     renderedValue,
     inverse,
@@ -76,4 +81,34 @@ describe('METEOR matching with the real handler', () => {
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('METEOR assertion passed');
   });
+
+  it.each([
+    { parameters: {}, expected: 75 / 116 },
+    { parameters: { alpha: 0 }, expected: 15 / 16 },
+    { parameters: { beta: 0 }, expected: 10 / 29 },
+    { parameters: { gamma: 0 }, expected: 20 / 29 },
+    { parameters: { alpha: 0.25, beta: 2, gamma: 0.4 }, expected: 0.8 },
+  ])('applies numeric scoring parameters $parameters', async ({ parameters, expected }) => {
+    // Two consecutive matches: precision 1, recall 2/3, fragmentation 1/2.
+    const result = await score('cat dog', 'cat dog bird', false, parameters);
+
+    expect(result.score).toBeCloseTo(expected, 12);
+  });
+
+  it.each([false, true])('handles threshold equality with inverse=%s', async (inverse) => {
+    // A single exact match has F-mean 1 and fragmentation penalty 1/2.
+    const result = await score('cat', 'cat', inverse);
+
+    expect(result.score).toBe(0.5);
+    expect(result.pass).toBe(!inverse);
+  });
+
+  it.each([{ value: null }, { value: 42 }, { value: {} }, { value: ['cat', 42] }])(
+    'rejects non-string reference values: $value',
+    async ({ value }) => {
+      await expect(score('cat', value as string)).rejects.toThrow(
+        '"meteor" assertion must have a string or array of strings value',
+      );
+    },
+  );
 });
