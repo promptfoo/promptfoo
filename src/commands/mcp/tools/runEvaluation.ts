@@ -14,28 +14,7 @@ import type { Command } from 'commander';
 import type { CommandLineOptions } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
-/**
- * Run an eval from a promptfoo config with optional test case filtering
- *
- * Use this tool to:
- * - Test specific test cases from a promptfoo configuration
- * - Debug individual test scenarios without running full evals
- * - Validate changes to prompts, providers, or assertions quickly
- * - Run targeted evals during development and testing
- *
- * Features:
- * - Load any promptfoo configuration file
- * - Select specific test cases by index or range
- * - Filter by specific prompts and/or providers
- * - Run full eval pipeline with all assertions and scoring
- * - Return detailed results with metrics and grading information
- *
- * Perfect for:
- * - Debugging failing test cases
- * - Testing prompt variations quickly
- * - Validating assertion configurations
- * - Development iteration and experimentation
- */
+/** Run a config with optional test, prompt, and provider filters. */
 export function registerRunEvaluationTool(server: McpServer) {
   server.tool(
     'run_evaluation',
@@ -52,11 +31,11 @@ export function registerRunEvaluationTool(server: McpServer) {
         ),
       testCaseIndices: z
         .union([
-          z.number(),
-          z.array(z.number()),
+          z.number().int().nonnegative(),
+          z.array(z.number().int().nonnegative()).min(1),
           z.object({
-            start: z.number().describe('Start index (inclusive)'),
-            end: z.number().describe('End index (exclusive)'),
+            start: z.number().int().nonnegative().describe('Start index (inclusive)'),
+            end: z.number().int().nonnegative().describe('End index (exclusive)'),
           }),
         ])
         .optional()
@@ -70,7 +49,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           `,
         ),
       promptFilter: z
-        .union([z.string(), z.array(z.string())])
+        .union([z.string(), z.array(z.string()).min(1)])
         .optional()
         .describe(
           dedent`
@@ -79,7 +58,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           `,
         ),
       providerFilter: z
-        .union([z.string(), z.array(z.string())])
+        .union([z.string(), z.array(z.string()).min(1)])
         .optional()
         .describe(
           dedent`
@@ -89,6 +68,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         ),
       maxConcurrency: z
         .number()
+        .int()
         .min(1)
         .max(20)
         .optional()
@@ -98,9 +78,10 @@ export function registerRunEvaluationTool(server: McpServer) {
         .min(1000)
         .max(300000)
         .optional()
-        .describe('Timeout per eval in milliseconds (1s-5min, default: 30s)'),
+        .describe('Timeout per test in milliseconds (1s-5min, default: 30s)'),
       repeat: z
         .number()
+        .int()
         .min(1)
         .max(10)
         .optional()
@@ -111,12 +92,14 @@ export function registerRunEvaluationTool(server: McpServer) {
       share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
       resultLimit: z
         .number()
+        .int()
         .min(1)
         .max(100)
         .optional()
         .describe('Maximum number of results to return (1-100, default: 20)'),
       resultOffset: z
         .number()
+        .int()
         .min(0)
         .optional()
         .describe('Number of results to skip for pagination (default: 0)'),
@@ -412,6 +395,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           // Prepare evaluate options
           const evaluateOptions: InternalEvaluateOptions = {
             maxConcurrency,
+            timeoutMs,
             eventSource: 'mcp',
             showProgressBar: false, // Disable for MCP usage
           };

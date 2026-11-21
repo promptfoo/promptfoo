@@ -318,6 +318,7 @@ async function doEvalWithEnv(
   envFileOverrides: EnvOverrides | undefined,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
+  const callerTimeoutMs = evaluateOptions.timeoutMs;
   const inputCommand = cmdObj;
   const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
 
@@ -611,6 +612,7 @@ async function doEvalWithEnv(
       evaluateOptions = {
         ...evaluateOptions,
         ...config.evaluateOptions,
+        timeoutMs: callerTimeoutMs ?? config.evaluateOptions.timeoutMs,
         eventSource: evaluateOptions.eventSource,
         generationEventId: evaluateOptions.generationEventId,
         generationTokenUsage: evaluateOptions.generationTokenUsage,

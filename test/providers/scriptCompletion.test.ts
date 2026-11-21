@@ -191,6 +191,37 @@ describe('ScriptCompletionProvider', () => {
     expect(provider.id()).toBe('exec:node script.js');
   });
 
+  it('never launches a child for an expired row', async () => {
+    const signal = AbortSignal.abort();
+    await expect(provider.callApi('test', undefined, { abortSignal: signal })).rejects.toBe(
+      signal.reason,
+    );
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('terminates the direct exec child when the row expires', async () => {
+    const actual = await vi.importActual<typeof import('child_process')>('child_process');
+    vi.mocked(execFile).mockImplementationOnce(actual.execFile);
+    const slow = new ScriptCompletionProvider(
+      `"${process.execPath}" -e "setTimeout(() => {}, 30000)" --`,
+    );
+    const controller = new AbortController();
+    const pending = slow.callApi('test', undefined, { abortSignal: controller.signal });
+    const child = vi.mocked(execFile).mock.results[0].value;
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    controller.abort();
+    try {
+      expect(child.killed).toBe(true);
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await closed;
+    } finally {
+      if (!child.killed) {
+        child.kill('SIGKILL');
+      }
+      await Promise.allSettled([pending, closed]);
+    }
+  });
+
   it('passes file defaults to the child without changing the host environment', async () => {
     const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, options, callback) {
