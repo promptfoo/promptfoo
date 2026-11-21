@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -6,6 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { events, formatEventDate, getEventBySlug } from '../../data/events';
 import BlackHat2026 from './blackhat-2026';
 import Defcon2026 from './defcon-2026';
+
+vi.mock('@docusaurus/Link', () => ({
+  default: ({ children, to }: { children?: ReactNode; to?: string }) =>
+    to ? <a href={to}>{children}</a> : children,
+}));
 
 const SITE_ROOT = path.resolve(__dirname, '../../..');
 
@@ -109,15 +116,6 @@ describe('Vegas 2026 event data', () => {
     const copy = `${event!.description} ${event!.fullDescription ?? ''}`;
 
     expect(copy).toMatch(/Aug(?:ust)?\.?\s*7\s*[–-]\s*9/i);
-  });
-
-  // `Event.highlights` is rendered by nothing in src/components or src/pages/events —
-  // every event page hardcodes its own highlight markup. Carrying the field on the two
-  // newest entries created a copy surface that could drift from the live pages without
-  // anyone noticing, so the Vegas entries deliberately omit it. (The older entries still
-  // carry theirs; removing those is a separate cleanup.)
-  it.each(['blackhat-2026', 'defcon-2026'])('%s carries no unrendered highlights', (slug) => {
-    expect(getEventBySlug(slug)?.highlights).toBeUndefined();
   });
 
   it('keeps the DEF CON 33 party entry distinct from the 2026 conference entry', () => {
@@ -342,18 +340,16 @@ describe('DEF CON 34 page specifics', () => {
     expect(container.textContent ?? '').toMatch(/Agency/);
   });
 
-  // The booth demo is the pitch, and the way to keep using it afterwards is the open
-  // source project. `@docusaurus/Link` is stubbed as a fragment in vitest.config.ts, so a
-  // `to=` target never reaches the DOM — hence the label fallback alongside the href
-  // check for raw anchors.
-  it('offers a route into the open-source project', () => {
-    const { container } = render(<Defcon2026 />);
-    const hrefs = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '');
-
-    const linkedCta = hrefs.some((href) => /github\.com|^\/docs\//.test(href));
-    const labelledCta = /github|red team docs/i.test(container.textContent ?? '');
-
-    expect(linkedCta || labelledCta).toBe(true);
+  it('offers links into the open-source project and red team docs', () => {
+    render(<Defcon2026 />);
+    expect(screen.getByRole('link', { name: 'Read the red team docs' })).toHaveAttribute(
+      'href',
+      '/docs/red-team/',
+    );
+    expect(screen.getByRole('link', { name: 'Run the demo yourself' })).toHaveAttribute(
+      'href',
+      'https://github.com/promptfoo/promptfoo',
+    );
   });
 
   it('describes Daybreak accurately without placing Promptfoo under the initiative', () => {

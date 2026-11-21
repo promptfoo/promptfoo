@@ -43,7 +43,7 @@ redteam:
     - id: coding-agent:core
 ```
 
-Use the full collection for comprehensive coverage across all coding-agent plugin IDs:
+Use the full collection to run all coding-agent plugin IDs:
 
 ```yaml
 redteam:

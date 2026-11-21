@@ -2,6 +2,25 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.2.3](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.2...code-scan-action-0.2.3) (2026-11-18)
+
+### Bug Fixes
+
+- **code-scan:** upgrade the filesystem MCP server to 2.3.0 ([#12185](https://github.com/promptfoo/promptfoo/issues/12185)) ([9e66910](https://github.com/promptfoo/promptfoo/commit/9e66910303f288c88bb49a8ce227b96789ab9400))
+- **deps:** upgrade Undici in the CLI and scan action ([#12437](https://github.com/promptfoo/promptfoo/issues/12437)) ([f12d114](https://github.com/promptfoo/promptfoo/commit/f12d1144af0678ce5f88f39a439f4b89378ec5fd))
+
+## [0.2.2](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.1...code-scan-action-0.2.2) (2026-10-08)
+
+### Bug Fixes
+
+- **code-scan:** mint OIDC after CLI installation ([#11467](https://github.com/promptfoo/promptfoo/issues/11467)) ([9a404c8](https://github.com/promptfoo/promptfoo/commit/9a404c8ea96e6e8f854964b9224667e704cd405d))
+
+## [0.2.1](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.0...code-scan-action-0.2.1) (2026-10-06)
+
+### Bug Fixes
+
+- **deps:** update type definitions ([#11010](https://github.com/promptfoo/promptfoo/issues/11010)) ([8174e60](https://github.com/promptfoo/promptfoo/commit/8174e6017902ffbd5ee8692db8caa24c437864e1))
+
 ## [0.2.0](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.8...code-scan-action-0.2.0) (2026-08-28)
 
 ### ⚠ BREAKING CHANGES
