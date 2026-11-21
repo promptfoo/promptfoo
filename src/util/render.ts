@@ -155,20 +155,23 @@ function mapObjectValues(
   return Object.fromEntries(entries);
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
+export function renderVarsInObject<T>(
+  obj: T,
+  vars?: Record<string, VarValue>,
+  engine?: ReturnType<typeof getNunjucksEngine>,
+): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
   if (typeof obj === 'string') {
-    const nunjucksEngine = getNunjucksEngine();
-    return nunjucksEngine.renderString(obj, vars) as unknown as T;
+    return (engine ?? getNunjucksEngine()).renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
+    return obj.map((item) => renderVarsInObject(item, vars, engine)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
-    return mapObjectValues(obj, (_key, value) => renderVarsInObject(value, vars)) as T;
+    return mapObjectValues(obj, (_key, value) => renderVarsInObject(value, vars, engine)) as T;
   } else if (typeof obj === 'function') {
     const fn = obj as Function;
     return renderVarsInObject(fn({ vars }) as T);
