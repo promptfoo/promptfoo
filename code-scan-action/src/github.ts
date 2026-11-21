@@ -43,8 +43,8 @@ export async function getGitHubContext(token: string): Promise<PullRequestContex
       );
     }
 
-    const prNumber = parseInt(prNumberInput, 10);
-    if (isNaN(prNumber)) {
+    const prNumber = Number(prNumberInput);
+    if (!/^[1-9]\d*$/.test(prNumberInput) || !Number.isSafeInteger(prNumber)) {
       throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
     }
 
@@ -131,7 +131,7 @@ async function getPRDiffRanges(
 export async function assertCurrentPRHead(
   octokit: Pick<ReturnType<typeof github.getOctokit>['rest'], 'pulls'>,
   context: PullRequestContext,
-): Promise<void> {
+): Promise<string> {
   const { data: pr } = await octokit.pulls.get({
     owner: context.owner,
     repo: context.repo,
@@ -142,6 +142,7 @@ export async function assertCurrentPRHead(
       'Pull request head changed after scan: ' + context.sha + ' -> ' + pr.head.sha,
     );
   }
+  return pr.base.sha;
 }
 
 // Keep exact finding locations. Out-of-diff findings become general comments instead

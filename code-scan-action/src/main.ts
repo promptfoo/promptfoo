@@ -106,35 +106,18 @@ function createSubprocessEnv(): Record<string, string> {
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
 
-  // A PR-controlled step running earlier in the workflow can persist
-  // NODE_OPTIONS=--require=/path/to/payload.cjs via $GITHUB_ENV; Node preloads that
-  // module into every child node process — npm during the install and promptfoo during
-  // the scan (when the OIDC token / API key are in scope). Strip it from all
-  // subprocesses; the action does not rely on caller-provided NODE_OPTIONS.
-  delete env.NODE_OPTIONS;
+  // Earlier steps can persist Git and module-loader settings through GITHUB_ENV.
+  for (const name of Object.keys(env)) {
+    if (/^(?:LD_|DYLD_|GIT_|NODE_OPTIONS$|NODE_PATH$|BASH_ENV$|ENV$)/i.test(name)) {
+      delete env[name];
+    }
+  }
 
   for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
     delete env[key];
   }
 
   return env;
-}
-
-async function getBaseBranch(githubToken: string, context: PullRequestContext): Promise<string> {
-  if (process.env.GITHUB_BASE_REF) {
-    return process.env.GITHUB_BASE_REF;
-  }
-
-  // For workflow_dispatch, fetch PR details to get actual base branch
-  core.info('📥 Fetching PR details to determine base branch...');
-  const { data: pr } = await github.getOctokit(githubToken).rest.pulls.get({
-    owner: context.owner,
-    repo: context.repo,
-    pull_number: context.number,
-  });
-
-  core.info(`✅ PR targets base branch: ${pr.base.ref}`);
-  return pr.base.ref;
 }
 
 function createMockScanResponse(): ScanResponse {
@@ -221,6 +204,7 @@ async function installPromptfooCli(promptfooVersion: string, installDir: string)
   const env = createSubprocessEnv();
   // The isolated install always uses the public registry; inherited private-registry
   // credentials are unnecessary here but remain available to the scanner's nested npx.
+  delete env.PROMPTFOO_API_KEY;
   delete env.NODE_AUTH_TOKEN;
   delete env.NPM_TOKEN;
   for (const key of Object.keys(env)) {
@@ -546,61 +530,20 @@ async function getGitHubOIDCToken(): Promise<string> {
   }
 }
 
-function getGitCommand(): string {
-  const gitPath = resolveSafePathExecutables(
-    process.platform === 'win32' ? ['git.exe'] : ['git'],
-  ).next().value?.executable;
-  if (!gitPath) {
-    throw new Error('Git not found outside the checkout; install Git and add it to PATH');
-  }
-  return `"${gitPath}"`;
-}
-
-function createGitEnv(): Record<string, string> {
-  const env = createSubprocessEnv();
-  // Keep helper selection, repository selection, and configuration local to this invocation.
-  for (const key of Object.keys(env)) {
-    if (key.toUpperCase().startsWith('GIT_')) {
-      delete env[key];
-    }
-  }
-  return {
-    ...env,
-    // Git for Windows recognizes its POSIX null path, not Node's device namespace.
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_TERMINAL_PROMPT: '0',
-  };
-}
-
-async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
-  core.info(`📥 Fetching base branch: ${baseBranch}...`);
-
-  try {
-    const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
-    await exec.exec(getGitCommand(), ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
-      env: {
-        ...createGitEnv(),
-        GIT_CONFIG_COUNT: '3',
-        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_0: '',
-        GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${basicAuth}`,
-        GIT_CONFIG_KEY_2: 'core.hooksPath',
-        GIT_CONFIG_VALUE_2: '/dev/null',
-      },
-    });
-    core.info(`✅ Base branch ${baseBranch} fetched successfully`);
-  } catch (error) {
-    core.warning(`Failed to fetch base branch ${baseBranch}: ${formatError(error)}`);
-    core.warning('Git diff may fail if base branch is not available');
-  }
-}
+// Checkout supplies the full history. Never give Git a token, fetch from a
+// mutable origin or resolve Git through a previous step's GITHUB_PATH.
+const git = process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git';
+const gitEnv = {
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_NO_REPLACE_OBJECTS: '1',
+  GIT_TERMINAL_PROMPT: '0',
+};
 
 async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
   let output = '';
-  const exitCode = await exec.exec(getGitCommand(), ['rev-parse', 'HEAD'], {
-    env: createGitEnv(),
+  const exitCode = await exec.exec(`"${git}"`, ['rev-parse', 'HEAD'], {
+    env: gitEnv,
     listeners: {
       stdout: (data: Buffer) => {
         output += data.toString();
@@ -832,6 +775,9 @@ async function handleScanResponse(
   // Skipped scans can still have findings to post, but cannot produce a complete SARIF run.
   if (skipReason && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
+    if (inputs.sarifOutputPath) {
+      throw new Error('SARIF was requested but withheld because the scanner skipped the run.');
+    }
     return;
   }
 
@@ -996,8 +942,12 @@ async function runCodeScan(): Promise<void> {
   }
 
   try {
-    const baseBranch = await getBaseBranch(inputs.githubToken, context);
-    await fetchBaseBranch(baseBranch, inputs.githubToken);
+    const api = github.getOctokit(inputs.githubToken).rest;
+    const baseSha = await assertCurrentPRHead(api, context);
+    if (!/^[a-f0-9]{40}$/i.test(baseSha)) {
+      throw new Error('GitHub returned an invalid base commit for the pull request');
+    }
+    core.info(`Comparing with ${baseSha}. Checkout must include the base commit (fetch-depth: 0).`);
 
     const apiHost = inputs.apiHost;
     const cliArgs = [
@@ -1008,7 +958,7 @@ async function runCodeScan(): Promise<void> {
       '--config',
       finalConfigPath,
       '--base',
-      baseBranch,
+      baseSha,
       '--compare',
       'HEAD',
       '--json',
@@ -1029,7 +979,9 @@ async function runCodeScan(): Promise<void> {
 
         let scanOutput = '';
         let scanError = '';
-        const scanEnv = createSubprocessEnv();
+        const scanEnv = Object.assign(createSubprocessEnv(), gitEnv, {
+          PATH: [path.dirname(git), path.dirname(process.execPath)].join(path.delimiter),
+        });
         if (oidcToken) {
           scanEnv.GITHUB_OIDC_TOKEN = oidcToken;
         }
@@ -1084,6 +1036,9 @@ async function runCodeScan(): Promise<void> {
       : runPromptfooScan());
 
     await assertWorkspaceHead(context);
+    if ((await assertCurrentPRHead(api, context)) !== baseSha) {
+      throw new Error('Pull request base changed during the scan. Run the scan again.');
+    }
     await handleScanResponse(scanResponse, inputs, context);
     const comments = scanResponse.comments;
     if (process.env.ACT === 'true' && comments.length !== 0) {

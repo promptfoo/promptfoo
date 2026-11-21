@@ -327,7 +327,7 @@ function setupMocks() {
     },
   });
 
-  mocks.actionGithub.assertCurrentPRHead.mockResolvedValue(undefined);
+  mocks.actionGithub.assertCurrentPRHead.mockResolvedValue('b'.repeat(40));
   mocks.actionGithub.getGitHubContext.mockResolvedValue({
     owner: 'test-owner',
     repo: 'test-repo',
@@ -533,59 +533,19 @@ describe('code-scan-action main', () => {
   });
 
   describe('CLI args construction', () => {
-    it('should pass --base with GITHUB_BASE_REF when set', async () => {
-      mockProcessEnv({ GITHUB_BASE_REF: 'feat/my-feature-branch' });
-
-      const { args } = await importActionAndGetPromptfooCall();
-
-      expectCliArg(args, '--base', 'feat/my-feature-branch');
-    });
-
-    it('should pass --base with "main" when GITHUB_BASE_REF is not set', async () => {
-      mockProcessEnv({ GITHUB_BASE_REF: undefined });
-
-      const { args } = await importActionAndGetPromptfooCall();
-
-      expectCliArg(args, '--base', 'main');
-    });
-
-    it('should pass --base for stacked PR base branches', async () => {
-      mockProcessEnv({ GITHUB_BASE_REF: 'feat/openai-sora-video-provider' });
-
-      const { args } = await importActionAndGetPromptfooCall();
-
-      expectCliArg(args, '--base', 'feat/openai-sora-video-provider');
-      const fetchCall = mocks.exec.exec.mock.calls.find(
-        ([, callArgs]) => callArgs?.[0] === 'fetch',
-      );
-      expect(fetchCall?.[0]).toMatch(/git(?:\.exe)?"$/);
-      expect(fetchCall?.[2]?.env).toMatchObject({
-        GIT_CONFIG_COUNT: '3',
-        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_0: '',
-        GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${Buffer.from('x-access-token:fake-token').toString('base64')}`,
-        GIT_CONFIG_KEY_2: 'core.hooksPath',
-        GIT_CONFIG_VALUE_2: '/dev/null',
+    it('uses the live base SHA without handing credentials to a Git fetch', async () => {
+      mockProcessEnv({
+        GITHUB_BASE_REF: 'feature/stale',
+        PATH: path.resolve('/runner-temp/untrusted'),
+        LD_PRELOAD: '/runner-temp/loader',
+        NODE_PATH: '/runner-temp/modules',
       });
-    });
-
-    it('resolves a Git installation outside the checkout through PATH', async () => {
-      const workspace = path.resolve('/test/workspace');
-      const localBin = path.join(workspace, 'bin');
-      const redirectedBin = path.resolve('/test/redirected-bin');
-      const systemBin = path.resolve('/test/Portable Git/bin');
-      const executable = process.platform === 'win32' ? 'git.exe' : 'git';
-      mockProcessEnv({ PATH: [localBin, redirectedBin, systemBin].join(path.delimiter) });
-      mocks.fs.realpathSync.mockImplementation((candidate: string) =>
-        candidate.startsWith(redirectedBin)
-          ? candidate.replace(redirectedBin, localBin)
-          : candidate,
-      );
-      await importActionAndGetPromptfooCall();
-      const fetchCall = mocks.exec.exec.mock.calls.find(([, args]) => args?.[0] === 'fetch');
-      expect(fetchCall?.[0]).toBe(`"${path.join(systemBin, executable)}"`);
-      expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(path.join(localBin, executable));
+      const { args, options } = await importActionAndGetPromptfooCall();
+      expectCliArg(args, '--base', 'b'.repeat(40));
+      expect(mocks.exec.exec.mock.calls.some(([, argv]) => argv?.[0] === 'fetch')).toBe(false);
+      expect(options?.env?.PATH).not.toContain('untrusted');
+      expect(options?.env?.LD_PRELOAD).toBeUndefined();
+      expect(options?.env?.NODE_PATH).toBeUndefined();
     });
 
     it('isolates every Git subprocess from inherited credentials and Git overrides', async () => {
@@ -641,7 +601,7 @@ describe('code-scan-action main', () => {
 
       const { args } = await importActionAndGetPromptfooCall();
 
-      expectCliArg(args, '--base', base);
+      expectCliArg(args, '--base', 'b'.repeat(40));
       expectCliArg(args, '--config', configPath);
       expectCliArg(args, '--api-host', apiHost);
       expect(args).not.toContain('echo');
@@ -1529,43 +1489,6 @@ describe('code-scan-action main', () => {
       expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
     });
 
-    it('does not write SARIF when the scanner returns a skipReason without completing a scan', async () => {
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (emitWorkspaceHead(command, args, options)) {
-            return 0;
-          }
-          if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
-            options.listeners.stdout(
-              Buffer.from(
-                JSON.stringify({
-                  success: true,
-                  comments: [],
-                  skipReason: 'Fork PR scanning requires maintainer approval.',
-                }),
-              ),
-            );
-          }
-          return 0;
-        },
-      );
-
-      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
-
-      await vi.waitFor(() => {
-        expect(mocks.core.info).toHaveBeenCalledWith(
-          '🔀 Scan skipped: Fork PR scanning requires maintainer approval.',
-        );
-      });
-
-      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
-      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
-    });
-
     it.each([undefined, null, -1, '0'])(
       'withholds SARIF when skippedFiles is %s',
       async (skippedFiles) => {
@@ -1860,6 +1783,48 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
+    it('fails when the scanner skips a requested SARIF run', async () => {
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [],
+        skipReason: 'Authorization required',
+      });
+      await triggerSarifAction('report.sarif');
+      await vi.waitFor(() =>
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('SARIF was requested'),
+        ),
+      );
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalled();
+    });
+
+    it.each(['base', 'head'])(
+      'withholds SARIF if the live PR %s changes before publication',
+      async (ref) => {
+        const check = mocks.actionGithub.assertCurrentPRHead.mockResolvedValueOnce('b'.repeat(40));
+        if (ref === 'head') {
+          check.mockRejectedValueOnce(new Error('Pull request head changed'));
+        } else {
+          check.mockResolvedValueOnce('c'.repeat(40));
+        }
+        mockPromptfooScanResponse({
+          success: true,
+          comments: [],
+          skippedFiles: 0,
+          commentsPosted: true,
+        });
+        await triggerSarifAction('report.sarif');
+        await vi.waitFor(() =>
+          expect(mocks.core.setFailed).toHaveBeenCalledWith(
+            expect.stringContaining(`Pull request ${ref} changed`),
+          ),
+        );
+        expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+        expect(mocks.core.setOutput).not.toHaveBeenCalled();
+      },
+    );
+
     it('does not write SARIF when a setup PR is skipped', async () => {
       mocks.actionGithub.getPRFiles.mockResolvedValue([
         {
@@ -2013,7 +1978,10 @@ describe('code-scan-action main', () => {
       async (message) => {
         const { createComment, createReview } = mockFallbackPosting();
         createReview.mockRejectedValue(new Error('GitHub API: 422 Unprocessable Entity'));
-        mocks.actionGithub.assertCurrentPRHead.mockRejectedValue(new Error(message));
+        mocks.actionGithub.assertCurrentPRHead
+          .mockResolvedValueOnce('b'.repeat(40))
+          .mockResolvedValueOnce('b'.repeat(40))
+          .mockRejectedValue(new Error(message));
         mockPromptfooScanResponse({
           success: true,
           comments: [{ file: 'src/handler.ts', line: 12, finding: 'Finding on scanned commit' }],

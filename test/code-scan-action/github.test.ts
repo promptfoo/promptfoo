@@ -103,7 +103,9 @@ describe('GitHub API Client', () => {
       },
     };
     mocks.pulls.get.mockImplementation(async (options) => ({
-      data: options?.mediaType ? mockDiff : { head: { sha: 'abc123' } },
+      data: options?.mediaType
+        ? mockDiff
+        : { head: { sha: 'abc123' }, base: { sha: 'b'.repeat(40) } },
     }));
     mocks.github.getOctokit.mockReturnValue({
       rest: { pulls: mocks.pulls },
@@ -335,7 +337,7 @@ describe('GitHub API Client', () => {
         if (options?.mediaType) {
           throw new Error('Unavailable');
         }
-        return { data: { head: { sha: 'abc123' } } };
+        return { data: { head: { sha: 'abc123' }, base: { sha: 'b'.repeat(40) } } };
       });
       const comment = { file: 'src/auth.ts', line: 43, finding: 'Finding' };
 
@@ -364,7 +366,9 @@ diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
 +new
 `;
       mocks.pulls.get.mockImplementation(async (options) => ({
-        data: options?.mediaType ? diff : { head: { sha: 'abc123' } },
+        data: options?.mediaType
+          ? diff
+          : { head: { sha: 'abc123' }, base: { sha: 'b'.repeat(40) } },
       }));
 
       const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [

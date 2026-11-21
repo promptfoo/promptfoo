@@ -25,6 +25,8 @@ Without `config-path`, the action generates scan policy from `min-severity`, `di
 
 Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
+Run the action in a clean job on a trusted runner before any pull request code executes. Check out the pull request head with `fetch-depth: 0` and `persist-credentials: false`. The action uses the base commit reported by GitHub. It never fetches through a credentialed Git remote. Git must be installed at `/usr/bin/git` on Linux or macOS, or in the default Git for Windows location. If the pull request changes during the scan, the action fails before writing SARIF or posting fallback comments.
+
 The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
 
 The action runs the scanner with its bundled Node.js 24 runtime. For workflow steps that install and run Promptfoo directly, use Node.js 24 or later for full-repository scans. Diff-only scans also support Node.js 22.22 or later. Configure the runtime before installing Promptfoo:
@@ -53,7 +55,7 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 ## SARIF Output
 
 Grant `contents: read` and `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
-The action sets `sarif-path` only when the scanner reports `skippedFiles: 0`. It withholds SARIF and fails when files were skipped or an older CLI omits the count. PR comment reporting still works. Keep the upload step conditional:
+The action sets `sarif-path` only when the scanner reports `skippedFiles: 0`. It withholds SARIF and fails when the scanner skips the run, skips files, or omits the count. PR comment reporting still works. Keep the upload step conditional:
 
 ```yaml
 - name: Run Promptfoo Code Scan
