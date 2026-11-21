@@ -581,9 +581,8 @@ export abstract class RedteamGraderBase {
         : undefined;
     const hasConfiguredGradingProvider = Boolean(
       cliState.config?.redteam?.provider ||
-        defaultTest?.provider ||
         defaultTest?.options?.provider ||
-        (inputImage && test.options?.provider),
+        (inputImage && (test.options?.provider || defaultTest?.provider)),
     );
     if (inputImage && !hasConfiguredGradingProvider) {
       throw new Error('Configure a multimodal grading provider before grading a safe input image.');
