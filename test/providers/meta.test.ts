@@ -757,12 +757,15 @@ describe('MetaProvider callApi cost', () => {
     expect(result.cost).toBeUndefined();
   });
 
-  it('does not fill cost for cached responses', async () => {
+  it('keeps the reported cost on cached responses', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({ ...okResponse, cached: true } as any);
     const provider = createMetaProvider('meta:chat:muse-spark-1.1', createApiKeyOptions('LLM|1|k'));
     const result = await provider.callApi('Say hi');
     expect(result.cached).toBe(true);
-    expect(result.cost).toBeUndefined();
+    // Cached usage omits the prompt/completion split, so cost comes from the
+    // raw usage; the evaluator derives zero incurred cost from `cached`.
+    expect(result.tokenUsage?.prompt).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.002935, 12);
   });
 });
 
@@ -834,15 +837,16 @@ describe('MetaResponsesProvider', () => {
     expect(billed.cost).toBeCloseTo(0.0492, 12);
   });
 
-  it('reports zero-cost for cached responses via the base billing path', () => {
+  it('keeps the reported cost on cached responses', () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
     const billed = (provider as any).applyBilling(
-      { output: 'hi' },
+      { output: 'hi', cached: true },
       { usage: { input_tokens: 1000, output_tokens: 500 } },
       provider.config,
       true,
     );
-    expect(billed.cost).toBeUndefined();
+    // 1000 * $1.25/M + 500 * $4.25/M
+    expect(billed.cost).toBeCloseTo(0.003375, 12);
   });
 });
 
@@ -1127,7 +1131,7 @@ describe.each(['chat', 'responses'] as const)('Meta %s effective-model billing',
     const cachedExplicit = await invoke('muse-spark-1.1', { ...config, cost: 0 }, undefined, true);
     expect(explicit.result.cost).toBe(0);
     expect(cached.result.cached).toBe(true);
-    expect(cached.result.cost).toBeUndefined();
+    expect(cached.result.cost).toBeCloseTo(0.0001608, 12);
     expect(cachedExplicit.result.cost).toBe(0);
   });
 
@@ -1169,9 +1173,10 @@ describe('MetaMessagesProvider', () => {
       expect(first.cached).not.toBe(true);
       expect(second.cached).toBe(true);
       expect(create).toHaveBeenCalledTimes(1);
-      // 2 input * $1.25/M + 1 output * $4.25/M; cache hits carry no cost.
+      // 2 input * $1.25/M + 1 output * $4.25/M. The cache hit keeps its
+      // reported cost; the evaluator derives zero incurred cost from `cached`.
       expect(first.cost).toBeCloseTo(6.75e-6, 12);
-      expect(second.cost).toBeUndefined();
+      expect(second.cost).toBeCloseTo(6.75e-6, 12);
     } finally {
       await clearCache();
       restore();

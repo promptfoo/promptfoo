@@ -16,6 +16,8 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { AnthropicMessageOptions } from './anthropic/types';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
+import type { OpenAiBillingConfig } from './openai/config';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const META_API_BASE_URL = 'https://api.meta.ai/v1';
@@ -465,6 +467,28 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return result;
   }
 
+  // The OpenAI billing tables can't price Muse models, so price them from the
+  // raw usage here. That also covers cache hits, whose token usage omits the
+  // prompt/completion split: they keep their reported cost, and the evaluator
+  // derives zero incurred cost from the cache marker.
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiBillingConfig,
+    cached: boolean,
+  ): number | undefined {
+    const baseCost = super.calculateResponseCost(data, config, cached);
+    if (baseCost !== undefined) {
+      return baseCost;
+    }
+    return calculateMetaCost(
+      this.getBillingModelName(config),
+      config as MetaConfig,
+      data.usage?.prompt_tokens,
+      data.usage?.completion_tokens,
+      data.usage?.prompt_tokens_details?.cached_tokens,
+    );
+  }
+
   override async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -576,8 +600,10 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): ProviderResponse {
+    // Cache hits keep their reported cost too; the evaluator derives zero
+    // incurred cost from the cache marker.
     const billed = super.applyBilling(result, data, config, cached);
-    if (cached || billed.cost !== undefined) {
+    if (billed.cost !== undefined) {
       return billed;
     }
     const usage = data?.usage;
@@ -727,11 +753,6 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
     }
 
     const response = await super.callApi(prompt, context);
-
-    // Cache hits carry no cost, like the Meta chat and Responses surfaces.
-    if (response?.cached) {
-      return { ...response, cost: undefined };
-    }
 
     // The base class bills usage-bearing errors (e.g. an MCP loop that
     // exceeded max_tool_calls), so preserve that completed work's cost.
