@@ -49,10 +49,27 @@ function isCredentialContainer(name: string, headers: boolean): boolean {
   // A credential map can contain secrets in its keys as well as its values.
   return (
     isSecretEnvVarName(name) ||
-    /(?:password|passwd|passphrase|pwd|secret|credential|dsn|token|auth|cookie|bearer|session|signature|(?:api|access|subscription|private|signing|encryption|cert|virtual)key)/.test(
+    /(?:password|passwd|passphrase|pwd|secret|credential|dsn|jwt|clientassertion|token|auth|cookie|bearer|session|signature|(?:api|access|subscription|private|signing|encryption|cert|virtual)key)/.test(
       normalizeFieldName(credentialWords),
     )
   );
+}
+
+// A form or a credential assignment can carry secrets under an ordinary argument
+// name. SQL predicates and other comparisons also use '='.
+function hasOpaqueAssignment(text: string): boolean {
+  if (!text.includes('=')) {
+    return false;
+  }
+  if (/(?:^|[?&#;])\s*[^\s=?&#;]+=/.test(text)) {
+    return true;
+  }
+  for (const [, label] of text.matchAll(/(?:^|\s)([^\s=]+)\s*=/g)) {
+    if (isCredentialContainer(label, true)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Omit opaque encodings, forms and URL parameters before a logger can normalize
@@ -62,7 +79,9 @@ function isOpaque(text: string): boolean {
   const url = text.replace(/\p{Cc}/gu, '').trim();
   return (
     looksLikeSecret(text) ||
-    /%[\da-f]{2}|=|\b(?:basic|bearer)\s+\S/i.test(text) ||
+    hasOpaqueAssignment(text) ||
+    /(?:^|[^\w-])eyJ[\w-]*\.[\w-]+\.[\w-]+/.test(text) ||
+    /%[\da-f]{2}|\b(?:basic|bearer)\s+\S/i.test(text) ||
     (text.includes('@') && /[:/\\]/.test(text)) ||
     (/^[a-z][a-z\d+.-]*:/i.test(url) &&
       (!/^https?:\/\//i.test(url) || /[?#]/.test(url) || sanitizeUrlForLogging(url) !== text))
@@ -132,7 +151,7 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
         if (budget < 0) {
           throw new Error('MCP tool data too large');
         }
-        if (isOpaque(key) || /^\s*[[{"]/.test(key)) {
+        if (key.includes('=') || isOpaque(key) || /^\s*[[{"]/.test(key)) {
           return [];
         }
         const fieldName = normalizeFieldName(key);

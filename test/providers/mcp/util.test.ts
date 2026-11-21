@@ -735,6 +735,17 @@ describe('sanitizeMcpToolData', () => {
     });
   });
 
+  it('keeps ordinary SQL comparisons while removing credential assignments and JWTs', () => {
+    const query = 'SELECT name FROM products WHERE category = ? AND price=?';
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'e30', 'unsigned'].join('.');
+    const data = { query, cookieText: 'private', note: `signed ${jwt}`, label: '2 + 2 = 4' };
+    expect(sanitizeMcpToolData(data)).toEqual({
+      ...data,
+      cookieText: '[REDACTED]',
+      note: '[REDACTED]',
+    });
+  });
+
   it('checks aliased header maps without dropping public headers', () => {
     const headers = { 'X-Goog-Iap-Jwt-Assertion': 'short', accept: 'application/json' };
     expect(sanitizeMcpToolData({ requestHeaders: headers })).toEqual({
@@ -782,6 +793,11 @@ describe('sanitizeMcpToolData', () => {
       { ' ur\tn:private-fixture': true },
       'jdbc:postgresql://alice:private-fixture@db',
       'dbPwd=private-fixture',
+      'sent password = private-fixture',
+      'user=alice&value=private-fixture',
+      { client_assertion: 'private-fixture' },
+      { name: 'jwt', value: 'private-fixture' },
+      { note: 'proof eyJhbGciOiJIUzI1NiJ9.e30.private-fixture' },
       'https://host.test/?subscriptionKey=private-fixture',
       encodeURIComponent('jdbc:postgresql://alice:private-fixture@db'),
       encodeURIComponent(encodeURIComponent('password=private-fixture')),
