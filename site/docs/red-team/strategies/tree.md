@@ -71,7 +71,7 @@ Each branch and sub-branch represents a potential path for further exploration a
 
 ## Importance in Gen AI Red Teaming
 
-The tree-based jailbreak strategy allows for a comprehensive exploration of potential vulnerabilities by:
+The tree-based jailbreak strategy explores prompt variations by:
 
 1. Testing a wide range of related but distinct prompts.
 2. Identifying the most effective paths for bypassing AI safeguards.

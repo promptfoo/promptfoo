@@ -3,7 +3,15 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
-import { sanitizeObject } from '../../util/sanitizer';
+import {
+  isSecretEnvVarName,
+  looksLikeSecret,
+  normalizeFieldName,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrlForLogging,
+} from '../../util/sanitizer';
+import { waitForPromiseWithAbort } from '../shared';
 import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
@@ -17,38 +25,115 @@ import type {
 
 export type { OAuthTokenResult };
 
-/**
- * How many levels of nested tool arguments are reported. Real arguments are far shallower.
- * The ceiling keeps the sanitizer's recursion well inside the stack when a payload is
- * nested deeply enough to exhaust it.
- */
-const MAX_TOOL_DATA_DEPTH = 64;
+const MAX_TOOL_DEPTH = 64;
+const OMITTED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
 
-/** Reported in place of tool data that could not be sanitized. */
-const UNSANITIZED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
+function isCredentialContainer(name: string): boolean {
+  const compact = normalizeFieldName(name);
+  if (
+    /^(?:token(?:usages?|counts?|budgets?|settings|ids)|passwordpolic(?:y|ies)|signaturealgorithms?|cookiesettings)$/.test(
+      compact,
+    )
+  ) {
+    return false;
+  }
+  // A credential map can contain secrets in its keys as well as its values.
+  return (
+    isSecretEnvVarName(name) ||
+    /(?:password|passwd|passphrase|pwd|secret|credential|dsn|token|auth(?!or$)|cookie|bearer|session|signature|(?:api|access|subscription|private|signing|encryption|cert|virtual)key)/.test(
+      compact,
+    )
+  );
+}
 
-/**
- * Redact secrets in tool arguments. Nested arguments are kept down to
- * `MAX_TOOL_DATA_DEPTH` levels, and anything deeper is replaced with `"[...]"`.
- *
- * The arguments come from the prompt, so they are never returned as they came in: when they
- * cannot be sanitized, for example because their nesting exhausts the stack, a placeholder
- * is reported instead.
- */
-export function sanitizeMcpToolData<T>(value: T): T | typeof UNSANITIZED_TOOL_DATA {
+// Omit opaque encodings, forms and URL parameters before a logger can normalize
+// them. Nested URL/form/JSON decoders can disagree about which layer owns a secret.
+function isOpaque(text: string): boolean {
+  return (
+    looksLikeSecret(text) ||
+    /%[\da-f]{2}|=|\b(?:basic|bearer)\s+\S/i.test(text) ||
+    (text.includes('@') && /[:/\\]/.test(text)) ||
+    (/^[a-z][a-z\d+.-]*:/i.test(text) &&
+      (!/^https?:\/\//i.test(text) || /[?#]/.test(text) || sanitizeUrlForLogging(text) !== text))
+  );
+}
+
+/** Keep nested public arguments while omitting credentials from saved results and traces. */
+export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
+  let budget = 4 * 1024 * 1024;
+  const visit = (item: unknown, depth: number): unknown => {
+    if (depth >= MAX_TOOL_DEPTH) {
+      return '[...]';
+    }
+    budget -= 64 + (typeof item === 'string' ? item.length : 0);
+    if (budget < 0) {
+      throw new Error('MCP tool data too large');
+    }
+    if (typeof item === 'string') {
+      if (/^\s*[[{"]/.test(item)) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(item);
+        } catch {
+          return REDACTED;
+        }
+        return JSON.stringify(visit(parsed, depth + 1));
+      }
+      return isOpaque(item) ? REDACTED : item;
+    }
+    if (Array.isArray(item)) {
+      if (item.length === 2 && typeof item[0] === 'string' && isCredentialContainer(item[0])) {
+        return REDACTED;
+      }
+      return item.map((child) => visit(child, depth + 1));
+    }
+    if (!item || typeof item !== 'object') {
+      return typeof item === 'function' ? REDACTED : item;
+    }
+    const entries = Object.entries(item);
+    // Header lists and form entries commonly identify a credential via a name
+    // or key and put the credential itself in an otherwise innocuous sibling.
+    if (
+      entries.some(
+        ([key, label]) =>
+          /^(?:name|key|field|header|parameter)$/i.test(key) &&
+          typeof label === 'string' &&
+          (isOpaque(label) || isCredentialContainer(label)),
+      )
+    ) {
+      return REDACTED;
+    }
+    return Object.fromEntries(
+      entries.flatMap(([key, child]) => {
+        budget -= key.length + 64;
+        if (budget < 0) {
+          throw new Error('MCP tool data too large');
+        }
+        if (isOpaque(key) || /^\s*[[{"]/.test(key)) {
+          return [];
+        }
+        const count =
+          typeof child === 'number' &&
+          /^(?:(?:max|min)(?:output|completion)?|prompt|completion|input|output|total|cached)tokens$/.test(
+            normalizeFieldName(key),
+          );
+        const sensitive =
+          child != null && typeof child !== 'boolean' && !count && isCredentialContainer(key);
+        return [[key, sensitive ? REDACTED : visit(child, depth + 1)]];
+      }),
+    );
+  };
+
   try {
-    return sanitizeObject(value, {
+    return sanitizeObject(visit(value, 0), {
       context: 'MCP tool data',
       sanitizeUrls: true,
-      redactCompoundKeys: true,
-      maxDepth: MAX_TOOL_DATA_DEPTH,
+      maxDepth: MAX_TOOL_DEPTH,
       throwOnError: true,
     });
   } catch {
-    // The thrown value can carry the data it was thrown for, and inspecting it can run code
-    // it controls, so it is neither read nor logged.
-    logger.debug('[MCP] Tool data could not be sanitized and is omitted');
-    return UNSANITIZED_TOOL_DATA;
+    // Getter and serializer errors can themselves contain input credentials.
+    return OMITTED_TOOL_DATA;
   }
 }
 
@@ -136,12 +221,8 @@ export function renderAuthVars(
   };
 }
 
-/**
- * OAuth token cache to store and reuse tokens
- */
-interface OAuthTokenCache {
-  accessToken: string;
-  expiresAt: number;
+interface OAuthTokenCache extends OAuthTokenResult {
+  refreshAt: number;
 }
 
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
@@ -159,10 +240,15 @@ function getOAuthCacheKey(
 // Cache for discovered token endpoints
 const tokenEndpointCache = new Map<string, string>();
 
-function isValidTokenEndpoint(tokenEndpoint: string): boolean {
+function isValidTokenEndpoint(tokenEndpoint: string, serverUrl: URL): boolean {
   try {
     const parsedUrl = new URL(tokenEndpoint);
-    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+    return (
+      (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') &&
+      parsedUrl.origin === serverUrl.origin &&
+      !parsedUrl.username &&
+      !parsedUrl.password
+    );
   } catch {
     return false;
   }
@@ -173,11 +259,13 @@ function isValidTokenEndpoint(tokenEndpoint: string): boolean {
  * Follows RFC 8414 OAuth 2.0 Authorization Server Metadata.
  * Only requires token_endpoint from the response (unlike SDK which requires authorization_endpoint).
  */
-export async function discoverTokenEndpoint(serverUrl: string): Promise<string> {
+export async function discoverTokenEndpoint(
+  serverUrl: string,
+  signal?: AbortSignal,
+): Promise<string> {
   // Check cache first
   const cached = tokenEndpointCache.get(serverUrl);
   if (cached) {
-    logger.debug(`[MCP Auth] Using cached token endpoint for ${serverUrl}`);
     return cached;
   }
 
@@ -190,11 +278,12 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   // 3. Root level: /.well-known/oauth-authorization-server
   const discoveryUrls = [];
 
-  if (url.pathname && url.pathname !== '/') {
+  const pathname = url.pathname.replace(/\/+$/, '');
+  if (pathname) {
     // Path-appended style (e.g., Keycloak: /realms/test/.well-known/oauth-authorization-server)
-    discoveryUrls.push(`${baseUrl}${url.pathname}/.well-known/oauth-authorization-server`);
+    discoveryUrls.push(`${baseUrl}${pathname}/.well-known/oauth-authorization-server`);
     // RFC 8414 path-aware style
-    discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server${url.pathname}`);
+    discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server${pathname}`);
   }
   // Root level discovery
   discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server`);
@@ -202,7 +291,10 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetchWithProxy(discoveryUrl);
+      const response = await fetchWithProxy(discoveryUrl, {
+        redirect: 'error',
+        ...(signal && { signal }),
+      });
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
@@ -210,7 +302,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
-      if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
+      if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint, url)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
         return metadata.token_endpoint;
@@ -218,6 +310,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
 
       logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
+      signal?.throwIfAborted();
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }
   }
@@ -228,69 +321,88 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   );
 }
 
-/**
- * Get OAuth token with expiration info, fetching a new one if needed.
- * If tokenUrl is not configured, attempts OAuth discovery to find the token endpoint.
- * Caches tokens and returns cached version if still valid.
- */
+// In-flight token requests, so concurrent callers share one token fetch
+const pendingTokenRequests = new Map<
+  string,
+  {
+    controller: AbortController;
+    promise: Promise<OAuthTokenResult>;
+    waiters: number;
+  }
+>();
+
+/** Reuse a valid token, discover its endpoint if needed, and replace rejected tokens. */
 export async function getOAuthTokenWithExpiry(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   serverUrl?: string,
+  rejectedToken?: string,
+  signal?: AbortSignal,
 ): Promise<OAuthTokenResult> {
+  signal?.throwIfAborted();
   // Use configured tokenUrl or discover it
   let tokenUrl = auth.tokenUrl;
   if (!tokenUrl) {
     if (!serverUrl) {
       throw new Error('Either tokenUrl or serverUrl is required for OAuth token fetching');
     }
-    tokenUrl = await discoverTokenEndpoint(serverUrl);
+    tokenUrl = await discoverTokenEndpoint(serverUrl, signal);
   }
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
-  const now = Date.now();
-
-  if (cached && now + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt) {
-    logger.debug('[MCP Auth] Using cached OAuth token');
+  if (cached && cached.accessToken !== rejectedToken && Date.now() < cached.refreshAt) {
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
   }
 
-  // Use shared OAuth token fetch logic
-  const result = await fetchOAuthToken({
-    tokenUrl,
-    grantType: auth.grantType,
-    clientId: auth.clientId,
-    clientSecret: auth.clientSecret,
-    username: 'username' in auth ? auth.username : undefined,
-    password: 'password' in auth ? auth.password : undefined,
-    scopes: normalizeRenderedOAuthScopes(auth.scopes),
-  });
-
-  // Cache the token
-  oauthTokenCache.set(cacheKey, {
-    accessToken: result.accessToken,
-    expiresAt: result.expiresAt,
-  });
-
-  logger.debug('[MCP Auth] Cached OAuth token');
-  return result;
-}
-
-/**
- * Get OAuth token, fetching a new one if needed.
- * Requires tokenUrl to be configured - throws if not provided.
- */
-export async function getOAuthToken(
-  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-): Promise<string> {
-  const result = await getOAuthTokenWithExpiry(auth);
-  return result.accessToken;
+  let pending = pendingTokenRequests.get(cacheKey);
+  if (!pending || pending.controller.signal.aborted) {
+    const controller = new AbortController();
+    const promise = fetchOAuthToken({
+      signal: controller.signal,
+      tokenUrl,
+      // Credentials must not follow a redirect away from a discovered endpoint
+      redirect: auth.tokenUrl ? undefined : 'error',
+      grantType: auth.grantType,
+      clientId: auth.clientId,
+      clientSecret: auth.clientSecret,
+      username: 'username' in auth ? auth.username : undefined,
+      password: 'password' in auth ? auth.password : undefined,
+      scopes: normalizeRenderedOAuthScopes(auth.scopes),
+    })
+      .then((result) => {
+        controller.signal.throwIfAborted();
+        // Keep short-lived tokens usable instead of refreshing them on every request.
+        const remainingMs = Math.max(0, result.expiresAt - Date.now());
+        oauthTokenCache.set(cacheKey, {
+          ...result,
+          refreshAt: result.expiresAt - Math.min(TOKEN_REFRESH_BUFFER_MS, remainingMs / 2),
+        });
+        logger.debug('[MCP Auth] Cached OAuth token');
+        return result;
+      })
+      .finally(() => {
+        if (pendingTokenRequests.get(cacheKey)?.controller === controller) {
+          pendingTokenRequests.delete(cacheKey);
+        }
+      });
+    pending = { controller, promise, waiters: 0 };
+    pendingTokenRequests.set(cacheKey, pending);
+  }
+  pending.waiters++;
+  try {
+    return await waitForPromiseWithAbort(pending.promise, signal);
+  } finally {
+    pending.waiters--;
+    if (pending.waiters === 0) {
+      pending.controller.abort();
+    }
+  }
 }
 
 /**
  * Get authentication headers for an MCP server configuration.
  * Returns headers for bearer, basic, and api_key (header placement) auth types.
- * For OAuth, use getOAuthToken() first then pass the token.
+ * For OAuth, fetch a token with getOAuthTokenWithExpiry() first and pass it in.
  * For api_key with query placement, use getAuthQueryParams() instead.
  */
 export function getAuthHeaders(
@@ -380,11 +492,4 @@ export function applyQueryParams(url: string, params: Record<string, string>): s
     urlObj.searchParams.append(key, value);
   }
   return urlObj.toString();
-}
-
-/**
- * Check if auth requires async token fetching (OAuth)
- */
-export function requiresAsyncAuth(server: MCPServerConfig): boolean {
-  return server.auth?.type === 'oauth';
 }

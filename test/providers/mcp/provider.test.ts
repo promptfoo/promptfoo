@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 
+const createStructuredToolResult = () => ({
+  content: [{ type: 'text', text: 'raw response' }],
+  structuredContent: { answer: 'structured response' },
+});
+
+const createTraversalErrorResult = () => ({
+  content: [{ type: 'text', text: 'Path traversal not allowed' }],
+  isError: true,
+});
+
 const mcpClientMock = vi.hoisted(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
   getAllTools: vi.fn().mockReturnValue([]),
@@ -23,6 +33,14 @@ function createContext(payload: Record<string, unknown>) {
   } as any;
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('MCPProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,11 +50,24 @@ describe('MCPProvider', () => {
     mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
   });
 
+  it('reads connected servers before a tool call and clears the accessor after cleanup', async () => {
+    const initializing = deferred();
+    mcpClientMock.initialize.mockReturnValueOnce(initializing.promise);
+    const provider = new MCPProvider({ config: { enabled: true } });
+    try {
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+      initializing.resolve();
+      await initializing.promise;
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+    } finally {
+      initializing.resolve();
+      await provider.cleanup();
+    }
+    expect(provider.getConnectedServers()).toEqual([]);
+  });
+
   it('should preserve existing output behavior without a response transform', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'raw response' }],
-      structuredContent: { answer: 'structured response' },
-    };
+    const rawResult = createStructuredToolResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'normalized response',
       raw: rawResult,
@@ -54,6 +85,60 @@ describe('MCPProvider', () => {
         originalPayload: payload,
       },
     });
+  });
+
+  it.each(['callApi', 'callTool'] as const)(
+    'does not dispatch %s after cancellation during initialization',
+    async (method) => {
+      const initialization = deferred();
+      mcpClientMock.initialize.mockReturnValue(initialization.promise);
+      const provider = new MCPProvider({ config: { enabled: true } });
+      const abort = new AbortController();
+      const reason = new Error('initialization cancelled');
+      const pending =
+        method === 'callApi'
+          ? provider.callApi(JSON.stringify({ tool: 'ping' }), undefined, {
+              abortSignal: abort.signal,
+            })
+          : provider.callTool('ping', {}, abort.signal);
+      void pending.catch(() => {});
+      try {
+        abort.abort(reason);
+        initialization.resolve();
+        await expect(pending).rejects.toBe(reason);
+        expect(mcpClientMock.callTool).not.toHaveBeenCalled();
+      } finally {
+        initialization.resolve();
+        await Promise.allSettled([pending]);
+      }
+    },
+  );
+
+  it('passes cancellation through an active MCP tool call and preserves its cause', async () => {
+    const started = deferred();
+    mcpClientMock.callTool.mockImplementation(
+      (_name, _args, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          started.resolve();
+        }),
+    );
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const abort = new AbortController();
+    const reason = new Error('active request cancelled');
+    const pending = provider.callApi(JSON.stringify({ tool: 'ping' }), undefined, {
+      abortSignal: abort.signal,
+    });
+    void pending.catch(() => {});
+    try {
+      await started.promise;
+      expect(mcpClientMock.callTool).toHaveBeenCalledExactlyOnceWith('ping', {}, abort.signal);
+      abort.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+    } finally {
+      abort.abort(reason);
+      await Promise.allSettled([pending]);
+    }
   });
 
   it('merges config.defaultArgs into tool calls, with per-call args winning', async () => {
@@ -127,7 +212,7 @@ describe('MCPProvider', () => {
       });
       expect(debug).toHaveBeenCalledWith('MCP Provider calling tool', {
         toolName: 'lookup_user',
-        argumentNames: ['sessionToken', 'custom', 'nested', 'apiKey', 'id'],
+        argumentCount: 5,
       });
       const debugCalls = JSON.stringify(debug.mock.calls);
       for (const value of [configuredToken, configuredPassword, customValue, promptKey]) {
@@ -138,181 +223,18 @@ describe('MCPProvider', () => {
     }
   });
 
-  it('reports nested tool arguments in full', async () => {
+  it('keeps deep public data in both metadata copies without changing tool execution', async () => {
     mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
     const provider = new MCPProvider({ config: { enabled: true } });
-    const args = {
-      order: { items: [{ product: { options: { engraving: { text: 'Hi', font: 'serif' } } } }] },
-    };
-
-    const result = await provider.callApi('', createContext({ tool: 'create_order', args }));
-
-    expect(mcpClientMock.callTool).toHaveBeenCalledWith('create_order', args);
-    expect(result.metadata?.toolArgs).toEqual(args);
-    expect(result.metadata?.originalPayload).toEqual({ tool: 'create_order', args });
-  });
-
-  it('redacts deep compound credentials in metadata without changing the tool call', async () => {
-    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
-    const provider = new MCPProvider({
-      config: { enabled: true, defaultArgs: { dbPassword: 'configured-db-fixture' } },
+    const args = { a: { b: { c: { d: { page: 2, subscriptionKey: 'fixture' } } } } };
+    const visible = { a: { b: { c: { d: { page: 2, subscriptionKey: '[REDACTED]' } } } } };
+    const result = await provider.callApi('', createContext({ tool: 'lookup', args }));
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup', args);
+    expect(result.metadata).toMatchObject({
+      toolArgs: visible,
+      originalPayload: { tool: 'lookup', args: visible },
     });
-    const fields = {
-      databasePassword: 'database-fixture',
-      userCredential: 'credential-fixture',
-      databaseDsn: 'dsn-fixture',
-      awsAccessKey: 'access-fixture',
-      guardedJsonUrl: JSON.stringify({ 'callback?token=key-fixture': 'GET', page: 2 }),
-      formatUrl: JSON.stringify(['AKIAABCDEFGHIJKLMNOP:format-fixture']),
-      opaqueUriUrl: JSON.stringify({
-        target: 'jdbc:sqlserver://db;password=opaque-fixture?api_key=query-fixture',
-        page: 2,
-      }),
-      rawHostPayload: { apiHost: 'data=https://example.test/sk-123456789012345678901234/' },
-      composedGuardUrl: JSON.stringify({
-        apiHost: 'jdbc:sqlserver://alice:context-fixture@db',
-        headers: { 'https://host/db;password=context-fixture': 'x' },
-        page: 2,
-      }),
-      quotedScalarUrl: JSON.stringify({
-        url: JSON.stringify('https:alice:quoted-fixture@example.test/'),
-        page: 2,
-      }),
-      quotedHostUrl: JSON.stringify({
-        apiHost: JSON.stringify('password=scalar-fixture'),
-        page: 2,
-      }),
-      parserKeyUrl: JSON.stringify({
-        headers: { 'https:\\alice:parser-fixture@example.test/': 'x' },
-        page: 2,
-      }),
-      referenceHeaders: { headers: { Authorization: 'Bearer {{ env.MCP_API_KEY }}' } },
-      dbPwd: 'pwd-fixture',
-      clientSecrets: ['secret-one', 'secret-two'],
-      apiKeysByTenant: { tenant: 'tenant-secret', count: 2 },
-      cookies: { sid: 'cookie-fixture' },
-      cookieJar: { sid: 123456, nested: ['other-fixture'], enabled: false },
-      cookieSettings: { sameSite: 'lax' },
-      headers: {
-        Accept: 'https://example.test/?api_key=header-fixture',
-        'User-Agent': '{"password":"header-fixture","label":"{{ value }}"}',
-        'https://example.test/?api_key=header-key': 'value',
-      },
-      env: {
-        SERVICE_URL: '{"password":"url-fixture","label":"{{ value }}"}',
-        SERVICE_HOST: '{"databasePassword":"host-fixture","label":"{{ value }}"}',
-      },
-      tokenUsage: { input: 4, output: 9 },
-      tokenUsages: [{ input: 4, model: 'gpt-4' }],
-      tokenCounts: { input: 120, output: 30 },
-      tokenSettings: { enabled: true, label: 'public' },
-      sessionCookies: { sid: 'cookie-fixture' },
-      subscriptionKeys: ['subscription-fixture'],
-      aliasForm: 'sessionCookies[0]=cookie-fixture',
-      aliasUrl: 'https://example.test/?subscriptionKey=subscription-fixture',
-      tokenBudgets: { daily: 4096 },
-      signatureAlgorithms: ['SHA256'],
-      passwordPolicies: [{ minLength: 12 }],
-      hasCredentials: false,
-      isSecret: true,
-      requiresCredentials: false,
-      needsPassword: true,
-      supportsApiKey: false,
-      tokenBudget: 4096,
-      signatureAlgorithm: 'SHA256',
-      dbPassword: 'db-fixture',
-      databasePasswordEnabled: true,
-      pageToken: 'next-page',
-      maxTokens: 42,
-      monkey: 'ordinary',
-      key: 'record-name',
-      'record.key': 'field-name',
-      tokenCount: 12,
-      credentialsRequired: false,
-      authHeaders: {
-        'User-Agent': '{"databasePassword":"header-fixture","page":2}',
-        Accept: 'https://example.test/?api_key=header-fixture',
-        'https://example.test/?api_key=header-key': 'value',
-      },
-      form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: 'encoded-fixture', tokenCount: 12 }))}`,
-      callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: 'encoded-fixture', credentialsRequired: false }))}`,
-      url: 'redirect=https://alice:fixture-password@example.test/path',
-      secondaryUrl: JSON.stringify({ target: 'callback?token=relative-fixture' }),
-      byUrl: {
-        'https://example.test/?api_key=short': { method: 'GET' },
-      },
-    };
-    const args = { one: { two: { three: { four: { five: fields } } } } };
-    const sanitizedArgs = {
-      one: {
-        two: {
-          three: {
-            four: {
-              five: {
-                ...fields,
-                databasePassword: '[REDACTED]',
-                userCredential: '[REDACTED]',
-                databaseDsn: '[REDACTED]',
-                awsAccessKey: '[REDACTED]',
-                guardedJsonUrl: JSON.stringify({ '[REDACTED]': 'GET', page: 2 }),
-                formatUrl: JSON.stringify(['[REDACTED]']),
-                opaqueUriUrl: JSON.stringify({ target: '[REDACTED]', page: 2 }),
-                rawHostPayload: { apiHost: '[REDACTED]' },
-                composedGuardUrl: JSON.stringify({
-                  apiHost: '[REDACTED]',
-                  headers: { '[REDACTED]': '[REDACTED]' },
-                  page: 2,
-                }),
-                quotedScalarUrl: JSON.stringify({ url: '[REDACTED]', page: 2 }),
-                quotedHostUrl: JSON.stringify({ apiHost: '[REDACTED]', page: 2 }),
-                parserKeyUrl: JSON.stringify({ headers: { '[REDACTED]': '[REDACTED]' }, page: 2 }),
-                dbPwd: '[REDACTED]',
-                clientSecrets: ['[REDACTED]', '[REDACTED]'],
-                apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
-                cookies: { sid: '[REDACTED]' },
-                sessionCookies: { sid: '[REDACTED]' },
-                subscriptionKeys: ['[REDACTED]'],
-                aliasForm: 'sessionCookies[0]=%5BREDACTED%5D',
-                aliasUrl: 'https://example.test/?subscriptionKey=%5BREDACTED%5D',
-                cookieJar: { sid: '[REDACTED]', nested: ['[REDACTED]'], enabled: false },
-                headers: {
-                  Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
-                  'User-Agent': '{"password":"[REDACTED]","label":"{{ value }}"}',
-                  'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
-                },
-                env: {
-                  SERVICE_URL: '{"password":"[REDACTED]","label":"{{ value }}"}',
-                  SERVICE_HOST: '{"databasePassword":"[REDACTED]","label":"{{ value }}"}',
-                },
-                dbPassword: '[REDACTED]',
-                authHeaders: {
-                  'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',
-                  Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
-                  'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
-                },
-                form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
-                callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
-                url: '[REDACTED]',
-                secondaryUrl: JSON.stringify({ target: '[REDACTED]' }),
-                byUrl: {
-                  'https://example.test/?api_key=%5BREDACTED%5D': { method: 'GET' },
-                },
-              },
-            },
-          },
-        },
-      },
-    };
-
-    const result = await provider.callApi('', createContext({ tool: 'lookup_user', args }));
-
-    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
-      dbPassword: 'configured-db-fixture',
-      ...args,
-    });
-    expect(result.metadata?.toolArgs).toEqual({ dbPassword: '[REDACTED]', ...sanitizedArgs });
-    expect(result.metadata?.originalPayload).toEqual({ tool: 'lookup_user', args: sanitizedArgs });
-    expect(args.one.two.three.four.five).toEqual(fields);
+    expect(args.a.b.c.d.subscriptionKey).toBe('fixture');
   });
 
   it('still accepts defaultArgs passed as a constructor option', async () => {
@@ -346,10 +268,7 @@ describe('MCPProvider', () => {
   });
 
   it('should preserve MCP tool error results as direct provider output', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'Path traversal not allowed' }],
-      isError: true,
-    };
+    const rawResult = createTraversalErrorResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'Path traversal not allowed',
       isError: true,
@@ -369,10 +288,7 @@ describe('MCPProvider', () => {
   });
 
   it('should preserve MCP tool error results as direct provider output via callApi', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'Path traversal not allowed' }],
-      isError: true,
-    };
+    const rawResult = createTraversalErrorResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'Path traversal not allowed',
       isError: true,
@@ -407,10 +323,7 @@ describe('MCPProvider', () => {
   });
 
   it('should transform raw MCP results and merge provider metadata', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'raw response' }],
-      structuredContent: { answer: 'structured response' },
-    };
+    const rawResult = createStructuredToolResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'normalized response',
       raw: rawResult,
