@@ -17,6 +17,14 @@ Install promptfoo globally:
 npm install -g promptfoo
 ```
 
+Install and run promptfoo with Node.js 24 or later for full-repository scans. On Node.js 22.22 or later, you can scan changed lines with `promptfoo code-scans run --diffs-only`.
+
+During a full scan, the hosted scanner can read eligible text files throughout the selected directory at the Git revision being compared (`--compare`, default `HEAD`). The CLI builds a private snapshot from committed regular files. It excludes working-tree edits, untracked files, symlinks, submodules, generated or oversized files, and recognized credential filenames and content. Each file is limited to 500 KiB. Full scans stop if eligible paths exceed 30,000 files or 256 MiB in total. Full scans send the commit IDs for the comparison and omit commit subjects and author names. These checks cannot identify every secret. Use `--diffs-only` to share only the Git diff.
+
+Full scans use the read-only filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned and use a trusted Git executable on your PATH. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
+
+If Yarn Plug'n'Play reports a missing ESM loader, set `pnpEnableEsmLoader: true` in the external installation's `.yarnrc.yml` and reinstall.
+
 Authenticate with your promptfoo account:
 
 ```bash
@@ -49,7 +57,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var |
 | `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                   |
 | `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                               |
-| `--config <path>`                 | Path to config file                                                                                 | `.promptfoo-code-scan.yaml`                          |
+| `--config <path>`                 | Path to config file                                                                                 | None                                                 |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                 |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
@@ -102,15 +110,21 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create a `.promptfoo-code-scan.yaml` file in your repository root:
+To use a configuration file, pass its path explicitly:
+
+```bash
+promptfoo code-scans run --config .promptfoo-code-scan.yaml
+```
+
+For example, this `.promptfoo-code-scan.yaml` limits the scan to the diff:
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical)
 # Both minSeverity and minimumSeverity are supported
 minSeverity: medium
 
-# Scan only PR diffs without filesystem exploration (default: false = explore full repo)
-diffsOnly: false
+# Limit the hosted scanner to the diff. The default is a full scan.
+diffsOnly: true
 
 # Optional: Custom guidance to tailor the scan to your needs
 guidance: |

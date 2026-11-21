@@ -1,11 +1,16 @@
 import util from 'util';
 
+import { normalizeForComparison } from './normalize';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 function getComparisonKeys(value: object): string[] {
   const array = Array.isArray(value);
   const prototype = Object.getPrototypeOf(value);
-  if (!array && prototype !== Object.prototype) {
+  if (
+    Object.getOwnPropertySymbols(value).length ||
+    prototype !== (array ? Array.prototype : Object.prototype)
+  ) {
     throw new Error('Comparison is not JSON');
   }
   const keys = Object.keys(value);
@@ -88,7 +93,7 @@ export const handleEquals = async ({
     try {
       const actual = JSON.parse(outputString);
       pass = util.isDeepStrictEqual(renderedValue, actual) !== inverse;
-      if (!pass && !inverse && outputString.length <= 20_000) {
+      if (!pass && !inverse && assertion.weight !== 0 && outputString.length <= 20_000) {
         const expectedJson = formatComparisonJson(renderedValue);
         const actualJson = formatComparisonJson(actual);
         if (expectedJson !== undefined && actualJson !== undefined) {
@@ -103,7 +108,11 @@ export const handleEquals = async ({
     }
     renderedValue = JSON.stringify(renderedValue);
   } else {
-    pass = (String(renderedValue) === outputString) !== inverse;
+    const normalize = assertion.normalizeUnicode;
+    pass =
+      (normalizeForComparison(String(renderedValue), normalize) ===
+        normalizeForComparison(outputString, normalize)) !==
+      inverse;
   }
 
   return {

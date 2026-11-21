@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { JsonDiffView } from '@app/components/JsonDiffView';
 import { Button } from '@app/components/ui/button';
@@ -69,15 +69,6 @@ function isAssertionSetMetadata(value: unknown): value is AssertionSetMetadata {
 function getAssertionSet(result: GradingResult): AssertionSetMetadata | undefined {
   const assertionSet = result.metadata?.assertionSet;
   return isAssertionSetMetadata(assertionSet) ? assertionSet : undefined;
-}
-
-function getAssertionSetCount(result: GradingResult): number | undefined {
-  const assertionSet = getAssertionSet(result);
-  if (!assertionSet) {
-    return undefined;
-  }
-
-  return assertionSet.assertionCount ?? assertionSet.assert?.length;
 }
 
 function getMetric(result: GradingResult): string {
@@ -221,14 +212,10 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   }
 
   const assertionSet = getAssertionSet(result);
-  if (assertionSet) {
-    const assertionCount = getAssertionSetCount(result) ?? getChildResults(result).length;
+  const assertionCount =
+    assertionSet?.assertionCount ?? assertionSet?.assert?.length ?? getChildResults(result).length;
+  if (assertionSet || assertionCount > 0) {
     return { value: `${assertionCount} nested assertion${assertionCount === 1 ? '' : 's'}` };
-  }
-
-  const childResultCount = getChildResults(result).length;
-  if (childResultCount > 0) {
-    return { value: `${childResultCount} nested assertion${childResultCount === 1 ? '' : 's'}` };
   }
 
   return { value: '-' };
@@ -260,6 +247,16 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   const [expandedValues, setExpandedValues] = useState<{ [key: string]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
+  const copyFeedbackTimers = useRef<Set<ReturnType<typeof setTimeout>> | null>(null);
+
+  useEffect(() => {
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    copyFeedbackTimers.current = timers;
+    return () => {
+      timers.forEach(clearTimeout);
+      copyFeedbackTimers.current = null;
+    };
+  }, []);
 
   if (!gradingResults) {
     return null;
@@ -274,12 +271,19 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const timers = copyFeedbackTimers.current;
     await navigator.clipboard.writeText(text);
+    // The clipboard write can finish after this mount has been cleaned up.
+    if (!timers || timers !== copyFeedbackTimers.current) {
+      return;
+    }
     setCopiedAssertions((prev) => ({ ...prev, [key]: true }));
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      timers.delete(timer);
       setCopiedAssertions((prev) => ({ ...prev, [key]: false }));
     }, COPY_FEEDBACK_DURATION_MS);
+    timers.add(timer);
   };
 
   return (

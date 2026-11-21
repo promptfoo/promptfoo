@@ -48,6 +48,7 @@ describe('handleEquals', () => {
     { expected: { a: 'x'.repeat(20_001) }, actual: '{}', inverse: false },
     { expected: { a: Infinity }, actual: '{}', inverse: false },
     { expected: Object.assign(Object.create(null), { a: 1 }), actual: '{"a":1}', inverse: false },
+    { expected: { [Symbol('only difference')]: 1 }, actual: '{}', inverse: false },
     { expected: Array.from({ length: 600 }, (_, i) => i), actual: '[]', inverse: false },
     {
       expected: Array.from({ length: 30 }).reduce<unknown>((value) => ({ value }), 1),

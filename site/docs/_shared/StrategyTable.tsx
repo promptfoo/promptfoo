@@ -2,27 +2,18 @@ import React from 'react';
 
 import { strategies } from './data/strategies';
 
-type GroupedStrategies = Record<string, typeof strategies>;
-
-const categoryOrder: (typeof strategies)[number]['category'][] = [
+const groupedStrategies = [
   'Static (Single-Turn)',
   'Dynamic (Single-Turn)',
   'Multi-turn',
   'Regression',
   'Custom',
-];
-
-const groupedStrategies = strategies.reduce<GroupedStrategies>((acc, strategy) => {
-  if (!acc[strategy.category]) {
-    acc[strategy.category] = [];
-  }
-  acc[strategy.category].push(strategy);
-  return acc;
-}, {});
-
-Object.values(groupedStrategies).forEach((categoryStrategies) => {
-  categoryStrategies.sort((a, b) => a.displayName.localeCompare(b.displayName));
-});
+].map((category) => ({
+  category,
+  strategies: strategies
+    .filter((strategy) => strategy.category === category)
+    .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+}));
 
 const RecommendedBadge = () => (
   <span
@@ -42,9 +33,7 @@ const RecommendedBadge = () => (
 
 interface StrategyTableProps {
   shouldRenderCategory?: boolean;
-  shouldRenderStrategy?: boolean;
   shouldRenderDescription?: boolean;
-  shouldRenderLongDescription?: boolean;
   shouldRenderCost?: boolean;
   shouldRenderAsrIncrease?: boolean;
   showRemoteStatus?: boolean;
@@ -52,9 +41,7 @@ interface StrategyTableProps {
 
 const StrategyTable = ({
   shouldRenderCategory = true,
-  shouldRenderStrategy = true,
   shouldRenderDescription = true,
-  shouldRenderLongDescription = true,
   shouldRenderCost = true,
   shouldRenderAsrIncrease = true,
   showRemoteStatus = false,
@@ -67,9 +54,9 @@ const StrategyTable = ({
             {shouldRenderCategory && (
               <th style={{ verticalAlign: 'top', textAlign: 'left' }}>Category</th>
             )}
-            {shouldRenderStrategy && <th>Strategy</th>}
+            <th>Strategy</th>
             {shouldRenderDescription && <th>Description</th>}
-            {shouldRenderLongDescription && <th>Details</th>}
+            <th>Details</th>
             {shouldRenderCost && <th>Cost</th>}
             {shouldRenderAsrIncrease && (
               <th>
@@ -85,8 +72,7 @@ const StrategyTable = ({
           </tr>
         </thead>
         <tbody>
-          {categoryOrder.map((category) => {
-            const categoryStrategies = groupedStrategies[category] || [];
+          {groupedStrategies.map(({ category, strategies: categoryStrategies }) => {
             return (
               <React.Fragment key={category}>
                 {categoryStrategies.map((strategy, index) => (
@@ -100,21 +86,12 @@ const StrategyTable = ({
                         {category}
                       </td>
                     )}
-                    {shouldRenderStrategy && (
-                      <td className="strategy-cell">
-                        {strategy.link ? (
-                          <a href={strategy.link} className="strategy-link">
-                            {strategy.displayName}
-                            {strategy.recommended && <RecommendedBadge />}
-                          </a>
-                        ) : (
-                          <>
-                            {strategy.displayName}
-                            {strategy.recommended && <RecommendedBadge />}
-                          </>
-                        )}
-                      </td>
-                    )}
+                    <td className="strategy-cell">
+                      <a href={strategy.link} className="strategy-link">
+                        {strategy.displayName}
+                        {strategy.recommended && <RecommendedBadge />}
+                      </a>
+                    </td>
                     {shouldRenderDescription && (
                       <td>
                         {strategy.description}
@@ -123,9 +100,7 @@ const StrategyTable = ({
                         )}
                       </td>
                     )}
-                    {shouldRenderLongDescription && (
-                      <td className="details-cell">{strategy.longDescription}</td>
-                    )}
+                    <td className="details-cell">{strategy.longDescription}</td>
                     {shouldRenderCost && <td className="metric-cell">{strategy.cost}</td>}
                     {shouldRenderAsrIncrease && (
                       <td className="metric-cell">{strategy.asrIncrease}</td>

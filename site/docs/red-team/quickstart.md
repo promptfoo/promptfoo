@@ -18,7 +18,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
   - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
   - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
 - Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
-- Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
+- Includes **adversarial ML techniques** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
 - Integrates with [CI/CD](/docs/integrations/ci-cd/).
 - Tests via [HTTP API](#attacking-an-api-endpoint), [browser](/docs/providers/browser/), or [direct model access](#alternative-test-specific-prompts-and-models).
 
@@ -85,6 +85,10 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 
 Next, configure Promptfoo to communicate with your target application or model.
 
+Provider cards populate an editable target ID and configuration. Choose a hosted model available to your account, or enter your own deployment, served model, or Bedrock agent and alias IDs.
+
+For llamafile, vLLM, and Text Generation WebUI, keep the `openai:chat:` prefix, enter the server's model name, and set `apiBaseUrl` including `/v1`. If your server requires authentication, set `apiKeyEnvar` to the name of an environment variable on the machine running Promptfoo. The native [llama.cpp provider](/docs/providers/llama.cpp/) uses `llama:` and reads its server URL from `LLAMA_BASE_URL` on the machine running Promptfoo.
+
 :::note
 The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
 :::
@@ -107,8 +111,6 @@ Check off the individual plugins you want to use, or select a preset that includ
 
 Now we select strategies. [Strategies](/docs/red-team/strategies/) are techniques that wrap the generated inputs in a specific attack pattern.
 
-This is how Promptfoo generates more sophisticated jailbreaks and injections.
-
 ![llm red team setup](/img/docs/setup/strategy.png)
 
 ### Review and save
@@ -125,6 +127,9 @@ If you don't want to use the UI to start a red team, you can use the `init` comm
 ```sh
 promptfoo redteam init --no-gui
 ```
+
+For a new Google Vertex AI target, the CLI offers `vertex:gemini-3.1-pro-preview` and writes
+`region: global` for it. Existing configurations can still be imported with their saved model IDs.
 
 :::
 
@@ -253,13 +258,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 ## Continuous improvement
 
-Red teaming is not a one-time activity but an ongoing process. As you develop and refine your LLM application, regularly running red team evaluations helps ensure that:
-
-1. New features or changes don't introduce unexpected vulnerabilities
-2. Your application remains robust against evolving attack techniques
-3. You can quantify and demonstrate improvements in safety and reliability over time
-
-Check out the [CI/CD integration](/docs/integrations/ci-cd/) docs for more info.
+Rerun red team tests after changes to prompts, models, tools, or guardrails. Compare failures and attack success rates with previous runs to identify regressions. See [CI/CD integration](/docs/integrations/ci-cd/).
 
 ## Resources
 
