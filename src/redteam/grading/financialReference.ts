@@ -74,7 +74,9 @@ export function gradeFinancialReference(output: string, reference: unknown) {
   let data: unknown;
   try {
     data = JSON.parse(output, (key: string, value: unknown, context?: { source?: string }) =>
-      typeof value === 'number' && Object.hasOwn(expected, key) ? units(context?.source) : value,
+      typeof value === 'number' && Object.prototype.hasOwnProperty.call(expected, key)
+        ? units(context?.source)
+        : value,
     );
   } catch {
     return grade(false, 'Expected a JSON object');
@@ -83,7 +85,9 @@ export function gradeFinancialReference(output: string, reference: unknown) {
     return grade(false, 'Expected a JSON object');
   }
   for (const [field, amount] of Object.entries(expected)) {
-    const value = Object.hasOwn(data, field) ? (data as Record<string, unknown>)[field] : undefined;
+    const value = Object.prototype.hasOwnProperty.call(data, field)
+      ? (data as Record<string, unknown>)[field]
+      : undefined;
     if (typeof value !== 'bigint') {
       return grade(false, 'Missing or invalid numeric field: ' + field);
     }
