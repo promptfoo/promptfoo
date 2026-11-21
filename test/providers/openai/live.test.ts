@@ -2485,19 +2485,6 @@ describe('OpenAiLiveProvider', () => {
       url: 'wss://api.openai.com/v1/live/sessions',
       headers: { Authorization: 'Bearer ambient-openai-key', 'X-OpenAI-Originator': 'promptfoo' },
     });
-    expect(await connectWith(gateway, { apiHost: 'eu.api.openai.com' })).toMatchObject({
-      url: 'wss://eu.api.openai.com/v1/live/sessions',
-      headers: { Authorization: 'Bearer ambient-openai-key' },
-    });
-    for (const apiBaseUrl of [
-      'https://eu.api.openai.com.example/v1',
-      'http://eu.api.openai.com/v1',
-      'https://eu.api.openai.com:8443/v1',
-    ]) {
-      expect((await connectWith(gateway, { apiBaseUrl })).headers).not.toHaveProperty(
-        'Authorization',
-      );
-    }
     // The merged endpoint also decides ambient-key suppression, userinfo, and query rejection.
     expect(
       await connectWith(official, {
@@ -3657,6 +3644,22 @@ describe('OpenAiLiveProvider', () => {
 });
 
 describe('application transcription connection', () => {
+  it.each([
+    ['https://eu.api.openai.com/v1', 'Bearer scoped-fixture'],
+    ['https://eu.api.openai.com.example/v1', undefined],
+    ['http://eu.api.openai.com/v1', undefined],
+    ['https://eu.api.openai.com:8443/v1', undefined],
+  ] as const)(
+    'scopes the regional credential to the secure first-party origin (%s)',
+    (apiBaseUrl, expected) => {
+      const live = new OpenAiLiveProvider('gpt-live-1', {
+        config: { apiBaseUrl, apiKeyRequired: false },
+        env: { OPENAI_API_KEY: 'scoped-fixture' },
+      });
+      expect(live.getAppTranscriptionConnection().headers.Authorization).toBe(expected);
+    },
+  );
+
   it('keeps gateway credentials on the same prefixed origin and suppresses an ambient OpenAI key', () => {
     const p = new OpenAiLiveProvider('gpt-live-1', {
       config: {

@@ -73,7 +73,7 @@ export function callerReviewTests(input, { instructionsVar, instructionsText } =
     });
   }
   if (!tests.length) {
-    throw new Error('No saved row has reviewable listener evidence.');
+    throw new Error('No saved row has reviewable listener_input evidence.');
   }
   return tests;
 }
