@@ -9,7 +9,7 @@ Compare DeepSeek V3.2, OpenAI's GPT-5 and o3-mini, and Llama 4 Maverick on your 
 
 ## Requirements
 
-- Node.js `>=22.22.0`
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - OpenRouter API access for DeepSeek and Llama (set `OPENROUTER_API_KEY`)
 - OpenAI API access for GPT-5 and o3-mini (set `OPENAI_API_KEY`)
 
