@@ -168,7 +168,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern                       |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal               |
 
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, inspect imported spans in the results viewer. Built-in trace and trajectory assertions report unavailable evidence. The provider documentation shows how to check completed tool calls from response metadata.
+For an OpenAI Agents API target with `hostedTrace` enabled, use [raw span assertions](/docs/configuration/expected-outputs/deterministic/#trace-span-count) to check recorded actions. An unavailable import cannot prove a zero count, including when the assertion is inverted.
 
 Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, consume a generator's yielded result, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
 

@@ -14,6 +14,25 @@ export function withTraceAttributeFilterContext(
     : reason;
 }
 
+/** Apply inversion only after the trace has established whether the condition holds. */
+export function finishTraceAssertion<T>(
+  { assertion, inverse }: { assertion: T; inverse: boolean },
+  observedPass: boolean,
+  reason: string,
+  attributes?: TraceSpanAttributeFilter,
+) {
+  const pass = inverse ? !observedPass : observedPass;
+  const detail = inverse
+    ? `The trace ${observedPass ? 'satisfied' : 'did not satisfy'} the forbidden condition. ${reason}`
+    : reason;
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: withTraceAttributeFilterContext(detail, attributes),
+    assertion,
+  };
+}
+
 export function filterTraceSpans<T extends { name: string; attributes?: Record<string, unknown> }>(
   spans: T[],
   pattern: string,

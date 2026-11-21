@@ -71,6 +71,8 @@ export const PromptfooAttributes = {
   CACHE_HIT: 'promptfoo.cache_hit',
   REQUEST_BODY: 'promptfoo.request.body',
   RESPONSE_BODY: 'promptfoo.response.body',
+  REQUEST_BODY_STRIPPED: 'promptfoo.request.body_stripped',
+  RESPONSE_BODY_STRIPPED: 'promptfoo.response.body_stripped',
   USAGE_TOTAL_TOKENS: 'promptfoo.usage.total_tokens',
   USAGE_CACHED_RESPONSE_TOKENS: 'promptfoo.usage.cached_response_tokens',
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'promptfoo.usage.accepted_prediction_tokens',
@@ -98,6 +100,7 @@ const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
 
 /** Maximum length for request/response body attributes (characters) */
 const MAX_BODY_LENGTH = 4096;
+const BODY_TRUNCATION_MARKER = '... [truncated]';
 
 /**
  * Patterns to redact from request/response bodies for security.
@@ -578,7 +581,7 @@ export function sanitizeBody(body: string): string {
  * @param body - The body string to process
  * @param sanitize - Whether to sanitize sensitive data (defaults to true)
  */
-function truncateBody(body: string, sanitize: boolean = true): string {
+export function truncateBody(body: string, sanitize: boolean = true): string {
   // Sanitize sensitive data if requested
   const processed = sanitize ? sanitizeBody(body) : body;
 
@@ -586,7 +589,17 @@ function truncateBody(body: string, sanitize: boolean = true): string {
   if (processed.length <= MAX_BODY_LENGTH) {
     return processed;
   }
-  return processed.slice(0, MAX_BODY_LENGTH - 15) + '... [truncated]';
+  return (
+    processed.slice(0, MAX_BODY_LENGTH - BODY_TRUNCATION_MARKER.length) + BODY_TRUNCATION_MARKER
+  );
+}
+
+/** Capture markers can also occur literally in a body, so equality alone cannot prove a match. */
+export function hasBodyCaptureMarker(value: string): boolean {
+  return (
+    (value.length === MAX_BODY_LENGTH && value.endsWith(BODY_TRUNCATION_MARKER)) ||
+    /<REDACTED(?:_[A-Z_]+)?>/.test(value)
+  );
 }
 
 /**

@@ -287,12 +287,10 @@ function canGradePartialTrace({
   assertion,
   renderedValue,
 }: AssertionParams): boolean {
-  // Raw span handlers read the assertion value. Trajectory handlers use the rendered matcher.
-  const value =
-    baseType === 'trace-span-count' ? assertion.value : (renderedValue ?? assertion.value);
   if (inverse) {
     return false;
   }
+  const value = renderedValue ?? assertion.value;
   if (baseType === 'trajectory:tool-args-match') {
     return true;
   }

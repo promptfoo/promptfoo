@@ -345,14 +345,14 @@ describe('fetchTraceContext', () => {
     expect(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]).toBe(signature);
   });
 
-  it.each([false, true])(
+  it.each([undefined, 'grader', 'forged-owner'])(
     'retains a fetched target tool that claims grader and hosted ownership (redaction=%s)',
     async (redact) => {
       mockExternalTrace([
         {
           spanId: 'target',
           name: 'execute_tool delete_record',
-          statusMessage: 'grader',
+          statusMessage: redact ?? 'grader',
           startTime: 1,
           attributes: {
             'gen_ai.tool.name': 'delete_record',
