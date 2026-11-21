@@ -358,6 +358,25 @@ describe('HuggingfaceTextGenerationProvider inference responses', () => {
     });
     expect(await provider.callApi('Test prompt')).toEqual(expected);
   });
+
+  it('sends use_cache and wait_for_model as options, not generation parameters', async () => {
+    mockFetch.mockResolvedValue({
+      ...defaultMockResponse,
+      text: vi.fn().mockResolvedValue(JSON.stringify({ generated_text: 'Output' })),
+    });
+    const optionsProvider = new HuggingfaceTextGenerationProvider('fixture/generator', {
+      config: { temperature: 0.5, use_cache: false, wait_for_model: true },
+    });
+
+    await optionsProvider.callApi('Test prompt');
+
+    const [, request] = mockFetch.mock.calls[0];
+    expect(JSON.parse(request.body as string)).toEqual({
+      inputs: 'Test prompt',
+      parameters: { return_full_text: false, temperature: 0.5 },
+      options: { use_cache: false, wait_for_model: true },
+    });
+  });
 });
 
 describe('HuggingfaceTextGenerationProvider chat delegation', () => {
