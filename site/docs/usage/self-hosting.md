@@ -216,7 +216,6 @@ persistentVolumeClaims:
 service:
   type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
 
-
 # Optional: Configure ingress if you have an ingress controller
 # ingress:
 #   enabled: true
@@ -276,8 +275,8 @@ docker build -t promptfoo:custom .
 ```
 
 Images built from this Dockerfile are marked as custom containers. To apply a Promptfoo update,
-first advance the checkout to the desired release, then rebuild and redeploy. Use a Node.js
-`22.22.0` or newer base image (24 LTS recommended). Use `docker build --pull` when a
+first advance the checkout to the desired release, then rebuild and redeploy. Choose a base image with a
+[supported Node.js version](/docs/installation#nodejs-runtime-support). Use `docker build --pull` when a
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
@@ -618,7 +617,7 @@ The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the cor
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js `>=22.22.0`, npm
+- Install npm and a [supported Node.js version](/docs/installation#nodejs-runtime-support).
 
 ### Server Requirements (Hosting the Web UI/API)
 

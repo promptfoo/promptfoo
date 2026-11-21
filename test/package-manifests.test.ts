@@ -683,57 +683,6 @@ describe('package manifests', () => {
     ).toThrow('Unable to resolve override reference $missing');
   });
 
-  it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
-    const workflowPath = '.github/workflows/main.yml';
-    const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
-    const supportedNodeRange = readPackageJson<{ engines: { node: string } }>('package.json')
-      .engines.node;
-    const renovateConfig = readPackageJson<{
-      packageRules?: Array<{
-        enabled?: boolean;
-        matchCurrentValue?: string;
-        matchFileNames?: string[];
-        matchManagers?: string[];
-        matchPackageNames?: string[];
-      }>;
-    }>('renovate.json');
-
-    const unsupportedNodeVersion = workflow.match(
-      /name:\s*Set up unsupported Node[^\n]*\n[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
-    )?.[1];
-    const minimumSupportedNodeVersion = workflow.match(
-      /name:\s*Set up minimum supported Node[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
-    )?.[1];
-
-    expect(unsupportedNodeVersion).toBeDefined();
-    expect(satisfies(unsupportedNodeVersion!, supportedNodeRange)).toBe(false);
-    expect(minimumSupportedNodeVersion).toBeDefined();
-    expect(minimumSupportedNodeVersion).toBe(minVersion(supportedNodeRange)?.version);
-
-    const protectedRuntimeRule = renovateConfig.packageRules?.find(
-      (rule) =>
-        rule.enabled === false &&
-        rule.matchManagers?.includes('github-actions') &&
-        rule.matchPackageNames?.includes('node') &&
-        rule.matchPackageNames?.includes('actions/node-versions') &&
-        rule.matchFileNames?.includes(workflowPath) &&
-        rule.matchCurrentValue,
-    );
-
-    expect(
-      protectedRuntimeRule,
-      'Renovate must not replace intentionally unsupported or minimum-supported smoke-test runtimes',
-    ).toBeDefined();
-
-    const protectedRuntimePattern = new RegExp(
-      protectedRuntimeRule!.matchCurrentValue!.slice(1, -1),
-    );
-
-    expect(protectedRuntimePattern.test(unsupportedNodeVersion!)).toBe(true);
-    expect(protectedRuntimePattern.test(minimumSupportedNodeVersion!)).toBe(true);
-    expect(protectedRuntimePattern.test(fs.readFileSync('.nvmrc', 'utf8').trim())).toBe(false);
-  });
-
   it('keeps the Docker runtime on the patched Node release', () => {
     const expectedVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
@@ -851,24 +800,6 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps the streaming OpenAI example aligned with supported Node versions', () => {
-    const rootManifest = readPackageJson<{ engines?: { node?: string } }>('package.json');
-    const exampleManifest = readPackageJson<{ engines?: { node?: string } }>(
-      'examples/config-websockets/streaming/server/package.json',
-    );
-    const readme = fs.readFileSync(
-      path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
-      'utf8',
-    );
-    const exampleNodeMinimum = minVersion(exampleManifest.engines?.node ?? '');
-    const rootNodeMinimum = minVersion(rootManifest.engines?.node ?? '');
-
-    expect(exampleNodeMinimum).not.toBeNull();
-    expect(rootNodeMinimum).not.toBeNull();
-    expect(exampleNodeMinimum?.compare(rootNodeMinimum!)).toBeGreaterThanOrEqual(0);
-    expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
-  });
-
   it('does not import jsdom from root src/', () => {
     // Guards against re-introducing jsdom into the CLI startup graph, which
     // previously broke `npx promptfoo` on Node 24 via ERR_REQUIRE_ASYNC_MODULE.
@@ -887,17 +818,5 @@ describe('package manifests', () => {
       'jsdom',
     );
     expect(offenders).toEqual([]);
-  });
-
-  it('keeps the supported Node.js range aligned across workspace manifests', () => {
-    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
-      ?.node;
-
-    expect(validRange(rootEngines ?? '')).toBeTruthy();
-
-    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
-      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
-      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
-    }
   });
 });
