@@ -42,6 +42,47 @@ describe('sanitizeRuntimeOptions', () => {
       }),
     ).toEqual({ providerFilter: 'selected-target' });
   });
+
+  it('deeply sanitizes the replay plan and omits it under every protected-output policy', () => {
+    const plan = {
+      version: 1 as const,
+      cases: [
+        {
+          source: { kind: 'top-level' as const, testIndex: 0 },
+          test: { vars: { input: 'safe' }, metadata: { role: 'keep' } },
+        },
+      ],
+    };
+    expect(sanitizeRuntimeOptions({ exactHistoricalReplay: plan })?.exactHistoricalReplay).toEqual(
+      plan,
+    );
+    for (const flag of [
+      'shouldStripTestVars',
+      'shouldStripMetadata',
+      'shouldStripPromptText',
+      'shouldStripResponseOutput',
+    ] as const) {
+      expect(sanitizeRuntimeOptions({ exactHistoricalReplay: plan }, { [flag]: true })).toEqual({});
+      expect(
+        sanitizeRuntimeOptions(
+          { exactHistoricalReplayRequired: true, exactHistoricalReplay: plan },
+          { [flag]: true },
+        ),
+      ).toEqual({ exactHistoricalReplayRequired: true });
+    }
+    const redacted = sanitizeRuntimeOptions({
+      exactHistoricalReplay: {
+        version: 1,
+        cases: [
+          {
+            source: { kind: 'top-level', testIndex: 0 },
+            test: { vars: { input: 'sk-proj-QAFakeOnly12345678901234567890' } },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(redacted)).not.toContain('QAFakeOnly');
+  });
 });
 
 function headerCaseVariants(name: string): Set<string> {

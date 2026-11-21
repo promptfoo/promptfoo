@@ -138,6 +138,13 @@ export function evalCommand(
         return previous ? [...previous, value] : [value];
       },
     )
+    .option(
+      '--filter-metadata-exact <key=value>',
+      'Only run tests whose metadata exactly equals key=value. Comma-separated values use OR, repeated flags use AND, and \\, is a literal comma',
+      (value: string, previous: string[] | undefined) => {
+        return previous ? [...previous, value] : [value];
+      },
+    )
 
     // Output configuration
     .option(
