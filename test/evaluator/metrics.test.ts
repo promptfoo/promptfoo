@@ -4,10 +4,12 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { handleRedteam } from '../../src/assertions/redteam';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import telemetry from '../../src/telemetry';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { createDeferred } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
@@ -24,7 +26,138 @@ const createErrorMetricTest = (errorValue: number) => ({
   ],
 });
 
+vi.mock('../../src/assertions/redteam', () => ({
+  handleRedteam: vi.fn(),
+}));
+
 describeEvaluator('evaluator metrics and scoring', () => {
+  beforeEach(() => {
+    vi.mocked(handleRedteam)
+      .mockReset()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Fixture category only' });
+  });
+
+  it.each([
+    ['promptfoo:redteam:pii', 'promptfoo:redteam:pii'],
+    ['promptfoo:redteam:policy', 'promptfoo:redteam:policy'],
+    ['promptfoo:redteam:fixture-private-label', 'custom'],
+  ])('preserves only registered assertion category %s', async (type, category) => {
+    const record = vi.spyOn(telemetry, 'record');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello fixture')],
+      tests: [{ assert: [{ type: type as 'promptfoo:redteam:pii' }] }],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, {});
+    const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
+    expect(event).toMatchObject({ assertionTypes: [category] });
+    expect(JSON.stringify(event)).not.toContain('fixture-private');
+  });
+
+  it('retains the built-in category for assertion sets', async () => {
+    const record = vi.spyOn(telemetry, 'record');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello fixture')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'contains', value: 'Test' }],
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, {});
+    const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
+    expect(event).toMatchObject({ assertionTypes: ['assert-set'], numPasses: 1 });
+  });
+
+  it('emits bounded provider and assertion categories without changing evaluation counters', async () => {
+    const record = vi.spyOn(telemetry, 'record');
+    const providers = [
+      'manual-input',
+      'agent-provider',
+      'fixture-private-team:private-endpoint',
+      'minimax:private-model',
+      'moonshot:private-model',
+      'novita:private-model',
+      'elevenlabs:private-voice',
+      'file:///fixture/local-provider.js',
+      'a2a',
+      'orcarouter:private-model',
+      'dashscope:private-model',
+      'azureopenai:private-deployment',
+      'echo',
+      'fixture-custom-provider',
+    ].map(
+      (id): ApiProvider => ({
+        id: () => id,
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Hello fixture',
+          tokenUsage: { numRequests: 1, total: 3, prompt: 1, completion: 2 },
+        }),
+      }),
+    );
+    const suite: TestSuite = {
+      providers,
+      prompts: [toPrompt('Hello fixture')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Hello' },
+            { type: 'not-contains', value: 'Goodbye' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, {});
+    const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
+    expect(event).toMatchObject({
+      providerPrefixes: [
+        'a2a',
+        'agent-provider',
+        'azureopenai',
+        'custom',
+        'dashscope',
+        'echo',
+        'elevenlabs',
+        'file',
+        'manual-input',
+        'minimax',
+        'moonshot',
+        'novita',
+        'orcarouter',
+      ],
+      assertionTypes: ['contains', 'not-contains'],
+      numPasses: providers.length,
+      numErrors: 0,
+      totalRequests: providers.length,
+      totalTokens: 3 * providers.length,
+    });
+    expect(JSON.stringify(event)).not.toContain('private');
+    expect(JSON.stringify(event)).not.toContain('local-provider');
+  });
+
+  it('categorizes unrecognized assertion types without emitting their names', async () => {
+    const record = vi.spyOn(telemetry, 'record');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello fixture')],
+      tests: [{ assert: [{ type: 'fixture-private-assertion' as 'contains', value: 'Hello' }] }],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, {});
+    const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
+    expect(event).toMatchObject({ assertionTypes: ['custom'] });
+    expect(JSON.stringify(event)).not.toContain('fixture-private');
+  });
+
   it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
