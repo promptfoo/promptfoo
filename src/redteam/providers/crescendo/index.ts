@@ -40,7 +40,11 @@ import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../../util';
 import { MemorySystem } from '../conversationMemory';
-import { getEvalScore, getRefusalScore } from '../conversationScoring';
+import {
+  AmbiguousConversationScoreError,
+  getEvalScore,
+  getRefusalScore,
+} from '../conversationScoring';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
@@ -302,6 +306,7 @@ export class CrescendoProvider implements ApiProvider {
     let lastResponse: TargetResponse = { output: '' };
     let hasTargetResponse = false;
     let lastAttemptError: string | undefined;
+    let judgeError: string | undefined;
     let lastResponseMessages: Message[] = [];
     let evalFlag = false;
     let evalPercentage: number | null = null;
@@ -797,6 +802,10 @@ export class CrescendoProvider implements ApiProvider {
         if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
         }
+        if (error instanceof AmbiguousConversationScoreError) {
+          judgeError = error.message;
+          break;
+        }
         lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
@@ -835,6 +844,7 @@ export class CrescendoProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(reported.messages, 'user');
     const error =
       lastResponse.error ||
+      judgeError ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return preserveSelectedError(
       {

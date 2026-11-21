@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
+import { extractJsonObjectsWithMeta, selectVerdictObject } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateGradingResponseTokenUsage } from '../../util/tokenUsageUtils';
@@ -10,6 +10,38 @@ import { callGradingProvider } from './shared';
 import type { Environment } from 'nunjucks';
 
 import type { ApiProvider, CallApiOptionsParams, TokenUsage } from '../../types';
+
+export type CrescendoScoreResponse = {
+  value: boolean;
+  description?: string;
+  rationale?: string;
+  metadata: number;
+};
+
+/**
+ * Security: parse the refusal/eval judge LLM's scoring response with
+ * verdict-injection hardening. The judge prompt embeds the target model's
+ * output verbatim (responseToEvaluateInput), so the judge's reply may quote
+ * attacker-crafted JSON from that output. A raw last-object extraction picks an
+ * echoed UNTERMINATED fragment (auto-closed by the extractor) over the judge's
+ * own verdict, flipping the objective-achieved / refusal boolean — a jailbroken
+ * model can grade itself safe. selectVerdictObject prefers the last COMPLETE
+ * verdict-shaped object, fails closed on conflicting complete verdicts, and
+ * recovers the judge's verdict from merged fragments.
+ */
+export function parseCrescendoScoreResponse(output: string): CrescendoScoreResponse | undefined {
+  return selectVerdictObject<CrescendoScoreResponse>(
+    extractJsonObjectsWithMeta(output),
+    ['value'],
+    ['value', 'metadata'],
+  );
+}
+
+export class AmbiguousConversationScoreError extends Error {
+  constructor() {
+    super('Judge returned no unambiguous conversation score');
+  }
+}
 
 interface ScoringContext {
   logPrefix: string;
@@ -74,14 +106,13 @@ export async function getRefusalScore(
 
   const parsed =
     typeof refusalResponse.output === 'string'
-      ? extractFirstJsonObject<{
-          value: boolean;
-          metadata: number;
-          rationale: string;
-        }>(refusalResponse.output)
+      ? parseCrescendoScoreResponse(refusalResponse.output)
       : refusalResponse.output;
 
   logger.debug(`[${context.logPrefix}] Refusal score parsed response`, { parsed });
+  if (!parsed) {
+    throw new AmbiguousConversationScoreError();
+  }
   invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
   invariant(typeof parsed.metadata === 'number', 'Expected refusal grader metadata to be a number');
 
@@ -138,15 +169,13 @@ export async function getEvalScore(
 
   const parsed =
     typeof evalResponse.output === 'string'
-      ? extractFirstJsonObject<{
-          value: boolean;
-          description: string;
-          rationale: string;
-          metadata: number;
-        }>(evalResponse.output)
+      ? parseCrescendoScoreResponse(evalResponse.output)
       : evalResponse.output;
 
   logger.debug(`[${context.logPrefix}] Eval score parsed response`, { parsed });
+  if (!parsed) {
+    throw new AmbiguousConversationScoreError();
+  }
   invariant(
     typeof parsed.value === 'boolean',
     `Expected eval grader value to be a boolean: ${parsed}`,
