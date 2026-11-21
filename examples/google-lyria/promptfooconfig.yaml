@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Lyria music generation
+
+prompts:
+  - |
+    {{image}}
+    {{brief}}
+
+providers:
+  - id: google:lyria-3-clip-preview
+    label: lyria-3-clip
+  - id: google:lyria-3.5
+    label: lyria-3.5
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: Boolean(context.providerResponse.audio?.data) && context.providerResponse.audio.format === 'mpeg'
+
+tests:
+  - description: 30-second instrumental clip
+    providers: [lyria-3-clip]
+    vars:
+      brief: A bright chiptune melody in C major, retro 8-bit video game style. Instrumental only, no vocals.
+    assert:
+      - type: equals
+        value: <instrumental>
+
+  - description: Song inspired by a photo
+    providers: [lyria-3.5]
+    vars:
+      image: file://assets/raccoon.jpg
+      brief: Write a playful one-minute acoustic folk song with vocals about the animal in this photo, with a verse and a chorus.
+    assert:
+      - type: llm-rubric
+        value: The lyrics are about a raccoon or a small masked animal.

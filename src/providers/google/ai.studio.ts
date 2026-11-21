@@ -46,14 +46,49 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig } from './types';
+import type { CompletionOptions, GoogleProviderConfig, Part } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
-const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma'];
+const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma', 'lyria'];
+
+// Lyria music models are billed per generated song, not per token.
+// https://ai.google.dev/gemini-api/docs/pricing#lyria-3-5
+const LYRIA_SONG_COSTS: Record<string, number> = {
+  'lyria-3.5': 0.08,
+  'lyria-3-pro-preview': 0.08,
+  'lyria-3-clip-preview': 0.04,
+};
 
 function usesGenerateContentApi(modelName: string): boolean {
   return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+}
+
+/**
+ * Lyria returns lyrics (or `<instrumental>`) as text parts alongside the song. Expose the
+ * lyrics as text output and keep the song in `audio` for playback.
+ */
+function formatLyriaResponse(
+  modelName: string,
+  output: Part[] | string | undefined,
+  audio: ProviderResponse['audio'],
+  tokenCost: number | undefined,
+): Pick<ProviderResponse, 'output' | 'audio' | 'cost'> {
+  const lyrics =
+    typeof output === 'string'
+      ? output
+      : (output ?? [])
+          .filter((part) => typeof part.text === 'string')
+          .map((part) => part.text)
+          .join('\n');
+  if (!audio) {
+    return { output: lyrics, audio, cost: tokenCost };
+  }
+  return {
+    output: lyrics,
+    audio: { ...audio, ...(lyrics && { transcript: lyrics }) },
+    cost: LYRIA_SONG_COSTS[modelName] ?? tokenCost,
+  };
 }
 
 /**
@@ -492,13 +527,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         responseTimestamp,
       );
       const audio = normalizeGeminiAudio(output);
+      const media = this.modelName.startsWith('lyria')
+        ? formatLyriaResponse(this.modelName, output, audio, cost)
+        : { output, audio, cost };
 
       const response = withResponseCacheMetadata(
         {
-          output,
-          ...(audio && { audio }),
+          output: media.output,
+          ...(media.audio && { audio: media.audio }),
           tokenUsage,
-          cost,
+          cost: media.cost,
           raw: data,
           ...(guardrails && { guardrails }),
           metadata: {
@@ -511,7 +549,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
       try {
         response.output = await this.executeFunctionToolCallbacks(
-          output,
+          media.output,
           {
             ...config,
             basePath:
