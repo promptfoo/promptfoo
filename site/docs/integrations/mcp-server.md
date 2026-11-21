@@ -1,13 +1,13 @@
 ---
 title: Promptfoo MCP Server
-description: Deploy promptfoo as Model Context Protocol server enabling external AI agents to access evaluation and red teaming capabilities
+description: Run promptfoo as a local Model Context Protocol server for evaluation and red teaming capabilities
 sidebar_label: MCP Server
 sidebar_position: 21
 ---
 
 # Promptfoo MCP Server
 
-Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
+Expose promptfoo's eval tools to local AI agents via Model Context Protocol (MCP).
 
 :::info Prerequisites
 
@@ -36,7 +36,7 @@ instead of `npx promptfoo@latest ...` so both packages resolve from the same pro
 # For Cursor, Claude Desktop (STDIO transport)
 npx promptfoo@latest mcp --transport stdio
 
-# For web tools (HTTP transport)
+# For local web tools (HTTP transport)
 npx promptfoo@latest mcp --transport http --port 3100
 ```
 
@@ -167,7 +167,15 @@ The AI will:
 Choose the appropriate transport based on your use case:
 
 - **STDIO (`--transport stdio`)**: For desktop AI tools (Cursor, Claude Desktop) that communicate via stdin/stdout
-- **HTTP (`--transport http`)**: For web applications, APIs, and remote integrations that need HTTP endpoints
+- **HTTP (`--transport http`)**: For local web applications, APIs, and integrations that need HTTP endpoints. HTTP binds to `127.0.0.1`.
+
+### HTTP Security
+
+HTTP listens on `127.0.0.1` and accepts `Host` headers for `127.0.0.1`, `localhost`, or `[::1]`, with an optional port. Browser POSTs use the web UI's CSRF checks before their JSON bodies are parsed. Local origins and origins configured in [`PROMPTFOO_CSRF_ALLOWED_ORIGINS`](/docs/usage/command-line/) remain allowed.
+
+This changes the previous listener on all network interfaces. Remote clients, Docker port publication, and IPv6-only connections no longer work. Run the HTTP client in the same network namespace and connect to `127.0.0.1`, or use STDIO with a compatible client.
+
+Local-only HTTP does not sandbox tool access. MCP tools can read configs, execute providers and assertions, and write outputs with the server process's permissions. Connect only trusted clients and use trusted configs.
 
 ## Best Practices
 
@@ -298,6 +306,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # Configure promptfoo behavior
 export PROMPTFOO_CONFIG_DIR=/path/to/configs
+export PROMPTFOO_LOG_DIR=/path/to/logs
 
 # Start server with environment
 npx promptfoo@latest mcp --transport stdio
