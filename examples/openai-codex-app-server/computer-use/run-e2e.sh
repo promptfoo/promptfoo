@@ -134,7 +134,8 @@ fi
 # Launch only the two reviewed flows. Validate the decoded YAML, including the
 # generated config, before replacing any of the fixture's state directories.
 cd "$EXAMPLE_DIR"
-node - "$@" <<'NODE'
+# Stop Node from consuming --env-file before argument validation.
+node -- - "$@" <<'NODE'
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
