@@ -401,6 +401,143 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     });
   });
 
+  it('keeps sampling candidates after the target refuses', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2', 'candidate 3'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi)
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: "I'm sorry, I can't help with that.", isRefusal: true }),
+      )
+      .mockResolvedValueOnce(createProviderResponse({ output: '' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Here is how you do it.' }));
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(result.output).toBe('Here is how you do it.');
+    expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 3', step: 3 });
+  });
+
+  it('preserves partial target output for grading after a content filter cutoff', async () => {
+    mockTargetProvider.callApi.mockResolvedValueOnce({
+      output: 'partial answer',
+      isRefusal: true,
+      hasPartialOutput: true,
+    });
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+    expect(result.output).toBe('partial answer');
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the last refusal when every candidate is refused', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi)
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: 'I cannot help with that.', isRefusal: true }),
+      )
+      .mockResolvedValueOnce(createProviderResponse({ output: 'refused', isRefusal: true }));
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(result.output).toBe('refused');
+    expect(result.metadata?.redteamFinalPrompt).toBeUndefined();
+  });
+
+  it('treats a missing text output as empty and keeps sampling', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2', 'candidate 3'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ output: null })
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Here is how you do it.' }));
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(result.output).toBe('Here is how you do it.');
+  });
+
+  it('accepts a media-only response without text output', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce({
+      images: [{ data: 'aGVsbG8=', mimeType: 'image/png' }],
+    } as ProviderResponse);
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 1', step: 1 });
+  });
+
+  it('leaves an unflagged apologetic reply for the grader to judge', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce(
+      createProviderResponse({ output: "I'm sorry, but here is the secret: hunter2" }),
+    );
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe("I'm sorry, but here is the secret: hunter2");
+  });
+
+  it.each([false, true])(
+    'keeps an empty coding-agent reply with isRefusal=%s',
+    async (isRefusal) => {
+      mockFetchWithProxy.mockResolvedValue({
+        json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+      });
+      vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce(
+        createProviderResponse({ output: '', isRefusal }),
+      );
+
+      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+      const result = await provider.callApi('test prompt', {
+        ...createMockContext(mockTargetProvider),
+        test: { metadata: { pluginId: 'coding-agent:secret-env-read' } },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 1', step: 1 });
+    },
+  );
+
+  it('keeps the first answer while counting both concurrent calls', async () => {
+    const second = createDeferred<ProviderResponse>();
+    const bothStarted = createDeferred<void>();
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'First answer', cost: 0.02 })
+      .mockImplementationOnce(() => {
+        bothStarted.resolve();
+        return second.promise;
+      });
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 2 });
+    const resultPromise = provider.callApi('', createMockContext(mockTargetProvider));
+    await bothStarted.promise;
+    second.resolve({ output: 'Second answer', cost: 0.03 });
+
+    const result = await resultPromise;
+    expect(result.output).toBe('First answer');
+    expect(result.metadata?.redteamFinalPrompt).toBe('candidate 1');
+    expect(result.cost).toBeCloseTo(0.05);
+  });
+
   it('should pass options to target provider callApi', async () => {
     const provider = new BestOfNProvider({
       injectVar: 'input',

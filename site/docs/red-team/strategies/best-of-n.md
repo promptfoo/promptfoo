@@ -39,7 +39,7 @@ BoN Jailbreaking works through a simple three-step process:
 
 2. **Concurrent Testing**: Tests multiple variations simultaneously against the target model
 
-3. **Success Detection**: Monitors responses until a harmful output is detected or the maximum attempts are reached
+3. **Response selection**. The plugin grader evaluates the first usable reply. Sampling continues after empty replies and provider-declared refusals. Providers can retain partial model output from a filtered response for grading. Coding-agent checks can also grade tool actions when the final message is empty. Calls already in flight contribute to the reported cost.
 
 The strategy's effectiveness comes from exploiting the stochastic nature of LLM outputs and their sensitivity to small input variations.
 
