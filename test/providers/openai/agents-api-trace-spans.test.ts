@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { normalizeHostedTrace } from '../../../src/providers/openai/agents-api-trace-spans';
+import { sanitizeTraceAttributes } from '../../../src/tracing/sanitizeAttributes';
 
 const traceId = 'b94f3ef2d9574e71a3084b13865d60b8';
 const parentId = '6f3b409971b19c81';
@@ -742,6 +743,41 @@ describe('normalizeHostedTrace', () => {
     expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
     expect(spans[1].attributes?.['gen_ai.tool.call.arguments']).toBe(raw);
     expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it.each(['q7', 'c6af2a137b918a14a37aa88bb504a998.csv'])(
+    'drops credential-bearing path components and inspection operands (%s)',
+    (component) => {
+      const path = `/workspace/${component}/data.csv`;
+      const raw = JSON.stringify({ path, command: `cat ${path}`, cwd: '/workspace' });
+      const { spans } = normalizeHostedTrace(
+        payload(root, toolWithArgs(raw)),
+        parentId,
+        true,
+        (value) => (value === 'q7' ? '[REDACTED]' : value),
+      );
+      expect(JSON.parse(spans[1].attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
+      expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+      expect(JSON.stringify(spans)).not.toContain(component);
+    },
+  );
+
+  it('keeps approved bounded argument JSON parseable through export and honors alias redactions', () => {
+    const directory = '/folder.v1'.repeat(25);
+    const raw = JSON.stringify({ cwd: directory, path: directory + '/ledger.csv' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(raw.length).toBeGreaterThan(400);
+    const stored = spans[1].attributes!;
+    const exported = sanitizeTraceAttributes(stored);
+    expect(exported['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(exported['tool.arguments']).toBe(raw);
+    const redacted = sanitizeTraceAttributes(stored, { redactAttributes: ['tool.arguments'] });
+    expect(redacted['gen_ai.tool.call.arguments']).toBe('[REDACTED]');
+    const ordinary = sanitizeTraceAttributes({
+      ...stored,
+      'promptfoo.openai.hosted_trace': undefined,
+    });
+    expect(ordinary['tool.arguments']).not.toBe(raw);
   });
 
   it('applies provider credential redaction to a supported path', () => {
