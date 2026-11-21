@@ -5,7 +5,6 @@ import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import { isApiProvider, isProviderOptions } from '../types/providers';
-import { serializeBedrockProviderRef } from '../util/bedrockSerialization';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -13,6 +12,7 @@ import {
   mapTestProviderRefs,
   REDACTED,
   sanitizeObject,
+  serializeBedrockProviderRef,
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';

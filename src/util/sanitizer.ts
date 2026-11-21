@@ -9,6 +9,8 @@ import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
+export { serializeBedrockProviderRef };
+
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
 const URL_REFERENCE = /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i;
