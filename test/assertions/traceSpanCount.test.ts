@@ -67,6 +67,19 @@ const defaultParams = {
 };
 
 describe('handleTraceSpanCount', () => {
+  it.each([true, false])('rejects contradictory bounds before inversion (%s)', (inverse) => {
+    const value = { pattern: '*', min: 3, max: 2 };
+    expect(() =>
+      handleTraceSpanCount({
+        ...defaultParams,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+        assertion: { type: inverse ? 'not-trace-span-count' : 'trace-span-count', value },
+        renderedValue: value,
+        inverse,
+      }),
+    ).toThrow('minimum must not exceed maximum');
+  });
+
   it('should pass when span count is within max limit', () => {
     const params: AssertionParams = {
       ...defaultParams,

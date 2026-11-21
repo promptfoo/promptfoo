@@ -26,6 +26,9 @@ export const handleTraceSpanCount = ({
   }
 
   const { pattern, min, max, attributes } = value;
+  if (min !== undefined && max !== undefined && min > max) {
+    throw new Error('trace-span-count minimum must not exceed maximum');
+  }
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Count spans matching the pattern
