@@ -20,7 +20,7 @@ For direct model API calls, use the [OpenAI provider](/docs/providers/openai).
 
 ### Install
 
-Use Node.js 22.22.0 or later. Promptfoo supports SDK versions from 0.156.1 through 0.169.x. For the GPT-6.2 examples, install a version whose [bundled CLI catalog](https://github.com/openai/codex/blob/rust-v0.169.1/codex-rs/models-manager/models.json) includes Astra and Sol.
+Use a [supported Node.js version](/docs/installation#nodejs-runtime-support). Promptfoo supports SDK versions from 0.156.1 through 0.169.x. For the GPT-6.2 examples, install a version whose [bundled CLI catalog](https://github.com/openai/codex/blob/rust-v0.169.1/codex-rs/models-manager/models.json) includes Astra and Sol.
 
 ```bash
 npm install --save-dev promptfoo "@openai/codex-sdk@>=0.169.1 <0.170.0"
