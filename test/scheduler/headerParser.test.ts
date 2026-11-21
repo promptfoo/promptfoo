@@ -175,6 +175,15 @@ describe('parseRateLimitHeaders', () => {
   });
 
   describe('Generic format (ratelimit-*)', () => {
+    it('reads the effective limit from a generic quota policy list', () => {
+      const result = parseRateLimitHeaders({
+        'x-ratelimit-limit-requests': '99, 99;w=60',
+        'ratelimit-limit': '100, 100;w=60, 1000;w=3600',
+      });
+
+      expect(result.limitRequests).toBe(100);
+    });
+
     it('should parse generic ratelimit headers', () => {
       const headers = {
         'ratelimit-remaining': '300',
@@ -587,6 +596,46 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(futureTimestampMs);
+    });
+
+    it.each(['500junk', '10s', '1e3', '30.5', '+500', '0x10'])(
+      'should reject a partially numeric retry-after-ms and fall back to Retry-After: %s',
+      (value) => {
+        const result = parseRateLimitHeaders({
+          'retry-after-ms': value,
+          'retry-after': '2',
+        });
+
+        expect(result.retryAfterMs).toBe(2000);
+      },
+    );
+
+    it.each(['12abc', '100ms', '1e3', '50.5'])(
+      'should reject a partially numeric request quota header: %s',
+      (value) => {
+        const result = parseRateLimitHeaders({
+          'x-ratelimit-remaining-requests': value,
+          'x-ratelimit-limit-requests': value,
+        });
+
+        expect(result.remainingRequests).toBeUndefined();
+        expect(result.limitRequests).toBeUndefined();
+      },
+    );
+
+    it('should fall through to the next quota header when the first value is malformed', () => {
+      const result = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '12abc',
+        'anthropic-ratelimit-requests-remaining': '7',
+      });
+
+      expect(result.remainingRequests).toBe(7);
+    });
+
+    it('should still accept a bare retry-after-ms with surrounding whitespace', () => {
+      const result = parseRateLimitHeaders({ 'retry-after-ms': ' 250 ' });
+
+      expect(result.retryAfterMs).toBe(250);
     });
   });
 });
