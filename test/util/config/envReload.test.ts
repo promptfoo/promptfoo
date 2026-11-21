@@ -1434,10 +1434,11 @@ describe('suite environment loading', () => {
     }
   });
 
-  it.each([{ vars: 'vars.yaml' }, { vars: ['vars.yaml'] }])(
+  it.each([{ vars: 'vars.yaml' }, { vars: ['vars.yaml'] }, { vars: 'file://{{ env.VARS_FILE }}' }])(
     'loads and watches config-relative vars $vars inside a nested defaultTest file',
     async ({ vars }) => {
       const configPath = writeConfig('default-root', {
+        env: { VARS_FILE: 'vars.yaml' },
         defaultTest: 'file://defaults/default.yaml',
       });
       const dir = path.dirname(configPath);

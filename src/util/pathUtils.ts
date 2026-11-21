@@ -60,10 +60,19 @@ export function safeJoin(...paths: string[]): string {
   return path.join(...paths);
 }
 
-export function fileReferenceToPath(reference: string): string {
-  if (/^file:\/\/(?:\/|localhost\/)/.test(reference)) {
+export function isAbsoluteFileReference(reference: string): boolean {
+  return /^file:\/\/(?:\/|localhost\/)/i.test(reference);
+}
+
+export function fileReferenceToPath(
+  reference: string,
+  windows = process.platform === 'win32',
+): string {
+  if (isAbsoluteFileReference(reference)) {
+    // Only an explicit UNC path can name a remote host. file://dir/subdir/file is local.
+    const url = windows ? reference.replace(/^file:\/\/\/\/(?=[^/])/i, 'file://') : reference;
     // Config references are paths/globs, so keep literal # and ? rather than URL fragments.
-    return fileURLToPath(reference.replace(/[?#]/g, encodeURIComponent));
+    return fileURLToPath(url.replace(/[?#]/g, encodeURIComponent), { windows });
   }
   return reference.replace(/^file:\/\//, '');
 }

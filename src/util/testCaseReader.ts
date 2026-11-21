@@ -22,7 +22,7 @@ import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
-import { fileReferenceToPath } from './pathUtils';
+import { fileReferenceToPath, isAbsoluteFileReference } from './pathUtils';
 import { renderEnvOnlyInObject } from './render';
 import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
@@ -65,6 +65,29 @@ function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
   return test.metadata?.__promptfoo?.remote === true;
 }
 
+function resolveVarsFiles(reference: string, basePath: string, watch = false): string[] {
+  reference = renderEnvOnlyInObject(reference);
+  const resolved = path.resolve(basePath, fileReferenceToPath(reference));
+  const options = { windowsPathsNoEscape: true, magicalBraces: true };
+  let pattern: string;
+  if (isAbsoluteFileReference(reference)) {
+    if (!hasGlobMagic(reference)) {
+      return [resolved];
+    }
+    // Only raw operators are globs. Escape URL-encoded * ? [ ] ( ) { } before decoding.
+    pattern = fileReferenceToPath(
+      reference.replace(/%(?:2a|3f|5b|5d|28|29|7b|7d)/gi, (code) =>
+        escapeGlob(decodeURIComponent(code), options),
+      ),
+    );
+  } else {
+    const base = path.resolve(basePath);
+    pattern = path.resolve(escapeGlob(base, options), path.relative(base, resolved));
+  }
+  const matches = globSync(pattern, { windowsPathsNoEscape: true });
+  return watch && matches.length === 0 ? [resolved] : matches;
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = cliState.basePath || '',
@@ -75,13 +98,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, fileReferenceToPath(pathOrGlob));
-
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
-
-    for (const p of paths) {
+    for (const p of resolveVarsFiles(pathOrGlob, basePath)) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
@@ -915,15 +932,9 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(
-  reference: string,
-  basePath: string,
-  varsFile = false,
-): string[] {
+function resolveTestsFileReference(reference: string, basePath: string): string[] {
   reference = renderEnvOnlyInObject(reference);
-  const withoutScheme = varsFile
-    ? fileReferenceToPath(reference)
-    : reference.replace(/^file:\/\//, '');
+  const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
     return [];
   }
@@ -1098,7 +1109,7 @@ export function resolveTestsWatchPaths(
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
           typeof value === 'string'
-            ? resolveTestsFileReference(value, basePath, true).flatMap((file) => [
+            ? resolveVarsFiles(value, basePath, true).flatMap((file) => [
                 file,
                 ...collectNestedFileReferences(file, basePath, false),
               ])

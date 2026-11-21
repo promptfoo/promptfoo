@@ -30,6 +30,15 @@ describe('pathUtils', () => {
       },
     );
 
+    it('requires an explicit UNC path on Windows to avoid accidental network access', () => {
+      expect(fileReferenceToPath('file:////server/share/vars%20file.yaml', true)).toBe(
+        '\\\\server\\share\\vars file.yaml',
+      );
+      expect(fileReferenceToPath('file://server/share/vars.yaml', true)).toBe(
+        'server/share/vars.yaml',
+      );
+    });
+
     it('accepts localhost file URLs and preserves literal glob syntax', () => {
       const absolutePath = path.resolve('/base', 'vars??.yaml');
       const reference = pathToFileURL(absolutePath)

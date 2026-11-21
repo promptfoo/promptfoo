@@ -44,7 +44,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
-import { fileReferenceToPath } from '../pathUtils';
+import { fileReferenceToPath, isAbsoluteFileReference } from '../pathUtils';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
@@ -683,8 +683,10 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
       return reference;
     }
     if (varsFile) {
-      // Keep a filesystem path after decoding so later loading does not decode it twice.
-      return path.resolve(basePath, fileReferenceToPath(reference));
+      // Preserve encoded literal characters until the vars-file resolver expands globs.
+      return isAbsoluteFileReference(reference)
+        ? reference
+        : path.resolve(basePath, fileReferenceToPath(reference));
     }
     const prefix = reference.startsWith('file://') ? 'file://' : '';
     return prefix + path.resolve(basePath, reference.slice(prefix.length));

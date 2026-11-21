@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import { readTestFiles, readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -170,6 +170,15 @@ describe('resolveTestsWatchPaths', () => {
     expect(resolve('file://report[1].csv' as TestSuiteConfig['tests'])).toEqual([
       path.join(base, 'report[1].csv'),
     ]);
+  });
+
+  it('loads and watches only the encoded literal file, even beside matching glob siblings', async () => {
+    const filename = path.join(base, 'vars[12].yaml');
+    fs.writeFileSync(filename, 'source: literal');
+    fs.writeFileSync(path.join(base, 'vars1.yaml'), 'sibling: unwanted');
+    const reference = pathToFileURL(filename).href;
+    expect(await readTestFiles(reference, base)).toEqual({ source: 'literal' });
+    expect(resolve([{ vars: reference }])).toEqual([filename]);
   });
 
   it('preserves literal percent escapes in existing per-variable file references', () => {
