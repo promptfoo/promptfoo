@@ -1001,6 +1001,9 @@ describe('sanitizeObject', () => {
       '{ "item": {"apiKey":"private-value"}, "item":{} }',
     ])('does not restore hidden credentials or overwritten keys', (source) => {
       expect(sanitizeObject(source)).not.toContain('private-value');
+      const form = `payload=${encodeURIComponent(source)}`;
+      expect(sanitizeObject(form)).not.toContain('private-value');
+      expect(sanitizeUrl(`https://example.org/?${form}`)).not.toContain('private-value');
     });
 
     it('bounds nested JSON-encoded string sanitization', () => {

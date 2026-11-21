@@ -1273,11 +1273,8 @@ function decodeFormComponent(component: string): string | undefined {
 }
 
 /**
- * When a form value URL-decodes to a JSON object/array, recursively sanitize
- * it and return the serialized result — but only if sanitization actually
- * changed something. Returns `null` when there is no JSON to sanitize or when
- * the value is JSON but contains no secrets (so callers can preserve the
- * original byte-for-byte).
+ * Keep the original form or URL encoding only when every JSON token survives
+ * parsing and sanitization, including keys that JSON.parse would discard.
  */
 function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (decoded === undefined) {
@@ -1300,9 +1297,8 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
     sanitizeUrls: true,
     maxDepth: Number.POSITIVE_INFINITY,
   });
-  const originalSerialized = JSON.stringify(parsed);
-  const sanitizedSerialized = JSON.stringify(sanitized);
-  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+  const encoded = JSON.stringify(sanitized);
+  return retainJsonWhitespace(trimmed, encoded) === trimmed ? null : encoded;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
