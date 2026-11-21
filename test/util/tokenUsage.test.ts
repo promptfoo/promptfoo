@@ -62,6 +62,23 @@ describe('evaluation token usage', () => {
     });
   });
 
+  it('charges a provider loaded by another entry point only to its innermost evaluation', async () => {
+    vi.resetModules();
+    const other = await import('../../src/util/tokenUsage');
+    expect(other.trackResponseUsage).not.toBe(trackResponseUsage);
+    let nested!: object;
+    const outer = await withTokenUsageTracking(async () => {
+      nested = await other.withTokenUsageTracking(async () => {
+        trackResponseUsage('child', { tokenUsage: { total: 11 } });
+        return {};
+      });
+      other.trackResponseUsage('parent', { tokenUsage: { total: 2 } });
+      return {};
+    });
+    expect([...other.getProviderTokenUsage(outer).keys()]).toEqual(['parent']);
+    expect(getProviderTokenUsage(nested).get('child')?.total).toBe(11);
+  });
+
   it('returns independent evaluation usage snapshots and keeps malformed usage from overwriting prior totals', async () => {
     const evaluation = await withTokenUsageTracking(async () => {
       trackResponseUsage('target', { tokenUsage: { total: 5, completion: 5 } });

@@ -9,27 +9,36 @@ import {
   createEmptyTokenUsage,
 } from './tokenUsageUtils';
 
-const evaluationUsage = new WeakMap<object, Map<string, TokenUsage>>();
-const activeUsage = new AsyncLocalStorage<{
-  providers: Map<string, TokenUsage>;
-  active: boolean;
-}>();
+// CLI hooks and package callers can mix CJS and ESM copies. Share the
+// async context and result lookup while keeping totals local to each run.
+const USAGE = Symbol.for('promptfoo.tokenUsage.v1');
+type Totals = Map<string, TokenUsage>;
+type UsageState = {
+  active: AsyncLocalStorage<{ totals?: Totals }>;
+  finished: WeakMap<object, Totals>;
+};
+const shared = globalThis as { [USAGE]?: UsageState };
+const usage: UsageState = (shared[USAGE] ??= {
+  active: new AsyncLocalStorage(),
+  finished: new WeakMap(),
+});
 
 /** Own provider accounting for one evaluation, including its async cleanup. */
 export async function withTokenUsageTracking<T extends object>(run: () => Promise<T>): Promise<T> {
-  const state = { providers: new Map<string, TokenUsage>(), active: true };
+  const totals: Totals = new Map();
+  const state: { totals?: Totals } = { totals };
   try {
-    const evaluation = await activeUsage.run(state, run);
-    evaluationUsage.set(evaluation, state.providers);
+    const evaluation = await usage.active.run(state, run);
+    usage.finished.set(evaluation, totals);
     return evaluation;
   } finally {
     // Timed-out provider work can outlive the evaluation and inherit its context.
-    state.active = false;
+    state.totals = undefined;
   }
 }
 
 export function getProviderTokenUsage(evaluation: object): ReadonlyMap<string, TokenUsage> {
-  return structuredClone(evaluationUsage.get(evaluation) ?? new Map());
+  return structuredClone(usage.finished.get(evaluation) ?? new Map());
 }
 
 /** Add incurred tokens and cache hits to this evaluation's provider totals. */
@@ -37,8 +46,8 @@ export function trackResponseUsage(
   providerId: string,
   response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
 ): void {
-  const state = activeUsage.getStore();
-  if (!state?.active || !response) {
+  const totals = usage.active.getStore()?.totals;
+  if (!totals || !response) {
     return;
   }
   let tokenUsage: TokenUsage | undefined;
@@ -53,7 +62,7 @@ export function trackResponseUsage(
   } catch {
     tokenUsage = undefined;
   }
-  const current = state.providers.get(providerId) ?? createEmptyTokenUsage();
+  const current = totals.get(providerId) ?? createEmptyTokenUsage();
   const updated = { ...current };
   const accounting = createEmptyTokenUsage();
   accumulateResponseTokenUsage(accounting, { cached: response.cached, tokenUsage });
@@ -61,7 +70,7 @@ export function trackResponseUsage(
     ...(accounting.incurredTokenUsage ?? accounting),
     cached: accounting.cached,
   });
-  state.providers.set(providerId, updated);
+  totals.set(providerId, updated);
   logger.debug(
     `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${tokenUsage?.total ?? 0}, cached=${tokenUsage?.cached ?? 0}`,
   );

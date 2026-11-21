@@ -55,7 +55,11 @@
       }
     },
     "src/app": {
-      "entry": ["index.html"],
+      "entry": [
+        "index.html",
+        // Vite loads these build plugins outside the app source directory.
+        "vite.shared.ts"
+      ],
       "project": ["src/**/*.{js,ts,tsx}"],
       "ignoreDependencies": [
         // Tailwind v4 is loaded through the CSS/PostCSS pipeline.
@@ -78,7 +82,6 @@
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
         "@theme/*",
-        "@mui/*",
         "@generated/*"
       ]
     },
@@ -89,7 +92,6 @@
   "ignoreBinaries": [
     // System tools invoked by package scripts and subprocesses.
     "act",
-    "ffmpeg",
     "go",
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",
