@@ -149,6 +149,15 @@ describe('redactDiagnosticText', () => {
     expect(redacted).not.toMatch(/upstream-|sk-proj-/);
   });
 
+  it.each(['\\secret', 'left\\right', 'left\\;right', 'left\\ right'])(
+    'masks backslashes in a bare credential and preserves the next field (%#)',
+    (value) => {
+      expect(redactDiagnosticText('PASSWORD=' + value + '; status=400', [])).toBe(
+        'PASSWORD=' + REDACTED + '; status=400',
+      );
+    },
+  );
+
   it('preserves literal backslash credential matching when normalizing escaped slashes', () => {
     const credential = 'synthetic\\/credential';
     expect(redactDiagnosticText(`failed ${credential}`, [credential])).toBe(`failed ${REDACTED}`);

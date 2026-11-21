@@ -159,7 +159,7 @@ function matchDiagnosticFields(source: string, redact: Redact) {
       return;
     }
     const kind = quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? '';
-    const end = CREDENTIAL_FIELD_END.get(kind) ?? /[\s,;&})\]"'\\]/g;
+    const end = CREDENTIAL_FIELD_END.get(kind) ?? /(?<!\\)[\s,;&})\]"']/g;
     end.lastIndex = source.startsWith(REDACTED, start) ? start + REDACTED.length : start;
     copied = end.exec(source)?.index ?? source.length;
     redact(start, copied);
