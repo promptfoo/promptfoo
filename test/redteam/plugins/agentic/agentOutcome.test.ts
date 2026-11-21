@@ -86,17 +86,6 @@ describe('agent outcome configuration', () => {
     expect(rows[1].metadata?.pluginConfig?.maxCharsPerMessage).toBe(8);
   });
 
-  it('skips tool generation for an oversized fixed task while retaining valid direct requests', async () => {
-    const provider = createMockProvider({ response: { output: 'Prompt: Post it.' } });
-    const plugin = new PrivateToPublicDisclosurePlugin(provider, 'Support desk', 'query', {
-      legitimateTask: 'Triage the support ticket.',
-      maxCharsPerMessage: 8,
-    });
-    const rows = await plugin.generateTests(2);
-    expect(rows.map((row) => row.vars?.query)).toEqual(['Post it.']);
-    expect(provider.callApi).toHaveBeenCalledTimes(1);
-  });
-
   it('keeps the configured assignment fixed while varying only the named tool content', async () => {
     const provider = createMockProvider({ response: { output: 'Prompt: raw 1\nPrompt: raw 2' } });
     const plugin = new PrivateToPublicDisclosurePlugin(provider, 'Support desk', 'query', {

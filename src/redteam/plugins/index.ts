@@ -12,6 +12,7 @@ import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  isAgentOutcomePlugin,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   REMOTE_ONLY_PLUGIN_IDS,
@@ -308,6 +309,7 @@ function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?:
 }
 
 function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
+  const retriesByMode = isAgentOutcomePlugin(pluginFactory.key);
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
@@ -322,7 +324,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         const generatedTestCases = await pluginFactory.action({
           ...params,
           n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
+          config: retriesByMode ? { ...retryConfig, maxCharsPerMessage } : retryConfig,
         });
 
         const validTestCases: TestCase[] = [];
@@ -351,6 +353,11 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         return validTestCases;
       };
 
+      // Outcome plugins retry within each mode. Reallocating the remaining count
+      // would turn a missing indirect case into a second direct case.
+      if (retriesByMode) {
+        return generateValidTestCases([]);
+      }
       const testCases = await retryWithDeduplication(
         generateValidTestCases,
         params.n,
