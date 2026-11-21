@@ -74,10 +74,11 @@ export default {
     const method = candidate ? 'capture' : 'track';
     const afterReject = await probe(source, method, 'reject');
     const afterAccept = await probe(source, method, 'accept');
+    const completed = afterReject?.handlerCompleted && afterAccept?.handlerCompleted;
     return {
-      taskCompleted: Boolean(candidate) && collected(afterAccept),
+      taskCompleted: completed ? Boolean(candidate) && collected(afterAccept) : null,
       measurements: {
-        beforeReject: collected(beforeAccept) ? baseline : null,
+        beforeReject: beforeAccept?.handlerCompleted && collected(beforeAccept) ? baseline : null,
         afterReject,
         afterAccept,
       },

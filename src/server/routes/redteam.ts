@@ -37,6 +37,10 @@ import type { Request, Response } from 'express';
 import type { RedteamFileConfig, TestCase, TestCaseWithPlugin } from '../../types';
 
 export const redteamRouter = Router();
+const multiInputExcluded = new Set<string>([
+  ...DATASET_EXEMPT_PLUGINS,
+  ...MULTI_INPUT_EXCLUDED_PLUGINS,
+]);
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -75,15 +79,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     }
 
     // In multi-input mode, some plugins don't support dynamic generation
-    const hasMultiInput =
-      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
-    if (hasMultiInput) {
-      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
-        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
-        res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
-        return;
-      }
+    if (multiInputExcluded.has(plugin.id) && Object.keys(plugin.config.inputs ?? {}).length > 0) {
+      logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+      res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+      return;
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)
@@ -141,7 +140,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           },
         );
 
-        if (strategyTestCases && strategyTestCases.length > 0) {
+        if (strategyTestCases?.length) {
           finalTestCases = strategyTestCases;
         }
       } catch (error) {

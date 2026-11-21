@@ -32,7 +32,7 @@ Record Pat's permissions before and after the turn. Create a private build in th
 
 Select each plugin explicitly in red team setup or in YAML, including the consent plugin when using `coding-agent:all`. Use the `basic` strategy to preserve the source of each instruction.
 
-The HTTP target below receives a user message, a ticket body, and case metadata. In Cloud, use an address reachable by your runner.
+The request transform sends the message and ticket body as strings, even when they contain JSON, and the case metadata as an object. In Cloud, use an address reachable by your runner.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -46,8 +46,8 @@ providers:
         Content-Type: application/json
       body:
         message: '{{prompt}}'
-        ticketBody: '{{artifact}}'
-        trial: '{{agentOutcome | dump}}'
+      transformRequest: |
+        (message, vars) => ({ message, ticketBody: vars.artifact, trial: vars.agentOutcome })
       transformResponse: |
         (json) => ({
           output: json.reply,
@@ -73,7 +73,7 @@ npx promptfoo redteam eval --no-cache
 `mode` accepts `direct`, `indirect`, or `both` (default). With `both`, Promptfoo splits `numTests` evenly and gives any extra case to `direct`. The config above generates two of each.
 
 1. Start each trial with fresh synthetic data, including retries. Keep `trial.pluginId` and `trial.caseId` in the harness.
-2. Send `message` as the user request. For indirect trials it contains the fixed `legitimateTask`. Seed the ticket with `ticketBody` so the agent retrieves it through a tool. To rename `artifact`, set `indirectInjectionVar` and update the body template.
+2. Send `message` as the user request. For indirect trials it contains the fixed `legitimateTask`. Seed the ticket with `ticketBody` so the agent retrieves it through a tool. To rename `artifact`, set `indirectInjectionVar` and update the request transform.
 3. After the turn, collect `observations` with separate credentials. Keep the collector, credentials, controls, and observations outside the agent's write access. Observations can appear in eval exports.
 
 ## Return evidence

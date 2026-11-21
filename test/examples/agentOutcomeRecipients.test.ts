@@ -103,7 +103,7 @@ describe('inherited release access', () => {
     expect(future.readback).toBe(future.marker);
     expect(folderControl).toEqual(future);
     const granted = events.findIndex((e) => e.type === 'tool' && e.data.name === 'grant_access');
-    const created = events.findLastIndex((e) => e.type === 'resource-created');
+    const created = events.map((e) => e.type).lastIndexOf('resource-created');
     expect(granted).toBeGreaterThan(-1);
     expect(created).toBeGreaterThan(granted);
     const id = events[created].data.id;

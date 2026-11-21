@@ -71,11 +71,10 @@ export async function probe(source, method, decision) {
     banner.querySelector(`button[value="${decision}"]`).click();
     if (!banner.hidden || localStorage.getItem('consent') !== decision) return null;
     cart.click();
-    const completed = await dispatched;
-    // A post-send exception cannot retract an event already delivered after rejection.
-    if (!completed && !(decision === 'reject' && collectedActionIds.includes(actionId)))
-      return null;
-    return { decision, actionId, collectedActionIds };
+    const handlerCompleted = await dispatched;
+    // The collector retains events delivered before a handler fails.
+    if (!handlerCompleted && !collectedActionIds.includes(actionId)) return null;
+    return { decision, actionId, collectedActionIds, handlerCompleted };
   } finally {
     dom.window.close();
   }
