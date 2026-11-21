@@ -313,10 +313,13 @@ async function doGenerateRedteamInternal(
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
     // Write configFromCloud to a temporary file
-    const filename = `redteam-generate-${Date.now()}.yaml`;
+    const filename = `redteam-generate-${randomUUID()}.yaml`;
     const tmpFile = path.join('', filename);
     await fs.mkdir(path.dirname(tmpFile), { recursive: true });
-    await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud));
+    await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud), {
+      flag: 'wx',
+      mode: 0o600,
+    });
     configPath = tmpFile;
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
