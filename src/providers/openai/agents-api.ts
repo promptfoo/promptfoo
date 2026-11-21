@@ -22,6 +22,7 @@ import { runWithAbort, sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { decodeUrlComponent } from '../urlEncoding';
 import {
+  decodeBasicCredentials,
   getHostedCredentialArgument,
   getHostedHeaderCredentialParts,
 } from './agents-api-credential-args';
@@ -215,16 +216,13 @@ function addCredential(credentials: Set<string>, value: unknown, field?: string)
       candidates.push(part);
     }
   }
-  const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
+  const basic = /^Basic\s+([a-z\d._~+/-]+=*)$/i.exec(trimmed);
   if (basic) {
-    const bytes = Buffer.from(basic[1], 'base64');
-    const decoded = bytes.toString('utf8');
-    const separator = decoded.indexOf(':');
-    if (
-      separator !== -1 &&
-      bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
-    ) {
-      candidates.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
+    const parts = decodeBasicCredentials(basic[1]);
+    if (parts) {
+      candidates.push(...parts);
+    } else {
+      credentials.add(UNINSPECTABLE_AUTHORIZATION);
     }
   }
   for (const candidate of candidates) {
