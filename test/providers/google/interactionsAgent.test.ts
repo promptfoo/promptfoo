@@ -773,12 +773,15 @@ describe('GoogleInteractionsAgentProvider', () => {
     });
   });
 
-  it.each(['auto', 'none'])('honors prompt overrides with tool_choice: %s', async (tool_choice) => {
+  it.each(['auto', 'none', undefined])('honors tool_choice: %s', async (tool_choice) => {
     mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
     const tools = [{ type: 'google_search' }];
     const provider = researchAgent({
       passthrough: {
         tools,
+        tool_config: {
+          function_calling_config: { mode: tool_choice === 'none' ? 'AUTO' : 'NONE' },
+        },
         agent_config: { collaborative_planning: false },
         environment: 'provider-sandbox',
         previous_interaction_id: 'provider-id',

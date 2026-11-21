@@ -108,6 +108,8 @@ const RESERVED_AGENT_REQUEST_FIELDS = new Set([
   'environment',
   'previous_interaction_id',
   'previousInteractionId',
+  'toolConfig',
+  'tool_config',
 ]);
 
 // Agents whose `agent_config.type` and environment defaults Google documents.
@@ -305,7 +307,10 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
       ...promptConfig?.passthrough,
       store: field('store'),
     };
-    if (resolveGoogleToolConfig(config).toolsDisabled) {
+    const toolMode =
+      resolveGoogleToolConfig(promptConfig ?? {}).toolConfig?.functionCallingConfig?.mode ??
+      resolveGoogleToolConfig(this.config).toolConfig?.functionCallingConfig?.mode;
+    if (toolMode === 'NONE') {
       delete config.tools;
       delete passthrough.tools;
     }
