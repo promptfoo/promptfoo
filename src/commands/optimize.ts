@@ -9,6 +9,7 @@ import { printBorder, setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 
 interface OptimizeOptions {
+  abortSignal?: AbortSignal;
   config?: string;
   envPath?: string | string[];
   promptIndex?: number;
@@ -22,19 +23,11 @@ function applyCommandLineEvaluateOptions(
   config: Partial<UnifiedConfig>,
   commandLineOptions: Partial<CommandLineOptions> | undefined,
 ): Partial<UnifiedConfig> {
-  const overrides: Partial<EvaluateOptions> = {};
-  if (commandLineOptions?.delay !== undefined) {
-    overrides.delay = commandLineOptions.delay;
-  }
-  if (commandLineOptions?.filterRange !== undefined) {
-    overrides.filterRange = commandLineOptions.filterRange;
-  }
-  if (commandLineOptions?.maxConcurrency !== undefined) {
-    overrides.maxConcurrency = commandLineOptions.maxConcurrency;
-  }
-  if (commandLineOptions?.repeat !== undefined) {
-    overrides.repeat = commandLineOptions.repeat;
-  }
+  const overrides: Partial<EvaluateOptions> = Object.fromEntries(
+    (['delay', 'filterRange', 'maxConcurrency', 'repeat'] as const)
+      .filter((key) => commandLineOptions?.[key] !== undefined)
+      .map((key) => [key, commandLineOptions?.[key]]),
+  );
   return Object.keys(overrides).length > 0
     ? { ...config, evaluateOptions: { ...config.evaluateOptions, ...overrides } }
     : config;
@@ -80,11 +73,13 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
     resolved.commandLineOptions,
   );
   const result = await optimizePromptTestSuite(mergedConfig, resolved.testSuite, {
+    abortSignal: options.abortSignal,
     promptIndex: options.promptIndex ?? 0,
     providerIndex: options.providerIndex ?? 0,
     validationSplit: options.validationSplit,
   });
 
+  options.abortSignal?.throwIfAborted();
   printBorder();
   logger.info(chalk.bold('Prompt optimization result'));
   logger.info(
@@ -188,15 +183,28 @@ export function optimizeCommand(
         providerIndex?: number;
         validationSplit?: number;
       }) => {
+        const controller = new AbortController();
+        const cancel = (signal: NodeJS.Signals) => {
+          process.exitCode = signal === 'SIGINT' ? 130 : 143;
+          controller.abort(new Error('Operation cancelled'));
+        };
+        process.once('SIGINT', cancel);
+        process.once('SIGTERM', cancel);
         try {
           await doOptimize({
             ...opts,
             defaultConfig,
             defaultConfigPath,
+            abortSignal: controller.signal,
           });
         } catch (error) {
           logger.error(error instanceof Error ? error.message : String(error));
-          process.exitCode = 1;
+          if (!controller.signal.aborted) {
+            process.exitCode = 1;
+          }
+        } finally {
+          process.off('SIGINT', cancel);
+          process.off('SIGTERM', cancel);
         }
       },
     );

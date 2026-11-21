@@ -3,9 +3,11 @@ import cliState from '../cliState';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { asEvaluateResult } from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import { OPTIMIZE_PROMPT_SYSTEM_MESSAGE } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import { waitForPromiseWithAbort } from '../providers/shared';
 import {
   type CompletedPrompt,
   type EvaluateResult,
@@ -14,10 +16,9 @@ import {
 } from '../types/index';
 import { filterByRange } from '../util/filterRange';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
-import { isPromptAllowed } from '../util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
 
-import type EvalResult from '../models/evalResult';
 import type { UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
@@ -134,8 +135,14 @@ function createOptimizationExamples(results: EvaluateResult[]) {
   }));
 }
 
-function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+function selectPromptFeedback(evalRecord: Eval, promptIndex: number) {
+  const rows = evalRecord.results
+    .map((row) => asEvaluateResult(row))
+    .filter((row) => row.promptIdx === promptIndex);
+  return {
+    failures: rows.filter((row) => !row.success).slice(0, MAX_FAILURE_EXAMPLES),
+    successes: rows.filter((row) => row.success).slice(0, MAX_SUCCESS_EXAMPLES),
+  };
 }
 
 function buildCandidateGenerationPayload(params: {
@@ -226,7 +233,13 @@ export async function generateOptimizedPromptCandidates(params: {
     history: params.history,
   });
   const response = params.abortSignal
-    ? await provider.callApi(payload, undefined, { abortSignal: params.abortSignal })
+    ? await waitForPromiseWithAbort(
+        provider.callApi(payload, undefined, { abortSignal: params.abortSignal }),
+        params.abortSignal,
+      ).catch((error) => {
+        throwIfOptimizationAborted(params.abortSignal);
+        throw error;
+      })
     : await provider.callApi(payload);
   throwIfOptimizationAborted(params.abortSignal);
 
@@ -468,8 +481,9 @@ function createSelectedOptimizationTestSuite(
   }
 
   const providerKey = selectedProvider.label || selectedProvider.id();
-  const allowedPrompts = testSuite.providerPromptMap?.[providerKey];
-  if (!isPromptAllowed(selectedPrompt, allowedPrompts)) {
+  const override = getProviderPromptOverride(selectedProvider, testSuite.providerPromptMap);
+  const selectors = override ?? selectedProvider.prompts?.slice();
+  if (!isPromptAllowed(selectedPrompt, selectors)) {
     throw new Error(
       `Prompt index ${promptIndex} is not configured for provider index ${providerIndex}.`,
     );
@@ -481,6 +495,14 @@ function createSelectedOptimizationTestSuite(
     ...testSuite,
     prompts: [selectedPrompt],
     providers: [selectedProvider],
+    providerPromptMap:
+      selectors === undefined
+        ? testSuite.providerPromptMap
+        : {
+            ...testSuite.providerPromptMap,
+            ...(override === undefined && { [selectedProvider.id()]: selectors }),
+            [providerKey]: selectors,
+          },
   };
 }
 
@@ -518,65 +540,17 @@ function buildCandidateProviderPromptMap(
     return testSuite.providerPromptMap;
   }
 
+  const extendedFilters = new Map<string[], string[]>();
   return Object.fromEntries(
     Object.entries(testSuite.providerPromptMap).map(([providerId, labels]) => {
-      return [
-        providerId,
-        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ?? labels,
-      ];
+      const extended =
+        extendedFilters.get(labels) ??
+        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ??
+        labels;
+      extendedFilters.set(labels, extended);
+      return [providerId, extended];
     }),
   );
-}
-
-function buildCandidateTests(
-  tests: TestSuite['tests'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['tests'] {
-  if (!tests) {
-    return tests;
-  }
-
-  return tests.map((test) => ({
-    ...test,
-    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-  }));
-}
-
-function buildCandidateDefaultTest(
-  defaultTest: TestSuite['defaultTest'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['defaultTest'] {
-  if (!defaultTest || typeof defaultTest !== 'object') {
-    return defaultTest;
-  }
-
-  return {
-    ...defaultTest,
-    prompts: extendPromptFilter(defaultTest.prompts, routingPrompt, seedPrompt, candidateLabels),
-  };
-}
-
-function buildCandidateScenarios(
-  scenarios: TestSuite['scenarios'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['scenarios'] {
-  return scenarios?.map((scenario) => ({
-    ...scenario,
-    config: scenario.config.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-    tests: scenario.tests.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-  }));
 }
 
 function createCandidateTestSuite(
@@ -600,6 +574,14 @@ function createCandidateTestSuite(
     .map((prompt) => prompt.label)
     .filter(Boolean) as string[];
 
+  const withCandidatePrompts = <T extends { prompts?: string[] }>(test: T) => ({
+    ...test,
+    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+  });
+  const mapTests = (tests: TestSuite['tests']) => tests && tests.map(withCandidatePrompts);
+  const mapDefaultTest = (test: TestSuite['defaultTest']) =>
+    test && typeof test === 'object' ? withCandidatePrompts(test) : test;
+
   return {
     ...testSuite,
     prompts: [seedPrompt, ...candidatePrompts],
@@ -609,19 +591,13 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    tests: buildCandidateTests(testSuite.tests, routingPrompt, seedPrompt, candidateLabels),
-    defaultTest: buildCandidateDefaultTest(
-      testSuite.defaultTest,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
-    scenarios: buildCandidateScenarios(
-      testSuite.scenarios,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
+    tests: mapTests(testSuite.tests),
+    defaultTest: mapDefaultTest(testSuite.defaultTest),
+    scenarios: testSuite.scenarios?.map((scenario) => ({
+      ...scenario,
+      config: scenario.config.map(withCandidatePrompts),
+      tests: scenario.tests.map(withCandidatePrompts),
+    })),
   };
 }
 
@@ -782,23 +758,12 @@ function createEvaluationOptions(
   }
   // Match the `eval` command: a configured delay only rate-limits API calls
   // when concurrency is forced to 1, otherwise delayed evals still run in parallel.
-  if (typeof options.delay === 'number' && !Number.isNaN(options.delay) && options.delay > 0) {
+  if (typeof options.delay === 'number' && Number.isFinite(options.delay) && options.delay > 0) {
     options.maxConcurrency = 1;
   } else {
     options.delay = undefined;
   }
   return options;
-}
-
-function runOptimizationEvaluation(
-  testSuite: TestSuite,
-  evalRecord: Eval,
-  options: InternalEvaluateOptions,
-): Promise<Eval> {
-  const runEvaluation = () => evaluate(cloneOptimizationTestSuite(testSuite), evalRecord, options);
-  return options.maxConcurrency === undefined
-    ? runEvaluation()
-    : cliState.withMaxConcurrency(options.maxConcurrency, runEvaluation);
 }
 
 function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
@@ -843,22 +808,26 @@ export async function optimizePromptTestSuite(
   // candidate result rows to a .jsonl file the user expects only `eval` to populate.
   const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
-  logger.info('Running baseline evaluation for prompt optimization...');
-  const baselineEval = await runOptimizationEvaluation(
-    searchTestSuite,
-    new Eval(optimizationConfig, { persisted: false }),
-    createEvaluationOptions(config, filterRangeApplied, abortSignal),
-  );
-  throwIfOptimizationAborted(abortSignal);
-  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
-  const baselineValidationEval = validationTestSuite
-    ? await runOptimizationEvaluation(
-        validationTestSuite,
+  const run = async (suite: TestSuite) => {
+    throwIfOptimizationAborted(abortSignal);
+    const evalOptions = createEvaluationOptions(config, filterRangeApplied, abortSignal);
+    const evaluateSuite = () =>
+      evaluate(
+        cloneOptimizationTestSuite(suite),
         new Eval(optimizationConfig, { persisted: false }),
-        createEvaluationOptions(config, filterRangeApplied, abortSignal),
-      )
-    : undefined;
-  throwIfOptimizationAborted(abortSignal);
+        evalOptions,
+      );
+    const result = await (evalOptions.maxConcurrency === undefined
+      ? evaluateSuite()
+      : cliState.withMaxConcurrency(evalOptions.maxConcurrency, evaluateSuite));
+    throwIfOptimizationAborted(abortSignal);
+    return result;
+  };
+
+  logger.info('Running baseline evaluation for prompt optimization...');
+  const baselineEval = await run(searchTestSuite);
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
+  const baselineValidationEval = validationTestSuite ? await run(validationTestSuite) : undefined;
   assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
@@ -871,21 +840,13 @@ export async function optimizePromptTestSuite(
     throw new Error('Prompt optimization currently supports string prompts only.');
   }
 
-  const baselineResults = baselineEval.results
-    .map(toEvaluateResult)
-    .filter((result) => result.promptIdx === baselinePromptIndex);
-  let currentFailures = baselineResults
-    .filter((result) => !result.success)
-    .slice(0, MAX_FAILURE_EXAMPLES);
-  let currentSuccesses = baselineResults
-    .filter((result) => result.success)
-    .slice(0, MAX_SUCCESS_EXAMPLES);
+  let feedback = selectPromptFeedback(baselineEval, baselinePromptIndex);
   let currentPrompt = baselinePrompt;
   let currentValidationPrompt = baselineValidationPrompt;
   let currentPromptSource = baselineSourcePrompt;
   const history: PromptOptimizationHistoryItem[] = [
     {
-      failures: createOptimizationExamples(currentFailures),
+      failures: createOptimizationExamples(feedback.failures),
       prompt: baselineSourcePrompt.raw,
       score: scoreOf(baselinePrompt),
     },
@@ -902,8 +863,7 @@ export async function optimizePromptTestSuite(
   for (let round = 1; round <= DEFAULT_ROUNDS; round += 1) {
     const candidates = await generateRoundCandidatesOrStop(round, {
       prompt: currentPromptSource.raw,
-      failures: currentFailures,
-      successes: currentSuccesses,
+      ...feedback,
       history,
       abortSignal,
     });
@@ -920,31 +880,12 @@ export async function optimizePromptTestSuite(
     logger.info(
       `Evaluating ${candidates.length} optimized prompt candidate(s) in round ${round}...`,
     );
-    const candidateSearchSuite = createCandidateTestSuite(
-      searchTestSuite,
-      baselineSourcePrompt,
-      currentPromptSource,
-      candidates,
-    );
-    const candidateEval = await runOptimizationEvaluation(
-      candidateSearchSuite,
-      new Eval(optimizationConfig, { persisted: false }),
-      createEvaluationOptions(config, filterRangeApplied, abortSignal),
-    );
-    throwIfOptimizationAborted(abortSignal);
+    const runCandidates = (suite: TestSuite) =>
+      run(createCandidateTestSuite(suite, baselineSourcePrompt, currentPromptSource, candidates));
+    const candidateEval = await runCandidates(searchTestSuite);
     const candidateValidationEval = validationTestSuite
-      ? await runOptimizationEvaluation(
-          createCandidateTestSuite(
-            validationTestSuite,
-            baselineSourcePrompt,
-            currentPromptSource,
-            candidates,
-          ),
-          new Eval(optimizationConfig, { persisted: false }),
-          createEvaluationOptions(config, filterRangeApplied, abortSignal),
-        )
+      ? await runCandidates(validationTestSuite)
       : undefined;
-    throwIfOptimizationAborted(abortSignal);
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =
       selectBestPromptPair({
         searchPrompts: candidateEval.prompts,
@@ -974,19 +915,11 @@ export async function optimizePromptTestSuite(
         label: roundBestPrompt.label,
       };
       const chosenPromptIndex = findPromptIndex(candidateEval.prompts, roundBestPrompt);
-      const chosenResults = candidateEval.results
-        .map(toEvaluateResult)
-        .filter((result) => result.promptIdx === chosenPromptIndex);
-      currentFailures = chosenResults
-        .filter((result) => !result.success)
-        .slice(0, MAX_FAILURE_EXAMPLES);
-      currentSuccesses = chosenResults
-        .filter((result) => result.success)
-        .slice(0, MAX_SUCCESS_EXAMPLES);
+      feedback = selectPromptFeedback(candidateEval, chosenPromptIndex);
     }
 
     history.push({
-      failures: createOptimizationExamples(currentFailures),
+      failures: createOptimizationExamples(feedback.failures),
       prompt: currentPromptSource.raw,
       score: scoreOf(currentPrompt),
     });

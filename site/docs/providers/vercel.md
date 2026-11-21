@@ -2,12 +2,13 @@
 title: Vercel AI Gateway
 sidebar_label: Vercel AI Gateway
 sidebar_position: 48
-description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Vercel's unified AI Gateway. Supports text generation, streaming, structured output, and embeddings.
+description: Access language and embedding models through Vercel's unified AI Gateway
 ---
 
 # Vercel AI Gateway
 
-[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access
+models through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
 When [tracing](/docs/tracing/) is enabled, Promptfoo automatically turns on the AI SDK's built-in tracing for text generation, streaming, structured output, and embeddings. SDK spans inherit the current evaluation trace, including direct provider calls that supply a `traceparent`. Prompt and response content are not recorded. If you call the SDK directly from a [`file://` custom provider](/docs/providers/custom-api/), enable `experimental_telemetry` yourself; Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize its tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
 
@@ -47,7 +48,7 @@ providers:
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -57,7 +58,7 @@ providers:
 
 ### Full Configuration Options
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -86,6 +87,34 @@ providers:
 
 When using Claude 5, omit `temperature`, `topP`, and `topK`.
 
+### GPT-6.2
+
+Use `vercel:openai/gpt-6.2-astra` or `vercel:openai/gpt-6.2-sol`. For Fast mode, append `-fast` to either model ID. For Ultrafast, set `providerOptions.openai.serviceTier` to `ultrafast`. Both options reduce latency at a higher per-token price. [Vercel model catalog](https://vercel.com/ai-gateway/models/labs/openai) · [GPT-6.2 announcement](https://vercel.com/changelog/gpt-6-2-astra-and-sol-now-available-on-ai-gateway)
+
+```yaml
+providers:
+  - id: vercel:openai/gpt-6.2-astra
+    config:
+      providerOptions:
+        openai:
+          reasoningEffort: high
+          serviceTier: ultrafast
+```
+
+For tool calls, use the same gateway key with Promptfoo's OpenAI Responses provider. [Vercel's Responses endpoint](https://vercel.com/docs/ai-gateway/sdks-and-apis/responses)
+
+```yaml
+providers:
+  - id: openai:responses:openai/gpt-6.2-sol
+    config:
+      apiBaseUrl: https://ai-gateway.vercel.sh/v1
+      apiKeyEnvar: VERCEL_AI_GATEWAY_API_KEY
+      tools:
+        - type: web_search
+```
+
+The `vercel:` provider reports the gateway's USD charge from `providerMetadata.gateway.cost` for text generation and streaming. If the gateway omits the charge, the cost remains unknown. [Vercel AI Gateway pricing](https://vercel.com/academy/ai-gateway/ai-gateway-pricing)
+
 ### Configuration Parameters
 
 | Parameter          | Type     | Description                                     |
@@ -95,6 +124,7 @@ When using Claude 5, omit `temperature`, `topP`, and `topK`.
 | `temperature`      | number   | Controls randomness; range depends on the model |
 | `maxTokens`        | number   | Maximum number of tokens to generate            |
 | `maxRetries`       | number   | Retry attempts for a failed request             |
+| `providerOptions`  | object   | OpenAI `reasoningEffort` and `serviceTier`      |
 | `topP`             | number   | Nucleus sampling parameter                      |
 | `topK`             | number   | Top-k sampling parameter                        |
 | `frequencyPenalty` | number   | Penalizes frequent tokens                       |
@@ -111,6 +141,7 @@ When using Claude 5, omit `temperature`, `topP`, and `topK`.
 Generate structured JSON output by providing a JSON schema:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:
@@ -146,7 +177,7 @@ tests:
 
 Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:anthropic/claude-sonnet-5
     config:
@@ -158,20 +189,15 @@ The provider normalizes the AI SDK's `tool-calls` and `content-filter` finish re
 
 ## Supported Providers
 
-The Vercel AI Gateway supports models from these providers:
+Query Vercel's public model catalog for IDs, capabilities, and pricing:
 
-| Provider   | Example Models                                            |
-| ---------- | --------------------------------------------------------- |
-| OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`    |
-| Anthropic  | `anthropic/claude-sonnet-5`, `anthropic/claude-haiku-4.5` |
-| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`        |
-| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`       |
-| Cohere     | `cohere/command-a`                                        |
-| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`            |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`      |
-| xAI        | `xai/grok-3`, `xai/grok-4`                                |
+```bash
+curl -fsS https://ai-gateway.vercel.sh/v1/models
+```
 
-For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers).
+The endpoint requires no authentication. See the
+[Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers)
+for response fields and filtering examples.
 
 ## Embedding Models
 
@@ -215,6 +241,7 @@ Supported embedding models:
 ### Multi-Provider Comparison
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -240,6 +267,7 @@ tests:
 ### JSON Response with Validation
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:

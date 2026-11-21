@@ -320,6 +320,7 @@ describe('optimize command', () => {
     ]);
 
     expect(optimizePromptTestSuite).toHaveBeenCalledWith({}, expect.any(Object), {
+      abortSignal: expect.any(AbortSignal),
       promptIndex: 2,
       providerIndex: 1,
       validationSplit: 0.3,
@@ -348,6 +349,25 @@ describe('optimize command', () => {
       message,
     );
   });
+
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'cancels the active optimization on %s',
+    async (signal) => {
+      const before = process.listeners(signal);
+      vi.mocked(optimizePromptTestSuite).mockImplementationOnce(
+        async (_config, _suite, options) => {
+          process.listeners(signal).find((fn) => !before.includes(fn))!(signal);
+          expect(options?.abortSignal?.aborted).toBe(true);
+          throw new Error('Operation cancelled');
+        },
+      );
+      const program = new Command();
+      optimizeCommand(program, {}, 'input.yaml');
+      await program.parseAsync(['node', 'test', 'optimize']);
+      expect(process.exitCode).toBe(signal === 'SIGINT' ? 130 : 143);
+      expect(process.listeners(signal)).toEqual(before);
+    },
+  );
 
   it('logs action handler failures and sets the exit code', async () => {
     vi.mocked(resolveConfigs).mockRejectedValue(new Error('config exploded'));

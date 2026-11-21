@@ -46,12 +46,14 @@ cd examples/openai-agents-basic
 npm install
 ```
 
+Promptfoo and the Agents SDK are installed together locally so the exported agents share the SDK used by the provider.
+
 ## Running the Example
 
 ### Evaluate the Dungeon Master
 
 ```bash
-npx promptfoo@latest eval --no-cache
+npx promptfoo eval --no-cache
 ```
 
 This runs test cases simulating player actions and validates the DM's responses.
@@ -59,7 +61,7 @@ This runs test cases simulating player actions and validates the DM's responses.
 ### View Results
 
 ```bash
-npx promptfoo@latest view
+npx promptfoo view
 ```
 
 Opens the evaluation results in a web interface showing how the DM handled different scenarios.

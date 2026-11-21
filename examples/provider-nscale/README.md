@@ -84,7 +84,7 @@ Nscale supports many popular models with competitive pricing:
 
 **Embedding Models:**
 
-- `Qwen/Qwen3-Embedding-8B` - Qwen 3 8B Embedding model
+- `Qwen3-Embedding-8B` - Qwen 3 8B Embedding model
 
 **Text-to-Image Models:**
 
