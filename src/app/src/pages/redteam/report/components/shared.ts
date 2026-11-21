@@ -65,6 +65,10 @@ export function getReportPrompt(result: EvaluateResult, injectVar: string): stri
     return actualPrompt;
   }
 
+  if (typeof result.metadata?.redteamFinalPrompt === 'string') {
+    return result.metadata.redteamFinalPrompt;
+  }
+
   const candidateVars = [injectVar, 'query', 'prompt', 'question'];
   for (const key of new Set(candidateVars)) {
     if (!Object.prototype.hasOwnProperty.call(result.vars, key)) {

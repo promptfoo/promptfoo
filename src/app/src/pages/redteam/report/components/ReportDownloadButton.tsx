@@ -16,7 +16,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { escapeCsvFormula } from '@promptfoo/util/text';
+import { escapeCsvFormula, isCsvEscapingDisabled } from '@promptfoo/util/text';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import {
   getPluginIdFromResult,
@@ -76,14 +76,18 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       };
     });
 
-    const escapedRows = rows.map((row) =>
-      Object.fromEntries(
-        Object.entries(row).map(([key, value]) => [
-          key,
-          typeof value === 'string' ? escapeCsvFormula(value) : value,
-        ]),
-      ),
-    );
+    const escapedRows = isCsvEscapingDisabled(
+      evalData.config.env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING,
+    )
+      ? rows
+      : rows.map((row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [
+              key,
+              typeof value === 'string' ? escapeCsvFormula(value) : value,
+            ]),
+          ),
+        );
 
     return stringify(escapedRows, {
       header: true,

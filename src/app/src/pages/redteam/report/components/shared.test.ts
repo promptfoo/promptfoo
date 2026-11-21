@@ -15,6 +15,14 @@ describe('getReportPrompt', () => {
     expect(getReportPrompt(result, 'prompt')).toBe('');
   });
 
+  it('prefers the saved final prompt over the initial variable', () => {
+    const result = {
+      metadata: { redteamFinalPrompt: 'final' },
+      vars: { prompt: 'first' },
+    } as unknown as Parameters<typeof getReportPrompt>[0];
+    expect(getReportPrompt(result, 'prompt')).toBe('final');
+  });
+
   it('falls back from an empty array variable', () => {
     const result = {
       response: {},

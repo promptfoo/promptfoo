@@ -176,7 +176,15 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
           throw new Error(`Failed to load tool definitions (${response.status})`);
         }
         const body = (await response.json()) as { data?: Tool[] } | null;
-        if (!Array.isArray(body?.data) || body.data.length === 0) {
+        if (
+          !Array.isArray(body?.data) ||
+          body.data.length === 0 ||
+          body.data.some(
+            (tool) =>
+              typeof tool !== 'string' &&
+              (!tool || typeof tool !== 'object' || Array.isArray(tool)),
+          )
+        ) {
           throw new Error('No valid tool definitions were returned');
         }
         if (!controller.signal.aborted) {
@@ -718,7 +726,7 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
   const totalTokens = evaluationTokens + generationTokens;
   const incurredAccounting = getIncurredTokenAccounting(scanTokenUsage ?? selectedTokenUsage);
   const selectedPromptResultCount = evalData.results.results.filter(
-    (result) => prompts.length <= 1 || result.promptIdx === selectedPromptIndex,
+    (result) => prompts.length <= 1 || !selectedPrompt || result.promptIdx === selectedPromptIndex,
   ).length;
 
   let tools: Tool[] = [];

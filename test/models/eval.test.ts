@@ -1665,6 +1665,7 @@ describe('evaluator', () => {
       const finalRow = rows.find((row) => row.response?.output === 'final retry output');
 
       expect(finalRow).toBeDefined();
+      await expect(Eval.getResultByIdAndIndices(eval1.id, 0, 0)).resolves.toBeUndefined();
       await expect(
         Eval.getResultByIdAndIndices(eval1.id, 0, 0, finalRow!.id),
       ).resolves.toMatchObject({
@@ -4026,6 +4027,34 @@ describe('evaluator', () => {
         expect(components).toHaveLength(27);
         expect(components?.[25].assertion?.metric).toBe('PolicyViolation:example');
         expect(components?.[26]).toMatchObject({ pass: false, assertion: { type: 'moderation' } });
+      }
+    });
+
+    it('keeps stripped legacy prompts out of compact reports, full exports and details', async () => {
+      const secret = 'private-user-message';
+      const row = createEvaluateResult({
+        testIdx: 0,
+        promptIdx: 0,
+        promptId: secret,
+        provider: { id: 'a'.repeat(20000) },
+        response: { output: 'ok', prompt: secret, metadata: { redteamFinalPrompt: secret } },
+        metadata: { redteamFinalPrompt: secret },
+        vars: { prompt: secret },
+      });
+      const env = { PROMPTFOO_STRIP_PROMPT_TEXT: 'true', PROMPTFOO_STRIP_TEST_VARS: 'true' };
+      const evalId = await writeResultsToDatabase(createEvaluateSummaryV2({ results: [row] }), {
+        env,
+      });
+      const details = await Eval.getResultByIdAndIndices(evalId, 0, 0);
+      expect(details?.response?.output).toBe('ok');
+      expect(JSON.stringify(details)).not.toContain(secret);
+      for (const resultProjection of ['full', 'redteamReport'] as const) {
+        const saved = await Eval.findById(evalId, { resultProjection });
+        const report = await saved!.toResultsFile({ resultProjection, includeTraces: false });
+        expect(JSON.stringify(report)).not.toContain(secret);
+        if (resultProjection === 'redteamReport') {
+          expect(report.results.results[0].provider.id).toHaveLength(10240);
+        }
       }
     });
 

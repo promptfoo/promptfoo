@@ -401,14 +401,16 @@ describe('App component target selection', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it.each([false, true])(
-    'loads named tools with an empty first response: %s',
+  it.each([false, 'empty', 'null'])(
+    'loads named tools after an invalid first response: %s',
     async (emptyFirst) => {
       const evalData = createComponentMockEvalData(1, []);
       evalData.config.providers = [{ id: 'claude-agent-sdk', config: { tools: ['Read', 'Edit'] } }];
       mockCallApi.mockResolvedValueOnce(createMockResponse({ data: evalData }));
       if (emptyFirst) {
-        mockCallApi.mockResolvedValueOnce(createMockResponse({ data: [] }));
+        mockCallApi.mockResolvedValueOnce(
+          createMockResponse({ data: emptyFirst === 'null' ? [null] : [] }),
+        );
       }
       mockCallApi.mockResolvedValueOnce(createMockResponse({ data: ['Read', 'Edit'] }));
       renderWithProviders(<App evalId="test-eval-id" />);

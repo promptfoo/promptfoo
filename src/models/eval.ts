@@ -14,7 +14,6 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { hashPrompt } from '../prompts/utils';
 import { categoryAliasesReverse, PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import {
@@ -81,6 +80,12 @@ import EvalResult, {
   sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
+import { generateIdFromPrompt } from './prompt';
+import {
+  MAX_REPORT_TEXT_LENGTH,
+  reportConfigProjection,
+  selectReportRows,
+} from './redteamReportSql';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -94,48 +99,9 @@ interface FilteredCountRow {
   count: number | null;
 }
 
-interface RedteamReportResultRow {
-  id: string;
-  legacyResultIndex: number | null;
-  promptIdx: number;
-  testIdx: number;
-  promptId: string | null;
-  promptObjectId: string | null;
-  providerId: string | null;
-  providerLabel: string | null;
-  promptRaw: string | null;
-  promptLabel: string | null;
-  promptDisplay: string | null;
-  vars: string | null;
-  responseExists: number;
-  responseOutput: string | null;
-  responsePrompt: string | null;
-  responseRedteamFinalPrompt: string | null;
-  errorExists: number;
-  failureReason: number;
-  success: boolean;
-  score: number;
-  latencyMs: number | null;
-  gradingResultExists: number;
-  gradingPass: number | null;
-  gradingScore: number | null;
-  gradingReason: string | null;
-  gradingAssertionType: string | null;
-  gradingAssertionMetric: string | null;
-  gradingSuggestions: string | null;
-  gradingComponentResults: string | null;
-  identityMetric: string | null;
-  metadataPluginId: string | null;
-  metadataPolicyId: string | null;
-  metadataHarmCategory: string | null;
-  metadataRedteamFinalPrompt: string | null;
-  testCasePluginId: string | null;
-  testCaseStrategyId: string | null;
-  testCasePolicyId: string | null;
-}
+type RedteamReportResultRow = Awaited<ReturnType<typeof selectReportRows>>[number];
 
 type RedteamReportStripFlags = ReturnType<typeof getStripFlags>;
-const MAX_REPORT_TEXT_LENGTH = 10_240;
 
 const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
 
@@ -349,84 +315,6 @@ function parseJsonFragment<T>(value: string | null): T | undefined {
   }
 }
 
-function jsonObjectOrEmpty(value: SQLWrapper): SQL {
-  return sql`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN ${value} ELSE json('{}') END ELSE json('{}') END`;
-}
-
-function jsonObjectFieldOrEmpty(value: SQLWrapper, path: string): SQL {
-  const object = jsonObjectOrEmpty(value);
-  return sql`CASE WHEN json_type(${object}, ${path}) = 'object' THEN json_extract(${object}, ${path}) ELSE json('{}') END`;
-}
-
-function jsonIsObject(value: SQLWrapper): SQL<number> {
-  return sql<number>`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN 1 ELSE 0 END ELSE 0 END`;
-}
-
-function jsonTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
-  return sql<
-    string | null
-  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN json_extract(${value}, ${path}) ELSE NULL END`;
-}
-
-function jsonBoundedTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
-  return sql<
-    string | null
-  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN substr(json_extract(${value}, ${path}), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`;
-}
-
-function jsonBooleanOrNull(value: SQLWrapper, path: string): SQL<number | null> {
-  return sql<
-    number | null
-  >`CASE WHEN json_type(${value}, ${path}) IN ('true', 'false') THEN json_extract(${value}, ${path}) ELSE NULL END`;
-}
-
-function jsonNumberOrNull(value: SQLWrapper, path: string): SQL<number | null> {
-  return sql<
-    number | null
-  >`CASE WHEN json_type(${value}, ${path}) IN ('integer', 'real') THEN json_extract(${value}, ${path}) ELSE NULL END`;
-}
-
-function jsonBoundedValueOrNull(value: SQLWrapper, path: string): SQL<string | null> {
-  return sql<string | null>`CASE
-    WHEN json_type(${value}, ${path}) = 'text'
-      THEN json_quote(substr(json_extract(${value}, ${path}), 1, ${MAX_REPORT_TEXT_LENGTH}))
-    WHEN json_type(${value}, ${path}) IN ('integer', 'real', 'true', 'false', 'null')
-      THEN ${value} -> ${path}
-    WHEN json_type(${value}, ${path}) IN ('array', 'object')
-      THEN CASE WHEN length(${value} -> ${path}) <= ${MAX_REPORT_TEXT_LENGTH}
-        THEN ${value} -> ${path}
-        ELSE json_quote(substr(${value} -> ${path}, 1, ${MAX_REPORT_TEXT_LENGTH})) END
-    ELSE NULL END`;
-}
-
-function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | null> {
-  return sql<string | null>`CASE
-    WHEN json_type(${value}, ${path}) = 'array'
-    THEN (
-      SELECT json_group_array(
-        json_object(
-          'type', json_extract(report_suggestion.value, '$.type'),
-          'action', json_extract(report_suggestion.value, '$.action'),
-          'value', substr(json_extract(report_suggestion.value, '$.value'), 1, ${MAX_REPORT_TEXT_LENGTH})
-        )
-      )
-      FROM (
-        SELECT suggestion.value
-        FROM json_each(${value}, ${path}) AS suggestion
-        WHERE suggestion.type = 'object'
-          AND json_type(suggestion.value, '$.type') = 'text'
-          AND json_type(suggestion.value, '$.action') = 'text'
-          AND json_extract(suggestion.value, '$.action') IN (
-            'replace-prompt', 'pre-filter', 'post-filter', 'note'
-          )
-          AND json_type(suggestion.value, '$.value') = 'text'
-        ORDER BY suggestion.key LIMIT 25
-      ) AS report_suggestion
-    )
-    ELSE NULL
-  END`;
-}
-
 function projectPromptForRedteamReport<T extends Prompt>(
   prompt: T,
   shouldStripPromptText: boolean,
@@ -460,7 +348,7 @@ function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt 
     raw,
     label: typeof prompt.label === 'string' ? text(prompt.label) : raw,
     ...(typeof prompt.display === 'string' && { display: text(prompt.display) }),
-    ...(typeof prompt.provider === 'string' && { provider: prompt.provider }),
+    ...(typeof prompt.provider === 'string' && { provider: text(prompt.provider) }),
     ...(metrics && { metrics }),
   };
 }
@@ -473,7 +361,12 @@ function projectProviderForRedteamReport(
     return { id: '' };
   }
   return {
-    id: typeof provider.id === 'string' ? provider.id : '',
+    id:
+      typeof provider.id === 'string'
+        ? bounded
+          ? provider.id.slice(0, MAX_REPORT_TEXT_LENGTH)
+          : provider.id
+        : '',
     ...(typeof provider.label === 'string' && {
       label: bounded ? provider.label.slice(0, MAX_REPORT_TEXT_LENGTH) : provider.label,
     }),
@@ -617,8 +510,8 @@ function createRedteamReportResult(
       ...(Object.keys(testCaseMetadata).length > 0 && { metadata: testCaseMetadata }),
     },
     promptId: shouldStripPromptText
-      ? (row.promptId ?? hashPrompt(storedPrompt))
-      : (row.promptId ?? hashPrompt(prompt)),
+      ? (row.promptId ?? generateIdFromPrompt(storedPrompt))
+      : (row.promptId ?? generateIdFromPrompt(prompt)),
     provider: {
       id: row.providerId ?? '',
       ...(row.providerLabel !== null && { label: row.providerLabel }),
@@ -664,7 +557,7 @@ function getRedteamReportPromptId(
   if (typeof result.promptId === 'string' && (!shouldStripPromptText || alreadyOutputProjected)) {
     return result.promptId;
   }
-  return hashPrompt(prompt);
+  return generateIdFromPrompt(prompt);
 }
 
 function projectResultForRedteamReport(
@@ -883,8 +776,10 @@ function projectConfigForRedteamReport(
     providerId === undefined
       ? undefined
       : {
-          id: providerId,
-          ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
+          id: providerId.slice(0, MAX_REPORT_TEXT_LENGTH),
+          ...(typeof providerRecord?.label === 'string' && {
+            label: providerRecord.label.slice(0, MAX_REPORT_TEXT_LENGTH),
+          }),
           ...(tools !== undefined && { config: { tools } }),
         };
   let policyIndex = 0;
@@ -906,7 +801,9 @@ function projectConfigForRedteamReport(
     : undefined;
 
   return {
-    ...(config.description !== undefined && { description: config.description }),
+    ...(typeof config.description === 'string' && {
+      description: config.description.slice(0, MAX_REPORT_TEXT_LENGTH),
+    }),
     ...(config.redteam && {
       redteam: {
         ...(config.redteam.injectVar !== undefined && { injectVar: config.redteam.injectVar }),
@@ -984,7 +881,10 @@ function normalizeLegacyResultForDetail(
     testIdx,
     promptIdx,
     testCase,
-    promptId: typeof value.promptId === 'string' ? value.promptId : hashPrompt(prompt),
+    promptId:
+      !stripFlags.shouldStripPromptText && typeof value.promptId === 'string'
+        ? value.promptId
+        : generateIdFromPrompt(prompt),
     provider: projectProviderForRedteamReport(value.provider, false),
     prompt,
     vars: isRecord(value.vars)
@@ -1030,6 +930,46 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
+
+export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+  for (const prompt of prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = generateIdFromPrompt(prompt);
+    await tx
+      .insert(promptsTable)
+      .values({ id: promptId, prompt: label })
+      .onConflictDoNothing()
+      .run();
+    await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
+}
+
+export async function insertEvalDatasetAndTags(
+  tx: EvalRelationDb,
+  evalId: string,
+  dataset: typeof datasetsTable.$inferInsert,
+  config: Pick<UnifiedConfig, 'tags'>,
+) {
+  await tx.insert(datasetsTable).values(dataset).onConflictDoNothing().run();
+  await tx
+    .insert(evalsToDatasetsTable)
+    .values({ evalId, datasetId: dataset.id })
+    .onConflictDoNothing()
+    .run();
+  logger.debug(`Inserting dataset ${dataset.id}`);
+
+  if (config.tags) {
+    for (const [name, value] of Object.entries(config.tags)) {
+      const tagId = sha256(`${name}:${value}`);
+      await tx.insert(tagsTable).values({ id: tagId, name, value }).onConflictDoNothing().run();
+      await tx.insert(evalsToTagsTable).values({ evalId, tagId }).onConflictDoNothing().run();
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -1324,7 +1264,14 @@ export default class Eval {
           )
         : evalsTable.results;
     const evalData = await db
-      .select({ ...columns, results })
+      .select({
+        ...columns,
+        results,
+        config:
+          options.resultProjection === 'redteamReport'
+            ? reportConfigProjection()
+            : evalsTable.config,
+      })
       .from(evalsTable)
       .where(eq(evalsTable.id, id))
       .all();
@@ -1431,7 +1378,11 @@ export default class Eval {
   ): Promise<EvaluateResult | undefined> {
     const db = await getDb();
     const evaluation = await db
-      .select({ config: evalsTable.config })
+      .select({
+        config: sql`json_object('env', json_extract(${evalsTable.config}, '$.env'))`.mapWith(
+          evalsTable.config,
+        ),
+      })
       .from(evalsTable)
       .where(eq(evalsTable.id, evalId))
       .get();
@@ -1570,30 +1521,7 @@ export default class Eval {
         })
         .run();
 
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
-
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
+      await insertEvalPrompts(tx, evalId, renderedPrompts);
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
@@ -1614,52 +1542,7 @@ export default class Eval {
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: config.tests,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
-
-          await tx
-            .insert(tagsTable)
-            .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          await tx
-            .insert(evalsToTagsTable)
-            .values({
-              evalId,
-              tagId,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          logger.debug(`Inserting tag ${tagId}`);
-        }
-      }
+      await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: config.tests }, config);
     });
 
     invalidateEvaluationCache(evalId);
@@ -2581,13 +2464,41 @@ export default class Eval {
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return {
+      const legacy: EvaluateSummaryV2 = {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
         results: this.oldResults.results,
         table: this.oldResults.table,
         stats: this.oldResults.stats,
       };
+      const flags = getStripFlags(this.config.env);
+      if (Object.values(flags).some(Boolean)) {
+        legacy.results = legacy.results.map((row) =>
+          sanitizeResultForJsonlArtifact(
+            {
+              ...row,
+              ...(flags.shouldStripPromptText && {
+                promptId: generateIdFromPrompt(normalizePromptForRedteamReport(row.prompt, false)),
+                prompt: projectPromptForRedteamReport(row.prompt, true),
+              }),
+            },
+            flags,
+          ),
+        );
+        // The legacy table mirrors the original bytes. Rebuild it only from projected rows.
+        legacy.table = convertResultsToTable({
+          version: 4,
+          createdAt: legacy.timestamp,
+          results: legacy,
+          config: {},
+          author: null,
+          prompts: legacy.table.head.prompts.map((prompt) =>
+            flags.shouldStripPromptText ? projectPromptForRedteamReport(prompt, true) : prompt,
+          ),
+          vars: legacy.table.head.vars,
+        });
+      }
+      return legacy;
     }
     if (this.results.length === 0) {
       await this.loadResults();
@@ -2654,242 +2565,14 @@ export default class Eval {
       );
     }
 
-    const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
-    const db = await getDb();
     const legacy = this.useOldResults();
-    const sources = legacy
-      ? {
-          id: sql<string>`json_extract(report_result.value, '$.id')`,
-          promptIdx: sql<number>`COALESCE(json_extract(report_result.value, '$.promptIdx'), 0)`,
-          testIdx: sql<number>`COALESCE(json_extract(report_result.value, '$.testIdx'), report_result.key)`,
-          promptId: sql<string>`json_extract(report_result.value, '$.promptId')`,
-          provider: sql<string>`json_extract(report_result.value, '$.provider')`,
-          prompt: sql<string>`json_extract(report_result.value, '$.prompt')`,
-          testCase: sql<string>`json_extract(report_result.value, '$.testCase')`,
-          response: sql<string>`json_extract(report_result.value, '$.response')`,
-          gradingResult: sql<string>`json_extract(report_result.value, '$.gradingResult')`,
-          metadata: sql<string>`json_extract(report_result.value, '$.metadata')`,
-          error: sql<string>`json_extract(report_result.value, '$.error')`,
-          failureReason: sql<number>`json_extract(report_result.value, '$.failureReason')`,
-          success: sql<boolean>`json_extract(report_result.value, '$.success')`.mapWith(Boolean),
-          score: sql<number>`json_extract(report_result.value, '$.score')`,
-          latencyMs: sql<number>`json_extract(report_result.value, '$.latencyMs')`,
-        }
-      : evalResultsTable;
-    const validProviderJson = jsonObjectOrEmpty(sources.provider);
-    const validPromptJson = jsonObjectOrEmpty(sources.prompt);
-    const validTestCaseJson = jsonObjectOrEmpty(sources.testCase);
-    const validResponseJson = jsonObjectOrEmpty(sources.response);
-    const validGradingResultJson = jsonObjectOrEmpty(sources.gradingResult);
-    const validMetadataJson = jsonObjectOrEmpty(sources.metadata);
-    const validTestCaseVarsJson = legacy
-      ? sql`CASE WHEN json_type(report_result.value, '$.vars') = 'object' THEN json_extract(report_result.value, '$.vars') ELSE ${jsonObjectFieldOrEmpty(validTestCaseJson, '$.vars')} END`
-      : sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
-    const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
-    const columns = {
-      id: sources.id,
-      legacyResultIndex: legacy ? sql<number | null>`report_result.key` : sql<number | null>`NULL`,
-      promptIdx: sources.promptIdx,
-      testIdx: sources.testIdx,
-      promptId: sources.promptId,
-      providerId: sql<
-        string | null
-      >`CASE WHEN json_type(${validProviderJson}, '$.id') = 'text' THEN json_extract(${validProviderJson}, '$.id') ELSE NULL END`,
-      providerLabel: jsonBoundedTextOrNull(validProviderJson, '$.label'),
-      promptObjectId: sql<
-        string | null
-      >`CASE WHEN json_type(${validPromptJson}, '$.id') = 'text' THEN json_extract(${validPromptJson}, '$.id') ELSE NULL END`,
-      promptRaw: stripFlags.shouldStripPromptText
-        ? sql<string | null>`'[prompt stripped]'`
-        : sql<
-            string | null
-          >`CASE WHEN json_type(${validPromptJson}, '$.raw') = 'text' THEN substr(json_extract(${validPromptJson}, '$.raw'), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`,
-      promptLabel: stripFlags.shouldStripPromptText
-        ? sql<string | null>`'[prompt stripped]'`
-        : sql<
-            string | null
-          >`CASE WHEN json_type(${validPromptJson}, '$.label') = 'text' THEN substr(json_extract(${validPromptJson}, '$.label'), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`,
-      promptDisplay: stripFlags.shouldStripPromptText
-        ? sql<
-            string | null
-          >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN '[prompt stripped]' ELSE NULL END`
-        : sql<
-            string | null
-          >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN substr(json_extract(${validPromptJson}, '$.display'), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`,
-      vars: stripFlags.shouldStripTestVars
-        ? sql<string | null>`NULL`
-        : sql<string | null>`(
-          SELECT json_group_object(
-            report_vars.key,
-            CASE report_vars.type
-              WHEN 'true' THEN json('true')
-              WHEN 'false' THEN json('false')
-              WHEN 'null' THEN json('null')
-              WHEN 'integer' THEN json(report_vars.value)
-              WHEN 'real' THEN json(report_vars.value)
-              WHEN 'array' THEN json(report_vars.value)
-              WHEN 'object' THEN json(report_vars.value)
-              ELSE substr(report_vars.value, 1, ${MAX_REPORT_TEXT_LENGTH})
-            END
-          )
-          FROM json_each(${validTestCaseVarsJson}) AS report_vars
-          WHERE report_vars.key IN (${sql.join(
-            reportVarKeys.map((key) => sql`${key}`),
-            sql`, `,
-          )})
-            AND (
-              report_vars.type NOT IN ('array', 'object')
-              OR length(report_vars.value) <= ${MAX_REPORT_TEXT_LENGTH}
-            )
-        )`,
-      responseExists: jsonIsObject(sources.response),
-      responseOutput: stripFlags.shouldStripResponseOutput
-        ? sql<string | null>`NULL`
-        : jsonBoundedValueOrNull(validResponseJson, '$.output'),
-      responsePrompt: stripFlags.shouldStripPromptText
-        ? sql<string | null>`NULL`
-        : jsonBoundedValueOrNull(validResponseJson, '$.prompt'),
-      responseRedteamFinalPrompt:
-        stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
-          ? sql<string | null>`NULL`
-          : jsonBoundedTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
-      errorExists: sql<number>`CASE
-          WHEN ${sources.error} IS NOT NULL AND ${sources.error} <> '' THEN 1
-          ELSE 0
-        END`,
-      failureReason: sources.failureReason,
-      success: sources.success,
-      score: sources.score,
-      latencyMs: sources.latencyMs,
-      gradingResultExists: stripFlags.shouldStripGradingResult
-        ? sql<number>`0`
-        : jsonIsObject(sources.gradingResult),
-      gradingPass: stripFlags.shouldStripGradingResult
-        ? sql<number | null>`NULL`
-        : jsonBooleanOrNull(validGradingResultJson, '$.pass'),
-      gradingScore: stripFlags.shouldStripGradingResult
-        ? sql<number | null>`NULL`
-        : jsonNumberOrNull(validGradingResultJson, '$.score'),
-      gradingReason: stripFlags.shouldStripGradingResult
-        ? sql<string | null>`NULL`
-        : sql<string | null>`CASE
-              WHEN json_type(${validGradingResultJson}, '$.reason') = 'text'
-              THEN substr(json_extract(${validGradingResultJson}, '$.reason'), 1, ${MAX_REPORT_TEXT_LENGTH})
-              ELSE NULL
-            END`,
-      gradingAssertionType: stripFlags.shouldStripGradingResult
-        ? sql<string | null>`NULL`
-        : jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
-      gradingAssertionMetric: stripFlags.shouldStripGradingResult
-        ? sql<string | null>`NULL`
-        : jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
-      gradingSuggestions: stripFlags.shouldStripGradingResult
-        ? sql<string | null>`NULL`
-        : jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
-      // Materialization keeps representative searches outside the component loop.
-      gradingComponentResults: stripFlags.shouldStripGradingResult
-        ? sql<string | null>`NULL`
-        : sql<string | null>`CASE
-          WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
-          THEN (
-            WITH report_indices AS MATERIALIZED (
-              SELECT
-                ${jsonReportIdentityMetric(validGradingResultJson, true)} AS identity_index,
-                (
-                  SELECT moderation_component.key
-                  FROM json_each(${validGradingResultJson}, '$.componentResults') AS moderation_component
-                  WHERE moderation_component.type = 'object'
-                    AND json_extract(moderation_component.value, '$.assertion.type') = 'moderation'
-                    AND json_type(moderation_component.value, '$.pass') = 'false'
-                  ORDER BY moderation_component.key LIMIT 1
-                ) AS moderation_index,
-                (
-                  SELECT suggestion_component.key
-                  FROM json_each(${validGradingResultJson}, '$.componentResults') AS suggestion_component
-                  WHERE json_array_length(${jsonSuggestionsOrNull(
-                    sql`CASE WHEN suggestion_component.type = 'object' THEN suggestion_component.value ELSE NULL END`,
-                    '$.suggestions',
-                  )}) > 0
-                  ORDER BY suggestion_component.key LIMIT 1
-                ) AS suggestion_index
-            )
-            SELECT json_group_array(
-              json_patch(
-                json_patch(
-                  json_object(
-                    'pass', ${jsonBooleanOrNull(validReportComponentJson, '$.pass')},
-                    'score', ${jsonNumberOrNull(validReportComponentJson, '$.score')},
-                    'reason', CASE
-                      WHEN json_type(${validReportComponentJson}, '$.reason') = 'text'
-                      THEN substr(json_extract(${validReportComponentJson}, '$.reason'), 1, ${MAX_REPORT_TEXT_LENGTH})
-                      ELSE NULL
-                    END
-                  ),
-                  CASE
-                    WHEN json_type(${validReportComponentJson}, '$.assertion') = 'object'
-                    THEN json_object(
-                      'assertion',
-                      json_object(
-                        'type', ${jsonTextOrNull(validReportComponentJson, '$.assertion.type')},
-                        'metric', ${jsonTextOrNull(validReportComponentJson, '$.assertion.metric')}
-                      )
-                    )
-                    ELSE json('{}')
-                  END
-                ),
-                  CASE
-                    WHEN json_type(${validReportComponentJson}, '$.suggestions') = 'array'
-                    THEN json_object(
-                      'suggestions',
-                      json(${jsonSuggestionsOrNull(validReportComponentJson, '$.suggestions')})
-                    )
-                  ELSE json('{}')
-                END
-              )
-            )
-            FROM report_indices CROSS JOIN json_each(
-              json_extract(${validGradingResultJson}, '$.componentResults')
-            ) AS report_component
-            WHERE report_component.type = 'object'
-              AND (
-                report_component.key < 25
-                OR report_component.key = report_indices.identity_index
-                OR report_component.key = report_indices.moderation_index
-                OR report_component.key = report_indices.suggestion_index
-              )
-          )
-          ELSE NULL
-        END`,
-      identityMetric:
-        !stripFlags.shouldStripGradingResult || stripFlags.shouldStripMetadata
-          ? sql<string | null>`NULL`
-          : jsonReportIdentityMetric(validGradingResultJson),
-      metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
-      metadataPolicyId: jsonTextOrNull(validMetadataJson, '$.policyId'),
-      metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
-      metadataRedteamFinalPrompt:
-        stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
-          ? sql<string | null>`NULL`
-          : jsonBoundedTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
-      testCasePluginId: jsonTextOrNull(validTestCaseJson, '$.metadata.pluginId'),
-      testCaseStrategyId: jsonTextOrNull(validTestCaseJson, '$.metadata.strategyId'),
-      testCasePolicyId: jsonTextOrNull(validTestCaseJson, '$.metadata.policyId'),
-    };
-    const rows = legacy
-      ? await db
-          .select(columns)
-          .from(
-            sql`${evalsTable}, json_each(CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}, '$.results') = 'array' THEN json_extract(${evalsTable.results}, '$.results') ELSE json('[]') END) AS report_result`,
-          )
-          .where(sql`${evalsTable.id} = ${this.id} AND report_result.type = 'object'`)
-          .orderBy(sources.testIdx, sources.promptIdx, sources.id)
-          .all()
-      : await db
-          .select(columns)
-          .from(evalResultsTable)
-          .where(eq(evalResultsTable.evalId, this.id))
-          .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx, evalResultsTable.id)
-          .all();
+    const rows = await selectReportRows(
+      this.id,
+      legacy,
+      injectVar,
+      stripFlags,
+      jsonReportIdentityMetric,
+    );
     const prompts = this.prompts.map((prompt) =>
       projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
     );
