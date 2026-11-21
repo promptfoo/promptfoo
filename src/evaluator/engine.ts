@@ -109,7 +109,6 @@ import {
 import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
-import { checkProviderSetup } from './providerSetup';
 import { getResultIndexKey } from './resultIndex';
 import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
 import {
@@ -119,6 +118,7 @@ import {
   deferredGradingPromises,
   getRepeatCacheNamespace,
   isGradingAbort,
+  prepareProviderSetup,
   promptUsesConversationVariable,
   runEvalInternal,
 } from './runEval';
@@ -1123,63 +1123,6 @@ async function applyInputTransform(
     'Transform function did not return a valid object',
   );
   testCase.vars = { ...testCase.vars, ...transformedVars };
-}
-
-async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
-  let workloadGeneration = 0;
-  for (const step of runEvalOptions) {
-    checkAbort();
-    // Hooks can create or replace files without changing provider configuration.
-    // Check their resulting state for each row, inside its timeout boundary.
-    const hasExtensions = Boolean(step.testSuite?.extensions?.length);
-    let timedOutSetup: ProviderResponse | undefined;
-    const checkedGeneration = workloadGeneration;
-    step.providerSetup = async (provider, context, options) => {
-      // Preserve a consumed deadline until another row is allowed to run. Earlier
-      // workloads can prepare files or other state required by this row's setup.
-      if (timedOutSetup && workloadGeneration === checkedGeneration) {
-        return structuredClone(timedOutSetup);
-      }
-      const failure = await checkProviderSetup(provider, context, options);
-      if (!failure) {
-        workloadGeneration++;
-      }
-      return failure;
-    };
-    const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
-    if (hasExtensions || step.test.providerOutput || !activeProvider.checkSetupOnEval) {
-      continue;
-    }
-    const runtimeVars = getEvalRuntimeVars({
-      evalId: step.evalId,
-      promptIndex: step.promptIdx,
-      repeatIndex: step.repeatIndex,
-      testIndex: step.testIdx,
-    });
-    const setupFailure = await checkProviderSetup(
-      activeProvider,
-      {
-        vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
-        prompt: {
-          ...step.prompt,
-          config: mergeProviderPromptConfig(step.prompt.config, step.test.options),
-        },
-        test: step.test,
-        originalProvider: step.provider,
-        evaluationId: step.evalId,
-        testIdx: step.testIdx,
-        promptIdx: step.promptIdx,
-        repeatIndex: step.repeatIndex,
-      },
-      {
-        abortSignal: step.abortSignal,
-        timeoutMs: step.evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
-      },
-    );
-    if (setupFailure?.metadata?.providerSetup?.timedOut) {
-      timedOutSetup = setupFailure;
-    }
-  }
 }
 
 async function buildRunEvalOptions({

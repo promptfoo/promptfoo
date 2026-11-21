@@ -1151,7 +1151,25 @@
                         "status": { "type": "string", "enum": ["in-progress"] },
                         "progress": { "type": "number" },
                         "total": { "type": "number" },
-                        "logs": { "type": "array", "items": { "type": "string" } }
+                        "logs": { "type": "array", "items": { "type": "string" } },
+                        "providerProgress": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "phase": { "type": "string", "minLength": 1, "maxLength": 80 },
+                              "elapsedMs": { "type": "number", "minimum": 0 },
+                              "estimatedCostUsd": { "type": "number", "minimum": 0 },
+                              "warningCount": { "type": "integer", "minimum": 0 },
+                              "provider": { "type": "string", "maxLength": 200 },
+                              "testIdx": { "type": "integer", "minimum": 0 },
+                              "promptIdx": { "type": "integer", "minimum": 0 },
+                              "repeatIndex": { "type": "integer", "minimum": 0 }
+                            },
+                            "required": ["phase", "provider", "testIdx", "promptIdx"]
+                          },
+                          "maxItems": 100
+                        }
                       },
                       "required": ["status", "progress", "total", "logs"]
                     },
@@ -2016,6 +2034,7 @@
                 "properties": {
                   "evaluationId": { "type": "string", "minLength": 1 },
                   "testIndex": { "type": "integer", "minimum": 0 },
+                  "promptIndex": { "type": "integer", "minimum": 0 },
                   "prompt": { "type": "string", "minLength": 1 },
                   "variables": { "type": "object", "additionalProperties": {} }
                 },

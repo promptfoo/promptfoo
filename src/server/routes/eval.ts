@@ -756,11 +756,11 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
               return label === column.provider;
             }
             // HttpProvider.id() returns config.url even if its loader path is a different URL.
-            const url =
+            const identity =
               'loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)
-                ? target.loadOptions.config?.url
-                : undefined;
-            return (url || target.id) === column.provider;
+                ? target.loadOptions.config?.url || target.loadProviderPath
+                : target.id;
+            return identity === column.provider;
           })
         : candidates;
     } catch (error) {

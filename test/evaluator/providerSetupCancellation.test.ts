@@ -46,7 +46,7 @@ describe('provider setup cancellation boundaries', () => {
         abortSignal: controller.signal,
         timeoutMs: 1000,
       }),
-    ).rejects.toThrow('Operation cancelled');
+    ).rejects.toBe(controller.signal.reason);
 
     expect(provider.checkSetup).not.toHaveBeenCalled();
     expect(provider.callApi).not.toHaveBeenCalled();
@@ -62,12 +62,14 @@ describe('provider setup cancellation boundaries', () => {
       abortSignal: controller.signal,
       timeoutMs: 1000,
     });
-    const rejected = expect(pending).rejects.toThrow('Operation cancelled');
+    // The scheduler recognizes pauses by the identity of the abort reason.
+    const reason = new Error('Evaluation paused');
+    const rejected = expect(pending).rejects.toBe(reason);
     await Promise.resolve();
     const forwardedSignal = setup.mock.calls[0][1]?.abortSignal;
     expect(forwardedSignal?.aborted).toBe(false);
 
-    controller.abort(new Error('User canceled'));
+    controller.abort(reason);
     await rejected;
 
     expect(forwardedSignal?.aborted).toBe(true);
@@ -150,7 +152,7 @@ describe('provider setup cancellation boundaries', () => {
     const provider = providerWithSetup(setup);
     const check = checkProviderSetup;
     const pending = check(provider, context, { abortSignal: controller.signal });
-    const rejected = expect(pending).rejects.toThrow('Operation cancelled');
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     await Promise.resolve();
 
     controller.abort();
@@ -168,7 +170,7 @@ describe('provider setup cancellation boundaries', () => {
     const owner = check(provider, context, { timeoutMs: 1000 });
     const controller = new AbortController();
     const waiter = check(provider, context, { abortSignal: controller.signal });
-    const rejected = expect(waiter).rejects.toThrow('Operation cancelled');
+    const rejected = expect(waiter).rejects.toMatchObject({ name: 'AbortError' });
     await Promise.resolve();
 
     controller.abort();

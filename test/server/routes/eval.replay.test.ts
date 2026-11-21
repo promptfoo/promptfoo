@@ -261,6 +261,18 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate.mock.calls[0][0].providers).toEqual([{ ...selected, prompts: ['Replay'] }]);
   });
 
+  it('does not confuse a URL provider with another target using it as an alias', async () => {
+    const a = 'https://a.invalid';
+    const b = 'https://b.invalid';
+    storedConfig(
+      [{ [a]: { id: b, config: { body: {} } } }, { [b]: { id: a, config: { body: {} } } }],
+      undefined,
+      [a],
+    );
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toMatchObject([{ [a]: { id: b } }]);
+  });
+
   it('resolves a provider-scoped label even if an unrelated provider file is missing', async () => {
     storedConfig(
       [
