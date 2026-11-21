@@ -1518,6 +1518,7 @@ describe('TestSuiteSchema', () => {
         'file://path/to/file.py:function_name',
         'file://./relative/path.py:function_name',
         'file:///absolute/path.py:function_name',
+        'file://C:\\proj\\hooks.py:extension_hook',
       ];
 
       validExtensions.forEach((extension) => {
@@ -1532,6 +1533,8 @@ describe('TestSuiteSchema', () => {
         'file://./relative/path.ts:function_name',
         'file:///absolute/path.mjs:function_name',
         'file://path/to/file.cjs:function_name',
+        'file://C:/proj/hooks.js:extensionHook',
+        'file://D:/a/hooks.mjs:beforeAll',
       ];
 
       validExtensions.forEach((extension) => {
@@ -1544,6 +1547,7 @@ describe('TestSuiteSchema', () => {
       ['path/to/file.py:function_name', 'Missing file:// prefix'],
       ['file://path/to/file.txt:function_name', 'Invalid file extension'],
       ['file://path/to/file.py', 'Missing function name'],
+      ['file://C:/proj/hooks.js', 'Drive letter only, no function name'],
       ['file://path/to/file.py:', 'Empty function name'],
       ['file://:function_name', 'Missing file path'],
       ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
