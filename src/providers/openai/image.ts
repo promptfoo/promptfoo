@@ -1,18 +1,13 @@
-import { lookup } from 'node:dns/promises';
-import { BlockList, isIP } from 'node:net';
-import type { LookupAddress } from 'node:dns';
-
-import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
 import { BLOB_MAX_SIZE } from '../../blobs/constants';
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { fetchWithProxy, getFetchTlsOptions, getProxyUrlForTarget } from '../../util/fetch/index';
-import { stripDecompressionHeaders } from '../../util/fetch/stripDecompressionHeaders';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
+import { downloadExternalImage } from './imageDownload';
+import { type ImageEditOptions, validateImageEditConfig } from './imageEdit';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -37,6 +32,8 @@ type OpenAiImageModel =
   | 'gpt-image-2'
   | 'gpt-image-2.5-sunburst'
   | 'gpt-image-2.5-flare'
+  | 'gpt-image-2.6-sunburst'
+  | 'gpt-image-2.6-flare'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
   | 'chatgpt-image-latest'
@@ -55,7 +52,6 @@ const GPT_IMAGE2_MIN_PIXELS = 655_360;
 const GPT_IMAGE2_MAX_PIXELS = 8_294_400;
 const DATED_GPT_IMAGE2_MODEL_PATTERN = /^gpt-image-2-\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SIZE = '1024x1024';
-const BLOCKED_IMAGE_HOSTNAMES = new Set(['localhost', 'metadata', 'metadata.google.internal']);
 const MAX_IMAGE_BATCH_SIZE = 10;
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
@@ -164,6 +160,13 @@ type GptImage25Options = Omit<GptImageCommonOptions, 'quality'> & {
   background?: GptImage1Background;
 };
 
+type GptImage26Options = Omit<GptImage25Options, 'output_format'> & {
+  complexity?: 'low' | 'medium' | 'high';
+  output_format?: GptImageOutputFormat | 'gif' | 'svg';
+  frame_count?: number;
+  frame_duration_ms?: number;
+};
+
 type DallE2Options = CommonImageOptions & {
   size?: DallE2Size;
   image?: string; // Base64-encoded image or image URL
@@ -173,16 +176,28 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options | GptImage25Options);
+} & (
+    | DallE2Options
+    | DallE3Options
+    | GptImage1Options
+    | GptImage2Options
+    | GptImage25Options
+    | (GptImage26Options & ({ operation?: 'generation' } | ImageEditOptions))
+  );
 
 const GPT_IMAGE_QUALITIES = ['low', 'medium', 'high', 'auto'] as const;
-const GPT_IMAGE25_QUALITIES = [...GPT_IMAGE_QUALITIES, 'xhigh', 'max'] as const;
+const EXTENDED_GPT_IMAGE_QUALITIES = [...GPT_IMAGE_QUALITIES, 'xhigh', 'max'] as const;
 const GPT_IMAGE1_BACKGROUNDS = ['transparent', 'opaque', 'auto'] as const;
 const GPT_IMAGE2_BACKGROUNDS = ['opaque', 'auto'] as const;
 const GPT_IMAGE_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
+const GPT_IMAGE26_OUTPUT_FORMATS = [...GPT_IMAGE_OUTPUT_FORMATS, 'gif', 'svg'] as const;
 const GPT_IMAGE_MODERATION_VALUES = ['auto', 'low'] as const;
 
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
+function isGptImage26(model: string): boolean {
+  return model === 'gpt-image-2.6-flare' || model === 'gpt-image-2.6-sunburst';
+}
+
 function isGptImage25(model: string): boolean {
   return /^gpt-image-2\.5-(sunburst|flare)(-\d{4}-\d{2}-\d{2})?$/.test(model);
 }
@@ -209,6 +224,7 @@ function isGptImage15(model: string): boolean {
 
 function isGptImageModel(model: string): boolean {
   return (
+    isGptImage26(model) ||
     isGptImage25(model) ||
     isGptImage2(model) ||
     isGptImage1(model) ||
@@ -218,6 +234,9 @@ function isGptImageModel(model: string): boolean {
 }
 
 function getGptImageModelDisplayName(model: string): string {
+  if (isGptImage26(model)) {
+    return 'GPT Image 2.6';
+  }
   if (isGptImage25(model)) {
     return 'GPT Image 2.5';
   }
@@ -241,8 +260,10 @@ function validateCustomImageSize(
     return { valid: true };
   }
 
-  const constraints =
-    'Valid sizes are auto or WIDTHxHEIGHT where both dimensions are multiples of 16, the maximum edge is 3840px, the long edge to short edge ratio is at most 3:1, and total pixels are between 655,360 and 8,294,400.';
+  const isImage26 = isGptImage26(model);
+  const constraints = isImage26
+    ? 'Use auto or WIDTHxHEIGHT with positive multiples of 16 and an aspect ratio between 1:3 and 3:1.'
+    : 'Valid sizes are auto or WIDTHxHEIGHT where both dimensions are multiples of 16, the maximum edge is 3840px, the long edge to short edge ratio is at most 3:1, and total pixels are between 655,360 and 8,294,400.';
 
   const sizeMatch = /^(\d+)x(\d+)$/.exec(size);
   if (!sizeMatch) {
@@ -259,14 +280,15 @@ function validateCustomImageSize(
   const totalPixels = width * height;
 
   if (
-    width <= 0 ||
-    height <= 0 ||
-    longEdge > GPT_IMAGE2_MAX_EDGE ||
+    shortEdge <= 0 ||
+    !Number.isSafeInteger(longEdge) ||
     width % 16 !== 0 ||
     height % 16 !== 0 ||
     longEdge / shortEdge > 3 ||
-    totalPixels < GPT_IMAGE2_MIN_PIXELS ||
-    totalPixels > GPT_IMAGE2_MAX_PIXELS
+    (!isImage26 &&
+      (longEdge > GPT_IMAGE2_MAX_EDGE ||
+        totalPixels < GPT_IMAGE2_MIN_PIXELS ||
+        totalPixels > GPT_IMAGE2_MAX_PIXELS))
   ) {
     return {
       valid: false,
@@ -295,7 +317,7 @@ export function validateSizeForModel(
     };
   }
 
-  if (isGptImage2(model) || isGptImage25(model)) {
+  if (isGptImage2(model) || isGptImage25(model) || isGptImage26(model)) {
     return validateCustomImageSize(size, model);
   }
 
@@ -351,9 +373,8 @@ function validateGptImageQualityForModel(
     return { valid: true };
   }
 
-  const validQualities: readonly string[] = isGptImage25(model)
-    ? GPT_IMAGE25_QUALITIES
-    : GPT_IMAGE_QUALITIES;
+  const validQualities: readonly string[] =
+    isGptImage25(model) || isGptImage26(model) ? EXTENDED_GPT_IMAGE_QUALITIES : GPT_IMAGE_QUALITIES;
   if (typeof quality !== 'string' || !validQualities.includes(quality)) {
     return {
       valid: false,
@@ -421,13 +442,13 @@ function validateOutputFormatForModel(
     return { valid: true };
   }
 
-  if (
-    typeof outputFormat !== 'string' ||
-    !GPT_IMAGE_OUTPUT_FORMATS.includes(outputFormat as GptImageOutputFormat)
-  ) {
+  const formats: readonly string[] = isGptImage26(model)
+    ? GPT_IMAGE26_OUTPUT_FORMATS
+    : GPT_IMAGE_OUTPUT_FORMATS;
+  if (typeof outputFormat !== 'string' || !formats.includes(outputFormat)) {
     return {
       valid: false,
-      message: `Invalid output_format "${String(outputFormat)}" for ${getGptImageModelDisplayName(model)}. Valid output formats are: ${GPT_IMAGE_OUTPUT_FORMATS.join(', ')}.`,
+      message: `Invalid output_format "${String(outputFormat)}" for ${getGptImageModelDisplayName(model)}. Valid output formats are: ${formats.join(', ')}.`,
     };
   }
 
@@ -487,7 +508,60 @@ function validateModerationForModel(
   return { valid: true };
 }
 
-function validateUnsupportedImageOptions(config: any): { valid: boolean; message?: string } {
+function isIntegerInRange(value: unknown, min: number, max: number): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function validateImage26Options(
+  config: Record<string, unknown>,
+  model: string,
+): { valid: boolean; message?: string } {
+  const { complexity, frame_count, frame_duration_ms, output_format } = config;
+  const hasFrameOptions = frame_count !== undefined || frame_duration_ms !== undefined;
+  if (!isGptImage26(model)) {
+    return complexity !== undefined || hasFrameOptions
+      ? {
+          valid: false,
+          message: 'complexity, frame_count, and frame_duration_ms require GPT Image 2.6.',
+        }
+      : { valid: true };
+  }
+  if (
+    complexity !== undefined &&
+    complexity !== 'low' &&
+    complexity !== 'medium' &&
+    complexity !== 'high'
+  ) {
+    return { valid: false, message: 'complexity must be low, medium, or high.' };
+  }
+  if (hasFrameOptions && output_format !== 'gif') {
+    return {
+      valid: false,
+      message: 'frame_count and frame_duration_ms require output_format: "gif".',
+    };
+  }
+  if (frame_count !== undefined && !isIntegerInRange(frame_count, 2, 64)) {
+    return { valid: false, message: 'frame_count must be an integer between 2 and 64.' };
+  }
+  if (frame_duration_ms !== undefined && !isIntegerInRange(frame_duration_ms, 20, 2000)) {
+    return { valid: false, message: 'frame_duration_ms must be an integer between 20 and 2000.' };
+  }
+  if (output_format === 'svg' && (config.n ?? 1) !== 1) {
+    return { valid: false, message: 'SVG output requires n: 1.' };
+  }
+  if (
+    (output_format === 'svg' || output_format === 'gif') &&
+    config.prompt_rewriter !== undefined
+  ) {
+    return { valid: false, message: 'prompt_rewriter is unsupported for SVG and GIF output.' };
+  }
+  return { valid: true };
+}
+
+function validateUnsupportedImageOptions(
+  config: any,
+  model: string,
+): { valid: boolean; message?: string } {
   if (config.stream === true) {
     return {
       valid: false,
@@ -504,6 +578,21 @@ function validateUnsupportedImageOptions(config: any): { valid: boolean; message
     };
   }
 
+  if (isGptImage26(model) && config.operation === 'edit') {
+    const message = validateImageEditConfig(config);
+    return message ? { valid: false, message } : { valid: true };
+  }
+
+  if (
+    config.images !== undefined ||
+    config.markup !== undefined ||
+    (isGptImage26(model) && config.mask !== undefined)
+  ) {
+    return {
+      valid: false,
+      message: 'Image references, markup, and masks require GPT Image 2.6 with operation: edit.',
+    };
+  }
   if (
     config.image !== undefined ||
     config.mask !== undefined ||
@@ -526,8 +615,9 @@ function validateImageRequestConfig(
 ): { valid: boolean; message?: string } {
   return (
     [
-      validateUnsupportedImageOptions(config),
+      validateUnsupportedImageOptions(config, model),
       validateNForModel(config.n, model),
+      validateImage26Options(config, model),
       validateSizeForModel(size, model),
       validateGptImageQualityForModel('quality' in config ? config.quality : undefined, model),
       validateOutputFormatForModel(
@@ -551,6 +641,10 @@ function validateImageRequestConfig(
 
 function getMimeTypeForOutputFormat(outputFormat?: string): string {
   switch (outputFormat) {
+    case 'gif':
+      return 'image/gif';
+    case 'svg':
+      return 'image/svg+xml';
     case 'jpeg':
       return 'image/jpeg';
     case 'webp':
@@ -560,224 +654,8 @@ function getMimeTypeForOutputFormat(outputFormat?: string): string {
   }
 }
 
-function inferMimeTypeFromUrl(url: string): string | undefined {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
-      return 'image/jpeg';
-    }
-    if (pathname.endsWith('.webp')) {
-      return 'image/webp';
-    }
-    if (pathname.endsWith('.gif')) {
-      return 'image/gif';
-    }
-    if (pathname.endsWith('.svg')) {
-      return 'image/svg+xml';
-    }
-    if (pathname.endsWith('.png')) {
-      return 'image/png';
-    }
-  } catch {
-    // Ignore invalid URLs and fall back to undefined mime type.
-  }
-
-  return undefined;
-}
-
 function isExternalImageUrl(url: string): boolean {
-  return /^(?:https?:)?\/\//i.test(url);
-}
-
-function normalizeExternalImageHostname(hostname: string): string {
-  return hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
-}
-
-const blockedImageAddresses = new BlockList();
-for (const [address, prefix] of [
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.0.2.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
-  ['198.51.100.0', 24],
-  ['203.0.113.0', 24],
-  ['224.0.0.0', 3],
-] as const) {
-  blockedImageAddresses.addSubnet(address, prefix, 'ipv4');
-  // Apply the same destination restrictions to NAT64 and 6to4 addresses.
-  const octets = address.split('.').map(Number);
-  const embedded = `${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
-  blockedImageAddresses.addSubnet(`64:ff9b::${embedded}`, 96 + prefix, 'ipv6');
-  blockedImageAddresses.addSubnet(`2002:${embedded}::`, 16 + prefix, 'ipv6');
-}
-for (const [address, prefix] of [
-  ['::', 96],
-  ['64:ff9b:1::', 48],
-  ['2001:db8::', 32],
-  ['fc00::', 7],
-  ['fe80::', 10],
-  ['fec0::', 10],
-  ['ff00::', 8],
-] as const) {
-  blockedImageAddresses.addSubnet(address, prefix, 'ipv6');
-}
-
-function getUnsafeIpReason(address: string): string | undefined {
-  const normalizedAddress = normalizeExternalImageHostname(address);
-  const family = isIP(normalizedAddress);
-  if (family && blockedImageAddresses.check(normalizedAddress, family === 4 ? 'ipv4' : 'ipv6')) {
-    return `resolved to blocked IPv${family} address ${normalizedAddress}`;
-  }
-  return undefined;
-}
-
-type ExternalImageTargetValidation =
-  | { blockReason: string; resolvedAddresses?: never }
-  | { blockReason?: never; resolvedAddresses: LookupAddress[] };
-
-async function validateExternalImageTarget(
-  url: string,
-  signal: AbortSignal,
-): Promise<ExternalImageTargetValidation> {
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    return { blockReason: 'URL is invalid' };
-  }
-
-  if (parsedUrl.protocol !== 'https:') {
-    return { blockReason: `protocol ${parsedUrl.protocol} is not allowed` };
-  }
-
-  const hostname = normalizeExternalImageHostname(parsedUrl.hostname);
-  if (!hostname) {
-    return { blockReason: 'URL is missing a hostname' };
-  }
-
-  if (parsedUrl.username || parsedUrl.password) {
-    return { blockReason: 'URL credentials are not allowed' };
-  }
-
-  if (BLOCKED_IMAGE_HOSTNAMES.has(hostname) || hostname.endsWith('.localhost')) {
-    return { blockReason: `hostname ${hostname} is blocked` };
-  }
-
-  const directIpReason = getUnsafeIpReason(hostname);
-  if (directIpReason) {
-    return { blockReason: directIpReason };
-  }
-
-  const hostnameIpFamily = isIP(hostname);
-  if (hostnameIpFamily) {
-    return { resolvedAddresses: [{ address: hostname, family: hostnameIpFamily }] };
-  }
-
-  try {
-    const resolvedAddresses = await new Promise<LookupAddress[]>((resolve, reject) => {
-      signal.throwIfAborted();
-      const onAbort = () => reject(signal.reason);
-      signal.addEventListener('abort', onAbort, { once: true });
-      lookup(hostname, { all: true, verbatim: true })
-        .then(resolve, reject)
-        .finally(() => signal.removeEventListener('abort', onAbort));
-    });
-    if (resolvedAddresses.length === 0) {
-      return { blockReason: `hostname ${hostname} did not resolve to any addresses` };
-    }
-
-    for (const resolvedAddress of resolvedAddresses) {
-      const unsafeReason = getUnsafeIpReason(resolvedAddress.address);
-      if (unsafeReason) {
-        return { blockReason: `${hostname} ${unsafeReason}` };
-      }
-    }
-
-    return { resolvedAddresses };
-  } catch (error) {
-    logger.warn('[OpenAI Image] Failed to resolve external image hostname', {
-      url,
-      hostname,
-      error: String(error),
-    });
-    return { blockReason: `hostname ${hostname} could not be resolved` };
-  }
-}
-
-async function createPinnedExternalImageDispatcher(
-  url: string,
-  resolvedAddresses: LookupAddress[],
-): Promise<Dispatcher> {
-  const tlsOptions = await getFetchTlsOptions();
-  const proxyUrl = getProxyUrlForTarget(url);
-  const hostname = normalizeExternalImageHostname(new URL(url).hostname);
-  const requestTls = { ...tlsOptions, ...(isIP(hostname) ? {} : { servername: hostname }) };
-  const agent = proxyUrl
-    ? new ProxyAgent({ uri: proxyUrl, proxyTls: tlsOptions, requestTls })
-    : new Agent({ connect: requestTls });
-  const pinnedAgent = isIP(hostname)
-    ? agent
-    : agent.compose(
-        interceptors.dns({
-          // Pin the validated addresses while preserving the HTTP host and TLS server name.
-          lookup: (_origin, _options, callback) => {
-            callback(
-              null,
-              resolvedAddresses.map(({ address, family }) => ({
-                address,
-                family: family as 4 | 6,
-                ttl: 60_000,
-              })),
-            );
-          },
-        }),
-      );
-  return pinnedAgent.compose(
-    // DNS pinning rotates address families on another request. Retry route failures
-    // that the DNS interceptor does not handle itself, using the same validated set.
-    interceptors.retry({
-      maxRetries: 1,
-      minTimeout: 0,
-      maxTimeout: 0,
-      errorCodes: ['ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT'],
-      statusCodes: [],
-    }),
-    interceptors.decompress({ skipErrorResponses: false, maxSize: BLOB_MAX_SIZE }),
-    stripDecompressionHeaders(),
-  );
-}
-
-function getDownloadedImageMimeType(buffer: Buffer): string | undefined {
-  if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
-    return 'image/png';
-  }
-  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
-    return 'image/jpeg';
-  }
-  if (['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) {
-    return 'image/gif';
-  }
-  if (
-    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
-    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
-  ) {
-    return 'image/webp';
-  }
-  if (buffer.length >= 16 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
-    const boxEnd = Math.min(buffer.readUInt32BE(0), buffer.length);
-    for (let offset = 8; offset + 4 <= boxEnd; offset += offset === 8 ? 8 : 4) {
-      if (['avif', 'avis'].includes(buffer.subarray(offset, offset + 4).toString('ascii'))) {
-        return 'image/avif';
-      }
-    }
-  }
-  return undefined;
+  return url === url.trim() && URL.parse(url)?.protocol === 'https:';
 }
 
 function formatImageMarkdown(prompt: string, imageSrc: string): string {
@@ -790,152 +668,39 @@ function formatImageMarkdown(prompt: string, imageSrc: string): string {
   return `![${ellipsizedPrompt}](${imageSrc})`;
 }
 
-function getPrimaryImageSource(images?: ImageOutput[]): string | undefined {
-  const primaryImage = images?.[0];
-  return primaryImage?.blobRef?.uri || primaryImage?.data;
+const INLINE_IMAGE =
+  /^data:image\/(?:png|jpe?g|gif|webp|avif|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/i;
+
+function getInlineImage(
+  item: { b64_json?: unknown; url?: unknown } | null,
+  outputFormat?: string,
+): ImageOutput | null {
+  if (typeof item?.b64_json === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(item.b64_json)) {
+    const mimeType = getMimeTypeForOutputFormat(outputFormat);
+    return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+  }
+  if (typeof item?.url === 'string' && INLINE_IMAGE.test(item.url)) {
+    return { data: item.url };
+  }
+  return null;
 }
 
 export function buildStructuredImageOutputs(
   data: any,
   outputFormat?: string,
 ): ImageOutput[] | undefined {
-  if (!Array.isArray(data.data) || data.data.length === 0) {
+  if (!Array.isArray(data?.data) || !data.data.length || data.data.length > MAX_IMAGE_BATCH_SIZE) {
     return undefined;
   }
-
-  return data.data
-    .map((item: any): ImageOutput | null => {
-      if (item.b64_json) {
-        const mimeType = getMimeTypeForOutputFormat(outputFormat);
-        return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
-      }
-
-      if (item.url) {
-        if (isExternalImageUrl(item.url)) {
-          return null;
-        }
-        const mimeType = inferMimeTypeFromUrl(item.url);
-        return mimeType ? { data: item.url, mimeType } : { data: item.url };
-      }
-
-      return null;
-    })
-    .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
-}
-
-async function downloadExternalImage(
-  url: string,
-  abortSignal: AbortSignal,
-  maxBytes: number,
-): Promise<ImageOutput | null> {
-  const controller = new AbortController();
-  const signal = AbortSignal.any([controller.signal, abortSignal]);
-  let dispatcher: Dispatcher | undefined;
-  try {
-    signal.throwIfAborted();
-    const validatedTarget = await validateExternalImageTarget(url, signal);
-    if ('blockReason' in validatedTarget) {
-      logger.warn('[OpenAI Image] Blocked unsafe external image URL', {
-        url,
-        reason: validatedTarget.blockReason,
-      });
-      return null;
+  const images: ImageOutput[] = [];
+  for (const item of data.data) {
+    const image = getInlineImage(item, outputFormat);
+    if (!image) {
+      return undefined;
     }
-
-    signal.throwIfAborted();
-    dispatcher = await createPinnedExternalImageDispatcher(url, validatedTarget.resolvedAddresses);
-    signal.throwIfAborted();
-    const downloadOptions = {
-      redirect: 'error',
-      signal,
-      dispatcher,
-      // Binary downloads must not be cloned for request logging or receive saved Cloud auth.
-      headers: { 'x-promptfoo-silent': 'true' },
-      skipCloudAuthInjection: true,
-    } as const;
-    const response = await fetchWithProxy(url, downloadOptions);
-    if (!response.ok) {
-      logger.warn('[OpenAI Image] Failed to download external image URL', {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-      });
-      return null;
-    }
-
-    const contentLength = Number(response.headers.get('content-length') ?? 0);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-      logger.warn('[OpenAI Image] External image exceeds blob size limit', {
-        url,
-        contentLength,
-        maxSizeBytes: maxBytes,
-      });
-      return null;
-    }
-
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    if (response.body) {
-      const reader = response.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        totalBytes += value.byteLength;
-        if (totalBytes > maxBytes) {
-          controller.abort();
-          logger.warn('[OpenAI Image] External image exceeded blob size limit during download', {
-            url,
-            sizeBytes: totalBytes,
-            maxSizeBytes: maxBytes,
-          });
-          return null;
-        }
-        chunks.push(Buffer.from(value));
-      }
-    } else {
-      const arrayBuffer = await response.arrayBuffer();
-      totalBytes = arrayBuffer.byteLength;
-      if (totalBytes > maxBytes) {
-        controller.abort();
-        logger.warn('[OpenAI Image] External image exceeded blob size limit after download', {
-          url,
-          sizeBytes: totalBytes,
-          maxSizeBytes: maxBytes,
-        });
-        return null;
-      }
-      chunks.push(Buffer.from(arrayBuffer));
-    }
-
-    const responseMimeType = response.headers
-      .get('content-type')
-      ?.split(';', 1)[0]
-      ?.trim()
-      .toLowerCase();
-    const buffer = Buffer.concat(chunks, totalBytes);
-    const mimeType = getDownloadedImageMimeType(buffer);
-    const declaredMimeType = responseMimeType === 'image/jpg' ? 'image/jpeg' : responseMimeType;
-    if (!mimeType || (declaredMimeType && declaredMimeType !== mimeType)) {
-      logger.warn('[OpenAI Image] External image bytes did not match a supported content type', {
-        url,
-        declaredMimeType,
-        detectedMimeType: mimeType,
-      });
-      return null;
-    }
-    return { data: `data:${mimeType};base64,${buffer.toString('base64')}`, mimeType };
-  } catch (error) {
-    logger.warn('[OpenAI Image] Failed to internalize external image URL', {
-      url,
-      error: String(error),
-    });
-    return null;
-  } finally {
-    controller.abort();
-    await dispatcher?.destroy();
+    images.push(image);
   }
+  return images;
 }
 
 export async function buildSafeStructuredImageOutputs(
@@ -945,7 +710,7 @@ export async function buildSafeStructuredImageOutputs(
   abortSignal?: AbortSignal,
 ): Promise<ImageOutput[] | undefined> {
   if (
-    !Array.isArray(data.data) ||
+    !Array.isArray(data?.data) ||
     data.data.length === 0 ||
     data.data.length > MAX_IMAGE_BATCH_SIZE
   ) {
@@ -964,16 +729,17 @@ export async function buildSafeStructuredImageOutputs(
       if (signal.aborted || remainingBytes <= 0) {
         return undefined;
       }
-      let image: ImageOutput | null = null;
-      if (item.b64_json) {
-        const mimeType = getMimeTypeForOutputFormat(outputFormat);
-        image = { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
-      } else if (responseFormat !== 'b64_json' && typeof item.url === 'string') {
-        if (isExternalImageUrl(item.url)) {
-          image = await downloadExternalImage(item.url, signal, remainingBytes);
-        } else if (item.url.startsWith('data:image/')) {
-          image = { data: item.url };
-        }
+      if (responseFormat === 'b64_json' && !item?.b64_json) {
+        return undefined;
+      }
+      let image = getInlineImage(item, outputFormat);
+      if (
+        !image &&
+        responseFormat !== 'b64_json' &&
+        typeof item?.url === 'string' &&
+        isExternalImageUrl(item.url)
+      ) {
+        image = await downloadExternalImage(item.url, signal, remainingBytes);
       }
       if (!image?.data || signal.aborted) {
         return undefined;
@@ -997,39 +763,28 @@ export function formatStructuredImageOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
-  outputFormat?: string,
+  _outputFormat?: string,
   images?: ImageOutput[],
 ): string | { error: string } {
-  if (!images && data.data?.length > 1) {
+  if (!images && data?.data?.length > 1) {
     return { error: 'One or more generated images could not be downloaded safely.' };
   }
-
-  if (responseFormat === 'b64_json') {
-    const b64Json = data.data?.[0]?.b64_json;
-    if (!b64Json) {
-      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
-    }
-    if (!images?.length) {
-      return { error: 'No usable image data: the generated image did not pass validation.' };
-    }
-
-    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
+  const first = data?.data?.[0];
+  if (responseFormat === 'b64_json' && (typeof first?.b64_json !== 'string' || !first.b64_json)) {
+    return { error: 'No base64 image data found in response' };
   }
-
-  const primaryImageSource = getPrimaryImageSource(images);
-  if (primaryImageSource) {
-    if (primaryImageSource.startsWith('data:')) {
-      return primaryImageSource;
-    }
-    return formatImageMarkdown(prompt, primaryImageSource);
+  const image = images?.[0];
+  if (image?.data && INLINE_IMAGE.test(image.data)) {
+    return image.data;
   }
-
-  const url = data.data?.[0]?.url;
-  if (!url) {
-    return { error: `No image URL found in response: ${JSON.stringify(data)}` };
+  const uri = image?.blobRef?.uri;
+  if (responseFormat !== 'b64_json' && uri && /^promptfoo:\/\/blob\/[a-f0-9]{64}$/i.test(uri)) {
+    return formatImageMarkdown(prompt, uri);
   }
-
-  return { error: 'No usable image data: the external image could not be downloaded safely.' };
+  if (responseFormat !== 'b64_json' && (typeof first?.url !== 'string' || !first.url)) {
+    return { error: 'No image URL found in response' };
+  }
+  return { error: 'No usable image data: the generated image could not be downloaded safely.' };
 }
 
 export function formatOutput(
@@ -1077,28 +832,21 @@ export function prepareRequestBody(
   }
 
   if (isGptImageModel(model)) {
-    if ('quality' in config && config.quality) {
-      body.quality = config.quality;
+    for (const field of ['quality', 'background', 'output_format', 'moderation']) {
+      if (config[field]) {
+        body[field] = config[field];
+      }
     }
-
-    // Background options are model-dependent.
-    if ('background' in config && config.background) {
-      body.background = config.background;
-    }
-
-    // Output format: png, jpeg, or webp
-    if ('output_format' in config && config.output_format) {
-      body.output_format = config.output_format;
-    }
-
-    // Compression level for jpeg/webp (0-100)
-    if ('output_compression' in config && config.output_compression !== undefined) {
+    if (config.output_compression !== undefined) {
       body.output_compression = config.output_compression;
     }
+  }
 
-    // Moderation: auto or low
-    if ('moderation' in config && config.moderation) {
-      body.moderation = config.moderation;
+  if (isGptImage26(model)) {
+    for (const field of ['complexity', 'frame_count', 'frame_duration_ms']) {
+      if (config[field] !== undefined) {
+        body[field] = config[field];
+      }
     }
   }
 
@@ -1115,8 +863,8 @@ export function calculateImageCost(
   const gptImageQuality =
     quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
 
-  // GPT Image 2.5 shares token rates with GPT Image 2, but not per-image token usage.
-  if (isGptImage25(model)) {
+  // Sunburst and Flare do not have fixed per-image prices.
+  if (isGptImage25(model) || isGptImage26(model)) {
     return undefined;
   }
 
@@ -1205,7 +953,9 @@ export async function callOpenAiImageApi(
     ([key, value]) => !isSensitiveHeader(key) && hasSensitiveOpenAiCacheString(value),
   );
   const serializedBody = JSON.stringify(body);
-  const hasSensitiveBody = hasSensitiveOpenAiCacheString(serializedBody);
+  // Edit references may be private inputs or account-scoped file IDs.
+  const hasSensitiveBody =
+    body.images !== undefined || hasSensitiveOpenAiCacheString(serializedBody);
   const bustCache =
     hasSensitiveUrl ||
     hasSensitiveHeaderValue ||
@@ -1235,29 +985,35 @@ export async function processApiResponse(
 ): Promise<ProviderResponse> {
   const evictFromCache = async () => {
     if (!abortSignal?.aborted) {
-      await (deleteFromCache ?? data?.deleteFromCache)?.();
+      try {
+        await deleteFromCache?.();
+      } catch {
+        logger.warn('[OpenAI Image] Failed to evict invalid response from cache');
+      }
     }
   };
 
-  if (data.error) {
+  if (data?.error) {
     await evictFromCache();
     return {
       error: formatOpenAiError(data),
     };
   }
 
-  const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
-    cachedResponse: cached,
-  });
+  // SVG also bills an authoring model whose usage is not itemized in the image ledger.
+  const exactUsageCost =
+    isGptImage26(model) && outputFormat === 'svg'
+      ? undefined
+      : calculateOpenAIUsageCost(model, billingConfig, data?.usage, { cachedResponse: cached });
   const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
-  const tokenUsage = getImageTokenUsage(data, cached);
+  const tokenUsage = getImageTokenUsage(data ?? {}, cached);
 
   const generation: ProviderResponse = {
     cached,
     latencyMs,
     ...(cost === undefined ? {} : { cost }),
     ...(tokenUsage ? { tokenUsage } : {}),
-    ...(data.usage ? { metadata: { usage: data.usage } } : {}),
+    ...(data?.usage ? { metadata: { usage: data.usage } } : {}),
   };
 
   try {
@@ -1285,11 +1041,11 @@ export async function processApiResponse(
       ...generation,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
-  } catch (err) {
+  } catch {
     await evictFromCache();
     return {
       ...generation,
-      error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+      error: 'Invalid generated image data',
     };
   }
 }
@@ -1325,14 +1081,20 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     // GPT Image models always return b64_json, so we treat them as such regardless of config
     const responseFormat = isGptImageModel(model) ? 'b64_json' : config.response_format || 'url';
 
-    if (operation !== 'generation') {
+    const isEdit = operation === 'edit' && isGptImage26(model);
+    if (operation !== 'generation' && !isEdit) {
       return {
-        error: `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
+        error: isGptImage26(model)
+          ? `Unsupported operation '${operation}' for GPT Image 2.6. Use 'generation' or 'edit'.`
+          : `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
       };
     }
 
-    const endpoint = '/images/generations';
-    const size = config.size || DEFAULT_SIZE;
+    const endpoint = isEdit ? '/images/edits' : '/images/generations';
+    const outputFormat = 'output_format' in config ? config.output_format : undefined;
+    const size =
+      config.size ||
+      (isEdit || (isGptImage26(model) && outputFormat === 'gif') ? 'auto' : DEFAULT_SIZE);
 
     const requestValidation = validateImageRequestConfig(config, model, size as string);
     if (!requestValidation.valid) {
@@ -1340,6 +1102,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
+    if (isEdit && 'images' in config) {
+      Object.assign(body, { images: config.images, markup: config.markup, mask: config.mask });
+    }
 
     const headers = {
       'Content-Type': 'application/json',
@@ -1347,34 +1112,29 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       ...this.getOpenAiRequestHeaders(config.headers),
     };
 
-    let data, status, statusText;
-    let cached = false;
-    let latencyMs: number | undefined;
-    let deleteFromCache: (() => Promise<void>) | undefined;
-    let updateCache: FetchWithCacheResult<unknown>['updateCache'];
+    let response: FetchWithCacheResult<any>;
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache, updateCache } =
-        await callOpenAiImageApi(
-          appendOpenAiApiPath(this.getApiUrl(), endpoint),
-          body,
-          headers,
-          getRequestTimeoutMs(),
-        ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
-      }
+      response = await callOpenAiImageApi(
+        appendOpenAiApiPath(this.getApiUrl(), endpoint),
+        body,
+        headers,
+        getRequestTimeoutMs(),
+      );
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    const response = await processApiResponse(
+    const { data, cached, status, statusText, latencyMs } = response;
+    if (status < 200 || status >= 300) {
+      return {
+        error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+      };
+    }
+
+    const result = await processApiResponse(
       data,
       prompt,
       responseFormat,
@@ -1384,12 +1144,12 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       latencyMs,
       config.quality,
       config.n ?? 1,
-      'output_format' in config ? config.output_format : undefined,
+      outputFormat,
       config,
-      deleteFromCache,
+      response.deleteFromCache,
       callApiOptions?.abortSignal,
     );
-    const images = response.images;
+    const images = result.images;
     if (
       images &&
       data.data.some(
@@ -1397,7 +1157,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       )
     ) {
       try {
-        await updateCache?.(
+        await response.updateCache?.(
           {
             ...data,
             data: data.data.map((item: object, index: number) => ({
@@ -1412,6 +1172,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         logger.warn('[OpenAI Image] Failed to cache image data', { error: String(error) });
       }
     }
-    return response;
+    return result;
   }
 }

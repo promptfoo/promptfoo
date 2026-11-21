@@ -11,6 +11,16 @@ import {
 } from '../../../src/util/fetch/index';
 import { JPEG_IMAGE } from '../../fixtures/images';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createImageResponse = () => ({
+  created: 1234567890,
+  data: [
+    {
+      url: 'https://example.com/image.jpg',
+    },
+  ],
+});
 
 vi.mock('../../../src/logger');
 vi.mock('node:dns/promises', () => ({
@@ -36,43 +46,16 @@ describe('XAI Image Provider', () => {
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
-  const mockSuccessResponse = {
-    data: {
-      created: 1234567890,
-      data: [
-        {
-          url: 'https://example.com/image.jpg',
-        },
-      ],
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  const mockSuccessResponse = createMockFetchResponse(createImageResponse());
 
-  const mockBase64Response = {
-    data: {
-      created: 1234567890,
-      data: [{ b64_json: 'base64EncodedImageData' }],
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  const mockBase64Response = createMockFetchResponse({
+    created: 1234567890,
+    data: [{ b64_json: 'base64EncodedImageData' }],
+  });
 
-  const mockCachedResponse = {
-    data: {
-      created: 1234567890,
-      data: [
-        {
-          url: 'https://example.com/image.jpg',
-        },
-      ],
-    },
+  const mockCachedResponse = createMockFetchResponse(createImageResponse(), {
     cached: true,
-    status: 200,
-    statusText: 'OK',
-  };
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -551,17 +534,14 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, n: 2 },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: {
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(
+        createMockFetchResponse({
           data: [
             { url: 'https://example.com/image-1.jpg' },
             { url: 'https://example.com/image-2.jpg' },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('test prompt');
 
@@ -688,12 +668,10 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      const errorResponse = {
-        data: { error: { message: 'API error message', type: 'api_error', code: 'error_code' } },
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      };
+      const errorResponse = createMockFetchResponse(
+        { error: { message: 'API error message', type: 'api_error', code: 'error_code' } },
+        { status: 400, statusText: 'Bad Request' },
+      );
 
       vi.mocked(callOpenAiImageApi).mockResolvedValue(errorResponse);
 
@@ -708,12 +686,12 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: 'Error message',
-        cached: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(
+        createMockFetchResponse('Error message', {
+          status: 500,
+          statusText: 'Internal Server Error',
+        }),
+      );
 
       const result = await provider.callApi('test prompt');
 
@@ -739,12 +717,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: { data: [{}] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(createMockFetchResponse({ data: [{}] }));
 
       const result = await provider.callApi('test prompt');
 
@@ -757,12 +730,12 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: { error: 'Invalid request' },
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(
+        createMockFetchResponse(
+          { error: 'Invalid request' },
+          { status: 400, statusText: 'Bad Request' },
+        ),
+      );
 
       const result = await provider.callApi(mockPrompt);
       expect(result.error).toMatch(/API error: 400 Bad Request/);
@@ -805,13 +778,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: { data: [{}] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        deleteFromCache,
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(createMockFetchResponse({ data: [{}] }));
 
       const result = await provider.callApi('test prompt');
 
@@ -988,19 +955,14 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, n: 3 },
       });
 
-      const multiImageResponse = {
-        data: {
-          created: 1234567890,
-          data: [
-            { url: 'https://example.com/image1.jpg' },
-            { url: 'https://example.com/image2.jpg' },
-            { url: 'https://example.com/image3.jpg' },
-          ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const multiImageResponse = createMockFetchResponse({
+        created: 1234567890,
+        data: [
+          { url: 'https://example.com/image1.jpg' },
+          { url: 'https://example.com/image2.jpg' },
+          { url: 'https://example.com/image3.jpg' },
+        ],
+      });
 
       vi.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
 

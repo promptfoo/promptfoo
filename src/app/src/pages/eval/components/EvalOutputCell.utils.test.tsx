@@ -5,6 +5,11 @@ import {
   resolveEvalImageOutputSource,
 } from './EvalOutputCell';
 
+// Keep API routing deterministic while exercising the real media resolvers.
+vi.mock('@app/stores/apiConfig', () => ({
+  default: { getState: () => ({ apiBaseUrl: '' }) },
+}));
+
 describe('normalizeImageSrcForComparison', () => {
   it('normalizes and resolves HTTP URLs', () => {
     const result = normalizeImageSrcForComparison('https://example.com/image.png');
@@ -265,13 +270,13 @@ describe('resolveEvalImageOutputSource', () => {
   it('falls back to resolveImageSource when data is not an HTTP(S) URL', () => {
     const image = { data: 'storageRef:images/test.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('/api/media/images/test.png');
+    expect(result).toBe('data:image/png;base64,storageRef:images/test.png');
   });
 
-  it('returns undefined when data is not a URL and cannot be resolved', () => {
+  it('delegates non-URL image data to the base64 resolver', () => {
     const image = { data: 'invalid-data', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBeUndefined();
+    expect(result).toBe('data:image/png;base64,invalid-data');
   });
 
   it('handles image with only blobRef', () => {
@@ -309,32 +314,30 @@ describe('resolveEvalImageOutputSource', () => {
     expect(result).toBeUndefined();
   });
 
-  it('rejects uppercase HTTP protocol (implementation uses case-sensitive regex)', () => {
+  it('delegates uppercase HTTP data instead of treating it as an HTTP URL', () => {
     // The implementation uses /^https?:\/\// which only matches lowercase http/https
     const image = { data: 'HTTP://example.com/image.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    // Should fall back to resolveImageSource which also won't match uppercase
-    expect(result).toBeUndefined();
+    expect(result).toBe('data:image/png;base64,HTTP://example.com/image.png');
   });
 
-  it('rejects ftp URLs (not http/https)', () => {
+  it('delegates FTP data instead of treating it as an HTTP URL', () => {
     const image = { data: 'ftp://example.com/image.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBeUndefined();
+    expect(result).toBe('data:image/png;base64,ftp://example.com/image.png');
   });
 
-  it('rejects file URLs', () => {
+  it('delegates file data instead of treating it as an HTTP URL', () => {
     const image = { data: 'file:///path/to/image.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBeUndefined();
+    expect(result).toBe('data:image/png;base64,file:///path/to/image.png');
   });
 
-  it('rejects data string with leading whitespace (regex requires start of string)', () => {
+  it('delegates data with leading whitespace instead of treating it as an HTTP URL', () => {
     // The regex /^https?:\/\// requires the string to start with http/https
     // Leading whitespace causes the regex to fail
     const image = { data: '  https://example.com/image.png  ', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    // Should fall back to resolveImageSource which also won't match with leading whitespace
-    expect(result).toBeUndefined();
+    expect(result).toBe('data:image/png;base64,  https://example.com/image.png  ');
   });
 });

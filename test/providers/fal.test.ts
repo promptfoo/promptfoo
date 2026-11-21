@@ -7,6 +7,20 @@ import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/imag
 const imageData = 'data:image/png;base64,aW1hZ2U=';
 vi.mock('../../src/providers/openai/image', () => ({ buildSafeStructuredImageOutputs: vi.fn() }));
 
+const createImageListResponse = () => ({
+  data: {
+    images: [{ url: 'https://example.com/image.png' }],
+  },
+  requestId: 'test-request-id',
+});
+
+const createSingleImageResponse = () => ({
+  data: {
+    image: { url: 'https://example.com/image.png' },
+  },
+  requestId: 'test-request-id',
+});
+
 const mockSubscribe = vi.hoisted(() => vi.fn());
 const mockConfig = vi.hoisted(() => vi.fn());
 const mockCreateClient = vi.hoisted(() => vi.fn());
@@ -122,9 +136,7 @@ describe('Fal Provider', () => {
       });
 
       it('should use environment variable for API key when not provided in config', () => {
-        vi.mocked(getEnvString).mockImplementation(function () {
-          return 'env-api-key';
-        });
+        vi.mocked(getEnvString).mockReturnValue('env-api-key');
 
         const envProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
 
@@ -166,19 +178,9 @@ describe('Fal Provider', () => {
     });
 
     describe('API calls and image generation', () => {
-      const mockImageResponse = {
-        data: {
-          images: [{ url: 'https://example.com/image.png' }],
-        },
-        requestId: 'test-request-id',
-      };
+      const mockImageResponse = createImageListResponse();
 
-      const mockSingleImageResponse = {
-        data: {
-          image: { url: 'https://example.com/image.png' },
-        },
-        requestId: 'test-request-id',
-      };
+      const mockSingleImageResponse = createSingleImageResponse();
 
       it('should call fal API and return inline image data with images array response', async () => {
         mockSubscribe.mockResolvedValueOnce(mockImageResponse);
@@ -293,12 +295,7 @@ describe('Fal Provider', () => {
 
     describe('runInference method', () => {
       it('should resolve image URL from images array', async () => {
-        const mockResponse = {
-          data: {
-            images: [{ url: 'https://example.com/image.png' }],
-          },
-          requestId: 'test-request-id',
-        };
+        const mockResponse = createImageListResponse();
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
         const result = await provider.runInference({
@@ -310,12 +307,7 @@ describe('Fal Provider', () => {
       });
 
       it('should resolve image URL from single image object', async () => {
-        const mockResponse = {
-          data: {
-            image: { url: 'https://example.com/image.png' },
-          },
-          requestId: 'test-request-id',
-        };
+        const mockResponse = createSingleImageResponse();
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
         const result = await provider.runInference({
@@ -328,12 +320,7 @@ describe('Fal Provider', () => {
     });
 
     describe('prompt processing', () => {
-      const mockResponse = {
-        data: {
-          images: [{ url: 'https://example.com/image.png' }],
-        },
-        requestId: 'test-request-id',
-      };
+      const mockResponse = createImageListResponse();
 
       beforeEach(() => {
         mockSubscribe.mockResolvedValue(mockResponse);
@@ -446,9 +433,7 @@ describe('Fal Provider', () => {
       });
 
       it('should use cached response when cache is enabled and available', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function () {
-          return true;
-        });
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
         const mockCachedResponse = JSON.stringify(
           '![cached prompt](https://cached.example.com/image.png)',
         );
@@ -499,9 +484,7 @@ describe('Fal Provider', () => {
       });
 
       it('should set cache when enabled and response is fresh', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function () {
-          return true;
-        });
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
         const mockCache = {
           get: vi.fn().mockResolvedValue(null),
           set: vi.fn(),
@@ -524,12 +507,7 @@ describe('Fal Provider', () => {
         };
         vi.mocked(getCache).mockReturnValue(mockCache as any);
 
-        const mockResponse = {
-          data: {
-            images: [{ url: 'https://example.com/image.png' }],
-          },
-          requestId: 'test-request-id',
-        };
+        const mockResponse = createImageListResponse();
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
         const result = await provider.callApi('test prompt');
@@ -547,9 +525,7 @@ describe('Fal Provider', () => {
       });
 
       it('should hash prompt and config values in cache keys', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function () {
-          return true;
-        });
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
         const mockCache = {
           get: vi.fn().mockResolvedValue(null),
           set: vi.fn(),
@@ -572,12 +548,7 @@ describe('Fal Provider', () => {
         };
         vi.mocked(getCache).mockReturnValue(mockCache as any);
 
-        mockSubscribe.mockResolvedValueOnce({
-          data: {
-            images: [{ url: 'https://example.com/image.png' }],
-          },
-          requestId: 'test-request-id',
-        });
+        mockSubscribe.mockResolvedValueOnce(createImageListResponse());
 
         const prompt = 'PFQA_FAL_PROMPT_SENTINEL';
         const contextSecret = 'PFQA_FAL_CONFIG_SECRET_SENTINEL';
@@ -603,9 +574,7 @@ describe('Fal Provider', () => {
       });
 
       it('should not expose API key values in hashed cache keys', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function () {
-          return true;
-        });
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
         const mockCache = {
           get: vi.fn().mockResolvedValue(null),
           set: vi.fn(),
@@ -704,9 +673,7 @@ describe('Fal Provider', () => {
       });
 
       it('should handle cache set errors gracefully', async () => {
-        vi.mocked(isCacheEnabled).mockImplementation(function () {
-          return true;
-        });
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
         const mockCache = {
           get: vi.fn().mockResolvedValue(null),
           set: vi.fn().mockRejectedValue(new Error('Cache error')),
@@ -729,12 +696,7 @@ describe('Fal Provider', () => {
         };
         vi.mocked(getCache).mockReturnValue(mockCache as any);
 
-        const mockResponse = {
-          data: {
-            images: [{ url: 'https://example.com/image.png' }],
-          },
-          requestId: 'test-request-id',
-        };
+        const mockResponse = createImageListResponse();
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
         const result = await provider.callApi('test prompt');
@@ -781,10 +743,7 @@ describe('Fal Provider', () => {
 
     describe('client initialization', () => {
       it('refreshes the owned client from the current provider configuration', async () => {
-        mockSubscribe.mockResolvedValue({
-          data: { images: [{ url: 'https://example.com/image.png' }] },
-          requestId: 'test-request-id',
-        });
+        mockSubscribe.mockResolvedValue(createImageListResponse());
 
         await provider.callApi('first');
         provider.apiKey = 'rotated-key';
@@ -907,12 +866,7 @@ describe('Fal Provider', () => {
           config: { apiKey: 'test-api-key' },
         });
 
-        const mockResponse = {
-          data: {
-            images: [{ url: 'https://example.com/image.png' }],
-          },
-          requestId: 'test-request-id',
-        };
+        const mockResponse = createImageListResponse();
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
         await newProvider.callApi('test prompt');

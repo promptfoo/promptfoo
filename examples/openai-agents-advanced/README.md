@@ -31,12 +31,14 @@ cd examples/openai-agents-advanced
 npm install
 ```
 
+Promptfoo and the Agents SDK are installed together locally so the exported agents share the SDK used by the provider.
+
 Both configs wait 1.5 seconds after each agent response so the SDK’s batched traces can reach Promptfoo before trajectory assertions run.
 
 ## Run the session and tracing eval
 
 ```bash
-npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+npx promptfoo eval -c promptfooconfig.yaml --no-cache
 ```
 
 The second test depends on the first test’s remembered code word. The config sets `evaluateOptions.maxConcurrency: 1` so these tests run in order.
@@ -46,7 +48,7 @@ For stateful red-team strategies, use a session factory keyed by a per-test `ses
 ## Run the sandbox and skill eval
 
 ```bash
-npx promptfoo@latest eval -c promptfooconfig.sandbox.yaml --no-cache
+npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
 ```
 
 The sandbox eval mounts a synthetic `task.md`, asks the agent to use the `ticket-summary` skill, and asserts on traced shell activity plus the final answer.

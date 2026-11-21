@@ -42,7 +42,7 @@ export type BlobLike =
     };
 
 function normalizePath(path: string): string {
-  return path.replace(/^\//, '');
+  return path.replace(/^\/+/, '');
 }
 
 function withApiBase(apiPath: string): string {
@@ -78,6 +78,15 @@ function resolveMediaUrl(url?: string | null): string | undefined {
   }
 
   return undefined;
+}
+
+export function isMediaRef(
+  value: unknown,
+): value is `${typeof BLOB_URI_PREFIX}${string}` | `${typeof STORAGE_REF_PREFIX}${string}` {
+  return (
+    typeof value === 'string' &&
+    (value.startsWith(BLOB_URI_PREFIX) || value.startsWith(STORAGE_REF_PREFIX))
+  );
 }
 
 export function resolveBlobUri(uri?: string | null): string | undefined {

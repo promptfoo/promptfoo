@@ -77,7 +77,8 @@ Downloads require public HTTPS destinations, validate the image signature, and a
 
 ### Full Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: modelslab:image:flux
     config:
