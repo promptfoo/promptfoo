@@ -182,13 +182,17 @@ describe('PortkeyChatCompletionProvider', () => {
       const provider = new PortkeyChatCompletionProvider('gpt-4o', {
         config: { portkeyApiKey: 'pk-config-key' },
       });
-      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-config-key' });
+      expect(provider.getOpenAiRequestHeaders()).toMatchObject({
+        'x-portkey-api-key': 'pk-config-key',
+      });
     });
 
     it('should send PORTKEY_API_KEY from the environment in the x-portkey-api-key header', () => {
       vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
       const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
-      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
+      expect(provider.getOpenAiRequestHeaders()).toMatchObject({
+        'x-portkey-api-key': 'pk-env-key',
+      });
     });
 
     it('should prefer the per-provider env override over ambient process env', () => {
@@ -197,7 +201,9 @@ describe('PortkeyChatCompletionProvider', () => {
         config: { portkeyProvider: 'openai' },
         env: { PORTKEY_API_KEY: 'pk-override' },
       });
-      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-override' });
+      expect(provider.getOpenAiRequestHeaders()).toMatchObject({
+        'x-portkey-api-key': 'pk-override',
+      });
     });
 
     it.each([
@@ -208,15 +214,20 @@ describe('PortkeyChatCompletionProvider', () => {
       const provider = new PortkeyChatCompletionProvider('fixture-model', {
         env: { PORTKEY_API_KEY: value },
       });
-      expect(new Headers(provider.config.headers).get('x-portkey-api-key')).toBe(expected);
+      expect(new Headers(provider.getOpenAiRequestHeaders()).get('x-portkey-api-key')).toBe(
+        expected,
+      );
     });
 
     it('should not copy an environment credential into the persisted config', () => {
       vi.stubEnv('PORTKEY_API_KEY', 'pk-env-key');
       const provider = new PortkeyChatCompletionProvider('gpt-4o', createOpenaiProviderConfig());
       // eval results persist provider config, so the credential must only reach the header.
-      expect(provider.config.portkeyApiKey).toBeUndefined();
-      expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-env-key' });
+      expect(JSON.stringify(provider.config)).not.toContain('pk-env-key');
+      vi.stubEnv('PORTKEY_API_KEY', 'pk-rotated');
+      expect(provider.getOpenAiRequestHeaders()).toMatchObject({
+        'x-portkey-api-key': 'pk-rotated',
+      });
     });
 
     it('should accept a credential supplied directly as a header', () => {
@@ -268,6 +279,17 @@ describe('PortkeyChatCompletionProvider', () => {
       });
       expect(provider.getApiKey()).toBe('sk-explicit');
     });
+
+    it.each([{ apiKey: '' }, { useDefaultApiKey: false }])(
+      'honors explicit masking of the default upstream key (%j)',
+      (config) => {
+        vi.stubEnv('OPENAI_API_KEY', 'fake-ambient-openai');
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: { portkeyProvider: 'openai', ...config },
+        });
+        expect(provider.getApiKey()).toBeFalsy();
+      },
+    );
 
     it('should not forward an explicit apiKey when Portkey holds the credential', () => {
       const provider = new PortkeyChatCompletionProvider('@bedrock-eu/claude', {
@@ -416,6 +438,30 @@ describe('PortkeyChatCompletionProvider', () => {
       expect(headers.get('x-portkey-api-key')).toBe('fake-portkey');
     });
 
+    it.each([null, undefined, '', '   '])(
+      'rejects an Azure resource change with an empty authorization (%j)',
+      async (authorization) => {
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: {
+            portkeyProvider: 'azure-openai',
+            portkeyAzureResourceName: 'trusted',
+            apiKey: 'fake-upstream',
+            headers: { Authorization: 'Bearer fake-provider' },
+          },
+        });
+        const result = await provider.callApi('Hello', {
+          vars: {},
+          prompt: {
+            raw: 'Hello',
+            label: 'fixture',
+            config: { headers: { 'X-Portkey-Azure-Resource-Name': 'other', authorization } },
+          },
+        });
+        expect(result.error).toContain('Portkey prompt headers change upstream credential routing');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
     it.each([false, true])(
       'handles a prompt route override with explicit Authorization=%s',
       async (explicitAuthorization) => {
@@ -514,6 +560,11 @@ describe('PortkeyChatCompletionProvider', () => {
       { 'X-Portkey-Provider': 'anthropic' },
       { 'X-Portkey-Virtual-Key': 'selected-key' },
       { 'X-Portkey-Custom-Host': 'https://selected.example' },
+      { 'X-Portkey-Config': 'other' },
+      { 'X-Portkey-Azure-Deployment-Id': 'other' },
+      { 'X-Portkey-Vertex-Project-Id': 'other' },
+      { 'X-Portkey-Vertex-Region': 'other' },
+      { 'X-Portkey-Aws-Region': 'other' },
     ])('requires prompt authorization despite an inherited bearer: %j', (route) => {
       const provider = new PortkeyChatCompletionProvider('fixture-model', {
         config: {

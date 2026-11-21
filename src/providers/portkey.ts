@@ -1,4 +1,3 @@
-import { resolveProviderApiKey } from './credentials';
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
@@ -83,28 +82,12 @@ export function getPortkeyHeaders(
   // Values come from user YAML, so coerce them rather than trusting the declared type.
   for (const [key, value] of Object.entries(customHeaders)) {
     if (value != null) {
-      headers[key] = toHeaderValue(value);
+      // Replace the inherited Authorization field instead of adding a second bearer.
+      headers[key.toLowerCase() === 'authorization' ? 'Authorization' : key] = toHeaderValue(value);
     }
   }
 
   return headers;
-}
-
-/**
- * Rewrites any `Authorization` entry to its canonical casing.
- *
- * The inherited request builder adds `Authorization` before spreading these headers, and it
- * only guards the originator and organization headers case-insensitively. A caller-supplied
- * `authorization` would therefore survive as a second entry that fetch joins into one value;
- * emitting the canonical name lets it replace the generated bearer instead.
- */
-function canonicalizeAuthorization(headers: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(headers).map(([key, value]) => [
-      key.toLowerCase() === 'authorization' ? 'Authorization' : key,
-      value,
-    ]),
-  );
 }
 
 /**
@@ -115,7 +98,7 @@ function resolvePortkeyApiKey(
   config: PortkeyConfig = {},
   env?: ProviderOptions['env'],
 ): string | undefined {
-  return resolveProviderApiKey({ apiKey: config.portkeyApiKey }, env, ['PORTKEY_API_KEY']);
+  return config.portkeyApiKey ?? resolveProviderEnv(env, ['PORTKEY_API_KEY'])?.value;
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
@@ -141,7 +124,6 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
           config.portkeyApiBaseUrl ||
           resolveProviderEnv(providerOptions.env, ['PORTKEY_API_BASE_URL'])?.value ||
           'https://api.portkey.ai/v1',
-        headers: getPortkeyHeaders(config, portkeyApiKey),
       },
     });
   }
@@ -160,11 +142,12 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
       this.config,
       resolvePortkeyApiKey(this.config, this.env),
     );
+    const overrides = getPortkeyHeaders({ headers: customHeaders });
     const headers = {
       ...Object.fromEntries(
         Object.entries(providerHeaders).filter(([name]) => !hasHeaderOverride(customHeaders, name)),
       ),
-      ...getPortkeyHeaders({ headers: customHeaders }),
+      ...overrides,
     };
     const providerRoute = new Headers(providerHeaders);
     const requestRoute = new Headers(headers);
@@ -173,14 +156,22 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     const routeChanged =
       providerRoute.get('x-portkey-provider')?.toLowerCase() !==
         requestRoute.get('x-portkey-provider')?.toLowerCase() ||
-      providerRoute.get('x-portkey-virtual-key') !== requestRoute.get('x-portkey-virtual-key') ||
-      providerRoute.get('x-portkey-custom-host') !== requestRoute.get('x-portkey-custom-host');
-    if (!hasHeaderOverride(customHeaders, 'Authorization') && routeChanged) {
+      [
+        'x-portkey-virtual-key',
+        'x-portkey-custom-host',
+        'x-portkey-config',
+        'x-portkey-azure-resource-name',
+        'x-portkey-azure-deployment-id',
+        'x-portkey-vertex-project-id',
+        'x-portkey-vertex-region',
+        'x-portkey-aws-region',
+      ].some((name) => providerRoute.get(name) !== requestRoute.get(name));
+    if (routeChanged && !overrides.Authorization?.trim()) {
       throw new Error(
         'Portkey prompt headers change upstream credential routing. Configure the route on the provider or set Authorization explicitly.',
       );
     }
-    return canonicalizeAuthorization(super.getOpenAiRequestHeaders(headers));
+    return super.getOpenAiRequestHeaders(headers);
   }
 
   /** Resolve the upstream bearer from the effective Portkey route, including header overrides. */
@@ -195,11 +186,11 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     ) {
       return undefined;
     }
-    // apiKeyEnvar names the gateway credential for diagnostics, never the upstream bearer.
-    return resolveProviderApiKey(
-      { apiKey: config.apiKey },
-      this.env,
-      upstream === 'openai' ? ['OPENAI_API_KEY'] : [],
+    return (
+      config.apiKey ??
+      (upstream === 'openai' && config.useDefaultApiKey !== false
+        ? resolveProviderEnv(this.env, ['OPENAI_API_KEY'])?.value
+        : undefined)
     );
   }
 
