@@ -296,7 +296,7 @@ describe('completed MCP diagnostics and target model quota', () => {
     'preserves completed tool diagnostic without model quota: %s',
     async (text) => {
       const f = await fixture({ text });
-      const message = `MCP Tool Error (lookup): ${JSON.stringify([{ type: 'text', text }])}`;
+      const message = `MCP Tool Error (lookup): ${text}`;
       expect(f.error).toBeUndefined();
       expect(f.value).toMatchObject({
         error: message,
@@ -310,7 +310,7 @@ describe('completed MCP diagnostics and target model quota', () => {
               id: 'tool-call-fixture',
               name: 'lookup',
               input: { item: 'fixture' },
-              output: JSON.stringify([{ type: 'text', text }]),
+              output: text,
               is_error: true,
             },
           ],
@@ -339,14 +339,19 @@ describe('completed MCP diagnostics and target model quota', () => {
     },
   );
 
-  it('retains ordinary uncancelled tool errors as output', async () => {
+  it('reports uncancelled tool failures without charging model quota or retrying', async () => {
     const f = await fixture({ abortOnCompletion: false });
-    expect(f.value?.error).toBeUndefined();
-    expect(f.value?.output).toContain('Downstream service returned 429 rate limit');
+    const message = 'MCP Tool Error (lookup): Downstream service returned 429 rate limit';
+    expect(f.value).toMatchObject({
+      error: message,
+      output: message,
+      metadata: { errorOrigin: 'tool' },
+    });
     expect(f.registry.getMetrics()[f.key]).toMatchObject({
       rateLimitHits: 0,
       maxConcurrency: 2,
       completedRequests: 1,
+      retriedRequests: 0,
     });
   });
 

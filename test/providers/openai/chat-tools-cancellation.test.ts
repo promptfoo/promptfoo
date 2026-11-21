@@ -387,7 +387,7 @@ describe('Chat post-response callback cancellation', () => {
         expect(response).toMatchObject({
           error:
             settlement === 'returned error'
-              ? `MCP Tool Error (first): ${JSON.stringify(content)}`
+              ? `MCP Tool Error (first): ${content[0].text}`
               : 'MCP Tool Error (first): selected SDK failure',
           metadata: { http: { status: 200 } },
         });
@@ -400,7 +400,7 @@ describe('Chat post-response callback cancellation', () => {
                   id: 'call-first',
                   name: 'first',
                   input: {},
-                  output: JSON.stringify(content),
+                  output: content[0].text,
                   is_error: true,
                 },
               ],
@@ -439,7 +439,7 @@ describe('Chat post-response callback cancellation', () => {
     const controller = new AbortController();
     const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
     const content = [{ type: 'text' as const, text: 'independent tool failure' }];
-    const errorMessage = JSON.stringify(content);
+    const errorMessage = content[0].text;
     const preserved = expect(pending).resolves.toMatchObject({
       output: `MCP Tool Error (first): ${errorMessage}`,
       tokenUsage: { total: 5 },
@@ -546,8 +546,8 @@ describe('Chat post-response callback cancellation', () => {
     const target = provider({
       mcp: { enabled: true, servers: [{ url: 'https://mcp.fixture.test' }] },
     });
-    const firstOutput = JSON.stringify([{ type: 'text', text: 'ordinary failure' }]);
-    const secondOutput = JSON.stringify([{ type: 'text', text: 'second result' }]);
+    const firstOutput = 'ordinary failure';
+    const secondOutput = 'second result';
     const controller = new AbortController();
     await expect(
       target.callApi('fixture', undefined, { abortSignal: controller.signal }),
