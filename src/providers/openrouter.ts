@@ -236,7 +236,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             : getOpenAiPartialOutput(policy.partialOutput, jsonSchemaFormat),
         ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
         cached,
-        cost: cached ? 0 : this.calculateResponseCost(data, config),
+        cost: this.calculateResponseCost(data, config),
         isRefusal: true,
         guardrails: {
           flagged: true,
@@ -279,7 +279,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           : message.refusal || 'Content filtered by the model provider.',
       tokenUsage: getTokenUsageWithRequestCount(data, cached),
       cached,
-      cost: cached ? 0 : this.calculateResponseCost(data, config),
+      cost: this.calculateResponseCost(data, config),
       isRefusal: true,
       guardrails: { flagged: true },
       raw: data,

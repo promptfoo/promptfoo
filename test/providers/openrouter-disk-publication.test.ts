@@ -11,7 +11,7 @@ import type * as ProvidersModule from '../../src/providers';
 import type { ApiProvider, ProviderResponse } from '../../src/types';
 
 const headers = { 'content-type': 'application/json', 'x-request-id': 'publication-fixture' };
-const usage = { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 };
+const usage = { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5, cost: 0.05 };
 const refusals = [
   {
     name: 'message refusal',
@@ -82,7 +82,6 @@ describe('OpenRouter completed refusals during disk publication', () => {
           apiBaseUrl: 'https://publication.fixture.test/v1',
           apiKey: 'fixture-key',
           maxRetries: 0,
-          cost: 0.01,
         },
       },
     });
@@ -127,6 +126,24 @@ describe('OpenRouter completed refusals during disk publication', () => {
   }
 
   describe.each(refusals)('$name', ({ choice, output }) => {
+    it.each([false, true])('preserves the logical cost on replay (BYOK=%s)', async (byok) => {
+      const prompt = randomUUID();
+      const payload = { choices: [choice], usage: { ...usage, is_byok: byok } };
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify(payload), { headers }),
+      );
+      const first = await provider.callApi(prompt);
+      const replay = await provider.callApi(prompt);
+      expect(first.cost).toBe(byok ? undefined : usage.cost);
+      expect(replay.cost).toBe(first.cost);
+      expect(replay).toMatchObject({
+        isRefusal: true,
+        cached: true,
+        tokenUsage: { numRequests: 0 },
+      });
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+    });
+
     it.each([false, true])(
       'retains the completed envelope with cancellation=%s',
       async (cancel) => {
@@ -198,7 +215,7 @@ describe('OpenRouter completed refusals during disk publication', () => {
     expect(joined).toMatchObject({
       isRefusal: true,
       cached: true,
-      cost: 0,
+      cost: origin.cost,
       tokenUsage: { cached: 5, numRequests: 0 },
     });
     expect(globalThis.fetch).toHaveBeenCalledOnce();
