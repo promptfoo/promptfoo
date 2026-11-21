@@ -105,9 +105,15 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
         try {
           parsed = JSON.parse(item);
         } catch {
-          return REDACTED;
+          // Malformed JSON can still contain fields, credential tuples or escaped names.
+          // Plain bracketed text such as log prefixes and templates gets the normal checks.
+          if (/[:,\\]/.test(item) || isCredentialContainer(item, headers)) {
+            return REDACTED;
+          }
         }
-        return JSON.stringify(visit(parsed, depth + 1, headers));
+        if (parsed !== undefined) {
+          return JSON.stringify(visit(parsed, depth + 1, headers));
+        }
       }
       return isOpaque(item) || (headers && isCredentialHeader('', item)) ? REDACTED : item;
     }

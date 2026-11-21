@@ -746,6 +746,16 @@ describe('sanitizeMcpToolData', () => {
     });
   });
 
+  it('retains plain text starting with delimiters while protecting malformed data', () => {
+    const content = [
+      '[INFO] Operation complete',
+      '[section]\npath=docs',
+      '{{ user.name }}',
+      '"hello" again',
+    ];
+    expect(sanitizeMcpToolData({ content })).toEqual({ content });
+  });
+
   it('checks aliased header maps without dropping public headers', () => {
     const headers = { 'X-Goog-Iap-Jwt-Assertion': 'short', accept: 'application/json' };
     expect(sanitizeMcpToolData({ requestHeaders: headers })).toEqual({
@@ -795,6 +805,10 @@ describe('sanitizeMcpToolData', () => {
       'dbPwd=private-fixture',
       'sent password = private-fixture',
       'run --env=API_KEY=private-fixture',
+      '[section]\npassword=private-fixture',
+      '{"apiKey":"private-fixture"',
+      '["X-Honeycomb-Team","private-fixture"',
+      '{"\\u0070wd":"private-fixture"',
       'user=alice&value=private-fixture',
       { client_assertion: 'private-fixture' },
       { name: 'jwt', value: 'private-fixture' },
