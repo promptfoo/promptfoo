@@ -1,16 +1,11 @@
-import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
-import { promisify } from 'util';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getProcessEnv } from '../../envars';
-import { getFileHashes, parseScriptParts, stripText } from '../../providers/scriptCompletion';
+import { getFileHashes, parseScriptParts, runScript } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Executable prompt function. Executes any script/binary and returns its output as the prompt.
@@ -45,46 +40,20 @@ export const executablePromptFunction = async (
   const scriptParts = parseScriptParts(scriptPath);
   const fileHashes = getFileHashes(scriptParts);
 
-  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
-
-  let cachedResult;
-  if (fileHashes.length > 0 && isCacheEnabled()) {
-    const cache = getCache();
-    cachedResult = await cache.get(cacheKey);
-
-    if (cachedResult) {
-      return cachedResult as string;
-    }
+  const argument = safeJsonStringify(transformedContext) as string;
+  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${argument}`;
+  const cache = fileHashes.length && isCacheEnabled() ? getCache() : undefined;
+  const cachedResult = await cache?.get(cacheKey);
+  if (typeof cachedResult === 'string') {
+    return cachedResult;
   }
 
-  const command = scriptParts.shift();
-  invariant(command, 'No command found in script path');
-
-  // Pass context as JSON argument to the script
-  const scriptArgs = scriptParts.concat([safeJsonStringify(transformedContext) as string]);
-
-  const options = {
+  const output = await runScript(scriptParts, [argument], {
     cwd: context.config?.basePath,
-    env: getProcessEnv(),
-    timeout: context.config?.timeout || 60000, // Default 60 second timeout
-  };
-
-  const execution = execFileAsync(command, scriptArgs, options);
-  execution.child?.stdin?.end();
-  const { stdout, stderr } = await execution;
-  const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
-  const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
-
-  if (errorOutput && !standardOutput) {
-    throw new Error(errorOutput);
-  }
-
-  if (fileHashes.length > 0 && isCacheEnabled()) {
-    const cache = getCache();
-    await cache.set(cacheKey, standardOutput);
-  }
-
-  return standardOutput;
+    timeout: context.config?.timeout || 60_000,
+  });
+  await cache?.set(cacheKey, output);
+  return output;
 };
 
 /**

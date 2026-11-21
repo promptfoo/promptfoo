@@ -1,7 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
-import { promisify } from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
@@ -16,12 +15,10 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
-const execFileAsync = promisify(execFile);
-
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
-export function stripText(text: string) {
-  return text.replace(ANSI_ESCAPE, '');
+function stripText(text: string | Buffer) {
+  return text.toString().trim().replace(ANSI_ESCAPE, '');
 }
 
 export function parseScriptParts(scriptPath: string): string[] {
@@ -52,6 +49,55 @@ export function getFileHashes(scriptParts: string[]): string[] {
   return fileHashes;
 }
 
+/** Only the configured script selects the executable. Runtime inputs are literal arguments. */
+export async function runScript(
+  [command, ...args]: string[],
+  inputs: string[],
+  options: { cwd?: string; timeout?: number },
+): Promise<string> {
+  invariant(command, 'No command found in script path');
+  const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
+    (resolve, reject) => {
+      const child = execFile(
+        command,
+        [...args, ...inputs],
+        { ...options, env: getProcessEnv() },
+        (error, stdout, stderr) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve({ stdout, stderr });
+          }
+        },
+      );
+      // Scripts receive input through argv and may wait for EOF on stdin.
+      child.stdin?.end();
+    },
+  );
+  const output = stripText(stdout);
+  const error = stripText(stderr);
+  if (error && !output) {
+    throw new Error(error);
+  }
+  return output;
+}
+
+function scriptContext(context?: CallApiContextParams) {
+  const value =
+    context && 'toJSON' in context && typeof context.toJSON === 'function'
+      ? context.toJSON('')
+      : (context ?? {});
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  // Skip internal fields before reading properties, including accessors.
+  return Object.fromEntries(
+    Object.keys(value)
+      .filter((key) => !['getCache', 'logger', 'filters', 'originalProvider'].includes(key))
+      .map((key) => [key, value[key]]),
+  );
+}
+
 export class ScriptCompletionProvider implements ApiProvider {
   constructor(
     private scriptPath: string,
@@ -72,60 +118,23 @@ export class ScriptCompletionProvider implements ApiProvider {
 
     const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
 
-    let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
-      const cache = await getCache();
-      cachedResult = await cache.get(cacheKey);
-
-      if (cachedResult) {
-        logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
-        return { ...JSON.parse(cachedResult as string), cached: true };
-      }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
-      logger.warn(
-        `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
-      );
+    const cache = fileHashes.length && isCacheEnabled() ? await getCache() : undefined;
+    const cachedResult = await cache?.get(cacheKey);
+    if (cachedResult) {
+      return { ...JSON.parse(cachedResult as string), cached: true };
     }
 
-    const command = scriptParts.shift();
-    invariant(command, 'No command found in script path');
-    // Keep caller context intact while omitting nonserializable script arguments.
-    const scriptContext = { ...context };
-    delete scriptContext.getCache;
-    delete scriptContext.logger;
-    delete scriptContext.filters;
-    delete scriptContext.originalProvider;
-    const scriptArgs = scriptParts.concat([
-      prompt,
-      safeJsonStringify(this.options || {}) as string,
-      safeJsonStringify(scriptContext) as string,
-    ]);
-    const options = {
-      ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
-      env: getProcessEnv(),
-    };
-
-    const execution = execFileAsync(command, scriptArgs, options);
-    // execFile leaves stdin open; close it so programs waiting for EOF can finish.
-    execution.child?.stdin?.end();
-    const { stdout, stderr } = await execution.catch((error: Error) => {
-      logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
-      throw error;
-    });
-    const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
-    const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
-    if (errorOutput) {
-      logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
-      if (!standardOutput) {
-        throw new Error(errorOutput);
-      }
-    }
-    logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
-    const result = { output: standardOutput };
-    if (fileHashes.length > 0 && isCacheEnabled()) {
-      const cache = await getCache();
-      await cache.set(cacheKey, JSON.stringify(result));
-    }
+    const output = await runScript(
+      scriptParts,
+      [
+        prompt,
+        safeJsonStringify(this.options ?? {}) as string,
+        safeJsonStringify(scriptContext(context)) as string,
+      ],
+      { cwd: this.options?.config?.basePath },
+    );
+    const result = { output };
+    await cache?.set(cacheKey, JSON.stringify(result));
     return result;
   }
 }

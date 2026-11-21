@@ -14,27 +14,9 @@ import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
-  const { promisify } = await import('node:util');
-  const execFile = vi.fn();
-  // Model Node's custom promise result and child handle while retaining callback controls.
-  Object.defineProperty(execFile, promisify.custom, {
-    value: (...args: unknown[]) => {
-      let child;
-      const promise = new Promise((resolve, reject) => {
-        child = execFile(...args, (error: Error | null, stdout: string, stderr: string) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve({ stdout, stderr });
-          }
-        });
-      });
-      return Object.assign(promise, { child });
-    },
-  });
   return {
     ...(await importOriginal()),
-    execFile,
+    execFile: vi.fn(),
   };
 });
 vi.mock('../../src/cache', async () => {

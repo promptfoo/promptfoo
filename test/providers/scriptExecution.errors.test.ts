@@ -1,105 +1,82 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { executablePromptFunction } from '../../src/prompts/processors/executable';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
-const mocks = vi.hoisted(() => ({
-  get: vi.fn(),
-  set: vi.fn(),
-}));
-vi.mock('../../src/cache', () => ({
-  getCache: () => mocks,
-  isCacheEnabled: () => true,
-}));
+const cache = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
+vi.mock('../../src/cache', () => ({ getCache: () => cache, isCacheEnabled: () => true }));
 
-let directory: string;
-let command: string;
-let pidPath: string;
+describe('executable prompts and providers', () => {
+  let directory: string;
+  let command: string;
 
-beforeEach(async () => {
-  mocks.get.mockReset().mockResolvedValue(undefined);
-  mocks.set.mockReset().mockResolvedValue(undefined);
-  directory = await mkdtemp(path.join(os.tmpdir(), 'script-completion-cache-'));
-  pidPath = path.join(directory, 'child.pid');
-  const script = path.join(directory, 'fixture.cjs');
-  await writeFile(
-    script,
-    `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
-process.stdout.write('finished child');`,
-  );
-  command = `"${process.execPath}" "${script}"`;
-});
+  beforeAll(async () => {
+    directory = await mkdtemp(path.join(os.tmpdir(), 'script-completion-cache-'));
+    const script = path.join(directory, 'peer.cjs');
+    await writeFile(
+      script,
+      `setTimeout(() => {
+  console.error('Timed out waiting for stdin EOF');
+  process.exit(1);
+}, 2000).unref();
+process.stdin.resume();
+process.stdin.on('end', () => process.stdout.write(process.argv.at(-1)));`,
+    );
+    command = `"${process.execPath}" "${script}"`;
+  });
 
-afterEach(async () => {
-  try {
-    const pid = Number(await readFile(pidPath, 'utf8'));
-    expect(() => process.kill(pid, 0)).toThrow();
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-    vi.resetAllMocks();
-  }
-});
+  beforeEach(() => {
+    cache.get.mockReset();
+    cache.set.mockReset();
+  });
 
-describe('script execution cache failures', () => {
-  it.each(['provider', 'prompt'] as const)(
-    'rejects the %s call when caching a successful child result fails',
+  afterAll(() => rm(directory, { recursive: true, force: true }));
+
+  it.each(['provider', 'prompt'])(
+    'closes %s stdin and propagates cache write failures after child completion',
     async (mode) => {
       const failure = new Error('cache write failed');
-      mocks.set.mockRejectedValue(failure);
-      const operation =
+      cache.set.mockRejectedValue(failure);
+      const result =
         mode === 'provider'
           ? new ScriptCompletionProvider(command).callApi('hello')
           : executablePromptFunction(command, {
               vars: {},
               provider: { id: () => 'echo', callApi: async () => ({}) },
             });
-      await expect(operation).rejects.toBe(failure);
-      expect(mocks.set).toHaveBeenCalledOnce();
+      await expect(result).rejects.toBe(failure);
+      expect(cache.set).toHaveBeenCalledOnce();
     },
   );
 
-  it('serializes script context without changing the caller object', async () => {
-    const script = path.join(directory, 'fixture.cjs');
-    await writeFile(
-      script,
-      `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
-process.stdout.write(process.argv[4]);`,
-    );
-    const getCache = vi.fn();
+  it('omits internal accessors without reading them or changing the caller object', async () => {
     const prompt = { raw: 'hello', label: 'fixture' };
-    const context = Object.freeze({ vars: { value: 'fixture' }, prompt, getCache });
+    const context = Object.freeze({
+      vars: {},
+      prompt,
+      get getCache() {
+        throw new Error('internal getter must not run');
+      },
+    });
     const response = await new ScriptCompletionProvider(command).callApi('hello', context);
-
-    expect(JSON.parse(response.output as string)).toEqual({ vars: { value: 'fixture' }, prompt });
-    expect(context.getCache).toBe(getCache);
+    expect(JSON.parse(response.output as string)).toEqual({ vars: {}, prompt });
   });
 
-  it.each(['provider', 'prompt'] as const)(
-    'closes %s stdin before awaiting child completion',
-    async (mode) => {
-      const script = path.join(directory, 'fixture.cjs');
-      await writeFile(
-        script,
-        `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
-process.stdin.resume();
-process.stdin.on('end', () => process.stdout.write('received EOF'));`,
-      );
-      if (mode === 'provider') {
-        await expect(new ScriptCompletionProvider(command).callApi('hello')).resolves.toEqual({
-          output: 'received EOF',
-        });
-      } else {
-        await expect(
-          executablePromptFunction(command, {
-            vars: {},
-            provider: { id: () => 'echo', callApi: async () => ({}) },
-            config: { timeout: 5000 },
-          }),
-        ).resolves.toBe('received EOF');
+  it('respects context serialization on the original instance', async () => {
+    class Context {
+      vars = { secret: 'private' };
+      prompt = { raw: 'hello', label: 'fixture' };
+      #safe = { redacted: true };
+
+      toJSON() {
+        return this.#safe;
       }
-    },
-  );
+    }
+
+    const response = await new ScriptCompletionProvider(command).callApi('hello', new Context());
+    expect(JSON.parse(response.output as string)).toEqual({ redacted: true });
+  });
 });
