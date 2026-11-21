@@ -1,4 +1,6 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import fs from 'fs/promises';
 
 import { Agent } from 'undici';
@@ -17,6 +19,7 @@ vi.mock('undici', async (importOriginal) => ({
   Agent: vi.fn(function (options: unknown) {
     return {
       options,
+      close: vi.fn(),
       compose() {
         return this;
       },
@@ -85,6 +88,30 @@ describe('HTTP provider FIPS policy', () => {
       },
     });
     expect(fetchWithCache).toHaveBeenCalledOnce();
+  });
+
+  it('reuses a dispatcher only while the CA file still contains the same certificate', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'promptfoo-ca-'));
+    const caPath = join(dir, 'ca.pem');
+    const provider = new HttpProvider('https://example.test', {
+      config: { method: 'GET', tls: { caPath } },
+    });
+    try {
+      await fs.writeFile(caPath, 'CA-A');
+      await provider.callApi('first');
+      await provider.callApi('same CA');
+      expect(Agent).toHaveBeenCalledOnce();
+      await fs.writeFile(caPath, 'CA-B');
+      await provider.callApi('new CA');
+      expect(Agent).toHaveBeenCalledTimes(2);
+      expect(Agent).toHaveBeenLastCalledWith({ connect: { ca: 'CA-B', rejectUnauthorized: true } });
+      expect(vi.mocked(Agent).mock.results[0].value.close).toHaveBeenCalledOnce();
+      await fs.unlink(caPath);
+      await expect(provider.callApi('missing CA')).rejects.toThrow('configured CA certificate');
+      expect(fetchWithCache).toHaveBeenCalledTimes(3);
+    } finally {
+      await fs.rm(dir, { force: true, recursive: true });
+    }
   });
 
   it('preserves an explicit insecure TLS option outside FIPS mode', async () => {

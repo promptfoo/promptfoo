@@ -87,15 +87,19 @@ function getConnectionPoolSize(): number {
   return cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
 }
 
+function closeAgent(dispatcher: Dispatcher): void {
+  void Promise.resolve(dispatcher.close?.()).catch(() => {
+    logger.debug('Failed to close an evicted HTTP dispatcher');
+  });
+}
+
 /**
  * Close cached dispatchers on shutdown and between tests.
  */
 export function clearAgentCache(): void {
   activeAgents.clear(); // Outstanding calls close their dispatcher on last release.
   for (const agent of idleAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
+    closeAgent(agent);
   }
   idleAgents.clear();
 }
@@ -144,7 +148,7 @@ function releaseAgent(entry: ActiveAgent): void {
   }
   if (activeAgents.get(entry.key) !== entry) {
     // clearAgentCache ran while this request was pending.
-    void entry.dispatcher.close();
+    closeAgent(entry.dispatcher);
     return;
   }
   activeAgents.delete(entry.key);
@@ -153,7 +157,7 @@ function releaseAgent(entry: ActiveAgent): void {
     const [key, oldest] = idleAgents.entries().next().value!;
     idleAgents.delete(key);
     // Undici drains outstanding response bodies before closing the dispatcher.
-    void oldest.close();
+    closeAgent(oldest);
   }
 }
 
@@ -287,7 +291,10 @@ export async function fetchWithProxy(
   }
 
   assertFipsDispatcher(finalOptions.dispatcher);
-  const resolved = finalOptions.dispatcher && !isFipsEnabled() ? {} : resolveTlsOptions(logEnabled);
+  const resolved =
+    finalOptions.dispatcher && !isFipsEnabled()
+      ? {}
+      : resolveTlsOptions(logEnabled, combinedSignal);
   const tlsOptions = resolved instanceof Promise ? await resolved : resolved;
   // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
   if (finalOptions.dispatcher) {

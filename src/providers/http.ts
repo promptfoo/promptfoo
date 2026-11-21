@@ -20,7 +20,11 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { assertFipsTlsVerification, createTlsAgent } from '../util/fetch/tls';
+import {
+  assertFipsTlsVerification,
+  createTlsAgent,
+  readFipsCaCertificate,
+} from '../util/fetch/tls';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -1711,8 +1715,7 @@ export class HttpProvider implements ApiProvider {
   private signatureCache = new LRUCache<string, RequestSignature>({ max: MAX_AUTH_CACHE_ENTRIES });
   private authTokenCache = new Map<string, CachedAuthToken>();
   private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
-  private httpsAgent?: Dispatcher;
-  private httpsAgentPromise?: Promise<Dispatcher>;
+  private httpsAgent?: { promise: Promise<Dispatcher>; ca?: string; fips: boolean };
   /**
    * Tracks session IDs that were fetched from the session endpoint.
    * Used to distinguish sessions we created from client-generated UUIDs.
@@ -2276,32 +2279,42 @@ export class HttpProvider implements ApiProvider {
     return sessionId;
   }
 
-  private async getHttpsAgent(): Promise<Dispatcher | undefined> {
-    validateFipsTlsConfig(this.config.tls);
-    if (!this.config.tls) {
+  private async getHttpsAgent(signal?: AbortSignal): Promise<Dispatcher | undefined> {
+    const tls = this.config.tls;
+    validateFipsTlsConfig(tls);
+    if (!tls) {
       return undefined;
     }
 
-    // If agent is already created, return it
-    if (this.httpsAgent) {
-      return this.httpsAgent;
+    const fips = isFipsEnabled();
+    const ca =
+      fips && tls.caPath && !tls.ca
+        ? await readFipsCaCertificate(
+            safeResolve(cliState.basePath || '', tls.caPath),
+            signal,
+            getRequestTimeoutMs(),
+          )
+        : undefined;
+    const previous = this.httpsAgent;
+    if (previous && previous.fips === fips && previous.ca === ca) {
+      return previous.promise;
     }
 
-    // If agent creation is in progress, wait for it
-    if (this.httpsAgentPromise != null) {
-      return this.httpsAgentPromise;
-    }
-
-    // Create the agent
-    this.httpsAgentPromise = createHttpsAgent(this.config.tls);
+    // Build from the exact bytes we checked, sharing creation only for identical trust.
+    const entry = { fips, ca, promise: createHttpsAgent(ca ? { ...tls, ca } : tls) };
+    this.httpsAgent = entry;
+    void previous?.promise
+      .then((agent) => agent.close())
+      .catch(() => {
+        logger.debug('[HTTP Provider] Failed to close the previous HTTPS agent');
+      });
     try {
-      this.httpsAgent = await this.httpsAgentPromise;
-      logger.debug('[HTTP Provider] HTTPS agent created successfully');
-      return this.httpsAgent;
-    } catch (err) {
-      // Clear the promise so we can retry
-      this.httpsAgentPromise = undefined;
-      throw err;
+      return await entry.promise;
+    } catch (error) {
+      if (this.httpsAgent === entry) {
+        this.httpsAgent = undefined;
+      }
+      throw error;
     }
   }
 
@@ -2603,7 +2616,7 @@ export class HttpProvider implements ApiProvider {
       : undefined;
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
+    const httpsAgent = await this.getHttpsAgent(options?.abortSignal);
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
@@ -2858,7 +2871,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
+    const httpsAgent = await this.getHttpsAgent(options?.abortSignal);
 
     const fetchOptions: any = {
       method: parsedRequest.method,

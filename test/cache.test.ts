@@ -403,6 +403,18 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledOnce();
     });
 
+    it('bounds a stalled CA preflight by the request deadline and caller cancellation', async () => {
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/fixture-ca.pem' });
+      vi.mocked(fsPromises.readFile).mockImplementation(() => new Promise<never>(() => {}));
+      const url = 'https://example.test/fips-cache';
+      await expect(fetchWithCache(url, {}, 20)).rejects.toThrow('Request timed out after 20 ms');
+      const controller = new AbortController();
+      const pending = fetchWithCache(url, { signal: controller.signal }, 1000);
+      controller.abort(new Error('cancelled'));
+      await expect(pending).rejects.toThrow('cancelled');
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+    });
+
     it('rereads a configured CA file before returning a cached response', async () => {
       mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/fixture-ca.pem' });
       vi.mocked(fsPromises.readFile).mockResolvedValue('CA fixture');

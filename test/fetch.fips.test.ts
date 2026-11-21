@@ -265,6 +265,8 @@ describe('FIPS fetch policy with the real environment parser', () => {
           vi.mocked(fs.readFile).mockResolvedValue(`CA-${index}`);
           await fetchWithProxy('https://example.test');
         }
+        // Active pools have separate leases. Clearing idle agents must preserve this lease.
+        clearAgentCache();
         expect(first.close).not.toHaveBeenCalled();
       } finally {
         resolveCredentials({});

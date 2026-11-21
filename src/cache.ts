@@ -929,7 +929,7 @@ export async function fetchWithCache<T = unknown>(
   onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<FetchWithCacheResult<T>> {
-  const timeoutMs = Number(timeout);
+  let timeoutMs = Number(timeout);
   const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
@@ -944,7 +944,16 @@ export async function fetchWithCache<T = unknown>(
   if (fipsEnabled) {
     // A warm cache must not hide invalid hardened-runtime configuration.
     assertFipsDispatcher(fetchOptions.dispatcher);
-    await resolveTlsOptions(logEnabled);
+    const started = performance.now();
+    const preflight = resolveTlsOptions(logEnabled, signal, timeoutMs);
+    if (preflight instanceof Promise) {
+      await preflight;
+      throwIfAborted(signal);
+      timeoutMs -= Math.floor(performance.now() - started);
+      if (timeoutMs <= 0) {
+        throw new Error(`Request timed out after ${timeout} ms`);
+      }
+    }
   }
   // Never reuse a response cached by a runtime without the FIPS policy.
   const cacheVersion = fipsEnabled ? 'fips:v1' : 'v3';
