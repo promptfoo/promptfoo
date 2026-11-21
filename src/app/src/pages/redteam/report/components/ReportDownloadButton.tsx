@@ -12,7 +12,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { getDisplayVars } from '@promptfoo/presentation/evalResults';
+import { getReportPrompt } from '@promptfoo/presentation/evalResults';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
@@ -46,7 +46,6 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         }
       }
 
-      const displayVars = getDisplayVars(result);
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
@@ -55,11 +54,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
-        Prompt:
-          displayVars?.query?.toString() ||
-          displayVars?.prompt?.toString() ||
-          result.prompt.raw ||
-          '',
+        Prompt: getReportPrompt(result, evalData.config?.redteam?.injectVar),
         Response: result.response?.output || '',
         Pass:
           result.gradingResult?.pass === true

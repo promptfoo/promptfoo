@@ -35,11 +35,7 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import {
-  convertResultsToTable,
-  getDisplayVars,
-  promptText,
-} from '@promptfoo/presentation/evalResults';
+import { convertResultsToTable, getReportPrompt } from '@promptfoo/presentation/evalResults';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -85,16 +81,6 @@ function buildStrategyStats(
     });
   }
   return stats;
-}
-
-function reportPrompt(result: EvaluateResult, injectVar = 'prompt'): string {
-  const vars = getDisplayVars(result, injectVar);
-  return (
-    promptText(vars?.[injectVar]) ||
-    promptText(vars?.query) ||
-    promptText(vars?.prompt) ||
-    result.prompt.raw
-  );
 }
 
 function forEachReportResult(
@@ -247,7 +233,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
           failures[pluginId] = [];
         }
         failures[pluginId].push({
-          prompt: reportPrompt(result, evalData.config.redteam?.injectVar),
+          prompt: getReportPrompt(result, evalData.config.redteam?.injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -272,7 +258,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
           passes[pluginId] = [];
         }
         passes[pluginId].push({
-          prompt: reportPrompt(result, evalData.config.redteam?.injectVar),
+          prompt: getReportPrompt(result, evalData.config.redteam?.injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,

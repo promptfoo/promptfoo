@@ -67,55 +67,26 @@ describe('ReportDownloadButton', () => {
       { result: { response: { output: 'answer', prompt: '' } }, expected: 'seed prompt' },
       { result: { vars: {} }, expected: 'rendered prompt' },
       {
-        result: { metadata: { redteamFinalPrompt: { query: 'historic' } } },
-        expected: '[object Object]',
-      },
-      {
-        result: { metadata: { redteamFinalPrompt: ['historic', 'array'] } },
-        expected: 'historic,array',
-      },
-      { result: { metadata: { redteamFinalPrompt: 37 } }, expected: '37' },
-      { result: { metadata: { redteamFinalPrompt: true } }, expected: 'true' },
-      { result: { metadata: { redteamFinalPrompt: 0 } }, expected: 'seed prompt' },
-      { result: { metadata: { redteamFinalPrompt: false } }, expected: 'seed prompt' },
-      { result: { metadata: { redteamFinalPrompt: [] } }, expected: 'rendered prompt' },
-      { result: { metadata: { redteamFinalPrompt: null } }, expected: 'seed prompt' },
-      {
         result: {
-          response: { output: 'answer', metadata: { redteamFinalPrompt: { query: 'historic' } } },
+          vars: { customInput: 'seed', query: 'old' },
+          response: { prompt: 'custom prompt', output: 'answer' },
         },
-        expected: '[object Object]',
+        expected: 'custom prompt',
       },
-      {
-        result: {
-          response: { output: 'answer', metadata: { redteamFinalPrompt: ['historic', 'array'] } },
-        },
-        expected: 'historic,array',
-      },
-      {
-        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: 37 } } },
-        expected: '37',
-      },
-      {
-        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: true } } },
-        expected: 'true',
-      },
-      {
-        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: 0 } } },
-        expected: 'seed prompt',
-      },
-      {
-        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: false } } },
-        expected: 'seed prompt',
-      },
-      {
-        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: [] } } },
-        expected: 'rendered prompt',
-      },
-      {
-        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: null } } },
-        expected: 'seed prompt',
-      },
+      { result: { vars: { query: { toString: 'legacy' } } }, expected: '{"toString":"legacy"}' },
+      ...[
+        { value: { query: 'historic' }, expected: '{"query":"historic"}' },
+        { value: ['historic', 'array'], expected: '["historic","array"]' },
+        { value: 37, expected: '37' },
+        { value: true, expected: 'true' },
+        ...[0, false, [], null].map((value) => ({ value, expected: 'seed prompt' })),
+      ].flatMap(({ value, expected }) => {
+        const metadata = { redteamFinalPrompt: value };
+        return [
+          { result: { metadata }, expected },
+          { result: { response: { output: 'answer', metadata } }, expected },
+        ];
+      }),
     ];
     for (const result of [
       { vars: {}, response: { prompt: 'stripped secret', output: 'answer' } },
@@ -156,7 +127,7 @@ describe('ReportDownloadButton', () => {
     const evalData = {
       version: 4,
       createdAt: '2026-01-01T00:00:00.000Z',
-      config: {},
+      config: { redteam: { injectVar: 'customInput' } },
       prompts: [{ id: 'prompt-1', raw: 'rendered prompt', label: 'Prompt' }],
       results: {
         results: cases.map(({ result }, index) => ({

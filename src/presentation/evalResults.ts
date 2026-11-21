@@ -83,6 +83,16 @@ export function getDisplayVars(
   return displayVars;
 }
 
+export function getReportPrompt(result: EvaluateResult, injectVar?: string): string {
+  const vars = getDisplayVars(result, injectVar);
+  return (
+    (injectVar && promptText(vars?.[injectVar])) ||
+    promptText(vars?.query) ||
+    promptText(vars?.prompt) ||
+    promptText(result.prompt.raw)
+  );
+}
+
 /** Convert version 4+ results to display rows and ordered variable columns. */
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(
