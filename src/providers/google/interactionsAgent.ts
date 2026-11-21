@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getCallerAbortError } from '../../util/fetch/requestSignal';
+import { readWithResponseDeadline } from '../../util/fetch/responseDeadline';
 import { sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import {
@@ -195,7 +196,8 @@ function waitForPoll(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 async function readInteractionResponse(response: Response): Promise<AgentRequestResult> {
-  const body = await response.text();
+  // fetchWithTimeout stops its timer when headers arrive; keep the request deadline for the body.
+  const body = await readWithResponseDeadline(response, () => response.text());
   let data: AgentInteractionResponse | undefined;
   try {
     data = body ? (JSON.parse(body) as AgentInteractionResponse) : {};

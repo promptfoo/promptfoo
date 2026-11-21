@@ -4,6 +4,7 @@ import { GoogleInteractionsAgentProvider } from '../../../src/providers/google/i
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
+import { trackResponseDeadline } from '../../../src/util/fetch/responseDeadline';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
@@ -673,6 +674,61 @@ describe('GoogleInteractionsAgentProvider', () => {
     // 10 s, 20 s, 40 s, then the remaining 50 s up to the deadline.
     expect(getCount()).toBe(4);
     expect(postCount()).toBe(1);
+  });
+
+  /**
+   * A response whose headers arrived but whose body never finishes. It carries the request
+   * deadline that fetchWithTimeout records once headers arrive.
+   */
+  function stalledResponse(timeoutMs: number) {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"id":'));
+      },
+    });
+    const response = new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    trackResponseDeadline(response, {
+      controller: new AbortController(),
+      expiresAt: performance.now() + timeoutMs,
+      timeout: timeoutMs,
+    });
+    return response;
+  }
+
+  it('bounds a stalled create response body by the request timeout', async () => {
+    mockFetch.mockImplementation(async () => stalledResponse(30_000));
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await settle(provider.callApi('Research TPUs'));
+
+    expect(result.error).toContain(
+      'Gemini agent request failed: Error: Request timed out after 30000 ms',
+    );
+    expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
+    expect(postCount()).toBe(1);
+  });
+
+  it('treats a stalled status-check body as a transient failure and keeps polling', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'interaction-1', status: 'in_progress' }))
+      .mockImplementationOnce(async () => stalledResponse(15_000))
+      .mockResolvedValueOnce(jsonResponse(completedReport));
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key', pollIntervalMs: 10_000 },
+    });
+    const startedAt = Date.now();
+
+    const result = await settle(provider.callApi('Research TPUs'));
+
+    expect(result.output).toContain('TPU v1');
+    expect(getCount()).toBe(2);
+    // 10 s wait, 15 s stalled body, then the 20 s backoff before the next check.
+    expect(Date.now() - startedAt).toBe(10_000 + 15_000 + 20_000);
   });
 
   it('stops polling on a non-transient poll error', async () => {
