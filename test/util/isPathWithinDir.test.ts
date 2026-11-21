@@ -3,7 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isPathWithinDir } from '../../src/util/isPathWithinDir';
+import { isCanonicalPathWithinDir, isPathWithinDir } from '../../src/util/isPathWithinDir';
+
+it('distinguishes canonical siblings even when only their case differs', () => {
+  const root = path.parse(process.cwd()).root;
+  const file = path.join(root, 'Eval', 'report.txt');
+  expect(isCanonicalPathWithinDir(file, root)).toBe(true);
+  expect(isCanonicalPathWithinDir(file, path.join(root, 'eval'))).toBe(false);
+  expect(isCanonicalPathWithinDir(file, path.join(root, 'Eva'))).toBe(false);
+});
 
 describe('isPathWithinDir', () => {
   let testRoot: string;
@@ -42,6 +50,18 @@ describe('isPathWithinDir', () => {
   it('should block files outside directory using relative paths', async () => {
     await expect(isPathWithinDir('../outside/external.txt', workspace)).resolves.toBe(false);
     await expect(isPathWithinDir('../../external.txt', workspace)).resolves.toBe(false);
+
+    const nestedWorkspace = path.join(testRoot, 'container', 'workspace');
+    await fs.mkdir(nestedWorkspace, { recursive: true });
+    await fs.writeFile(path.join(nestedWorkspace, 'file.txt'), 'test');
+    const link = path.join(testRoot, 'workspace-link');
+    await fs.symlink(nestedWorkspace, link, 'dir');
+    await expect(isPathWithinDir('../workspace/file.txt', link)).resolves.toBe(false);
+  });
+
+  it('allows filenames beginning with two dots inside the directory', async () => {
+    await fs.writeFile(path.join(workspace, '..notes.txt'), 'test');
+    await expect(isPathWithinDir('..notes.txt', workspace)).resolves.toBe(true);
   });
 
   it('should block files outside directory using absolute paths', async () => {
@@ -69,6 +89,11 @@ describe('isPathWithinDir', () => {
 
   it('should block symlinks that point outside directory (symlink attack)', async () => {
     await expect(isPathWithinDir('evil-symlink', workspace)).resolves.toBe(false);
+  });
+
+  it('rejects writes through dangling symlinks', async () => {
+    await fs.symlink(path.join(outsideDir, 'new.txt'), path.join(workspace, 'dangling'), 'file');
+    await expect(isPathWithinDir('dangling', workspace)).resolves.toBe(false);
   });
 
   it('should allow non-existent paths within directory (for Write tool)', async () => {
