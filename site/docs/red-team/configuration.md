@@ -844,6 +844,10 @@ The `redteam.provider` configuration controls both attack generation and grading
 
 You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
+Local English batches for `pii:direct`, `pii:social`, `prompt-extraction`, `sql-injection`, `shell-injection`, and `excessive-agency` prefer distinct topics if the generator returns surplus candidates. Selection uses the existing responses and makes no extra model calls. Custom examples, custom generation instructions, and multi-input cases keep the standard selection behavior.
+
+Inspect `metadata.sourcePromptFeatures` on each retained test to see which fixed English word lists matched the original prompt. For example, a mention of an email address can add the `contact` label to a PII test. An empty list means no match. Strategies can change the prompt after selection. These labels cannot establish execution, permissions, or vulnerability and do not affect grading.
+
 :::note
 Custom plugins and strategies require an OpenAI key or your own provider configuration.
 :::

@@ -1,12 +1,10 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
-import {
-  extractAllPromptsFromTags,
-  extractMaterializedVariablesFromJsonWithMetadata,
-  extractPromptFromTags,
-} from '../util';
+import { getGeneratedPromptOverLimit } from '../shared/promptLength';
+import { extractMaterializedVariablesFromJsonWithMetadata, extractPromptFromTags } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { getPromptOutputFormatter, hasMultiInput } from './multiInputFormat';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -198,6 +196,7 @@ const generatePiiLeak = (examples: string[]) => {
 export async function getPiiLeakTestsForCategory(
   { provider, purpose, injectVar, n, config }: PluginActionParams,
   categoryKey: string,
+  acceptSingleInput?: (text: string) => boolean,
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
@@ -230,26 +229,23 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
+  const multiInput = hasMultiInput(config?.inputs);
+  const accept =
+    acceptSingleInput ??
+    ((text: string) => !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage));
+  const eligible = getPromptOutputFormatter(config ?? {})
+    .parse(generatedPrompts, config ?? {})
+    .map(({ __prompt }) => __prompt.trim())
+    .filter((text) => text && (multiInput || accept(text)));
+  const unique = [...new Set(eligible)];
   const inputs = config?.inputs as Inputs | undefined;
-  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
+  // During length retries, multi-input rows need materialization before validation and deduplication.
+  const prompts = multiInput && acceptSingleInput ? unique : unique.slice(0, n);
 
-  let prompts: string[];
-  if (hasMultipleInputs) {
-    // Multi-input mode: extract from <Prompt> tags (JSON format)
-    prompts = extractAllPromptsFromTags(generatedPrompts);
-    if (prompts.length === 0) {
-      logger.warn('[PII] Multi-input mode: Could not extract prompts from <Prompt> tags');
-    }
-  } else {
-    // Standard mode: look for "Prompt:" prefix lines
-    prompts = generatedPrompts
-      .split('\n')
-      .filter((line) => line.includes('Prompt:'))
-      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
-  }
-
+  const portfolio = RedteamPluginBase.selectPromptPortfolio(categoryKey, config ?? {}, unique, n);
+  const selected = portfolio?.map(({ __prompt }) => __prompt) ?? prompts;
   return Promise.all(
-    prompts.map(async (prompt, materializationIndex) => {
+    selected.map(async (prompt, materializationIndex) => {
       const { processedPrompt, additionalVars, additionalMetadata } = await processPromptForInputs(
         prompt,
         inputs,
@@ -272,13 +268,14 @@ export async function getPiiLeakTestsForCategory(
             metric: 'PIILeak',
           },
         ],
-        ...(additionalMetadata
-          ? {
-              metadata: {
-                inputMaterialization: additionalMetadata,
-              },
-            }
-          : {}),
+        ...((portfolio || additionalMetadata) && {
+          metadata: {
+            ...(portfolio && {
+              sourcePromptFeatures: portfolio[materializationIndex].sourcePromptFeatures,
+            }),
+            ...(additionalMetadata && { inputMaterialization: additionalMetadata }),
+          },
+        }),
       };
     }),
   );

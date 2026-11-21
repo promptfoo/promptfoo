@@ -9,6 +9,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { selectPromptPortfolio } from '../generation/selection';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -40,6 +41,8 @@ import type { RedteamGradingContext } from '../grading/types';
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
+  static readonly selectPromptPortfolio = selectPromptPortfolio;
+
   /**
    * Unique identifier for the plugin.
    */
@@ -235,14 +238,20 @@ export abstract class RedteamPluginBase {
       generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
       n,
     );
-    const prompts = sampleArray(allPrompts, n);
+    const prompts =
+      RedteamPluginBase.selectPromptPortfolio(
+        getShortPluginId(this.id),
+        this.config,
+        allPrompts,
+        n,
+      ) ?? sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
     if (prompts.length !== n) {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts as { __prompt: string }[]);
+    return this.promptsToTestCases(prompts);
   }
 
   /**
@@ -253,7 +262,9 @@ export abstract class RedteamPluginBase {
    * @param prompts - An array of { __prompt: string } objects.
    * @returns An array of test cases.
    */
-  protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {
+  protected async promptsToTestCases(
+    prompts: { __prompt: string; sourcePromptFeatures?: string[] }[],
+  ): Promise<TestCase[]> {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
     return Promise.all(
@@ -284,6 +295,9 @@ export abstract class RedteamPluginBase {
             vars,
             assert: this.getAssertions(promptObj.__prompt),
             metadata: {
+              ...(promptObj.sourcePromptFeatures && {
+                sourcePromptFeatures: promptObj.sourcePromptFeatures,
+              }),
               pluginId: getShortPluginId(this.id),
               pluginConfig: this.config,
               ...(materializedInputVars?.metadata
