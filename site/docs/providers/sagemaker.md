@@ -533,7 +533,8 @@ providers:
 
 When caching is enabled:
 
-- Responses for identical prompts are stored and reused
+- Matching requests can share a response within the same process when they use the same static credentials and endpoint settings. Changing the secret or session token, or starting a new CLI process, prevents reuse. Promptfoo skips the cache for borrowed clients, dynamic credentials, and endpoints with credentials, query strings or custom paths.
+- If a transform changes the input, the cache omits the original input from response metadata. The current call can still return its own original input in metadata.
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
 
