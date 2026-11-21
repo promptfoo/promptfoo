@@ -54,7 +54,7 @@ function parseCloudProvider(id: string, config: unknown): ProviderOptions & { id
     name &&
     isRecord(config) &&
     isRecord(config.env) &&
-    Object.hasOwn(config.env, name) &&
+    Object.prototype.hasOwnProperty.call(config.env, name) &&
     config.env[name] !== undefined
   ) {
     const value = config.env[name];
