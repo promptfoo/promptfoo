@@ -456,6 +456,7 @@ const sidebars = {
               collapsed: true,
               items: [
                 'guides/langchain-prompttemplate',
+                'guides/evaluate-openai-agent-runtimes',
                 'guides/evaluate-openai-assistants',
                 'guides/evaluate-crewai',
                 'guides/evaluate-langgraph',

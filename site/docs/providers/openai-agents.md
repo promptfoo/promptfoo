@@ -19,7 +19,7 @@ sidebar_label: OpenAI Agents
 Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, persist session history, hand off between specialists, or run inside the SDK's sandbox runtime.
 
 :::note
-This page covers the JavaScript `@openai/agents` SDK and the built-in `openai:agents:*` provider.
+This page covers the JavaScript `@openai/agents` SDK and the built-in `openai:agents:*` provider. If your application creates hosted Agents API sessions, use the [hosted provider](./openai-agents-api.md). The [runtime comparison](/docs/guides/evaluate-openai-agent-runtimes) runs the same task through both providers and Codex app-server.
 
 If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
 :::
