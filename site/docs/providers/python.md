@@ -541,6 +541,14 @@ Or set globally for all providers:
 export REQUEST_TIMEOUT_MS=600000  # 10 minutes
 ```
 
+When a call times out, promptfoo restarts that worker's Python process so later calls don't wait behind the stuck one. Any global state in that worker is lost.
+
+#### Crashes
+
+If a worker's Python process exits unexpectedly, only the call it was running fails and the worker restarts. After three crashes or failed restarts in a row, with no completed call in between, the worker stops restarting. Once every worker for a provider has stopped, remaining calls fail with an error instead of waiting.
+
+A script that fails at import time fails provider startup immediately. The Python traceback is logged from the worker's stderr.
+
 ### Environment Configuration
 
 #### Custom Python Executable
@@ -576,10 +584,13 @@ Promptfoo automatically detects your Python installation in this priority order:
    - Windows: `python`, `python3`, `py -3`, `py`
    - macOS/Linux: `python3`, `python`
 
-This enhanced detection is especially helpful on Windows where the Python launcher (`py.exe`) might not be available.
+This detection helps on Windows where the Python launcher (`py.exe`) might not be available.
 Use `pythonExecutable` when one provider needs a different interpreter than the global default.
 
 #### Environment Variables
+
+Python inherits environment variables from your shell and `--env-file`. Set `PATH`
+and `PYTHONPATH` there; provider `env` overrides do not change the child process environment.
 
 ```bash
 # Use specific Python version
@@ -693,7 +704,7 @@ pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-prot
 
 **Enable tracing:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   otlp:
@@ -784,7 +795,7 @@ For red team runs, [image](/docs/red-team/strategies/image), [audio](/docs/red-t
 | `audio`           | Raw MP3 base64 from remote generation, no `data:` prefix | `context['test']['metadata']['originalText']`                                  | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
 | `video`           | Raw MP4 base64 when local FFmpeg generation succeeds     | `context['vars']['video_text']`, `context['test']['metadata']['originalText']` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
 
-Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+Audio and video have opposite generation requirements: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
 
 ```python title="multimodal_provider.py"
 import os
