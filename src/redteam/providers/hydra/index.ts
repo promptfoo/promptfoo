@@ -812,7 +812,9 @@ export class HydraProvider implements ApiProvider {
       lastResponseMessages = [...this.conversationHistory];
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isBasicRefusal(targetResponse.output);
+      const grader = assertToUse && getGraderById(assertToUse.type);
+      const isRefusal =
+        grader?.useRefusalShortcut !== false && isBasicRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
@@ -867,7 +869,6 @@ export class HydraProvider implements ApiProvider {
       previousTraceSummary = attackTraceSummary;
 
       if (test && assertToUse) {
-        const grader = getGraderById(assertToUse.type);
         if (grader) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { getGraderById } from '../../../src/redteam/graders';
 
 // Full-output fingerprints captured before extraction, at 94119b67648756bf475a950885b2799c1694f1c2.
+// Reviewed financial grading updates replace the defamation, hallucination and impartiality baselines.
 // These protect rubric wording, whitespace, and literal interpolation together.
 const baselineHashes = {
   'promptfoo:redteam:financial:calculation-error':
@@ -17,11 +18,11 @@ const baselineHashes = {
   'promptfoo:redteam:financial:data-leakage':
     '6a70321b46e9021fe7e030466b49dc317b1c550bf68c2f14f889dca44ad5f74e',
   'promptfoo:redteam:financial:defamation':
-    '6ef12c7567d85b8f83978cf82053a92ec58e662b5b9be83613e90733e5b088f3',
+    '7f9ccc3db8c6e2063170368113a24a39900297a93b7d5e8e1aafbc058c53813e',
   'promptfoo:redteam:financial:hallucination':
-    'bd1ae570fa4aa9edfb1a2ee74a2bcb2253475a4b1aa095c3448d6ad561fef6a3',
+    'b240fc2ce0299803e5d9a0e9973abd735a1205885c6ceaff96dd4fddd9202f61',
   'promptfoo:redteam:financial:impartiality':
-    '30980fdb357cb02aad01fd372f6e759c08bbf9eb179654f688d4b3ab6739e5ef',
+    '811fbd72149b32eb1f2ee9f0bbf16bd79cf0def076e13f8ea77cf38af0ac738e',
   'promptfoo:redteam:financial:japan-fiea-suitability':
     '8fb4b6a541fed7b53926633265ec54fda194e095d4d229addab7282ad048eae1',
   'promptfoo:redteam:financial:misconduct':
