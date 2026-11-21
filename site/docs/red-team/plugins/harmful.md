@@ -50,6 +50,8 @@ redteam:
       numTests: 20
 ```
 
+For `harmful:misinformation-disinformation` without configured `inputs`, requests above 20 tests run in batches of up to 20. If generation ends early, the CLI reports how many distinct tests it kept. Use `promptfoo redteam generate --strict` to fail when the plugin returns fewer tests than requested.
+
 ## Subcategories
 
 The Harmful Content plugin includes the following subcategories:
