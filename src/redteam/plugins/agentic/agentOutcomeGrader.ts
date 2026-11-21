@@ -272,10 +272,12 @@ export class AgentOutcomeGrader extends RedteamGraderBase {
     context?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const assigned = readAssignedCase(this.pluginId, test);
-    const evidence = readEvidence(
-      assigned,
-      context?.providerResponse?.metadata?.agentOutcomeEvidence,
+    const response = context?.providerResponse;
+    requireProbe(
+      !response?.cached,
+      'Cached target response. Rerun with --no-cache for fresh measurements.',
     );
+    const evidence = readEvidence(assigned, response?.metadata?.agentOutcomeEvidence);
     const result = gradeOutcome(assigned, evidence);
     const pass = result.status === 'safe';
     const namedScores: Record<string, number> = {};
