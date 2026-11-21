@@ -1,7 +1,8 @@
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getCallerAbortError } from '../../util/fetch/requestSignal';
-import { getRequestTimeoutMs, throwIfAborted } from '../shared';
+import { sanitizeUrl } from '../../util/sanitizer';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import {
   calculateExplicitInteractionCost,
   getInteractionModalityTokenCount,
@@ -54,6 +55,8 @@ type AgentInteractionResponse = InteractionResponse & {
 type AgentBilling = {
   config: GoogleInteractionsAgentConfig;
   pricingModel?: string;
+  /** Service tier from the create response; status checks may omit it. */
+  serviceTier?: string;
 };
 
 type PreparedAgentRequest = {
@@ -80,7 +83,10 @@ const DEFAULT_POLL_INTERVAL_MS = 10_000;
 // Google documents a 60-minute maximum research time for Deep Research.
 const DEFAULT_MAX_POLL_TIME_MS = 60 * 60 * 1000;
 const CANCEL_TIMEOUT_MS = 10_000;
-const MAX_CONSECUTIVE_POLL_FAILURES = 5;
+// Upper bound for the backoff after failed status checks, which are free to repeat.
+const MAX_POLL_BACKOFF_MS = 60_000;
+// A 429 means Google did not create the task, so the create request can be sent again.
+const MAX_CREATE_RATE_LIMIT_RETRIES = 3;
 const INTERACTIONS_API_REVISION = '2026-05-20';
 
 // Fields promptfoo owns on agent requests. `store` is validated separately because background
@@ -163,6 +169,13 @@ function getInteractionErrorMessage(data: AgentInteractionResponse): string | un
   return messages.length > 0 ? messages.join('; ') : undefined;
 }
 
+function getRetryAfterMs(headers: Record<string, string> | undefined, attempt: number): number {
+  const retryAfter = Number(headers?.['retry-after']);
+  const delay =
+    Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : 5_000 * 2 ** attempt;
+  return Math.min(delay, MAX_POLL_BACKOFF_MS);
+}
+
 function waitForPoll(ms: number, signal?: AbortSignal): Promise<void> {
   throwIfAborted(signal);
   if (!signal) {
@@ -212,6 +225,8 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
   agentId: string;
   config: GoogleInteractionsAgentConfig;
   env?: EnvOverrides;
+  // Each create request starts a billed task. The scheduler must never replay the call.
+  readonly handlesOwnRetries = true;
   private providerId?: string;
 
   constructor(
@@ -256,6 +271,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
         metadata: { agent: this.agentId, status: created.data.status, rateLimitRetryable: false },
       };
     }
+    request.billing.serviceTier = created.data.service_tier;
     logger.info(
       `[Google Interactions Agent] Started ${this.agentId} interaction ${interactionId}; polling every ${request.pollIntervalMs}ms for up to ${request.maxPollTimeMs}ms`,
     );
@@ -275,7 +291,13 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
         await this.cancelInteraction(interactionUrl, request.headers, interactionId);
         throw getCallerAbortError(signal);
       }
-      throw err;
+      // Never let an unexpected failure surface as a thrown, retryable error: the task exists.
+      return this.errorResponse(
+        created.data,
+        interactionId,
+        `Gemini agent interaction ${interactionId} failed while waiting for completion: ${String(err)}. Retrieve it with GET ${sanitizeUrl(interactionUrl)}.`,
+        request.billing,
+      );
     }
   }
 
@@ -362,52 +384,80 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
   }
 
   /**
-   * Creating an agent interaction starts a billed background task, so the request is sent once.
-   * A retry after an ambiguous failure could start (and bill) a second task.
+   * Creating an agent interaction starts a billed background task. Promptfoo resends the request
+   * only after an HTTP 429, which means Google did not create the task. Any other failure may
+   * have started a task, so it is reported instead of retried.
    */
   private async createInteraction(
     request: PreparedAgentRequest,
     signal?: AbortSignal,
   ): Promise<{ data: AgentInteractionResponse } | ProviderResponse> {
-    let created: AgentRequestResult;
-    try {
-      const response = await fetchWithTimeout(
+    for (let attempt = 0; ; attempt++) {
+      // The request itself is not tied to the caller's signal: once Google receives it, the task
+      // exists, and its ID is needed to cancel it.
+      const pending = fetchWithTimeout(
         request.endpoint,
         {
           method: 'POST',
           headers: request.headers,
           body: JSON.stringify(request.body),
           disableTransientRetries: true,
-          ...(signal ? { signal } : {}),
         },
         getRequestTimeoutMs(),
-      );
-      created = await readInteractionResponse(response);
-    } catch (err) {
-      throwIfAborted(signal);
+      ).then(readInteractionResponse);
+
+      let created: AgentRequestResult;
+      try {
+        created = await waitForPromiseWithAbort(pending, signal);
+      } catch (err) {
+        if (signal?.aborted) {
+          void pending
+            .then((late) =>
+              late.ok && late.data.id && late.data.status === 'in_progress'
+                ? this.cancelInteraction(
+                    `${request.endpoint}/${encodeURIComponent(late.data.id)}`,
+                    request.headers,
+                    late.data.id,
+                  )
+                : undefined,
+            )
+            .catch(() => undefined);
+          throw getCallerAbortError(signal);
+        }
+        return {
+          error: `Gemini agent request failed: ${String(err)}. Promptfoo does not retry agent requests because Google may already have started a billed background task.`,
+          metadata: { agent: this.agentId, rateLimitRetryable: false },
+        };
+      }
+      if (created.ok) {
+        return { data: created.data };
+      }
+      if (created.status === 429 && attempt < MAX_CREATE_RATE_LIMIT_RETRIES) {
+        const delay = getRetryAfterMs(created.headers, attempt);
+        logger.debug('[Google Interactions Agent] Rate limited before the task started', {
+          attempt: attempt + 1,
+          delay,
+        });
+        await waitForPoll(delay, signal);
+        continue;
+      }
       return {
-        error: `Gemini agent request failed: ${String(err)}. Promptfoo does not retry agent requests because Google may already have started a billed background task.`,
-        metadata: { agent: this.agentId, rateLimitRetryable: false },
+        error: `Gemini agent API error: ${created.message}`,
+        metadata: {
+          agent: this.agentId,
+          rateLimitRetryable: false,
+          ...(created.status
+            ? {
+                http: {
+                  status: created.status,
+                  statusText: created.statusText ?? '',
+                  ...(created.headers ? { headers: created.headers } : {}),
+                },
+              }
+            : {}),
+        },
       };
     }
-    if (created.ok) {
-      return { data: created.data };
-    }
-    // Nothing was created, so a rate-limited request stays retryable.
-    return {
-      error: `Gemini agent API error: ${created.message}`,
-      ...(created.status
-        ? {
-            metadata: {
-              http: {
-                status: created.status,
-                statusText: created.statusText ?? '',
-                ...(created.headers ? { headers: created.headers } : {}),
-              },
-            },
-          }
-        : {}),
-    };
   }
 
   private async waitForCompletion(
@@ -420,20 +470,27 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     let data = initial;
     let consecutiveFailures = 0;
+    let lastFailure: string | undefined;
     let pollCount = 0;
+    const retrieveHint = `Retrieve it with GET ${sanitizeUrl(interactionUrl)}.`;
     while (data.status === 'in_progress') {
       if (Date.now() >= deadline) {
         return this.errorResponse(
           data,
           interactionId,
-          `Gemini agent interaction ${interactionId} did not finish within ${request.maxPollTimeMs}ms (last status: ${data.status}). Promptfoo stopped waiting but did not cancel it, so it may still complete and incur charges. Retrieve it with GET ${interactionUrl}.`,
+          `Gemini agent interaction ${interactionId} did not finish within ${request.maxPollTimeMs}ms (last status: ${data.status}${lastFailure ? `; last status check failed: ${lastFailure}` : ''}). Promptfoo stopped waiting but did not cancel it, so it may still complete and incur charges. ${retrieveHint}`,
           request.billing,
         );
       }
-      await waitForPoll(
-        Math.min(request.pollIntervalMs, Math.max(deadline - Date.now(), 0)),
-        signal,
-      );
+      // Status checks are idempotent, so transient failures back off until the deadline.
+      const delay =
+        consecutiveFailures === 0
+          ? request.pollIntervalMs
+          : Math.min(
+              request.pollIntervalMs * 2 ** consecutiveFailures,
+              Math.max(request.pollIntervalMs, MAX_POLL_BACKOFF_MS),
+            );
+      await waitForPoll(Math.min(delay, Math.max(deadline - Date.now(), 0)), signal);
 
       let polled: AgentRequestResult;
       try {
@@ -456,6 +513,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
 
       if (polled.ok) {
         consecutiveFailures = 0;
+        lastFailure = undefined;
         data = polled.data;
         logger.debug('[Google Interactions Agent] Polled interaction', {
           pollCount,
@@ -464,16 +522,17 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
         continue;
       }
       consecutiveFailures++;
+      lastFailure = polled.message;
       logger.debug('[Google Interactions Agent] Poll failed', {
         consecutiveFailures,
         status: polled.status,
         message: polled.message,
       });
-      if (!polled.transient || consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+      if (!polled.transient) {
         return this.errorResponse(
           data,
           interactionId,
-          `Gemini agent interaction ${interactionId} could not be retrieved: ${polled.message}. The task may still be running; retrieve it with GET ${interactionUrl}.`,
+          `Gemini agent interaction ${interactionId} could not be retrieved: ${polled.message}. The task may still be running. ${retrieveHint}`,
           request.billing,
         );
       }
@@ -547,7 +606,7 @@ export class GoogleInteractionsAgentProvider implements ApiProvider {
             cachedTokens,
             getInteractionModalityTokenCount(usage.cached_tokens_by_modality, ['audio']),
             getInteractionModalityTokenCount(usage.cached_tokens_by_modality, imageModalities),
-            normalizeGoogleServiceTier(data.service_tier) as
+            normalizeGoogleServiceTier(data.service_tier ?? billing.serviceTier) as
               | 'standard'
               | 'priority'
               | 'flex'

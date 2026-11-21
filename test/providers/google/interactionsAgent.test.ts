@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { googleProviderFactories } from '../../../src/providers/families/google';
 import { GoogleInteractionsAgentProvider } from '../../../src/providers/google/interactionsAgent';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -300,6 +302,29 @@ describe('GoogleInteractionsAgentProvider', () => {
     expect(result.cost).toBeCloseTo(40_000 * 1.5e-6 + 60_000 * 0.075e-6 + 1_000 * 7.5e-6, 12);
   });
 
+  it('prices usage at the service tier reported when the task was created', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        jsonResponse({ id: 'ag-flex', status: 'in_progress', service_tier: 'flex' }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'ag-flex',
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Done' }] }],
+          usage: { total_input_tokens: 10_000, total_output_tokens: 1_000 },
+        }),
+      );
+    const provider = new GoogleInteractionsAgentProvider(ANTIGRAVITY, {
+      config: { apiKey: 'test-key', pollIntervalMs: 1 },
+    });
+
+    const result = await provider.callApi('Hello');
+
+    // Gemini 4 Hydrogen Flex: $0.75/1M input, $3.75/1M output.
+    expect(result.cost).toBeCloseTo(10_000 * 0.75e-6 + 1_000 * 3.75e-6, 12);
+  });
+
   it('leaves cost undefined when the agent model is not documented', async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse({
@@ -427,6 +452,41 @@ describe('GoogleInteractionsAgentProvider', () => {
     const cancel = mockFetch.mock.calls.find(([url]) => String(url).endsWith('/cancel'));
     expect(cancel?.[0]).toBe(`${ENDPOINT}/interaction-abort/cancel`);
     expect(cancel?.[1]).toMatchObject({ method: 'POST' });
+    // An aborted signal would stop the cancel request before it reached Google.
+    expect(cancel?.[1]?.signal).toBeUndefined();
+    expect(postCount()).toBe(1);
+  });
+
+  it('cancels a task whose create response arrives after the caller aborts', async () => {
+    const controller = new AbortController();
+    let releaseCreate: (response: Response) => void = () => {};
+    mockFetch.mockImplementation((url) => {
+      if (String(url).endsWith('/cancel')) {
+        return Promise.resolve(jsonResponse({ id: 'interaction-late', status: 'cancelled' }));
+      }
+      return new Promise<Response>((resolve) => {
+        releaseCreate = resolve;
+      });
+    });
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key' },
+    });
+
+    const call = provider.callApi('Research TPUs', undefined, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    // Google may already have the request, so the create is not tied to the caller's signal.
+    expect(requestAt(0).init?.signal).toBeUndefined();
+    controller.abort();
+    await expect(call).rejects.toMatchObject({ name: 'AbortError' });
+
+    releaseCreate(jsonResponse({ id: 'interaction-late', status: 'in_progress' }));
+    await vi.waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${ENDPOINT}/interaction-late/cancel`,
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+      ),
+    );
     expect(postCount()).toBe(1);
   });
 
@@ -457,14 +517,33 @@ describe('GoogleInteractionsAgentProvider', () => {
     expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
   });
 
-  it('reports create HTTP errors with their status', async () => {
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse(
-        { error: { message: 'Quota exceeded for agent requests' } },
-        429,
-        'Too Many Requests',
-      ),
+  function rateLimited() {
+    return new Response(
+      JSON.stringify({ error: { message: 'Quota exceeded for agent requests' } }),
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Content-Type': 'application/json', 'retry-after': '0' },
+      },
     );
+  }
+
+  it('resends the create request after HTTP 429 because no task was created', async () => {
+    mockFetch
+      .mockResolvedValueOnce(rateLimited())
+      .mockResolvedValueOnce(jsonResponse(completedReport));
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Research TPUs');
+
+    expect(result.output).toContain('TPU v1');
+    expect(postCount()).toBe(2);
+  });
+
+  it('reports a persistent 429 after bounded create retries', async () => {
+    mockFetch.mockImplementation(async () => rateLimited());
     const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
       config: { apiKey: 'test-key' },
     });
@@ -473,8 +552,38 @@ describe('GoogleInteractionsAgentProvider', () => {
 
     expect(result.error).toBe('Gemini agent API error: Quota exceeded for agent requests');
     expect(result.metadata).toMatchObject({
+      rateLimitRetryable: false,
       http: { status: 429, statusText: 'Too Many Requests' },
     });
+    expect(postCount()).toBe(4);
+  });
+
+  it.each([
+    [
+      'an ambiguous 5xx',
+      () =>
+        jsonResponse({ error: { message: 'rate limit exceeded upstream' } }, 503, 'Unavailable'),
+    ],
+    ['a timeout', () => Promise.reject(new Error('Request timed out after 300000 ms'))],
+  ])('is never replayed by the scheduler after %s', async (_name, respond) => {
+    mockFetch.mockImplementation(async () => respond());
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key' },
+    });
+
+    try {
+      const result = await registry.execute(
+        provider,
+        () => provider.callApi('Research TPUs'),
+        createProviderRateLimitOptions(),
+      );
+      expect(result.error).toBeDefined();
+      expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
+    } finally {
+      registry.dispose();
+    }
+    expect(postCount()).toBe(1);
   });
 
   it('keeps polling through transient poll failures', async () => {
@@ -494,6 +603,43 @@ describe('GoogleInteractionsAgentProvider', () => {
     expect(postCount()).toBe(1);
   });
 
+  it('keeps backing off through repeated transient failures until the task completes', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'interaction-1', status: 'in_progress' }));
+    for (let i = 0; i < 6; i++) {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({ error: { message: 'busy' } }, 503, 'Unavailable'),
+      );
+    }
+    mockFetch.mockResolvedValueOnce(jsonResponse(completedReport));
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key', pollIntervalMs: 1 },
+    });
+
+    const result = await provider.callApi('Research TPUs');
+
+    expect(result.output).toContain('TPU v1');
+    expect(mockFetch).toHaveBeenCalledTimes(8);
+    expect(postCount()).toBe(1);
+  });
+
+  it('reports the last status-check failure when polling never recovers', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'interaction-down', status: 'in_progress' }))
+      .mockImplementation(async () =>
+        jsonResponse({ error: { message: 'backend unavailable' } }, 503, 'Unavailable'),
+      );
+    const provider = new GoogleInteractionsAgentProvider(DEEP_RESEARCH, {
+      config: { apiKey: 'test-key', pollIntervalMs: 1, maxPollTimeMs: 30 },
+    });
+
+    const result = await provider.callApi('Research TPUs');
+
+    expect(result.error).toContain(
+      'Gemini agent interaction interaction-down did not finish within 30ms (last status: in_progress; last status check failed: backend unavailable)',
+    );
+    expect(postCount()).toBe(1);
+  });
+
   it('stops polling on a non-transient poll error', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse({ id: 'interaction-gone', status: 'in_progress' }))
@@ -506,7 +652,7 @@ describe('GoogleInteractionsAgentProvider', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result.error).toBe(
-      `Gemini agent interaction interaction-gone could not be retrieved: Not found. The task may still be running; retrieve it with GET ${ENDPOINT}/interaction-gone.`,
+      `Gemini agent interaction interaction-gone could not be retrieved: Not found. The task may still be running. Retrieve it with GET ${ENDPOINT}/interaction-gone.`,
     );
     expect(result.metadata).toMatchObject({ rateLimitRetryable: false });
   });
