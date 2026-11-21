@@ -24,7 +24,7 @@ This assertion will use a language model to grade the output based on the specif
 
 Keep grading rules separate from untrusted candidate text. Give the grader only the tools and data it needs. Use [deterministic assertions](/docs/configuration/expected-outputs/deterministic) for criteria you can enforce in code.
 
-Calibrate the grader with labeled passes, failures, and edge cases. JSON parsing alone checks syntax. Missing fields can default to a passing result, so check that the raw grader response includes a boolean `pass`, numeric `score`, and a `reason` that agrees with the label. Track malformed responses and provider errors separately.
+Calibrate with labeled passes, failures, and edge cases. JSON parsing checks syntax. Inspect the raw grader's `pass`, `score`, and `reason` against each label. Without an explicit verdict, a positive score passes by default. A response with neither a verdict nor a finite score is a grader error. Track grader and provider errors separately from judged failures.
 
 Set the grader provider explicitly. Record the model, parameters, and rubric, and repeat the calibration whenever they change.
 
