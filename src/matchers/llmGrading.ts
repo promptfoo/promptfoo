@@ -199,10 +199,13 @@ export async function matchesLlmRubric(
 
   // Use remote grading when no provider is explicitly configured, or when a
   // caller injected an implicit default provider but still prefers remote.
-  const shouldPreferRemote =
-    options?.preferRemote ||
-    (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
-    !grading.provider;
+  const implicitGrader = (grading as LlmRubricGradingConfig).__promptfooPreferRemote;
+  const shouldPreferRemote = options?.preferRemote || implicitGrader || !grading.provider;
+  // Without a provider override, the red team manager injects an OpenAI API
+  // grader that cannot use Codex credentials. Leave configured providers alone.
+  const defaultTest = cliState.config?.defaultTest;
+  const usesRedteamDefault =
+    implicitGrader && !(typeof defaultTest === 'object' && defaultTest?.provider);
   const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
   const audio = options?.providerResponse?.audio;
   const gradingOutput = getGradingOutputForImages(
@@ -214,7 +217,7 @@ export async function matchesLlmRubric(
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
+    shouldUseRemoteGrading({ canUseCodexDefaultProvider: !usesRedteamDefault })
   ) {
     try {
       return {
