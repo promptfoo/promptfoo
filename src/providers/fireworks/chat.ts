@@ -1,10 +1,6 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import { FireworksEmbeddingProvider } from './embedding';
-import {
-  buildFireworksProviderConfig,
-  resolveFireworksApiKey,
-  resolveFireworksApiUrl,
-} from './shared';
+import { buildFireworksProviderConfig, resolveFireworksApiKey } from './shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -107,10 +103,6 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
   // sent to api.fireworks.ai.
   override getOrganization(): string | undefined {
     return undefined;
-  }
-
-  override getApiUrl(): string {
-    return resolveFireworksApiUrl(this.config);
   }
 
   override async callApi(
