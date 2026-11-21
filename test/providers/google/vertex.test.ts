@@ -3922,6 +3922,11 @@ describe('VertexChatProvider.callClaudeApi', () => {
       expected: { max_tokens: 1000, top_p: 0.9 },
     },
     {
+      name: 'a nested zero max tokens',
+      config: { max_tokens: 1000, generationConfig: { maxOutputTokens: 0 } },
+      expected: { max_tokens: 1000 },
+    },
+    {
       name: 'top-level settings only',
       config: { max_tokens: 1000, temperature: 0.7 },
       expected: { max_tokens: 1000, temperature: 0.7 },

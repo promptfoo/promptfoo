@@ -401,7 +401,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return {
       // Claude rejects max_tokens: 0, so a 0 means unset here, as it already did at the top level.
       max_tokens:
-        generationConfig?.maxOutputTokens || this.config.max_tokens || this.config.maxOutputTokens,
+        generationConfig?.maxOutputTokens ||
+        this.config.max_tokens ||
+        this.config.maxOutputTokens ||
+        undefined,
       temperature: generationConfig?.temperature ?? this.config.temperature,
       top_p: generationConfig?.topP ?? this.config.top_p ?? this.config.topP,
       top_k: generationConfig?.topK ?? this.config.top_k ?? this.config.topK,
