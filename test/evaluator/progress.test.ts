@@ -33,8 +33,8 @@ it('counts comparison rows exactly once in CI progress', () => {
   expect(ciProgressReporter.update).toHaveBeenCalledWith(3);
   cleanupProgressReporters(null, ciProgressReporter);
   expect(ciProgressReporter.finish).toHaveBeenCalledOnce();
-  cleanupProgressAfterError(null, ciProgressReporter, new Error('stopped'));
-  expect(ciProgressReporter.error).toHaveBeenCalledWith('Evaluation failed: Error: stopped');
+  cleanupProgressAfterError(null, ciProgressReporter);
+  expect(ciProgressReporter.error).toHaveBeenCalledWith('Evaluation failed');
 });
 
 it('logs web progress using the provider label or the provider ID', () => {
