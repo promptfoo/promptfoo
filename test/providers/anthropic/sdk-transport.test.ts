@@ -4,15 +4,16 @@ import type { AddressInfo } from 'node:net';
 import { context, propagation, type SpanContext, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   type ReadableSpan,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { AnthropicLlmRubricProvider } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { CloudflareGatewayAnthropicProvider } from '../../../src/providers/cloudflare-gateway';
+import { registerTracerProvider } from '../../../src/tracing/tracerProvider';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
@@ -136,8 +137,8 @@ afterEach(async () => {
 
 describe('Anthropic Messages SDK transport', () => {
   const exporter = new InMemorySpanExporter();
-  const tracerProvider = new NodeTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  const tracerProvider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
   });
   // The trace context the evaluator gives a traced test case's provider calls.
   const EVAL_TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
@@ -150,7 +151,7 @@ describe('Anthropic Messages SDK transport', () => {
   let restoreEnv: () => void;
 
   beforeAll(() => {
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   beforeEach(() => {

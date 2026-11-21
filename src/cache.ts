@@ -21,6 +21,7 @@ import {
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
+import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
@@ -737,7 +738,9 @@ async function fetchAndReadBody(
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
   const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
-  const maxBodyRetries = isIdempotent ? Math.min(2, retryBudget) : 0;
+  const body = options.body ?? (url instanceof Request ? url.body : null);
+  const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
+  const maxBodyRetries = isIdempotent && !singleUseBody ? Math.min(2, retryBudget) : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -745,12 +748,12 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await resp.text();
+      const respText = await readWithResponseDeadline(resp, () => resp.text());
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (
         !options.signal?.aborted &&
-        isTransientConnectionError(err as Error) &&
+        (err instanceof ResponseBodyTimeoutError || isTransientConnectionError(err as Error)) &&
         bodyAttempt < maxBodyRetries
       ) {
         const backoffMs = Math.pow(2, bodyAttempt) * 1000;
@@ -916,13 +919,14 @@ async function prepareFetchResponse(
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number = getRequestTimeoutMs(),
+  timeout: number | `${number}` = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
   onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<FetchWithCacheResult<T>> {
+  const timeoutMs = Number(timeout);
   const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
@@ -992,7 +996,7 @@ export async function fetchWithCache<T = unknown>(
     const response = fetchAndReadBody(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       logEnabled,
@@ -1053,7 +1057,8 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = getAbortSignalScopedKey(cacheKey, signal);
+  // Only share an active transport when its deadline works for both callers.
+  const inflightCacheKey = `${timeoutMs}:${getAbortSignalScopedKey(cacheKey, signal)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
@@ -1061,7 +1066,7 @@ export async function fetchWithCache<T = unknown>(
     const response = prepareFetchResponse(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       format,

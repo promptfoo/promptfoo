@@ -75,7 +75,7 @@ $env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
 ```
 
 CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
-This example uses CrewAI 1.15.22 or newer within the 1.x release series.
+This example uses CrewAI 1.15.28 or newer within the 1.x release series.
 
 Keep the environment activated when running Promptfoo so its Python provider uses
 the installed packages. Alternatively, set `PROMPTFOO_PYTHON` to the virtual
