@@ -1,4 +1,5 @@
 import {
+  isCredentialHeader,
   normalizeFieldName,
   REDACTED,
   SECRET_FIELD_NAMES,
@@ -46,6 +47,8 @@ function isCredentialName(key: string): boolean {
   const field = normalized.slice(normalized.lastIndexOf('.') + 1);
   if (
     (SECRET_FIELD_NAMES.has(field) && field !== 'token' && field !== 'signature') ||
+    // Check auth and token compounds below so diagnostics like X-Token-Count survive.
+    (field.startsWith('x') && !/auth|token/.test(field) && isCredentialHeader(field, '')) ||
     /(?:connstr_|connectionstrings(?:__|[.:]))/i.test(key) ||
     /(?:connectionstrings?|connstr|dsn|(?:account|storage|sharedaccess)keys?[12]?|sharedaccesssignature|xsessionid|(?:code|pkce)verifier)$/.test(
       normalized.replace(/[.[\]]/g, ''),

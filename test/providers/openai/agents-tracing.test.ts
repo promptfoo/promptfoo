@@ -175,9 +175,17 @@ describe('OTLPTracingExporter', () => {
     ['protobuf', 'X-Session-Id'],
     ['json', 'Ocp-Apim-Subscription-Key'],
     ['protobuf', 'Ocp-Apim-Subscription-Key'],
+    ['json', 'X-Honeycomb-Team'],
+    ['protobuf', 'X-Honeycomb-Team'],
   ] as const)(
     'redacts %s header records for %s in every supported container',
     async (format, header) => {
+      const diagnostics = {
+        'X-Idempotency-Key': 'request-id',
+        'X-Token-Count': 42,
+        'X-Auth-Type': 'oauth',
+        'X-Input-Tokens': 12,
+      };
       const { attributes, payload } = await exportCustomData(
         {
           headers: { [header.toLowerCase()]: 'opaque/object', 'Content-Type': 'text/plain' },
@@ -185,6 +193,7 @@ describe('OTLPTracingExporter', () => {
           records: [{ name: header, value: 'opaque/record' }],
           text: `${header}: opaque/text`,
           nested: JSON.stringify({ headers: { [header.toLowerCase()]: 'opaque/serialized' } }),
+          ...diagnostics,
           session_status: 'completed',
           session_duration: 42,
         },
@@ -194,6 +203,7 @@ describe('OTLPTracingExporter', () => {
         [header.toLowerCase()]: '<redacted>',
         'Content-Type': 'text/plain',
       });
+      expect(attributes).toMatchObject(diagnostics);
       expect(attributes.session_status).toBe('completed');
       expect(attributes.session_duration).toBe(42);
       expect(JSON.stringify(payload)).not.toContain('opaque/');
