@@ -12,10 +12,10 @@ describe('persistent cache claims', () => {
   let cachePath: string;
   let cache: typeof import('../src/cache');
 
-  async function holdClaimLock() {
+  async function holdClaimLock(mode: 'read' | 'write' = 'write') {
     await cache.claimBackgroundUsageOnce('initialize');
     const db = new DatabaseSync(path.join(cachePath, 'claims/claims.db'));
-    db.exec('BEGIN IMMEDIATE');
+    db.exec(mode === 'read' ? 'BEGIN; SELECT key FROM claims' : 'BEGIN IMMEDIATE');
     return () => {
       if (db.isOpen) {
         db.close();
@@ -138,7 +138,7 @@ describe('persistent cache claims', () => {
     },
   );
 
-  it('finishes a claim after notifying the subscriber that commit has started', async () => {
+  it('keeps the committed claim when the notification aborts the caller', async () => {
     const controller = new AbortController();
     const onCommit = vi.fn(() => controller.abort());
     expect(
@@ -259,22 +259,30 @@ describe('persistent cache claims', () => {
     expect(await cache.claimBackgroundUsageOnce('cancelled')).toBe(true);
   });
 
-  it('retries a lock that is released within the deadline', async () => {
-    const release = await holdClaimLock();
-    const retry = vi
-      .spyOn(await import('../src/util/time'), 'sleep')
-      .mockImplementationOnce(async () => release());
-    try {
-      expect(
-        await cache.claimBackgroundUsageOnce('contended', { deadline: Date.now() + 2000 }),
-      ).toBe(true);
-      expect(retry).toHaveBeenCalled();
-      expect(await cache.claimBackgroundUsageOnce('contended')).toBe(false);
-    } finally {
-      retry.mockRestore();
-      release();
-    }
-  });
+  it.each(['read', 'write'] as const)(
+    'notifies once after a contended %s lock clears',
+    async (mode) => {
+      const release = await holdClaimLock(mode);
+      const onCommit = vi.fn();
+      const retry = vi
+        .spyOn(await import('../src/util/time'), 'sleep')
+        .mockImplementationOnce(async () => release());
+      try {
+        expect(
+          await cache.claimBackgroundUsageOnce('contended', {
+            deadline: Date.now() + 2000,
+            onCommit,
+          }),
+        ).toBe(true);
+        expect(retry).toHaveBeenCalled();
+        expect(await cache.claimBackgroundUsageOnce('contended', { onCommit })).toBe(false);
+        expect(onCommit).toHaveBeenCalledOnce();
+      } finally {
+        retry.mockRestore();
+        release();
+      }
+    },
+  );
 
   it('allows exactly one claimant across independent processes', async () => {
     const workers = Array.from({ length: 2 }, () => {

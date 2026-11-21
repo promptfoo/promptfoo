@@ -669,6 +669,7 @@ export async function claimBackgroundUsageOnce(
   };
   checkDeadline();
   const scopedCacheKey = getScopedCacheKey(cacheKey);
+  let claimed: boolean;
   if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
     const cachePath =
       getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
@@ -694,11 +695,9 @@ export async function claimBackgroundUsageOnce(
               .prepare('INSERT OR IGNORE INTO claims (key) VALUES (?)')
               .run(Buffer.from(hash, 'hex'));
             checkDeadline();
-            if (changes === 1) {
-              options.onCommit?.();
-            }
             db.exec('COMMIT');
-            return changes === 1;
+            claimed = changes === 1;
+            break;
           } finally {
             // Closing also rolls back an interrupted transaction.
             db.close();
@@ -725,8 +724,9 @@ export async function claimBackgroundUsageOnce(
       (wrapped as Error & { cause?: unknown }).cause = error;
       throw wrapped;
     }
+  } else {
+    claimed = claimCacheKeyOnce(cacheKey);
   }
-  const claimed = claimCacheKeyOnce(cacheKey);
   if (claimed) {
     options.onCommit?.();
   }
