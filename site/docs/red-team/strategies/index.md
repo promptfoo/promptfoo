@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Comprehensive catalog of red team attack strategies for systematically identifying and exploiting LLM application vulnerabilities
+description: Choose red team strategies for single-turn attacks, multi-turn conversations, encodings, and other ways to probe LLM applications for vulnerabilities.
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
@@ -14,7 +14,7 @@ Strategies are attack techniques that systematically probe LLM applications for 
 
 ## Recommended Strategies
 
-Most users only need two strategies for comprehensive coverage. These agentic methods provide the highest attack success rates across use cases.
+Start with `jailbreak:meta` for single-turn attacks and `jailbreak:hydra` for multi-turn conversations. Add strategies for attack surfaces specific to your application.
 
 ### Meta Agent: Best for Single-Turn
 
@@ -30,7 +30,7 @@ The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack t
 
 ### Quick Start
 
-For most applications, this configuration provides comprehensive red team coverage:
+Configure both strategies:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:

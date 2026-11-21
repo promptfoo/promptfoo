@@ -51,8 +51,8 @@ Return a JSON response with your translation, confidence level, and any fun cult
       },
     },
     {
-      id: 'google:gemini-2.5-flash',
-      label: 'Gemini 2.5 Flash (structured)',
+      id: 'google:gemini-3.5-flash-lite',
+      label: 'Gemini (structured)',
       config: {
         generationConfig: {
           response_mime_type: 'application/json',

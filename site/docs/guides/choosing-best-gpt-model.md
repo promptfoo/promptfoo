@@ -5,11 +5,7 @@ description: Compare GPT-5.2 vs GPT-5-mini performance on your custom data with 
 
 # Choosing the best GPT model: benchmark on your own data
 
-This guide will walk you through how to compare OpenAI's GPT-5.2 and GPT-5-mini, top contenders for the most powerful and effective GPT models. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
-
-New model releases often score well on benchmarks. But generic benchmarks are for generic use cases. If you're building an LLM app, you should evaluate these models on your own data and make an informed decision based on your specific needs.
-
-The end result will be a side-by-side comparison that looks like this:
+Compare GPT-5.2 and GPT-5-mini on your own test cases to measure reasoning quality, cost, and latency:
 
 ![gpt-5-mini vs gpt-5.2](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
@@ -78,7 +74,7 @@ npx promptfoo@latest view
 
 ## Step 5: Automatic evaluation
 
-To streamline the evaluation process, you can add various types of assertions to your test cases. Assertions verify if the model's output meets certain criteria, marking the test as pass or fail accordingly.
+Add assertions to mark each output as passing or failing your criteria.
 
 In this case, we're especially interested in `cost` and `latency` assertions given the tradeoffs between the two models:
 
