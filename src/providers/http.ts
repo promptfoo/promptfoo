@@ -79,7 +79,7 @@ import type {
   TokenUsage,
 } from '../types/index';
 
-export type StreamingMetrics = NonNullable<ProviderResponse['streamingMetrics']>;
+type StreamingMetrics = NonNullable<ProviderResponse['streamingMetrics']>;
 
 const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
 const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);

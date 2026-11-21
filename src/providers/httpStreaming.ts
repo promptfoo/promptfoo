@@ -1,6 +1,3 @@
-import type { HttpProviderConfig, StreamingMetrics } from './http';
-
-type StreamFormat = NonNullable<HttpProviderConfig['streamFormat']>;
 const MAX_SSE_EVENT_BYTES = 64 * 1024;
 const MAX_STREAM_BYTES = 16 * 1024 * 1024;
 
@@ -12,41 +9,33 @@ function hasText(value: unknown): boolean {
   return typeof value === 'string' && value.length > 0;
 }
 
-function hasTextDelta(event: unknown, format: StreamFormat): boolean {
-  if (!isRecord(event)) {
-    return false;
-  }
-  switch (format) {
-    case 'openai-chat':
-      return (
-        Array.isArray(event.choices) &&
-        event.choices.some(
-          (choice) =>
-            isRecord(choice) &&
-            isRecord(choice.delta) &&
-            (hasText(choice.delta.content) || hasText(choice.delta.refusal)),
-        )
-      );
-    case 'openai-responses':
-      return (
-        (event.type === 'response.output_text.delta' || event.type === 'response.refusal.delta') &&
-        hasText(event.delta)
-      );
-    case 'anthropic-messages':
-      return (
-        event.type === 'content_block_delta' &&
-        isRecord(event.delta) &&
-        event.delta.type === 'text_delta' &&
-        hasText(event.delta.text)
-      );
-  }
-}
+const textDetectors = {
+  'openai-chat': (event) =>
+    Array.isArray(event.choices) &&
+    event.choices.some(
+      (choice) =>
+        isRecord(choice) &&
+        isRecord(choice.delta) &&
+        (hasText(choice.delta.content) || hasText(choice.delta.refusal)),
+    ),
+  'openai-responses': (event) =>
+    (event.type === 'response.output_text.delta' || event.type === 'response.refusal.delta') &&
+    hasText(event.delta),
+  'anthropic-messages': (event) =>
+    event.type === 'content_block_delta' &&
+    isRecord(event.delta) &&
+    event.delta.type === 'text_delta' &&
+    hasText(event.delta.text),
+} satisfies Record<string, (event: Record<string, unknown>) => boolean>;
+
+type StreamFormat = keyof typeof textDetectors;
 
 function createTextDetector(format?: StreamFormat): (chunk: string, final?: boolean) => boolean {
   if (!format) {
     return (chunk) => /\S/.test(chunk);
   }
 
+  const detectText = Object.hasOwn(textDetectors, format) ? textDetectors[format] : () => false;
   let lineParts: string[] = [];
   let dataLines: string[] = [];
   let eventBytes = 0;
@@ -77,7 +66,8 @@ function createTextDetector(format?: StreamFormat): (chunk: string, final?: bool
     const data = dataLines.join('\n');
     dataLines = [];
     try {
-      return hasTextDelta(JSON.parse(data), format);
+      const event: unknown = JSON.parse(data);
+      return isRecord(event) && detectText(event);
     } catch {
       return false;
     }
@@ -117,7 +107,7 @@ export async function processStreamingResponse(
   response: Response,
   requestStartTime: number,
   opts?: { streamFormat?: StreamFormat },
-): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
+) {
   const reader = response.body?.getReader();
   if (!reader) {
     return { text: '', streamingMetrics: { multiChunkDelivery: false } };
