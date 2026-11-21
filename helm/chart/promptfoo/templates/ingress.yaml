@@ -1,3 +1,17 @@
+{{- $enabled := (.Values.ingress | default dict).enabled }}
+{{- if and (ne $enabled nil) (not (kindIs "bool" $enabled)) }}
+{{- fail "ingress.enabled must be a boolean" }}
+{{- end }}
+{{- if eq $enabled nil }}
+{{- $existing := dict }}
+{{- if .Release.IsUpgrade }}
+{{- $existing = lookup "networking.k8s.io/v1" "Ingress" .Release.Namespace .Release.Name }}
+{{- end }}
+{{- if or .Values.domainName (eq (dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existing) .Release.Name) }}
+{{- fail "To keep the existing route, set ingress.enabled=true and configure ingress.hosts, className, annotations and tls. Set ingress.enabled=false to remove it." }}
+{{- end }}
+{{- end }}
+{{- if $enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5,22 +19,31 @@ metadata:
   namespace: {{ $.Release.Namespace | quote }}
   labels:
     app: {{ $.Release.Name | quote }}
+  {{- with .Values.ingress.annotations }}
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  ingressClassName: traefik
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
   rules:
-  - host: {{ $.Values.domainName }}
+  {{- range .Values.ingress.hosts }}
+  - host: {{ .host | quote }}
     http:
       paths:
-      - path: /
-        pathType: Prefix
+      {{- range .paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType | default "Prefix" }}
         backend:
-            service:
-              name:  {{ include "promptfoo.fullname" . }}
-              port:
-                number: {{ $.Values.service.port }}
+          service:
+            name: {{ include "promptfoo.fullname" $ }}
+            port:
+              number: {{ $.Values.service.port }}
+      {{- end }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
   tls:
-  - hosts:
-    - {{ $.Values.domainName }}
-    secretName: {{ $.Release.Name }}-certificate-tls
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

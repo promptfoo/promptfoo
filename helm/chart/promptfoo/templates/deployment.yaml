@@ -1,3 +1,6 @@
+{{- if not (has (toString .Values.replicaCount) (list "0" "1")) }}
+{{- fail "replicaCount must be 0 or 1 because multiple servers cannot share the SQLite volume" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,9 +8,11 @@ metadata:
   labels:
     {{- include "promptfoo.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  # Wait for the old SQLite writer to exit. Clear legacy rolling update settings on upgrade.
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       {{- include "promptfoo.selectorLabels" . | nindent 6 }}
@@ -34,11 +39,12 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $tag := .Values.image.tag | default .Chart.AppVersion | toString }}
+          image: "{{ .Values.image.repository }}:{{ $tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default (eq $tag "latest" | ternary "Always" "IfNotPresent") }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: 3000
               protocol: TCP
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
@@ -47,10 +53,23 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
-            - name: PROMPTFOO_REMOTE_API_BASE_URL
-              value: http://localhost:3000 
-            - name: PROMPTFOO_REMOTE_APP_BASE_URL
+            {{- $names := list }}
+            {{- range .Values.env }}
+            {{- $names = append $names .name }}
+            {{- end }}
+            {{- range list "PROMPTFOO_REMOTE_API_BASE_URL" "PROMPTFOO_REMOTE_APP_BASE_URL" }}
+            {{- if not (has . $names) }}
+            - name: {{ . }}
               value: http://localhost:3000
+            {{- end }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

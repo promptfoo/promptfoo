@@ -142,6 +142,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'helm-chart.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(!hasHelm\)\('rendered with helm template'/,
+    reason: 'Chart rendering requires the Helm CLI, which the same file requires on Linux CI',
+  },
+  {
     file: 'smoke/sigterm-eval.test.ts',
     kind: 'skipIf',
     linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('SIGTERM during an eval'/,
