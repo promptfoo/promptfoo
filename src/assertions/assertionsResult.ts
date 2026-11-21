@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { addCompletionDetails } from '../contracts/completionDetails';
 import { getEnvBool } from '../envars';
+import { CompensatedSum } from './compensatedSum';
 import { asGradingResult } from './scriptResultNormalization';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
@@ -225,8 +226,8 @@ export class AssertionsResult {
   };
   private threshold: number | undefined;
   private _parentAssertionSet: ParentAssertionSet | undefined;
-  private totalScore: number = 0;
-  private totalWeight: number = 0;
+  private readonly totalScore = new CompensatedSum();
+  private readonly totalWeight = new CompensatedSum();
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = Object.create(null);
@@ -260,8 +261,8 @@ export class AssertionsResult {
     metric?: string;
     weight?: number;
   }) {
-    this.totalScore += result.score * weight;
-    this.totalWeight += weight;
+    this.totalScore.add(result.score * weight);
+    this.totalWeight.add(weight);
     this.componentResults[index] = result;
 
     const isRedteamGuardrail =
@@ -316,7 +317,7 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = normalizeWeightedScore(this.totalScore, this.totalWeight);
+    const score = normalizeWeightedScore(this.totalScore.total, this.totalWeight.total);
 
     // An empty explanation still records a failed assertion.
     let pass = this.failedReason === undefined;
@@ -326,7 +327,11 @@ export class AssertionsResult {
       // A numeric test threshold overrides the pass/fail status of individual assertions.
       // Honor zero and negative thresholds, but do not coerce an empty YAML threshold
       // (null) to zero. A zero threshold can still fail when the aggregate score is negative.
-      pass = score >= this.threshold;
+      // Scale rounding tolerance to these values so zero still fails a tiny positive threshold.
+      const tolerance = Number.EPSILON * Math.max(Math.abs(score), Math.abs(this.threshold));
+      pass =
+        score >= this.threshold ||
+        (Number.isFinite(tolerance) && this.threshold - score <= tolerance);
       const comparator = pass ? '≥' : '<';
       reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;
     }

@@ -65,8 +65,8 @@ describe('AssertionsResult', () => {
         weight: 2,
       });
 
-      expect(assertionsResult['totalScore']).toBe(1.6); // 0.8 * 2
-      expect(assertionsResult['totalWeight']).toBe(2);
+      expect(assertionsResult['totalScore'].total).toBe(1.6); // 0.8 * 2
+      expect(assertionsResult['totalWeight'].total).toBe(2);
       expect(assertionsResult['tokensUsed']).toEqual({
         total: 100,
         prompt: 50,
@@ -658,6 +658,56 @@ describe('AssertionsResult', () => {
       expect(result.score).toBe(0.7);
       expect(result.reason).toBe('Aggregate score 0.70 ≥ 0.7 threshold');
     });
+
+    it.each([
+      { score: 0.1, weight: 1, threshold: 0.1, pass: true },
+      { score: 0.1, weight: 0.01, threshold: 0.1, pass: true },
+      { score: 0.1, weight: 1, threshold: 0.100000000000001, pass: false },
+    ])('preserves the cutoff across many weighted results: %o', async (sample) => {
+      const aggregate = new AssertionsResult({ threshold: sample.threshold });
+      for (let index = 0; index < 50; index++) {
+        aggregate.addResult({
+          index,
+          result: { pass: true, score: sample.score, reason: 'Scored' },
+          weight: sample.weight,
+        });
+      }
+      expect(await aggregate.testResult()).toMatchObject({
+        score: sample.score,
+        pass: sample.pass,
+      });
+    });
+
+    it.each([
+      { score: 0.3, zeroWeight: 2, threshold: 0.1, pass: true },
+      { score: 0.29, zeroWeight: 2, threshold: 0.1, pass: false },
+      { score: 0.0999, zeroWeight: 0, threshold: 0.1, pass: false },
+      { score: 0, zeroWeight: 0, threshold: 1e-18, pass: false },
+      { score: 0, zeroWeight: 0, threshold: Number.MIN_VALUE, pass: false },
+      { score: -1e-300, zeroWeight: 0, threshold: 0, pass: false },
+      { score: 1, zeroWeight: 0, threshold: Infinity, pass: false },
+    ])(
+      'compares $score / (1 + $zeroWeight) to $threshold',
+      async ({ score, zeroWeight, threshold, pass }) => {
+        const aggregate = new AssertionsResult({ threshold });
+        aggregate.addResult({
+          index: 0,
+          result: { pass: true, score, reason: 'Scored' },
+          weight: 1,
+        });
+        aggregate.addResult({
+          index: 1,
+          result: { pass: false, score: 0, reason: 'Missed' },
+          weight: zeroWeight,
+        });
+        const result = await aggregate.testResult();
+        expect(result.score).toBe(score / (1 + zeroWeight));
+        expect(result.pass).toBe(pass);
+        expect(result.reason).toBe(
+          `Aggregate score ${result.score.toFixed(2)} ${pass ? '≥' : '<'} ${threshold} threshold`,
+        );
+      },
+    );
 
     it('should honor a threshold of 0 as an override (never fail on individual assertion failures)', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0 });
