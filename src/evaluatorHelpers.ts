@@ -515,7 +515,7 @@ export async function renderPrompt(
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, vars, nunjucks), null, 2);
   } catch {
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
