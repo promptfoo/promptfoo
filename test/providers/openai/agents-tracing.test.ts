@@ -264,6 +264,49 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts complete URL and form credentials, including punctuation, in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          query: 'https://host/?password=,opaque/value&region=west',
+          encodedKey: 'https://host/?%61pi_key=before];opaque/value&region=west',
+          form: 'secret=]opaque/value&region=west',
+          redirect: 'next=https://host/?password=,opaque/value&region=west',
+          publicForm: 'cities=London,Tokyo&bbox=[1,2]',
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toMatch(/opaque|before/);
+      expect(attributes.query).toBe('https://host/?password=<redacted>&region=west');
+      expect(attributes.encodedKey).toBe('https://host/?%61pi_key=<redacted>&region=west');
+      expect(attributes.form).toBe('secret=<redacted>&region=west');
+      expect(attributes.publicForm).toBe('cities=London,Tokyo&bbox=[1,2]');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves unrelated command options after curl in %s',
+    async (format) => {
+      const cmd = ['curl', 'https://example.test', '&&', 'git', 'push', '-u', 'origin', 'main'];
+      const { attributes, payload } = await exportCustomData(
+        {
+          cmd,
+          chained: 'curl -u "bot:opaque;value" https://host;git push -u origin main',
+          lines: 'curl https://host\ngit push -u origin main',
+        },
+        format,
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque');
+      expect(attributes.cmd).toEqual({
+        arrayValue: { values: cmd.map((stringValue) => ({ stringValue })) },
+      });
+      expect(attributes.command).toBe(cmd.join(' '));
+      expect(attributes.chained).toBe('curl -u <redacted> https://host;git push -u origin main');
+      expect(attributes.lines).toContain('git push -u origin main');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'withholds embedded JSON containing escaped credential keys in %s',
     async (format) => {
       const publicText = 'Reply: {"st\\u0061tus":"ok"}';
@@ -1321,7 +1364,7 @@ describe('OTLPTracingExporter', () => {
       expect(arguments_).toMatchObject({
         jwt: '<redacted>',
         authorization_endpoint: 'https://issuer.example/authorize',
-        callback: 'https://host/?access_token=<redacted>"suffix',
+        callback: 'https://host/?access_token=<redacted>',
         url: 'postgres://<redacted>@db.example/app',
         headers: [['Authorization', '<redacted>']],
       });

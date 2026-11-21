@@ -714,72 +714,91 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
   }
   value = sanitized + value.slice(copied);
 
-  return redactQuotedCredentials(value)
-    .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
-    .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
-    .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
-    .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
-    .replace(
-      /^([ \t]*)([A-Za-z_][A-Za-z\d_.-]*)([ \t]+)(?![ \t:=])([^\r\n]+)/gm,
-      (match, prefix: string, key: string, separator: string) =>
-        key.toLowerCase() !== 'pwd' && isCredentialAttributeKey(key)
-          ? `${prefix}${key}${separator}<redacted>`
-          : match,
-    )
-    .replace(
-      /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
-      (token, header: string) => {
-        if (header.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
-          return '<redacted>';
-        }
-        try {
-          const parsed = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
-          return isRecord(parsed) && typeof parsed.alg === 'string' ? '<redacted>' : token;
-        } catch {
-          return token;
-        }
-      },
-    )
-    .replace(/(\/\/)[^\s/?#]+@/g, (_match, prefix: string) => `${prefix}<redacted>@`)
-    .replace(
-      /(["'])(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)(?:\\[^\r\n]|(?!\1)[^\\\r\n])*(?:\1|(?=[\r\n]|$))|(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
-      (match, quote: string | undefined, quotedPrefix: string, prefix: string) =>
-        quote
-          ? `${quote}${quotedPrefix}<redacted>${match.endsWith(quote) ? quote : ''}`
-          : `${prefix}<redacted>`,
-    )
-    .replace(
-      /(\bAuthorization\s*=\s*)([A-Za-z][A-Za-z\d-]*\s+)[^\s;,"'{}\]]+/gi,
-      (_match, prefix: string) => `${prefix}<redacted>`,
-    )
-    .replace(
-      /(^|[\s;,:])([A-Za-z_][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
-      (match, prefix: string, key: string, separator: string) =>
-        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
-    )
-    .replace(
-      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]]+)\4/gi,
-      (match, prefix: string, key: string, separator: string, quote: string, raw: string) => {
-        let decodedKey = key;
-        try {
-          decodedKey = decodeURIComponent(key.replace(/\+/g, ' '));
-        } catch {
-          // Preserve malformed query parameters while still checking their literal key.
-        }
-        const bareFormKey =
-          /^(?:key|code)$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
-        const secret =
-          isCredentialAttributeKey(decodedKey) ||
-          bareFormKey ||
-          (inspectEncoding && hasEncodedCredential(raw));
-        return secret ? `${prefix}${key}${separator}${quote}<redacted>${quote}` : match;
-      },
-    );
+  return (
+    redactQuotedCredentials(value)
+      .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
+      .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
+      .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
+      .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
+      .replace(
+        /^([ \t]*)([A-Za-z_][A-Za-z\d_.-]*)([ \t]+)(?![ \t:=])([^\r\n]+)/gm,
+        (match, prefix: string, key: string, separator: string) =>
+          key.toLowerCase() !== 'pwd' && isCredentialAttributeKey(key)
+            ? `${prefix}${key}${separator}<redacted>`
+            : match,
+      )
+      .replace(
+        /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
+        (token, header: string) => {
+          if (header.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+            return '<redacted>';
+          }
+          try {
+            const parsed = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+            return isRecord(parsed) && typeof parsed.alg === 'string' ? '<redacted>' : token;
+          } catch {
+            return token;
+          }
+        },
+      )
+      .replace(/(\/\/)[^\s/?#]+@/g, (_match, prefix: string) => `${prefix}<redacted>@`)
+      .replace(
+        /(["'])(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)(?:\\[^\r\n]|(?!\1)[^\\\r\n])*(?:\1|(?=[\r\n]|$))|(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
+        (match, quote: string | undefined, quotedPrefix: string, prefix: string) =>
+          quote
+            ? `${quote}${quotedPrefix}<redacted>${match.endsWith(quote) ? quote : ''}`
+            : `${prefix}<redacted>`,
+      )
+      .replace(
+        /(\bAuthorization\s*=\s*)([A-Za-z][A-Za-z\d-]*\s+)[^\s;,"'{}\]]+/gi,
+        (_match, prefix: string) => `${prefix}<redacted>`,
+      )
+      .replace(
+        /(^|[\s;,:])([A-Za-z_][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
+        (match, prefix: string, key: string, separator: string) =>
+          isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+      )
+      // Query and form parameters admit punctuation that delimits configuration
+      // values. Mask the full parameter before applying configuration delimiters.
+      .replace(
+        /(^|[?&#])([\w.%+[\]-]+)=(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#\s]+)/gi,
+        (match, prefix: string, key: string, raw: string) =>
+          isPrivateParameter(key, prefix, raw, inspectEncoding)
+            ? prefix + key + '=<redacted>'
+            : match,
+      )
+      .replace(
+        /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]]+)\4/gi,
+        (match, prefix: string, key: string, separator: string, quote: string, raw: string) =>
+          isPrivateParameter(key, prefix, raw, inspectEncoding)
+            ? prefix + key + separator + quote + '<redacted>' + quote
+            : match,
+      )
+  );
+}
+
+function isPrivateParameter(key: string, prefix: string, raw: string, inspectEncoding: boolean) {
+  let decodedKey = key;
+  try {
+    decodedKey = decodeURIComponent(key.replace(/\+/g, ' '));
+  } catch {
+    // Preserve malformed query parameters while still checking their literal key.
+  }
+  const bareFormKey =
+    /^(?:key|code)$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
+  return (
+    isCredentialAttributeKey(decodedKey) ||
+    bareFormKey ||
+    (inspectEncoding && hasEncodedCredential(raw))
+  );
 }
 
 // Inspect encoded query values under otherwise harmless names. Never substitute
 // a decoded URL into the trace, and bound decoding of nested redirects.
 function hasEncodedCredential(raw: string): boolean {
+  if (raw.includes('?') && sanitizeCredentialText(raw, false) !== raw) {
+    return true;
+  }
   for (let depth = 0; /%[\da-f]{2}/i.test(raw); depth++) {
     if (depth >= 3) {
       return true;
@@ -797,13 +816,18 @@ function hasEncodedCredential(raw: string): boolean {
 }
 
 // Keep adjacent quoted and escaped fragments in the same shell argument.
-const COMMAND_WORDS = /(?:[^\s"'\\]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"?|'[^']*'?)+/g;
+const COMMAND_WORDS = /[;&|\r\n]+|(?:[^;&|\s"'\\]|\\[\s\S]|"(?:[^"\\]|\\[\s\S])*"?|'[^']*'?)+/g;
 
 // Recognize curl after wrappers and command separators in a single pass.
 function curlArgumentRedactor() {
   let curl = false;
   let maskNext = false;
   return (word: unknown) => {
+    if (typeof word === 'string' && /^[;&|\r\n]+$/.test(word)) {
+      curl = false;
+      maskNext = false;
+      return;
+    }
     if (maskNext) {
       maskNext = false;
       return '<redacted>';
