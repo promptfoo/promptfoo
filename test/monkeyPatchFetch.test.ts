@@ -541,12 +541,12 @@ describe('monkeyPatchFetch', () => {
       stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple',
     };
     mockOriginalFetch.mockRejectedValue(connectionError);
-    vi.stubEnv('HTTP_PROXY', 'https://proxy-user:proxy-password@proxy.example.com?token=proxy-key');
+    const proxyUrl = 'https://proxy-user:proxy-password@proxy.example.com?token=proxy-key';
 
     const url =
       'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
 
-    await expect(monkeyPatchFetch(url)).rejects.toThrow('fetch failed');
+    await expect(monkeyPatchFetch(url, undefined, proxyUrl)).rejects.toThrow('fetch failed');
 
     const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
     expect(debugLogs).toContain('n8n.example.com');

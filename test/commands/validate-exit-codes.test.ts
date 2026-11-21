@@ -36,6 +36,25 @@ describe('Validate Command Exit Codes', () => {
   });
 
   describe('Success scenarios - should set exit code 0', () => {
+    it('accepts numeric transport settings retained by config resolution', async () => {
+      // Config resolution retains raw YAML primitives after validating normalized values.
+      const env = JSON.parse('{"REQUEST_TIMEOUT_MS":1250,"PROMPTFOO_FETCH_CONNECTIONS":3}');
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: { prompts: ['fixture'], providers: ['echo'], env },
+        testSuite: {
+          prompts: [{ raw: 'fixture', label: 'fixture' }],
+          providers: [{ id: () => 'echo', callApi: async () => ({ output: 'fixture' }) }],
+          env,
+        },
+        basePath: '/test',
+      });
+
+      await doValidate({ config: ['numeric-env.yaml'] }, defaultConfig, defaultConfigPath);
+
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Configuration is valid'));
+      expect(process.exitCode).toBe(0);
+    });
+
     it('should set exit code 0 when configuration is valid', async () => {
       // Mock successful config resolution and validation
       const mockValidConfig = {

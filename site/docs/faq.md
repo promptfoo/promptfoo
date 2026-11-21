@@ -82,11 +82,15 @@ export HTTPS_PROXY=http://username:password@proxy.company.com:8080
 export NO_PROXY=localhost,127.0.0.1,internal.domain.com
 ```
 
+HTTP, Bedrock (except Nova Sonic and video), and GPT-Live providers also read proxy settings from the evaluation's top-level `env` and from its environment file. The evaluation takes precedence over the file and then the shell. Lowercase names take precedence within each source. `ALL_PROXY` supplies a fallback. HTTP requests require an HTTP or HTTPS proxy. Bedrock and GPT-Live also accept SOCKS proxies. Proxy auto-configuration scripts are unsupported.
+
+An HTTP provider with `config.tls` uses its own direct connection. It bypasses these proxies. HTTP response caching separates routes and skips requests that use proxy credentials, a custom CA bundle or a custom dispatcher.
+
 Note: Environment variables are specific to your terminal/shell instance. If you need them permanently, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).
 
 ### How do I configure SSL certificates and security?
 
-For environments with custom certificate authorities (like corporate environments), configure SSL/TLS settings using these environment variables:
+Promptfoo verifies TLS certificates by default. Use a custom CA bundle for corporate certificate authorities.
 
 1. `PROMPTFOO_CA_CERT_PATH`: Path to a custom CA certificate bundle. The path can be absolute or relative to your working directory. Invalid paths will log a warning:
 

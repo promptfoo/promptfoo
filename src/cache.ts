@@ -20,6 +20,7 @@ import {
   PROMPTFOO_TEAM_ID_HEADER,
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
+import { getProxyForUrl } from './util/fetch/proxy';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
@@ -574,7 +575,26 @@ function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown)
   return { cacheable: true, identity };
 }
 
+function getFetchCachePrefix(url: RequestInfo, options: FetchOptions): string | null {
+  if (('dispatcher' in options && options.dispatcher) || getEnvString('PROMPTFOO_CA_CERT_PATH')) {
+    return null;
+  }
+  const proxy = getProxyForUrl(getRequestUrlString(url));
+  const route = proxy ? new URL(proxy) : undefined;
+  if (
+    route &&
+    (route.username || route.password || route.search || route.hash || route.pathname !== '/')
+  ) {
+    return null;
+  }
+  const insecure = getEnvBool('PROMPTFOO_INSECURE_SSL') ? ':insecure' : '';
+  const partition = route ? `:proxy:${sha256(route.origin)}` : '';
+  // v3 entries predate transport isolation and might originate from any route.
+  return `fetch:v4${insecure}${partition}`;
+}
+
 function getFetchCacheKey(
+  prefix: string,
   url: RequestInfo,
   options: RequestInit,
   method: string,
@@ -595,7 +615,7 @@ function getFetchCacheKey(
 
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   return getScopedCacheKey(
-    `fetch:v3:${hashFetchCacheKey({
+    `${prefix}:${hashFetchCacheKey({
       format,
       headers: getHeadersForCacheKey(url, options),
       method,
@@ -961,16 +981,14 @@ export async function fetchWithCache<T = unknown>(
     );
   }
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
-  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
-  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
-    ? 'fetch:cloud-auth:v3'
-    : 'fetch:v3';
+  const prefix = cacheEnabled && !bust ? getFetchCachePrefix(url, fetchOptions) : null;
   const cacheKey =
-    cacheEnabled && !bust
-      ? providedCacheKey
-        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
-      : null;
+    prefix &&
+    (providedCacheKey
+      ? getScopedCacheKey(
+          `${prefix}:explicit:${fetchOptions.restrictCloudAuthRedirects ? 'cloud' : 'plain'}:${providedCacheKey}${repeatSuffix}`,
+        )
+      : getFetchCacheKey(prefix, url, fetchOptions, method, format, repeatIndex));
 
   let notifyRateLimitBackoff: typeof onRateLimitBackoff;
   const observerFailure = onRateLimitBackoff

@@ -2,7 +2,6 @@ import * as fsPromises from 'node:fs/promises';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
-import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
@@ -24,6 +23,7 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { getProxyForUrl } from './proxy';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
@@ -290,7 +290,7 @@ export async function fetchWithProxy(
   }
 
   const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL'),
   };
 
   // Support custom CA certificates
@@ -311,6 +311,9 @@ export async function fetchWithProxy(
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
+  if (proxyUrl && !/^https?:/i.test(proxyUrl)) {
+    throw new Error('HTTP requests require an HTTP or HTTPS proxy.');
+  }
   if (proxyUrl && logEnabled) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
   }
@@ -318,7 +321,13 @@ export async function fetchWithProxy(
   const agent = acquireAgent(proxyUrl, tlsOptions);
   finalOptions.dispatcher = agent.dispatcher;
   try {
-    return await fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
+    return await fetchWithTransientRetries(
+      finalUrl,
+      finalOptions,
+      getAuthHeaders,
+      logEnabled,
+      proxyUrl,
+    );
   } finally {
     releaseAgent(agent);
   }
@@ -329,6 +338,7 @@ async function fetchWithTransientRetries(
   options: FetchOptions,
   getAuthHeaders: FetchOptions['getAuthHeaders'],
   logEnabled: boolean,
+  proxyUrl?: string,
 ): Promise<Response> {
   // Transient error retry logic (502/503/504/524 with matching status text).
   // When a provider sets maxRetries: 0 and the caller did not pass an explicit
@@ -348,7 +358,7 @@ async function fetchWithTransientRetries(
         ),
       };
     }
-    const response = await monkeyPatchFetch(url, attemptOptions);
+    const response = await monkeyPatchFetch(url, attemptOptions, proxyUrl);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s

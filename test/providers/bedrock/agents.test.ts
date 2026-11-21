@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { sha256 } from '../../../src/util/createHash';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../../util/utils';
 
 const { createNodeHttpHandlerFactory, createBedrockCacheFactory } = await vi.hoisted(
   () => import('../../factories/moduleMocks'),
@@ -110,6 +111,8 @@ function makeCompletionResponse(output: string) {
   };
 }
 
+let restoreEnv = () => {};
+
 describe('AwsBedrockAgentsProvider', () => {
   beforeAll(async () => {
     const bedrockModule = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -117,27 +120,25 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   beforeEach(() => {
+    restoreEnv = mockProcessEnv(
+      Object.fromEntries(
+        [...PROXY_ENV_KEYS, 'AWS_BEDROCK_MAX_RETRIES', 'AWS_BEARER_TOKEN_BEDROCK'].map((key) => [
+          key,
+          undefined,
+        ]),
+      ),
+    );
     vi.clearAllMocks();
     mockSend.mockReset();
     mockGet.mockReset();
     mockSet.mockReset();
     mockIsCacheEnabled.mockReset().mockReturnValue(false);
-    vi.unstubAllEnvs();
-    vi.stubEnv('AWS_BEDROCK_MAX_RETRIES', '');
-    vi.stubEnv('AWS_BEARER_TOKEN_BEDROCK', '');
-    vi.stubEnv('HTTPS_PROXY', '');
-    vi.stubEnv('https_proxy', '');
-    vi.stubEnv('HTTP_PROXY', '');
-    vi.stubEnv('http_proxy', '');
-    vi.stubEnv('npm_config_https_proxy', '');
-    vi.stubEnv('npm_config_http_proxy', '');
-    vi.stubEnv('npm_config_proxy', '');
-    vi.stubEnv('all_proxy', '');
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it('places knowledge-base retrieval overrides in sessionState without explicit session attributes', async () => {

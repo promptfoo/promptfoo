@@ -4,7 +4,7 @@ import logger from '../../../src/logger';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { sha256 } from '../../../src/util/createHash';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
-import { mockProcessEnv } from '../../util/utils';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../../util/utils';
 
 const { createNodeHttpHandlerFactory, createBedrockCacheFactory } = await vi.hoisted(
   () => import('../../factories/moduleMocks'),
@@ -130,6 +130,8 @@ vi.mock(
   createBedrockCacheFactory(mockGet, mockSet, () => mockIsCacheEnabled),
 );
 
+let restoreEnv = () => {};
+
 describe('AwsBedrockKnowledgeBaseProvider', () => {
   beforeAll(async () => {
     const bedrockModule = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -138,33 +140,23 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   beforeEach(() => {
+    restoreEnv = mockProcessEnv(
+      Object.fromEntries(
+        [...PROXY_ENV_KEYS, 'AWS_BEDROCK_MAX_RETRIES', 'AWS_BEARER_TOKEN_BEDROCK'].map((key) => [
+          key,
+          undefined,
+        ]),
+      ),
+    );
     vi.clearAllMocks();
     mockGet.mockReset();
     mockSet.mockReset();
     mockIsCacheEnabled.mockReset().mockReturnValue(false);
-    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-    mockProcessEnv({ HTTPS_PROXY: undefined });
-    mockProcessEnv({ https_proxy: undefined });
-    mockProcessEnv({ HTTP_PROXY: undefined });
-    mockProcessEnv({ http_proxy: undefined });
-    mockProcessEnv({ npm_config_https_proxy: undefined });
-    mockProcessEnv({ npm_config_http_proxy: undefined });
-    mockProcessEnv({ npm_config_proxy: undefined });
-    mockProcessEnv({ all_proxy: undefined });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-    mockProcessEnv({ HTTPS_PROXY: undefined });
-    mockProcessEnv({ https_proxy: undefined });
-    mockProcessEnv({ HTTP_PROXY: undefined });
-    mockProcessEnv({ http_proxy: undefined });
-    mockProcessEnv({ npm_config_https_proxy: undefined });
-    mockProcessEnv({ npm_config_http_proxy: undefined });
-    mockProcessEnv({ npm_config_proxy: undefined });
-    mockProcessEnv({ all_proxy: undefined });
+    restoreEnv();
   });
 
   it('should throw an error if knowledgeBaseId is not provided', () => {

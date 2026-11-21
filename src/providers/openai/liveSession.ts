@@ -1,8 +1,8 @@
 import type { IncomingMessage } from 'node:http';
 
 import { ProxyAgent } from 'proxy-agent';
-import { getProxyForUrl } from 'proxy-from-env';
 import WebSocket from 'ws';
+import { getProxyForUrl } from '../../util/fetch/proxy';
 import { isSecretField, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';

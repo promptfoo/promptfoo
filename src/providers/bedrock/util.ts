@@ -1,6 +1,7 @@
 import type { Agent } from 'http';
 
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvOverrides } from '../../envars';
+import { getProxyEnvironment, getProxyForUrl } from '../../util/fetch/proxy';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
 
@@ -25,8 +26,8 @@ export function getScopedBedrockTokenOptions() {
  */
 export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
 
-export function hasProxyEnv(): boolean {
-  return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
+export function hasProxyEnv(env = getProxyEnvironment()): boolean {
+  return Boolean(env.http_proxy || env.https_proxy || env.all_proxy);
 }
 
 /**
@@ -42,18 +43,21 @@ export function hasProxyEnv(): boolean {
 export async function createBedrockRequestHandler(options?: {
   apiKey?: string;
 }): Promise<{ handle: (...args: any[]) => any }> {
-  const hasProxy = hasProxyEnv();
+  const proxyEnv = getProxyEnvironment();
+  const hasProxy = hasProxyEnv(proxyEnv);
 
   try {
     const { NodeHttpHandler } = await import('@smithy/node-http-handler');
     let proxyAgent: Agent | undefined;
     if (hasProxy) {
       const { ProxyAgent } = await import('proxy-agent');
-      proxyAgent = new ProxyAgent() as unknown as Agent;
+      proxyAgent = new ProxyAgent({
+        getProxyForUrl: (url) => getProxyForUrl(url, proxyEnv),
+      }) as unknown as Agent;
     }
 
     const handler = new NodeHttpHandler({
-      ...(proxyAgent ? { httpsAgent: proxyAgent } : {}),
+      ...(proxyAgent ? { httpAgent: proxyAgent, httpsAgent: proxyAgent } : {}),
       requestTimeout: REQUEST_TIMEOUT_MS,
     });
 

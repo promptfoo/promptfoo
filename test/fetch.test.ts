@@ -99,6 +99,7 @@ vi.mock('undici', () => {
 
 vi.mock('../src/envars', () => {
   return {
+    getEnvOverrides: () => undefined,
     getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
         return process.env.HTTPS_PROXY;
@@ -918,7 +919,7 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy(`${protocol}://example.com`);
 
-    const tlsOptions = { rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true) };
+    const tlsOptions = { rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL') };
     expect(ProxyAgent).toHaveBeenCalledWith({
       uri: proxyUrl,
       proxyTls: tlsOptions,
