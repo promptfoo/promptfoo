@@ -58,6 +58,7 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import {
   buildAttackReport,
+  flaggedByModeration,
   getPluginIdFromResult,
   getStrategyIdFromTest,
   type TestWithMetadata,
@@ -262,16 +263,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
         acc[pluginId].total++;
 
-        // Check if moderation tests failed but other tests passed - this indicates content was
-        // flagged by moderation but would have passed otherwise
-        const moderationPassed = row.gradingResult?.componentResults?.some(
-          (result) => result.assertion?.type === 'moderation' && !result.pass,
-        );
-
         if (row.success) {
           acc[pluginId].pass++;
           acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
-        } else if (moderationPassed) {
+        } else if (flaggedByModeration(row.gradingResult)) {
           acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
         }
 
@@ -366,6 +361,9 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].total += tests.length;
       stats[pluginId].failCount += tests.length;
+      stats[pluginId].passWithFilter += tests.filter((test) =>
+        flaggedByModeration(test.gradingResult),
+      ).length;
     });
 
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {

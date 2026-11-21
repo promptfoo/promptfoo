@@ -107,8 +107,16 @@ describe('Report filtering logic', () => {
 
   it('counts only attacks in ASR while keeping failed baselines visible', async () => {
     const pluginId = 'agentic:unauthorized-sharing';
+    const moderationFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Flagged by moderation',
+      assertion: { type: 'moderation' },
+    };
     const cases = ['attack', 'control', 'authorized'].map((variant) => {
-      const row = createComponentMockResult(0, pluginId, variant === 'authorized');
+      const passed = variant === 'authorized';
+      const row = createComponentMockResult(0, pluginId, passed, passed ? [] : [moderationFailure]);
+      row.response = { output: variant };
       row.testCase = {
         ...row.testCase,
         metadata: {
@@ -121,9 +129,17 @@ describe('Report filtering logic', () => {
     await renderReportData(1, cases);
     expect(screen.getByTestId('overview-total')).toHaveTextContent('3');
     expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
+    const readStats = () =>
+      JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[pluginId];
+    const attackStats = { total: 1, pass: 0, passWithFilter: 1, failCount: 1 };
+    expect(readStats().attacks).toEqual(attackStats);
     expect(readStrategyStats()).toEqual({ basic: { pass: 0, total: 1, failCount: 1 } });
     expect(readGroups().failuresByPlugin[pluginId]).toHaveLength(2);
     expect(readGroups().passesByPlugin[pluginId]).toHaveLength(1);
+
+    await userEvent.click(screen.getAllByLabelText('filter results')[0]);
+    await userEvent.type(screen.getByPlaceholderText('Search prompts & outputs'), 'attack');
+    expect(readStats()).toEqual(attackStats);
   });
 
   it('links to excluded agent outcome errors for the current target and preserves owner requests', async () => {
