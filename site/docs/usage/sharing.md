@@ -26,13 +26,13 @@ promptfoo share
 
 :::note
 
-Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
+Cloud uploads are private by default. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
 
 :::
 
 ## Web Interface Sharing
 
-In the local web interface, use **Eval actions → Share** to upload an eval. Hosted Cloud and Enterprise use different controls; see [Enterprise link access and public visibility](/docs/enterprise/findings#share-an-existing-eval).
+In the local web interface, use **Eval actions → Share** to upload an eval. For hosted Cloud and Enterprise, see [Enterprise link access and public visibility](/docs/enterprise/findings#share-an-existing-eval).
 
 ![Share button location in web interface](/img/docs/usage/sharing-webui.png)
 
@@ -51,9 +51,9 @@ The local web interface shows sharing setup instructions if a destination isn't 
 
 ### Sharing Behavior by Setup Type
 
-- **Cloud/Enterprise CLI uploads**: Return an eval URL; recipients need the appropriate access unless the eval is public
-- **Self-hosted users**: Uses your configured sharing endpoints
-- **Unconfigured setups**: Displays clear setup instructions with next steps
+- **Cloud and Enterprise** uploads return an eval URL. Recipients need permission to view private evals.
+- **Self-hosted** deployments use your configured sharing endpoints.
+- **Unconfigured** deployments display setup instructions.
 
 ## Sharing Specific Evals
 

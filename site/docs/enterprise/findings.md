@@ -85,32 +85,31 @@ There are several ways to share findings outside of the Promptfoo application:
 
 ### Share an existing eval
 
-For an eval already in your Enterprise deployment, copy its URL from your browser. For a private eval, recipients must sign in and have access to that eval through their team and role. Copying the URL does not grant membership or permissions.
-
-The CLI's `promptfoo share` command uploads local results to the configured deployment and returns an eval URL. It does not create an organization invitation.
+Copy the eval URL from your browser. To upload a local eval and get its URL, run `promptfoo share`. Recipients of a private eval URL must sign in and have permission to view it. The URL grants no additional access.
 
 ### Invitation links
 
-In release 125, **Eval actions → Create Share Link** is available in hosted Promptfoo Cloud organizations without red team access. It is not shown in on-prem deployments or organizations with red team access. When available, read the **Share Evaluation** dialog before copying its URL:
+In release 125, **Eval actions → Create Share Link** is available only in hosted Promptfoo Cloud organizations without red team access. You need permission to update the eval. Check the **Share Evaluation** dialog to see whether you're copying an eval URL or an organization invitation.
 
-| Link type               | Who can use it                                                                                                        |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Eval URL                | People who already have access to the eval; it grants no additional access.                                           |
-| Organization invitation | Eligible recipients can join the organization as ordinary members. Manage their team membership and roles separately. |
+:::warning
 
-Creating a share link requires permission to update the eval. Only organization administrators using personal accounts can create or revoke invitation links. Service accounts and team-scoped API tokens receive an ordinary eval URL.
+Accepting an invitation makes the recipient an organization member and an **Administrator** of the default team. They can view and modify other private evals on that team. You can't change their team role in these organizations.
 
-The invitation dialog shows when the link expires. **Revoke share links** disables all existing invitation links for that eval. People who already joined remain members; remove their membership separately if they should no longer have access.
+:::
+
+Only organization administrators using personal accounts can create or revoke invitations. Service accounts and team-scoped API tokens receive an ordinary eval URL.
+
+The dialog shows when the invitation expires. **Revoke share links** disables all existing invitations for that eval. To remove access for someone who already joined, remove their membership separately.
 
 ### Public visibility
 
-**Eval actions → Make Public** changes the eval's visibility. Anyone who can reach the deployment and has its URL can view the public eval without signing in to Promptfoo. Review the prompts, responses, and other eval data before making it public.
+**Eval actions → Make Public** lets anyone who can reach the deployment and has the URL view the eval without signing in. Review the prompts, responses, and other eval data first.
 
-This control appears only when the deployment enables public evals and your role has all four eval permissions: create, read, update, and delete (**Manage Evaluations**). On-prem deployments disable the control by default; administrators can configure `ENABLE_MAKE_PUBLIC=true`. **Make Private** restores the eval's authentication and access requirements.
+The deployment must enable public evals and your role must have **Manage Evaluations** permissions (create, read, update, and delete). On-prem administrators can enable this control with `ENABLE_MAKE_PUBLIC=true`.
 
-[![Eval actions showing Make Public for a Customer Support baseline eval](/img/enterprise-docs/sharing-access.png)](pathname:///img/enterprise-docs/sharing-access.png)
+**Make Private** restores access checks for requests that reach the server. Shared caches can still serve previously public results until they expire. In release 125, the results table can remain cached for five minutes.
 
-On-prem eval actions with public visibility enabled for the deployment. The example uses synthetic data.
+![Eval actions showing Make Public for a sample Customer Support eval](/img/enterprise-docs/sharing-access.png)
 
 ## See Also
 

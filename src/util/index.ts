@@ -33,4 +33,4 @@ export { providerToIdentifier } from './provider';
 // Template rendering
 export { renderEnvOnlyInObject, renderVarsInObject } from './render';
 // Runtime utilities
-export { isRunningUnderNpx, printBorder } from './runtime';
+export { printBorder } from './runtime';
