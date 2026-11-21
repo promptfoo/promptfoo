@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { getDbIfExists } from '../../database';
 import logger from '../../logger';
 import Eval from '../../models/eval';
@@ -59,12 +57,9 @@ export async function filterTestsByResults(
   let results: { results: EvaluateResult[] };
   try {
     const isJson = pathOrId.toLowerCase().endsWith('.json');
-    // Lowercase JSON and explicit JSON paths mean files. A bare mixed-case name can be a stored ID.
+    // Imported IDs may include directories. Preserve their precedence for mixed-case suffixes.
     const checkStoredId =
-      !isJson ||
-      (!pathOrId.endsWith('.json') &&
-        path.basename(pathOrId) === pathOrId &&
-        (await getDbIfExists()) !== null);
+      !isJson || (!pathOrId.endsWith('.json') && (await getDbIfExists()) !== null);
     const eval_ = checkStoredId ? await Eval.findById(pathOrId) : undefined;
 
     if (eval_) {
