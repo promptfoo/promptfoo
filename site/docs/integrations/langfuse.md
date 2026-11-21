@@ -184,4 +184,4 @@ Imported variables and values returned by `transformVars` are treated as literal
 | `__langfuse_latency`, `__langfuse_cost`                          | Latency in seconds and cost in USD, when available |
 | `__langfuse_url`                                                 | Trace link, when supplied by Langfuse              |
 
-Local `defaultTest.vars` entries still render normally. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.
+Local `defaultTest.vars` entries still render normally. After a step uses imported data, values saved with `storeOutputAs` stay literal for the rest of the run, including paths to local media files. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.
