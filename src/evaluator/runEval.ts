@@ -1175,9 +1175,8 @@ async function gradeRunEvalResponse({
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
-      throw error;
-    }
+    // Keep the completed target response, as deferred grading does, so a grading error
+    // still shows what the target returned.
     applyGradingError(ret, error, abortSignal);
   }
   ret.response = processedResponse;

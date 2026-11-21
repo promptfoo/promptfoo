@@ -208,6 +208,19 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
       expect(unsupported.failureReason).toBe(ResultFailureReason.ERROR);
       expect(unsupported.error).toContain('[inconclusive]');
       expect(unsupported.error).toContain('metadata.agentOutcomeEvidence');
+      expect(unsupported.response?.output).toEqual(observation(info.caseId));
+
+      // An inconclusive grade keeps the reply and measurements for review.
+      const [unmeasured] = await run(
+        '({ output: json.reply, metadata: { agentOutcomeEvidence: { ...json.probe, measurements: null } } })',
+      );
+      expect(unmeasured.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(unmeasured.error).toContain('[inconclusive]');
+      expect(unmeasured.response?.output).toEqual(reply);
+      expect(unmeasured.response?.metadata?.agentOutcomeEvidence).toMatchObject({
+        caseId: info.caseId,
+        measurements: null,
+      });
     } finally {
       await close();
     }
