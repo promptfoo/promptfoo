@@ -164,9 +164,9 @@ interface BackgroundResponseResult {
 class BackgroundPollError extends Error {
   constructor(
     readonly responseId: string,
-    cause: unknown,
+    readonly cause: unknown,
   ) {
-    super(`Failed to poll background response ${responseId}`, { cause });
+    super(`Failed to poll background response ${responseId}`);
   }
 }
 
@@ -176,14 +176,10 @@ function getPollErrorMetadata(responseId?: string) {
 }
 
 function getBackgroundCompletionWindowMs(completionWindow?: string): number {
-  switch (completionWindow) {
-    case '2h':
-      return 2 * 60 * 60 * 1000;
-    case '8h':
-      return 8 * 60 * 60 * 1000;
-    default:
-      return 0;
+  if (completionWindow !== '2h' && completionWindow !== '8h') {
+    return 0;
   }
+  return Number.parseInt(completionWindow, 10) * 60 * 60 * 1000;
 }
 
 function getBackgroundAttemptTimeout(request: BackgroundRequest, timeout: number): number {
