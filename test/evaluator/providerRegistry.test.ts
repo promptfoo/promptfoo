@@ -23,6 +23,7 @@ function deferred() {
 it('keeps the registry reusable across nonterminal beforeExit events', async () => {
   const events = ['beforeExit', 'SIGINT', 'SIGTERM'] as const;
   const existing = new Map(events.map((event) => [event, new Set(process.rawListeners(event))]));
+  const existingBeforeExit = new Set(process.rawListeners('beforeExit'));
   const registry = new ProviderRegistry();
   const resource = { shutdown: vi.fn(async () => {}) };
   try {
@@ -30,7 +31,7 @@ it('keeps the registry reusable across nonterminal beforeExit events', async () 
     for (const round of [1, 2]) {
       const idle = process
         .rawListeners('beforeExit')
-        .find((listener) => !existing.get('beforeExit')!.has(listener));
+        .find((listener) => !existingBeforeExit.has(listener));
       expect(idle).toBeDefined();
       idle!.call(process, 0);
       await vi.waitFor(() => expect(resource.shutdown).toHaveBeenCalledTimes(round));

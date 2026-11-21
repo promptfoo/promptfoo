@@ -11,59 +11,27 @@ import protobuf from 'protobufjs';
 import { getDirectory } from '../esm';
 import logger from '../logger';
 
-// Cached protobuf root
-let protoRoot: protobuf.Root | null = null;
-let ExportTraceServiceRequest: protobuf.Type | null = null;
+let exportRequestType: Promise<protobuf.Type> | undefined;
 
-/**
- * Load and cache the OTLP proto definitions
- */
-async function loadProtoDefinitions(): Promise<protobuf.Root> {
-  if (protoRoot) {
-    return protoRoot;
-  }
-
+async function loadExportTraceServiceRequestType(): Promise<protobuf.Type> {
   logger.debug('[Protobuf] Loading OTLP proto definitions');
-
-  /**
-   * Get the path to the proto files directory.
-   * This works correctly in both development (tsx) and production (bundled) environments.
-   */
-  // getDirectory() returns the src/ or dist/src/ directory
-  // Proto files are in src/tracing/proto/ or dist/src/tracing/proto/
+  // getDirectory() points at src/ in development and dist/src/ in packaged builds.
   const protoDir = path.join(getDirectory(), 'tracing', 'proto');
   logger.debug(`[Protobuf] Proto directory: ${protoDir}`);
-
-  try {
-    // Create a new Root with the proto directory as the include path
-    // This allows imports like "opentelemetry/proto/trace/v1/trace.proto" to resolve correctly
-    const root = new protobuf.Root();
-
-    // Configure the root to resolve imports from the proto directory
-    root.resolvePath = (_origin: string, target: string) => {
-      // Always resolve imports relative to the proto root directory
-      return path.join(protoDir, target);
-    };
-
-    // Load the main trace service proto which imports the others
-    await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-
-    protoRoot = root;
-    logger.debug('[Protobuf] Successfully loaded OTLP proto definitions');
-    return protoRoot;
-  } catch (error) {
-    logger.error(`[Protobuf] Failed to load proto definitions: ${error}`);
-    throw error;
-  }
+  const root = new protobuf.Root();
+  root.resolvePath = (_origin: string, target: string) => path.join(protoDir, target);
+  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
+  const type = root.lookupType('opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest');
+  logger.debug('[Protobuf] Successfully loaded OTLP proto definitions');
+  return type;
 }
 
-/**
- * Get the ExportTraceServiceRequest message type
- */
-async function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
-  return (ExportTraceServiceRequest ??= (await loadProtoDefinitions()).lookupType(
-    'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-  ));
+function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
+  return (exportRequestType ??= loadExportTraceServiceRequestType().catch((error) => {
+    exportRequestType = undefined;
+    logger.error(`[Protobuf] Failed to load proto definitions: ${error}`);
+    throw error;
+  }));
 }
 
 /**

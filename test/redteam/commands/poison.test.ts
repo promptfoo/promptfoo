@@ -12,6 +12,10 @@ import {
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { mockProcessEnv } from '../../util/utils';
 
+vi.mock('../../../src/globalConfig/globalConfig', () => ({
+  readGlobalConfig: () => ({ id: 'test-user' }),
+}));
+
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
 const mockFsExistsSync = vi.hoisted(() => vi.fn());
 const mockFsStatSync = vi.hoisted(() => vi.fn());
