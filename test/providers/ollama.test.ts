@@ -7,6 +7,7 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+import * as util from '../../src/util/index';
 import { mockProcessEnv } from '../util/utils';
 import { createAttributeRecordingSpan } from './openai/tracing';
 
@@ -64,6 +65,33 @@ const createCustomProviderOptions = () => ({
 });
 
 vi.mock('../../src/cache');
+
+describe.each([
+  ['chat', OllamaChatProvider],
+  ['completion', OllamaCompletionProvider],
+] as const)('Ollama %s cancellation', (_name, Provider) => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('skips a request canceled before dispatch', async () => {
+    const signal = AbortSignal.abort(new Error('canceled before dispatch'));
+    await expect(
+      new Provider('test').callApi('hello', undefined, { abortSignal: signal }),
+    ).rejects.toThrow('canceled before dispatch');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('forwards the caller signal to the active request', async () => {
+    const controller = new AbortController();
+    vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
+      controller.abort(new Error('canceled during dispatch'));
+      throw new Error('transport error');
+    });
+    await expect(
+      new Provider('test').callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toThrow('canceled during dispatch');
+    expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(controller.signal);
+  });
+});
 
 describe.each([
   { baseUrl: undefined, expectedBase: 'http://localhost:11434' },
@@ -599,6 +627,23 @@ describe('OllamaCompletionProvider', () => {
 describe('OllamaChatProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('stops waiting when tool loading is cancelled', async () => {
+    const loader = vi
+      .spyOn(util, 'maybeLoadToolsFromExternalFile')
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const controller = new AbortController();
+    const provider = new OllamaChatProvider('llama3.3', { config: { tools: [] } });
+    try {
+      const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(loader).toHaveBeenCalledWith([], undefined, controller.signal));
+      controller.abort(new Error('cancelled tool loader'));
+      await expect(call).rejects.toThrow('cancelled tool loader');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    } finally {
+      loader.mockRestore();
+    }
   });
 
   it('should construct with model name and options', () => {
