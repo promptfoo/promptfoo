@@ -5,7 +5,7 @@ description: 'Step-by-step guide for testing ElevenLabs voice AI with Promptfoo 
 
 # Evaluating ElevenLabs voice AI
 
-This guide walks you through testing ElevenLabs voice AI capabilities using Promptfoo, from basic text-to-speech quality testing to advanced conversational agent evaluation.
+Use Promptfoo to compare ElevenLabs text-to-speech models and test conversational agents.
 
 ## Part 1: Text-to-Speech Quality Testing
 
@@ -467,5 +467,5 @@ Check out complete examples:
 ### Getting Help
 
 - [GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
-- [Discord Community](https://discord.gg/promptfoo)
+- [Discord Community](https://discord.gg/gHPS9jjfbs)
 - [ElevenLabs Support](https://elevenlabs.io/support)

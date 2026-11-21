@@ -5,7 +5,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sampleArray } from '../../util/generation';
 import { readIncludeSafe, sampleBalancedSafetyRecords } from '../shared/safetyBalance';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 import { safeControlGrader } from './safeControlGrader';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
@@ -340,8 +340,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
   protected getAssertions(category: string): Assertion[] {
     return [
       {
-        type: PLUGIN_ID,
-        metric: 'UnsafeBench',
+        ...createAssertion(PLUGIN_ID, 'UnsafeBench'),
         value: { category },
       },
     ];

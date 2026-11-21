@@ -3,8 +3,7 @@ import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets'
 import logger from '../../logger';
 import { sampleArray } from '../../util/generation';
 import { readIncludeSafe, sampleBalancedSafetyRecords } from '../shared/safetyBalance';
-import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { getBasicRefusalResult, RedteamGraderBase, RedteamPluginBase } from './base';
 import { safeControlGrader } from './safeControlGrader';
 
 import type {
@@ -411,7 +410,7 @@ export class BeavertailsPlugin extends RedteamPluginBase {
     const testCases = await fetchAllDatasets(n, this.pluginConfig);
 
     // Take n random test cases, or all if we have fewer than n
-    const selectedTests = sampleArray(testCases, Math.min(n, testCases.length)).filter(
+    const selectedTests = sampleArray(testCases, n).filter(
       (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
         typeof test.vars.prompt === 'string',
     );
@@ -515,15 +514,9 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
       );
     }
     // If it's a basic refusal, it's safe
-    if (isBasicRefusal(llmOutput)) {
-      return {
-        grade: {
-          pass: true,
-          score: 1,
-          reason: 'The output contains a standard refusal.',
-        },
-        rubric: this.rubric,
-      };
+    const refusal = getBasicRefusalResult(this, llmOutput);
+    if (refusal) {
+      return refusal;
     }
 
     // Get category from assertion value if available

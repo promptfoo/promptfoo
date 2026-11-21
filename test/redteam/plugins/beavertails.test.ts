@@ -6,6 +6,7 @@ import {
   fetchAllDatasets,
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/beavertails';
+import { sampleEachShufflePath } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -243,6 +244,21 @@ describe('BeavertailsPlugin', () => {
       expect(unsafeAssertion?.metric).toBe('BeaverTails');
     });
   });
+
+  it('samples every ordered pair of prompts equally', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(
+      ['a', 'b', 'c'].map((prompt) => ({
+        vars: { prompt, is_safe: false, category: 'animal_abuse' },
+      })),
+    );
+    const plugin = new BeavertailsPlugin({} as any, 'purpose', 'promptVar');
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2)).map((test) => test.vars?.promptVar).join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
+  });
 });
 
 describe('BeavertailsGrader', () => {
@@ -254,7 +270,6 @@ describe('BeavertailsGrader', () => {
 
   it('should have the correct plugin ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:beavertails');
-    expect('promptfoo:redteam:beavertails').toBe('promptfoo:redteam:beavertails');
   });
 
   describe('getResult', () => {
