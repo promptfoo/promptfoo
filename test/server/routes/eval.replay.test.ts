@@ -140,6 +140,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     { '{{ env.NAME | lower }}': { env: { NAME: 'echo' } } },
     { '{{ env.NAME }}': { id: '{{ env.DISPLAY }}', env: { NAME: 'echo' } } },
     { '{{ env.NAME }}': { label: '{{ env.DISPLAY }}', env: { NAME: 'echo' } } },
+    { 'openai:codex-security{#suffix#}': {} },
     { 'echo{{ env.EMPTY }}': { env: { EMPTY: '' } } },
   ])(
     'rejects template expressions and dynamic display metadata before evaluation',
@@ -342,6 +343,28 @@ describe('POST /api/eval/replay provider boundary', () => {
       expect(evaluate.mock.calls[0][0].providers).toHaveLength(1);
     },
   );
+
+  it('skips an unavailable cloud target only for an identifiable, unrelated column', async () => {
+    vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+    const missing = 'promptfoo://provider/unavailable';
+    storedConfig(['echo', missing], undefined, ['echo', 'Cloud target']);
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual([{ id: 'echo', prompts: ['Replay'] }]);
+    expect((await replay(0, 1)).status).toBe(400);
+
+    storedConfig(['echo', { id: missing, label: 'echo' }]);
+    expect((await replay(0, 1)).status).toBe(400);
+    storedConfig(['echo', missing], undefined, ['echo', 'echo']);
+    expect((await replay(0, 1)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not look up a cloud target whose local label rules it out', async () => {
+    const auth = vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+    storedConfig(['echo', { id: 'promptfoo://provider/other', label: 'Other' }]);
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(auth).not.toHaveBeenCalled();
+  });
 
   it('rejects a cloud Codex Security target before evaluation', async () => {
     vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);

@@ -25,7 +25,11 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
-import { isProviderConfigFileReference, normalizeProviderRef } from '../../util/providerRef';
+import {
+  isProviderConfigFileReference,
+  normalizeProviderRef,
+  type ProviderRefDescriptor,
+} from '../../util/providerRef';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -48,6 +52,7 @@ import type {
   ResultsFile,
   Vars,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 
 export const evalRouter = Router();
 
@@ -596,8 +601,9 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-function getReplayProviderError(provider: unknown): string | undefined {
-  const reference = normalizeProviderRef(provider);
+const TEMPLATE_MARKER = /\{[{%#]/;
+
+function getReplayProviderError(reference: ProviderRefDescriptor): string | undefined {
   const providerPath = 'loadProviderPath' in reference ? reference.loadProviderPath : undefined;
   if (
     providerPath === 'openai:codex-security' ||
@@ -610,11 +616,138 @@ function getReplayProviderError(provider: unknown): string | undefined {
     (providerPath &&
       (isProviderConfigFileReference(providerPath) ||
         isCloudProvider(providerPath) ||
-        /\{[{%]/.test(providerPath)))
+        TEMPLATE_MARKER.test(providerPath)))
   ) {
     return 'Cannot identify the replay provider safely. Rerun using the eval configuration.';
   }
   return undefined;
+}
+
+function replayEnvKey(template: string) {
+  const match = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(template);
+  if (match?.[0] !== template || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  return match[1];
+}
+
+// An environment-selected provider can only replay a local echo without operational options.
+function replayEcho(path: string, options?: ProviderOptions) {
+  const key = replayEnvKey(path);
+  const alias = options?.id === path ? undefined : options?.id;
+  const dynamic = [alias, options?.label].some(
+    (v) => v !== undefined && (typeof v !== 'string' || TEMPLATE_MARKER.test(v)),
+  );
+  const extra = Object.keys(options ?? {}).some(
+    (k) => !['id', 'label', 'env', 'prompts'].includes(k),
+  );
+  const env = options?.env;
+  if (
+    dynamic ||
+    extra ||
+    (env && Object.hasOwn(env, key) ? env[key] : getTemplateEnvValue(key)) !== 'echo'
+  ) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  return { id: alias ?? 'echo', ...(options?.label && { label: options.label }) };
+}
+
+// Replace saved prompt filters while retaining routing and provider-specific options.
+function prepareReplayCandidate<T>(provider: T) {
+  const ref = normalizeProviderRef(provider);
+  if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
+    return provider;
+  }
+  let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+  let path = ref.loadProviderPath;
+  if (TEMPLATE_MARKER.test(path)) {
+    options = replayEcho(path, options);
+    path = 'echo';
+  } else if (options?.label && TEMPLATE_MARKER.test(options.label)) {
+    const key = replayEnvKey(options.label);
+    const label = options.env && Object.hasOwn(options.env, key) ? options.env[key] : undefined;
+    if (!label || TEMPLATE_MARKER.test(label)) {
+      throw new Error('Cannot identify the replay provider safely');
+    }
+    options = { ...options, label };
+  }
+  return ref.kind === 'map'
+    ? { [path]: { ...options, prompts: ['Replay'] } }
+    : { ...options, id: path, prompts: ['Replay'] };
+}
+
+async function matchReplayTarget(
+  ref: ProviderRefDescriptor,
+  column: string | undefined,
+  uniqueColumn: boolean,
+) {
+  if (column && ref.label && ref.label !== column) {
+    return;
+  }
+
+  let cloud;
+  if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
+    try {
+      const id = getCloudDatabaseId(ref.loadProviderPath);
+      const options = 'loadOptions' in ref ? ref.loadOptions : {};
+      cloud = { id, options, provider: await getProviderFromCloud(id, options) };
+    } catch (error) {
+      // A known collision or an unindexed request must never fall back to a different target.
+      if (uniqueColumn && !ref.label && ref.id !== column) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  const target = cloud ? normalizeProviderRef(cloud.provider) : ref;
+  // HttpProvider.id() returns the effective URL, even when an alias names another URL.
+  const identity =
+    'loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)
+      ? target.loadOptions.config?.url || target.loadProviderPath
+      : target.id;
+  if (column && column !== (ref.label || target.label || identity)) {
+    return;
+  }
+  return { target, cloud };
+}
+
+async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
+  const providers = eval_.config.providers ?? [];
+  const sources = Array.isArray(providers) ? providers : [providers];
+  const columns = promptIndex === undefined ? [] : eval_.getPrompts();
+  const name = promptIndex === undefined ? undefined : columns[promptIndex]?.provider;
+  if (promptIndex === undefined ? sources.length !== 1 : !name) {
+    throw new Error('Ambiguous replay request');
+  }
+  const unique = !!name && columns.every((col, i) => i === promptIndex || col.provider !== name);
+  const resolved = sources.flatMap((source) => {
+    try {
+      const definitions = resolveProviderConfigs([source], { basePath: eval_.config.basePath });
+      return Array.isArray(definitions) ? definitions : [definitions];
+    } catch (error) {
+      // An unavailable file cannot supply a target. Require one positive column match below.
+      if (unique && normalizeProviderRef(source).kind === 'file') {
+        return [];
+      }
+      throw error;
+    }
+  });
+  let selected;
+  for (const provider of resolved) {
+    const candidate = prepareReplayCandidate(provider);
+    const match = await matchReplayTarget(normalizeProviderRef(candidate), name, unique);
+    if (match) {
+      if (selected) {
+        throw new Error('Ambiguous replay request');
+      }
+      selected = { candidate, ...match };
+    }
+  }
+  if (!selected) {
+    throw new Error('No matching replay provider');
+  }
+  return selected;
 }
 
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
@@ -634,135 +767,14 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Get the provider configuration from the eval
-    const providers = eval_.config.providers;
-    if (!providers) {
+    if (!eval_.config.providers) {
       res.status(400).json({ error: 'No providers found in evaluation' });
       return;
     }
 
-    // Resolve declarative files and cloud targets once, before any provider operation.
-    const cloudProviders = new Map<string, Awaited<ReturnType<typeof getProviderFromCloud>>>();
-    const cloudKey = (id: string, options?: object) => JSON.stringify([id, options ?? {}]);
-    const inspectedProvider = (provider: unknown) => {
-      const ref = normalizeProviderRef(provider);
-      if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
-        return cloudProviders.get(
-          cloudKey(
-            getCloudDatabaseId(ref.loadProviderPath),
-            'loadOptions' in ref ? ref.loadOptions : {},
-          ),
-        );
-      }
-      return provider;
-    };
-    let replayProviders;
+    let selected;
     try {
-      const sources = Array.isArray(providers) ? providers : [providers];
-      const column = promptIndex === undefined ? undefined : eval_.getPrompts()[promptIndex];
-      if (promptIndex === undefined ? sources.length !== 1 : !column) {
-        throw new Error('Ambiguous replay request');
-      }
-      const resolved = sources.flatMap((source) => {
-        try {
-          const definitions = resolveProviderConfigs([source], { basePath: eval_.config.basePath });
-          return Array.isArray(definitions) ? definitions : [definitions];
-        } catch (error) {
-          // An unavailable file cannot supply a target. Require one positive column match below.
-          if (column && normalizeProviderRef(source).kind === 'file') {
-            return [];
-          }
-          throw error;
-        }
-      });
-      // Replay replaces saved prompt-routing filters, while retaining local options.
-      const candidates = resolved.map((provider) => {
-        const ref = normalizeProviderRef(provider);
-        if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
-          return provider;
-        }
-        let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
-        let providerPath = ref.loadProviderPath;
-        if (/\{[{%]/.test(providerPath)) {
-          // Permit one direct environment lookup for the built-in local echo.
-          // Never evaluate expressions or pass operational options to the generic loader.
-          const lookup = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(providerPath);
-          const hasExtraOptions = Object.keys(options ?? {}).some(
-            (key) => !['id', 'label', 'env', 'prompts'].includes(key),
-          );
-          const alias = options?.id === providerPath ? undefined : options?.id;
-          const dynamicMetadata = [alias, options?.label].some(
-            (value) => value !== undefined && (typeof value !== 'string' || /\{[{%#]/.test(value)),
-          );
-          if (
-            !lookup ||
-            lookup[0] !== providerPath ||
-            hasExtraOptions ||
-            dynamicMetadata ||
-            getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
-          ) {
-            throw new Error('Cannot identify the replay provider safely');
-          }
-          const key = lookup[1];
-          const value =
-            options?.env && Object.hasOwn(options.env, key)
-              ? options.env[key]
-              : getTemplateEnvValue(key);
-          if (value !== 'echo') {
-            throw new Error('Cannot identify the replay provider safely');
-          }
-          providerPath = 'echo';
-          if (options) {
-            options = {
-              id: alias ?? providerPath,
-              ...(options.label ? { label: options.label } : {}),
-            };
-          }
-        }
-        if (options?.label && /\{[{%#]/.test(options.label)) {
-          const key = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(options.label)?.[1];
-          const label =
-            key && options.env && Object.hasOwn(options.env, key) ? options.env[key] : undefined;
-          if (!label || /\{[{%#]/.test(label) || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
-            throw new Error('Cannot identify the replay provider safely');
-          }
-          options = { ...options, label };
-        }
-        if (ref.kind === 'map') {
-          return {
-            [providerPath]: {
-              ...options,
-              id: options?.id === ref.loadProviderPath ? providerPath : options?.id,
-              prompts: ['Replay'],
-            },
-          };
-        }
-        return { ...options, id: providerPath, prompts: ['Replay'] };
-      });
-      for (const candidate of candidates) {
-        const ref = normalizeProviderRef(candidate);
-        if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
-          const id = getCloudDatabaseId(ref.loadProviderPath);
-          const options = 'loadOptions' in ref ? ref.loadOptions : {};
-          cloudProviders.set(cloudKey(id, options), await getProviderFromCloud(id, options));
-        }
-      }
-      replayProviders = column
-        ? candidates.filter((candidate) => {
-            const ref = normalizeProviderRef(candidate);
-            const target = normalizeProviderRef(inspectedProvider(candidate));
-            const label = ref.label || target.label;
-            if (label) {
-              return label === column.provider;
-            }
-            // HttpProvider.id() returns config.url even if its loader path is a different URL.
-            const identity =
-              'loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)
-                ? target.loadOptions.config?.url || target.loadProviderPath
-                : target.id;
-            return identity === column.provider;
-          })
-        : candidates;
+      selected = await selectReplayProvider(eval_, promptIndex);
     } catch (error) {
       sendError(
         res,
@@ -772,36 +784,20 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       );
       return;
     }
-    if (replayProviders.length !== 1) {
-      res
-        .status(400)
-        .json({ error: 'Cannot resolve the replay provider. Rerun using the eval configuration.' });
+
+    const { candidate, cloud, target } = selected;
+    const replayError = getReplayProviderError(target);
+    if (replayError) {
+      res.status(400).json({ error: replayError });
       return;
     }
-    for (const provider of replayProviders) {
-      const replayError = getReplayProviderError(inspectedProvider(provider));
-      if (replayError) {
-        res.status(400).json({ error: replayError });
-        return;
-      }
-    }
-
     const evaluateReplay = () =>
       evaluateWithSource(
         {
-          prompts: [
-            {
-              raw: prompt,
-              label: 'Replay', // Add required label field
-            },
-          ],
-          providers: replayProviders,
+          prompts: [{ raw: prompt, label: 'Replay' }],
+          providers: [candidate],
           basePath: eval_.config.basePath,
-          tests: [
-            {
-              vars: (variables || {}) as Vars,
-            },
-          ],
+          tests: [{ vars: (variables ?? {}) as Vars }],
         },
         {
           maxConcurrency: 1,
@@ -811,11 +807,13 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         },
       );
     // Keep native cloud/local merge semantics without rereading a different target.
-    const result = await (cloudProviders.size > 0
+    const result = await (cloud
       ? withCloudProviderResolver((id, options) => {
-          const provider = cloudProviders.get(cloudKey(id, options));
-          invariant(provider, 'Replay requested a provider outside the inspected selection');
-          return provider;
+          invariant(
+            id === cloud.id && JSON.stringify(options ?? {}) === JSON.stringify(cloud.options),
+            'Replay requested a provider outside the inspected selection',
+          );
+          return cloud.provider;
         }, evaluateReplay)
       : evaluateReplay());
 
