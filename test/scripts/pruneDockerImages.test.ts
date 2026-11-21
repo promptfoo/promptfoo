@@ -1,7 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
+import * as yaml from 'js-yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 import { type PackageVersion, planPrune } from '../../scripts/pruneDockerImages.mjs';
 
@@ -33,6 +35,30 @@ function removedTags(versions: PackageVersion[], extraTags: string[] = []): stri
 }
 
 describe('pruneDockerImages', () => {
+  it('only runs package-token jobs on main and locks publication during deletion', () => {
+    const file = path.resolve(import.meta.dirname, '../../.github/workflows/docker-prune.yml');
+    const { on, jobs } = yaml.load(readFileSync(file, 'utf8')) as {
+      on: Record<string, unknown>;
+      jobs: Record<string, { steps: { uses?: string; with?: unknown }[] }>;
+    };
+    expect(Object.keys(on).sort()).toEqual(['schedule', 'workflow_dispatch']);
+    expect(Object.keys(jobs).sort()).toEqual(['plan', 'prune']);
+    const main = "github.ref == 'refs/heads/main'";
+    expect(jobs.plan).toMatchObject({ if: main, permissions: { packages: 'read' } });
+    expect(jobs.prune).toMatchObject({
+      if: `${main} && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.delete))`,
+      permissions: { packages: 'write' },
+      concurrency: {
+        group: 'docker-publish-${{ github.repository }}',
+        'cancel-in-progress': false,
+      },
+    });
+    for (const { steps } of Object.values(jobs)) {
+      const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
+      expect(checkouts.map((step) => step.with)).toEqual([{ 'persist-credentials': false }]);
+    }
+  });
+
   it('removes an old build that has only its commit tag', () => {
     expect(removedTags([version('a', ['sha-0123abc'])])).toEqual([['sha-0123abc']]);
   });
