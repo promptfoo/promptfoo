@@ -360,7 +360,8 @@ describe('AzureChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.cost).toBeCloseTo(cached ? 0 : (1_000 * 0.55 + 500 * 2.19) / 1e6, 12);
+      expect(result.cached).toBe(cached);
+      expect(result.cost).toBeCloseTo((1_000 * 0.55 + 500 * 2.19) / 1e6, 12);
       const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
       expect(request.model).toBe('DeepSeek-R1');
     });
