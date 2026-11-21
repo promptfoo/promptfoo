@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDb } from '../../src/database/index';
+import { getDb, getDbIfExists } from '../../src/database/index';
 import { mockGlobal } from '../util/utils';
 
 const mockRandomUUID = vi.fn(() => 'test-uuid');
@@ -12,7 +12,7 @@ afterAll(() => {
   restoreCrypto();
 });
 
-vi.mock('../../src/database/index', () => ({ getDb: vi.fn() }));
+vi.mock('../../src/database/index', () => ({ getDb: vi.fn(), getDbIfExists: vi.fn() }));
 
 // Mock logger
 vi.mock('../../src/logger', () => ({
@@ -64,6 +64,7 @@ describe('TraceStore', () => {
     };
 
     vi.mocked(getDb).mockResolvedValue(mockDb);
+    vi.mocked(getDbIfExists).mockResolvedValue(mockDb);
     traceStore = new TraceStore();
   });
 
@@ -277,6 +278,12 @@ describe('TraceStore', () => {
   });
 
   describe('getTracesByEvaluation', () => {
+    it('does not create a database when no evaluation has been stored', async () => {
+      vi.mocked(getDbIfExists).mockResolvedValueOnce(null);
+      expect(await traceStore.getTracesByEvaluation('missing')).toEqual([]);
+      expect(getDb).not.toHaveBeenCalled();
+    });
+
     it('should retrieve all traces for an evaluation', async () => {
       const mockTraces = [
         { id: '1', traceId: 'trace-1', evaluationId: 'eval-1', testCaseId: 'test-case-1' },
