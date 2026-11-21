@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import {
   getCache,
   getCacheClearGeneration,
@@ -10,12 +9,28 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
+import { formatLegacyCompletionPrompt } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderResponse } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { AnthropicCompletionOptions } from './types';
 
-function getCompletionRequestMetadata(params: Anthropic.CompletionCreateParams) {
+interface CompletionRequest {
+  model: string;
+  prompt: string;
+  max_tokens_to_sample: number;
+  temperature: number;
+  stop_sequences: string[];
+}
+
+interface CompletionResponse {
+  model: string;
+  stop_reason: string | null;
+  type: 'completion';
+  completion: string;
+}
+
+function getCompletionRequestMetadata(params: CompletionRequest) {
   return {
     model: params.model,
     promptLength: params.prompt.length,
@@ -27,7 +42,7 @@ function getCompletionRequestMetadata(params: Anthropic.CompletionCreateParams) 
   };
 }
 
-function getCompletionResponseMetadata(response: Anthropic.Completion) {
+function getCompletionResponseMetadata(response: CompletionResponse) {
   return {
     model: response.model,
     stopReason: response.stop_reason,
@@ -54,12 +69,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: {
-      config?: AnthropicCompletionOptions;
-      id?: string;
-      label?: string;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<
+      ProviderOptions<AnthropicCompletionOptions>,
+      'config' | 'id' | 'label' | 'env'
+    > = {},
   ) {
     super(modelName, options);
   }
@@ -80,12 +93,17 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       throw new Error(`ANTHROPIC_STOP is not a valid JSON string: ${err}`);
     }
 
-    const params: Anthropic.CompletionCreateParams = {
+    const scopedTemperature = Number.parseFloat(this.env?.ANTHROPIC_TEMPERATURE ?? '');
+    const params: CompletionRequest = {
       model: this.modelName,
-      prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
+      prompt: formatLegacyCompletionPrompt(prompt),
       max_tokens_to_sample:
         this.config?.max_tokens_to_sample ?? getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
-      temperature: this.config.temperature ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+      temperature:
+        this.config.temperature ??
+        (Number.isNaN(scopedTemperature)
+          ? getEnvFloat('ANTHROPIC_TEMPERATURE', 0)
+          : scopedTemperature),
       stop_sequences: stop,
     };
 
@@ -117,7 +135,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     let response;
     try {
-      response = await this.anthropic.completions.create(params);
+      response = await this.anthropic.post<CompletionResponse>('/v1/complete', {
+        body: params,
+        headers: this.config.headers,
+      });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,

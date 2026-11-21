@@ -5,7 +5,6 @@
 
 export interface RawDiffEntry {
   path: string;
-  oldPath?: string;
   status: string;
   shaA: string | null;
   shaB: string | null;
@@ -22,7 +21,7 @@ export interface RawDiffEntry {
  *
  * Note: Rename/Copy status includes similarity (e.g., R100, R90, C100)
  */
-export function parseRawDiff(rawOutput: string): RawDiffEntry[] {
+export function parseRawDiff(rawOutput: string, regularFilesOnly = false): RawDiffEntry[] {
   const entries = rawOutput.split('\0').filter(Boolean);
   const results: RawDiffEntry[] = [];
 
@@ -41,40 +40,38 @@ export function parseRawDiff(rawOutput: string): RawDiffEntry[] {
       continue;
     }
 
-    const shaA = parts[2] === '0000000000000000000000000000000000000000' ? null : parts[2];
-    const shaB = parts[3] === '0000000000000000000000000000000000000000' ? null : parts[3];
+    const shaA = /^0+$/.test(parts[2]) ? null : parts[2];
+    const shaB = /^0+$/.test(parts[3]) ? null : parts[3];
     const status = parts[4];
 
     // Check if this is a rename or copy operation
     // Status will be like: R100, R90, C100, C95, etc.
-    const isRenameOrCopy = status.startsWith('R') || status.startsWith('C');
-
-    if (isRenameOrCopy) {
+    if (status.startsWith('R') || status.startsWith('C')) {
       // Renames and copies have TWO paths: oldpath and newpath
       // Format: metadata\0oldpath\0newpath\0
-      const oldPath = entries[i];
       i++;
-      const newPath = entries[i];
-      i++;
-
-      if (!oldPath || !newPath) {
-        continue;
-      }
-
-      // Use the new/destination path as the main path
-      results.push({ path: newPath, oldPath, status, shaA, shaB });
-    } else {
-      // Normal operations (M, A, D) have ONE path
-      // Format: metadata\0path\0
-      const filePath = entries[i];
-      i++;
-
-      if (!filePath) {
-        continue;
-      }
-
-      results.push({ path: filePath, status, shaA, shaB });
     }
+
+    // Normal operations (M, A, D) have ONE path
+    // Format: metadata\0path\0
+    // Use the new/destination path as the main path for renames and copies.
+    const filePath = entries[i];
+    i++;
+
+    if (!filePath) {
+      continue;
+    }
+
+    // An absent side is normal for adds and deletes. Never share a symlink or gitlink blob.
+    if (
+      regularFilesOnly &&
+      (![parts[0].slice(1), parts[1]].every((mode) => /^(?:100644|100755|000000)$/.test(mode)) ||
+        !['A', 'M', 'D'].includes(status))
+    ) {
+      continue;
+    }
+
+    results.push({ path: filePath, status, shaA, shaB });
   }
 
   return results;
