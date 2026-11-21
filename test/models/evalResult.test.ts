@@ -2381,6 +2381,7 @@ describe('EvalResult', () => {
           }
         }
         const provider = new LocalProvider();
+        const serializer = vi.spyOn(provider, 'toJSON');
         const prompt = createPrompt('Hello', {
           config: { provider: mapped ? { text: provider } : provider },
         });
@@ -2396,9 +2397,7 @@ describe('EvalResult', () => {
         expect(provider.runtimeOnly).toBe('ordinary working state');
         expect(provider.prompts).toEqual(['ordinary selector']);
         expect(mapped ? prompt.config.provider.text : prompt.config.provider).toBe(provider);
-        if (!strip) {
-          expect(projected).toBe(prompt);
-        }
+        expect(serializer).not.toHaveBeenCalled();
       },
     );
   });

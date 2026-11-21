@@ -338,9 +338,14 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
         id: id.bind(provider),
         callApi: getDataMethod(provider, 'callApi'),
       };
-      return isApiProvider(snapshot)
-        ? sanitizeForDbWithSecrets(toSerializableProviderRef(snapshot))
-        : sanitizeProvider(snapshot as ProviderOptions);
+      const reference = isApiProvider(snapshot)
+        ? toSerializableProviderRef(snapshot)
+        : {
+            ...sanitizeProvider(snapshot as ProviderOptions),
+            // Historical class instances can expose id() and selectors without callApi().
+            prompts: descriptors.prompts?.enumerable ? descriptors.prompts.value : undefined,
+          };
+      return sanitizeForDbWithSecrets(reference);
     }
     if (typeof id === 'string') {
       const { id: _id, label, config, ...options } = getDataProperties(provider) as ProviderOptions;
