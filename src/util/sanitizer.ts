@@ -1362,7 +1362,7 @@ function sanitizePlainObject(
   sanitizeUrls: boolean,
   isEnvMap: boolean,
 ): any {
-  const sanitized: any = {};
+  const sanitized: Record<string, unknown> = Object.create(null);
   let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [rawKey, value] of Object.entries(obj)) {
@@ -1431,7 +1431,7 @@ function sanitizePlainObject(
           : sanitizedValue;
     }
   }
-  return sanitized;
+  return { ...sanitized };
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   isMcpToolNameFilter,
   normalizeMcpToolContent,
   renderAuthVars,
+  sanitizeMcpToolData,
 } from '../../../src/providers/mcp/util';
 
 import type {
@@ -717,5 +718,145 @@ describe('OAuth cancellation ownership', () => {
     controller.abort();
     await rejected;
     expect(mockFetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe('sanitizeMcpToolData', () => {
+  it('keeps tool names and public words while inspecting their arguments', () => {
+    const args = { authors: ['Alice'], authorName: 'Alice', tokenizer: 'cl100k_base' };
+    expect(
+      sanitizeMcpToolData({
+        name: 'reset_password',
+        args: { ...args, authorAccessToken: 'private', authorization: 'private' },
+      }),
+    ).toEqual({
+      name: 'reset_password',
+      args: { ...args, authorAccessToken: '[REDACTED]', authorization: '[REDACTED]' },
+    });
+  });
+
+  it('keeps ordinary SQL comparisons while removing credential assignments and JWTs', () => {
+    const query = 'SELECT name FROM products WHERE category = ? AND price=?';
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'e30', 'unsigned'].join('.');
+    const data = { query, cookieText: 'private', note: `signed ${jwt}`, label: '2 + 2 = 4' };
+    expect(sanitizeMcpToolData(data)).toEqual({
+      ...data,
+      cookieText: '[REDACTED]',
+      note: '[REDACTED]',
+    });
+  });
+
+  it('retains plain text starting with delimiters while protecting malformed data', () => {
+    const content = [
+      '[INFO] Operation complete',
+      '[section]\npath=docs',
+      '{{ user.name }}',
+      '"hello" again',
+    ];
+    expect(sanitizeMcpToolData({ content })).toEqual({ content });
+  });
+
+  it('checks aliased header maps without dropping public headers', () => {
+    const headers = { 'X-Goog-Iap-Jwt-Assertion': 'short', accept: 'application/json' };
+    expect(sanitizeMcpToolData({ requestHeaders: headers })).toEqual({
+      requestHeaders: { ...headers, 'X-Goog-Iap-Jwt-Assertion': '[REDACTED]' },
+    });
+  });
+
+  it.each([
+    'basicAuth',
+    'myAuth',
+    'authHeaders',
+    'sessionCookie',
+    'cookieJar',
+    'subscriptionKey',
+    'userCredential',
+    'databaseDsn',
+    'dbPwd',
+    'clientSecrets',
+    'apiKeysByTenant',
+    'apiKeyMap',
+    'clientSecretMap',
+    'passwordList',
+    'AWS_SECRET_ACCESS_KEY',
+    'revokedApiKeys',
+  ])('omits the entire credential container %s', (name) => {
+    const data = { [name]: { 'private-fixture': [123456] }, public: 3 };
+    expect(sanitizeMcpToolData(data)).toEqual({ [name]: '[REDACTED]', public: 3 });
+  });
+
+  it.each(
+    [
+      { name: 'databasePassword', value: 'private-fixture' },
+      { key: 'apiKey', value: 'private-fixture' },
+      { header: 'Authorization', values: ['private-fixture'] },
+      { name: 'apiKey', default: 'private-fixture' },
+      { name: 'X-Goog-Iap-Jwt-Assertion', in: 'header', example: 'private-fixture' },
+      { name: 'Authorization', schema: { example: 'private-fixture' } },
+      { request_headers: JSON.stringify({ 'X-Honeycomb-Team': 'private-fixture' }) },
+      { extraHeaders: [['X-Goog-Iap-Jwt-Assertion', 'private-fixture']] },
+      { name: 'authorAccessToken', fieldValue: 'private-fixture' },
+      ['Authorization', 'private-fixture'],
+      'Bearer private-fixture',
+      ' urn:credential:private-fixture',
+      '\0u\tr\rn\n:private-fixture',
+      { ' ur\tn:private-fixture': true },
+      'jdbc:postgresql://alice:private-fixture@db',
+      'dbPwd=private-fixture',
+      'sent password = private-fixture',
+      'run --env=API_KEY=private-fixture',
+      '[section]\npassword=private-fixture',
+      '{"apiKey":"private-fixture"',
+      '["X-Honeycomb-Team","private-fixture"',
+      '{"\\u0070wd":"private-fixture"',
+      'user=alice&value=private-fixture',
+      { client_assertion: 'private-fixture' },
+      { name: 'jwt', value: 'private-fixture' },
+      { note: 'proof eyJhbGciOiJIUzI1NiJ9.e30.private-fixture' },
+      'https://host.test/?subscriptionKey=private-fixture',
+      encodeURIComponent('jdbc:postgresql://alice:private-fixture@db'),
+      encodeURIComponent(encodeURIComponent('password=private-fixture')),
+      encodeURIComponent(JSON.stringify({ clientSecret: 'private-fixture' })),
+      JSON.stringify({ databasePassword: 'private-fixture' }),
+      { 'https://host.test/?api_key=private-fixture': true },
+    ].map((value) => ({ value })),
+  )('removes private values from encoded and named entries', ({ value }) => {
+    for (const key of ['value', 'url', 'apiHost', 'callbackUrl']) {
+      const data = { a: { b: { c: { d: { [key]: value, page: 2 } } } } };
+      const safe = JSON.stringify(sanitizeMcpToolData(data));
+      expect(safe).not.toContain('private-fixture');
+      expect(safe).toContain('"page":2');
+    }
+  });
+
+  it('keeps plural metadata, checks its children, and preserves __proto__ as an own property', () => {
+    const value = JSON.parse('{"__proto__":{"hidden":"public","basicAuth":"private"}}');
+    Object.assign(value, {
+      tokenUsages: [{ input: 4, model: 'demo' }],
+      maxTokens: 100,
+      passwordPolicies: [{ minLength: 8, dbPassword: 'private' }],
+    });
+    const safe = sanitizeMcpToolData(value);
+    expect(safe.hidden).toBeUndefined();
+    expect(Object.hasOwn(safe, '__proto__')).toBe(true);
+    expect(safe.tokenUsages).toEqual(value.tokenUsages);
+    expect(safe.passwordPolicies[0].minLength).toBe(8);
+    expect(safe.maxTokens).toBe(100);
+    expect(JSON.stringify(safe)).not.toContain('private');
+  });
+
+  it('fails closed on an unreadable or oversized payload and limits nesting', () => {
+    const value = {
+      get data() {
+        throw new Error('private-fixture');
+      },
+    };
+    expect(sanitizeMcpToolData(value)).toMatch(/omitted/);
+    expect(sanitizeMcpToolData('x'.repeat(4 * 1024 * 1024))).toMatch(/omitted/);
+    let deep: unknown = 'private-fixture';
+    for (let i = 0; i < 10000; i++) {
+      deep = { next: deep };
+    }
+    expect(JSON.stringify(sanitizeMcpToolData(deep))).not.toContain('private-fixture');
   });
 });

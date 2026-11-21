@@ -212,7 +212,7 @@ describe('MCPProvider', () => {
       });
       expect(debug).toHaveBeenCalledWith('MCP Provider calling tool', {
         toolName: 'lookup_user',
-        argumentNames: ['sessionToken', 'custom', 'nested', 'apiKey', 'id'],
+        argumentCount: 5,
       });
       const debugCalls = JSON.stringify(debug.mock.calls);
       for (const value of [configuredToken, configuredPassword, customValue, promptKey]) {
@@ -221,6 +221,20 @@ describe('MCPProvider', () => {
     } finally {
       debug.mockRestore();
     }
+  });
+
+  it('keeps deep public data in both metadata copies without changing tool execution', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const args = { a: { b: { c: { d: { page: 2, subscriptionKey: 'fixture' } } } } };
+    const visible = { a: { b: { c: { d: { page: 2, subscriptionKey: '[REDACTED]' } } } } };
+    const result = await provider.callApi('', createContext({ tool: 'lookup', args }));
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup', args);
+    expect(result.metadata).toMatchObject({
+      toolArgs: visible,
+      originalPayload: { tool: 'lookup', args: visible },
+    });
+    expect(args.a.b.c.d.subscriptionKey).toBe('fixture');
   });
 
   it('still accepts defaultArgs passed as a constructor option', async () => {

@@ -129,7 +129,7 @@ export class MCPProvider implements ApiProvider {
 
       logger.debug('MCP Provider calling tool', {
         toolName,
-        argumentNames: Object.keys(finalArgs),
+        argumentCount: Object.keys(finalArgs).length,
       });
 
       // Call the MCP tool
