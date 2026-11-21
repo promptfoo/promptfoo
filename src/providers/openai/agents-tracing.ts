@@ -694,9 +694,10 @@ function sanitizeCredentialText(value: string, inspectEncoding = true): string {
 
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
-  const redactCurl = curlArgumentRedactor(value);
+  const command = value.replace(/\\\r?\n/g, '');
+  const redactCurl = curlArgumentRedactor(command);
   if (redactCurl) {
-    value = value.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
+    value = command.replace(COMMAND_WORDS, (word) => redactCurl(word) ?? word);
   }
   let match: RegExpExecArray | null;
   let sanitized = '';
@@ -831,8 +832,9 @@ function curlArgumentRedactor(command: string | unknown[]) {
       return;
     }
     const arg = word.replace(/^(["'])(.*)\1$/s, '$2');
+    // curl permits short options without operands before the credential flag.
     const flag =
-      /^(?:-[sSfLkvI]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
+      /^(?:-[#0-46:aBfgGiIjJklLMnNOpqRsSvVZ]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
         arg,
       )?.[0];
     if (!flag) {

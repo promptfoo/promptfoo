@@ -221,6 +221,9 @@ describe('OTLPTracingExporter', () => {
         '--oauth2-bearer',
         'opaque/bearer',
         '-Ubot:opaque/attached',
+        '-iu',
+        'bot:opaque/group',
+        '-NgUbot:opaque/group-attached',
         '--proxy-user=bot:opaque/long',
         '-su"bot:opaque/secret phrase"',
         '--pass',
@@ -233,6 +236,7 @@ describe('OTLPTracingExporter', () => {
         {
           argv: args,
           text: args.join(' '),
+          continued: 'curl -u \\\n bot:opaque/password https://host',
           unrelated: 'git push -uorigin main',
         },
         format,
