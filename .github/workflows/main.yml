@@ -1143,3 +1143,9 @@ jobs:
         working-directory: src/golang
         run: |
           go test -v wrapper.go wrapper_test.go
+
+      - name: Build Go provider example
+        working-directory: examples/provider-golang
+        run: |
+          go build ./...
+          go vet ./...

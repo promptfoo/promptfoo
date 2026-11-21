@@ -74,6 +74,11 @@ export class GolangProvider implements ApiProvider {
     abortSignal?: AbortSignal,
   ): Promise<any> {
     abortSignal?.throwIfAborted();
+    if (this.functionName && !['CallApi', 'call_api'].includes(this.functionName)) {
+      throw new Error(
+        `Go providers must export a function named 'CallApi'. The configuration requested '${this.functionName}'.`,
+      );
+    }
     const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
@@ -166,7 +171,12 @@ export class GolangProvider implements ApiProvider {
           ['list', '-json', '.'],
           scriptDir,
         );
-        const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
+        let packageInfo: { ImportPath?: string; Name?: string };
+        try {
+          packageInfo = JSON.parse(packageJson);
+        } catch {
+          throw new Error("Could not parse 'go list' output for the Go provider package");
+        }
         let buildDir = scriptDir;
         let buildFiles = ['wrapper.go', path.basename(relativeScriptPath)];
 
@@ -176,11 +186,12 @@ export class GolangProvider implements ApiProvider {
           }
 
           buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
+          const adapter = 'promptfoo_adapter.go';
           await fs.writeFile(
-            path.join(buildDir, 'provider.go'),
-            `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = provider.CallApi\n`,
+            path.join(buildDir, adapter),
+            `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = ApiFunc(provider.CallApi)\n`,
           );
-          buildFiles = ['wrapper.go', 'provider.go'];
+          buildFiles = ['wrapper.go', adapter];
         }
 
         await fs.copyFile(
