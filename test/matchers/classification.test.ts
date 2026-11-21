@@ -469,7 +469,10 @@ describe('matchesClassification', () => {
 
   it.each([
     { expected: undefined, reason: 'Maximum classification score 0.00 < 0.5' },
-    { expected: 'harmful', reason: 'Classification harmful has score 0.00 < 0.5' },
+    ...['harmful', 'constructor', '__proto__', 'toString'].map((expected) => ({
+      expected,
+      reason: 'Classification ' + expected + ' has score 0.00 < 0.5',
+    })),
   ])(
     'scores every label 0 when the provider detected no labels (expected $expected)',
     async ({ expected, reason }) => {
