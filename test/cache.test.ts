@@ -69,6 +69,7 @@ vi.mock('cache-manager', () => ({
     const expiresAt = new Map<string, number>();
     const inflight = new Map<string, Promise<unknown>>();
     const memoryStore = {
+      opts: { store: cache },
       iterator: vi.fn().mockImplementation(async function* (namespace?: string) {
         const prefix = namespace ? `${namespace}:` : undefined;
         for (const [key, value] of cache.entries()) {
@@ -251,7 +252,7 @@ describe('cache configuration', () => {
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
     expect(cache.stores.length).toBeGreaterThan(0);
-    const expectedCachePath = path.join('/mock/config/path', 'cache');
+    const expectedCachePath = path.resolve('/mock/config/path', 'cache');
     expect(createDiskCache).toHaveBeenCalledWith(
       path.join(expectedCachePath, 'cache.json'),
       cacheModule.getCacheTtlMs(),
@@ -297,7 +298,7 @@ describe('cache configuration', () => {
 
     expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
     await cacheModule.clearCache();
-    expect(rmSync).toHaveBeenCalledWith(path.join('/custom/cache/path', 'claims'), {
+    expect(rmSync).toHaveBeenCalledWith(path.resolve('/custom/cache/path', 'claims'), {
       force: true,
       recursive: true,
     });
@@ -313,7 +314,9 @@ describe('cache configuration', () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
+    expect(fs.mkdirSync).toHaveBeenCalledWith(path.resolve('/custom/cache/path'), {
+      recursive: true,
+    });
   });
 
   it('converts the configured cache TTL from seconds to milliseconds', async () => {

@@ -1524,7 +1524,31 @@
     "__schema36": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema7"
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema7"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "PROMPTFOO_CACHE_ENABLED": {
+                  "type": "string"
+                },
+                "PROMPTFOO_CACHE_PATH": {
+                  "type": "string"
+                },
+                "PROMPTFOO_CACHE_TTL": {
+                  "type": "string"
+                },
+                "PROMPTFOO_CACHE_TYPE": {
+                  "type": "string"
+                },
+                "PROMPTFOO_CONFIG_DIR": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
         },
         {
           "type": "object",
