@@ -185,6 +185,8 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   );
 }
 
+const warnedImplicitGraders = new WeakSet<object>();
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -241,12 +243,18 @@ export async function getGradingProvider(
     const defaultTest = cliState.config?.defaultTest;
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
-      defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.text || undefined,
-      defaultTestObj?.options?.provider || undefined,
+      { provider: defaultTestObj?.provider || undefined, source: 'defaultTest.provider' },
+      {
+        provider: defaultTestObj?.options?.provider?.text || undefined,
+        source: 'defaultTest.options.provider.text',
+      },
+      {
+        provider: defaultTestObj?.options?.provider || undefined,
+        source: 'defaultTest.options.provider',
+      },
     ];
 
-    const cfg = fallbackProviders.find((candidateProvider) => {
+    const fallback = fallbackProviders.find(({ provider: candidateProvider }) => {
       if (!candidateProvider) {
         return false;
       }
@@ -259,13 +267,22 @@ export async function getGradingProvider(
       return true;
     });
 
+    const cfg = fallback?.provider;
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
-      if (finalProvider) {
-        logger.debug('[Grading] Using provider from defaultTest fallback', {
-          providerId: finalProvider.id(),
-        });
+      const scope = cliState.envScope ?? defaultTestObj;
+      if (
+        finalProvider &&
+        scope &&
+        type === 'text' &&
+        fallback?.source === 'defaultTest.provider' &&
+        !warnedImplicitGraders.has(scope)
+      ) {
+        warnedImplicitGraders.add(scope);
+        logger.warn(
+          '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured. Set --grader, defaultTest.options.provider, or an assertion-level provider to choose a separate grader.',
+        );
       }
     } else {
       finalProvider = defaultProvider;
