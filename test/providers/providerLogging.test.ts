@@ -50,6 +50,10 @@ describe('credential redaction', () => {
     ).toBe(`${REDACTED} Bearer ${REDACTED} ${REDACTED}`);
   });
 
+  it('omits both ends of partially overlapping credentials', () => {
+    expect(redactCredentials('pre-middle-tail', ['pre-middle', 'middle-tail'])).toBe(REDACTED);
+  });
+
   it('redacts short upstream authorization tokens', () => {
     expect(redactCredentials('Bearer abc123; Basic dTpw; Bearer z', [])).toBe(
       `Bearer ${REDACTED}; Basic ${REDACTED}; Bearer ${REDACTED}`,

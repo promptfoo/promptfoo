@@ -65,13 +65,20 @@ export function getHeaderCredentialForms(value: string): string[] {
 /** Characters that continue a credential-like token, such as base64 or URL-safe text. */
 const TOKEN_CHARACTER = /[A-Za-z0-9._~+/=-]/;
 
-/** Restrict ambiguous short values to token boundaries. */
-function redactCredential(text: string, credential: string, anywhere: boolean): string {
-  if (credential.length > text.length) {
-    return text;
+type Redact = (start: number, end: number, replacement?: string) => void;
+
+function matchCredential(text: string, credential: string, anywhere: boolean, redact: Redact) {
+  if (!credential || credential.length > text.length) {
+    return;
   }
   if (anywhere && !/%[\da-f]{2}/i.test(credential)) {
-    return text.split(credential).join(REDACTED);
+    let start = text.indexOf(credential);
+    while (start !== -1) {
+      const end = start + credential.length;
+      redact(start, end);
+      start = text.indexOf(credential, end);
+    }
+    return;
   }
   // A percent escape may change hex case or have its '%' encoded again by nested transports.
   const pattern = credential
@@ -82,11 +89,9 @@ function redactCredential(text: string, credential: string, anywhere: boolean): 
         : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
     )
     .join('');
-  return text.replace(new RegExp(pattern, 'g'), (match, start: number) => {
-    if (anywhere) {
-      return REDACTED;
-    }
-    const end = start + match.length;
+  for (const match of text.matchAll(new RegExp(pattern, 'g'))) {
+    const start = match.index;
+    const end = start + match[0].length;
     const before = text.charAt(start - 1);
     const after = text.charAt(end);
     // A key=value separator can precede a token, and a sentence-ending period can follow it.
@@ -94,33 +99,10 @@ function redactCredential(text: string, credential: string, anywhere: boolean): 
     const endsToken =
       !TOKEN_CHARACTER.test(after) ||
       (after === '.' && !TOKEN_CHARACTER.test(text.charAt(end + 1)));
-    return startsToken && endsToken ? REDACTED : match;
-  });
-}
-
-/**
- * Redact known credentials, longest first so a credential containing another is fully removed,
- * then bearer/Basic tokens and OpenAI-style keys that were never configured locally.
- */
-export function redactCredentials(
-  text: string,
-  credentials: Iterable<string>,
-  embedded?: ReadonlySet<string>,
-): string {
-  let redacted = text;
-  const ordered = [...new Set(credentials)].filter(Boolean).sort((a, b) => b.length - a.length);
-  for (const credential of ordered) {
-    redacted = redactCredential(
-      redacted,
-      credential,
-      credential.length >= 8 || embedded?.has(credential) === true,
-    );
+    if (anywhere || (startsToken && endsToken)) {
+      redact(start, end);
+    }
   }
-  return redacted
-    .replace(/\b(Bearer|Basic)\s+(?:[\w.~+/=-]|\[REDACTED\])+/gi, `$1 ${REDACTED}`)
-    .replace(/\bsk-(?:[\w-]|\[REDACTED\])+/g, (key) =>
-      key.length >= 19 || key.includes(REDACTED) ? REDACTED : key,
-    );
 }
 
 /** Credential names per the shared sanitizer: config keys, env vars, headers, and text fields. */
@@ -156,31 +138,13 @@ const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
   bare: /[\s,;&})\]"'\\]/g,
 };
 
-/** Redact known credentials, URLs, and credential fields in upstream diagnostics. */
-export function redactDiagnosticText(
-  text: string,
-  credentials: Iterable<string>,
-  embedded?: ReadonlySet<string>,
-): string {
-  // Undo slash escaping on both sides before sorting, preserving the original
-  // strength of a credential that contained a literal backslash.
-  if (text.includes('\\/')) {
-    const slash = /(?<!\\)\\+\//g;
-    const strong = new Set<string>();
-    credentials = Array.from(credentials, (value) => {
-      const normalized = value.replace(slash, '/');
-      if (value.length >= 8 || embedded?.has(value)) {
-        strong.add(normalized);
-      }
-      return normalized;
-    });
-    text = text.replace(slash, '/');
-    embedded = strong;
+function matchDiagnosticFields(source: string, redact: Redact) {
+  for (const match of source.matchAll(DIAGNOSTIC_URL)) {
+    const url = sanitizeUrlForLogging(match[0]);
+    if (url !== match[0]) {
+      redact(match.index, match.index + match[0].length, url);
+    }
   }
-  const source = redactCredentials(text, credentials, embedded).replace(DIAGNOSTIC_URL, (url) =>
-    sanitizeUrlForLogging(url),
-  );
-  let redacted = '';
   let copied = 0;
   for (const match of source.matchAll(CREDENTIAL_FIELD)) {
     const [field, , name, quote] = match;
@@ -188,13 +152,13 @@ export function redactDiagnosticText(
     if (match.index < copied || !isCredentialName(name)) {
       continue;
     }
-    redacted += source.slice(copied, start) + REDACTED;
     // Objects, arrays and repeatedly escaped quotes have no reliable simple delimiter.
     // Withhold the rest of the diagnostic instead of exposing a nested value.
     const structured =
       source[start] === '{' || (source[start] === '[' && !source.startsWith(REDACTED, start));
     if (structured || (quote && quote.length > 1)) {
-      return redacted;
+      redact(start, source.length);
+      return;
     }
     const end =
       CREDENTIAL_FIELD_END[
@@ -202,6 +166,69 @@ export function redactDiagnosticText(
       ];
     end.lastIndex = source.startsWith(REDACTED, start) ? start + REDACTED.length : start;
     copied = end.exec(source)?.index ?? source.length;
+    redact(start, copied);
   }
-  return redacted + source.slice(copied);
+}
+
+// Inspect the same text for every rule. Replacing a key first can conceal a
+// field name, a URL scheme or another credential that overlaps the key.
+function maskCredentials(
+  text: string,
+  credentials: Iterable<string>,
+  diagnostics?: { embedded?: ReadonlySet<string> },
+): string {
+  const slash = diagnostics && text.includes('\\/') ? /(?<!\\)\\+\//g : undefined;
+  const source = slash ? text.replace(slash, '/') : text;
+  const matches: { start: number; end: number; replacement: string }[] = [];
+  const redact: Redact = (start, end, replacement = REDACTED) => {
+    matches.push({ start, end, replacement });
+  };
+  for (const credential of new Set(credentials)) {
+    matchCredential(
+      source,
+      slash ? credential.replace(slash, '/') : credential,
+      credential.length >= 8 || diagnostics?.embedded?.has(credential) === true,
+      redact,
+    );
+  }
+  for (const match of source.matchAll(/\b(?:Bearer|Basic)\s+((?:[\w.~+/=-]|\[REDACTED\])+)/gi)) {
+    const end = match.index + match[0].length;
+    redact(end - match[1].length, end);
+  }
+  for (const match of source.matchAll(/\bsk-(?:[\w-]|\[REDACTED\])+/g)) {
+    if (match[0].length >= 19 || match[0].includes(REDACTED)) {
+      redact(match.index, match.index + match[0].length);
+    }
+  }
+  if (diagnostics) {
+    matchDiagnosticFields(source, redact);
+  }
+
+  matches.sort((a, b) => a.start - b.start);
+  let result = '';
+  let copied = 0;
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    // If a sanitized URL overlaps another secret, withhold the whole URL.
+    while (i + 1 < matches.length && matches[i + 1].start < match.end) {
+      i++;
+      match.end = Math.max(match.end, matches[i].end);
+      match.replacement = REDACTED;
+    }
+    result += source.slice(copied, match.start) + match.replacement;
+    copied = match.end;
+  }
+  return result + source.slice(copied);
+}
+
+export function redactCredentials(text: string, credentials: Iterable<string>): string {
+  return maskCredentials(text, credentials);
+}
+
+export function redactDiagnosticText(
+  text: string,
+  credentials: Iterable<string>,
+  embedded?: ReadonlySet<string>,
+): string {
+  return maskCredentials(text, credentials, { embedded });
 }

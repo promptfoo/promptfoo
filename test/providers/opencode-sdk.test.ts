@@ -3939,6 +3939,18 @@ describe('OpenCodeSDKProvider', () => {
         });
       });
 
+      it.each([
+        ['pass', 'password=private-value'],
+        ['Bearer', 'Bearer private-value'],
+        ['https', 'https://user:private-value@host.example.test/v1'],
+      ])('masks upstream values when a key overlaps the %s label', async (apiKey, message) => {
+        await expectRedacted({
+          config: { apiKey },
+          message,
+          secrets: [apiKey, 'private-value'],
+        });
+      });
+
       it('redacts upstream-only fields with long whitespace around their separators', async () => {
         await expectRedacted({
           message: `gateway api_key${' '.repeat(24)}=${'\t'.repeat(24)}upstream-private-value; useful context`,
