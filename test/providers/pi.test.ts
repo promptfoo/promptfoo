@@ -406,23 +406,23 @@ describe('PiProvider', () => {
 
   describe('environment', () => {
     it('isolates the selected vendor from the host login, loader and other credentials', async () => {
-      vi.stubEnv('OPENAI_API_KEY', 'example-openai');
+      vi.stubEnv('OPENAI_API_KEY', 'example.openai');
       vi.stubEnv('ANTHROPIC_API_KEY', 'other-key');
       vi.stubEnv('PI_CODING_AGENT_DIR', '/shared/profile');
       vi.stubEnv('NODE_OPTIONS', '--inspect');
-      mockPiRun(defaultEvents('key=example-openai'));
+      mockPiRun(defaultEvents('example.openai example-openai example.openai'));
       const response = await createProvider({ config: { model: 'openai/fixture' } }).callApi(
         'hello',
       );
       const { env } = spawnedOptions();
-      expect(env.OPENAI_API_KEY).toBe('example-openai');
+      expect(env.OPENAI_API_KEY).toBe('example.openai');
       expect(env.ANTHROPIC_API_KEY).toBeUndefined();
       expect(env.NODE_OPTIONS).toBeUndefined();
       expect(env.HOME).not.toBe(os.homedir());
       expect(env.PI_CODING_AGENT_DIR).toBe(path.join(env.HOME, 'agent'));
       expect(fs.existsSync(env.HOME)).toBe(false);
-      expect(spawnedArgs()).not.toContain('example-openai');
-      expect(response.output).toBe('key=[REDACTED]');
+      expect(spawnedArgs()).not.toContain('example.openai');
+      expect(response.output).toBe('[REDACTED] example-openai [REDACTED]');
       expect(response.raw).toBeUndefined();
     });
 

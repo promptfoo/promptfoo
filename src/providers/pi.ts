@@ -758,6 +758,7 @@ export class PiProvider implements ApiProvider {
     const maxOutputBytes = config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES;
 
     const { env, key } = this.buildEnv(tempDir);
+    const redact = (text: string) => (key ? text.split(key).join(REDACTED) : text);
     try {
       const isLocal = await getProjectPathCheck(runDir, resolveBasePath(config));
       if (config.agent_dir) {
@@ -796,7 +797,7 @@ export class PiProvider implements ApiProvider {
         key
           ? JSON.parse(
               JSON.stringify(result, (_field, value) =>
-                typeof value === 'string' ? value.replaceAll(key, REDACTED) : value,
+                typeof value === 'string' ? redact(value) : value,
               ),
             )
           : result;
@@ -846,7 +847,7 @@ export class PiProvider implements ApiProvider {
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
-        error: `Error calling Pi: ${key ? errorMessage.replaceAll(key, REDACTED) : errorMessage}`,
+        error: `Error calling Pi: ${redact(errorMessage)}`,
       };
     } finally {
       await fsPromises.rm(tempDir, { recursive: true, force: true, maxRetries: 3 });
