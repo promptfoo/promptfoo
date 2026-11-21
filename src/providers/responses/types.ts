@@ -12,14 +12,14 @@ export interface ProcessorConfig {
   ) => number | undefined;
 }
 
-export interface ProcessorContext {
+export interface ProcessorContext extends ResponseProcessingOptions {
   config: any;
   cached: boolean;
   data: any;
-  suppressReasoningOutput?: boolean;
 }
 
 export interface ResponseProcessingOptions {
+  multiAgent?: boolean;
   suppressReasoningOutput?: boolean;
 }
 

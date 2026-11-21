@@ -27,6 +27,7 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
       ) {
         result.usage = data.usage;
         result.service_tier = data.service_tier;
+        result.created = data.created;
         throw new Error('Bedrock chat stream ended before a complete response');
       }
       return data;

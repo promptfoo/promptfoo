@@ -1,7 +1,7 @@
 ---
 sidebar_position: 99
 sidebar_label: Classification
-description: Apply HuggingFace classifiers for comprehensive output analysis including sentiment, toxicity, bias, PII detection, and custom labels
+description: Use Hugging Face text classifiers to grade LLM outputs for sentiment, toxicity, PII, or custom labels. Configure score thresholds and classification providers.
 ---
 
 # Classifier grading
