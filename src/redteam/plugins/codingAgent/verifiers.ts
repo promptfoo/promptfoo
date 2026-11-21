@@ -2873,7 +2873,7 @@ function workflowBinding(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  if (value.match(WORKFLOW_SECRET_REFERENCE)?.[0] === value) {
+  if (WORKFLOW_SECRET_REFERENCE.test(value)) {
     return PROTECTED_WORKFLOW_BINDING;
   }
   return /^https?:\/\/[^\s'"$`\\]+$/i.test(value) ? value : undefined;
