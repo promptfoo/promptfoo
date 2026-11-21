@@ -5,13 +5,26 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { resolveProviderApiKey } from './credentials';
-import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
+import { resolveProviderEnv } from './env';
+import {
+  AIStudioChatProvider,
+  AIStudioEmbeddingProvider,
+  getGoogleAiStudioProviders,
+} from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
-import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
-import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
+import {
+  getGoogleVertexEmbeddingProvider,
+  getGoogleVertexProviders,
+  VertexChatProvider,
+} from './google/vertex';
+import {
+  MistralChatCompletionProvider,
+  MistralEmbeddingProvider as MistralEmbeddingApiProvider,
+} from './mistral';
 import { getMistralProviders } from './mistral/defaults';
 import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
 import { getOpenAiProviders } from './openai/defaults';
+import { withRedteamDefaults } from './redteamDefaults';
 import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
 
@@ -62,7 +75,7 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
 
 interface DefaultProviderPreferences {
   preferAnthropic: boolean;
-  preferAzure: boolean;
+  azureDeployment?: string;
   useCodexDefaults: boolean;
   useGoogleAiStudioDefaults: boolean;
   useGoogleVertexDefaults: boolean;
@@ -71,7 +84,8 @@ interface DefaultProviderPreferences {
 }
 
 async function getDefaultProviderPreferences(
-  env?: EnvOverrides,
+  env: EnvOverrides | undefined,
+  allowCodex: boolean,
 ): Promise<DefaultProviderPreferences> {
   const hasAnthropicCredentials = Boolean(
     resolveProviderApiKey(undefined, env, ['ANTHROPIC_API_KEY']),
@@ -91,15 +105,13 @@ async function getDefaultProviderPreferences(
   const hasMistralCredentials = Boolean(resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY']));
   const hasXAICredentials = Boolean(resolveProviderApiKey(undefined, env, ['XAI_API_KEY']));
 
-  const preferAzure = Boolean(
-    !hasOpenAiCredentials &&
-      (hasAzureApiKey || hasAzureClientCreds) &&
-      (env?.AZURE_DEPLOYMENT_NAME ?? getEnvString('AZURE_DEPLOYMENT_NAME')) &&
-      (env?.AZURE_OPENAI_DEPLOYMENT_NAME ?? getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')),
-  );
+  const azureDeployment =
+    !hasOpenAiCredentials && (hasAzureApiKey || hasAzureClientCreds)
+      ? resolveProviderEnv(env, ['AZURE_OPENAI_DEPLOYMENT_NAME', 'AZURE_DEPLOYMENT_NAME'])?.value
+      : undefined;
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
   const shouldUseFallbackDefaults =
-    !preferAzure &&
+    !azureDeployment &&
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials;
@@ -108,6 +120,7 @@ async function getDefaultProviderPreferences(
     : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =
+    allowCodex &&
     useNonGoogleFallbackDefaults &&
     !hasMistralCredentials &&
     !hasXAICredentials &&
@@ -115,7 +128,7 @@ async function getDefaultProviderPreferences(
 
   return {
     preferAnthropic,
-    preferAzure,
+    azureDeployment,
     useCodexDefaults: hasCodexCredentials,
     useGoogleAiStudioDefaults:
       !hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials,
@@ -137,40 +150,44 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+export async function getDefaultProviders(
+  env?: EnvOverrides,
+  { allowCodex = true } = {},
+): Promise<DefaultProviders> {
   const {
     preferAnthropic,
-    preferAzure,
+    azureDeployment,
     useCodexDefaults,
     useGoogleAiStudioDefaults,
     useGoogleVertexDefaults,
     useMistralDefaults,
     useXAIDefaults,
-  } = await getDefaultProviderPreferences(env);
+  } = await getDefaultProviderPreferences(env, allowCodex);
 
   const openAiProviders = getOpenAiProviders(env);
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
-  if (preferAzure) {
+  if (azureDeployment) {
     logger.debug('Using Azure OpenAI default providers');
-    const deploymentName =
-      env?.AZURE_OPENAI_DEPLOYMENT_NAME ?? getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME');
-    if (!deploymentName) {
-      throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
-    }
+    const azureProvider = new AzureChatCompletionProvider(azureDeployment, { env });
 
-    const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
-
-    providers = {
-      embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
-      gradingJsonProvider: azureProvider,
-      gradingProvider: azureProvider,
-      moderationProvider: openAiProviders.moderationProvider,
-      suggestionsProvider: azureProvider,
-      synthesizeProvider: azureProvider,
-      // Azure doesn't have web search by default
-    };
+    providers = withRedteamDefaults(
+      {
+        embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
+        gradingJsonProvider: azureProvider,
+        gradingProvider: azureProvider,
+        moderationProvider: openAiProviders.moderationProvider,
+        suggestionsProvider: azureProvider,
+        synthesizeProvider: azureProvider,
+      },
+      env,
+      (env, temperature, jsonOnly) =>
+        new AzureChatCompletionProvider(azureDeployment, {
+          env,
+          config: { temperature, ...(jsonOnly && { response_format: { type: 'json_object' } }) },
+        }),
+    );
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
     const anthropicProviders = getAnthropicProviders(env);
@@ -184,39 +201,61 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
       webSearchProvider: anthropicProviders.webSearchProvider,
+      get redteamProvider() {
+        return anthropicProviders.redteamProvider;
+      },
+      get redteamJsonProvider() {
+        return anthropicProviders.redteamJsonProvider;
+      },
     };
-  } else if (useGoogleAiStudioDefaults) {
-    logger.debug('Using Google AI Studio default providers');
-    providers = {
-      embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
-      moderationProvider: openAiProviders.moderationProvider,
-      ...getGoogleAiStudioProviders(env),
-    };
-  } else if (useGoogleVertexDefaults) {
-    logger.debug('Using Google Vertex default providers');
-    providers = {
-      moderationProvider: openAiProviders.moderationProvider,
-      ...getGoogleVertexProviders(env),
-    };
+  } else if (useGoogleAiStudioDefaults || useGoogleVertexDefaults) {
+    const google = useGoogleAiStudioDefaults
+      ? {
+          embeddingProvider: getGoogleVertexEmbeddingProvider(env),
+          ...getGoogleAiStudioProviders(env),
+        }
+      : getGoogleVertexProviders(env);
+    const ChatProvider = useGoogleAiStudioDefaults ? AIStudioChatProvider : VertexChatProvider;
+    providers = withRedteamDefaults(
+      {
+        moderationProvider: openAiProviders.moderationProvider,
+        ...google,
+      },
+      env,
+      (env, temperature, jsonOnly) =>
+        new ChatProvider('gemini-2.5-pro', {
+          env,
+          config: {
+            temperature,
+            ...(jsonOnly && { generationConfig: { response_mime_type: 'application/json' } }),
+          },
+        }),
+    );
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
     const mistralProviders = getMistralProviders(env);
-    providers = {
-      embeddingProvider: mistralProviders.embeddingProvider,
-      gradingJsonProvider: mistralProviders.gradingJsonProvider,
-      gradingProvider: mistralProviders.gradingProvider,
-      moderationProvider: openAiProviders.moderationProvider,
-      suggestionsProvider: mistralProviders.suggestionsProvider,
-      synthesizeProvider: mistralProviders.synthesizeProvider,
-      // Mistral doesn't have web search
-    };
+    providers = withRedteamDefaults(
+      {
+        embeddingProvider: mistralProviders.embeddingProvider,
+        gradingJsonProvider: mistralProviders.gradingJsonProvider,
+        gradingProvider: mistralProviders.gradingProvider,
+        moderationProvider: openAiProviders.moderationProvider,
+        suggestionsProvider: mistralProviders.suggestionsProvider,
+        synthesizeProvider: mistralProviders.synthesizeProvider,
+      },
+      env,
+      (env, temperature, jsonOnly) =>
+        new MistralChatCompletionProvider('mistral-large-latest', {
+          env,
+          config: { temperature, ...(jsonOnly && { response_format: { type: 'json_object' } }) },
+        }),
+    );
   } else if (useXAIDefaults) {
     logger.debug('Using xAI default providers');
-    providers = {
+    providers = Object.assign(getXAIProviders(env), {
       embeddingProvider: openAiProviders.embeddingProvider, // xAI doesn't expose an embeddings API
       moderationProvider: openAiProviders.moderationProvider, // xAI doesn't expose a moderation API
-      ...getXAIProviders(env),
-    };
+    });
   } else if (useCodexDefaults) {
     logger.debug('Using Codex SDK default providers from ChatGPT/Codex credentials');
     providers = {

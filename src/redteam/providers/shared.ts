@@ -3,10 +3,14 @@ import { randomUUID } from 'crypto';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, getEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import {
+  bindRedteamProviderEnvironment,
+  getDefaultRedteamTemperature,
+} from '../../providers/redteamDefaults';
 import {
   createProviderRateLimitOptions,
   getProviderCallExecutionContext,
@@ -53,7 +57,7 @@ import {
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -148,25 +152,44 @@ async function loadRedteamProvider({
   preferSmallModel?: boolean;
   purpose?: 'redteam' | 'grading';
 } = {}) {
-  let ret;
   const redteamProvider = provider;
   if (isApiProvider(redteamProvider)) {
-    logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
-    ret = redteamProvider;
-  } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
-    ret = (await redteamProviderLoader([redteamProvider]))[0];
-  } else {
-    const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-    logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
-    ret = new OpenAiChatCompletionProvider(defaultModel, {
+    return redteamProvider;
+  }
+
+  if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
+    return (await redteamProviderLoader([redteamProvider]))[0];
+  }
+
+  const env = { ...getEnvOverrides() };
+  const { getDefaultProviders } = await import('../../providers/defaults');
+  const defaults = await cliState.withEnv(env, () =>
+    getDefaultProviders(env, { allowCodex: false }),
+  );
+  const configuredDefault = jsonOnly
+    ? (defaults.redteamJsonProvider ?? defaults.redteamProvider)
+    : defaults.redteamProvider;
+  if (configuredDefault) {
+    logger.debug(`Using default ${purpose} provider from defaults`, {
+      provider: configuredDefault.id(),
+      jsonOnly,
+      preferSmallModel,
+    });
+    return configuredDefault;
+  }
+
+  const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+  logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
+  return bindRedteamProviderEnvironment(
+    new OpenAiChatCompletionProvider(defaultModel, {
+      env,
       config: {
-        temperature: TEMPERATURE,
+        temperature: getDefaultRedteamTemperature(env),
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
-    });
-  }
-  return ret;
+    }),
+    env,
+  );
 }
 
 class RedteamProviderManager {
@@ -238,10 +261,12 @@ class RedteamProviderManager {
     provider,
     fallbackProvider,
     ignoreCliState = false,
+    ignoreCache = false,
   }: {
     provider?: RedteamFileConfig['provider'];
     fallbackProvider?: RedteamFileConfig['provider'];
     ignoreCliState?: boolean;
+    ignoreCache?: boolean;
   } = {}): {
     source: RedteamProviderSelectionSource;
     provider?: RedteamFileConfig['provider'];
@@ -258,7 +283,7 @@ class RedteamProviderManager {
       return { source: 'explicit', provider, spec: toSpec(provider) };
     }
 
-    if (this.provider && this.jsonOnlyProvider) {
+    if (!ignoreCache && this.provider && this.jsonOnlyProvider) {
       return {
         source: 'cache',
         cachedProvider: this.provider,
@@ -338,6 +363,7 @@ class RedteamProviderManager {
     provider,
     fallbackProvider,
     ignoreCliState = false,
+    ignoreCache = false,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
@@ -345,6 +371,8 @@ class RedteamProviderManager {
     fallbackProvider?: RedteamFileConfig['provider'];
     /** Skip process-global config for request-scoped callers such as Web UI previews. */
     ignoreCliState?: boolean;
+    /** Skip the process-wide preloaded provider for an independent request. */
+    ignoreCache?: boolean;
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   } = {}): Promise<RedteamProviderSelection> {
@@ -352,9 +380,14 @@ class RedteamProviderManager {
       provider,
       fallbackProvider,
       ignoreCliState,
+      ignoreCache,
     });
     return {
-      provider: await this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
+      provider: await (ignoreCliState
+        ? cliState.withConfig(undefined, () =>
+            this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
+          )
+        : this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel })),
       source: candidate.source,
       localProviderSpec: candidate.spec,
       persistableId: typeof candidate.spec === 'string' ? candidate.spec : undefined,
@@ -371,7 +404,9 @@ class RedteamProviderManager {
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   } = {}): Promise<ApiProvider> {
-    const provider = await loadRedteamProvider({ jsonOnly, preferSmallModel });
+    const provider = await cliState.withConfig(undefined, () =>
+      loadRedteamProvider({ jsonOnly, preferSmallModel }),
+    );
     return this.wrapProvider(provider);
   }
 

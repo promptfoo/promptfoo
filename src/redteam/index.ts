@@ -965,6 +965,7 @@ export async function synthesize({
   cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
   delay,
   entities: entitiesOverride,
+  fallbackProvider,
   injectVar,
   inputs,
   language,
@@ -975,6 +976,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   redteamGenerationContext: inputRedteamGenerationContext,
+  requestScoped,
   strategies,
   targetIds,
   showProgressBar: showProgressBarOverride,
@@ -1077,6 +1079,9 @@ export async function synthesize({
 
   const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
+    ignoreCliState: requestScoped,
+    ignoreCache: requestScoped,
+    fallbackProvider,
   });
   const generationTokenUsage: TokenUsage = {
     cached: 0,
