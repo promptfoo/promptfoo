@@ -777,9 +777,9 @@ function parseJsonGradingResponse(
       if (jsonObjects.length === 0) {
         return { failure: failWithTokens(`Could not extract JSON from ${label} response`) };
       }
-    } catch (err) {
+    } catch {
       return {
-        failure: failWithTokens(`${label} produced malformed response: ${err}\n\n${resp.output}`),
+        failure: failWithTokens(`${label} produced malformed JSON`),
       };
     }
   } else if (
@@ -791,7 +791,7 @@ function parseJsonGradingResponse(
   } else {
     return {
       failure: failWithTokens(
-        `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+        `${label} produced malformed response - output must be string or object`,
       ),
     };
   }
@@ -799,9 +799,7 @@ function parseJsonGradingResponse(
   const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
-      failure: failWithTokens(
-        `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-      ),
+      failure: failWithTokens(`${label} produced malformed response - expected a JSON object`),
     };
   }
 

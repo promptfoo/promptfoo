@@ -196,6 +196,42 @@ describe('runAssertions', () => {
     });
   });
 
+  it.each([false, true])(
+    'keeps failed zero-weight sets metric-only with short-circuit=%s',
+    async (shortCircuit) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: String(shortCircuit),
+      });
+      try {
+        const result = await runAssertions({
+          prompt: 'Question',
+          test: {
+            assert: [
+              { type: 'equals', value: 'Answer' },
+              {
+                type: 'assert-set',
+                weight: 0,
+                metric: 'unavailable',
+                assert: [{ type: 'model-graded-closedqa', value: 'Criterion' }],
+              },
+            ],
+            options: {
+              provider: createMockProvider({ response: { error: 'Grader unavailable' } }),
+            },
+          },
+          providerResponse: { output: 'Answer' },
+        });
+        expect(result).toMatchObject({ pass: true, score: 1, namedScores: {} });
+        expect(result.metadata?.graderError).toBeUndefined();
+        expect(result.componentResults?.some((component) => component.metadata?.graderError)).toBe(
+          true,
+        );
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
   it('should fail when any assertion fails', async () => {
     const output = 'Actual output';
 

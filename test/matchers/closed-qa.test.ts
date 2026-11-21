@@ -129,6 +129,16 @@ describe('matchesClosedQa', () => {
     );
   });
 
+  it.each(['sensitive judge content', { detail: 'sensitive judge content' }])(
+    'keeps malformed grader payloads out of failure reasons: %j',
+    async (output) => {
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({ output });
+      const result = await matchesClosedQa('Input', 'Expected', 'Answer', {});
+      expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+      expect(result.reason).not.toContain('sensitive judge content');
+    },
+  );
+
   it('should handle input, criteria, and completion that need escaping', async () => {
     const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
     const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';

@@ -60,6 +60,11 @@ export function resetBlobStorageProvider(): void {
   defaultProvider = null;
 }
 
+export type BlobTransaction = Pick<
+  Awaited<ReturnType<typeof getDb>>,
+  'insert' | 'select' | 'update'
+>;
+
 export async function storeBlob(
   data: Buffer,
   mimeType: string,
@@ -70,15 +75,15 @@ export async function storeBlob(
     location?: string;
     kind?: string;
   },
+  transaction?: BlobTransaction,
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
   const result = await provider.store(data, mimeType);
 
   // Track asset and reference in DB for dedup/auth/cascade
-  const db = await getDb();
   // Keep stored bytes if persistence fails: another eval may already reference them,
   // including bytes adopted after this store began. Unreferenced bytes are safer than data loss.
-  const registeredMimeType = await db.transaction(async (tx) => {
+  const register = async (tx: BlobTransaction) => {
     await tx
       .insert(blobAssetsTable)
       .values({
@@ -114,7 +119,10 @@ export async function storeBlob(
       .where(eq(blobAssetsTable.hash, result.ref.hash))
       .get();
     return asset!.mimeType;
-  });
+  };
+  const registeredMimeType = transaction
+    ? await register(transaction)
+    : await (await getDb()).transaction(register);
 
   return { ...result, ref: { ...result.ref, mimeType: registeredMimeType } };
 }
@@ -178,6 +186,7 @@ export async function recordBlobReference(
     location?: string;
     kind?: string;
   },
+  transaction?: BlobTransaction,
 ): Promise<void> {
   if (!refContext.evalId) {
     return;
@@ -194,7 +203,7 @@ export async function recordBlobReference(
     return;
   }
 
-  const db = await getDb();
+  const db = transaction ?? (await getDb());
   // A failed store can retain bytes without committing their asset registration.
   // Referencing those bytes must not adopt them or create an invalid foreign key.
   const asset = await db

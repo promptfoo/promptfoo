@@ -14,6 +14,7 @@ import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger, { getLogLevel, setLogLevel } from '../../src/logger';
 import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import { applyManualRating, updateManualRatingMetrics } from '../../src/presentation/manualRating';
 import { EchoProvider } from '../../src/providers/echo';
 import { HttpProvider } from '../../src/providers/http';
 import telemetry from '../../src/telemetry';
@@ -546,8 +547,24 @@ describeEvaluator('select-best runtime grading configuration', () => {
       expect(row.error).toContain('Check the grader configuration and credentials');
       expect(row.error).toContain('Run with --verbose to log the underlying error');
       expect(row.error).not.toContain('temporary grader failure');
-      expect(row.gradingResult?.pass).toBe(true);
+      expect(row.gradingResult).toMatchObject({ pass: false, score: 0, reason: row.error });
       expect(row.gradingResult?.componentResults).toEqual([]);
+      const strip = {
+        shouldStripPromptText: false,
+        shouldStripResponseOutput: false,
+        shouldStripTestVars: false,
+        shouldStripGradingResult: true,
+        shouldStripMetadata: false,
+      };
+      for (const artifact of [
+        row.toEvaluateResult(strip),
+        sanitizeResultForJsonlArtifact(row, strip),
+      ]) {
+        expect(artifact.gradingResult).toBeNull();
+        expect(artifact.metadata?.__promptfoo?.comparisonError).not.toHaveProperty(
+          'gradingVerdict',
+        );
+      }
     }
     expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
     expect(await EvalResult.getCompletedIndexPairs(record.id, { excludeErrors: true })).toEqual(
@@ -561,6 +578,10 @@ describeEvaluator('select-best runtime grading configuration', () => {
 
     const recovered = await record.fetchResultsByTestIdx(0);
     expect(recovered.filter((row) => row.success)).toHaveLength(1);
+    for (const row of recovered) {
+      expect(row.gradingResult?.pass).toBe(row.success);
+      expect(row.gradingResult?.reason).not.toContain('Error grading select-best');
+    }
     expect(recovered.find((row) => row.success)?.error).toBeFalsy();
     expect(recovered.every((row) => row.metadata?.__promptfoo?.comparisonError === undefined)).toBe(
       true,
@@ -571,7 +592,95 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['malformed YAML', 'Error', 'string'])(
+  it('restores a legacy error row after another comparison grader failure', async () => {
+    const { grader, suite, target } = makeSuite();
+    vi.mocked(grader.callApi)
+      .mockResolvedValueOnce({ error: 'first outage' })
+      .mockResolvedValueOnce({ error: 'second outage' });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    // Pre-fix rows stored the assertion verdict on gradingResult during an outage.
+    for (const row of await record.fetchResultsByTestIdx(0)) {
+      const baseline = row.metadata!.__promptfoo.comparisonError;
+      Object.assign(row.gradingResult!, baseline.gradingVerdict);
+      delete baseline.gradingVerdict;
+      await row.save();
+    }
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(
+      (await record.fetchResultsByTestIdx(0)).every((row) => row.gradingResult?.pass === false),
+    ).toBe(true);
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows.filter((row) => row.success && row.gradingResult?.pass)).toHaveLength(1);
+    expect(
+      rows.every((row) => !row.gradingResult?.reason.includes('Error grading select-best')),
+    ).toBe(true);
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([false, true])(
+    'retains a manual pass=%s and score across a failed comparison retry',
+    async (pass) => {
+      const { grader, suite, target } = makeSuite();
+      suite.tests![0].assert!.unshift({ type: 'equals', value: pass ? 'different' : 'candidate' });
+      vi.mocked(grader.callApi)
+        .mockRejectedValueOnce(new Error('initial grader failure'))
+        .mockRejectedValueOnce(new Error('retry grader failure'));
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+
+      const row = (await record.fetchResultsByTestIdx(0)).find((result) => result.promptIdx === 0)!;
+      const previous = {
+        pass: row.success,
+        score: row.score,
+        failureReason: row.failureReason,
+        error: row.error,
+        gradingResult: row.gradingResult,
+      };
+      const rated = applyManualRating(previous, { action: 'rate', pass, score: 0.4 });
+      row.success = rated.pass;
+      row.score = rated.score;
+      row.failureReason = rated.failureReason;
+      row.error = rated.error ?? null;
+      row.gradingResult = rated.gradingResult;
+      record.prompts[0].metrics = updateManualRatingMetrics(
+        record.prompts[0].metrics!,
+        previous,
+        rated,
+      );
+      await row.save();
+      await record.save();
+
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      const retried = (await record.fetchResultsByTestIdx(0)).find(
+        (result) => result.promptIdx === 0,
+      )!;
+      expect(retried.metadata?.__promptfoo?.comparisonError).toMatchObject({
+        success: pass,
+        score: 0.4,
+        failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+      });
+
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      const recovered = (await record.fetchResultsByTestIdx(0)).find(
+        (result) => result.promptIdx === 0,
+      )!;
+      expect(recovered).toMatchObject({
+        success: pass,
+        score: 0.4,
+        failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+      });
+      expect(recovered.gradingResult).toMatchObject({ pass, score: 0.4 });
+      expect(recovered.metadata?.__promptfoo?.comparisonError).toBeUndefined();
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(grader.callApi).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each(['malformed YAML', 'Error', 'string', 'error response'])(
     'keeps secrets in a grader %s out of persisted errors and recovers on resume',
     async (failure) => {
       const { grader, suite, target } = makeSuite();
@@ -585,6 +694,11 @@ describeEvaluator('select-best runtime grading configuration', () => {
         if (failure === 'malformed YAML') {
           await writeFile(graderPath, `id: echo\nconfig:\n  apiKey: ${errorSecret}: invalid\n`);
           (suite.tests![0].assert![0] as Assertion).provider = `file://${graderPath}`;
+        } else if (failure === 'error response') {
+          vi.mocked(grader.callApi).mockResolvedValueOnce({
+            error: errorSecret,
+            tokenUsage: { total: 7, prompt: 5, completion: 2, numRequests: 1 },
+          });
         } else {
           vi.mocked(grader.callApi).mockRejectedValueOnce(
             failure === 'Error' ? new Error(errorSecret) : errorSecret,
@@ -605,8 +719,12 @@ describeEvaluator('select-best runtime grading configuration', () => {
           expect(row.failureReason).toBe(ResultFailureReason.ERROR);
           expect(row.error).toContain('Check the grader configuration and credentials');
           expect(row.error).toContain(failure === 'malformed YAML' ? graderPath : grader.id());
+          expect(row.gradingResult).toMatchObject({ pass: false, score: 0, reason: row.error });
         }
         expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+        if (failure === 'error response') {
+          expect(record.getStats().tokenUsage.assertions?.total).toBe(14);
+        }
         // The run's log file records debug messages on every run, so without debug output
         // enabled the cause must not be logged at all.
         expect(getLogLevel()).not.toBe('debug');
@@ -633,6 +751,38 @@ describeEvaluator('select-best runtime grading configuration', () => {
     },
   );
 
+  it.each([false, true])(
+    'accounts for a failed comparison on saved cache hits (cached grader: %s)',
+    async (cached) => {
+      const { grader, suite, target } = makeSuite();
+      vi.mocked(target.callApi).mockResolvedValue({
+        output: 'cached answer',
+        cached: true,
+        tokenUsage: { total: 5 },
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, {});
+      await markComparisonPending(record);
+      // Older evals stored zero requests on cached targets awaiting a comparison.
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        row.response!.tokenUsage!.numRequests = 0;
+        await row.save();
+      }
+      vi.mocked(grader.callApi).mockResolvedValue({
+        error: 'grader unavailable',
+        cached,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+      cliState.resume = true;
+      await evaluate(suite, record, {});
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(row.response?.tokenUsage?.numRequests).toBe(cached ? 0 : 1);
+      }
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('compares only replacement rows during an error-only retry', async () => {
     const { grader, suite, target } = makeSuite();
     suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
@@ -645,20 +795,17 @@ describeEvaluator('select-best runtime grading configuration', () => {
     cliState.retryMode = true;
     cliState._retryErrorResultIds = previousIds;
     try {
-      await evaluate(suite, record, { maxConcurrency: 1 });
+      const retryStage = { originalIds: new Set(previousIds), rows: [] as EvalResult[] };
+      await evaluate(suite, record, { maxConcurrency: 1, retryStage });
       expect(target.callApi).toHaveBeenCalledTimes(4);
       const calls = vi.mocked(grader.callApi).mock.calls;
       expect(calls).toHaveLength(2);
       expect(JSON.parse(calls[1][0])).toHaveLength(2);
       const allRows = await record.fetchResultsByTestIdx(0);
-      const replacements = allRows.filter((row) => !previousIds.includes(row.id));
-      expect(replacements).toHaveLength(2);
-      expect(replacements.filter((row) => row.success)).toHaveLength(1);
-      expect(
-        allRows
-          .filter((row) => previousIds.includes(row.id))
-          .every((row) => row.failureReason === ResultFailureReason.ERROR),
-      ).toBe(true);
+      expect(retryStage.rows).toHaveLength(2);
+      expect(retryStage.rows.filter((row) => row.success)).toHaveLength(1);
+      expect(allRows.map((row) => row.id).sort()).toEqual([...previousIds].sort());
+      expect(allRows.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(true);
     } finally {
       delete cliState._retryErrorResultIds;
     }

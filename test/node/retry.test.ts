@@ -9,6 +9,7 @@ import {
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
+import EvalResult from '../../src/models/evalResult';
 import { generateIdFromPrompt } from '../../src/models/prompt';
 import {
   deleteErrorResults,
@@ -22,15 +23,18 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
+import type { RetryStage } from '../../src/node/evaluationStore';
 import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
-  const errorRows: Array<{ id: string }> = [];
+  const errorRows: Array<{ id: string; promptIdx?: number }> = [];
   const affectedEvalRows: Array<{ evalId: string }> = [];
-  const errorRowsAll = vi.fn(async () => errorRows);
+  const errorRowsAll = vi.fn(async () =>
+    errorRows.map((row) => ({ testIdx: 0, promptIdx: 0, ...row, testCase: {}, failureReason: 2 })),
+  );
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);
-  const db = {
+  const queries = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
@@ -54,7 +58,12 @@ const dbMocks = vi.hoisted(() => {
 
   return {
     affectedEvalRows,
-    db,
+    db: {
+      ...queries,
+      transaction: vi.fn(async (callback: (tx: typeof queries) => Promise<boolean>) =>
+        callback(queries),
+      ),
+    },
     deleteRun,
     errorRows,
   };
@@ -93,10 +102,40 @@ function createEval(overrides: Partial<Eval> = {}): Eval {
     config: {},
     persisted: false,
     prompts: [],
+    save: vi.fn().mockResolvedValue(undefined),
     addPrompts: vi.fn().mockResolvedValue(undefined),
     fetchResultsBatched: vi.fn(async function* () {}),
     ...overrides,
   } as unknown as Eval;
+}
+
+function stageRetryRow(stage: RetryStage | undefined, evalId: string, promptIdx = 0) {
+  if (!stage) {
+    throw new Error('Expected a retry stage');
+  }
+  const row = new EvalResult({
+    id: 'new-result',
+    evalId,
+    testIdx: 0,
+    promptIdx,
+    testCase: {},
+    prompt: { raw: 'test', label: 'test' },
+    provider: { id: 'echo' },
+    response: { output: 'done' },
+    gradingResult: null,
+    score: 1,
+    success: true,
+    failureReason: ResultFailureReason.NONE,
+  });
+  vi.spyOn(row, 'saveRetryReplacement').mockResolvedValue(undefined);
+  stage.rows.push(row);
+}
+
+function mockCompletedRetry(retriedEval: Eval) {
+  vi.mocked(evaluate).mockImplementationOnce(async (_suite, _eval, options) => {
+    stageRetryRow(options.retryStage, retriedEval.id);
+    return retriedEval;
+  });
 }
 
 function mockResolvedConfig({
@@ -204,7 +243,11 @@ describe('retryCommand', () => {
               pass: true,
               score: 1,
               reason: 'passed',
-              componentResults: [{ pass: true }, { pass: false }],
+              componentResults: [
+                { pass: true },
+                { pass: false },
+                { pass: false, metadata: { graderError: true } },
+              ],
               tokensUsed: { total: 3, prompt: 2, completion: 1 },
             },
           },
@@ -529,12 +572,15 @@ describe('retryCommand', () => {
       expect(receivedSuite).toBe(testSuite);
       expect(receivedEval).toBe(originalEval);
       expect(options).toEqual({
+        cache: false,
+        retryStage: { originalIds: new Set(['error-result-1']), rows: [] },
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
         restorePromptColumns: true,
         showProgressBar: true,
       });
+      stageRetryRow(options.retryStage, retriedEval.id);
       return retriedEval;
     });
     vi.mocked(shouldShareResults).mockReturnValue(true);
@@ -573,12 +619,15 @@ describe('retryCommand', () => {
     vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
       expect(cliState.maxConcurrency).toBe(1);
       expect(options).toEqual({
+        cache: false,
+        retryStage: { originalIds: new Set(['error-result-1']), rows: [] },
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,
         restorePromptColumns: false,
         showProgressBar: false,
       });
+      stageRetryRow(options.retryStage, retriedEval.id);
       return retriedEval;
     });
 
@@ -631,7 +680,7 @@ describe('retryCommand', () => {
         })),
       });
       vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-      dbMocks.errorRows.push({ id: 'mocked-retry-row' });
+      dbMocks.errorRows.push({ id: 'mocked-retry-row', promptIdx: 1 });
       vi.mocked(resolveConfigs).mockResolvedValue({
         basePath: '',
         config: originalEval.config as UnifiedConfig,
@@ -661,6 +710,7 @@ describe('retryCommand', () => {
           { promptIdx: 1, testIdx: 0, success: true, response: { output: 'selected text' } },
         ]);
         expect(memory.prompts).toMatchObject(originalEval.prompts);
+        stageRetryRow(options.retryStage, receivedEval.id, memory.results[0].promptIdx);
         return receivedEval as Eval;
       });
 
@@ -738,7 +788,7 @@ describe('retryCommand', () => {
     expect(cliState.maxConcurrency).toBeUndefined();
   });
 
-  it('restores JSONL output and preserves error rows when retry persistence fails', async () => {
+  it('leaves JSONL output and error rows untouched when retry persistence fails', async () => {
     const originalEval = createEval({
       config: { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig,
     });
@@ -752,7 +802,8 @@ describe('retryCommand', () => {
       'Retry results failed to persist. Existing ERROR rows were preserved.',
     );
 
-    expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.jsonl'], retriedEval, null);
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
+    expect(dbMocks.db.transaction).not.toHaveBeenCalled();
     expect(retriedEval.resultPersistenceFailed).toBe(true);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
@@ -771,7 +822,10 @@ describe('retryCommand', () => {
         config: { prompts: [], env },
         testSuite: { ...testSuite, env },
       });
-      vi.mocked(evaluate).mockImplementation(async () => {
+      vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
+        if (!failed) {
+          stageRetryRow(options.retryStage, retriedEval.id);
+        }
         cliState.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false' } };
         return retriedEval;
       });
@@ -787,7 +841,7 @@ describe('retryCommand', () => {
         } else {
           await expect(result).resolves.toBe(retriedEval);
         }
-        expect(flags).toEqual([true]);
+        expect(flags).toEqual(failed ? [] : [true]);
         expect(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT')).toBe(false);
       } finally {
         cliState.config = previousConfig;
@@ -795,52 +849,59 @@ describe('retryCommand', () => {
     },
   );
 
-  it('warns when JSONL restoration and post-retry rewriting fail', async () => {
+  it('warns when rewriting JSONL fails after the retry committed', async () => {
     const originalEval = createEval({
-      config: { outputPath: 'results.jsonl' } as UnifiedConfig,
+      config: { outputPath: ['results.jsonl', 'results.json'] } as UnifiedConfig,
     });
-    const failedPersistenceEval = createEval({ resultPersistenceFailed: true });
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValueOnce(failedPersistenceEval);
-    vi.mocked(writeMultipleOutputs).mockRejectedValueOnce(new Error('restore unavailable'));
-
-    await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
-      'Retry results failed to persist. Existing ERROR rows were preserved.',
-    );
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Retry results failed to persist, and restoring JSONL output failed.',
-      expect.objectContaining({ jsonlOutputPaths: ['results.jsonl'] }),
-    );
-
-    const successfulEval = createEval();
-    vi.mocked(evaluate).mockResolvedValueOnce(successfulEval);
-    vi.mocked(writeMultipleOutputs).mockRejectedValueOnce(new Error('rewrite unavailable'));
-
-    await expect(retryCommand(originalEval.id, {})).resolves.toBe(successfulEval);
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
-      expect.objectContaining({ outputPaths: ['results.jsonl'] }),
-    );
-  });
-
-  it('keeps a successful retry when post-retry cleanup fails', async () => {
-    const originalEval = createEval();
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(retriedEval);
-    dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
+    mockCompletedRetry(retriedEval);
+    const error = new Error('rewrite unavailable');
+    vi.mocked(writeMultipleOutputs).mockRejectedValueOnce(error);
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+    expect(retriedEval.save).toHaveBeenCalledOnce();
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.jsonl'], retriedEval, null);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
+      { error, outputPaths: ['results.jsonl'] },
+    );
+  });
 
+  it('propagates replacement transaction failures without rewriting JSONL', async () => {
+    const originalEval = createEval({ config: { outputPath: 'results.jsonl' } as UnifiedConfig });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    mockCompletedRetry(originalEval);
+    dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(retryCommand(originalEval.id, {})).rejects.toThrow('database unavailable');
+    expect(originalEval.save).not.toHaveBeenCalled();
+    expect(notifyEvaluationChanged).not.toHaveBeenCalled();
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
+  });
+
+  it('keeps a committed retry when recalculating metrics fails', async () => {
+    const originalEval = createEval();
+    const error = new Error('metrics unavailable');
+    const retriedEval = createEval({
+      fetchResultsBatched: vi.fn(async function* () {
+        throw error;
+      }),
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    mockCompletedRetry(retriedEval);
+
+    await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+    expect(dbMocks.deleteRun).toHaveBeenCalledOnce();
     expect(logger.warn).toHaveBeenCalledWith(
       'Post-retry cleanup had issues. Retry results are saved.',
-      {
-        error: expect.any(Error),
-      },
+      { error },
     );
   });
 
@@ -850,7 +911,7 @@ describe('retryCommand', () => {
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+    mockCompletedRetry(retriedEval);
     vi.mocked(shouldShareResults).mockReturnValue(true);
     vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockRejectedValue(new Error('cloud unavailable'));
@@ -868,7 +929,7 @@ describe('retryCommand', () => {
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+    mockCompletedRetry(retriedEval);
     vi.mocked(shouldShareResults).mockReturnValue(true);
     vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue(null);

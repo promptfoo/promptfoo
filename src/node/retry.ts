@@ -4,9 +4,11 @@ import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
+import { getResultIndexKey } from '../evaluator/resultIndex';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
+import { HUMAN_ASSERTION_TYPE } from '../providers/constants';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
@@ -22,8 +24,9 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { PromptMetrics } from '../types/index';
-import type { InternalEvaluateOptions } from '../types/internal';
+import type { GradingResult, PromptMetrics } from '../types/index';
+import type { NodeEvaluateOptions } from './evaluateTestSuite';
+import type { RetryStage } from './evaluationStore';
 
 export interface RetryCommandOptions {
   config?: string;
@@ -94,29 +97,6 @@ async function resolveRetryConfigs(
   return configs;
 }
 
-async function restoreJsonlOutputsAfterPersistenceFailure(
-  jsonlOutputPaths: string[],
-  evalRecord: Eval,
-): Promise<void> {
-  if (jsonlOutputPaths.length === 0) {
-    return;
-  }
-
-  try {
-    // A failed retry must restore the pre-retry database view, not union in
-    // replacement rows that were streamed before persistence failed.
-    evalRecord.resultPersistenceFailed = false;
-    await writeMultipleOutputs(jsonlOutputPaths, evalRecord, null);
-  } catch (error) {
-    logger.warn('Retry results failed to persist, and restoring JSONL output failed.', {
-      error,
-      jsonlOutputPaths,
-    });
-  } finally {
-    evalRecord.resultPersistenceFailed = true;
-  }
-}
-
 /**
  * Gets all ERROR results from an evaluation and returns their IDs
  */
@@ -137,8 +117,128 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
+export async function getRetryResultIds(evalId: string): Promise<string[]> {
+  const db = await getDb();
+  const errorTestIndices = db
+    .select({ testIdx: evalResultsTable.testIdx })
+    .from(evalResultsTable)
+    .where(
+      and(
+        eq(evalResultsTable.evalId, evalId),
+        eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+      ),
+    );
+  const siblings = await db
+    .select({
+      id: evalResultsTable.id,
+      testIdx: evalResultsTable.testIdx,
+      failureReason: evalResultsTable.failureReason,
+      testCase: evalResultsTable.testCase,
+      gradingResult: evalResultsTable.gradingResult,
+    })
+    .from(evalResultsTable)
+    .where(
+      and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.testIdx, errorTestIndices)),
+    )
+    .all();
+  const comparisonTests = new Set(
+    siblings
+      .filter((row) =>
+        row.testCase.assert?.some(
+          (assertion) => assertion.type === 'select-best' || assertion.type === 'max-score',
+        ),
+      )
+      .map((row) => row.testIdx),
+  );
+  return siblings
+    .filter((row) => {
+      if (!comparisonTests.has(row.testIdx)) {
+        return row.failureReason === ResultFailureReason.ERROR;
+      }
+      if (hasManualGrading(row.gradingResult)) {
+        throw new Error(
+          'This comparison group has manual ratings or comments. Run a new eval to preserve them.',
+        );
+      }
+      return true;
+    })
+    .map((row) => row.id);
+}
+
+function hasManualGrading(grading: GradingResult | null | undefined): boolean {
+  return Boolean(
+    grading?.comment ||
+      grading?.assertion?.type === HUMAN_ASSERTION_TYPE ||
+      grading?.componentResults?.some((result) => hasManualGrading(result)),
+  );
+}
+
 /**
- * Deletes ERROR results after successful retry.
+ * Validate the current originals and commit only this attempt's staged rows.
+ * A manually edited original vetoes replacing any row in the selection.
+ */
+export async function replaceRetryResults(evaluation: Eval, stage: RetryStage): Promise<boolean> {
+  const { originalIds, rows } = stage;
+  if (originalIds.size === 0 || rows.length !== originalIds.size) {
+    return originalIds.size === 0 && rows.length === 0;
+  }
+
+  const replacementKeys = new Set(rows.map(getResultIndexKey));
+  if (
+    replacementKeys.size !== rows.length ||
+    rows.some(
+      (row) =>
+        row.persisted ||
+        row.evalId !== evaluation.id ||
+        row.failureReason === ResultFailureReason.ERROR,
+    )
+  ) {
+    return false;
+  }
+
+  const db = await getDb();
+  const replaced = await db.transaction(async (tx) => {
+    const originalFilter = and(
+      eq(evalResultsTable.evalId, evaluation.id),
+      inArray(evalResultsTable.id, [...originalIds]),
+    );
+    const originalRows = await tx
+      .select({
+        testIdx: evalResultsTable.testIdx,
+        promptIdx: evalResultsTable.promptIdx,
+        gradingResult: evalResultsTable.gradingResult,
+      })
+      .from(evalResultsTable)
+      .where(originalFilter)
+      .all();
+    if (
+      originalRows.length !== originalIds.size ||
+      new Set(originalRows.map(getResultIndexKey)).size !== originalRows.length ||
+      !originalRows.every((row) => replacementKeys.has(getResultIndexKey(row)))
+    ) {
+      return false;
+    }
+    if (originalRows.some((row) => hasManualGrading(row.gradingResult))) {
+      throw new Error(
+        'A selected result has a manual rating or comment. Original results were preserved.',
+      );
+    }
+
+    for (const row of rows) {
+      await row.saveRetryReplacement(tx);
+    }
+    await tx.delete(evalResultsTable).where(originalFilter).run();
+    await evaluation.save(tx);
+    return true;
+  });
+  if (replaced) {
+    notifyEvaluationChanged(evaluation.id);
+  }
+  return replaced;
+}
+
+/**
+ * Deletes selected results after their retry replacements have been saved.
  * Uses batch delete for better performance.
  */
 export async function deleteErrorResults(resultIds: string[]): Promise<void> {
@@ -160,7 +260,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
     notifyEvaluationChanged(evalId);
   }
 
-  logger.debug(`Deleted ${resultIds.length} error results from database`);
+  logger.debug(`Deleted ${resultIds.length} original results from database`);
 }
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results)
@@ -226,10 +326,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update assertion counts
         if (result.gradingResult?.componentResults) {
           metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
+            (r) => r.pass && r.metadata?.graderError !== true,
           ).length;
           metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
+            (r) => !r.pass && r.metadata?.graderError !== true,
           ).length;
         }
 
@@ -302,14 +402,14 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     throw new Error(`Evaluation with ID ${evalId} not found`);
   }
 
-  // Get all ERROR result IDs - capture these BEFORE retry so we know what to delete on success
-  const errorResultIds = await getErrorResultIds(evalId);
+  // Keep originals until the selected errors and comparison siblings are replaced.
+  const errorResultIds = await getRetryResultIds(evalId);
   if (errorResultIds.length === 0) {
     logger.info('✅ No ERROR results found in this evaluation');
     return originalEval;
   }
 
-  logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+  logger.info(`Found ${errorResultIds.length} results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
   const resolvedConfig = await resolveRetryConfigs(originalEval, cmdObj);
@@ -331,19 +431,10 @@ async function retryWithConfig(
 ) {
   const evalId = originalEval.id;
 
-  // CRITICAL: We do NOT delete ERROR results here anymore!
-  // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
-  // - If retry failed (network error, API timeout, etc.), the ERROR results were already gone
-  // - User could not re-retry because the original ERROR results were permanently deleted
-  // Now we delete AFTER successful retry, so if retry fails, ERROR results are preserved
-  // and the user can simply run the retry command again.
-
   logger.info(
     `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
   );
 
-  // Enable resume mode so only the missing results will be evaluated
-  // Enable retry mode so getCompletedIndexPairs excludes ERROR results
   cliState.resume = true;
   cliState.retryMode = true;
   cliState._retryErrorResultIds = errorResultIds;
@@ -371,8 +462,12 @@ async function retryWithConfig(
     cliState.maxConcurrency = effectiveMaxConcurrency;
   }
 
+  const retryStage: RetryStage = { originalIds: new Set(errorResultIds), rows: [] };
+
   // Set up evaluation options
-  const evaluateOptions: InternalEvaluateOptions = {
+  const evaluateOptions: NodeEvaluateOptions = {
+    cache: false,
+    retryStage,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
@@ -381,19 +476,20 @@ async function retryWithConfig(
   };
 
   try {
-    // Run the retry evaluation - this will only run ERROR test cases due to retry mode
+    // Run the selected errors and their comparison siblings.
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
     const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);
 
     if (retriedEval.resultPersistenceFailed) {
-      await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, retriedEval);
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
+    if (!(await replaceRetryResults(retriedEval, retryStage))) {
+      throw new Error(
+        'Retry did not replace all selected results. Original results were preserved.',
+      );
+    }
 
-    let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
-      errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
@@ -402,19 +498,17 @@ async function retryWithConfig(
       });
     }
 
-    if (errorRowsDeleted) {
-      if (jsonlOutputPaths.length > 0) {
-        try {
-          await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
-        } catch (outputError) {
-          logger.warn(
-            'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
-            {
-              error: outputError,
-              outputPaths: jsonlOutputPaths,
-            },
-          );
-        }
+    if (jsonlOutputPaths.length > 0) {
+      try {
+        await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
+      } catch (outputError) {
+        logger.warn(
+          'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
+          {
+            error: outputError,
+            outputPaths: jsonlOutputPaths,
+          },
+        );
       }
     }
 

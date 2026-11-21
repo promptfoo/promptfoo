@@ -1,5 +1,9 @@
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { and, eq, gte, inArray, lt, ne, notInArray } from 'drizzle-orm';
+import {
+  type BlobTransaction,
+  extractAndStoreBinaryData,
+  isBlobStorageEnabled,
+} from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
@@ -44,7 +48,7 @@ export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
     result: EvaluateResult,
-    opts?: { persist: boolean },
+    opts?: { persist: boolean; deferMedia?: boolean },
   ) {
     const persist = opts?.persist == null ? true : opts.persist;
     const {
@@ -74,11 +78,13 @@ export default class EvalResult {
       evaluationId,
     );
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
-      evalId,
-      testIdx: result.testIdx,
-      promptIdx: result.promptIdx,
-    });
+    const processedResponse = opts?.deferMedia
+      ? result.response
+      : await extractAndStoreBinaryData(result.response, {
+          evalId,
+          testIdx: result.testIdx,
+          promptIdx: result.promptIdx,
+        });
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -186,8 +192,11 @@ export default class EvalResult {
     return returnResults;
   }
 
-  static async findById(id: string) {
-    const db = await getDb();
+  static async findById(
+    id: string,
+    transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'select'>,
+  ) {
+    const db = transaction ?? (await getDb());
     const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
@@ -236,17 +245,18 @@ export default class EvalResult {
    */
   static async getCompletedIndexPairs(
     evalId: string,
-    opts?: { excludeErrors?: boolean },
+    opts?: { excludeErrors?: boolean; excludeResultIds?: string[] },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
+    const whereClause = and(
+      eq(evalResultsTable.evalId, evalId),
+      opts?.excludeErrors
+        ? ne(evalResultsTable.failureReason, ResultFailureReason.ERROR)
+        : undefined,
+      opts?.excludeResultIds?.length
+        ? notInArray(evalResultsTable.id, opts.excludeResultIds)
+        : undefined,
+    );
 
     const rows = await db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
@@ -382,8 +392,22 @@ export default class EvalResult {
     this.pluginId = opts.testCase.metadata?.pluginId;
   }
 
-  async save() {
-    const db = await getDb();
+  async saveRetryReplacement(transaction: BlobTransaction) {
+    this.response =
+      (await extractAndStoreBinaryData(
+        this.response,
+        {
+          evalId: this.evalId,
+          testIdx: this.testIdx,
+          promptIdx: this.promptIdx,
+        },
+        transaction,
+      )) ?? undefined;
+    await this.save(transaction);
+  }
+
+  async save(transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'insert' | 'update'>) {
+    const db = transaction ?? (await getDb());
     // Trace/repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived
     // from testCase metadata, while linkage travels inside the metadata JSON. Drizzle would
     // drop them silently, but excluding them explicitly keeps the payload aligned with the schema.
@@ -413,7 +437,10 @@ export default class EvalResult {
         .where(eq(evalResultsTable.id, this.id))
         .run();
     } else {
-      const result = await db.insert(evalResultsTable).values(persistedValues).returning();
+      const result = await db
+        .insert(evalResultsTable)
+        .values({ ...persistedValues, ...redactSensitiveResultFieldsForDb(persistedValues) })
+        .returning();
       this.id = result[0].id;
       this.persisted = true;
     }
@@ -492,6 +519,7 @@ export default class EvalResult {
             shouldStripResponseOutput,
             this.response?.metadata,
             this.testCase.metadata,
+            shouldStripGradingResult,
           ),
       failureReason: this.failureReason,
     };

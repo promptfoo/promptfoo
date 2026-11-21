@@ -49,6 +49,7 @@ export const handleSimilar = async ({
     // margin). matchesSimilarity already normalizes the inverse score so
     // higher is always better.
     let closestResult: Omit<GradingResult, 'assertion'> | undefined;
+    let graderError: Omit<GradingResult, 'assertion'> | undefined;
     // The assertion passes if the output matches ANY of the values (we return
     // early on the first pass), so when none pass, report the best (highest)
     // score — how close the output got to its closest value — not the worst.
@@ -65,6 +66,10 @@ export const handleSimilar = async ({
         metric,
         providerCallContext,
       );
+      if (result.metadata?.graderError === true) {
+        graderError ??= result;
+        continue;
+      }
       if (inverse ? !result.pass : result.pass) {
         return {
           assertion,
@@ -76,6 +81,9 @@ export const handleSimilar = async ({
       } else if (!inverse && result.score > maxScore) {
         maxScore = result.score;
       }
+    }
+    if (graderError) {
+      return { assertion, ...graderError };
     }
     if (inverse) {
       // renderedValue is non-empty (invariant above), so closestResult is set.

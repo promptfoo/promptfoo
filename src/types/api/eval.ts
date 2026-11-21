@@ -266,6 +266,7 @@ export const SubmitRatingParamsSchema = z.object({
 /** Permissive grading result schema. */
 export const SubmitRatingRequestSchema = z
   .object({
+    action: z.enum(['rate', 'clear', 'annotate']).optional(),
     pass: z.boolean(),
     score: z.number(),
   })
