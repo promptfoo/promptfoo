@@ -38,7 +38,7 @@ describe('HyperbolicProvider', () => {
       provider = new HyperbolicProvider('deepseek-ai/DeepSeek-R1', {
         config: { config: { apiKey: customApiKey } },
       });
-      expect(provider['originalConfig']?.apiKey).toBe(customApiKey);
+      expect(provider.getApiKey()).toBe(customApiKey);
     });
   });
 

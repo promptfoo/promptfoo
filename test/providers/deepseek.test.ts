@@ -612,12 +612,13 @@ describe('DeepSeek native requests', () => {
 // public-loader regression together rather than mock super.callApi in each suite.
 describe('completed model callback billing', () => {
   const cases = [
-    { route: 'deepseek:deepseek-chat', cost: 1.12e-6, config: {} },
-    { route: 'hyperbolic:deepseek-ai/DeepSeek-R1', cost: 7.54e-6, config: {} },
+    { route: 'deepseek:deepseek-chat', cost: 1.12e-6, cachedCost: 0, config: {} },
+    { route: 'hyperbolic:deepseek-ai/DeepSeek-R1', cost: 7.54e-6, cachedCost: 7.54e-6, config: {} },
     { route: 'meta:chat:muse-spark-1.3', cost: 15.25e-6, config: {} },
     {
       route: 'fireworks:accounts/fireworks/models/llama-v3p3-70b-instruct',
       cost: 13e-6,
+      cachedCost: 0,
       config: { inputCost: 2e-6, outputCost: 3e-6 },
     },
     {
@@ -868,23 +869,11 @@ describe('completed model callback billing', () => {
           const selected = response(await fixture.run('selected-error', prompt));
           expect(selected.cached).toBe(item.source === 'cached');
           expect(selected.tokenUsage?.total).toBe(5);
-          cost(
-            selected.cost,
-            item.source === 'fresh'
-              ? ordinary.cost
-              : item.route.startsWith('fireworks:') || item.route.startsWith('deepseek:')
-                ? 0
-                : undefined,
-          );
+          cost(selected.cost, item.source === 'fresh' ? ordinary.cost : item.cachedCost);
           const survivor = response(await fixture.run('success', prompt));
           expect(survivor.output).toBe('Hello from lookup');
           expect(survivor.cached).toBe(true);
-          cost(
-            survivor.cost,
-            item.route.startsWith('fireworks:') || item.route.startsWith('deepseek:')
-              ? 0
-              : undefined,
-          );
+          cost(survivor.cost, item.cachedCost);
           expect(fixture.fetch).toHaveBeenCalledTimes(item.source === 'fresh' ? 2 : 1);
           expect(fixture.callback).toHaveBeenCalledTimes(3);
         }),
@@ -915,8 +904,7 @@ describe('completed model callback billing', () => {
     );
     await withCacheEnabled(false, async () => {
       const ordinary = response(await fixture.run('fallback', 'ordinary'));
-      const expected =
-        item.boundary === 'zero' && !item.route.startsWith('hyperbolic:') ? 0 : undefined;
+      const expected = item.boundary === 'zero' ? 0 : undefined;
       cost(ordinary.cost, expected);
       const selected = response(await fixture.run('selected-error', 'selected'));
       cost(selected.cost, expected);
@@ -934,9 +922,8 @@ describe('completed model callback billing', () => {
       });
       await withCacheEnabled(false, async () => {
         const ordinary = response(await fixture.run('success', 'ordinary'));
-        const expected = /^hyperbolic:/.test(item.route) ? 14e-6 : 0;
-        cost(ordinary.cost, expected);
-        cost(response(await fixture.run('selected-error', 'selected')).cost, expected);
+        expect(ordinary.cost).toBe(0);
+        expect(response(await fixture.run('selected-error', 'selected')).cost).toBe(0);
         expect(fixture.fetch).toHaveBeenCalledTimes(2);
       });
     },

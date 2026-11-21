@@ -1,15 +1,16 @@
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
 import { serializeProvider } from '../serialization';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
+import type { OpenAiBillingConfig } from '../openai/config';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type HyperbolicConfig = OpenAiCompletionOptions;
 
 type HyperbolicProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
+  config?: HyperbolicConfig & {
     config?: HyperbolicConfig;
   };
 };
@@ -184,7 +185,14 @@ export function calculateHyperbolicCost(
   completionTokens?: number,
   reasoningTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  if (
+    typeof promptTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    promptTokens < 0 ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(completionTokens) ||
+    completionTokens < 0
+  ) {
     return undefined;
   }
 
@@ -212,8 +220,6 @@ export function calculateHyperbolicCost(
 }
 
 export class HyperbolicProvider extends OpenAiChatCompletionProvider {
-  private originalConfig?: HyperbolicConfig;
-
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
@@ -228,17 +234,38 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   }
 
   constructor(modelName: string, providerOptions: HyperbolicProviderOptions) {
+    const { config: nested, ...flat } = providerOptions.config ?? {};
+    const config = { ...flat, ...nested };
+    // Keep credentials and both URL aliases on the layer that chooses the endpoint.
+    const destination =
+      nested?.apiHost || nested?.apiBaseUrl
+        ? nested
+        : flat.apiHost || flat.apiBaseUrl
+          ? flat
+          : config;
+    if (destination !== config) {
+      const other = destination === flat ? nested : flat;
+      for (const key of ['apiKey', 'apiKeyEnvar', 'headers', 'organization'] as const) {
+        if (other?.[key] !== undefined && destination[key] === undefined) {
+          throw new Error(
+            'Configure Hyperbolic credentials and endpoint in the same config layer.',
+          );
+        }
+      }
+    }
     super(modelName, {
       ...providerOptions,
       config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'HYPERBOLIC_API_KEY',
-        apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+        ...config,
+        apiHost: destination.apiHost,
+        apiBaseUrl: destination.apiBaseUrl || 'https://api.hyperbolic.xyz/v1',
+        apiKey: destination.apiKey,
+        apiKeyEnvar: destination.apiKeyEnvar || 'HYPERBOLIC_API_KEY',
+        headers: destination.headers,
+        organization: destination.organization,
+        useDefaultApiKey: false,
       },
     });
-
-    // Store the original config for later use
-    this.originalConfig = providerOptions.config?.config;
   }
 
   id(): string {
@@ -253,33 +280,17 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
     return serializeProvider(this, 'hyperbolic', () => this.apiKey);
   }
 
-  async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (
-      !response ||
-      (response.error && (response.metadata?.errorOrigin !== 'tool' || !response.tokenUsage))
-    ) {
-      return response;
-    }
-
-    try {
-      if (response.tokenUsage && !response.cached) {
-        const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
-
-        response.cost = calculateHyperbolicCost(
-          this.modelName,
-          this.config || {},
-          response.tokenUsage.prompt,
-          response.tokenUsage.completion,
-          reasoningTokens,
-        );
-      }
-    } catch (err) {
-      logger.error(`Error processing Hyperbolic response: ${err}`);
-    }
-
-    return response;
+  protected override calculateResponseCost(
+    { usage }: OpenAiChatCompletionCostData,
+    config: OpenAiBillingConfig,
+  ): number | undefined {
+    return calculateHyperbolicCost(
+      this.getBillingModelName(config),
+      config,
+      usage?.prompt_tokens,
+      usage?.completion_tokens,
+      usage?.completion_tokens_details?.reasoning_tokens,
+    );
   }
 }
 

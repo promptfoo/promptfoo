@@ -150,7 +150,25 @@ function mapObjectValues(
 ): Record<string, unknown> {
   const entries: [string, unknown][] = [];
   for (const key in value) {
-    entries.push([key, map(key, (value as Record<string, unknown>)[key])]);
+    // Callback registries authorize execution. Never promote inherited entries or
+    // invoke callback functions as runtime template factories.
+    if (key === 'functionToolCallbacks' && !Object.prototype.hasOwnProperty.call(value, key)) {
+      continue;
+    }
+    const child = (value as Record<string, unknown>)[key];
+    if (key === 'functionToolCallbacks' && child && typeof child === 'object') {
+      entries.push([
+        key,
+        Object.fromEntries(
+          Object.entries(child).map(([name, fn]) => [
+            name,
+            typeof fn === 'string' ? map(name, fn) : fn,
+          ]),
+        ),
+      ]);
+    } else {
+      entries.push([key, map(key, child)]);
+    }
   }
   return Object.fromEntries(entries);
 }
