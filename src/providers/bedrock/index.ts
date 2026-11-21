@@ -3,7 +3,6 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   clampMaxTokensForThinkingBudget,
   formatLegacyCompletionPrompt,
@@ -18,7 +17,7 @@ import {
   parseMessages,
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
-import { parseChatPrompt } from '../shared';
+import { parseChatPrompt, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import {
   calculateBedrockInvokeModelCost,
@@ -49,11 +48,20 @@ function getNovaTokenUsage(responseJson: any): TokenUsage {
     return missingBedrockTokenUsage();
   }
 
+  const input = coerceStrToNum(usage.inputTokens);
+  const cacheReadInputTokens = coerceStrToNum(usage.cacheReadInputTokenCount);
+  const cacheCreationInputTokens = coerceStrToNum(usage.cacheWriteInputTokenCount);
   return {
-    prompt: coerceStrToNum(usage.inputTokens),
+    prompt:
+      input === undefined
+        ? undefined
+        : input + (cacheReadInputTokens ?? 0) + (cacheCreationInputTokens ?? 0),
     completion: coerceStrToNum(usage.outputTokens),
     total: coerceStrToNum(usage.totalTokens),
     numRequests: 1,
+    ...(cacheReadInputTokens !== undefined || cacheCreationInputTokens !== undefined
+      ? { completionDetails: { cacheReadInputTokens, cacheCreationInputTokens } }
+      : {}),
   };
 }
 
@@ -2835,65 +2843,39 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       region,
     })}`;
 
-    if (isCacheEnabled()) {
-      // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
-      if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return {
-          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
-          tokenUsage: createEmptyTokenUsage(),
-          cached: true,
-        };
-      }
-    }
-
-    let response;
-    try {
-      const bedrockInstance = await this.getBedrockInstance();
-
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    let body = useCache ? await cache.get<string>(cacheKey) : undefined;
+    const cached = Boolean(body);
+    if (!body) {
       try {
-        const testCredentials = await bedrockInstance.config.credentials?.();
-        logger.debug(
-          `Actual credentials being used: ${
-            testCredentials?.accessKeyId
-              ? `accessKeyId starts with: ${testCredentials.accessKeyId.substring(0, 4)}...`
-              : 'no explicit credentials (using instance metadata)'
-          }`,
-        );
-      } catch (credErr) {
-        logger.debug(`Error getting credentials: ${credErr}`);
-      }
-
-      response = await bedrockInstance.invokeModel({
-        modelId: this.modelName,
-        ...(this.config.guardrailIdentifier
-          ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
-          : {}),
-        ...(this.config.guardrailVersion
-          ? { guardrailVersion: String(this.config.guardrailVersion) }
-          : {}),
-        ...(this.config.trace ? { trace: this.config.trace } : {}),
-        accept: 'application/json',
-        contentType: 'application/json',
-        body: JSON.stringify(params),
-      });
-    } catch (err) {
-      return {
-        error: `Bedrock API invoke model error: ${String(err)}`,
-      };
-    }
-
-    logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
-    if (isCacheEnabled()) {
-      try {
-        await cache.set(cacheKey, new TextDecoder().decode(response.body));
+        const bedrockInstance = await this.getBedrockInstance();
+        const response = await bedrockInstance.invokeModel({
+          modelId: this.modelName,
+          ...(this.config.guardrailIdentifier
+            ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
+            : {}),
+          ...(this.config.guardrailVersion
+            ? { guardrailVersion: String(this.config.guardrailVersion) }
+            : {}),
+          ...(this.config.trace ? { trace: this.config.trace } : {}),
+          accept: 'application/json',
+          contentType: 'application/json',
+          body: JSON.stringify(params),
+        });
+        body = new TextDecoder().decode(response.body);
       } catch (err) {
-        logger.error(`Failed to cache response: ${String(err)}`);
+        return { error: `Bedrock API invoke model error: ${String(err)}` };
+      }
+      if (useCache) {
+        try {
+          await cache.set(cacheKey, body);
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
       }
     }
     try {
-      const output = JSON.parse(new TextDecoder().decode(response.body));
+      const output = JSON.parse(body);
 
       let tokenUsage: Partial<TokenUsage> = {};
       if (model.tokenUsage) {
@@ -2952,7 +2934,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      // Claude's displayed prompt count includes cache reads and writes. Billing
+      // Claude and Nova prompt counts include cache reads and writes. Billing
       // needs the API's uncached input count because cache tokens are priced separately.
       const cacheReadInputTokens =
         tokenUsage.completionDetails?.cacheReadInputTokens ??
@@ -2962,9 +2944,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const billablePromptTokens =
         model === BEDROCK_MODEL.CLAUDE_MESSAGES
           ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
-            ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
-            : tokenUsage.prompt;
+          : model === BEDROCK_MODEL.AMAZON_NOVA || model === BEDROCK_MODEL.AMAZON_NOVA_2
+            ? coerceStrToNum(output.usage?.inputTokens)
+            : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
+              ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
+              : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
         billablePromptTokens,
@@ -2981,9 +2965,10 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         grok47 && (output.service_tier ?? grokTier)
           ? { type: output.service_tier ?? grokTier }
           : undefined,
+        mergedConfig,
       );
 
-      return {
+      const result = {
         output: model.output(mergedConfig, output),
         tokenUsage,
         cost,
@@ -2995,11 +2980,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
             }
           : {}),
       };
+      return cached ? withResponseCacheMetadata(result, true) : result;
     } catch (err) {
-      logger.error('Bedrock API response error', { error: String(err), response });
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
-      };
+      return { error: `API response error: ${String(err)}` };
     }
   }
 }

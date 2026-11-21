@@ -29,6 +29,13 @@ export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex' | 'reserved';
 };
 
+export interface BedrockCostConfig {
+  inferenceModelType?: string;
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
+}
+
 type BedrockPricing = {
   input: number;
   output: number;
@@ -51,8 +58,14 @@ type BedrockPricing = {
  */
 const NOVA_CACHE_READ_RATIO = 0.25;
 
-function isNovaPromptCachingModel(normalizedModelId: string): boolean {
-  return normalizedModelId.includes('amazon.nova-');
+function isNovaPromptCachingModel(normalizedModelId: string, config: BedrockCostConfig): boolean {
+  return (
+    normalizedModelId.includes('amazon.nova-') ||
+    (/^arn:[^:]+:bedrock:[^:]+:\d{12}:(?:application-)?inference-profile\//.test(
+      normalizedModelId,
+    ) &&
+      (config.inferenceModelType === 'nova' || config.inferenceModelType === 'nova2'))
+  );
 }
 
 /**
@@ -529,6 +542,7 @@ export function calculateBedrockCost(
   region?: string,
   serviceTier?: BedrockServiceTier,
   cacheWrite1hTokens = 0,
+  config: BedrockCostConfig = {},
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
@@ -539,7 +553,39 @@ export function calculateBedrockCost(
     return undefined;
   }
 
+  const { cost, inputCost, outputCost } = config;
+  if (
+    [cost, inputCost, outputCost].some(
+      (rate) => rate !== undefined && (!Number.isFinite(rate) || rate < 0),
+    )
+  ) {
+    return undefined;
+  }
+  const inputOverride = inputCost ?? cost;
+  const outputOverride = outputCost ?? cost;
   const normalizedModelId = modelId.toLowerCase();
+  const claude = normalizedModelId.includes('anthropic.claude');
+  const nova = isNovaPromptCachingModel(normalizedModelId, config);
+  const hasOverrides = inputOverride !== undefined || outputOverride !== undefined;
+  if (hasOverrides) {
+    if (
+      [promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens, cacheWrite1hTokens].some(
+        (count) => !Number.isSafeInteger(count) || count < 0,
+      ) ||
+      cacheWrite1hTokens > cacheWriteTokens
+    ) {
+      return undefined;
+    }
+    if (
+      inputOverride !== undefined &&
+      outputOverride !== undefined &&
+      !cacheReadTokens &&
+      !cacheWriteTokens
+    ) {
+      const amount = promptTokens * inputOverride + completionTokens * outputOverride;
+      return Number.isFinite(amount) ? amount : undefined;
+    }
+  }
   // Every GPT-6 system profile goes to the shared Runtime billing table, which owns the
   // list of priced variants and returns no cost for the others.
   const gptProfile =
@@ -568,7 +614,7 @@ export function calculateBedrockCost(
     // expects total input, with the cache meters identified inside that total.
     return calculateOpenAIUsageCost(
       model,
-      {},
+      { cost, inputCost, outputCost },
       {
         input_tokens: inputTokens,
         output_tokens: completionTokens,
@@ -602,10 +648,10 @@ export function calculateBedrockCost(
       promptTokens + cacheReadTokens + cacheWriteTokens,
     )!;
     return (
-      promptTokens * rates.input +
+      promptTokens * (inputOverride ?? rates.input) +
       cacheReadTokens * rates.cachedInput +
       cacheWriteTokens * rates.cacheWriteInput +
-      completionTokens * rates.output
+      completionTokens * (outputOverride ?? rates.output)
     );
   }
   // AWS model cards publish separate geo/global cache rates for these Runtime
@@ -641,13 +687,11 @@ export function calculateBedrockCost(
     const multiplier =
       (globalProfile ? 1 : govCloudGrok ? 1.32 : 1.1) *
       (serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1);
+    const unit = multiplier / 1_000_000;
     return (
-      ((promptTokens * rates.input +
-        completionTokens * rates.output +
-        cacheReadTokens * rates.read +
-        cacheWriteTokens * rates.write) /
-        1_000_000) *
-      multiplier
+      promptTokens * (inputOverride ?? rates.input * unit) +
+      completionTokens * (outputOverride ?? rates.output * unit) +
+      (cacheReadTokens * rates.read + cacheWriteTokens * rates.write) * unit
     );
   }
   if (isBedrockGrokRuntimeProfile(normalizedModelId)) {
@@ -660,13 +704,17 @@ export function calculateBedrockCost(
       normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
     const [input, output, cachedInput] = globalProfile ? [2, 6, 0.5] : [2.2, 6.6, 0.55];
     return (
-      (promptTokens * input + cacheReadTokens * cachedInput + completionTokens * output) / 1_000_000
+      promptTokens * (inputOverride ?? input / 1_000_000) +
+      completionTokens * (outputOverride ?? output / 1_000_000) +
+      (cacheReadTokens * cachedInput) / 1_000_000
     );
   }
-  const pricing = getBedrockPricing(normalizedModelId, region);
-  if (!pricing) {
+  // The profiles above have published cache meters. In the generic table
+  // only Claude and Nova have verified cache rates.
+  if (hasOverrides && !nova && !claude && (cacheReadTokens > 0 || cacheWriteTokens > 0)) {
     return undefined;
   }
+  const pricing = getBedrockPricing(normalizedModelId, region);
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
   // premium for Claude 4.5+ models. The model ID may be a bare `global.` profile
   // or an inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
@@ -684,10 +732,15 @@ export function calculateBedrockCost(
   // Long-context tiers are billed on total input size, which for Anthropic means the uncached
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
-  const tier = selectBedrockTokenRates(normalizedModelId, pricing, totalInputTokens);
+  const tier = pricing && selectBedrockTokenRates(normalizedModelId, pricing, totalInputTokens);
 
-  const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
-  const inputCost = normalizedModelId.includes('anthropic.claude')
+  // Explicit rates already include the user's endpoint, tier, and context pricing.
+  const inputRate = inputOverride ?? (tier && (tier.input / 1_000_000) * pricingMultiplier);
+  const outputRate = outputOverride ?? (tier && (tier.output / 1_000_000) * pricingMultiplier);
+  if (inputRate === undefined || outputRate === undefined) {
+    return undefined;
+  }
+  const billedInput = claude
     ? calculateCacheInputCost(
         inputRate,
         promptTokens,
@@ -696,24 +749,17 @@ export function calculateBedrockCost(
         normalizedModelId,
         cacheWrite1hTokens,
       )
-    : isNovaPromptCachingModel(normalizedModelId)
+    : nova
       ? promptTokens * inputRate + cacheReadTokens * inputRate * NOVA_CACHE_READ_RATIO
       : promptTokens * inputRate;
-  const outputCost = (completionTokens / 1_000_000) * tier.output * pricingMultiplier;
-  return inputCost + outputCost;
+  const amount = billedInput + completionTokens * outputRate;
+  return Number.isFinite(amount) ? amount : undefined;
 }
 
 /**
- * Calculate InvokeModel cost only for models whose Runtime rates are verified here.
- *
- * The broader table preserves existing Converse cost coverage, but several legacy entries are
- * stale or refer to different variants. Before this shared calculator existed, InvokeModel only
- * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
- * emitting a plausible but incorrect cost.
- *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5) have verified Runtime rates, so they
- * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
- * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
+ * Use automatic InvokeModel rates only for verified families. Complete explicit
+ * rates also support other models; partial overrides cannot use the unverified
+ * entries retained in the broader Converse pricing table.
  */
 export function calculateBedrockInvokeModelCost(
   modelId: string,
@@ -724,6 +770,7 @@ export function calculateBedrockInvokeModelCost(
   region?: string,
   cacheWrite1hTokens = 0,
   serviceTier?: BedrockServiceTier,
+  config: BedrockCostConfig = {},
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
   if (serviceTier && !['default', 'priority', 'flex'].includes(serviceTier.type)) {
@@ -737,7 +784,11 @@ export function calculateBedrockInvokeModelCost(
   ) {
     return undefined;
   }
+  const explicit =
+    (config.inputCost ?? config.cost) !== undefined &&
+    (config.outputCost ?? config.cost) !== undefined;
   if (
+    !explicit &&
     !isBedrockGrokRuntimeProfile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
     !isClaudeHaiku55Model(normalizedModelId) &&
@@ -759,5 +810,6 @@ export function calculateBedrockInvokeModelCost(
     region,
     serviceTier,
     cacheWrite1hTokens,
+    config,
   );
 }
