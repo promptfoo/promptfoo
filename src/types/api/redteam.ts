@@ -69,6 +69,7 @@ export type TestCaseGeneration = z.infer<typeof TestCaseGenerationSchema>;
 
 const GeneratedTestCaseResponseSchema = z.object({
   prompt: z.string(),
+  artifact: z.string().optional(),
   context: z.string(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });

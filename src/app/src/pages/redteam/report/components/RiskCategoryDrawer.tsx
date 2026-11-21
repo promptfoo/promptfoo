@@ -11,12 +11,17 @@ import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
 import { getRedteamHistoryMessages } from '@app/utils/redteamHistory';
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  getAgentOutcomeCase,
+} from '@promptfoo/redteam/constants';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
+import { AgentOutcomeDetails, getAgentOutcomeLabel } from './AgentOutcomeDetails';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
@@ -88,7 +93,7 @@ function getOutputDisplay(output: string | object): string {
   return JSON.stringify(output);
 }
 
-function buildChatMessages(test: TestWithMetadata): Message[] {
+function buildChatMessages(test: TestWithMetadata, message?: string): Message[] {
   const historyMessages = getRedteamHistoryMessages(test.result?.metadata);
 
   if (historyMessages.length > 0) {
@@ -97,7 +102,7 @@ function buildChatMessages(test: TestWithMetadata): Message[] {
 
   // Fallback to last turn
   return [
-    { role: 'user' as const, content: getPromptDisplayString(test.prompt) },
+    { role: 'user' as const, content: message ?? getPromptDisplayString(test.prompt) },
     { role: 'assistant' as const, content: getOutputDisplay(test.output) },
   ];
 }
@@ -161,11 +166,12 @@ const RiskCategoryDrawer = ({
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
     );
-    const chatMessages = buildChatMessages(test);
+    const assigned = getAgentOutcomeCase(test.result?.testCase);
+    const chatMessages = buildChatMessages(test, assigned?.message);
     const maxTurns = Math.ceil(chatMessages.length / 2);
-    const strategyLabel = strategyId
-      ? displayNameOverrides[strategyId as keyof typeof displayNameOverrides] || strategyId
-      : undefined;
+    const caseLabel = assigned
+      ? getAgentOutcomeLabel(assigned)
+      : displayNameOverrides[strategyId as keyof typeof displayNameOverrides] || strategyId;
 
     return (
       <Collapsible key={index} defaultOpen={index === 0}>
@@ -189,9 +195,9 @@ const RiskCategoryDrawer = ({
               <div className="flex w-full items-center gap-3">
                 <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform [[data-state=closed]_&]:-rotate-90" />
                 <span className="text-sm font-medium text-muted-foreground">#{index + 1}</span>
-                {strategyLabel && (
+                {caseLabel && (
                   <Badge variant="secondary" className="text-xs">
-                    {strategyLabel}
+                    {caseLabel}
                   </Badge>
                 )}
                 {maxTurns > 1 && (
@@ -242,6 +248,7 @@ const RiskCategoryDrawer = ({
 
           {/* Collapsible content */}
           <CollapsibleContent>
+            {assigned && <AgentOutcomeDetails test={test} assigned={assigned} />}
             {/* Chat conversation */}
             <ChatMessages
               messages={chatMessages}

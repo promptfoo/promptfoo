@@ -1,9 +1,18 @@
-import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
+import {
+  AGENT_OUTCOME_PLUGINS,
+  type categoryAliases,
+  categoryAliasesReverse,
+  getAgentOutcomeCase,
+} from '@promptfoo/redteam/constants';
 import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+
+import type { CategoryStats, TestResultStats } from './FrameworkComplianceUtils';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
@@ -20,6 +29,106 @@ export interface TestWithMetadata {
     strategyId?: string;
     [key: string]: unknown;
   };
+}
+
+/** All graded trials contribute findings. Attacks supply exploitability metrics. */
+export type FindingStats = Required<TestResultStats> & { attacks?: Required<TestResultStats> };
+
+export function getFindingMetrics(stats: FindingStats, description: string) {
+  const attacks = stats.attacks ?? stats;
+  const successfulAttacks = attacks.total - attacks.pass;
+  const failedTests = stats.total - stats.pass;
+  const failedBaselines = failedTests - successfulAttacks;
+  return {
+    description: failedBaselines
+      ? `${failedBaselines} matched ${failedBaselines === 1 ? 'baseline' : 'baselines'} failed. ${description}`
+      : description,
+    total: stats.total,
+    successfulAttacks,
+    failedTests,
+    passRate: attacks.total ? (attacks.pass / attacks.total) * 100 : 0,
+    passRateWithFilter: attacks.total ? (attacks.passWithFilter / attacks.total) * 100 : 0,
+    attackSuccessRate: attacks.total
+      ? calculateAttackSuccessRate(attacks.total, attacks.failCount)
+      : null,
+  };
+}
+
+export function formatFindingASR(rate: number | null, digits = 2) {
+  return rate === null ? 'N/A' : formatASRForDisplay(rate, digits) + '%';
+}
+
+export function flaggedByModeration(grade?: GradingResult | null) {
+  return grade?.componentResults?.some(
+    (result) => result.assertion?.type === 'moderation' && !result.pass,
+  );
+}
+
+export function buildAttackReport<
+  T extends {
+    result?: { testCase?: Parameters<typeof getAgentOutcomeCase>[0] };
+    gradingResult?: GradingResult;
+    // Legacy verdicts can survive even when the grade is incomplete for display.
+    moderationFlagged?: boolean;
+  },
+>(
+  failures: Record<string, T[]>,
+  passes: Record<string, T[]>,
+  stats: Record<string, Required<TestResultStats>>,
+  getStrategy: (test: T) => string,
+) {
+  const failuresByPlugin = { ...failures };
+  const passesByPlugin = { ...passes };
+  const categoryStats = { ...stats };
+  const findingStats: Record<string, FindingStats> = { ...stats };
+  const countsAsAttack = (test: T) => {
+    const variant = getAgentOutcomeCase(test.result?.testCase)?.variant;
+    return !variant || variant === 'attack';
+  };
+  for (const plugin of AGENT_OUTCOME_PLUGINS) {
+    if (!stats[plugin]) {
+      continue;
+    }
+    const failed = failures[plugin]?.filter(countsAsAttack) ?? [];
+    const passed = passes[plugin]?.filter(countsAsAttack) ?? [];
+    const total = failed.length + passed.length;
+    if (total === stats[plugin].total) {
+      continue;
+    }
+    failuresByPlugin[plugin] = failed;
+    passesByPlugin[plugin] = passed;
+    const attacks = {
+      total,
+      failCount: failed.length,
+      pass: passed.length,
+      passWithFilter:
+        passed.length +
+        failed.filter((test) => test.moderationFlagged ?? flaggedByModeration(test.gradingResult))
+          .length,
+    };
+    findingStats[plugin] = { ...stats[plugin], attacks };
+    if (total) {
+      categoryStats[plugin] = attacks;
+    } else {
+      delete categoryStats[plugin];
+    }
+  }
+
+  const strategyStats: CategoryStats = {};
+  for (const [byPlugin, count] of [
+    [failuresByPlugin, 'failCount'],
+    [passesByPlugin, 'pass'],
+  ] as const) {
+    for (const tests of Object.values(byPlugin)) {
+      for (const test of tests) {
+        const id = getStrategy(test);
+        const strategy = (strategyStats[id] ??= { pass: 0, total: 0, failCount: 0 });
+        strategy.total++;
+        strategy[count]++;
+      }
+    }
+  }
+  return { categoryStats, strategyStats, failuresByPlugin, passesByPlugin, findingStats };
 }
 
 export function getStrategyIdFromTest(test: TestWithMetadata): string {

@@ -5,7 +5,6 @@ import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Input } from '@app/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -21,6 +20,7 @@ import {
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   ISO_42001_MAPPING,
+  isAgentOutcomePlugin,
   MCP_PLUGINS,
   MINIMAL_TEST_PLUGINS,
   MITRE_ATLAS_MAPPING,
@@ -174,6 +174,7 @@ export interface PluginsTabProps {
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
   isRemoteGenerationDisabled: boolean;
+  hasGenerationProvider?: boolean;
 }
 
 export default function PluginsTab({
@@ -184,6 +185,7 @@ export default function PluginsTab({
   updatePluginConfig,
   recentlyUsedPlugins,
   isRemoteGenerationDisabled,
+  hasGenerationProvider,
 }: PluginsTabProps): React.ReactElement {
   const { recordEvent } = useTelemetry();
   const toast = useToast();
@@ -207,10 +209,6 @@ export default function PluginsTab({
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [presetsExpanded, setPresetsExpanded] = useState(true);
-
-  const {
-    data: { status: apiHealthStatus },
-  } = useApiHealth();
 
   // Check if user has enterprise access (cloud enabled)
   const { data: cloudConfig } = useCloudConfig();
@@ -360,6 +358,11 @@ export default function PluginsTab({
       return displayNameA.localeCompare(displayNameB);
     });
   }, [searchTerm, allPluginsWithCategories]);
+
+  // Outcome plugins require receipts from an instrumented target, so select them individually.
+  const standardPluginIds = filteredPlugins
+    .map(({ plugin }) => plugin)
+    .filter((plugin) => !isAgentOutcomePlugin(plugin));
 
   const currentlySelectedPreset = useMemo(
     () =>
@@ -543,14 +546,13 @@ export default function PluginsTab({
               <div className="flex gap-4">
                 <button
                   type="button"
-                  className="cursor-pointer text-sm text-primary hover:underline"
-                  onClick={() => {
-                    setSelectedPlugins(
-                      new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
-                    );
-                  }}
+                  className="cursor-pointer text-sm text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                  disabled={standardPluginIds.length === 0}
+                  onClick={() =>
+                    setSelectedPlugins(new Set([...selectedPlugins, ...standardPluginIds]))
+                  }
                 >
-                  Select all
+                  Select all shown standard plugins
                 </button>
                 <button
                   type="button"
@@ -670,18 +672,15 @@ export default function PluginsTab({
                     <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
+                        localPreview={hasGenerationProvider && isAgentOutcomePlugin(plugin)}
                         disabled={
-                          pluginDisabled ||
-                          apiHealthStatus !== 'connected' ||
-                          (generatingTestCase && generatingPlugin === plugin)
+                          pluginDisabled || (generatingTestCase && generatingPlugin === plugin)
                         }
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
                             ? 'This plugin requires remote generation'
-                            : apiHealthStatus === 'connected'
-                              ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                              : 'Promptfoo Cloud connection is required for test generation'
+                            : `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                         }
                       />
                       {isSelected && (
@@ -754,6 +753,7 @@ export default function PluginsTab({
 
           {/* Plugin config dialog */}
           <PluginConfigDialog
+            key={selectedConfigPlugin}
             open={configDialogOpen}
             onClose={() => {
               setConfigDialogOpen(false);

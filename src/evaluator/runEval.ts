@@ -4,6 +4,7 @@ import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
+import { getLiteralVarNames } from '../contracts/literalVars';
 import { getEnvBool, getEnvInt } from '../envars';
 import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
@@ -11,7 +12,7 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
-import { getSessionId } from '../redteam/util';
+import { getSessionId, needsFreshTargetResponse } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
   withProviderCallExecutionContext,
@@ -269,7 +270,7 @@ function createRunEvalState({
   promptIndex: number;
 }): RunEvalState {
   const vars = structuredClone(test.vars || {});
-  const fileMetadata = collectFileMetadata(vars);
+  const fileMetadata = collectFileMetadata(vars, getLiteralVarNames(test));
   // Provider identifiers and prompt ids can both collide, but every result-table
   // column has a unique index. Encode the components as a tuple because identifiers
   // can contain separators that would make concatenated keys ambiguous.
@@ -407,9 +408,10 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
+  const literalVars = getLiteralVarNames(test);
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+    ? [getRedteamInjectVar(test, promptForRender, testSuite), ...(literalVars ?? [])]
+    : literalVars;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
@@ -499,7 +501,7 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
+      const request = {
         abortSignal,
         pauseSignal,
         evalId,
@@ -517,7 +519,10 @@ async function callProviderForRunEval({
         testSuite,
         traceContext,
         vars,
-      });
+      };
+      response = await withCacheEnabled(needsFreshTargetResponse(test) ? false : undefined, () =>
+        callActiveProvider(request),
+      );
     }
 
     sanitizeResponseMetadata(response);
@@ -1173,9 +1178,8 @@ async function gradeRunEvalResponse({
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
-      throw error;
-    }
+    // Keep the completed target response, as deferred grading does, so a grading error
+    // still shows what the target returned.
     applyGradingError(ret, error, abortSignal);
   }
   ret.response = processedResponse;

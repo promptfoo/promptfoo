@@ -6,6 +6,7 @@ import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import { processConfigField } from './contracts/literalVars';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
@@ -215,7 +216,7 @@ function stripTestPaths(test: TestCase): void {
     test.metadata = stripProviderOrigin(test.metadata);
   }
   if (test.vars) {
-    test.vars = stripFilePaths(test.vars);
+    test.vars = processConfigField(test, 'vars', test.vars, stripFilePaths) as TestCase['vars'];
   }
   if (test.provider) {
     test.provider = stripProviderPaths(test.provider);

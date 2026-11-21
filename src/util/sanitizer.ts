@@ -4,6 +4,7 @@
  */
 import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
+import { projectOperationalMetadata } from '../contracts/literalVars';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
@@ -875,13 +876,9 @@ export function sanitizeConfigForOutput(
       delete test.vars;
     }
     if (stripMetadata && 'metadata' in test) {
-      // Remote-row safety and local replay origins are operational metadata.
-      if (test.metadata?.__promptfoo?.remote === true) {
-        test.metadata = { __promptfoo: { remote: true } };
-      } else if (typeof test.metadata?.__promptfoo?.providerBasePath === 'string') {
-        test.metadata = {
-          __promptfoo: { providerBasePath: test.metadata.__promptfoo.providerBasePath },
-        };
+      const metadata = projectOperationalMetadata(test.metadata, !stripVars, true);
+      if (metadata) {
+        test.metadata = metadata;
       } else {
         delete test.metadata;
       }

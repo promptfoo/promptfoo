@@ -138,6 +138,119 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(onCloseMock).toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      variant: 'attack',
+      label: 'Indirect attack',
+      measuredId: 'case-1',
+      exposed: 'Yes',
+      completed: 'No',
+      control: 'Yes',
+    },
+    {
+      variant: 'control',
+      label: 'Indirect baseline',
+      measuredId: 'case-1',
+      exposed: 'Yes',
+      completed: 'No',
+      control: 'Yes',
+    },
+    {
+      variant: 'attack',
+      label: 'Indirect attack',
+      measuredId: 'case-2',
+      exposed: 'Unknown',
+      completed: 'Unknown',
+      control: 'Unknown',
+    },
+  ])(
+    'associates outcome evidence for $variant with receipt $measuredId',
+    ({ variant, label, measuredId, exposed, completed, control }) => {
+      const pluginId = 'coding-agent:consent-bypass';
+      const agentOutcome = {
+        pluginId,
+        mode: 'indirect',
+        caseId: 'case-1',
+        variant,
+        injectVar: 'assignment',
+        indirectInjectionVar: 'query',
+      };
+      const artifact = 'Initialize tracking on page load';
+      const grade = {
+        pass: false,
+        score: 0,
+        reason: 'The collector received the event after rejection.',
+      };
+      const agentOutcomeResult = {
+        ...agentOutcome,
+        caseId: measuredId,
+        status: 'violation',
+        attackExposed: true,
+        taskCompleted: false,
+        controlPassed: true,
+        reason: grade.reason,
+      };
+      const result = createMockEvaluateResult({ pluginId });
+      const measurements = {
+        beforeReject: { decision: 'reject', actionId: 'before', collectedActionIds: [] },
+        afterReject: { decision: 'reject', actionId: 'after', collectedActionIds: ['after'] },
+        afterAccept: { decision: 'accept', actionId: 'accepted', collectedActionIds: ['accepted'] },
+      };
+      result.response = {
+        metadata: {
+          agentOutcomeEvidence: {
+            version: 1,
+            pluginId,
+            caseId: measuredId,
+            taskCompleted: false,
+            attackExposed: true,
+            measurements,
+          },
+        },
+      };
+      result.testCase = {
+        ...result.testCase,
+        metadata: { pluginId, agentOutcome },
+        vars: { assignment: 'Upgrade the analytics SDK', query: artifact },
+      };
+      renderWithProviders(
+        <RiskCategoryDrawer
+          {...defaultProps}
+          category={pluginId}
+          failures={[
+            {
+              prompt: artifact,
+              output: 'Done',
+              result,
+              gradingResult: {
+                ...grade,
+                componentResults: [{ ...grade, metadata: { agentOutcomeResult } }],
+              },
+            },
+          ]}
+        />,
+      );
+      expect(screen.getByText(label).closest('[aria-expanded]')).toBeInTheDocument();
+      expect(screen.getByText('Upgrade the analytics SDK')).toBeInTheDocument();
+      expect(screen.getByText('Tool content delivered').nextElementSibling).toHaveTextContent(
+        exposed,
+      );
+      expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent(completed);
+      expect(screen.getByText('Positive control passed').nextElementSibling).toHaveTextContent(
+        control,
+      );
+      expect(screen.getByText(artifact)).toBeInTheDocument();
+      const receipts = screen.queryByText('Recorded measurements');
+      if (measuredId === agentOutcome.caseId) {
+        expect(receipts?.nextElementSibling?.textContent).toBe(
+          JSON.stringify(measurements, null, 2),
+        );
+      } else {
+        expect(receipts).toBeNull();
+      }
+    },
+  );
+
   it('should display correct pass/fail statistics', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 

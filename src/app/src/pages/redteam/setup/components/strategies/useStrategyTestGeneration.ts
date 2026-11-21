@@ -3,11 +3,10 @@ import { useCallback, useMemo } from 'react';
 import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { getStrategyPreviewPlugins } from '../../utils/plugins';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
 import type { TargetPlugin } from '../testCaseGenerationTypes';
-
-const DEFAULT_TEST_GENERATION_PLUGIN: Plugin = 'harmful:hate';
 
 interface UseStrategyTestGenerationOptions {
   strategyId: Strategy;
@@ -40,30 +39,10 @@ export function useStrategyTestGeneration({
 
   // Select a random plugin from the user's configured plugins, preserving any plugin config.
   const testGenerationTargetPlugin = useMemo<TargetPlugin>(() => {
-    const plugins = config.plugins ?? [];
-    if (plugins.length === 0) {
-      return {
-        id: DEFAULT_TEST_GENERATION_PLUGIN,
-        config: {},
-        isStatic: true,
-      };
-    }
-
+    const plugins = getStrategyPreviewPlugins(config.plugins, strategyId);
     const selectedPlugin = plugins[Math.floor(Math.random() * plugins.length)];
-    if (typeof selectedPlugin === 'string') {
-      return {
-        id: selectedPlugin as Plugin,
-        config: {},
-        isStatic: true,
-      };
-    }
-
-    return {
-      id: selectedPlugin.id as Plugin,
-      config: selectedPlugin.config ?? {},
-      isStatic: true,
-    };
-  }, [config.plugins]);
+    return { ...selectedPlugin, isStatic: true };
+  }, [config.plugins, strategyId]);
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(testGenerationTargetPlugin, {

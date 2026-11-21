@@ -12,6 +12,7 @@ import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  isAgentOutcomePlugin,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   REMOTE_ONLY_PLUGIN_IDS,
@@ -41,8 +42,13 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
+import {
+  getLiteralMessageOverLimit,
+  getMaxCharsPerMessageFromConfig,
+} from '../shared/promptLengthValidation';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import { agentOutcomePlugins, getAgentOutcomeGenerationSchema } from './agentic/agentOutcome';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -188,31 +194,6 @@ function applyDefaultRemotePluginConfig(
   };
 }
 
-function isValidMaxCharsPerMessage(limit: unknown): limit is number {
-  return typeof limit === 'number' && Number.isInteger(limit) && limit > 0;
-}
-
-function getMaxCharsPerMessageFromConfig(config: PluginConfig | undefined): number | undefined {
-  if (isValidMaxCharsPerMessage(config?.maxCharsPerMessage)) {
-    return config.maxCharsPerMessage;
-  }
-
-  const maxCharsModifier = (config?.modifiers as Record<string, string> | undefined)?.[
-    MAX_CHARS_PER_MESSAGE_MODIFIER_KEY
-  ];
-  if (typeof maxCharsModifier !== 'string') {
-    return undefined;
-  }
-
-  const match = /must be (\d+) characters or fewer\./.exec(maxCharsModifier);
-  if (!match) {
-    return undefined;
-  }
-
-  const maxCharsPerMessage = Number(match[1]);
-  return isValidMaxCharsPerMessage(maxCharsPerMessage) ? maxCharsPerMessage : undefined;
-}
-
 function buildRetryConfig(
   config: PluginConfig | undefined,
   retryInstructions: string | undefined,
@@ -307,6 +288,10 @@ function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?:
 }
 
 function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
+  const retriesByMode = isAgentOutcomePlugin(pluginFactory.key);
+  const checkMessageLength = retriesByMode
+    ? getLiteralMessageOverLimit
+    : getGeneratedPromptOverLimit;
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
@@ -321,7 +306,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         const generatedTestCases = await pluginFactory.action({
           ...params,
           n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
+          config: retriesByMode ? { ...retryConfig, maxCharsPerMessage } : retryConfig,
         });
 
         const validTestCases: TestCase[] = [];
@@ -329,7 +314,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         let rejectedPromptLimit: number | undefined;
 
         for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptOverLimit(
+          const violation = checkMessageLength(
             String(testCase.vars?.[params.injectVar] ?? ''),
             maxCharsPerMessage,
           );
@@ -350,6 +335,11 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         return validTestCases;
       };
 
+      // Outcome plugins retry within each mode. Reallocating the remaining count
+      // can return an extra case for a source that already reached its target.
+      if (retriesByMode) {
+        return generateValidTestCases([]);
+      }
       const testCases = await retryWithDeduplication(
         generateValidTestCases,
         params.n,
@@ -512,6 +502,11 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
+  ...agentOutcomePlugins.map((Plugin) =>
+    createPluginFactory(Plugin, Plugin.id, (config) =>
+      getAgentOutcomeGenerationSchema(Plugin.id).parse(config),
+    ),
+  ),
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(

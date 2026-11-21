@@ -12,6 +12,7 @@ import {
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { getLiteralVarNames } from '../contracts/literalVars';
 import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars';
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
@@ -314,6 +315,7 @@ function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
+  literalVars?: string[],
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
@@ -321,7 +323,11 @@ export function generateVarCombinations(
   for (const key of keys) {
     let values: Array<string | object> = [];
 
-    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+    if (
+      !literalVars?.includes(key) &&
+      typeof vars[key] === 'string' &&
+      vars[key].startsWith('file://')
+    ) {
       const filePath = vars[key].slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
@@ -1276,7 +1282,7 @@ function appendRunEvalOptionsForTestCase({
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {});
+      : generateVarCombinations(testCase.vars || {}, getLiteralVarNames(testCase));
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);

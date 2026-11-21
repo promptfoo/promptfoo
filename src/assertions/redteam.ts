@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { MULTI_INPUT_VAR } from '../redteam/constants';
+import { AGENT_OUTCOME_PLUGINS, MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
   getGradingAssertionHash,
@@ -227,6 +227,11 @@ export const handleRedteam = async (
     );
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
+  // The stored grade hash binds prompt and response text. Outcome assertions also
+  // need measurements from the current target response.
+  const needsOutcomeEvidence = AGENT_OUTCOME_PLUGINS.some(
+    (id) => assertion.type === `promptfoo:redteam:${id}`,
+  );
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
   const getStoredTokens = () =>
@@ -234,6 +239,7 @@ export const handleRedteam = async (
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
   if (
+    !needsOutcomeEvidence &&
     hasStrategyGrade &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
@@ -375,6 +381,7 @@ export const handleRedteam = async (
   } catch (error) {
     // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
     if (
+      needsOutcomeEvidence ||
       providerId === 'promptfoo:redteam:iterative:meta' ||
       providerId === 'promptfoo:redteam:hydra' ||
       providerId === 'promptfoo:redteam:goblin'

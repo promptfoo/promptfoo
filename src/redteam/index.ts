@@ -4,6 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import { z } from 'zod';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -34,6 +35,7 @@ import {
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
+import { isAgentOutcomePlugin } from './constants/agentOutcomes';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -562,7 +564,7 @@ function addLanguageToPluginMetadata(
       },
       // Hoist language to top-level metadata for backward compatibility and easier access
       ...languageToAdd,
-      ...getMaterializedMultiInputPromptMetadata(test.vars),
+      ...(!isAgentOutcomePlugin(plugin.id) && getMaterializedMultiInputPromptMetadata(test.vars)),
     },
   };
 }
@@ -606,13 +608,17 @@ async function applyStrategies(
   strategyResults: Record<string, { requested: number; generated: number }>;
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
+  const hasOutcomeCases = testCases.some(({ metadata }) =>
+    isAgentOutcomePlugin(metadata?.pluginId),
+  );
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
 
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
 
     let strategyAction;
-    if (strategy.id.startsWith('file://')) {
+    const isFileStrategy = strategy.id.startsWith('file://');
+    if (isFileStrategy) {
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
@@ -649,6 +655,11 @@ async function applyStrategies(
 
       return true;
     });
+
+    // Avoid remote strategy setup when outcome cases yielded no eligible inputs.
+    if (hasOutcomeCases && !isFileStrategy && applicableTestCases.length === 0) {
+      continue;
+    }
 
     // Apply numTests pre-limit if configured (with defensive check for NaN/Infinity)
     const numTestsLimit = strategy.config?.numTests;
@@ -1276,6 +1287,7 @@ export async function synthesize({
         logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
       }
     } else if (registeredPlugin.validate) {
+      const isOutcome = isAgentOutcomePlugin(plugin.id);
       try {
         const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
           plugin.config,
@@ -1284,6 +1296,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           ...resolvedPluginConfig,
+          ...(isOutcome && { injectVar, ...(hasMultipleInputs && { inputs }) }),
           modifiers: buildRedteamModifiers({
             maxCharsPerMessage,
             pluginConfig: resolvedPluginConfig,
@@ -1291,6 +1304,9 @@ export async function synthesize({
           }),
         });
       } catch (error) {
+        if (isOutcome && error instanceof z.ZodError) {
+          throw new Error(`Invalid configuration for ${plugin.id}. ${z.prettifyError(error)}`);
+        }
         logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
         return false;
       }
@@ -1485,7 +1501,7 @@ export async function synthesize({
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
         // Extract goal for this plugin's tests (only needed for agentic strategies)
-        if (needsGoalExtraction) {
+        if (needsGoalExtraction && !isAgentOutcomePlugin(plugin.id)) {
           logger.debug(
             `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
           );

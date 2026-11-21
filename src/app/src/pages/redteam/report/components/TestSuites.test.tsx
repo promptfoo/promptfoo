@@ -645,6 +645,29 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
     mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
+  it.each([
+    { passedAttacks: 0, rate: 'N/A' },
+    { passedAttacks: 2, rate: '0.00%' },
+  ])(
+    'shows a failed baseline with $passedAttacks graded attacks and links to the failure',
+    async ({ passedAttacks, rate }) => {
+      const attacks = {
+        total: passedAttacks,
+        pass: passedAttacks,
+        failCount: 0,
+        passWithFilter: passedAttacks,
+      };
+      const stats = { ...attacks, total: passedAttacks + 1, failCount: 1, attacks };
+      renderWithProviders(
+        <TestSuites {...defaultProps} categoryStats={{ 'agentic:unauthorized-sharing': stats }} />,
+      );
+      expect(screen.getByText(/^1 matched baseline failed/)).toBeInTheDocument();
+      expect(screen.getByText(rate)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'View logs' }));
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('mode=failures'));
+    },
+  );
+
   it('should navigate to eval page with mode=passes when attackSuccessRate is 0', async () => {
     const user = userEvent.setup();
     renderWithProviders(<TestSuites {...defaultProps} />);

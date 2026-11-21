@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
+import { projectOperationalMetadata } from '../contracts/literalVars';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
@@ -221,8 +222,11 @@ export function projectTestCase(
   if (options.stripOutput) {
     delete projectedTestCase.providerOutput;
   }
-  if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
-    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+  if (options.stripMetadata) {
+    const metadata = projectOperationalMetadata(testCase.metadata, !options.stripVars);
+    if (metadata) {
+      projectedTestCase.metadata = metadata;
+    }
   }
 
   return options.stripPromptText

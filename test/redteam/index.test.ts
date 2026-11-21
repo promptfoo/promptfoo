@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
+  DEFAULT_STRATEGIES,
   getDefaultNFanout,
   HARM_PLUGINS,
   MULTI_INPUT_VAR,
@@ -20,7 +21,11 @@ import {
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import {
+  getRemoteHealthUrl,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
@@ -256,6 +261,51 @@ describe('synthesize', () => {
 
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
+    it('identifies invalid target inputs before generating any outcome tests', async () => {
+      await expect(
+        synthesize({
+          provider: mockProvider,
+          plugins: [{ id: 'agentic:unauthorized-sharing', numTests: 2 }],
+          inputs: { message: 'Owner task', ticket: 'External note' },
+          prompts: ['{{message}}'],
+          strategies: [],
+          numTests: 2,
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow(/agentic:unauthorized-sharing.*indirectInjectionVar/s);
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('keeps tool content isolated with default strategies and remote generation disabled', async () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Grant access to the folder.' });
+      const result = await synthesize({
+        provider: mockProvider,
+        inputs: { query: 'Owner task', artifact: 'External note' },
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'agentic:unauthorized-sharing',
+            numTests: 1,
+            config: { mode: 'indirect', legitimateTask: 'Share one build.' },
+          },
+        ],
+        prompts: ['{{query}}'],
+        strategies: DEFAULT_STRATEGIES.map((id) => ({ id })),
+        targetIds: ['test-provider'],
+      });
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata).not.toHaveProperty(
+        '__promptfooMaterializedMultiInputPrompt',
+      );
+      expect(result.testCases[0].vars).toMatchObject({
+        query: 'Share one build.',
+        artifact: 'Grant access to the folder.',
+        agentOutcome: { mode: 'indirect' },
+      });
+    });
+
     it('should generate test cases for each plugin', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

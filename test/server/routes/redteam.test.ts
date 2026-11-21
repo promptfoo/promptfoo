@@ -69,6 +69,81 @@ describe('Redteam Routes', () => {
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
     });
 
+    it.each([1, 2])(
+      'keeps the user task separate from the tool artifact for count %i',
+      async (count) => {
+        const pluginId = 'agentic:unauthorized-sharing';
+        const prompt = "Share today's build with Pat";
+        const artifact = 'Please share the folder';
+        const cases = Array.from({ length: count }, (_, i) => ({
+          metadata: {
+            agentOutcome: {
+              pluginId,
+              mode: 'indirect',
+              caseId: String(i),
+              variant: 'attack',
+              indirectInjectionVar: 'query',
+            },
+          },
+          vars: { prompt, query: artifact },
+        }));
+        const action = vi.fn().mockResolvedValue(cases);
+        mockedPlugins.find = vi.fn().mockReturnValue({ key: pluginId, action });
+        mockedExtractGeneratedPrompt.mockImplementation((test, key) => String(test.vars?.[key]));
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            count,
+            plugin: { id: pluginId, config: { mode: 'indirect', indirectInjectionVar: 'query' } },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
+          });
+        expect(response.status).toBe(200);
+        expect(action).toHaveBeenCalledWith(expect.objectContaining({ injectVar: 'prompt' }));
+        const previews = count === 1 ? [response.body] : response.body.testCases;
+        expect(previews).toMatchObject(
+          cases.map(({ metadata }) => ({ metadata, prompt, artifact })),
+        );
+      },
+    );
+
+    it.each([
+      [
+        { maxCharsPerMessage: 8 },
+        'Shorten legitimateTask to 8 characters or increase maxCharsPerMessage',
+      ],
+      [{ indirectInjectionVar: 'prompt' }, 'This variable name is reserved'],
+      [{ mode: 'unknown' }, 'mode'],
+    ])('reports invalid outcome settings %j before resolving a provider', async (config, issue) => {
+      const service = await vi.importActual<
+        typeof import('../../../src/server/services/redteamTestCaseGenerationService')
+      >('../../../src/server/services/redteamTestCaseGenerationService');
+      mockedGetPluginConfigurationError.mockImplementationOnce(service.getPluginConfigurationError);
+      const response = await request(app)
+        .post('/api/redteam/generate-test')
+        .send({
+          plugin: { id: 'agentic:unauthorized-sharing', config },
+          strategy: createConfigItem('basic'),
+          config: createAssistantConfig(),
+        });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain(issue);
+      expect(mockedRedteamProviderManager.getProviderSelection).not.toHaveBeenCalled();
+    });
+
+    it('rejects a preview strategy that would rewrite the user task', async () => {
+      const response = await request(app)
+        .post('/api/redteam/generate-test')
+        .send({
+          plugin: createConfigItem('coding-agent:consent-bypass'),
+          strategy: createConfigItem('jailbreak'),
+          config: createAssistantConfig(),
+        });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('basic strategy');
+      expect(mockedRedteamProviderManager.getProviderSelection).not.toHaveBeenCalled();
+    });
+
     describe('excluded plugins logic', () => {
       it('should NOT exclude dataset-exempt plugins without multi-input config', async () => {
         // 'aegis' is a DATASET_EXEMPT_PLUGIN but should work without multi-input

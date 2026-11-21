@@ -104,7 +104,14 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers"
+      ]
     },
     {
       "name": "providers",

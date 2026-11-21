@@ -4116,6 +4116,7 @@
         "operationId": "generateRedteamTest",
         "tags": ["Redteam"],
         "summary": "Generate one or more redteam test cases",
+        "description": "For indirect agent outcome tests, each preview returns the legitimate user task in prompt and the third-party content in artifact.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -4169,6 +4170,8 @@
                           },
                           "name": { "type": "string" },
                           "multilingual": { "type": "boolean" },
+                          "mode": { "type": "string" },
+                          "legitimateTask": { "type": "string" },
                           "indirectInjectionVar": { "type": "string" },
                           "intendedResults": { "type": "array", "items": { "type": "string" } },
                           "intent": {
@@ -4506,6 +4509,7 @@
                       "type": "object",
                       "properties": {
                         "prompt": { "type": "string" },
+                        "artifact": { "type": "string" },
                         "context": { "type": "string" },
                         "metadata": { "type": "object", "additionalProperties": {} }
                       },
@@ -4520,6 +4524,7 @@
                             "type": "object",
                             "properties": {
                               "prompt": { "type": "string" },
+                              "artifact": { "type": "string" },
                               "context": { "type": "string" },
                               "metadata": { "type": "object", "additionalProperties": {} }
                             },

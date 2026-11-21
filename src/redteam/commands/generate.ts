@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { getLiteralVarNames } from '../../contracts/literalVars';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -64,7 +65,7 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
@@ -136,6 +137,14 @@ function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
   return typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.vars
     ? testSuite.defaultTest.vars
     : {};
+}
+
+function mergeContextVars(test: TestCase, contextVars?: Record<string, string>) {
+  const overrides = { ...contextVars };
+  for (const key of getLiteralVarNames(test) ?? []) {
+    delete overrides[key];
+  }
+  return { ...test.vars, ...overrides };
 }
 
 function renderPurposeTemplate(purpose: string | undefined, vars: Record<string, unknown>): string {
@@ -726,12 +735,9 @@ async function doGenerateRedteamInternal(
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
+      const taggedTests = contextResult.testCases.map((test) => ({
         ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
+        vars: mergeContextVars(test, context.vars),
         metadata: {
           ...test.metadata,
           purpose: contextResult.purpose,

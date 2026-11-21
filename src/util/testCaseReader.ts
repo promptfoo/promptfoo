@@ -8,6 +8,7 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import cliState from '../cliState';
+import { getLiteralVarNames, processConfigField } from '../contracts/literalVars';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -539,7 +540,9 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    testCase.vars = processConfigField(testCase, 'vars', testCase.vars, (value) =>
+      resolveVarsFileReferences(value, basePath),
+    ) as TestCase['vars'];
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
@@ -1010,6 +1013,7 @@ function collectConfigFileReferences(
   value: unknown,
   basePath: string,
   seen: WeakSet<object> = new WeakSet(),
+  literalKeys?: string[],
 ): string[] {
   if (typeof value === 'string') {
     return value.startsWith('file://') ? resolveTestsFileReference(value, basePath) : [];
@@ -1023,8 +1027,11 @@ function collectConfigFileReferences(
     return [];
   }
   seen.add(value);
-  const children = Array.isArray(value) ? value : Object.values(value);
-  return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
+  return Object.entries(value).flatMap(([key, item]) =>
+    literalKeys?.includes(key)
+      ? []
+      : collectConfigFileReferences(item, basePath, seen, getLiteralVarNames(value, key)),
+  );
 }
 
 /**
@@ -1086,8 +1093,9 @@ export function resolveTestsWatchPaths(
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
+      const literal = getLiteralVarNames(entry, 'vars');
+      return Object.entries(entry.vars).flatMap(([key, value]) =>
+        !literal?.includes(key) && typeof value === 'string' && value.startsWith('file://')
           ? resolveTestsFileReference(value, basePath)
           : [],
       );

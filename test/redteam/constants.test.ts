@@ -152,7 +152,8 @@ describe('constants', () => {
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
     expect(AGENTIC_PLUGINS).toContain('agentic:memory-poisoning');
-    expect(AGENTIC_PLUGINS.length).toBe(1);
+    expect(AGENTIC_PLUGINS).toContain('agentic:private-to-public-disclosure');
+    expect(AGENTIC_PLUGINS).toContain('agentic:unauthorized-sharing');
   });
 
   it('DEFAULT_PLUGINS should contain expected plugins', () => {
@@ -250,7 +251,10 @@ describe('constants', () => {
 
     it('should have coding agent risks', () => {
       expect(riskCategories['Coding Agent Security']).toBeDefined();
-      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_PLUGINS);
+      expect(riskCategories['Coding Agent Security']).toEqual([
+        ...CODING_AGENT_PLUGINS,
+        'coding-agent:consent-bypass',
+      ]);
     });
   });
 });

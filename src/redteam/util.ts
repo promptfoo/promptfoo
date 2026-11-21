@@ -5,7 +5,7 @@ import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { getErrorTokenUsage } from '../util/tokenUsageUtils';
-import { pluginDescriptions } from './constants';
+import { AgentOutcomeCaseSchema, pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
@@ -20,7 +20,18 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  ProviderResponse,
+} from '../types/index';
+
+/** Independent trials must never reuse measurements from concurrent requests or earlier runs. */
+export function needsFreshTargetResponse(test: AtomicTestCase): boolean {
+  const trial = test.metadata?.agentOutcome;
+  return Boolean(trial && AgentOutcomeCaseSchema.safeParse(trial).success);
+}
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
