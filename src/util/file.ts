@@ -427,7 +427,7 @@ export function parsePathOrGlob(
 export function readOutput(outputPath: string): OutputFile {
   const ext = path.parse(outputPath).ext.slice(1);
 
-  switch (ext) {
+  switch (ext.toLowerCase()) {
     case 'json':
       return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
     default:

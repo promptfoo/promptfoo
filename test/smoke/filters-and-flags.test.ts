@@ -1056,7 +1056,7 @@ describe('History-Based Filter Tests', () => {
 
   it('1.8.5.1 - --filter-failing re-runs only failed tests from file', () => {
     const configPath = path.join(CONFIGS_DIR, 'failing-tests.yaml');
-    const firstRunOutput = path.join(OUTPUT_DIR, 'failing-first-run.json');
+    const firstRunOutput = path.join(OUTPUT_DIR, 'failing-first-run.JsOn');
     const secondRunOutput = path.join(OUTPUT_DIR, 'failing-second-run.json');
 
     // First run: run all tests (some will fail)

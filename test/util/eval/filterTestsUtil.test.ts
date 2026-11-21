@@ -182,33 +182,45 @@ describe('filterTestsUtil', () => {
         expect(result).toHaveLength(0);
       });
 
-      it('should handle non-json file path as eval ID', async () => {
-        const mockEval = {
-          id: 'results.txt',
-          toEvaluateSummary: vi.fn().mockResolvedValue({
-            version: 2,
-            timestamp: new Date().toISOString(),
-            results: mockResults,
-            table: { head: { prompts: [], vars: [] }, body: [] },
-            stats: {
-              successes: 0,
-              failures: 0,
-              errors: 0,
-              tokenUsage: mockTokenUsage,
-            },
-          }),
-        };
-        vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+      it('reads a mixed-case report when no stored evaluation has its name', async () => {
+        vi.mocked(Eval.findById).mockResolvedValue(undefined);
 
         const result = await filterTestsByResults(
           mockTestSuite,
-          'results.txt',
-          (result) => result.success,
+          'results.JsOn',
+          (row) => row.success,
         );
-        expect(result).toHaveLength(1);
+        expect(util.readOutput).toHaveBeenCalledWith('results.JsOn');
         expect(result[0]?.vars?.var1).toBe('test1');
-        expect(util.readOutput).not.toHaveBeenCalled();
       });
+
+      it.each(['results.txt', 'nightly-eval.JSON', 'nightly/2026.JSON'])(
+        'keeps eval ID %s',
+        async (id) => {
+          const mockEval = {
+            id,
+            toEvaluateSummary: vi.fn().mockResolvedValue({
+              version: 2,
+              timestamp: new Date().toISOString(),
+              results: mockResults,
+              table: { head: { prompts: [], vars: [] }, body: [] },
+              stats: {
+                successes: 0,
+                failures: 0,
+                errors: 0,
+                tokenUsage: mockTokenUsage,
+              },
+            }),
+          };
+          vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+
+          const result = await filterTestsByResults(mockTestSuite, id, (result) => result.success);
+          expect(result).toHaveLength(1);
+          expect(result[0]?.vars?.var1).toBe('test1');
+          expect(Eval.findById).toHaveBeenCalledWith(id);
+          expect(util.readOutput).not.toHaveBeenCalled();
+        },
+      );
 
       it('should handle readOutput returning summary without results', async () => {
         vi.mocked(util.readOutput).mockResolvedValue({
