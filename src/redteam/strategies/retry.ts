@@ -119,8 +119,40 @@ interface CloudResult {
   success?: boolean;
 }
 
-function withoutMetrics(assertions: TestCase['assert']) {
-  return assertions?.map((assertion) => ({ ...assertion, metric: undefined })) ?? [];
+// Compare plugin-specific markers and companion inputs without importing any of them from Cloud.
+function matchingGradingInputs(previous: TestCase, current: TestCase) {
+  const assertions = (test: TestCase) =>
+    test.assert?.map((a) => ({ ...a, metric: undefined })) ?? [];
+  const metadata = (test: TestCase) => {
+    const result = { ...test.metadata };
+    for (const key of [
+      'goal',
+      'strategyId',
+      'strategyConfig',
+      'originalText',
+      'originalEvalId',
+      'retry',
+      'testCaseId',
+      '__promptfoo',
+    ]) {
+      delete result[key];
+    }
+    // The suite supplies these defaults after generation.
+    for (const key of ['purpose', 'entities']) {
+      if (current.metadata?.[key] === undefined) {
+        delete result[key];
+      }
+    }
+    return Object.fromEntries(Object.entries(result).filter(([, value]) => value !== undefined));
+  };
+  return (
+    Array.isArray(previous.assert ?? []) &&
+    isDeepStrictEqual(assertions(previous), assertions(current)) &&
+    isDeepStrictEqual(metadata(previous), metadata(current)) &&
+    Object.entries(current.vars ?? {}).every(([key, value]) =>
+      isDeepStrictEqual(previous.vars?.[key], value),
+    )
+  );
 }
 
 // Structured inputs can materialize other variables. References and templates can read local files.
@@ -149,8 +181,7 @@ function cloudRetry(
     typeof row.evalId !== 'string' ||
     row.evalId.length > 200 ||
     !/^[\w-]+(?::\d\d:\d\d)?$/.test(row.evalId) ||
-    !Array.isArray(test.assert ?? []) ||
-    !isDeepStrictEqual(withoutMetrics(test.assert), withoutMetrics(template.assert)) ||
+    !matchingGradingInputs(test, template) ||
     (strategyId !== undefined &&
       (!ALL_STRATEGIES.includes(strategyId) ||
         isMultiTurnStrategy(strategyId) ||

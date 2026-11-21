@@ -211,7 +211,7 @@ describe('addRetryTestCases', () => {
           results: [
             {
               testCase: {
-                vars: { prompt: 'cloud failure', companion: 'file://ignored.txt' },
+                vars: { prompt: 'cloud failure', companion: 'local', extra: 'file://ignored.txt' },
                 assert: [{ type: 'equals', value: 'expected', metric: 'Bias/base64' }],
                 metadata: {
                   pluginId: 'bias:age',
@@ -352,6 +352,34 @@ describe('addRetryTestCases', () => {
         metadata: { goal: 'second', strategyId: 'best-of-n' },
       },
     ]);
+  });
+
+  it('skips stale or missing grading markers and changed companion inputs', async () => {
+    const seed = {
+      vars: { prompt: 'seed', subject: 'one' },
+      metadata: { pluginId: 'ascii-smuggling', asciiSmugglingTestString: 'current' },
+    };
+    const row = (prompt: string, marker?: string, subject = 'one') => ({
+      evalId: 'cloud-eval',
+      testCase: {
+        vars: { prompt, subject },
+        metadata: { ...seed.metadata, asciiSmugglingTestString: marker, purpose: 'suite default' },
+      },
+    });
+    const results = [
+      row('missing'),
+      row('stale', 'old'),
+      row('changed', 'current', 'two'),
+      row('matching', 'current'),
+    ];
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(Response.json({ results }));
+    limit.mockResolvedValue([]);
+    const retries = await addRetryTestCases([seed], 'prompt', {
+      targetIds: ['target'],
+      numTests: results.length,
+    });
+    expect(retries).toMatchObject([{ vars: { prompt: 'matching' }, metadata: seed.metadata }]);
   });
 
   it('skips ambiguous Cloud templates without suppressing local cases', async () => {
