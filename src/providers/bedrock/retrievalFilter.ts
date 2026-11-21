@@ -23,7 +23,7 @@ export function isValidBedrockRetrievalFilter(filter: unknown): boolean {
       Array.isArray(operand) &&
       operand.length === 2 &&
       typeof operand[0] === 'string' &&
-      operand[1] !== undefined
+      operand[1] != null
     );
   }
   return (
@@ -44,6 +44,6 @@ export function isValidBedrockRetrievalFilter(filter: unknown): boolean {
     typeof operand === 'object' &&
     !Array.isArray(operand) &&
     typeof operand.key === 'string' &&
-    operand.value !== undefined
+    operand.value != null
   );
 }

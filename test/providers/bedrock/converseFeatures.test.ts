@@ -1550,6 +1550,92 @@ describe('ConverseStream response parity', () => {
     },
   );
 
+  const image = {
+    image: { format: 'png', source: { s3Location: { uri: 's3://private/image.png' } } },
+  };
+  it.each([
+    [model, JSON.stringify([{ role: 'user', content: [image] }])],
+    [
+      model,
+      JSON.stringify([
+        { role: 'user', content: [{ toolResult: { toolUseId: 'id', content: [image] } }] },
+      ]),
+    ],
+    ['arn:aws:bedrock:us-east-1:123456789012:prompt/PROMPT1234:1', 'hello'],
+  ])('leaves private resource authorization to AWS for %s %s', async (id, prompt) => {
+    cache.enabled = true;
+    cache.get.mockResolvedValue(JSON.stringify(reply));
+    const { provider, send } = fixture({}, id);
+    expect((await provider.callApi(prompt)).output).toBe('READY');
+    send.mockRejectedValueOnce(new Error('AccessDeniedException'));
+    expect((await provider.callApiStreaming(prompt)).error).toContain('access denied');
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('does not replay or store responses with S3-backed media', async () => {
+    cache.enabled = true;
+    const privateReply = { ...reply, output: { message: { role: 'assistant', content: [image] } } };
+    cache.get.mockResolvedValue(JSON.stringify(privateReply));
+    const { provider, send } = fixture();
+    send.mockResolvedValue(privateReply);
+    expect((await provider.callApi('hello')).metadata?.content).toEqual([image]);
+    expect(send).toHaveBeenCalledOnce();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch or cache a tool stream cancelled before metadata arrives', async () => {
+    cache.enabled = true;
+    const controller = new AbortController();
+    const lookup = vi.fn();
+    const { provider, send } = fixture({ streaming: true, functionToolCallbacks: { lookup } });
+    send.mockResolvedValue({
+      stream: (async function* () {
+        yield {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { name: 'lookup', toolUseId: 'id' } },
+          },
+        };
+        yield { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } };
+        yield { contentBlockStop: { contentBlockIndex: 0 } };
+        yield { messageStop: { stopReason: 'tool_use' } };
+        controller.abort();
+        yield { metadata: { usage: reply.usage } };
+      })(),
+    });
+    await expect(
+      provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toHaveProperty('name', 'AbortError');
+    expect(send.mock.calls[0][1].abortSignal).toBe(controller.signal);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('stops dispatching further callbacks when a cached tool turn is cancelled', async () => {
+    cache.enabled = true;
+    const controller = new AbortController();
+    const lookup = vi.fn(() => {
+      controller.abort();
+      return 'done';
+    });
+    const { provider } = fixture({ functionToolCallbacks: { lookup } });
+    const content = ['a', 'b'].map((toolUseId) => ({
+      toolUse: { toolUseId, name: 'lookup', input: {} },
+    }));
+    cache.get.mockResolvedValue(
+      JSON.stringify({
+        ...reply,
+        stopReason: 'tool_use',
+        output: { message: { role: 'assistant', content } },
+      }),
+    );
+    await expect(
+      provider.callApiStreaming('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toHaveProperty('name', 'AbortError');
+    expect(lookup).toHaveBeenCalledOnce();
+  });
+
   it('caches complete streams and preserves replay usage', async () => {
     cache.enabled = true;
     const { provider, send } = fixture({ streaming: true });
@@ -2120,7 +2206,7 @@ describe('ConverseStream response parity', () => {
     },
   );
 
-  it.each(['{broken', 'null', '[]', '1'])(
+  it.each([undefined, '', '{broken', 'null', '[]', '1'])(
     'rejects invalid local tool arguments %s without invoking the callback',
     async (input) => {
       cache.enabled = true;
@@ -2137,7 +2223,9 @@ describe('ConverseStream response parity', () => {
               start: { toolUse: { name: 'lookup', toolUseId: 'id' } },
             },
           },
-          { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input } } } },
+          ...(input === undefined
+            ? []
+            : [{ contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input } } } }]),
           { contentBlockStop: { contentBlockIndex: 0 } },
           { messageStop: { stopReason: 'tool_use' } },
           { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },

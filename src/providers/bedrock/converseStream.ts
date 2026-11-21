@@ -54,6 +54,7 @@ export class ConverseStreamValidationError extends Error {
 /** Collect SDK events before executing any tools: a failed stream must never dispatch a tool. */
 export async function collectConverseStream(
   response: ConverseStreamCommandOutput,
+  abortSignal?: AbortSignal,
 ): Promise<ConverseCommandOutput> {
   if (!response.stream) {
     throw new Error('Bedrock returned no response stream');
@@ -74,6 +75,7 @@ export async function collectConverseStream(
   };
   try {
     for await (const event of response.stream) {
+      abortSignal?.throwIfAborted();
       for (const key of [
         'internalServerException',
         'modelStreamErrorException',
@@ -247,7 +249,8 @@ export async function collectConverseStream(
   for (const [index, raw] of toolInputs) {
     const toolUse = blocks.get(index)!.toolUse!;
     try {
-      const input: unknown = JSON.parse(raw || '{}');
+      // A server tool can omit public arguments. Local calls must stream a JSON object.
+      const input: unknown = !raw && toolUse.type === 'server_tool_use' ? {} : JSON.parse(raw);
       if (input === null || typeof input !== 'object' || Array.isArray(input)) {
         throw new Error('Expected an object');
       }

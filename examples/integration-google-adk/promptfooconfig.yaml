@@ -63,7 +63,7 @@ tests:
           min: 3
       - type: trace-span-count
         value:
-          pattern: 'call_llm'
+          pattern: 'generate_content *'
           min: 3
       - type: trace-span-count
         value:

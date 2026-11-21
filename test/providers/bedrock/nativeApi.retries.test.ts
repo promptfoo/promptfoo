@@ -51,6 +51,7 @@ describe('native Bedrock retry ownership', () => {
       try {
         const result = await provider.callApi(countRequest);
         expect(result.error).toContain(name);
+        expect(result.tokenUsage).toEqual({ numRequests: 1 });
         expect(result.metadata).toMatchObject({
           operation: 'CountTokens',
           http: { status },

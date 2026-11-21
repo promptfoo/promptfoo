@@ -9,6 +9,8 @@ import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
+export { serializeBedrockProviderRef };
+
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
 const URL_REFERENCE = /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i;
@@ -167,6 +169,7 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
+  'azurestorageconnectionstring',
 
   // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
   // underscores, so the env var AWS_SECRET_ACCESS_KEY collapses to

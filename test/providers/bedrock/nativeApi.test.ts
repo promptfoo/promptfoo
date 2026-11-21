@@ -368,15 +368,19 @@ describe('native Bedrock APIs', () => {
   ] as const)(
     'collects %s native events and metadata',
     async (operation, stream, event, expected) => {
+      const end =
+        operation === 'ConverseStream'
+          ? [{ messageStop: { stopReason: 'end_turn' } }, { metadata: {} }]
+          : [];
       const { provider } = fixture(operation, {
-        [stream]: events([event]),
+        [stream]: events([event, ...end]),
         executionId: 'execution',
         $metadata: metadata,
       });
       const result = await provider.callApi('{}');
       expect(result.error).toBeUndefined();
       expect(JSON.parse(String(result.output))).toEqual({
-        [stream]: [expected],
+        [stream]: [expected, ...end],
         executionId: 'execution',
       });
     },
@@ -933,6 +937,16 @@ describe('native Bedrock APIs', () => {
     },
   );
 
+  it('rejects a disconnected Converse stream after a complete text delta', async () => {
+    const { provider } = fixture('ConverseStream', {
+      stream: events([{ contentBlockDelta: { delta: { text: 'READY' } } }]),
+    });
+    const result = await provider.callApi('{}');
+    expect(result.error).toContain('missing messageStop');
+    expect(result.output).toBeUndefined();
+    expect(result.tokenUsage).toEqual({ numRequests: 1 });
+  });
+
   it.each([undefined, events([])])('rejects missing and empty streams', async (stream) => {
     const { provider } = fixture('ConverseStream', { stream });
     expect((await provider.callApi('{}')).error).toMatch(/no event stream|empty event stream/);
@@ -1450,18 +1464,22 @@ describe('native Bedrock APIs', () => {
   });
 });
 
-it('rejects malformed native metadata filters before the SDK can drop them', async () => {
-  const { provider, invoke } = fixture('Retrieve', {});
-  const result = await provider.callApi(
-    JSON.stringify({
-      knowledgeBaseId: 'fixture',
-      retrievalQuery: { text: 'hello' },
-      retrievalConfiguration: { vectorSearchConfiguration: { filter: { tenant: 'fixture' } } },
-    }),
-  );
-  expect(result.error).toContain('Invalid Bedrock retrieval filter');
-  expect(invoke).not.toHaveBeenCalled();
-});
+it.each([{ tenant: 'fixture' }, { equals: { key: 'tenant', value: null } }])(
+  'rejects malformed native metadata filters before the SDK can drop them',
+  async (filter) => {
+    const { provider, invoke } = fixture('Retrieve', {});
+    const result = await provider.callApi(
+      JSON.stringify({
+        knowledgeBaseId: 'fixture',
+        retrievalQuery: { text: 'hello' },
+        retrievalConfiguration: { vectorSearchConfiguration: { filter } },
+      }),
+    );
+    expect(result.error).toContain('Invalid Bedrock retrieval filter');
+    expect(result.tokenUsage).toBeUndefined();
+    expect(invoke).not.toHaveBeenCalled();
+  },
+);
 
 it.each([
   [

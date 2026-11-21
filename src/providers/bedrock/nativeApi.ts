@@ -310,6 +310,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let responseMetadata: ResponseMetadata | undefined;
+    let tokenUsage: ProviderResponse['tokenUsage'];
     const operation = OPERATIONS[this.operation];
     const streamController = 'stream' in operation ? new AbortController() : undefined;
     const abortSignal = streamController
@@ -387,6 +388,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
           `Installed AWS SDK does not expose ${this.operation}; update the Bedrock ${operation.service} SDK package.`,
         );
       }
+      tokenUsage = { numRequests: 1 };
       const response = await invoke.call(client, request, { abortSignal });
       const { $metadata, ...native } = response;
       responseMetadata = $metadata;
@@ -423,6 +425,14 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
         if (!events.length) {
           throw new Error(`Bedrock ${this.operation} returned an empty event stream`);
         }
+        throwIfAborted(abortSignal);
+        if (this.operation === 'ConverseStream') {
+          // On a disconnect the SDK can finish iteration after a valid text delta.
+          const lastMessage = events.at(events.at(-1)?.metadata ? -2 : -1);
+          if (!lastMessage?.messageStop?.stopReason) {
+            throw new Error('Incomplete Bedrock ConverseStream: missing messageStop');
+          }
+        }
         native[operation.stream] = events;
       } else if (this.operation === 'InvokeModel') {
         if (!(native.body instanceof Uint8Array)) {
@@ -434,7 +444,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
       }
       return {
         output: JSON.stringify(encodeBlobs(native)),
-        tokenUsage: { numRequests: 1 },
+        tokenUsage,
         metadata: { operation: this.operation, aws: $metadata },
       };
     } catch (error) {
@@ -450,6 +460,7 @@ export class AwsBedrockNativeApiProvider extends AwsBedrockGenericProvider {
           ? 'Rate limit: '
           : '';
       return {
+        ...(tokenUsage && { tokenUsage }),
         error: `Bedrock ${this.operation} error: ${prefix}${String(error)}`,
         ...(aws
           ? {

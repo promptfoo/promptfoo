@@ -562,7 +562,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   it('does not replay legacy results that ignored generation settings', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-kb:v3:')
+      key.startsWith('bedrock-kb:v4:')
         ? null
         : JSON.stringify({ output: 'legacy response', citations: [] }),
     );
@@ -576,6 +576,40 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(result.output).toBe('fresh response');
     expect(result.cached).not.toBe(true);
     expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps explicitly credentialed knowledge-base results out of the shared cache', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockResolvedValue(JSON.stringify({ output: 'other account', citations: [] }));
+    for (const owner of ['first', 'second']) {
+      const provider = new AwsBedrockKnowledgeBaseProvider('custom-model', {
+        config: {
+          ...createKnowledgeBaseOptions().config,
+          accessKeyId: `fixture-id-${owner}`,
+          secretAccessKey: `fixture-secret-${owner}`,
+        },
+      });
+      mockSend.mockResolvedValueOnce({ output: { text: owner }, citations: [] });
+      expect((await provider.callApi('same prompt')).output).toBe(owner);
+    }
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('does not cache a prewarmed client after its configured key is cleared', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    const provider = new AwsBedrockKnowledgeBaseProvider('custom-model', {
+      config: { ...createKnowledgeBaseOptions().config, apiKey: 'fixture-bearer-key' },
+    });
+    await provider.getKnowledgeBaseClient();
+    delete provider.config.apiKey;
+    mockSend.mockResolvedValueOnce(createKnowledgeBaseResponse());
+
+    await provider.callApi('same prompt');
+
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('fixture-bearer-key');
   });
 
   it('should retrieve citations from cache when available', async () => {
@@ -606,7 +640,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toMatch(/^bedrock-kb:v3:kb-123:.+:[a-f0-9]{64}$/);
+    expect(cacheKey).toMatch(/^bedrock-kb:v4:kb-123:.+:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain('What is the capital of France?');
     const cacheHitLog = vi
       .mocked(logger.debug)
@@ -662,7 +696,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toMatch(/^bedrock-kb:v3:kb-123:custom:model:arn:us-east-1:[a-f0-9]{64}$/);
+    expect(cacheKey).toMatch(/^bedrock-kb:v4:kb-123:custom:model:arn:us-east-1:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain('What is the capital of France?');
 
     expect(mockSet).toHaveBeenCalledWith(cacheKey, expect.any(String));
@@ -707,48 +741,29 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it.each(['config', 'environment'] as const)(
-    'keeps cache identity unchanged by an ignored %s API key without logging private data',
+    'keeps private %s keys and KB responses out of logs and the shared cache',
     async (scope) => {
       mockIsCacheEnabled.mockReturnValue(true);
-      const config = {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
-        modelArn: 'custom:model:arn',
-        accessKeyId: 'LOCAL_FIXTURE',
-        secretAccessKey: 'LOCAL_FIXTURE_SECRET',
-      };
-      const original = new AwsBedrockKnowledgeBaseProvider('default', { config });
-      mockGet.mockResolvedValueOnce(null);
+      if (scope === 'environment') {
+        mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'SECRET_API_KEY' });
+      }
+      const provider = new AwsBedrockKnowledgeBaseProvider('default', {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          modelArn: 'custom:model:arn',
+          ...(scope === 'config' ? { apiKey: 'SECRET_API_KEY' } : {}),
+        },
+      });
       mockSend.mockResolvedValueOnce({
         output: { text: 'SECRET_RESPONSE_VALUE' },
         citations: [{ retrievedReferences: [{ content: { text: 'SECRET_CITATION_VALUE' } }] }],
       });
-      await original.callApi('SECRET_PROMPT_VALUE');
-      const [cacheKey, cachedValue] = mockSet.mock.calls[0];
-      mockGet.mockResolvedValueOnce(cachedValue);
-      if (scope === 'environment') {
-        mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'SECRET_API_KEY' });
-      }
-      const ignoredToken = new AwsBedrockKnowledgeBaseProvider('default', {
-        config: { ...config, ...(scope === 'config' ? { apiKey: 'SECRET_API_KEY' } : {}) },
-      });
-      const result = await ignoredToken.callApi('SECRET_PROMPT_VALUE');
-      expect(result.cached).toBe(true);
+      const result = await provider.callApi('SECRET_PROMPT_VALUE');
       expect(result.output).toBe('SECRET_RESPONSE_VALUE');
-      expect(mockSend).toHaveBeenCalledTimes(1);
-      expect(mockGet.mock.calls[1][0]).toBe(cacheKey);
-      expect(mockSet).toHaveBeenCalledTimes(1);
-      const persistedKeyAndLogs = JSON.stringify([cacheKey, vi.mocked(logger.debug).mock.calls]);
-      for (const secret of [
-        'SECRET_API_KEY',
-        'LOCAL_FIXTURE_SECRET',
-        'SECRET_PROMPT_VALUE',
-        'SECRET_RESPONSE_VALUE',
-        'SECRET_CITATION_VALUE',
-      ]) {
-        expect(persistedKeyAndLogs).not.toContain(secret);
-      }
-      mockIsCacheEnabled.mockReturnValue(false);
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockSet).not.toHaveBeenCalled();
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('SECRET_');
     },
   );
 

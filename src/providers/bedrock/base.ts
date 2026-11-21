@@ -12,6 +12,7 @@ import * as path from 'path';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { resolveBedrockMantleRegion } from './mantle';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -96,6 +97,17 @@ function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) 
   };
 }
 
+// A native S3 reference identifies neither its current contents nor who may read them.
+export function hasBedrockS3Location(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || ArrayBuffer.isView(value)) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasBedrockS3Location);
+  }
+  return Object.hasOwn(value, 's3Location') || Object.values(value).some(hasBedrockS3Location);
+}
+
 export function createBedrockCacheKeyHash({
   config,
   params,
@@ -118,6 +130,9 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  // Agent Runtime clients are reused. Once one sees configured credentials, its
+  // responses cannot safely enter a shared cache, even if the config is later cleared.
+  protected allowSharedAgentRuntimeCache = true;
 
   constructor(
     modelName: string,
@@ -147,6 +162,13 @@ export abstract class AwsBedrockGenericProvider {
 
   requiresApiKey(): boolean {
     return false;
+  }
+
+  protected checkAgentRuntimeCacheIdentity(): void {
+    const { accessKeyId, profile, secretAccessKey, sessionToken } = this.config;
+    if (accessKeyId || profile || secretAccessKey || sessionToken || this.getApiKey()) {
+      this.allowSharedAgentRuntimeCache = false;
+    }
   }
 
   protected getApiKey(): string | undefined {
@@ -227,12 +249,7 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   getRegion(): string {
-    return (
-      this.config?.region ||
-      this.env?.AWS_BEDROCK_REGION ||
-      getEnvString('AWS_BEDROCK_REGION') ||
-      'us-east-1'
-    );
+    return resolveBedrockMantleRegion(this.config, this.env, 'us-east-1');
   }
 }
 

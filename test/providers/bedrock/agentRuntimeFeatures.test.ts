@@ -16,7 +16,7 @@ import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { buildConfiguredProviderMap } from '../../../src/util/gradingProvider';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { ProviderOptions } from '../../../src/types/providers';
+import type { ProviderOptions, ProviderResponse } from '../../../src/types/providers';
 
 const cache = vi.hoisted(() => ({ enabled: false, get: vi.fn(), set: vi.fn() }));
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -74,27 +74,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('Knowledge Base runtime features', () => {
-  it.each(['retrieve', 'retrieveAndGenerate', 'streaming'] as const)(
-    'does not dispatch a pre-aborted %s call',
-    async (operation) => {
-      const { provider, send } = kb({
-        operation: operation === 'retrieve' ? 'retrieve' : 'retrieveAndGenerate',
-        streaming: operation === 'streaming',
-      });
-      const controller = new AbortController();
-      controller.abort(new Error('cancelled before dispatch'));
-      const result = await provider.callApi('question', undefined, {
-        abortSignal: controller.signal,
-      });
-      expect(result.error).toContain('cancelled before dispatch');
-      expect(result.output).toBeUndefined();
-      expect(provider.getKnowledgeBaseClient).not.toHaveBeenCalled();
-      expect(send).not.toHaveBeenCalled();
-    },
-  );
-
-  it('cancels an SDK stream after output while a concurrent request succeeds', async () => {
+it.each(['agent', 'knowledge base'])(
+  'cancels the %s SDK stream without affecting a concurrent request',
+  async (kind) => {
     let signalStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       signalStarted = resolve;
@@ -107,15 +89,16 @@ describe('Knowledge Base runtime features', () => {
       maxAttempts: 1,
       requestHandler: {
         async handle(request: Parameters<Handle>[0], options?: { abortSignal?: AbortSignal }) {
-          const cancelled =
-            JSON.parse(Buffer.from(request.body).toString()).input.text === 'cancelled';
+          const input = JSON.parse(Buffer.from(request.body).toString());
+          const cancelled = (input.inputText ?? input.input.text) === 'cancelled';
+          const text = cancelled ? 'PART' : 'READY';
           const frames: Uint8Array[] = [];
           for await (const frame of client.config.eventStreamMarshaller.serialize(
-            events([{ text: cancelled ? 'PART' : 'READY' }]),
+            events([kind === 'agent' ? { bytes: Buffer.from(text).toString('base64') } : { text }]),
             (output) => ({
               headers: {
                 ':message-type': { type: 'string', value: 'event' },
-                ':event-type': { type: 'string', value: 'output' },
+                ':event-type': { type: 'string', value: kind === 'agent' ? 'chunk' : 'output' },
                 ':content-type': { type: 'string', value: 'application/json' },
               },
               body: Buffer.from(JSON.stringify(output)),
@@ -156,18 +139,26 @@ describe('Knowledge Base runtime features', () => {
         },
       },
     });
-    const { provider } = kb({ streaming: true });
-    vi.spyOn(provider, 'getKnowledgeBaseClient').mockResolvedValue(client);
+    const { provider } = kind === 'agent' ? agent() : kb({ streaming: true });
+    if (provider instanceof AwsBedrockAgentsProvider) {
+      vi.mocked(provider.getAgentRuntimeClient).mockResolvedValue(client);
+    } else {
+      vi.mocked(provider.getKnowledgeBaseClient).mockResolvedValue(client);
+    }
     const controller = new AbortController();
-    const pending = provider.callApi('cancelled', undefined, { abortSignal: controller.signal });
+    const pending = provider
+      .callApi('cancelled', undefined, { abortSignal: controller.signal })
+      .catch((error: Error): ProviderResponse => ({ error: error.message }));
     try {
       await started;
-      controller.abort();
+      controller.abort(new Error('fixture cancelled'));
       expect(cancelledBody?.destroyed).toBe(true);
       const healthy = await provider.callApi('healthy');
       expect(healthy.error).toBeUndefined();
       expect(healthy.output).toBe('READY');
-      expect(healthy.tokenUsage).toMatchObject({ numRequests: 1 });
+      if (kind === 'knowledge base') {
+        expect(healthy.tokenUsage).toMatchObject({ numRequests: 1 });
+      }
       const cancelled = await pending;
       expect(cancelled.error).toContain('fixture cancelled');
       expect(cancelled.output).toBeUndefined();
@@ -177,7 +168,28 @@ describe('Knowledge Base runtime features', () => {
       await pending;
       client.destroy();
     }
-  });
+  },
+);
+
+describe('Knowledge Base runtime features', () => {
+  it.each(['retrieve', 'retrieveAndGenerate', 'streaming'] as const)(
+    'does not dispatch a pre-aborted %s call',
+    async (operation) => {
+      const { provider, send } = kb({
+        operation: operation === 'retrieve' ? 'retrieve' : 'retrieveAndGenerate',
+        streaming: operation === 'streaming',
+      });
+      const controller = new AbortController();
+      controller.abort(new Error('cancelled before dispatch'));
+      const result = await provider.callApi('question', undefined, {
+        abortSignal: controller.signal,
+      });
+      expect(result.error).toContain('cancelled before dispatch');
+      expect(result.output).toBeUndefined();
+      expect(provider.getKnowledgeBaseClient).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['amazon.nova-lite-v1:0', 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0'],
@@ -937,6 +949,15 @@ describe.each(['vectorSearchConfiguration', 'managedSearchConfiguration'] as con
 );
 
 describe('Agent runtime features', () => {
+  it('rejects pre-aborted turns before creating a client', async () => {
+    const { provider, send } = agent();
+    await expect(
+      provider.callApi('question', undefined, { abortSignal: AbortSignal.abort() }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(provider.getAgentRuntimeClient).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed filters in native session knowledge-base overrides', async () => {
     const { provider, send } = agent({
       sessionState: {
@@ -967,18 +988,42 @@ describe('Agent runtime features', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
-  it('does not replay or store explicit session turns', async () => {
-    cache.enabled = true;
-    const { provider, send } = agent({ sessionId: 'existing-session' });
-    send.mockImplementation(async () => ({
-      completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
-    }));
-    await provider.callApi('next turn');
-    await provider.callApi('next turn');
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(cache.get).not.toHaveBeenCalled();
-    expect(cache.set).not.toHaveBeenCalled();
-  });
+  const knowledgeBaseConfigurations = [
+    {
+      knowledgeBaseId: 'KB12345678',
+      retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 1 } },
+    },
+  ];
+  it.each([
+    { sessionId: 'existing-session' },
+    { knowledgeBaseConfigurations },
+    { sessionState: { knowledgeBaseConfigurations } },
+    {
+      sessionState: {
+        files: [
+          {
+            name: 'example.txt',
+            useCase: 'CHAT',
+            source: { sourceType: 'S3', s3Location: { uri: 's3://private/example.txt' } },
+          },
+        ],
+      },
+    },
+  ] satisfies Partial<AgentConfig>[])(
+    'does not replay or store session or private resource turns (%j)',
+    async (config) => {
+      cache.enabled = true;
+      const { provider, send } = agent(config);
+      send.mockImplementation(async () => ({
+        completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+      }));
+      await provider.callApi('next turn');
+      await provider.callApi('next turn');
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
 
   it('forwards native runtime controls and the complete session state', async () => {
     const config: Partial<AgentConfig> = {
@@ -1414,7 +1459,7 @@ describe.each([false, true])(
   'Agent streamFinalResponse=%s retry ownership',
   (streamFinalResponse) => {
     it.each(['existing-session', undefined])(
-      'keeps SDK attempts bounded after client initialization (session: %s)',
+      'never replays an accepted turn after a connection reset (session: %s)',
       async (sessionId) => {
         const restore = mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '2' });
         const provider = new AwsBedrockAgentsProvider('AGENT12345', {
@@ -1427,44 +1472,28 @@ describe.each([false, true])(
             sessionId,
           },
         });
-        const initial = await provider.getAgentRuntimeClient();
-        vi.spyOn(initial.config.requestHandler, 'handle').mockImplementation(async () =>
-          agentStreamResponse(initial),
-        );
-        expect((await provider.callApi('first turn')).output).toBe('answer');
-        provider.config.streamingConfigurations = { streamFinalResponse };
         const client = await provider.getAgentRuntimeClient();
-        const requests: string[] = [];
-        vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(async (request) => {
-          requests.push(request.path);
-          if (requests.length === 1) {
-            throw Object.assign(new Error('connection reset after acceptance'), {
-              code: 'ECONNRESET',
-            });
-          }
-          return agentStreamResponse(client);
-        });
+        const handle = vi
+          .spyOn(client.config.requestHandler, 'handle')
+          .mockImplementation(async () => agentStreamResponse(client));
         try {
+          expect((await provider.callApi('first turn')).output).toBe('answer');
+          provider.config.streamingConfigurations = { streamFinalResponse };
+          expect(await provider.getAgentRuntimeClient()).toBe(client);
+          handle
+            .mockClear()
+            .mockRejectedValueOnce(
+              Object.assign(new Error('connection reset after acceptance'), { code: 'ECONNRESET' }),
+            );
           const result = await provider.callApi('continue');
-          expect(requests).toHaveLength(streamFinalResponse ? 1 : 2);
-          if (streamFinalResponse) {
-            expect(client).not.toBe(initial);
-            expect(result.error).toContain('connection reset after acceptance');
-            expect(result.output).toBeUndefined();
-          } else {
-            expect(client).toBe(initial);
-            expect(result.error).toBeUndefined();
-            expect(result.output).toBe('answer');
-            expect(requests[0]).toBe(requests[1]);
-          }
+          expect(handle).toHaveBeenCalledOnce();
+          expect(result.error).toContain('connection reset after acceptance');
+          expect(result.output).toBeUndefined();
           if (sessionId) {
-            expect(requests[0]).toContain(`/sessions/${sessionId}/`);
+            expect(handle.mock.calls[0][0].path).toContain(`/sessions/${sessionId}/`);
           }
         } finally {
-          initial.destroy();
-          if (client !== initial) {
-            client.destroy();
-          }
+          client.destroy();
           restore();
         }
       },

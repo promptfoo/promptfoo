@@ -1,9 +1,8 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { shouldBustProviderCache } from '../shared';
-import { AwsBedrockGenericProvider } from './base';
+import { shouldBustProviderCache, throwIfAborted, waitForPromiseWithAbort } from '../shared';
+import { AwsBedrockGenericProvider, hasBedrockS3Location } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
   createBedrockRequestHandler,
@@ -21,7 +20,12 @@ import type {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 
 /**
  * Configuration options for AWS Bedrock Agents provider
@@ -172,7 +176,6 @@ interface BedrockAgentsOptions {
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
-  private singleAttemptAgentRuntimeClient?: BedrockAgentRuntimeClient;
   config: BedrockAgentsOptions; // Make public to match base class
 
   constructor(
@@ -223,20 +226,22 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Get or create the Bedrock Agent Runtime client
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
-    const singleAttempt = this.config.streamingConfigurations?.streamFinalResponse === true;
-    const clientProperty = singleAttempt ? 'singleAttemptAgentRuntimeClient' : 'agentRuntimeClient';
-    if (!this[clientProperty]) {
+    this.checkAgentRuntimeCacheIdentity();
+    if (!this.agentRuntimeClient) {
       // Use a custom handler when a proxy is configured.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials(false);
+        if (credentials) {
+          this.allowSharedAgentRuntimeCache = false;
+        }
 
-        this[clientProperty] = new BedrockAgentRuntimeClient({
+        this.agentRuntimeClient = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
-          // Keep a separate client because the SDK caches its retry strategy.
-          maxAttempts: singleAttempt ? 1 : getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
+          // A lost connection can follow a successful action, even without streamFinalResponse.
+          maxAttempts: 1,
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
@@ -248,7 +253,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         );
       }
     }
-    return this[clientProperty];
+    return this.agentRuntimeClient;
   }
 
   /**
@@ -401,7 +406,10 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   /**
    * Process the streaming response from the agent
    */
-  private async processResponse(response: InvokeAgentCommandOutput): Promise<ProviderResponse> {
+  private async processResponse(
+    response: InvokeAgentCommandOutput,
+    signal?: AbortSignal,
+  ): Promise<ProviderResponse> {
     if (!response.completion) {
       throw new Error('Bedrock returned no agent completion stream');
     }
@@ -413,6 +421,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     let guardrailIntervened = false;
     const decoder = new TextDecoder();
     for await (const event of response.completion) {
+      throwIfAborted(signal);
       const failure = Object.entries(event).find(([key]) => key.endsWith('Exception'));
       if (failure) {
         throw new Error(
@@ -467,10 +476,21 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     };
   }
 
-  /**
-   * Invoke the agent with the given prompt
-   */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    throwIfAborted(signal);
+    return waitForPromiseWithAbort(this.invokeAgent(prompt, context, signal), signal);
+  }
+
+  private async invokeAgent(
+    prompt: string,
+    context?: CallApiContextParams,
+    abortSignal?: AbortSignal,
+  ): Promise<ProviderResponse> {
     // Validate agentAliasId is present
     if (!this.config.agentAliasId) {
       return {
@@ -503,6 +523,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     }
 
     const client = await this.getAgentRuntimeClient();
+    throwIfAborted(abortSignal);
 
     // Generate session ID if not provided
     const sessionId =
@@ -557,49 +578,35 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
-    const cache = await getCache();
-    const useCache =
+    const cache =
+      this.allowSharedAgentRuntimeCache &&
       isCacheEnabled() &&
       !shouldBustProviderCache(context) &&
       !this.config.enableTrace &&
       !this.config.sessionId &&
       !this.config.memoryId &&
       !this.config.endSession &&
-      !this.config.sessionState?.returnControlInvocationResults;
+      !sessionState?.returnControlInvocationResults &&
+      !sessionState?.knowledgeBaseConfigurations?.length &&
+      !hasBedrockS3Location(input)
+        ? await getCache()
+        : undefined;
 
-    // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = useCache
-      ? `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${hashBedrockConfig(
-          {
-            prompt,
-            actionGroups: this.config.actionGroups,
-            enableTrace: this.config.enableTrace,
-            endSession: this.config.endSession,
-            guardrailConfiguration: this.config.guardrailConfiguration,
-            inferenceConfig,
-            inputDataConfig: this.config.inputDataConfig,
-            knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-            memoryId: this.config.memoryId,
-            promptOverrideConfiguration: this.config.promptOverrideConfiguration,
-            sessionId: this.config.sessionId,
-            sessionState: input.sessionState,
-            bedrockModelConfigurations: this.config.bedrockModelConfigurations,
-            streamingConfigurations: this.config.streamingConfigurations,
-            promptCreationConfigurations: this.config.promptCreationConfigurations,
-            sourceArn: this.config.sourceArn,
-          },
-        )}`
+    // Exclude the generated session ID while retaining every request override.
+    const cacheKey = cache
+      ? `bedrock-agent:v4:${input.agentId}:${input.agentAliasId}:${this.getRegion()}:${hashBedrockConfig({ ...input, sessionId: undefined })}`
       : '';
 
     // Check cache
-    if (useCache) {
+    if (cache) {
       const cached = await cache.get(cacheKey);
+      throwIfAborted(abortSignal);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
         try {
           const parsed = JSON.parse(cached as string);
           // Validate the parsed cache data has expected structure
-          if (parsed && typeof parsed === 'object') {
+          if (parsed && typeof parsed === 'object' && !hasBedrockS3Location(parsed)) {
             const {
               sessionId: _sessionId,
               memoryId: _memoryId,
@@ -618,15 +625,15 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     }
 
     try {
-      // Invoke the agent
       const { InvokeAgentCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
-      const response = await client.send(new InvokeAgentCommand(input));
-
-      // Process the streaming response
-      const result = await this.processResponse(response);
+      throwIfAborted(abortSignal);
+      const response = await client.send(new InvokeAgentCommand(input), { abortSignal });
+      throwIfAborted(abortSignal);
+      const result = await this.processResponse(response, abortSignal);
+      throwIfAborted(abortSignal);
 
       // Cache the successful response
-      if (useCache && !result.metadata?.returnControl) {
+      if (cache && !result.metadata?.returnControl && !hasBedrockS3Location(result)) {
         try {
           const { sessionId: _sessionId, memoryId: _memoryId, ...metadata } = result.metadata ?? {};
           await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));
@@ -637,6 +644,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
       return result;
     } catch (error: any) {
+      throwIfAborted(abortSignal);
       logger.error(`Bedrock Agents invocation failed: ${error}`);
 
       // Provide helpful error messages
