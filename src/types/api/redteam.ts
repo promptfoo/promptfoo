@@ -1,16 +1,14 @@
 import { z } from 'zod';
-import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
+import { ALL_PLUGINS, ALL_STRATEGIES, type Plugin, type Strategy } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
-  RedteamSetupPlanSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 import { JsonProviderOptionsWithIdSchema } from './providers';
-
-import type { Plugin, Strategy } from '../../redteam/constants';
+import { RedteamSetupPlanSchema } from './redteamSetup';
 
 // POST /api/redteam/generate-test
 

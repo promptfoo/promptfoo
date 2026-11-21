@@ -5,7 +5,7 @@ import { Checkbox } from '@app/components/ui/checkbox';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { callApi } from '@app/utils/api';
-import { type RedteamSetupPlan, RedteamSetupPlanSchema } from '@promptfoo/redteam/types';
+import { type RedteamSetupPlan, RedteamSetupPlanSchema } from '@promptfoo/types/api/redteamSetup';
 import isEqual from 'fast-deep-equal';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
