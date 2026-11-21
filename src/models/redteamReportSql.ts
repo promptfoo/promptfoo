@@ -10,7 +10,11 @@ export const MAX_REPORT_TEXT_LENGTH = 10_240;
 // A string policy needs its original bytes to derive the same ID used when grading.
 export function reportConfigProjection() {
   const cfg = evalsTable.config;
+  const usage = sql`json_extract(${cfg}, '$.metadata.generationAccounting.tokenUsage')`;
   return sql`json_object(
+    'metadata', CASE WHEN json_type(${cfg}, '$.metadata.generationAccounting.tokenUsage') = 'object'
+                          AND length(${usage}) <= ${MAX_REPORT_TEXT_LENGTH}
+      THEN json_object('generationAccounting',json_object('tokenUsage',${usage})) END,
     'description', substr(json_extract(${cfg}, '$.description'),1,${MAX_REPORT_TEXT_LENGTH}),
     'env', json((SELECT json_group_object(key, value) FROM json_each(${cfg}, '$.env')
                  WHERE key GLOB 'PROMPTFOO_STRIP_*')),

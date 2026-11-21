@@ -1356,6 +1356,27 @@ describe('evaluator', () => {
       });
     });
 
+    it('loads generation usage without unrelated metadata in a persisted compact report', async () => {
+      const saved = await EvalFactory.create({ numResults: 1 });
+      saved.config.metadata = {
+        notes: 'private label',
+        generationAccounting: {
+          id: 'generation-1',
+          tokenUsage: { total: 12, numRequests: 2, incurredTokenUsage: { total: 5 } },
+        },
+      };
+      await saved.save();
+      const resultProjection = 'redteamReport';
+      const compact = await Eval.findById(saved.id, { resultProjection });
+      expect(compact?.config.metadata).not.toHaveProperty('notes');
+      const report = await compact!.toResultsFile({ resultProjection, includeTraces: false });
+      expect(report.config).not.toHaveProperty('metadata');
+      expect(report.results.stats.tokenUsage).toMatchObject({
+        generation: { total: 12, numRequests: 2 },
+        incurredTokenUsage: { generation: { total: 5 } },
+      });
+    });
+
     it('does not attribute historical suite generation metadata without a run charge', () => {
       const eval1 = new Eval({
         metadata: {
