@@ -8,7 +8,7 @@ description: Evaluate Codex, Claude, OpenCode, Open Interpreter, and plain LLM c
 
 Coding agents present a different evaluation challenge than standard LLMs. A chat model transforms input to output in one step. An agent decides what to do, does it, observes the result, and iterates—often dozens of times before producing a final answer.
 
-This guide covers coding agent evals with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), [OpenAI Codex app-server](/docs/providers/openai-codex-app-server), [Claude Agent SDK](/docs/providers/claude-agent-sdk), [OpenCode SDK](/docs/providers/opencode-sdk), [Open Interpreter](/docs/providers/openinterpreter), and plain LLM baselines.
+This guide covers coding agent evals with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), [OpenAI Codex app-server](/docs/providers/openai-codex-app-server), [Claude Agent SDK](/docs/providers/claude-agent-sdk), [OpenCode SDK](/docs/providers/opencode-sdk), [Open Interpreter](/docs/providers/openinterpreter), [ACP agents](/docs/providers/acp/), and plain LLM baselines.
 
 ## Why agent evals are different
 
@@ -38,6 +38,7 @@ Choose the provider by the runtime boundary you need to evaluate:
 | **OpenAI Codex app-server** | Rich-client protocol behavior, streamed items, approvals, skills, plugins, app connector events | Local `codex app-server` JSON-RPC process                | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
 | **Claude Agent SDK**        | Claude Code-compatible workflows, MCP-heavy tasks, local skills                                 | `@anthropic-ai/claude-agent-sdk` library                 | No tools by default; configured working dirs are read-only until write tools opt in |
 | **OpenCode SDK**            | Provider-agnostic coding agent comparisons                                                      | OpenCode SDK with a promptfoo-started or existing server | Temporary workspace by default; working dirs start with read-only tools             |
+| **ACP agents**              | Compare Copilot CLI, Antigravity, Cursor, Hermes, and DeepSeek Harness                          | Agent Client Protocol over stdio                         | Fresh session per row, client permission requests declined                          |
 | **Open Interpreter**        | Multi-backend coding agent and harness comparisons                                              | Local `interpreter app-server` JSON-RPC process          | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
 
 `openai:codex-desktop` is an alias for the app-server protocol provider. Promptfoo starts its own `codex app-server` child process; it does not attach to an already-running Codex Desktop app window or reuse Desktop UI state.
