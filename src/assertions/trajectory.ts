@@ -228,8 +228,15 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const sequenceValue = value as Partial<TrajectorySequenceValue>;
+    if (
+      sequenceValue.mode !== undefined &&
+      sequenceValue.mode !== 'in_order' &&
+      sequenceValue.mode !== 'exact'
+    ) {
+      throw new Error('trajectory:tool-sequence assertion mode must be "in_order" or "exact"');
+    }
     return {
-      mode: sequenceValue.mode || 'in_order',
+      mode: sequenceValue.mode ?? 'in_order',
       steps: sequenceValue.steps || [],
     };
   }

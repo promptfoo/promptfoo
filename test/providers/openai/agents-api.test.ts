@@ -258,6 +258,49 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(fetchWithRetries).not.toHaveBeenCalled();
     });
 
+    it('starts artifact reads before optional usage and encodes opaque IDs without redirects', async () => {
+      const id = 'artifact.release-1/β?rev=2';
+      let listed = false;
+      mockApi((pathname, method) => {
+        if (pathname === endpoint) {
+          listed = true;
+          return json(page([{ ...artifact, id }]));
+        }
+        if (pathname.endsWith('/content')) {
+          return new Response('example');
+        }
+        return listed ? undefined : withoutUsage(pathname, method);
+      });
+      const result = await provider({ artifactPaths: [path], usageTimeoutMs: 100 }).callApi('hi');
+      expect(result.metadata?.artifacts).toMatchObject([{ path, status: 'available' }]);
+      const requests = calls();
+      expect(requests.findIndex((call) => call.pathname === endpoint)).toBeLessThan(
+        requests.findIndex((call) => call.pathname.endsWith('/turns/turn_test')),
+      );
+      expect(requests.find((call) => call.pathname.endsWith('/content'))).toMatchObject({
+        pathname: `${endpoint}/${encodeURIComponent(id)}/content`,
+        options: { redirect: 'manual' },
+      });
+    });
+
+    it('rejects content redirected to another artifact on the same origin', async () => {
+      mockApi((pathname) => {
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        if (pathname.endsWith('/content')) {
+          return new Response(null, {
+            status: 302,
+            headers: { Location: `${endpoint}/other/content` },
+          });
+        }
+        return undefined;
+      });
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.metadata?.artifacts).toEqual([{ path, status: 'unavailable' }]);
+      expect(result.output).toBe('42');
+    });
+
     it('does not request or record artifacts by default', async () => {
       const result = await provider().callApi('hi');
       expect(result.metadata).not.toHaveProperty('artifacts');
@@ -1742,14 +1785,16 @@ describe('OpenAiAgentsApiProvider', () => {
     },
   );
 
-  it('reports a missing session ID without attempting cleanup', async () => {
-    vi.mocked(fetchWithRetries).mockResolvedValueOnce(json({ status: 'idle' }));
+  const invalidIds = [undefined, null, '', ' ', '.', '..'];
+
+  it.each(invalidIds)('rejects session ID %j without attempting cleanup', async (id) => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(json({ id, status: 'idle' }));
     const result = await provider().callApi('hi');
     expect(result.error).toBe('Agents API did not return a session ID');
     expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   });
 
-  it.each([undefined, null, '', ' ', '..'])(
+  it.each(invalidIds)(
     'rejects a completed root turn with invalid ID %j before reading its messages',
     async (id) => {
       mockApi((pathname) => {
@@ -2329,6 +2374,21 @@ describe('OpenAiAgentsApiProvider', () => {
       ).toEqual([null, 'call_mcp']);
     });
 
+    it.each(invalidIds)('does not request history or usage for subagent ID %j', async (id) => {
+      mockApi((pathname) =>
+        pathname.endsWith('/subagents') ? json(page([{ id }])) : rootItemsRoute(pathname),
+      );
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.metadata).toMatchObject({
+        subagentToolCallsUnavailable: true,
+        usageMayExcludeSubagents: true,
+        sessionDeleted: true,
+      });
+      // A '..' segment would fetch the root's history or turns again.
+      expect(calls().filter(({ pathname }) => /\/(items|turns)$/.test(pathname))).toHaveLength(2);
+    });
+
     it('keeps the answer and flags subagent tool calls it cannot read', async () => {
       mockApi(
         (pathname) =>
@@ -2602,6 +2662,38 @@ describe('OpenAiAgentsApiProvider', () => {
           10,
         );
       }
+    },
+  );
+
+  it.each([
+    { model: 'gpt-6.2-sol', started: '2027-03-01T07:59:59Z', expected: 0.000972 },
+    { model: 'gpt-6.2-astra', started: '2027-03-01T08:00:00Z', expected: 0.007776 },
+  ])(
+    'uses the root turn start to price $model Ultrafast usage',
+    async ({ model, started, expected }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2027-03-02T00:00:00Z'));
+      const agent = { model, service_tier: 'ultrafast', reasoning: { effort: 'high' } };
+      mockApi((pathname) => {
+        if (pathname.endsWith('/turns')) {
+          return json(
+            page([
+              {
+                ...turn,
+                created_at: Date.parse('2027-03-01T07:00:00Z') / 1000,
+                started_at: Date.parse(started) / 1000,
+              },
+            ]),
+          );
+        }
+        return pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+          ? json({ ...session, agent })
+          : undefined;
+      });
+      const result = await provider({ agent }).callApi('hi');
+      expect(JSON.parse(calls()[0].options!.body as string).agent).toEqual(agent);
+      expect(result.output).toBe('42');
+      expect(result.cost).toBeCloseTo(expected, 10);
     },
   );
 

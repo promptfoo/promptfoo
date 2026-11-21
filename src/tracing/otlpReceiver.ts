@@ -402,7 +402,7 @@ export class OTLPReceiver {
       next();
     });
 
-    // Keep parser selection dynamic so setAcceptFormats() still works on the singleton receiver.
+    // Select the parser for the formats accepted by this receiver.
     this.app.use(
       '/v1/traces',
       express.json({
@@ -1079,10 +1079,6 @@ export class OTLPReceiver {
     return this.app;
   }
 
-  setAcceptFormats(acceptFormats?: OTLPFormat[]): void {
-    this.acceptFormats = normalizeAcceptFormats(acceptFormats);
-  }
-
   private toMilliseconds(
     value: DecodedSpan['startTimeUnixNano'] | DecodedSpan['endTimeUnixNano'],
   ): number | undefined {
@@ -1093,21 +1089,10 @@ export class OTLPReceiver {
   }
 }
 
-// Singleton instance
+// Singleton instance and its pending or completed startup.
 let otlpReceiver: OTLPReceiver | null = null;
-
-function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
-  if (otlpReceiver) {
-    otlpReceiver.setAcceptFormats(options?.acceptFormats);
-    otlpReceiver.setCommandToolNames(options?.commandToolNames);
-    otlpReceiver.setRedactAttributes(options?.redactAttributes);
-    otlpReceiver.registerTracePolicy(options?.tracePolicy);
-    return otlpReceiver;
-  }
-
-  otlpReceiver = new OTLPReceiver(options);
-  return otlpReceiver;
-}
+let otlpReceiverStartPromise: Promise<void> | null = null;
+let otlpReceiverStopPromise: Promise<void> | null = null;
 
 export async function startOTLPReceiver(
   port?: number,
@@ -1120,13 +1105,27 @@ export async function startOTLPReceiver(
   },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
-  const receiver = getOTLPReceiver({ acceptFormats, ...extra });
+  while (otlpReceiverStopPromise) {
+    await otlpReceiverStopPromise;
+  }
+  if (otlpReceiver) {
+    // A later caller can add its evaluation policy without changing the active endpoint
+    // or the fallback policy used for traces with no registered evaluation.
+    otlpReceiver.registerTracePolicy(extra?.tracePolicy);
+    await otlpReceiverStartPromise;
+    return;
+  }
+
+  const receiver = new OTLPReceiver({ acceptFormats, ...extra });
+  otlpReceiver = receiver;
   try {
-    await receiver.listen(port, host);
+    otlpReceiverStartPromise = receiver.listen(port, host);
+    await otlpReceiverStartPromise;
   } catch (error) {
     // A receiver that never bound must not dictate options for a later retry.
     if (otlpReceiver === receiver) {
       otlpReceiver = null;
+      otlpReceiverStartPromise = null;
     }
     throw error;
   }
@@ -1142,8 +1141,27 @@ export function deregisterOTLPReceiverTracePolicy(evaluationId?: string): void {
 
 export async function stopOTLPReceiver(): Promise<void> {
   logger.debug('[OtlpReceiver] Stopping receiver through stopOTLPReceiver function');
-  if (otlpReceiver) {
-    await otlpReceiver.stop();
-    otlpReceiver = null;
+  while (otlpReceiverStopPromise) {
+    await otlpReceiverStopPromise;
+  }
+  const receiver = otlpReceiver;
+  const startPromise = otlpReceiverStartPromise;
+  if (!receiver) {
+    return;
+  }
+
+  const stopPromise = (async () => {
+    await startPromise?.catch(() => undefined);
+    await receiver.stop();
+    if (otlpReceiver === receiver) {
+      otlpReceiver = null;
+      otlpReceiverStartPromise = null;
+    }
+  })();
+  otlpReceiverStopPromise = stopPromise;
+  try {
+    await stopPromise;
+  } finally {
+    otlpReceiverStopPromise = null;
   }
 }

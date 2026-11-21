@@ -626,18 +626,34 @@ describe('trace assertions', () => {
     },
   );
 
-  it('preserves validation errors on positive partial-trace assertions', async () => {
-    await expect(
-      runAssertion({
-        assertion: { type: 'trajectory:tool-args-match', value: { name: 'search' } },
-        test: mockTest,
-        providerResponse: mockProviderResponse,
-        traceId: mockTraceData.traceId,
-        traceData: mockTraceData,
-        traceIncomplete: true,
-      }),
-    ).rejects.toThrow('must include an args or arguments property');
-  });
+  it.each<{ assertion: Assertion; error: string }>([
+    {
+      assertion: { type: 'trajectory:tool-args-match', value: { name: 'search' } },
+      error: 'must include an args or arguments property',
+    },
+    {
+      assertion: { type: 'not-trajectory:tool-args-match', value: { name: 'search' } },
+      error: 'must include an args or arguments property',
+    },
+    {
+      assertion: { type: 'trajectory:tool-sequence', value: { steps: ['search'], mode: 'excat' } },
+      error: 'mode must be "in_order" or "exact"',
+    },
+  ])(
+    'preserves validation errors on partial traces for $assertion.type',
+    async ({ assertion, error }) => {
+      await expect(
+        runAssertion({
+          assertion,
+          test: mockTest,
+          providerResponse: mockProviderResponse,
+          traceId: mockTraceData.traceId,
+          traceData: mockTraceData,
+          traceIncomplete: true,
+        }),
+      ).rejects.toThrow(error);
+    },
+  );
 
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([
