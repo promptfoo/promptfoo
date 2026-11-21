@@ -298,7 +298,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
 
-Promptfoo caches Interactions text responses by endpoint and request body. Credentials are not part of the cache key, so requests that differ only in API key share an entry. Follow-ups (`previousInteractionId`), requests with `store: true`, custom `headers`, or credential-bearing values such as signed media URLs, and Gemini Omni video requests always go to the API. Use `--no-cache` to skip the cache.
+Promptfoo caches self-contained Interactions text responses by endpoint and request body. Requests that differ only in API key share an entry. To recheck access, Promptfoo skips the cache for tools, remote media and cached content references, custom headers, or credential-bearing values such as signed URLs. Follow-ups (`previousInteractionId`), requests with `store: true`, and Gemini Omni video requests also go directly to the API. Use `--no-cache` to skip the cache for every request.
 
 ### Gemini Decisions API
 

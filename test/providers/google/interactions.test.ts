@@ -2663,6 +2663,14 @@ describe('GoogleInteractionsProvider', () => {
 
     it.each([
       {
+        name: 'an unsigned Cloud Storage URI',
+        prompt: describeImage({
+          type: 'image',
+          uri: 'https://storage.googleapis.com/bucket/cat.png',
+        }),
+      },
+      { name: 'a gs:// URI', prompt: describeImage({ type: 'image', uri: 'gs://bucket/cat.png' }) },
+      {
         name: 'a signed Cloud Storage image URL',
         prompt: describeImage({
           type: 'image',
@@ -2700,43 +2708,37 @@ describe('GoogleInteractionsProvider', () => {
     });
 
     it.each([
-      {
-        name: 'a tool header map',
-        passthrough: {
-          tools: [
-            {
-              type: 'mcp_server',
-              name: 'docs',
-              url: 'https://mcp.example/sse',
-              headers: { Authorization: 'Bearer short' },
-            },
-          ],
-        },
-      },
+      { name: 'a header map', passthrough: { metadata: { headers: { 'x-tenant': 'test' } } } },
       { name: 'a secret-named field', passthrough: { api_key: 'not-a-real-key' } },
+      {
+        name: 'a private search store',
+        passthrough: { tools: [{ type: 'file_search', file_search_store_names: ['private'] }] },
+      },
+      {
+        name: 'a server-backed tool',
+        passthrough: { tools: [{ type: 'mcp_server', url: 'https://docs.example' }] },
+      },
+      {
+        name: 'a private cached context',
+        passthrough: { cached_content: 'cachedContents/private' },
+      },
+      {
+        name: 'a signed URL after serialization',
+        passthrough: { source: new URL('https://example.com/image?sig=short') },
+      },
     ])('bypasses the cache for a request body carrying $name', async ({ passthrough }) => {
       await expect(
         getCacheArgument('gemini-robotics-er-2-preview', { apiKey: 'test-key', passthrough }),
       ).resolves.toBe(true);
     });
 
-    it.each([
-      {
-        name: 'a Cloud Storage URL without a query',
-        image: { type: 'image', uri: 'https://storage.googleapis.com/bucket/cat.png' },
-      },
-      { name: 'a gs:// URI', image: { type: 'image', uri: 'gs://bucket/cat.png' } },
-      {
-        name: 'inline image bytes',
-        image: { type: 'image', mime_type: 'image/png', data: 'A'.repeat(256) },
-      },
-    ])('caches a request body with $name', async ({ image }) => {
+    it('caches inline image bytes', async () => {
       await expect(
         getCacheArgument(
           'gemini-robotics-er-2-preview',
           { apiKey: 'test-key' },
           undefined,
-          describeImage(image),
+          describeImage({ type: 'image', mime_type: 'image/png', data: 'A'.repeat(256) }),
         ),
       ).resolves.toEqual(cacheableInteraction);
     });
@@ -2837,6 +2839,10 @@ describe('GoogleInteractionsProvider', () => {
         context: { prompt: { config: { store: true } } },
       },
       { name: 'custom headers', config: { headers: { 'x-tenant': 'tenant-a' } } },
+      {
+        name: 'a credential in the endpoint',
+        config: { apiBaseUrl: 'https://gateway.example?key=short' },
+      },
     ])('bypasses the cache for $name', async ({ config, context }) => {
       await expect(
         getCacheArgument(

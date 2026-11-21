@@ -288,47 +288,32 @@ function getRequestedVideoAspectRatio(responseFormat: unknown): string | undefin
   return typeof videoFormat?.aspect_ratio === 'string' ? videoFormat.aspect_ratio : undefined;
 }
 
-/** True when a string holds a URL whose query or userinfo can carry a signature or password. */
+/** URLs can carry short credentials even when their individual values look harmless. */
 function hasCredentialBearingUrl(value: string): boolean {
-  if (!value.includes('://')) {
-    return false;
-  }
-  return value.split(/\s+/).some((token) => {
-    const separator = token.indexOf('://');
-    if (separator < 1) {
-      return false;
-    }
-    let schemeStart = separator;
-    while (schemeStart > 0 && /[a-z0-9+.-]/i.test(token[schemeStart - 1])) {
-      schemeStart--;
-    }
-    try {
-      const url = new URL(token.slice(schemeStart));
-      return url.search.length > 0 || url.username !== '' || url.password !== '';
-    } catch {
-      return false;
-    }
-  });
+  return (
+    value.includes('://') &&
+    value.split(/\s+/).some((word) => word.includes('://') && /[?#@]/.test(word))
+  );
 }
 
-/**
- * Signed media URLs, header maps, secret-named fields, and token-like strings must not be hashed
- * into a long-lived cache key, so requests carrying any of them are not cached. Inline media
- * bytes (`data`) are excluded from the token-like check because base64 media resembles a token.
- */
-function hasCredentialBearingInteractionValue(value: unknown, fieldName?: string): boolean {
+/** Remote media can require authorization even without a signature. Inline bytes resemble tokens. */
+function needsInteractionAccessCheck(value: unknown, fieldName?: string): boolean {
   if (typeof value === 'string') {
-    return hasCredentialBearingUrl(value) || (fieldName !== 'data' && looksLikeSecret(value));
+    return (
+      fieldName === 'uri' ||
+      hasCredentialBearingUrl(value) ||
+      (fieldName !== 'data' && looksLikeSecret(value))
+    );
   }
   if (Array.isArray(value)) {
-    return value.some((item) => hasCredentialBearingInteractionValue(item, fieldName));
+    return value.some((item) => needsInteractionAccessCheck(item, fieldName));
   }
   if (value && typeof value === 'object') {
     return Object.entries(value).some(
       ([field, nestedValue]) =>
         field.toLowerCase() === 'headers' ||
         isSecretField(field) ||
-        hasCredentialBearingInteractionValue(nestedValue, field),
+        needsInteractionAccessCheck(nestedValue, field),
     );
   }
   return false;
@@ -344,37 +329,43 @@ const ORDER_SENSITIVE_INTERACTION_FIELDS = new Set([
   'schema',
 ]);
 
-function canonicalizeInteractionCacheValue(value: unknown, preserveKeyOrder = false): unknown {
+function canonicalizeInteractionCacheValue(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value.map((item) => canonicalizeInteractionCacheValue(item, preserveKeyOrder));
+    return value.map(canonicalizeInteractionCacheValue);
   }
   if (!value || typeof value !== 'object') {
     return value;
   }
-  const entries = Object.entries(value);
-  if (!preserveKeyOrder) {
-    entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  }
   return Object.fromEntries(
-    entries.map(([field, nestedValue]) => [
-      field,
-      canonicalizeInteractionCacheValue(
-        nestedValue,
-        preserveKeyOrder || ORDER_SENSITIVE_INTERACTION_FIELDS.has(field),
-      ),
-    ]),
+    Object.entries(value)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, item]) => [
+        key,
+        ORDER_SENSITIVE_INTERACTION_FIELDS.has(key)
+          ? item
+          : canonicalizeInteractionCacheValue(item),
+      ]),
   );
 }
 
-/**
- * Credential-free cache identity: the endpoint, API revision, and the serialized request body with
- * object keys sorted, except inside JSON schemas. Arrays keep their order. API keys and OAuth
- * tokens are never part of the key, so requests that differ only in credentials share an entry;
- * Vertex OAuth endpoints still separate projects and regions.
- */
-function getInteractionsCacheKey(endpoint: string, apiRevision: string, body: string): string {
-  const identity = canonicalizeInteractionCacheValue(JSON.parse(body));
-  return `google:interactions:v1:${sha256(JSON.stringify([endpoint, apiRevision, identity]))}`;
+/** API keys share an entry, so check access after serialization, including toJSON transforms. */
+function getInteractionsCacheOptions(endpoint: string, apiRevision: string, requestBody: string) {
+  const body = JSON.parse(requestBody);
+  if (
+    body.previous_interaction_id !== undefined ||
+    (body.store !== undefined && body.store !== false) ||
+    body.tools !== undefined ||
+    body.cached_content !== undefined ||
+    body.cachedContent !== undefined ||
+    needsInteractionAccessCheck(endpoint) ||
+    needsInteractionAccessCheck(body)
+  ) {
+    return true;
+  }
+  const identity = canonicalizeInteractionCacheValue(body);
+  return {
+    cacheKey: `google:interactions:v1:${sha256(JSON.stringify([endpoint, apiRevision, identity]))}`,
+  };
 }
 
 function getLiveOnlyModelRouteError(modelName: string): string | undefined {
@@ -1437,18 +1428,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
       stream: false,
     };
 
-    // Replay only self-contained requests. A follow-up or an explicitly stored interaction depends
-    // on server-side state, and a replay would return an interaction ID that may have expired.
-    // Video responses carry media links that can expire, or inline video bytes. Custom headers and
-    // credential-bearing body values can select a tenant or carry secrets, which must not reach
-    // the cache key.
+    // Video links can expire, and custom headers can select a tenant.
     const bypassCache =
       shouldBustProviderCache(context) ||
       isVideoModel ||
-      previousInteractionId !== undefined ||
-      store === true ||
-      Object.keys(config.headers ?? {}).length > 0 ||
-      hasCredentialBearingInteractionValue(body);
+      Object.keys(config.headers ?? {}).length > 0;
     const requestBody = JSON.stringify(body);
 
     let data: InteractionResponse;
@@ -1472,12 +1456,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        // An explicit key keeps API keys and OAuth tokens out of the cache, even as fingerprints.
         bypassCache
           ? true
-          : {
-              cacheKey: getInteractionsCacheKey(endpoint, headers['Api-Revision'], requestBody),
-            },
+          : getInteractionsCacheOptions(endpoint, headers['Api-Revision'], requestBody),
       )) as {
         data: InteractionResponse;
         cached: boolean;
