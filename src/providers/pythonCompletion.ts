@@ -62,6 +62,7 @@ export class PythonProvider implements ApiProvider {
   private scriptPath: string;
   private functionName: string | null;
   private isInitialized: boolean = false;
+  private resolvedConfig?: PythonProviderConfig;
   private initializationPromise: Promise<void> | null = null;
   private initializationGeneration = 0;
   public label: string | undefined;
@@ -106,14 +107,18 @@ export class PythonProvider implements ApiProvider {
     this.initializationPromise = (async () => {
       let pool: PythonWorkerPool | undefined;
       try {
-        const config = await processConfigFileReferences(
-          this.config,
-          this.options?.config.basePath || '',
-        );
-        if (generation !== this.initializationGeneration) {
-          throw new Error('Python provider initialization interrupted by cleanup');
+        // Values returned by a config file are application data and may themselves be file URLs.
+        if (this.config !== this.resolvedConfig) {
+          const config = await processConfigFileReferences(
+            this.config,
+            this.options?.config.basePath || '',
+          );
+          if (generation !== this.initializationGeneration) {
+            throw new Error('Python provider initialization interrupted by cleanup');
+          }
+          this.config = config;
+          this.resolvedConfig = config;
         }
-        this.config = config;
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
