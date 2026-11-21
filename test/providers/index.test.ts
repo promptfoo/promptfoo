@@ -55,7 +55,7 @@ import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import { ProviderSchemas } from '../../src/types/api/providers';
-import { checkProviderApiKeys } from '../../src/util/provider';
+import { checkProviderApiKeys, isProviderAllowed } from '../../src/util/provider';
 import { createChatCompletion } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
@@ -1679,6 +1679,16 @@ describe('loadApiProvider', () => {
     expect(provider.label).toBe(expected);
   });
 
+  it('matches test-level provider references against a converted scalar label', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: { label: 2.5 as unknown as string },
+    });
+
+    expect(isProviderAllowed(provider, ['2.5'])).toBe(true);
+    expect(isProviderAllowed(provider, ['2.*'])).toBe(true);
+    expect(isProviderAllowed(provider, ['3'])).toBe(false);
+  });
+
   it('converts scalar labels from provider config files', async () => {
     mockFsReadFileSync.mockReturnValue('- id: echo\n  label: 2.5\n- id: echo\n  label: 3\n');
 
@@ -1688,23 +1698,36 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
-    [{ name: 'not-a-string' }, 'an object'],
-    [['a', 'b'], 'an array'],
-  ])('ignores the non-scalar label %j with a warning', async (label, kind) => {
-    const warnSpy = vi.spyOn(logger, 'warn');
-    try {
-      const provider = await loadApiProvider('https://user:fixture-secret@example.com/api', {
-        options: { label: label as unknown as string, config: createEmptyHttpBody() },
-      });
+    [
+      { name: 'not-a-string' },
+      'an object',
+      'https://user:fixture-secret@example.com/api',
+      'fixture-secret',
+    ],
+    [
+      ['a', 'b'],
+      'an array',
+      'https://api.example.com/v1/token/sk-proj-fixturesecret0123456789abcdefghij/chat',
+      'fixturesecret',
+    ],
+  ])(
+    'ignores the non-scalar label %j with a redacted warning',
+    async (label, kind, url, secret) => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      try {
+        const provider = await loadApiProvider(url, {
+          options: { label: label as unknown as string, config: createEmptyHttpBody() },
+        });
 
-      expect(provider.label).toBe('');
-      const warning = warnSpy.mock.calls.map(([message]) => String(message)).join('\n');
-      expect(warning).toContain(`expected a string, got ${kind}`);
-      expect(warning).not.toContain('fixture-secret');
-    } finally {
-      warnSpy.mockRestore();
-    }
-  });
+        expect(provider.label).toBe('');
+        const warning = warnSpy.mock.calls.map(([message]) => String(message)).join('\n');
+        expect(warning).toContain(`expected a string, got ${kind}`);
+        expect(warning).not.toContain(secret);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    },
+  );
 
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`

@@ -20,7 +20,7 @@ import {
   readProviderConfigFile,
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
-import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
+import { sanitizeObject, sanitizeUrlForLogging } from '../util/sanitizer';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -97,7 +97,7 @@ function getConfiguredProviderLabel(label: unknown, providerPath: string): strin
         ? 'an object'
         : `a ${typeof label}`;
     logger.warn(
-      `Ignoring the label of provider ${sanitizeUrl(providerPath)}: expected a string, got ${kind}. Quote the label in your config to use it.`,
+      `Ignoring the label of provider ${sanitizeUrlForLogging(providerPath)}: expected a string, got ${kind}. Quote the label in your config to use it.`,
     );
   }
   return normalized ?? '';
