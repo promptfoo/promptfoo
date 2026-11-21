@@ -2,7 +2,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { shouldBustProviderCache, throwIfAborted, waitForPromiseWithAbort } from '../shared';
-import { AwsBedrockGenericProvider } from './base';
+import { AwsBedrockGenericProvider, hasBedrockS3Location } from './base';
 import { isValidBedrockRetrievalFilter } from './retrievalFilter';
 import {
   createBedrockRequestHandler,
@@ -586,32 +586,15 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       !this.config.sessionId &&
       !this.config.memoryId &&
       !this.config.endSession &&
-      !this.config.sessionState?.returnControlInvocationResults
+      !sessionState?.returnControlInvocationResults &&
+      !sessionState?.knowledgeBaseConfigurations?.length &&
+      !hasBedrockS3Location(input)
         ? await getCache()
         : undefined;
 
-    // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
+    // Exclude the generated session ID while retaining every request override.
     const cacheKey = cache
-      ? `bedrock-agent:v4:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${hashBedrockConfig(
-          {
-            prompt,
-            actionGroups: this.config.actionGroups,
-            enableTrace: this.config.enableTrace,
-            endSession: this.config.endSession,
-            guardrailConfiguration: this.config.guardrailConfiguration,
-            inferenceConfig,
-            inputDataConfig: this.config.inputDataConfig,
-            knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-            memoryId: this.config.memoryId,
-            promptOverrideConfiguration: this.config.promptOverrideConfiguration,
-            sessionId: this.config.sessionId,
-            sessionState: input.sessionState,
-            bedrockModelConfigurations: this.config.bedrockModelConfigurations,
-            streamingConfigurations: this.config.streamingConfigurations,
-            promptCreationConfigurations: this.config.promptCreationConfigurations,
-            sourceArn: this.config.sourceArn,
-          },
-        )}`
+      ? `bedrock-agent:v4:${input.agentId}:${input.agentAliasId}:${this.getRegion()}:${hashBedrockConfig({ ...input, sessionId: undefined })}`
       : '';
 
     // Check cache
@@ -623,7 +606,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         try {
           const parsed = JSON.parse(cached as string);
           // Validate the parsed cache data has expected structure
-          if (parsed && typeof parsed === 'object') {
+          if (parsed && typeof parsed === 'object' && !hasBedrockS3Location(parsed)) {
             const {
               sessionId: _sessionId,
               memoryId: _memoryId,
@@ -650,7 +633,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       throwIfAborted(abortSignal);
 
       // Cache the successful response
-      if (cache && !result.metadata?.returnControl) {
+      if (cache && !result.metadata?.returnControl && !hasBedrockS3Location(result)) {
         try {
           const { sessionId: _sessionId, memoryId: _memoryId, ...metadata } = result.metadata ?? {};
           await cache.set(cacheKey, JSON.stringify({ ...result, metadata }));

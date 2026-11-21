@@ -252,18 +252,6 @@ describe('AwsBedrockAgentsProvider', () => {
             tenant: 'SECRET_SESSION_ATTRIBUTE',
           },
         },
-        knowledgeBaseConfigurations: [
-          {
-            knowledgeBaseId: 'kb-123',
-            retrievalConfiguration: {
-              vectorSearchConfiguration: {
-                filter: {
-                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
-                },
-              },
-            },
-          },
-        ],
       },
     });
 
@@ -284,7 +272,6 @@ describe('AwsBedrockAgentsProvider', () => {
 
     expect(firstKey).toMatch(/^bedrock-agent:v4:agent-123:alias-456:us-east-1:[a-f0-9]{64}$/);
     expect(firstKey).not.toContain(prompt);
-    expect(firstKey).not.toContain('SECRET_FILTER_VALUE');
     expect(firstKey).not.toContain('SECRET_SESSION_ATTRIBUTE');
     expect(secondKey).toBe(firstKey);
     expect(mockSet).toHaveBeenCalledWith(firstKey, expect.any(String));

@@ -988,18 +988,42 @@ describe('Agent runtime features', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
-  it('does not replay or store explicit session turns', async () => {
-    cache.enabled = true;
-    const { provider, send } = agent({ sessionId: 'existing-session' });
-    send.mockImplementation(async () => ({
-      completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
-    }));
-    await provider.callApi('next turn');
-    await provider.callApi('next turn');
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(cache.get).not.toHaveBeenCalled();
-    expect(cache.set).not.toHaveBeenCalled();
-  });
+  const knowledgeBaseConfigurations = [
+    {
+      knowledgeBaseId: 'KB12345678',
+      retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 1 } },
+    },
+  ];
+  it.each([
+    { sessionId: 'existing-session' },
+    { knowledgeBaseConfigurations },
+    { sessionState: { knowledgeBaseConfigurations } },
+    {
+      sessionState: {
+        files: [
+          {
+            name: 'example.txt',
+            useCase: 'CHAT',
+            source: { sourceType: 'S3', s3Location: { uri: 's3://private/example.txt' } },
+          },
+        ],
+      },
+    },
+  ] satisfies Partial<AgentConfig>[])(
+    'does not replay or store session or private resource turns (%j)',
+    async (config) => {
+      cache.enabled = true;
+      const { provider, send } = agent(config);
+      send.mockImplementation(async () => ({
+        completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+      }));
+      await provider.callApi('next turn');
+      await provider.callApi('next turn');
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
 
   it('forwards native runtime controls and the complete session state', async () => {
     const config: Partial<AgentConfig> = {
