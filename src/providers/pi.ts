@@ -514,48 +514,48 @@ export class PiProvider implements ApiProvider {
       .join('\n');
   }
 
-  private collectAssistantMessages(events: PiEvent[]): PiMessage[] {
-    let lastAgentEnd = -1;
-    let lastMessageEnd = -1;
-    events.forEach((event, index) => {
-      if (event.type === 'agent_end' && event.messages) {
-        lastAgentEnd = index;
-      } else if (event.type === 'message_end' && event.message?.role === 'assistant') {
-        lastMessageEnd = index;
-      }
-    });
-    // Use the terminal snapshot only when no completed assistant turn follows it.
-    if (lastAgentEnd > lastMessageEnd) {
-      const assistant = events[lastAgentEnd].messages!.filter(
-        (message) => message.role === 'assistant',
-      );
-      if (assistant.length > 0) {
-        return assistant;
+  private collectAssistantMessages(events: PiEvent[]) {
+    let finalMessage: PiMessage | undefined;
+    const requests: PiUsage[] = [];
+    let hasTurnUsage = false;
+    for (const event of events) {
+      if (event.type === 'message_end' && event.message?.role === 'assistant') {
+        finalMessage = event.message;
+        if (finalMessage.usage) {
+          requests.push(finalMessage.usage);
+          hasTurnUsage = true;
+        }
+      } else if (event.type === 'agent_end') {
+        // A retry starts a fresh snapshot. Only bill it if the attempt had no per-turn usage.
+        for (const message of event.messages ?? []) {
+          if (message.role === 'assistant') {
+            finalMessage = message;
+            if (!hasTurnUsage && message.usage) {
+              requests.push(message.usage);
+            }
+          }
+        }
+        hasTurnUsage = false;
       }
     }
-
-    // An interrupted retry can have completed turns without a terminal snapshot.
-    return events
-      .slice(lastMessageEnd > lastAgentEnd ? lastAgentEnd + 1 : 0)
-      .filter((event) => event.type === 'message_end' && event.message?.role === 'assistant')
-      .map((event) => event.message!);
+    return { finalMessage, requests };
   }
 
-  private buildTokenUsage(
-    assistantMessages: PiMessage[],
-  ): ProviderResponse['tokenUsage'] | undefined {
-    const withUsage = assistantMessages.filter((message) => message.usage);
-    if (withUsage.length === 0) {
-      return undefined;
+  private buildBilling(requests: PiUsage[]): Pick<ProviderResponse, 'tokenUsage' | 'cost'> {
+    if (requests.length === 0) {
+      return {};
     }
 
+    let cost: number | undefined;
     let prompt = 0;
     let completion = 0;
     let total = 0;
     let cached = 0;
     let cacheCreation = 0;
-    for (const message of withUsage) {
-      const usage = message.usage!;
+    for (const usage of requests) {
+      if (typeof usage.cost?.total === 'number') {
+        cost = (cost ?? 0) + usage.cost.total;
+      }
       const input = usage.input ?? 0;
       const output = usage.output ?? 0;
       const cacheRead = usage.cacheRead ?? 0;
@@ -568,30 +568,23 @@ export class PiProvider implements ApiProvider {
     }
 
     return {
-      prompt,
-      completion,
-      total,
-      cached,
-      numRequests: withUsage.length,
-      ...(cached > 0 || cacheCreation > 0
-        ? {
-            completionDetails: {
-              cacheReadInputTokens: cached,
-              cacheCreationInputTokens: cacheCreation,
-            },
-          }
-        : {}),
+      ...(cost === undefined ? {} : { cost }),
+      tokenUsage: {
+        prompt,
+        completion,
+        total,
+        cached,
+        numRequests: requests.length,
+        ...(cached > 0 || cacheCreation > 0
+          ? {
+              completionDetails: {
+                cacheReadInputTokens: cached,
+                cacheCreationInputTokens: cacheCreation,
+              },
+            }
+          : {}),
+      },
     };
-  }
-
-  private buildCost(assistantMessages: PiMessage[]): number | undefined {
-    const costs = assistantMessages
-      .map((message) => message.usage?.cost?.total)
-      .filter((cost): cost is number => typeof cost === 'number');
-    if (costs.length === 0) {
-      return undefined;
-    }
-    return costs.reduce((sum, cost) => sum + cost, 0);
   }
 
   private collectToolCalls(events: PiEvent[]): PiToolCall[] {
@@ -611,21 +604,13 @@ export class PiProvider implements ApiProvider {
   }
 
   private buildProviderResponse(events: PiEvent[]): ProviderResponse {
-    const assistantMessages = this.collectAssistantMessages(events);
-    const finalMessage = assistantMessages[assistantMessages.length - 1];
-
-    const tokenUsage = this.buildTokenUsage(assistantMessages);
-    const cost = this.buildCost(assistantMessages);
-
+    const { finalMessage, requests } = this.collectAssistantMessages(events);
     if (!finalMessage) {
       return { error: 'Pi agent produced no assistant response.' };
     }
 
     // Preserve completed requests for billing even when the final attempt fails.
-    const billing = {
-      ...(tokenUsage ? { tokenUsage } : {}),
-      ...(cost === undefined ? {} : { cost }),
-    };
+    const billing = this.buildBilling(requests);
 
     if (finalMessage.stopReason === 'error' || finalMessage.stopReason === 'aborted') {
       return {

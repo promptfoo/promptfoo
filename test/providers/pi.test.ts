@@ -745,29 +745,32 @@ describe('PiProvider', () => {
       expect(result.raw).toBeUndefined();
     });
 
-    it('returns the last agent_end assistant turn across a retried (multi-agent_end) stream', async () => {
-      // A retry stream emits an early agent_end for the failed attempt and a
-      // terminal agent_end for the successful one. The backwards scan must
-      // return the final turn, not the first attempt's transcript/usage.
-      const failed = assistantMessage('first attempt failed', {
-        usage: buildUsage(10, 0, 0.0001),
-        stopReason: 'error',
-        errorMessage: 'transient',
-      });
-      const ok = assistantMessage('final answer', { usage: buildUsage(100, 10, 0.002) });
-      mockPiRun([
-        { type: 'agent_end', messages: [{ role: 'user', content: [] }, failed], willRetry: true },
-        { type: 'agent_end', messages: [{ role: 'user', content: [] }, ok], willRetry: false },
-      ]);
-      const provider = createProvider();
+    it.each([true, false])(
+      'bills every retry once with per-turn events enabled: %s',
+      async (stream) => {
+        const tool = assistantMessage('using a tool', { stopReason: 'toolUse' });
+        const failed = { role: 'assistant', stopReason: 'error', errorMessage: 'transient' };
+        const ok = assistantMessage('final answer', { usage: buildUsage(200, 20, 0.002) });
+        mockPiRun([
+          ...(stream
+            ? [
+                { type: 'message_end', message: tool },
+                { type: 'message_end', message: failed },
+              ]
+            : []),
+          { type: 'agent_end', messages: [tool, failed], willRetry: true },
+          ...(stream ? [{ type: 'message_end', message: ok }] : []),
+          { type: 'agent_end', messages: [ok], willRetry: false },
+        ]);
 
-      const result = await provider.callApi('test prompt');
+        const result = await createProvider().callApi('test prompt');
 
-      expect(result.output).toBe('final answer');
-      expect(result.error).toBeUndefined();
-      expect(result.tokenUsage?.total).toBe(110);
-      expect(result.cost).toBeCloseTo(0.002);
-    });
+        expect(result.output).toBe('final answer');
+        expect(result.error).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ total: 330, numRequests: 2 });
+        expect(result.cost).toBeCloseTo(0.003);
+      },
+    );
 
     it('falls back to message_end when agent_end carries no assistant message', async () => {
       // A terminal agent_end whose messages omit the assistant turn must not
@@ -804,8 +807,8 @@ describe('PiProvider', () => {
 
       expect(result.error).toContain('exited with code 1');
       expect(result.output).toBeUndefined();
-      expect(result.tokenUsage).toMatchObject({ prompt: 120, completion: 12, total: 132 });
-      expect(result.cost).toBeCloseTo(0.005);
+      expect(result.tokenUsage).toMatchObject({ prompt: 130, completion: 13, total: 143 });
+      expect(result.cost).toBeCloseTo(0.006);
       expect(result.raw).toBeUndefined();
     });
 
