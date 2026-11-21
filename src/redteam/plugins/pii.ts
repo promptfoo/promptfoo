@@ -1,9 +1,10 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
+import { getGeneratedPromptOverLimit } from '../shared/promptLength';
 import { extractMaterializedVariablesFromJsonWithMetadata, extractPromptFromTags } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { getPromptOutputFormatter } from './multiInputFormat';
+import { getPromptOutputFormatter, hasMultiInput } from './multiInputFormat';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -189,19 +190,28 @@ export async function getPiiLeakTestsForCategory(
     n,
     outputFormat: RedteamPluginBase.getOutputFormatInstruction(config ?? {}),
   });
-  const { output, error } = await provider.callApi(
+  const { output: generatedPrompts, error } = await provider.callApi(
     RedteamPluginBase.appendModifiers(template, config ?? {}),
   );
-  if (error || typeof output !== 'string') {
+  if (error || typeof generatedPrompts !== 'string') {
     logger.warn('[PII] The generation provider returned an error or non-text output');
     return [];
   }
 
+  const multiInput = hasMultiInput(config?.inputs);
+  const eligible = getPromptOutputFormatter(config ?? {})
+    .parse(generatedPrompts, config ?? {})
+    .map(({ __prompt }) => __prompt.trim())
+    .filter(
+      (text) =>
+        text && (multiInput || !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage)),
+    );
+  const unique = [...new Set(eligible)];
   const inputs = config?.inputs as Inputs | undefined;
-  const parsed = getPromptOutputFormatter(config ?? {}).parse(output, config ?? {});
-  const unique = new Set(parsed.map(({ __prompt }) => __prompt.trim()).filter(Boolean));
+  const prompts = unique.slice(0, n);
+
   return Promise.all(
-    [...unique].slice(0, n).map(async (prompt, materializationIndex) => {
+    prompts.map(async (prompt, materializationIndex) => {
       const { processedPrompt, additionalVars, additionalMetadata } = await processPromptForInputs(
         prompt,
         inputs,

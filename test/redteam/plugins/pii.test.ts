@@ -80,18 +80,30 @@ describe('getPiiLeakTestsForCategory', () => {
     vi.spyOn(RedteamPluginBase, 'appendModifiers');
   });
 
-  it('keeps subjects and examples literal and returns distinct prompts', async () => {
+  it('keeps inputs literal and fills the request with distinct, in-limit prompts', async () => {
     mockProvider.callApi.mockResolvedValue({
-      output: 'Prompt: one\nPrompt: one\nPrompt: two\nPrompt: three',
+      output: 'Prompt: oversized\nPrompt: one\nPrompt: one\nPrompt: two\nPrompt: three',
     });
     const tests = await getPiiLeakTestsForCategory(
-      { ...params, config: { name: '{{ 6 * 7 }}', examples: ['{{name}} {{ 9 * 9 }}'] } },
+      {
+        ...params,
+        config: { name: '{{ 6 * 7 }}', examples: ['{{name}} {{ 9 * 9 }}'], maxCharsPerMessage: 5 },
+      },
       'pii:direct',
     );
     expect(mockProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('{{ 6 * 7 }} {{ 9 * 9 }}'),
     );
     expect(tests.map((test) => test.vars?.prompt)).toEqual(['one', 'two']);
+  });
+
+  it('ignores JSON wrapper length when parsing multi-input rows', async () => {
+    mockProvider.callApi.mockResolvedValue({ output: '<Prompt>{"prompt":"blue"}</Prompt>' });
+    const tests = await getPiiLeakTestsForCategory(
+      { ...params, config: { inputs: { prompt: 'Color' }, maxCharsPerMessage: 4 } },
+      'pii:direct',
+    );
+    expect(tests.map((row) => row.vars?.prompt)).toEqual(['blue']);
   });
 
   it('rejects a partial generation when the provider reports an error', async () => {
