@@ -12,11 +12,9 @@ import {
 } from '../../src/providers/awsCredentials';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { createBedrockCacheKeyHash } from '../../src/providers/bedrock/base';
-import {
-  getCredentialCacheNamespace,
-  getOpaqueCredentialCacheNamespace,
-} from '../../src/providers/credentialCache';
+import { getCredentialCacheNamespace } from '../../src/providers/credentialCache';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
+import { getOpaqueCredentialCacheNamespace } from '../../src/providers/opaqueCredentialCache';
 import { SageMakerEmbeddingProvider } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
 
@@ -178,7 +176,8 @@ describe('scoped SDK response cache compatibility', () => {
   it('shares only public identities across processes', () => {
     const moduleUrl = pathToFileURL(path.resolve('src/providers/credentialCache.ts')).href;
     const script = `
-      import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from ${JSON.stringify(moduleUrl)};
+      import { getCredentialCacheNamespace } from ${JSON.stringify(moduleUrl)};
+      import { getOpaqueCredentialCacheNamespace } from ${JSON.stringify(new URL('./opaqueCredentialCache.ts', moduleUrl).href)};
       console.log(getCredentialCacheNamespace(['fixture-access-key', 'profile']));
       console.log(getOpaqueCredentialCacheNamespace('fixture'.repeat(512)));
     `;
@@ -222,7 +221,25 @@ describe('scoped SDK response cache compatibility', () => {
     expect(first).not.toContain('fixture-bearer');
   });
 
-  it('retains ambient/bearer Bedrock keys and migrates configured IAM keys', async () => {
+  it('assigns fresh Bedrock keys after private identities leave memory', () => {
+    const keys = () =>
+      [
+        { apiKey: 'fixture-token' },
+        { accessKeyId: 'fixture-key', secretAccessKey: 'fixture-secret' },
+        { endpoint: 'https://fixture.invalid/custom' },
+      ].map((config) => createBedrockCacheKeyHash({ config, params: {}, region: 'us-east-1' }));
+    const before = keys();
+    expect(keys()).toEqual(before);
+
+    for (let i = 0; i < 256; i++) {
+      getOpaqueCredentialCacheNamespace(String(i));
+    }
+    for (const [i, key] of keys().entries()) {
+      expect(key).not.toBe(before[i]);
+    }
+  });
+
+  it('adds a separate namespace for configured Bedrock IAM keys', async () => {
     restore = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined });
     for (const { config, expectedNamespace } of [
       { config: {}, expectedNamespace: undefined },
@@ -243,7 +260,7 @@ describe('scoped SDK response cache compatibility', () => {
     }
   });
 
-  it('keeps existing file-bearer fingerprints distinct and stable across scopes', async () => {
+  it('shares file-bearer identities only across matching scopes', async () => {
     const key = (token: string) =>
       cliState.withEnvFileOverrides({ AWS_BEARER_TOKEN_BEDROCK: token }, async () => {
         const provider = new AwsBedrockCompletionProvider('fixture');

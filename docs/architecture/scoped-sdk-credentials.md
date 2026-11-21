@@ -8,7 +8,7 @@ A provider owns separate SDK clients for each environment and evaluation resourc
 
 Cache keys use public selectors and credential-file revision metadata where possible. Rotate files **between evaluations**. A client keeps its initial cache identity and follows the SDK refresh schedule. Files with unchanged metadata count as the same revision.
 
-Some inputs lack a safe public identifier. Scoped AWS key tuples, provider-only Bedrock bearer tokens, direct AWS endpoints, possible credential-process inputs and scoped Foundry identities use an HMAC with a random process key. Equal inputs can share a result within that process. Secret rotation or a process restart forces a fresh request. The partition mechanism retains no map of raw secrets.
+For secret inputs, the response cache uses a random ID. These include AWS key tuples, Bedrock bearer tokens and custom endpoints, credential-process inputs, Vertex Express keys and scoped Foundry identities. A process-local lookup derived with HKDF maps each input to its ID. It retains up to 256 entries in memory. The disk key contains neither the input nor its derived lookup. Eviction or process restart can cause a cache miss. Upgrading invalidates earlier Bedrock entries for configured keys, bearer tokens, endpoints and profiles.
 
 SageMaker and Vertex use new cache keys because earlier entries could cross credential or project boundaries. SageMaker bypasses sharing for configured credentials, profiles and injected clients. Vertex bypasses sharing for explicit SDK auth or custom headers, except the service-tier header included in the Gemini request key. Vertex partitions eligible requests by project, region, ADC, quota project and the Express API key.
 
