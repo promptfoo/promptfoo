@@ -228,7 +228,7 @@ describe('MCP HTTP Server', () => {
     const ready = new Promise<void>((resolve, reject) => {
       const collect = (data: Buffer) => {
         output += data.toString();
-        if (output.includes(`Promptfoo MCP server running at http://localhost:${port}`)) {
+        if (output.includes(`Promptfoo MCP server running at ${endpoint}`)) {
           clearTimeout(readyTimer);
           resolve();
         }

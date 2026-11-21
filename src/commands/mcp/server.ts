@@ -27,16 +27,12 @@ const MCP_HTTP_HOST = '127.0.0.1';
 const LOCAL_HOST_HEADER = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
 
 export function mcpHostProtection(req: Request, res: Response, next: NextFunction): void {
-  if (req.headers.host && LOCAL_HOST_HEADER.test(req.headers.host)) {
+  if (LOCAL_HOST_HEADER.test(req.headers.host ?? '')) {
     next();
     return;
   }
 
-  logger.warn('[MCP] Blocked request with non-local Host header', {
-    host: req.headers.host,
-    method: req.method,
-    path: req.path,
-  });
+  logger.warn('[MCP] Blocked request with non-local Host header');
   res.status(403).json({ error: 'MCP HTTP requests require a local Host header' });
 }
 
