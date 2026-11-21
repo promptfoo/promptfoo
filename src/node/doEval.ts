@@ -12,7 +12,7 @@ import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
-import { EvalRunError } from '../evaluator/errors';
+import { EvalRunError, StrictConfigError } from '../evaluator/errors';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -372,6 +372,7 @@ async function doEvalWithEnv(
     let testSuite: TestSuite;
     let _basePath: string | undefined;
     let commandLineOptions: Record<string, any> | undefined;
+    let strictConfigEnabled: boolean | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
@@ -388,7 +389,9 @@ async function doEvalWithEnv(
     if (defaultConfigPath) {
       const configDir = path.dirname(defaultConfigPath);
       const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
-      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName, {
+        deferUnknownKeyValidation: true,
+      });
       defaultConfig = newDefaultConfig;
     }
 
@@ -410,7 +413,9 @@ async function doEvalWithEnv(
           continue;
         }
         const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-          await loadDefaultConfig(configPath);
+          await loadDefaultConfig(configPath, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
         if (newConfigPath) {
           resolvedConfigPaths.push(newConfigPath);
           defaultConfig = { ...defaultConfig, ...dirConfig };
@@ -486,6 +491,7 @@ async function doEvalWithEnv(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
@@ -532,6 +538,7 @@ async function doEvalWithEnv(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
     } else {
       ({
@@ -539,6 +546,7 @@ async function doEvalWithEnv(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
         testSources,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
@@ -790,6 +798,8 @@ async function doEvalWithEnv(
     const {
       providerFilter: _ignoredProviderFilter,
       restorePromptColumns: _ignoredRestorePromptColumns,
+      skipStrictAssertionValidation: _ignoredSkipStrictAssertionValidation,
+      strictConfigEnabled: _ignoredStrictConfigEnabled,
       ...safeEvaluateOptions
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
@@ -807,6 +817,7 @@ async function doEvalWithEnv(
       filterRange,
       maxConcurrency,
       cache,
+      strictConfigEnabled,
     };
 
     if (!resumeEval && cmdObj.grader) {
@@ -1000,6 +1011,11 @@ async function doEvalWithEnv(
           cliState.retryMode = false;
         }
       }
+    } catch (error) {
+      if (error instanceof StrictConfigError && isCliInvocation) {
+        throw new ConfigResolutionError(error.message);
+      }
+      throw error;
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
     }

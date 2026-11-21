@@ -468,13 +468,16 @@ describe('prompt optimizer', () => {
 
     await optimizePromptTestSuite(
       {
+        env: { PROMPTFOO_STRICT_CONFIG: 'true' },
         evaluateOptions: {
           cache: true,
           delay: 50,
           maxConcurrency: 1,
           repeat: 2,
           showProgressBar: true,
-        },
+          skipStrictAssertionValidation: true,
+          strictConfigEnabled: false,
+        } as any,
       },
       testSuite,
     );
@@ -488,7 +491,11 @@ describe('prompt optimizer', () => {
         repeat: 2,
         showProgressBar: false,
         silent: true,
+        strictConfigEnabled: true,
       }),
+    );
+    expect(vi.mocked(evaluate).mock.calls[0][2]).not.toHaveProperty(
+      'skipStrictAssertionValidation',
     );
   });
 

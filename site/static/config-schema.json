@@ -707,6 +707,9 @@
         },
         "PROMPTFOO_EVAL_TIMEOUT_MS": {
           "type": "string"
+        },
+        "PROMPTFOO_STRICT_CONFIG": {
+          "type": "string"
         }
       }
     },

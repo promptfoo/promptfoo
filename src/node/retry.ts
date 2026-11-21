@@ -327,7 +327,12 @@ async function retryWithConfig(
   originalEval: Eval,
   errorResultIds: string[],
   cmdObj: RetryCommandOptions,
-  { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
+  {
+    testSuite,
+    commandLineOptions,
+    config,
+    strictConfigEnabled,
+  }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
 ) {
   const evalId = originalEval.id;
 
@@ -378,6 +383,7 @@ async function retryWithConfig(
     eventSource: 'cli',
     restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
+    strictConfigEnabled,
   };
 
   try {

@@ -36,6 +36,13 @@ import type {
 import type { InternalEvaluateOptions } from './types/internal';
 import type { ApiProvider } from './types/providers';
 
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'yup', 'yeppers']);
+
+function resolveStrictConfigEnabled(env: EnvOverrides | undefined): boolean {
+  const value = env?.PROMPTFOO_STRICT_CONFIG ?? process.env.PROMPTFOO_STRICT_CONFIG;
+  return value !== undefined && TRUE_ENV_VALUES.has(String(value).toLowerCase());
+}
+
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
  * instances on `options.provider` / `assert[].provider` without leaking those
@@ -332,6 +339,8 @@ export async function evaluateWithSource(
 
 async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
+  const strictConfigEnabled =
+    options.strictConfigEnabled ?? resolveStrictConfigEnabled(testSuiteConfig.env);
 
   if (testSuiteConfig.writeLatestResults) {
     await runDbMigrations();
@@ -358,6 +367,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
     doEvaluate(constructedTestSuite, evalRecord, {
       isRedteam: Boolean(testSuiteConfig.redteam),
       ...options,
+      strictConfigEnabled,
     }),
   );
 
