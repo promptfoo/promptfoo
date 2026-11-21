@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { escape as escapeGlob, hasMagic } from 'glob';
+import { escape as escapeGlob, hasMagic } from 'glob/raw';
 
 import type { TestCase } from '../types/index';
 

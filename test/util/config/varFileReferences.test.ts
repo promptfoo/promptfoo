@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { escape as escapeGlob } from 'glob';
+import { escape as escapeGlob } from 'glob/raw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import { generateVarCombinations } from '../../../src/evaluator';
