@@ -789,6 +789,7 @@ describe('handleToolCallF1', () => {
         type: 'function_call_output',
         output: { tool_calls: [{ function: { name: 'get_weather' } }] },
       },
+      { metadata: { arguments: { type: 'tool_use', name: 'get_weather' } } },
       { type: 'tool_result', content: [{ type: 'tool_use', name: 'get_weather' }] },
       { role: 'tool', content: { tool_calls: [{ function: { name: 'get_weather' } }] } },
       { functionResponse: { name: 'lookup', response: { functionCall: { name: 'get_weather' } } } },

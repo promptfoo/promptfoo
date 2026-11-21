@@ -244,6 +244,7 @@ function collectToolNames(output: unknown, names: Set<string>): void {
     } else {
       for (const [key, nested] of Object.entries(obj)) {
         if (
+          key === 'arguments' ||
           key === 'tools' ||
           key === 'function' ||
           key === 'toolResponse' ||
