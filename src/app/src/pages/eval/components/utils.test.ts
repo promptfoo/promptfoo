@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildEvalOutputPromptHash,
   buildEvalUrlWithSearchParams,
+  getDefaultHiddenVarNames,
   getHumanRating,
   getNamedMetricTotal,
   getNamedMetricTotals,
@@ -491,6 +492,49 @@ describe('getHumanRating', () => {
     };
 
     expect(getHumanRating(output)).toBeUndefined();
+  });
+});
+
+describe('getDefaultHiddenVarNames', () => {
+  it('returns vars not in allowlist when defaultVisibleVars is configured', () => {
+    const varNames = ['query', 'context', 'metadata'];
+    const hidden = getDefaultHiddenVarNames(varNames, {
+      defaultVisibleVars: ['query'],
+    });
+
+    expect(hidden).toEqual(['context', 'metadata']);
+  });
+
+  it('hides every variable when the allowlist is explicitly empty', () => {
+    const varNames = ['query', 'context', 'metadata'];
+    const hidden = getDefaultHiddenVarNames(varNames, {
+      defaultVisibleVars: [],
+    });
+
+    expect(hidden).toEqual(varNames);
+  });
+
+  it('uses defaultHiddenVars when no allowlist is configured', () => {
+    const varNames = ['query', 'context', 'metadata'];
+    const hidden = getDefaultHiddenVarNames(varNames, {
+      defaultHiddenVars: ['metadata', 'unknown'],
+    });
+
+    expect(hidden).toEqual(['metadata']);
+  });
+
+  it('prefers allowlist over denylist when both are provided', () => {
+    const varNames = ['query', 'context', 'metadata'];
+    const hidden = getDefaultHiddenVarNames(varNames, {
+      defaultVisibleVars: ['query', 'context'],
+      defaultHiddenVars: ['context'],
+    });
+
+    expect(hidden).toEqual(['metadata']);
+  });
+
+  it('returns empty array when no resultsTable config is provided', () => {
+    expect(getDefaultHiddenVarNames(['query'], undefined)).toEqual([]);
   });
 });
 
