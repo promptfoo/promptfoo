@@ -1,3 +1,4 @@
+import { hkdfSync, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -1409,13 +1410,33 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
   config: ClaudeCodeOptions;
   env?: EnvOverrides;
-  apiKey?: string;
+
+  get apiKey(): string | undefined {
+    return this.getApiKey();
+  }
+
+  set apiKey(apiKey: string | undefined) {
+    this.config = { ...this.config, apiKey };
+  }
 
   // Only SDK and Anthropic are supported for now
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
   private loadedSdk?: Awaited<ReturnType<typeof loadClaudeCodeSDK>>;
-  private readonly credentialCacheScope = crypto.randomUUID();
+  readonly #cacheSalt = randomBytes(32);
+  #cacheScope?: { fingerprint: string; id: string };
+
+  // Credentials can appear under arbitrary environment names. Keep the derived fingerprint
+  // in memory and give each environment a random ID for the persistent cache.
+  private getCacheScope(env: Record<string, string>): string {
+    const input = JSON.stringify(env, Object.keys(env).sort());
+    const key = hkdfSync('sha256', input, this.#cacheSalt, 'promptfoo:claude-agent-cache:v1', 32);
+    const fingerprint = Buffer.from(key).toString('hex');
+    if (this.#cacheScope?.fingerprint !== fingerprint) {
+      this.#cacheScope = { fingerprint, id: crypto.randomUUID() };
+    }
+    return this.#cacheScope.id;
+  }
 
   constructor(
     options: {
@@ -1427,7 +1448,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const { config, env, id } = options;
     this.config = config ?? {};
     this.env = env;
-    this.apiKey = this.getApiKey();
     this.providerId = id ?? this.providerId;
 
     if (
@@ -1481,28 +1501,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
     validateClaudeToolPolicyConfig(config);
 
-    // Sort keys for stable cache-key hashing. Precedence is documented on the
-    // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
+    // Preserve provider environment values when a prompt overrides individual keys.
+    // Precedence: process.env < provider config.env < prompt config.env < EnvOverrides.
     const env: Record<string, string> = {};
-    const processEnv = getProcessEnv();
-    for (const key of Object.keys(processEnv).sort()) {
-      if (processEnv[key] !== undefined) {
-        env[key] = processEnv[key];
-      }
-    }
-
-    if (config.env) {
-      for (const key of Object.keys(config.env).sort()) {
-        const value = config.env[key];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = this.env[key as keyof typeof this.env];
+    const inherited = { ...getProcessEnv(), ANTHROPIC_API_KEY: getEnvString('ANTHROPIC_API_KEY') };
+    for (const source of [inherited, this.config.env, config.env, this.env]) {
+      for (const [key, value] of Object.entries(source ?? {})) {
         if (value !== undefined) {
           env[key] = value;
         }
@@ -1563,13 +1567,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Prompt config overrides provider config; explicit keys take precedence over env.
-    const effectiveApiKey = config.apiKey || this.apiKey;
-    if (effectiveApiKey) {
+    const effectiveApiKey = config.apiKey ?? this.config.apiKey ?? env.ANTHROPIC_API_KEY;
+    if (effectiveApiKey !== undefined) {
       env.ANTHROPIC_API_KEY = effectiveApiKey;
     }
-    // Subprocess environment can contain credentials under arbitrary names and value formats.
-    // Keep it out of persistent key material and scope reuse to this provider instance instead.
-    const credentialCacheScope = this.credentialCacheScope;
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
     if (
@@ -1812,9 +1813,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if (sensitiveMcpBypassesCache) {
       logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: MCP configuration contains secrets');
     }
-    if (credentialCacheScope) {
-      logger.debug('[ClaudeCodeSDKProvider] Scoping cache to in-memory credential identity');
-    }
     if (settingsConfigurationBypassesCache) {
       logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: SDK settings are externally mutable');
     }
@@ -1855,7 +1853,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             {
               prompt,
               cacheKeyQueryOptions,
-              ...(credentialCacheScope ? { credentialCacheScope } : {}),
+              credentialCacheScope: this.getCacheScope(env),
               ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
             },
           );
@@ -2636,7 +2634,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+    return (
+      this.config.apiKey ??
+      this.env?.ANTHROPIC_API_KEY ??
+      this.config.env?.ANTHROPIC_API_KEY ??
+      getEnvString('ANTHROPIC_API_KEY')
+    );
   }
 
   async cleanup(): Promise<void> {

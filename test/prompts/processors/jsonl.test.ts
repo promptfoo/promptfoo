@@ -80,6 +80,32 @@ describe('processJsonlFile', () => {
     ]);
   });
 
+  it.each(['\n', '\r\n'])('ignores whitespace-only lines with %j separators', (newline) => {
+    const records = ['  [{"content": "first"}]  ', '\t[{"content": "second"}]\t'];
+    mockReadFileSync.mockReturnValue(
+      ['\uFEFF ', records[0], '\t  ', '', records[1], ' \t'].join(newline),
+    );
+    const config = { temperature: 0 };
+
+    expect(processJsonlFile('file.jsonl', { label: 'Label', config })).toEqual(
+      records.map((raw) => ({ raw, label: `Label: ${raw}`, config })),
+    );
+  });
+
+  it('uses the single-record label when the other lines contain only whitespace', () => {
+    mockReadFileSync.mockReturnValue(' \n\t\n[{"content": "only"}]\n  ');
+
+    expect(processJsonlFile('file.jsonl', {}, 'display.jsonl')).toEqual([
+      { raw: '[{"content": "only"}]', label: 'display.jsonl' },
+    ]);
+  });
+
+  it.each(['', ' \n\t\r\n  ', '\uFEFF\t\n '])('returns no prompts for blank file %j', (content) => {
+    mockReadFileSync.mockReturnValue(content);
+
+    expect(processJsonlFile('file.jsonl', {})).toEqual([]);
+  });
+
   it('should throw an error if the file cannot be read', () => {
     const filePath = 'nonexistent.jsonl';
     mockReadFileSync.mockImplementation(() => {

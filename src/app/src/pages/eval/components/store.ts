@@ -273,6 +273,8 @@ interface TableState {
   setAuthor: (author: string | null) => void;
 
   table: EvaluateTable | null;
+  /** Filtered row offset of the successfully loaded table; local ratings preserve it. */
+  tablePageOffset: number;
   setTable: (table: EvaluateTable | null) => void;
 
   config: Partial<UnifiedConfig> | null;
@@ -554,6 +556,7 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tablePageOffset: 0,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
@@ -562,6 +565,7 @@ export const useTableStore = create<TableState>()(
     setTable: (table: EvaluateTable | null) => {
       set((prevState) => ({
         table,
+        tablePageOffset: table === null ? 0 : prevState.tablePageOffset,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -635,10 +639,7 @@ export const useTableStore = create<TableState>()(
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
       // Cancel any existing metadata keys request and reset state for new eval
-      const currentState = get();
-      if (currentState.currentMetadataKeysRequest) {
-        currentState.currentMetadataKeysRequest.abort();
-      }
+      get().currentMetadataKeysRequest?.abort();
 
       set({
         activeEvalQuery: query,
@@ -708,6 +709,7 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => ({
             table: data.table,
+            tablePageOffset: pageIndex * pageSize,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),

@@ -1314,18 +1314,15 @@ function renderImageCellContent({
 }): React.ReactNode {
   return (
     <>
-      <img
-        src={imgSrc}
-        alt={alt}
-        style={{
-          maxWidth: '100%',
-          maxHeight: '200px',
-          height: 'auto',
-          objectFit: 'contain',
-          cursor: 'pointer',
-        }}
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-auto max-w-full p-0 hover:bg-transparent"
+        aria-label={`Open image preview: ${alt}`}
         onClick={() => toggleLightbox(imgSrc)}
-      />
+      >
+        <img src={imgSrc} alt={alt} className="max-h-[200px] max-w-full h-auto object-contain" />
+      </Button>
       {lightboxOpen && lightboxImage === imgSrc && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
           <img
@@ -1612,6 +1609,7 @@ function ResultsTable({
   const {
     evalId,
     table,
+    tablePageOffset,
     setTable,
     config,
     version,
@@ -1721,9 +1719,7 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
-    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1732,12 +1728,12 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
-              originalRowPositionIndex: rowPositionOffset + rowIndex,
+              originalRowPositionIndex: tablePageOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];
-  }, [body]);
+  }, [body, tablePageOffset]);
 
   const transformDisplayVarKeys = React.useMemo(() => {
     const transformVarKeys = new Set<string>();
@@ -2208,8 +2204,6 @@ function ResultsTable({
     if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
       const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
-      let hasScrolled = false;
-
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
 
       const maxPageIndex = pageCount - 1;
@@ -2220,66 +2214,53 @@ function ResultsTable({
           ...prev,
           pageIndex: safeRowPageIndex,
         }));
+        return;
       }
 
+      // A failed or pending page may leave old rows visible with the same local IDs.
+      // Ratings clone the body, so depend only on the loaded range to avoid scrolling again.
+      const localRowIndex = rowIndex - tablePageOffset;
+      if (
+        isFetching ||
+        tablePageOffset !== safeRowPageIndex * pagination.pageSize ||
+        localRowIndex >= body.length
+      ) {
+        return;
+      }
+
+      let frame: number | undefined;
       const scrollToRow = () => {
-        if (hasScrolled) {
-          return;
-        }
-
-        const localRowIndex = rowIndex % pagination.pageSize;
-        const rowElement = document.querySelector(`#row-${localRowIndex}`);
-
-        if (rowElement) {
-          hasScrolled = true;
-
-          requestAnimationFrame(() => {
-            rowElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'nearest',
-            });
+        const row = document.querySelector(`#row-${localRowIndex}`);
+        if (row) {
+          observer.disconnect();
+          frame = requestAnimationFrame(() => {
+            row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           });
         }
       };
 
-      const tableContainer = document.getElementById('results-table-container') || document.body;
-
-      const observer = new MutationObserver(() => {
-        if (hasScrolled) {
-          observer.disconnect();
-          return;
-        }
-
-        const localRowIndex = rowIndex % pagination.pageSize;
-        const rowElement = document.querySelector(`#row-${localRowIndex}`);
-        if (rowElement) {
-          scrollToRow();
-          observer.disconnect();
-        }
-      });
-
-      observer.observe(tableContainer, {
+      const observer = new MutationObserver(scrollToRow);
+      observer.observe(document.getElementById('results-table-container') ?? document.body, {
         childList: true,
         subtree: true,
       });
-
-      const timeoutId = setTimeout(() => {
-        if (!hasScrolled) {
-          console.warn('Timeout reached while waiting for row to be rendered');
-          observer.disconnect();
-        }
-      }, 5000);
+      scrollToRow();
 
       return () => {
         observer.disconnect();
-        clearTimeout(timeoutId);
+        if (frame !== undefined) {
+          cancelAnimationFrame(frame);
+        }
       };
     }
   }, [
     pagination.pageIndex,
     pagination.pageSize,
-    reactTable,
+    evalId,
     filteredResultsCount,
+    isFetching,
+    tablePageOffset,
+    body.length,
     locationHash,
     debouncedSearchText,
     failureFilter,
