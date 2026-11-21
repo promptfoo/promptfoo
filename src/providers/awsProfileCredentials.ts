@@ -269,14 +269,15 @@ export async function getScopedAwsProfileCredentials(
     try {
       // The SDK does not accept a child environment. Keep its shell and output
       // contract, changing only the environment for this individual invocation.
-      const { stdout } = await execAsync(command, {
-        env: { ...process.env, ...scopedEnvironment },
-      });
       let data;
       try {
+        const { stdout } = await execAsync(command, {
+          env: { ...process.env, ...scopedEnvironment },
+        });
         data = JSON.parse(stdout.trim());
       } catch {
-        throw new Error(`Profile ${name} credential_process returned invalid JSON.`);
+        // Exec errors include both the command and stderr. Neither is safe for SDK logs.
+        throw new Error('AWS credential_process failed or returned invalid JSON.');
       }
       if (data.Version !== 1) {
         throw new Error(`Profile ${name} credential_process did not return Version 1.`);

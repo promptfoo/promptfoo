@@ -207,7 +207,10 @@ abstract class SageMakerGenericProvider {
         );
         const credentials = await this.getCredentials();
         const profile = getAwsSdkProfile(this.config, this.env);
-        const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
+        const sdkOptions = {
+          ...getAwsCredentialProviderOptions(this.env),
+          ...(profile === undefined ? {} : { profile }),
+        };
         const endpointOptions = await getScopedAwsEndpointOptions(
           'SageMaker Runtime',
           sdkOptions,
@@ -215,13 +218,12 @@ abstract class SageMakerGenericProvider {
         );
 
         const runtime = new SageMakerRuntimeClient({
-          ...getAwsCredentialProviderOptions(this.env),
+          ...sdkOptions,
           ...endpointOptions,
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
-          ...(profile === undefined ? {} : { profile }),
         });
 
         state.client = runtime;

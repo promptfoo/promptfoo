@@ -46,7 +46,7 @@ function provider(env: EnvOverrides = {}, config: Record<string, unknown> = {}) 
   vi.spyOn(instance as any, 'createProjectClient').mockImplementation(async () => {
     const credential = await createAzureCredential(config, env);
     return {
-      agents: { get: async () => ({ id: 'fixture-agent', name: 'fixture-agent' }) },
+      getAgent: async () => ({ id: 'fixture-agent', name: 'fixture-agent' }),
       getOpenAIClient: () => ({
         responses: {
           create: async () => {
@@ -129,39 +129,18 @@ afterEach(() => {
 });
 
 describe('Foundry scoped credential cache with the installed Identity SDK', () => {
-  it.each(['environment', 'config'] as const)(
-    'separates principal, unavailable and invalid secrets from %s',
-    async (source) => {
-      const make = (secret: string | undefined) =>
-        source === 'environment'
-          ? provider({ ...principal, AZURE_CLIENT_SECRET: secret })
-          : provider(
-              {},
-              {
-                azureClientId: principal.AZURE_CLIENT_ID,
-                azureTenantId: principal.AZURE_TENANT_ID,
-                azureClientSecret: secret,
-              },
-            );
-      expect(await make('fixture-secret').callApi('same prompt')).toMatchObject({
-        output: publicAuthority,
-      });
-      for (const unavailable of ['', undefined]) {
-        expect(await make(unavailable).callApi('same prompt')).toMatchObject({
-          output: 'developer-identity',
-        });
-      }
-      expect(await make(' \t ').callApi('same prompt')).toMatchObject({
-        error: expect.stringContaining('credentials are incomplete'),
-      });
-      expect(await make('rotated-fixture-secret').callApi('same prompt')).toMatchObject({
-        output: publicAuthority,
-        cached: true,
-      });
-      expect(requests).toBe(2);
-      expect(stored.size).toBe(2);
-    },
-  );
+  it('requires authentication after a scoped secret changes', async () => {
+    const run = (secret?: string) =>
+      provider({ ...principal, AZURE_CLIENT_SECRET: secret }).callApi('same prompt');
+    expect(await run('fixture-secret')).toMatchObject({ output: publicAuthority });
+    expect(await run()).toMatchObject({ output: 'developer-identity' });
+    expect(await run(' \t ')).toMatchObject({
+      error: expect.stringContaining('credentials are incomplete'),
+    });
+    expect(await run('rotated-fixture-secret')).toMatchObject({ output: publicAuthority });
+    expect(requests).toBe(3);
+    expect(stored.size).toBe(3);
+  });
 
   it.each(['', undefined])(
     'separates username/password availability (%s) from developer fallback',
@@ -175,8 +154,8 @@ describe('Foundry scoped credential cache with the installed Identity SDK', () =
       ).toMatchObject({ output: 'developer-identity' });
       expect(
         await provider({ ...common, AZURE_PASSWORD: 'rotated-password' }).callApi('same prompt'),
-      ).toMatchObject({ output: 'username-identity', cached: true });
-      expect(requests).toBe(2);
+      ).toMatchObject({ output: 'username-identity' });
+      expect(requests).toBe(3);
     },
   );
 

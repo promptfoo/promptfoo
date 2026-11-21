@@ -7,6 +7,7 @@ import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
+  determineGoogleVertexMode,
   getGoogleClient,
   loadCredentials,
   resolveProjectId,
@@ -92,6 +93,12 @@ export class GoogleImageProvider implements ApiProvider {
     return `[Google Image Generation Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return (
+      this.config.apiKeyRequired !== false && !determineGoogleVertexMode(this.config, this.env)
+    );
+  }
+
   /**
    * Helper method to get Google client with credentials support
    */
@@ -122,23 +129,15 @@ export class GoogleImageProvider implements ApiProvider {
     const apiKey = this.getApiKey();
 
     // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
-    const projectId =
-      this.config.vertexai === false
-        ? undefined
-        : this.config.projectId ||
-          resolveProviderEnv(this.env, [
-            'VERTEX_PROJECT_ID',
-            'GOOGLE_PROJECT_ID',
-            'GOOGLE_CLOUD_PROJECT',
-          ])?.value;
+    const isVertexMode = determineGoogleVertexMode(this.config, this.env);
 
-    if (this.config.vertexai === true || projectId) {
+    if (isVertexMode) {
       // Use Vertex AI if project ID is available
       return this.callVertexApi(prompt);
     }
 
     // Otherwise, try Google AI Studio with API key
-    if (apiKey) {
+    if (apiKey || this.config.apiKeyRequired === false) {
       return this.callGeminiApi(prompt);
     }
 
@@ -228,7 +227,7 @@ export class GoogleImageProvider implements ApiProvider {
 
   private async callGeminiApi(prompt: string): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (!apiKey && this.config.apiKeyRequired !== false) {
       return {
         error:
           'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
@@ -236,7 +235,15 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     const modelPath = this.getModelPath();
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelPath}:predict`;
+    // Strip trailing slashes so `apiHost: proxy.example/` does not produce `//v1beta`.
+    const apiHost = (this.config.apiHost || 'generativelanguage.googleapis.com').replace(
+      /\/+$/,
+      '',
+    );
+    if (!apiHost) {
+      return { error: 'Google AI Studio apiHost must contain a host' };
+    }
+    const endpoint = `https://${apiHost}/v1beta/models/${modelPath}:predict`;
 
     logger.debug(`Google AI Studio Image API endpoint: ${endpoint}`);
 
@@ -263,7 +270,7 @@ export class GoogleImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);

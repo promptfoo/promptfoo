@@ -5,7 +5,7 @@ import {
 } from './azureWorkloadIdentity';
 import type { TokenCredential } from '@azure/identity';
 
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
 
 interface AzureCredentialConfig {
   azureClientId?: string;

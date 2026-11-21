@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getMergedEnvOverrides } from '../../envars';
+import { getEnvString, getMergedEnvOverrides, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
 import { createAzureCredential } from '../../util/azureCredentials';
@@ -11,12 +11,10 @@ import {
   extractRateLimitErrorType,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
+  isHardQuotaCode,
+  isRateLimitOrQuotaMessage,
+  isTransientRateLimitCode,
 } from '../../util/fetch/errors';
-import {
-  CallbackPathTraversalError,
-  loadCallbackFromFileUrl,
-  wrapError,
-} from '../../util/functions/loadFunction';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -24,10 +22,13 @@ import {
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
-import { getCredentialCacheNamespace } from '../credentialCache';
-import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from '../credentialCache';
+import { FunctionCallbackHandler, loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
+import { hasUnpricedAzureResponsesToolUsage } from '../openai/billing';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, getGpt6Variant } from '../openai/gpt6';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { getResponsesOutputText } from '../responses/stream';
 import { createEnvironmentScopedState } from '../scopedState';
 import {
   buildChatSpanContext,
@@ -38,15 +39,9 @@ import {
   withGenAISpan,
   withGenAIToolSpan,
 } from '../tracing';
-import {
-  formatContentFilterResponse,
-  isContentFilterError,
-  isRateLimitError,
-  isServiceError,
-} from './errors';
+import { formatContentFilterResponse, isContentFilterError, isServiceError } from './errors';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
-import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
 import type { Span } from '@opentelemetry/api';
 
 import type {
@@ -55,18 +50,17 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { CallbackContext, ReasoningEffort } from '../openai/types';
+import type { CallbackContext } from '../openai/types';
+import type { FoundryAgent, FoundryProjectClient } from './foundryProjectClient';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
-type FoundryAgent = Agent;
-type FoundryOpenAIClient = ReturnType<AzureAIProjectClient['getOpenAIClient']>;
+type FoundryOpenAIClient = ReturnType<FoundryProjectClient['getOpenAIClient']>;
 type FoundryResponses = FoundryOpenAIClient['responses'];
 type FoundryResponseCreateParams = Parameters<FoundryResponses['create']>[0] & { stream?: false };
 type FoundryResponseCreateOptions = NonNullable<Parameters<FoundryResponses['create']>[1]>;
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
 };
-// Foundry bundles its own OpenAI SDK, whose response types can differ from ours.
 type FoundryResponse = Extract<
   Awaited<ReturnType<FoundryResponses['create']>>,
   { output: unknown[] }
@@ -78,7 +72,7 @@ type ResponseFunctionCallItem = Extract<
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
 interface FoundryClientState {
-  projectClient?: Promise<AzureAIProjectClient>;
+  projectClient?: Promise<FoundryProjectClient>;
   agentPromise?: Promise<FoundryAgent>;
   resolvedAgent?: FoundryAgent;
   cacheNamespace?: string;
@@ -133,12 +127,23 @@ function hashFoundryAgentCacheValue(value: unknown): string {
     .digest('hex');
 }
 
+function hashFoundryRequest(
+  body: Record<string, any>,
+  { cost, inputCost, outputCost }: EffectiveFoundryConfig,
+) {
+  // Cached responses include their estimated cost. Keep existing keys for deployments without overrides.
+  if (cost === undefined && inputCost === undefined && outputCost === undefined) {
+    return hashFoundryAgentCacheValue(body);
+  }
+  return hashFoundryAgentCacheValue({ body, cost, inputCost, outputCost });
+}
+
 /**
  * Name/value pairs out of whichever header carrier an SDK error is holding.
  *
  * Web `Headers` and Azure Core's `HttpHeaders` are both declared
  * `Iterable<[name, value]>`, but only the Web one has `.entries()`. Azure's
- * `HttpHeadersImpl` — what an `@azure/ai-projects` `RestError` carries —
+ * `HttpHeadersImpl` — what an Azure `RestError` carries —
  * exposes `get()`, `toJSON()` and `[Symbol.iterator]` and nothing else, so
  * `.entries()` is undefined on it and `Object.entries()` yields its private
  * `_headersMap` instead of any header. Iterating covers both, `toJSON()`
@@ -294,6 +299,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: NonNullable<AzureAssistantProviderOptions['config']>;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
+  readonly #servicePrincipal?: {
+    tenantId: string;
+    clientId: string;
+    clientSecret: string;
+    authorityHost?: string;
+  };
   private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
     cacheNamespace: this.selectResponseCacheNamespace(),
   }));
@@ -308,6 +319,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     this.assistantConfig = options.config || {};
     // Validate at construction while resolving ambient endpoints in each invocation.
     this.getProjectUrl();
+
+    const { azureTenantId, azureClientId, azureClientSecret, azureAuthorityHost } =
+      this.assistantConfig;
+    if (azureClientSecret !== undefined) {
+      if (!azureTenantId?.trim() || !azureClientId?.trim() || !azureClientSecret?.trim()) {
+        throw new Error(
+          'An explicit Azure service principal requires azureClientId, azureTenantId and azureClientSecret together.',
+        );
+      }
+      this.#servicePrincipal = {
+        tenantId: azureTenantId,
+        clientId: azureClientId,
+        clientSecret: azureClientSecret,
+        authorityHost: azureAuthorityHost,
+      };
+    }
 
     this.processor = new ResponsesProcessor({
       modelName: this.assistantConfig.modelName || deploymentName,
@@ -340,56 +367,37 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       'AZURE_USERNAME',
       'AZURE_PASSWORD',
     ];
-    const hasConfiguredIdentity = [
+    const config = [
       this.config.azureClientId,
       this.config.azureTenantId,
-      this.config.azureClientSecret,
       this.config.azureAuthorityHost,
-    ].some((value) => value !== undefined);
-    if (!hasConfiguredIdentity && !names.some((name) => env[name] !== undefined)) {
+    ];
+    if (
+      config.every((value) => value === undefined) &&
+      names.every((key) => env[key] === undefined)
+    ) {
       return undefined;
     }
-    const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
-    const clientSecret =
-      this.config.azureClientSecret ??
-      env.AZURE_CLIENT_SECRET ??
-      getEnvString('AZURE_CLIENT_SECRET');
-    const password = env.AZURE_PASSWORD ?? getEnvString('AZURE_PASSWORD');
-    const usernameIdentity =
-      (!selector || ['prod', 'environmentcredential'].includes(selector)) &&
-      !clientSecret &&
-      !(env.AZURE_CLIENT_CERTIFICATE_PATH ?? getEnvString('AZURE_CLIENT_CERTIFICATE_PATH')) &&
-      password
-        ? (env.AZURE_USERNAME ?? getEnvString('AZURE_USERNAME'))
-        : undefined;
-    return getCredentialCacheNamespace(
-      [
-        this.config.azureClientId ?? env.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'),
-        this.config.azureTenantId ?? env.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'),
-        usernameIdentity,
-        this.config.azureAuthorityHost ??
-          env.AZURE_AUTHORITY_HOST ??
-          getEnvString('AZURE_AUTHORITY_HOST'),
-        // Availability changes can select a different native fallback identity.
-        // Partition those paths without persisting secrets or their fingerprints.
-        selector,
-        clientSecret
-          ? clientSecret.trim()
-            ? 'secret-present'
-            : 'secret-invalid'
-          : 'secret-absent',
-        password ? 'password-present' : 'password-absent',
-      ],
-      ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
-        .map((name) => env[name] ?? getEnvString(name))
-        .filter((file): file is string => file !== undefined),
+    const value = (key: string) => env[key] ?? getEnvString(key);
+    const files = ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
+      .map(value)
+      .filter((file): file is string => Boolean(file));
+    // Isolate rotated credentials without retaining them or a reusable secret fingerprint.
+    return getOpaqueCredentialCacheNamespace(
+      JSON.stringify([
+        process.env.AZURE_TOKEN_CREDENTIALS,
+        config,
+        names.map(value),
+        getCredentialCacheNamespace([], files),
+      ]),
     );
   }
 
   private getProjectUrl(): string {
     const projectUrl =
       this.assistantConfig.projectUrl ||
-      (this.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL'));
+      (getProviderEnvString(this.env, 'AZURE_AI_PROJECT_URL') ??
+        getEnvString('AZURE_AI_PROJECT_URL'));
     if (!projectUrl) {
       throw new Error(
         'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
@@ -398,7 +406,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return projectUrl;
   }
 
-  private initializeClient(): Promise<AzureAIProjectClient> {
+  private initializeClient(): Promise<FoundryProjectClient> {
     const state = this.getClientState();
     state.projectClient ??= this.createProjectClient().catch((error) => {
       state.projectClient = undefined;
@@ -407,14 +415,28 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return state.projectClient;
   }
 
-  private async createProjectClient(): Promise<AzureAIProjectClient> {
+  private async createProjectClient(): Promise<FoundryProjectClient> {
     try {
-      const { AIProjectClient } = await import('@azure/ai-projects');
-
-      const projectClient = new AIProjectClient(
-        this.getProjectUrl(),
-        await createAzureCredential(this.config, this.env),
-      ) as AzureAIProjectClient;
+      const { FoundryProjectClient } = await import('./foundryProjectClient');
+      const { ClientSecretCredential } = await import('@azure/identity');
+      const principal = this.#servicePrincipal;
+      const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
+      if (principal && selector && !['prod', 'environmentcredential'].includes(selector)) {
+        throw new Error(
+          'AZURE_TOKEN_CREDENTIALS must allow EnvironmentCredential for an explicit Azure client secret.',
+        );
+      }
+      const credential = principal
+        ? new ClientSecretCredential(
+            principal.tenantId,
+            principal.clientId,
+            principal.clientSecret,
+            {
+              authorityHost: principal.authorityHost,
+            },
+          )
+        : await createAzureCredential(this.config, this.env);
+      const projectClient = new FoundryProjectClient(this.getProjectUrl(), credential);
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
     } catch (error) {
@@ -424,7 +446,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+  private resolveAgent(client: FoundryProjectClient): Promise<FoundryAgent> {
     const state = this.getClientState();
     state.agentPromise ??= this.lookupAgent(client)
       .then((agent) => {
@@ -438,9 +460,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return state.agentPromise;
   }
 
-  private async lookupAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+  private async lookupAgent(client: FoundryProjectClient): Promise<FoundryAgent> {
     try {
-      return await client.agents.get(this.deploymentName);
+      return await client.getAgent(this.deploymentName);
     } catch (error) {
       logger.debug(
         `[AzureFoundryAgentProvider] Direct agent lookup failed for '${this.deploymentName}', falling back to list lookup`,
@@ -450,14 +472,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       );
     }
 
-    for await (const agent of client.agents.list()) {
+    for await (const agent of client.listAgents()) {
       if (agent.id === this.deploymentName || agent.name === this.deploymentName) {
         return agent;
       }
     }
 
     throw new Error(
-      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.getProjectUrl()}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
+      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.getProjectUrl()}'. Foundry resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
     );
   }
 
@@ -484,15 +506,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    try {
-      return await loadCallbackFromFileUrl(fileRef);
-    } catch (error) {
-      if (error instanceof CallbackPathTraversalError) {
-        throw error;
-      }
-      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
-    }
+  private loadExternalFunction(fileRef: string): Promise<Function> {
+    return loadProviderCallbackFromFileUrl(fileRef);
   }
 
   private async executeFunctionCallback(
@@ -617,9 +632,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const reasoningEffort = config.reasoning_effort
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
     const maxOutputTokens =
       config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens;
 
@@ -645,13 +657,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       text = { ...(text || {}), verbosity: config.verbosity };
     }
 
-    const body = {
+    const body: Record<string, any> = {
       input: this.parsePromptInput(prompt),
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(config.modelName ? { model: config.modelName } : {}),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
-      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options === undefined
+        ? {}
+        : { prompt_cache_options: config.prompt_cache_options }),
       ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
       ...(config.top_p === undefined ? {} : { top_p: config.top_p }),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
@@ -659,6 +676,26 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       ...(text ? { text } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (getGpt6Variant(body.model)?.startsWith('6.2-')) {
+      const reasoning = getGpt6ResponsesReasoning(
+        this.assistantConfig,
+        context?.prompt?.config,
+        (value) => renderVarsInObject(value, context?.vars),
+      );
+      if (reasoning) {
+        body.reasoning = reasoning;
+      } else {
+        delete body.reasoning;
+      }
+      applyGpt6RequestRules(body, body.model, 'responses');
+    } else if (!('reasoning' in body)) {
+      const reasoning =
+        config.reasoning ?? (config.reasoning_effort && { effort: config.reasoning_effort });
+      if (reasoning) {
+        body.reasoning = renderVarsInObject(reasoning, context?.vars);
+      }
+    }
 
     return {
       body,
@@ -749,26 +786,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         ),
       })),
     );
-  }
-
-  private getResponseOptions(
-    agent: FoundryAgent,
-    config: EffectiveFoundryConfig,
-  ): FoundryResponseCreateOptions {
-    // Azure AI Foundry replaced the top-level `agent` field in the responses
-    // create body with `agent_reference`. Sending `agent` returns a 400 similar
-    // to: "The 'agent' property is deprecated. Use 'agent_reference' instead."
-    return {
-      ...(config.timeoutMs === undefined ? {} : { timeout: config.timeoutMs }),
-      // Own retry waits until the bundled SDK supports cancellable backoff.
-      maxRetries: 0,
-      body: {
-        agent_reference: {
-          name: agent.name,
-          type: 'agent_reference',
-        },
-      },
-    };
   }
 
   private async createResponseWithRetries(
@@ -987,8 +1004,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): number | undefined {
     const usage = response.usage;
     const modelOverride = (config.passthrough as { model?: string } | undefined)?.model;
+    const model = response.model || modelOverride || config.modelName || this.deploymentName;
+    if (getGpt6Variant(model)?.startsWith('6.2-') && hasUnpricedAzureResponsesToolUsage(response)) {
+      return undefined;
+    }
     return calculateAzureCost(
-      response.model || modelOverride || config.modelName || this.deploymentName,
+      model,
       config,
       usage?.input_tokens,
       usage?.output_tokens,
@@ -1059,6 +1080,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private async processResponse(
     response: FoundryResponse,
     effectiveConfig: EffectiveFoundryConfig,
+    multiAgent: boolean,
   ): Promise<ProviderResponse> {
     const failure = this.responseFailureMessage(response);
     // Normalize any partial output without allowing response errors or callbacks
@@ -1067,7 +1089,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       response.error ? { ...response, error: null } : response,
       { ...effectiveConfig, functionToolCallbacks: undefined },
       false,
+      { multiAgent },
     );
+    const outputText = multiAgent ? getResponsesOutputText(response, true) : response.output_text;
     const metadata = {
       ...result.metadata,
       ...(response.status && { responseStatus: response.status }),
@@ -1079,14 +1103,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       return {
         ...result,
         ...((result.error || (result.isRefusal && result.output === '')) &&
-          response.output_text && { output: response.output_text }),
+          outputText && { output: outputText }),
         error: failure,
         raw: response,
-        metadata,
+        metadata: {
+          ...metadata,
+          ...(isTransientRateLimitCode(response.error?.code) && { rateLimitKind: 'rate_limit' }),
+          ...(isHardQuotaCode(response.error?.code) && { rateLimitKind: 'quota' }),
+        },
       };
     }
-    if (result.error && response.output_text) {
-      return { ...result, error: undefined, output: response.output_text, raw: response, metadata };
+    if (result.error && outputText) {
+      return { ...result, error: undefined, output: outputText, raw: response, metadata };
     }
     return { ...result, metadata };
   }
@@ -1136,11 +1164,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
     const projectScope = hashFoundryAgentCacheValue(this.getProjectUrl());
     const cacheNamespace = this.getResponseCacheNamespace();
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${cacheNamespace ? `${cacheNamespace}:` : ''}${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${cacheNamespace ? `${cacheNamespace}:` : ''}${projectScope}:${hashFoundryRequest(body, effectiveConfig)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.
+    // A project URI and client ID cannot authenticate a service principal to the shared cache.
     const useCache =
+      !this.#servicePrincipal &&
       isCacheEnabled() &&
       !Object.keys(effectiveConfig.functionToolCallbacks ?? {}).length &&
       effectiveConfig.maxPollTimeMs === undefined &&
@@ -1218,7 +1248,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
-      const responseOptions = this.getResponseOptions(agent, effectiveConfig);
+      const responseOptions = {
+        ...(effectiveConfig.timeoutMs === undefined ? {} : { timeout: effectiveConfig.timeoutMs }),
+        maxRetries: 0, // The provider owns cancellable retry waits.
+      };
       const tracer = getGenAITracer();
       let turnCount = 0;
 
@@ -1248,7 +1281,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         try {
           const response = await this.createResponseWithRetries(
             () => client.getOpenAIClient(),
-            requestBody,
+            { ...requestBody, agent_reference: { name: agent.name, type: 'agent_reference' } },
             responseOptions,
             effectiveConfig.retryOptions?.maxRetries,
             () => {
@@ -1336,7 +1369,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
 
       const result = aggregateResult(
-        await waitWithAbort(() => this.processResponse(response, effectiveConfig), abortSignal),
+        await waitWithAbort(
+          () => this.processResponse(response, effectiveConfig, body.multi_agent?.enabled === true),
+          abortSignal,
+        ),
       );
       if (useCache && !result.error) {
         try {
@@ -1384,7 +1420,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     let result: ProviderResponse;
     if (isContentFilterError(errorMessage)) {
       result = formatContentFilterResponse(errorMessage);
-    } else if (isRateLimitError(errorMessage)) {
+    } else if (isRateLimitOrQuotaMessage(errorMessage)) {
       result = { error: `Rate limit exceeded: ${errorMessage}` };
     } else if (isServiceError(errorMessage)) {
       result = { error: `Service error: ${errorMessage}` };

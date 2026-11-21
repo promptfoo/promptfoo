@@ -88,7 +88,7 @@ afterEach(() => {
 
 describe('scoped credential-process response caching', () => {
   it.each(['file', 'suite', 'provider'])(
-    'partitions %s process identities and reuses the first identity',
+    'keeps %s credential-process identities out of the shared cache',
     async (scope) => {
       const rows = [];
       for (const identity of ['first-access', 'second-access', 'first-access']) {
@@ -112,19 +112,12 @@ describe('scoped credential-process response caching', () => {
               : run()),
         );
       }
-      expect(rows).toMatchObject([
-        { output: 'first-access' },
-        { output: 'second-access' },
-        { output: 'first-access', cached: true },
-      ]);
-      expect(authorizations).toHaveLength(2);
-      expect(authorizations[0]).toContain('Credential=first-access/');
-      expect(authorizations[1]).toContain('Credential=second-access/');
-      for (const key of fixtures.cache.keys()) {
-        expect(key).not.toContain('first-access');
-        expect(key).not.toContain('second-access');
-        expect(key).not.toContain('fixture-secret');
-      }
+      const identities = ['first-access', 'second-access', 'first-access'];
+      expect(rows.map((row) => row.output)).toEqual(identities);
+      expect(authorizations).toEqual(
+        identities.map((key) => expect.stringContaining(`Credential=${key}/`)),
+      );
+      expect(fixtures.cache.size).toBe(0);
     },
   );
 

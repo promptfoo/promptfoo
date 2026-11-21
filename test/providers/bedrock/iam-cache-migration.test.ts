@@ -1,10 +1,8 @@
-import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler, NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockCompletionProvider } from '../../../src/providers/bedrock';
 import { AwsBedrockConverseProvider } from '../../../src/providers/bedrock/converse';
-import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { mockProcessEnv } from '../../util/utils';
 import type { HttpRequest } from '@smithy/types';
 
@@ -71,11 +69,6 @@ function createProvider(kind: string, configuredBearer: boolean) {
       ...(configuredBearer ? { apiKey: 'legacy-bearer-token' } : {}),
     },
   };
-  if (kind === 'kb') {
-    return new AwsBedrockKnowledgeBaseProvider('anthropic.claude-3-sonnet-20240229-v1:0', {
-      config: { ...options.config, knowledgeBaseId: 'fixture-kb' },
-    });
-  }
   if (kind === 'converse') {
     return new AwsBedrockConverseProvider('anthropic.claude-3-sonnet-20240229-v1:0', options);
   }
@@ -83,7 +76,7 @@ function createProvider(kind: string, configuredBearer: boolean) {
 }
 
 // Released clients applied a bearer header after SDK signing, and used no added namespace.
-function useReleasedClient(provider: ReturnType<typeof createProvider>, kind: string) {
+function useReleasedClient(provider: ReturnType<typeof createProvider>) {
   Object.defineProperty(provider, 'responseCacheNamespace', { get: () => undefined });
   const handler = new NodeHttpHandler();
   const options = {
@@ -100,20 +93,14 @@ function useReleasedClient(provider: ReturnType<typeof createProvider>, kind: st
       destroy: () => handler.destroy(),
     },
   };
-  if (kind === 'kb') {
-    const client = new BedrockAgentRuntimeClient(options);
-    (provider as AwsBedrockKnowledgeBaseProvider).knowledgeBaseClient = client;
-    clients.push(client);
-  } else {
-    const client = new BedrockRuntime(options);
-    provider.bedrock = client;
-    clients.push(client);
-  }
+  const client = new BedrockRuntime(options);
+  provider.bedrock = client;
+  clients.push(client);
 }
 
 describe('configured Bedrock IAM cache migration', () => {
   it.each(
-    ['completion', 'converse', 'kb'].flatMap((kind) =>
+    ['completion', 'converse'].flatMap((kind) =>
       ['config', 'ambient', 'ambient-removed'].map((bearer) => ({ kind, bearer })),
     ),
   )('does not reuse a released $kind $bearer bearer response for IAM', async ({ kind, bearer }) => {
@@ -121,7 +108,7 @@ describe('configured Bedrock IAM cache migration', () => {
       mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'legacy-bearer-token' });
     }
     const released = createProvider(kind, bearer === 'config');
-    useReleasedClient(released, kind);
+    useReleasedClient(released);
     expect(await released.callApi('fixture prompt')).toMatchObject({
       output: 'legacy-bearer-owner',
     });
@@ -138,12 +125,8 @@ describe('configured Bedrock IAM cache migration', () => {
       output: 'configured-iam-owner',
       cached: true,
     });
-    const currentClient =
-      kind === 'kb'
-        ? (current as AwsBedrockKnowledgeBaseProvider).knowledgeBaseClient
-        : current.bedrock;
-    if (currentClient) {
-      clients.push(currentClient);
+    if (current.bedrock) {
+      clients.push(current.bedrock);
     }
     expect(authorizations).toHaveLength(2);
     expect(authorizations[0]).toBe('Bearer legacy-bearer-token');

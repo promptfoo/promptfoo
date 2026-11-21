@@ -125,6 +125,24 @@ describe('scoped SDK response cache compatibility', () => {
     expect(getAwsCredentialCacheNamespace({}, { AWS_PROFILE: '' })).not.toBe(first);
   });
 
+  it('isolates scoped tuples that share a public ID but differ in a secret or session token', () => {
+    const env = {
+      AWS_PROFILE: '',
+      AWS_ACCESS_KEY_ID: 'same-access',
+      AWS_SECRET_ACCESS_KEY: 'first-secret',
+      AWS_SESSION_TOKEN: 'first-session',
+    };
+    const first = getAwsCredentialCacheNamespace({}, env);
+    expect(getAwsCredentialCacheNamespace({}, { ...env })).toBe(first);
+    expect(getAwsCredentialCacheNamespace({}, { ...env, AWS_SECRET_ACCESS_KEY: 'wrong' })).not.toBe(
+      first,
+    );
+    expect(getAwsCredentialCacheNamespace({}, { ...env, AWS_SESSION_TOKEN: 'other' })).not.toBe(
+      first,
+    );
+    expect(first).not.toContain('first-secret');
+  });
+
   it('partitions the public source identity beneath the same scoped AWS role profile', () => {
     const env = {
       AWS_PROFILE: 'role-profile',

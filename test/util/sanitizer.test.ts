@@ -1,6 +1,4 @@
-import { BlobServiceClient } from '@azure/storage-blob';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CreateJobRequestSchema } from '../../src/types/api/eval';
 import {
   isCredentialHeader,
   isSecretEnvVarName,
@@ -264,43 +262,21 @@ describe('stripProviderPromptSelectors', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
-  it.each([';', '; '])(
-    'redacts parsed Azure storage credentials with %j separators',
-    (separator) => {
-      const accountKey = Buffer.from('fixture-account-key-'.repeat(4)).toString('base64');
-      const connectionString = [
-        'DefaultEndpointsProtocol=https',
-        'AccountName=fixtureaccount',
-        `AccountKey=${accountKey}`,
-        'EndpointSuffix=core.windows.net',
-      ].join(separator);
-      // Exercise the SDK's accepted syntax without making a request.
-      expect(BlobServiceClient.fromConnectionString(connectionString).accountName).toBe(
-        'fixtureaccount',
-      );
+  it.each(['AccountKey', 'SharedAccessSignature'])(
+    'redacts Azure Storage connection strings containing %s in exports and request logs',
+    (credentialName) => {
+      const credential = 'synthetic-storage-credential';
       const env = {
-        AZURE_STORAGE_CONNECTION_STRING: connectionString,
-        AZURE_AI_PROJECT_URL: 'https://project.example.test',
+        AZURE_STORAGE_CONNECTION_STRING: `DefaultEndpointsProtocol=https;AccountName=fixture;${credentialName}=${credential}`,
+        AZURE_CLIENT_ID: 'fixture-client',
       };
-      const config = CreateJobRequestSchema.parse({
-        prompts: ['fixture'],
-        providers: [{ id: 'echo', env }],
-        env,
-      });
-      expect(config.env?.AZURE_STORAGE_CONNECTION_STRING).toBe(connectionString);
-
-      const exported = sanitizeConfigForOutput({ env: config.env, providers: config.providers });
-      expect(exported).toMatchObject({
-        env: { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' },
-        providers: [{ env: { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' } }],
-      });
-      const requestLog = sanitizeObject(config, { context: 'evaluation job request' });
-      const logContext = sanitizeObject({ body: requestLog });
-      for (const output of [exported, requestLog, logContext]) {
-        expect(JSON.stringify(output)).not.toContain(accountKey);
-        expect(JSON.stringify(output)).toContain('https://project.example.test');
+      const config = { env, providers: [{ id: 'echo', env }] };
+      const safeEnv = { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' };
+      for (const output of [sanitizeConfigForOutput(config), sanitizeObject(config)]) {
+        expect(output).toMatchObject({ env: safeEnv, providers: [{ env: safeEnv }] });
+        expect(JSON.stringify(output)).not.toContain(credential);
       }
-      expect(config.env?.AZURE_STORAGE_CONNECTION_STRING).toBe(connectionString);
+      expect(config.env.AZURE_STORAGE_CONNECTION_STRING).toContain(credential);
     },
   );
 

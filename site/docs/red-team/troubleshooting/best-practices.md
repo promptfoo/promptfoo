@@ -80,7 +80,7 @@ Put on your thinking cap and try to make these _as specific as possible_ to your
 | [Intent (Custom Prompts)](/docs/red-team/plugins/intent/) | Supply known "danger phrases" to test. Great for compliance checklists              |
 | [Policy](/docs/red-team/plugins/policy/)                  | Encode organization-specific rules; Promptfoo crafts attacks that try to break them |
 
-Declare them under [`plugins:`](/docs/red-team/plugins/) and pair with your high-ASR strategies so the Promptfoo attacker can mutate your seed inputs or policy text into sophisticated exploits.
+Declare them under [`plugins:`](/docs/red-team/plugins/) and pair with your high-ASR strategies so the Promptfoo attacker can mutate your seed inputs or policy text into attack variants.
 
 ## 5. Calibrate Grading
 

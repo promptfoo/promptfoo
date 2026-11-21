@@ -19,6 +19,7 @@ import { NovaReelVideoProvider } from '../../src/providers/bedrock/nova-reel';
 import { NovaSonicProvider } from '../../src/providers/bedrock/nova-sonic';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
+import { invokeMedia, methods } from './bedrock/mediaFixture';
 
 import type { EnvOverrides } from '../../src/contracts/env';
 
@@ -328,11 +329,7 @@ describe.each([
   ['luma', LumaRayVideoProvider],
   ['reel', NovaReelVideoProvider],
 ] as const)('%s configured SSO media endpoint profiles', (_name, Provider) => {
-  it.each(
-    ['startVideoGeneration', 'pollForCompletion', 'downloadAndStoreVideo'].flatMap((method) =>
-      [false, true].map((scoped) => ({ method, scoped })),
-    ),
-  )(
+  it.each(methods.flatMap((method) => [false, true].map((scoped) => ({ method, scoped }))))(
     'keeps IAM and endpoint profiles separate for $method scoped=$scoped',
     async ({ method, scoped }) => {
       vi.useFakeTimers({ toFake: ['Date'] });
@@ -353,13 +350,7 @@ describe.each([
             s3OutputUri: 's3://fixture-bucket/output',
           },
         });
-        const args =
-          method === 'startVideoGeneration'
-            ? [{}, 's3://fixture-bucket/output']
-            : method === 'pollForCompletion'
-              ? ['arn:aws:bedrock:us-east-1:123456789012:async-invoke/fixture', 1, 100]
-              : ['s3://fixture-bucket/output'];
-        const invoke = () => Reflect.get(provider, method).apply(provider, args);
+        const invoke = () => invokeMedia(provider, method);
         const result = await (scoped
           ? cliState.withEnvFileOverrides({ AWS_CONFIG_FILE: configFile }, invoke)
           : invoke());

@@ -1,11 +1,10 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
-import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
 import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
@@ -91,26 +90,11 @@ export class AwsBedrockKnowledgeBaseProvider
     }
   }
   private readonly getClientState = createEnvironmentScopedState(
-    () => {
-      const namespace = this.selectResponseCacheNamespace(this.getIamCredentialConfig());
-      // cacheConfig omits the IAM tuple. Partition configured identities in memory
-      // without persisting credentials or hashes derived from their secret values.
-      const configuredIdentity =
-        this.config.accessKeyId && this.config.secretAccessKey
-          ? getOpaqueCredentialCacheNamespace(
-              JSON.stringify([
-                this.config.accessKeyId,
-                this.config.secretAccessKey,
-                this.config.sessionToken,
-              ]),
-            )
-          : undefined;
-      return {
-        cacheNamespace: [namespace, configuredIdentity].filter(Boolean).join(':') || undefined,
-        client: undefined as BedrockAgentRuntimeClient | undefined,
-        initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
-      };
-    },
+    () => ({
+      cacheNamespace: this.selectResponseCacheNamespace(this.getIamCredentialConfig()),
+      client: undefined as BedrockAgentRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
+    }),
     (state) =>
       destroyScopedClient(state.client, state.initialization, (error) =>
         logger.warn('Error destroying late SDK client', { error }),
@@ -155,6 +139,7 @@ export class AwsBedrockKnowledgeBaseProvider
   }
 
   async getKnowledgeBaseClient() {
+    this.checkAgentRuntimeCacheIdentity();
     if (this.knowledgeBaseClient) {
       return this.knowledgeBaseClient;
     }
@@ -170,22 +155,7 @@ export class AwsBedrockKnowledgeBaseProvider
             })
           : undefined;
 
-      const credentialOptions = await this.getIamCredentialOptions();
-      try {
-        const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const client = new BedrockAgentRuntimeClient({
-          region: this.getRegion(),
-          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
-          retryMode: 'adaptive',
-          ...(handler ? { requestHandler: handler } : {}),
-          ...credentialOptions,
-        });
-        state.client = client;
-      } catch (err) {
-        throw new Error(
-          `The @aws-sdk/client-bedrock-agent-runtime package is required as a peer dependency. Please install it in your project or globally. Error: ${err}`,
-        );
-      }
+      state.client = await this.createAgentRuntimeClient(handler);
       return state.client;
     })().catch((error) => {
       state.initialization = undefined;
@@ -285,9 +255,9 @@ export class AwsBedrockKnowledgeBaseProvider
       hasRetrievalConfiguration: Boolean(knowledgeBaseConfiguration.retrievalConfiguration),
     });
 
-    const cache = await getCache();
+    const cache = this.allowSharedAgentRuntimeCache ? await getCache() : undefined;
 
-    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
+    const sensitiveKeys = ['accessKeyId', 'apiKey', 'secretAccessKey', 'sessionToken'];
     const cacheConfig = {
       region: this.getRegion(),
       modelName: this.modelName,
@@ -298,14 +268,14 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
     // Earlier cached results did not apply configured generation parameters.
-    const cacheKey = `bedrock-kb:v2:${cacheNamespace ? `${cacheNamespace}:` : ''}${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    const cacheKey = `bedrock-kb:v3:${cacheNamespace ? `${cacheNamespace}:` : ''}${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,
       }),
     )}`;
 
-    if (isCacheEnabled()) {
+    if (cache && isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached Bedrock Knowledge Base response');
@@ -341,7 +311,7 @@ export class AwsBedrockKnowledgeBaseProvider
         citations = response.citations;
       }
 
-      if (isCacheEnabled()) {
+      if (cache && isCacheEnabled()) {
         try {
           await cache.set(
             cacheKey,

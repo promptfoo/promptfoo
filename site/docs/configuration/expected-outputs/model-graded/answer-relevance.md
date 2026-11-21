@@ -1,6 +1,6 @@
 ---
 sidebar_label: Answer Relevance
-description: 'Score LLM response relevance and completeness against user queries using sophisticated AI-powered evaluation metrics'
+description: Score how relevant an LLM response is to the query using three generated questions and embedding similarity. Configure the assertion threshold and grader.
 ---
 
 # Answer Relevance
@@ -23,7 +23,7 @@ If `threshold` is omitted, it defaults to `0.5`.
 
 The answer relevance checker:
 
-1. Uses an LLM to generate potential questions that the output could be answering
+1. Uses three independent LLM calls to generate potential questions that the output could be answering. Each sample is cached separately and reused on later runs. Deterministic graders can return the same question for multiple samples.
 2. Compares these questions with the original query using embedding similarity
 3. Calculates a relevance score based on the similarity scores
 
