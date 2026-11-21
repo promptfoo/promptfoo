@@ -11,7 +11,7 @@ The [example application](https://github.com/promptfoo/promptfoo/tree/main/examp
 
 ## 1. Start the application
 
-Use Node.js 22.22 or newer and an OpenAI API key with access to `gpt-5.4-mini` for the app and attack generation, and `gpt-5.5-2026-04-23` for grading:
+Use [a supported Node.js release](../installation.md#nodejs-runtime-support) and an OpenAI API key with access to `gpt-5.4-mini` for the app and attack generation, and `gpt-5.5-2026-04-23` for grading:
 
 ```bash
 npx promptfoo@latest init --example redteam-pdf
