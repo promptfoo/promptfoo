@@ -470,7 +470,7 @@ function isHttpFailure(status: number | undefined): status is number {
  */
 function getMistralErrorMessage(data: unknown): string | undefined {
   if (typeof data === 'string') {
-    return data.trim().slice(0, MAX_MISTRAL_ERROR_DETAIL_LENGTH) || undefined;
+    return data.trim() || undefined;
   }
   if (!data || typeof data !== 'object') {
     return undefined;
@@ -508,17 +508,22 @@ function getMistralErrorMessage(data: unknown): string | undefined {
   return undefined;
 }
 
-function formatMistralHttpError(status: number, statusText: string | undefined, data: unknown) {
-  const detail = getMistralErrorMessage(data);
-  return `Mistral API error ${status}${statusText ? ` ${statusText}` : ''}${detail ? `: ${detail}` : ''}`;
+function safeErrorText(value: string, apiKey: string): string {
+  // Gateways can echo the rejected key. Redact before truncating to avoid exposing a prefix.
+  return value.replaceAll(apiKey, '[REDACTED]').slice(0, MAX_MISTRAL_ERROR_DETAIL_LENGTH);
 }
 
-function getMistralErrorMetadata(error: any) {
+function formatMistralHttpError(
+  status: number,
+  text: string | undefined,
+  data: unknown,
+  apiKey: string,
+) {
+  const statusText = safeErrorText(text ?? '', apiKey);
+  const detail = safeErrorText(getMistralErrorMessage(data) ?? '', apiKey);
   return {
-    code:
-      typeof error?.code === 'string' || typeof error?.code === 'number' ? error.code : undefined,
-    hasMessage: typeof error?.message === 'string',
-    type: typeof error?.type === 'string' ? error.type : undefined,
+    message: `${status}${statusText ? ` ${statusText}` : ''}${detail ? `: ${detail}` : ''}`,
+    http: { status, statusText },
   };
 }
 
@@ -680,7 +685,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   static MISTRAL_CHAT_MODELS_NAMES = MISTRAL_CHAT_MODELS.map((model) => model.id);
 
-  private readonly loggedNonTransientErrors = new Set<string>();
+  private readonly loggedStatuses = new Set<number>();
 
   constructor(
     modelName: string,
@@ -818,32 +823,29 @@ export class MistralChatCompletionProvider implements ApiProvider {
       }));
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${safeErrorText(String(err), apiKey)}`,
       };
     }
 
     logger.debug('Mistral API response', getMistralResponseMetadata(data));
 
     if (isHttpFailure(status)) {
-      logger.debug('Mistral API error', { status, ...getMistralErrorMetadata(data) });
-      const error = formatMistralHttpError(status, statusText, data);
+      const { message, http } = formatMistralHttpError(status, statusText, data, apiKey);
+      const error = `Mistral API error ${message}`;
       // The eval aborts on these statuses and prints only the status code, so show
       // Mistral's message once per provider.
-      if (isNonTransientHttpStatus(status) && !this.loggedNonTransientErrors.has(error)) {
-        this.loggedNonTransientErrors.add(error);
+      if (isNonTransientHttpStatus(status) && !this.loggedStatuses.has(status)) {
+        this.loggedStatuses.add(status);
         logger.error(error);
       }
-      return { error, metadata: { http: { status, statusText: statusText ?? '' } } };
+      return { error, metadata: { http } };
     }
-    if (data.error) {
-      return {
-        error: `API call error: ${getMistralErrorMessage(data) ?? JSON.stringify(data.error)}`,
-      };
+    if (data?.error) {
+      const detail = getMistralErrorMessage(data) ?? 'Unknown Mistral error';
+      return { error: `API call error: ${safeErrorText(detail, apiKey)}` };
     }
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
-      };
+    if (!data?.choices?.[0]?.message) {
+      return { error: 'Malformed response data: missing Mistral message' };
     }
 
     const message = data.choices[0].message;
@@ -1026,15 +1028,14 @@ export class MistralEmbeddingProvider implements ApiProvider {
         ));
       } catch (err) {
         options?.abortSignal?.throwIfAborted();
-        logger.error(`API call error: ${err}`);
-        throw err;
+        const message = safeErrorText(String(err), apiKey);
+        logger.error(`API call error: ${message}`);
+        throw message === String(err) ? err : new Error(message);
       }
 
       if (isHttpFailure(status)) {
-        const detail = getMistralErrorMessage(data);
-        throw new Error(
-          `Mistral embeddings API error: ${status} ${statusText}${detail ? `: ${detail}` : ''}`,
-        );
+        const { message } = formatMistralHttpError(status, statusText, data, apiKey);
+        throw new Error(`Mistral embeddings API error: ${message}`);
       }
     }
 
@@ -1066,7 +1067,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       }
       return result;
     } catch (err) {
-      logger.error('Mistral embeddings API error', getMistralErrorMetadata(data?.error));
+      logger.error('Mistral embeddings API error');
       throw err;
     }
   }

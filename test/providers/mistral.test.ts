@@ -688,21 +688,26 @@ describe('Mistral', () => {
       },
     );
 
-    it('logs a non-transient HTTP error once so it is visible when the eval aborts', async () => {
+    it('redacts echoed keys before returning or logging a non-transient HTTP error', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { detail: 'Invalid API Key' },
+        data: { detail: 'Invalid API Key fake-api-key', type: 'fake-api-key' },
         cached: false,
         status: 401,
-        statusText: 'Unauthorized',
+        statusText: 'Unauthorized fake-api-key',
       });
 
-      await provider.callApi('First prompt');
+      const result = await provider.callApi('First prompt');
       await provider.callApi('Second prompt');
 
-      expect(logger.error).toHaveBeenCalledTimes(1);
-      expect(logger.error).toHaveBeenCalledWith(
-        'Mistral API error 401 Unauthorized: Invalid API Key',
+      expect(result.error).toBe(
+        'Mistral API error 401 Unauthorized [REDACTED]: Invalid API Key [REDACTED]',
       );
+      expect(result.metadata).toEqual({
+        http: { status: 401, statusText: 'Unauthorized [REDACTED]' },
+      });
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('fake-api-key');
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(result.error);
     });
 
     it('does not log retryable or request-specific HTTP errors at error level', async () => {
@@ -1333,7 +1338,7 @@ describe('Mistral', () => {
       vi.mocked(isCacheEnabled).mockReturnValue(false);
       vi.mocked(fetchWithCache).mockResolvedValue(
         createMockFetchResponse(
-          { message: 'Unauthorized', request_id: 'req-1' },
+          { message: 'Unauthorized fake-api-key', request_id: 'req-1' },
           { status: 401, statusText: 'Unauthorized' },
         ),
       );
@@ -1341,7 +1346,7 @@ describe('Mistral', () => {
       const result = await provider.callApi('Test text');
 
       expect(result.error).toContain(
-        'Mistral embeddings API error: 401 Unauthorized: Unauthorized',
+        'Mistral embeddings API error: 401 Unauthorized: Unauthorized [REDACTED]',
       );
       expect(result.error).not.toContain('No embedding found');
     });
