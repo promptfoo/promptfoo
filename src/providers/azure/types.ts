@@ -54,6 +54,9 @@ export interface AzureCompletionOptions {
   dataSources?: any;
 
   // Promptfoo supported params
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
   apiHost?: string;
   apiBaseUrl?: string;
   apiKey?: string;
@@ -134,6 +137,8 @@ export interface AzureCompletionOptions {
  * Options shared by Azure chat and responses providers.
  */
 export interface AzureChatResponsesOptions extends AzureCompletionOptions {
+  prompt_cache_key?: string;
+  prompt_cache_options?: AzureChatConfigInput['prompt_cache_options'];
   /** Underlying model ID for request compatibility and cost estimates when the deployment is aliased. */
   modelName?: string;
   /** Responses only: continue a previously stored response. */
@@ -148,7 +153,9 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
 /**
  * Options specific to the Azure Responses provider.
  */
-export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, 'response_format'> {
+export interface AzureResponsesOptions
+  extends Omit<AzureChatResponsesOptions, 'response_format' | 'prompt_cache_options'> {
+  prompt_cache_options?: AzureResponsesConfigInput['prompt_cache_options'];
   reasoning?: AzureResponsesConfigInput['reasoning'];
   response_format?:
     | AzureResponsesConfigInput['response_format']
@@ -188,6 +195,9 @@ export interface AzureModelCost {
 }
 
 export type AzureAssistantOptions = AzureCompletionOptions & {
+  reasoning?: AzureResponsesConfigInput['reasoning'];
+  prompt_cache_key?: string;
+  prompt_cache_options?: AzureResponsesConfigInput['prompt_cache_options'];
   // Preserve the legacy Azure assistant options independently of the retired SDK.
   model?: string;
   name?: string | null;

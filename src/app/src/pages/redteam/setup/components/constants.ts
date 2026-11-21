@@ -3,7 +3,7 @@ import type { RedteamUITarget } from '../types';
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-6-sol';
 export const DEFAULT_BEDROCK_TARGET_ID = 'bedrock:responses:openai.gpt-5.6-sol';
 export const OPENAI_TARGET_PLACEHOLDER =
-  'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra';
+  'openai:gpt-6.2-sol, openai:gpt-6-luna, openai:gpt-6.2-astra';
 export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';
 export const DEFAULT_VERTEX_TARGET_ID = 'vertex:gemini-3.8-flash';
 
@@ -12,6 +12,8 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'http', label: 'HTTP/HTTPS Endpoint' },
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
+  { value: 'openai:gpt-6.2-astra', label: 'OpenAI GPT-6.2 Astra' },
+  { value: 'openai:gpt-6.2-sol', label: 'OpenAI GPT-6.2 Sol' },
   { value: 'openai:gpt-6-astra', label: 'OpenAI GPT-6 Astra' },
   { value: 'openai:gpt-6.1-sol', label: 'OpenAI GPT-6.1 Sol' },
   { value: 'openai:gpt-6.1-terra', label: 'OpenAI GPT-6.1 Terra' },
