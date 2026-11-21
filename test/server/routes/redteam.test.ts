@@ -893,6 +893,18 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
+    it('accepts an empty plan only when the agent explains the coverage limit', async () => {
+      const empty = { purpose: description, plugins: [] };
+      const explained = { ...empty, note: 'Use manual setup to test a custom policy.' };
+      mockedFetchWithProxy.mockResolvedValueOnce(Response.json(explained));
+      const res = await request(app).post(path).send({ description });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(explained);
+
+      mockedFetchWithProxy.mockResolvedValueOnce(Response.json(empty));
+      expect((await request(app).post(path).send({ description })).status).toBe(502);
+    });
+
     it('never sends a disabled request upstream', async () => {
       mockedNeverGenerateRemote.mockReturnValue(true);
       expect((await request(app).get(path)).body).toEqual({ enabled: false });
