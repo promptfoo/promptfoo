@@ -337,6 +337,8 @@ promptfoo logs --grep "error|warn"
 promptfoo logs --grep "openai"
 ```
 
+When combining `--follow` and `--grep`, output waits for a newline so lines written in multiple chunks can match; Ctrl+C also prints any matching unfinished line already read.
+
 Log files are stored in `~/.promptfoo/logs` by default. Set `PROMPTFOO_LOG_DIR` to use a custom directory.
 
 ## `promptfoo code-scans run [repo-path]`
