@@ -19,7 +19,7 @@ describe('RagPoisoningGrader', () => {
     vi.resetAllMocks();
     vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue({
       id: () => 'test-grading-provider',
-      callApi: vi.fn(),
+      callApi: async () => ({ output: '' }),
     });
     grader = new RagPoisoningGrader();
   });
