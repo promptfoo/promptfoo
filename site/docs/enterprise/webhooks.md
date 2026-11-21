@@ -33,15 +33,15 @@ Supported webhook event types include:
 
 ## Managing Webhooks
 
-On-prem administrators can manage webhooks under **Organization → Webhooks** or through the API. Management requires organization-admin access. Use your signed-in administrator session or an administrator [service-account API key](./service-accounts.md); team-scoped user API tokens are rejected.
+On-prem organization administrators can manage webhooks under **Organization → Webhooks** or through the API. Use your administrator session or an administrator [service account key](./service-accounts.md). The API rejects team-scoped user tokens.
 
-Each webhook subscribes to selected events across its organization. The API stores a `teamId` on the subscription (the organization's default team if omitted, including through the UI), but delivery does **not** filter events by that team. Choose a receiver authorized to handle the selected events from every team in the organization.
+Webhooks deliver the selected events from **every team in the organization**. Choose a receiver authorized to handle data from all those teams. A subscription's `teamId` defaults to the organization's default team and does not filter deliveries.
 
-For request and response schemas, see **Create webhook**, **List webhook event types**, and **Regenerate webhook secret** in the [API reference](/docs/api-reference/), or download the [OpenAPI specification](https://api.promptfoo.app/static/openapi.json).
+For request and response schemas, download `/static/openapi.json` from your installation's API host. The public [API reference](/docs/api-reference/) may describe a different release.
 
 ### Creating a Webhook
 
-Using an administrator service-account API key, send the following request, replacing the example `teamId` with a team UUID from your organization. This field does not restrict event delivery to that team. With an authenticated administrator session, omit the `Authorization` header.
+This example uses an administrator service account key. Set `teamId` to your team's UUID or omit it to use the default. If you use an authenticated administrator session, omit the `Authorization` header.
 
 ```http
 POST /api/v1/webhooks
@@ -59,11 +59,11 @@ Authorization: Bearer YOUR_SERVICE_ACCOUNT_API_KEY
 
 Upon creation, a secret is generated for the webhook. This secret is used to sign webhook payloads and should be stored securely.
 
-Use `GET /api/v1/webhooks/event-types` to list the events supported by your installed version. To rotate a secret, use **Regenerate** in the webhook's edit dialog or `POST /api/v1/webhooks/{webhookId}/regenerate-secret`. Update the receiver with the returned secret; new deliveries use the replacement immediately.
+Use `GET /api/v1/webhooks/event-types` to list the events supported by your installed version. To rotate a secret, use **Regenerate** in the webhook's edit dialog or `POST /api/v1/webhooks/{webhookId}/regenerate-secret`. Update the receiver with the returned secret immediately.
 
 ### Webhook Payload Structure
 
-Webhook payloads are sent as JSON with `event`, `timestamp`, and `data` fields. These examples show selected issue fields; the full `data.issue` object also includes issue history and other metadata.
+Webhook payloads are sent as JSON with `event`, `timestamp`, and `data` fields. The examples omit issue history and other metadata from `data.issue`.
 
 ```json
 {
@@ -107,13 +107,13 @@ The optional `eventData` field varies by event type. An `issue.updated` event fo
 }
 ```
 
-For `remediation.created`, `data` contains `issueId` and `remediation`. Eval events include `jobId`: creation includes `config`, completion includes `evalId`, `partial`, and `progress`, and failure includes `error` and `progress` when available.
+For `remediation.created`, `data` contains `issueId` and `remediation`. All eval events include `jobId`. Creation includes `config`, completion includes `evalId`, `partial`, and `progress`, and failure includes `error` and `progress` when available.
 
 ## Verifying Webhook Signatures
 
-To verify that a webhook is coming from Promptfoo Enterprise, the payload is signed using HMAC SHA-256. The hex-encoded signature is included in the `X-Promptfoo-Signature` header. Verify the raw request body before parsing JSON; reserializing parsed JSON can change the signed bytes.
+To verify that a webhook is coming from Promptfoo Enterprise, the payload is signed using HMAC SHA-256. The hex-encoded signature is included in the `X-Promptfoo-Signature` header. Verify the raw body before parsing JSON. Reserializing parsed JSON can change the signed bytes.
 
-Here's an example of how to verify signatures in Node.js. Its `5mb` body limit is an example receiver limit, not a Promptfoo payload limit. Size this limit and any reverse-proxy limits for your largest expected payload, including eval configurations.
+The Node.js receiver below sets its own `5mb` body limit. Allow for your largest payloads, including eval configurations, on both the receiver and any reverse proxy.
 
 ```js
 import crypto from 'node:crypto';
@@ -159,9 +159,9 @@ app.post(
 
 ## Delivery and troubleshooting
 
-Promptfoo sends an HTTP `POST` and expects a `2xx` response within 10 seconds. Redirects are not followed. Deliveries are asynchronous, with no automatic retries for failures. The `X-Webhook-Id` header identifies the webhook subscription, not an individual event.
+Promptfoo sends an HTTP `POST` and expects a `2xx` response within 10 seconds. Redirects are not followed. Deliveries are asynchronous, with no automatic retries for failures. The `X-Webhook-Id` header identifies the subscription and stays the same across events.
 
-To test the integration, trigger a subscribed event in the webhook's organization, such as adding an issue comment. If it does not arrive, check that the webhook is enabled, its organization and event subscription match, and the Promptfoo server can reach the endpoint. For HTTPS, check that the server trusts the endpoint's certificate. On managed Promptfoo Cloud, private and reserved network destinations are blocked; on-prem receivers can use internal addresses reachable from the deployment.
+To test the integration, trigger a subscribed event in the webhook's organization, such as adding an issue comment. If it does not arrive, check that the webhook is enabled, its organization and event subscription match, and the Promptfoo server can reach the endpoint. For HTTPS, check that the server trusts the endpoint's certificate. On managed Promptfoo Cloud, private and reserved network destinations are blocked. On-prem receivers can use internal addresses reachable from the deployment.
 
 If signature verification fails, check the raw body and current signing secret. On-prem administrators can inspect server logs for `Failed to send webhook` and the endpoint's response status or connection error.
 
@@ -169,7 +169,7 @@ If signature verification fails, check the raw body and current signing secret. 
 
 ### SIEM Integration
 
-Subscribe to `issue.created` and `issue.updated` to keep your SIEM synchronized with the current vulnerability state.
+Subscribe to `issue.created`, `issue.updated`, `issue.status_changed`, and `issue.severity_changed` to track vulnerabilities in your SIEM.
 
 ### Task Tracking Integration
 
