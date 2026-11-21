@@ -181,7 +181,7 @@ async function attack(
           : await loadApiProvider(providerConfig.id!, { options: providerConfig });
     const result = await provider.callApi('Synthetic initial prompt', context);
     if (expectTransformFailure) {
-      expect(result.error).toMatch(/required transforms/);
+      expect(result).toMatchObject({ error: expect.stringMatching(/required transforms/) });
       expect(targetCalls).toHaveLength(0);
       return;
     }
