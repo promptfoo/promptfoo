@@ -126,27 +126,37 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters } = useTableStore.getState();
+        const { filters, activeEvalQuery } = useTableStore.getState();
+        const queryOptions =
+          isBackgroundUpdate && activeEvalQuery?.evalId === id
+            ? activeEvalQuery.options
+            : {
+                filterMode,
+                filters: Object.values(filters.values).filter((filter) =>
+                  filter.type === 'metadata'
+                    ? Boolean(filter.value && filter.field)
+                    : Boolean(filter.value),
+                ),
+              };
 
         const data = await fetchEvalData(id, {
+          ...queryOptions,
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode,
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
         });
 
         if (!data) {
-          setFailed(true);
+          if (!isBackgroundUpdate) {
+            setFailed(true);
+          }
           return false;
         }
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        if (!isBackgroundUpdate) {
+          setFailed(true);
+        }
         return false;
       }
     },

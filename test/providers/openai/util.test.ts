@@ -24,6 +24,7 @@ import {
   validateChatCompletionMessage,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/cache');
 
@@ -158,6 +159,19 @@ describe('failApiCall', () => {
     expect(result).toEqual({
       error: `API error: invalid_request_error 400 Bad request`,
     });
+  });
+
+  it.each([
+    ['requests', true],
+    ['insufficient_quota', false],
+  ] as const)('preserves the SDK rate-limit classification for %s', (type, retryable) => {
+    const error = new OpenAI.APIError(
+      429,
+      { type, message: 'Please try later' },
+      undefined,
+      new Headers(),
+    );
+    expect(isProviderResponseRateLimited(failApiCall(error), undefined)).toBe(retryable);
   });
 
   it('should format generic errors', () => {
@@ -843,6 +857,8 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
+    ['gpt-6.2-astra', 8, 40, 16, 60],
+    ['gpt-6.2-sol', 2, 10, 4, 15],
     ['gpt-6.1-sol', 2, 10, 4, 15],
     ['gpt-5.6', 4, 20, 8, 30],
     ['gpt-5.6-sol', 4, 20, 8, 30],
