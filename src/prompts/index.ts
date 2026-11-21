@@ -65,15 +65,10 @@ async function processPromptFile(
   ) {
     return await processExecutableFile(filePath, prompt, functionName, labelPath);
   }
-  // If no extension matched but file exists and is executable, treat it as an executable
-  try {
-    const stats = await stat(filePath);
-    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
-      // File is executable
-      return await processExecutableFile(filePath, prompt, functionName, labelPath);
-    }
-  } catch (_e) {
-    // File doesn't exist or can't be accessed, fall through
+  // Ignore unavailable files, but propagate executable loading and policy errors.
+  const stats = await stat(filePath).catch(() => undefined);
+  if (stats?.isFile() && (stats.mode & 0o111) !== 0) {
+    return processExecutableFile(filePath, prompt, functionName, labelPath);
   }
   return [];
 }

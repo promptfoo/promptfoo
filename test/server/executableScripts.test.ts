@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readPrompts } from '../../src/prompts/index';
 import { prepareScript, ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 import { createApp } from '../../src/server/server';
 import { withoutExecutableScripts } from '../../src/util/scriptExecution';
@@ -19,9 +20,10 @@ describe('HTTP script execution policy', () => {
     const provider = new ScriptCompletionProvider('node --version');
     const script = prepareScript('node --version');
     await withoutExecutableScripts(async () => {
-      const message = 'require the CLI or Node.js library';
+      const message = 'are disabled over HTTP';
       await expect(provider.callApi('hello')).rejects.toThrow(message);
       await expect(script.run([])).rejects.toThrow(message);
+      await expect(readPrompts(`file://${process.execPath}`)).rejects.toThrow(message);
     });
   });
 
@@ -37,7 +39,7 @@ describe('HTTP script execution policy', () => {
       async () => {
         const job = await api.get(`/api/eval/job/${res.body.id}`);
         expect(job.body.status).toBe('error');
-        expect(job.body.logs.join(' ')).toContain('require the CLI or Node.js library');
+        expect(job.body.logs.join(' ')).toContain('are disabled over HTTP');
       },
       { timeout: 5000 },
     );

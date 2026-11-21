@@ -5,6 +5,7 @@ import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { withoutExecutableScripts } from '../../util/scriptExecution';
 import { createMcpErrorHandler } from './defaultErrorHandler';
 import { registerResources } from './resources';
 import { registerCompareProvidersTool } from './tools/compareProviders';
@@ -96,6 +97,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
 
   const app = express();
   app.use(express.json());
+  app.use((_req, _res, next) => withoutExecutableScripts(next));
 
   const mcpServer = await createMcpServer();
 

@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import { promisify } from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
@@ -15,6 +16,7 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+const execFileAsync = promisify(execFile);
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 function stripText(text: string | Buffer) {
@@ -64,24 +66,15 @@ export function prepareScript(scriptPath: string, cwd?: string, timeout?: number
     },
     async run(inputs: string[]): Promise<string> {
       requireLocalCommand(command);
-      const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
-        (resolve, reject) => {
-          const child = execFile(
-            command,
-            [...args, ...inputs],
-            { cwd, timeout, env: getProcessEnv(), shell: false },
-            (error, stdout, stderr) => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve({ stdout, stderr });
-              }
-            },
-          );
-          // Scripts receive input through argv and may wait for EOF on stdin.
-          child.stdin?.end();
-        },
-      );
+      const execution = execFileAsync(command, [...args, ...inputs], {
+        cwd,
+        timeout,
+        env: getProcessEnv(),
+        shell: false,
+      });
+      // Scripts receive input through argv and may wait for EOF on stdin.
+      execution.child.stdin?.end();
+      const { stdout, stderr } = await execution;
       const output = stripText(stdout);
       const error = stripText(stderr);
       if (error && !output) {

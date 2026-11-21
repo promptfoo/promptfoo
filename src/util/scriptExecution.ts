@@ -8,7 +8,7 @@ export function withoutExecutableScripts<T>(run: () => T): T {
 
 export function requireLocalCommand(command: string): void {
   if (scriptsDisabled.getStore()) {
-    throw new Error('Executable prompts and exec providers require the CLI or Node.js library');
+    throw new Error('Executable prompts and exec providers are disabled over HTTP');
   }
   if (!command) {
     throw new Error('No command found in script path');

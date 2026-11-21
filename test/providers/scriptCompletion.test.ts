@@ -1,4 +1,3 @@
-import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 
@@ -14,10 +13,12 @@ import {
 import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
+const execFileAsync = vi.hoisted(() => vi.fn());
 vi.mock('child_process', async (importOriginal) => {
+  const { promisify } = await import('util');
   return {
     ...(await importOriginal()),
-    execFile: vi.fn(),
+    execFile: Object.assign(vi.fn(), { [promisify.custom]: execFileAsync }),
   };
 });
 vi.mock('../../src/cache', async () => {
@@ -154,6 +155,12 @@ describe('getFileHashes', () => {
   });
 });
 
+function execution(stdout: string | Buffer, stderr: string | Buffer = '', end?: () => void) {
+  return Object.assign(Promise.resolve({ stdout, stderr }), {
+    child: { stdin: end ? { end } : null },
+  });
+}
+
 describe('ScriptCompletionProvider', () => {
   let provider: ScriptCompletionProvider;
 
@@ -190,7 +197,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('rejects invalid setup before child dispatch', () => {
     expect(() => prepareScript('   ')).toThrow('No command found');
-    expect(execFile).not.toHaveBeenCalled();
+    expect(execFileAsync).not.toHaveBeenCalled();
   });
 
   it('should return the correct id', () => {
@@ -199,15 +206,9 @@ describe('ScriptCompletionProvider', () => {
 
   it('passes file defaults to the child without changing the host environment', async () => {
     const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, options, callback) {
-      const env = (options as { env?: NodeJS.ProcessEnv }).env;
-      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
-        null,
-        env?.PROMPTFOO_REVIEW_ENV_PROBE ?? 'missing',
-        '',
-      );
-      return { stdin: { end: vi.fn() } } as any;
-    });
+    execFileAsync.mockImplementation((_cmd, _args, { env }) =>
+      execution(env.PROMPTFOO_REVIEW_ENV_PROBE ?? 'missing'),
+    );
     try {
       const result = await cliState.withEnvFileOverrides(
         { PROMPTFOO_REVIEW_ENV_PROBE: 'file' },
@@ -222,63 +223,37 @@ describe('ScriptCompletionProvider', () => {
 
   it('should close stdin on the child process to prevent hanging', async () => {
     const stdinEnd = vi.fn();
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
-        null,
-        Buffer.from('ok'),
-        '',
-      );
-      return { stdin: { end: stdinEnd } } as any;
-    });
+    execFileAsync.mockReturnValue(execution('ok', '', stdinEnd));
 
     await provider.callApi('test prompt');
     expect(stdinEnd).toHaveBeenCalledOnce();
   });
 
   it('should handle child process with no stdin gracefully', async () => {
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
-        null,
-        Buffer.from('ok'),
-        '',
-      );
-      return { stdin: null } as any;
-    });
+    execFileAsync.mockReturnValue(execution('ok'));
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('ok');
   });
 
-  it('should close stdin before the exec callback rejects on script execution errors', async () => {
+  it('closes stdin before a failed execution settles', async () => {
     const stdinEnd = vi.fn();
     const errorMessage = 'Script execution failed';
-    let stdinClosedBeforeCallback = false;
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      const childProcess = { stdin: { end: stdinEnd } } as any;
-      queueMicrotask(() => {
-        stdinClosedBeforeCallback = stdinEnd.mock.calls.length > 0;
-        if (typeof callback === 'function') {
-          callback(Object.assign(new Error(errorMessage), { cmd: _cmd }), '', '');
-        }
+    execFileAsync.mockImplementation(() => {
+      const rejected = Promise.resolve().then(() => {
+        expect(stdinEnd).toHaveBeenCalledOnce();
+        throw new Error(errorMessage);
       });
-      return childProcess;
+      return Object.assign(rejected, { child: { stdin: { end: stdinEnd } } });
     });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow(errorMessage);
     expect(stdinEnd).toHaveBeenCalledOnce();
-    expect(stdinClosedBeforeCallback).toBe(true);
   });
 
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
-        null,
-        Buffer.from(utf8Output),
-        '',
-      );
-      return {} as any;
-    });
+    execFileAsync.mockReturnValue(execution(Buffer.from(utf8Output)));
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe(utf8Output);
@@ -286,12 +261,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle UTF-8 characters in error output', async () => {
     const utf8Error = 'エラー発生';
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      if (typeof callback === 'function') {
-        callback(null, '', Buffer.from(utf8Error));
-      }
-      return {} as any;
-    });
+    execFileAsync.mockReturnValue(execution('', Buffer.from(utf8Error)));
 
     await expect(provider.callApi('test prompt')).rejects.toThrow(utf8Error);
   });
@@ -324,16 +294,13 @@ describe('ScriptCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalledWith(
       'exec:node script.js:mock hash:mock hash:test prompt:undefined',
     );
-    expect(execFile).not.toHaveBeenCalled();
+    expect(execFileAsync).not.toHaveBeenCalled();
   });
 
-  it('should handle script execution errors', async () => {
+  it('propagates synchronous process setup errors', async () => {
     const errorMessage = 'Script execution failed';
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      if (typeof callback === 'function') {
-        callback(Object.assign(new Error(errorMessage), { cmd: _cmd }), '', '');
-      }
-      return {} as any;
+    execFileAsync.mockImplementation(() => {
+      throw new Error(errorMessage);
     });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow(errorMessage);
@@ -341,12 +308,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle empty standard output with error output', async () => {
     const errorOutput = 'Warning: Something went wrong';
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      if (typeof callback === 'function') {
-        callback(null, '', Buffer.from(errorOutput));
-      }
-      return {} as any;
-    });
+    execFileAsync.mockReturnValue(execution('', Buffer.from(errorOutput)));
 
     await expect(provider.callApi('test prompt')).rejects.toThrow(errorOutput);
   });
@@ -354,12 +316,7 @@ describe('ScriptCompletionProvider', () => {
   it('should strip ANSI escape codes from output', async () => {
     const ansiOutput = '\x1b[31mColored\x1b[0m \x1b[1mBold\x1b[0m';
     const strippedOutput = 'Colored Bold';
-    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      if (typeof callback === 'function') {
-        callback(null, Buffer.from(ansiOutput), '');
-      }
-      return {} as any;
-    });
+    execFileAsync.mockReturnValue(execution(Buffer.from(ansiOutput)));
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe(strippedOutput);
