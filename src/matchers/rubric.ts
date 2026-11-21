@@ -764,7 +764,7 @@ async function buildGradingProviderPrompt(
   };
 }
 
-function parseJsonGradingResponse(
+export function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
