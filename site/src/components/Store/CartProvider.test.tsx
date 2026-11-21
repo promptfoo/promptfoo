@@ -3,7 +3,7 @@ import React from 'react';
 import { useHistory, useLocation } from '@docusaurus/router';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { router } from '../../test/storeRouter';
+import { BrowserRouter } from '../../test/storeRouter';
 import { CartProvider, useCartContext } from './CartProvider';
 
 vi.mock('@docusaurus/router', async () => (await import('../../test/storeRouter')).router);
@@ -20,7 +20,6 @@ vi.mock('./useFourthwall', () => ({
   }),
 }));
 
-const { BrowserRouter } = router;
 const originalPush = window.history.pushState;
 const originalReplace = window.history.replaceState;
 const couponKey = 'promptfoo_coupon_code';
