@@ -70,7 +70,7 @@ console.log(`Shareable URL: ${evalRecord.shareableUrl}`);
 
 **Suite settings and runtime options:**
 
-Pass `outputPath`, `writeLatestResults`, and `sharing` in the first argument. The second argument controls execution, including caching, concurrency, deadlines, and progress reporting. Import the package's types instead of copying an interface:
+Pass `outputPath`, `writeLatestResults`, and `sharing` in the first argument. The second argument controls execution, including caching, concurrency, deadlines, and progress reporting. The example uses the package’s public types.
 
 ```typescript
 import { evaluate, type EvaluateOptions, type EvaluateTestSuite } from 'promptfoo';
@@ -96,7 +96,7 @@ const summary = await evalRecord.toEvaluateSummary();
 console.log(summary.results.map(({ success, score, error }) => ({ success, score, error })));
 ```
 
-`cache: false` applies to this call. `progressCallback` receives counts, the row index, execution context, and aggregate prompt metrics; it does not receive a completed result. Read final results from `toEvaluateSummary()` after `evaluate()` resolves. `onTestComplete` and `formatOutput` are not supported options. `outputPath` selects the export format from the filename.
+`cache: false` applies to this call. `progressCallback` receives counts, the row index, execution context, and aggregate prompt metrics. It does not receive completed results. Read final results from `toEvaluateSummary()` after `evaluate()` resolves. `onTestComplete` and `formatOutput` are not supported options. Set `outputPath` to a local file path, a [Google Sheets URL](/docs/integrations/google-sheets/), or an array of destinations. For local files, the extension determines the export format.
 
 ---
 
@@ -201,7 +201,7 @@ for (const provider of providers) {
 
 ### `assertions.runAssertion(params)`
 
-Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
+Execute a single assertion against provider output.
 
 ```typescript
 declare function runAssertion(params: {

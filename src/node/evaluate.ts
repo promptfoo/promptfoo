@@ -13,7 +13,7 @@ import type { EvaluateOptions, EvaluateTestSuite } from '../types';
  * @param testSuite.providers Array of provider configurations (e.g., 'openai:gpt-4')
  * @param testSuite.tests Array of test cases with variables and assertions
  * @param testSuite.sharing Optional sharing configuration
- * @param testSuite.outputPath Export path(s); filename extensions select the formats
+ * @param testSuite.outputPath Local file paths (format selected by extension) or Google Sheets URLs
  * @param testSuite.writeLatestResults Whether to persist results to database
  *
  * @param options Optional evaluation settings
