@@ -188,20 +188,28 @@ function getGradingOutputForImages(
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
-  if (parsed && typeof parsed === 'object') {
-    let redacted = false;
-    const output = JSON.stringify(parsed, (key, value) => {
-      if (key === 'b64_json' && typeof value === 'string' && isImageValue(value)) {
-        redacted = true;
-        return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
-      }
-      return value;
-    });
-    if (redacted) {
-      return output;
-    }
+  // Inline output can mix an attached image URI with a caption or other images.
+  const redactUris = (text: string) =>
+    text.replace(/\bdata:image\/[^\s,]{1,256};base64,([\w+/=-]+)/gi, (uri, payload: string) =>
+      isImageValue(payload) ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER : uri,
+    );
+  if (!parsed || typeof parsed !== 'object') {
+    return redactUris(llmOutput);
   }
-  return llmOutput;
+
+  let redacted = false;
+  const output = JSON.stringify(parsed, (key, value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    const next =
+      key === 'b64_json' && isImageValue(value)
+        ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER
+        : redactUris(value);
+    redacted ||= next !== value;
+    return next;
+  });
+  return redacted ? output : llmOutput;
 }
 
 function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['audio']) {
