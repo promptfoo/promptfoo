@@ -518,7 +518,7 @@ export class XAIResponsesProvider implements ApiProvider {
       const errorMessage = err instanceof Error ? err.message : String(err);
 
       // Handle common xAI errors
-      if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway')) {
+      if (/\b502\b/.test(errorMessage) || errorMessage.includes('Bad Gateway')) {
         return {
           error: `xAI API error: 502 Bad Gateway - This often indicates an invalid API key.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
         };
