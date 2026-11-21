@@ -23,7 +23,7 @@ Set `OPENAI_API_KEY` in the shell that runs Promptfoo. The comparison also needs
 
 ### Working Directory
 
-[Summarize sample.py](./working-dir) by including the file explicitly in the prompt.
+[Summarize sample.txt](./working-dir) by including the file explicitly in the prompt.
 
 ### Model Comparison
 

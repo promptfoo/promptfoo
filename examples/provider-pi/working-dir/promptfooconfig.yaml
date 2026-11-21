@@ -7,13 +7,13 @@ prompts:
 providers:
   - id: pi:openai/gpt-5.5
     config:
-      # The working directory is this example folder, which ships with sample.py,
+      # The working directory is this example folder, which ships with sample.txt,
       # so the example is self-contained when initialized on its own.
       working_dir: .
 
 tests:
   - vars:
-      source: file://sample.py
+      source: file://sample.txt
     assert:
       - type: icontains
         value: 'greet'

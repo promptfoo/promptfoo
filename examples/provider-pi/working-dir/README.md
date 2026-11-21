@@ -1,6 +1,6 @@
 # provider-pi/working-dir (Pi Working Directory)
 
-Include the bundled `sample.py` in the prompt while using this directory as the working directory. All Pi tools stay disabled.
+Include the bundled `sample.txt` in the prompt while using this directory as the working directory. All Pi tools stay disabled.
 
 ## Usage
 
