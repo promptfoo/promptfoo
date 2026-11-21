@@ -285,7 +285,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     const payloads = table.body
       .flatMap((row) => {
         const seed = varIndex >= 0 ? row.vars[varIndex] : row.test.vars?.[varName];
-        if (!seed || seed === '[prompt stripped]') return [];
+        if (!seed || seed === '[prompt stripped]') {
+          return [];
+        }
         // Persisted tables keep seeds in row.vars and executed prompts on individual outputs.
         const executed = row.outputs
           .map((output) => output && getExecutedPrompt(output))

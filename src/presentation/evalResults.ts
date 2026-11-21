@@ -7,8 +7,12 @@ import type { EvaluateResult, EvaluateTable, EvaluateTableRow, ResultsFile } fro
 
 /** Historical prompt values can be structured JSON, including a literal toString field. */
 export function promptText(value: unknown): string {
-  if (!value || (Array.isArray(value) && value.length === 0)) return '';
-  if (typeof value === 'string') return value;
+  if (!value || (Array.isArray(value) && value.length === 0)) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
   try {
     return JSON.stringify(value) ?? '';
   } catch {
