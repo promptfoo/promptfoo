@@ -137,6 +137,12 @@ function getProviderEnvAliasGroups(
   config?: ProviderOptions['config'],
   env?: ProviderOptions['env'],
 ): readonly (readonly string[])[] {
+  if (/^openai:agents(?::|$)/.test(providerPath)) {
+    return ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].map((key) => [
+      key.toLowerCase(),
+      key,
+    ]);
+  }
   const isGeminiImage = /^(?:google|palm):(?:image:)?(?:[^:]*-image|gemini-nano-banana-2\.1$)/.test(
     providerPath,
   );
@@ -294,9 +300,11 @@ export function mergeProviderEnv(
     }
     merged ??= {};
     for (const aliases of aliasGroups) {
-      // Empty entries retain their existing per-variable meaning; a non-empty
-      // alias selects this scope without retaining a conflicting lower alias.
-      if (aliases.some((key) => layer[key])) {
+      // Empty proxies explicitly mask both spellings in lower layers.
+      const clearsAliases = aliases.some((key) =>
+        key.toUpperCase().endsWith('_PROXY') ? layer[key] !== undefined : layer[key],
+      );
+      if (clearsAliases) {
         for (const key of aliases) {
           delete merged[key];
           delete explicit[key];

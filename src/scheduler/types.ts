@@ -12,6 +12,8 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  /** A delegated provider owns retries; do not replay the enclosing call. */
+  handlesOwnRetries?: boolean;
   /** Cancel queue and retry waits for this caller. */
   abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */

@@ -152,6 +152,7 @@ interface CustomConfig {
 }
 
 export class CustomProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: CustomConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;
