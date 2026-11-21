@@ -15,6 +15,7 @@ import {
   getErrorResultIds,
   recalculatePromptMetrics,
   retryCommand,
+  trackRetryResults,
 } from '../../src/node/retry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
@@ -22,10 +23,16 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
-import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
+import type { EnvOverrides, RunEvalOptions, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
-  const errorRows: Array<{ id: string }> = [];
+  const errorRows: Array<{
+    id: string;
+    test?: object;
+    provider?: object;
+    promptIdx?: number;
+    testIdx?: number;
+  }> = [];
   const affectedEvalRows: Array<{ evalId: string }> = [];
   const errorRowsAll = vi.fn(async () => errorRows);
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
@@ -87,6 +94,21 @@ const testSuite = {
   tests: [],
 } as unknown as TestSuite;
 
+async function saveReplacement(options: unknown) {
+  const tracker = (options as import('../../src/types/internal').InternalEvaluateOptions)
+    .retryResults!;
+  const provider = testSuite.providers[0];
+  const row = {
+    provider: { id: provider.id(), label: provider.label },
+    testIdx: 0,
+    promptIdx: 0,
+    test: {},
+  };
+  Object.assign(dbMocks.errorRows[0], row);
+  await tracker.prepare([{ ...row, provider } as RunEvalOptions]);
+  tracker.saved({ ...row, testCase: {} });
+}
+
 function createEval(overrides: Partial<Eval> = {}): Eval {
   return {
     id: 'eval-123',
@@ -135,6 +157,43 @@ describe('retryCommand', () => {
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
+  });
+
+  it('matches persisted select-best grader settings without discarding account changes', async () => {
+    const env = { OPENAI_ORGANIZATION: 'first', OPENAI_API_KEY: 'synthetic' };
+    const grader = { id: () => 'grader', callApi: async () => ({}), env };
+    const savedGrader = { id: 'grader', env: { ...env, OPENAI_API_KEY: '[REDACTED]' } };
+    const row = {
+      id: 'original',
+      testIdx: 0,
+      promptIdx: 0,
+      provider: { id: 'echo' },
+      test: { assert: [{ type: 'select-best', provider: savedGrader }] },
+      latencyMs: 100,
+    };
+    dbMocks.errorRows.push(row);
+    const step: RunEvalOptions = {
+      ...row,
+      prompt: { label: 'question', raw: 'question' },
+      repeatIndex: 0,
+      delay: 0,
+      isRedteam: false,
+      provider: { id: () => 'echo', callApi: async () => ({}) },
+      test: { assert: [{ type: 'select-best', provider: grader }] },
+    };
+    const plan = () => trackRetryResults('eval-123', [row.id]).prepare([step]);
+    await expect(plan()).resolves.toEqual([step]);
+    env.OPENAI_ORGANIZATION = 'changed';
+    await expect(plan()).rejects.toThrow('saved test or provider');
+    // Old timeout rows used generic serialization, which omitted grader env.
+    Object.assign(row, {
+      error: 'Evaluation timed out after 100ms: deadline',
+      test: { assert: [{ type: 'select-best', provider: { id: 'grader' } }] },
+    });
+    await expect(plan()).resolves.toEqual([step]);
+    await expect(trackRetryResults('eval-123', [row.id], false).prepare([step])).rejects.toThrow(
+      'saved test or provider',
+    );
   });
 
   it('rejects a retry for an evaluation that does not exist', async () => {
@@ -528,7 +587,9 @@ describe('retryCommand', () => {
       expect(cliState.maxConcurrency).toBe(4);
       expect(receivedSuite).toBe(testSuite);
       expect(receivedEval).toBe(originalEval);
+      await saveReplacement(options);
       expect(options).toEqual({
+        retryResults: expect.anything(),
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
@@ -572,7 +633,9 @@ describe('retryCommand', () => {
     });
     vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
       expect(cliState.maxConcurrency).toBe(1);
+      await saveReplacement(options);
       expect(options).toEqual({
+        retryResults: expect.anything(),
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,
@@ -631,7 +694,16 @@ describe('retryCommand', () => {
         })),
       });
       vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-      dbMocks.errorRows.push({ id: 'mocked-retry-row' });
+      dbMocks.errorRows.push({
+        id: 'mocked-retry-row',
+        testIdx: 0,
+        promptIdx: 1,
+        test:
+          selectorSource === 'scenario'
+            ? { ...selection, metadata: { conversationId: '__scenario_0__' } }
+            : selection,
+        provider: { id: 'echo' },
+      });
       vi.mocked(resolveConfigs).mockResolvedValue({
         basePath: '',
         config: originalEval.config as UnifiedConfig,
@@ -831,7 +903,10 @@ describe('retryCommand', () => {
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, _eval, options) => {
+      await saveReplacement(options);
+      return retriedEval;
+    });
     dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);

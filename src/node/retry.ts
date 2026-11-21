@@ -1,9 +1,18 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import chalk from 'chalk';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
+import { getResultIndexKey } from '../evaluator/resultIndex';
+import {
+  sanitizeForDbWithSecrets,
+  sanitizeProvider,
+  serializeResultProviderRefs,
+  snapshotComparisonTest,
+} from '../evaluator/resultProcessing';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
@@ -22,7 +31,7 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { PromptMetrics } from '../types/index';
+import type { AtomicTestCase, EvaluateResult, PromptMetrics, RunEvalOptions } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -137,6 +146,141 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
+// Match the same public test representation that EvalResult writes, including
+// older rows without the empty containers supplied by the current evaluator.
+function retryTestIdentity(input: AtomicTestCase, legacyTimeout = false) {
+  const testCase = legacyTimeout
+    ? { ...input, provider: undefined }
+    : snapshotComparisonTest(input);
+  const saved = sanitizeForDbWithSecrets(serializeResultProviderRefs({ testCase }).testCase);
+  return { vars: {}, assert: [], options: {}, metadata: {}, ...saved };
+}
+
+export function trackRetryResults(evalId: string, errorIds: string[], usingSavedConfig = true) {
+  const captured = new Set(errorIds);
+  const replaced = new Set<string>();
+  const providerIdentity = (provider: Parameters<typeof sanitizeProvider>[0]) => {
+    const { id, label, config = {} } = sanitizeProvider(provider);
+    // Config loading injects a working directory that older rows did not store.
+    const { basePath: _basePath, ...settings } = config;
+    return { id, label: label || id, settings };
+  };
+  const identity = (test: AtomicTestCase, provider: Parameters<typeof sanitizeProvider>[0]) => ({
+    test: retryTestIdentity(test),
+    provider: providerIdentity(provider),
+  });
+  const cells = new Map<string, { ids: string[]; identity: ReturnType<typeof identity> }>();
+  const mismatch = () =>
+    new ConfigResolutionError(
+      'Cannot retry because a saved test or provider changed position or content. Existing ERROR results were preserved. Start a new evaluation.',
+    );
+  return {
+    async prepare(steps: RunEvalOptions[], hasExtensions = false) {
+      const db = await getDb();
+      const r = evalResultsTable;
+      // A paused retry can leave both the original error and a completed row.
+      // Load only cells with errors, including their possible replacements.
+      const rows = await db
+        .select({
+          sequence: sql<number>`rowid`,
+          id: r.id,
+          testIdx: r.testIdx,
+          promptIdx: r.promptIdx,
+          test: r.testCase,
+          provider: r.provider,
+          failureReason: r.failureReason,
+          error: r.error,
+          latencyMs: r.latencyMs,
+        })
+        .from(r)
+        .where(
+          and(
+            eq(r.evalId, evalId),
+            sql`(${r.testIdx}, ${r.promptIdx}) IN (
+          SELECT ${r.testIdx}, ${r.promptIdx} FROM ${r}
+          WHERE ${r.evalId} = ${evalId} AND ${r.failureReason} = ${ResultFailureReason.ERROR}
+        )`,
+          ),
+        )
+        .all();
+      const byCell: Record<string, typeof rows> = {};
+      for (const row of rows) {
+        (byCell[getResultIndexKey(row)] ??= []).push(row);
+      }
+      return steps.filter((step) => {
+        const key = getResultIndexKey(step);
+        const group = byCell[key];
+        const errors = group?.filter((row) => captured.has(row.id));
+        if (!errors?.length) {
+          return false;
+        }
+
+        const savedIdentity = (row: (typeof rows)[number]) => {
+          // Timeout rows omit the test override and use generic grader serialization.
+          // Restore missing settings only when replaying the saved configuration and
+          // its timeout projection agrees with everything the old row retained.
+          const timeout =
+            usingSavedConfig &&
+            row.latencyMs &&
+            row.error?.startsWith(`Evaluation timed out after ${row.latencyMs}ms: `) &&
+            isDeepStrictEqual(retryTestIdentity(row.test), retryTestIdentity(step.test, true));
+          return identity(timeout ? step.test : row.test, row.provider);
+        };
+        const expected = savedIdentity(errors[0]);
+        if (
+          errors.slice(1).some((row) => !isDeepStrictEqual(expected, savedIdentity(row))) ||
+          !isDeepStrictEqual(expected.provider, providerIdentity(step.provider)) ||
+          (!hasExtensions && !isDeepStrictEqual(expected.test, retryTestIdentity(step.test)))
+        ) {
+          throw mismatch();
+        }
+
+        const ids = errors.map((row) => row.id);
+        if (
+          group.some(
+            (row) =>
+              row.failureReason !== ResultFailureReason.ERROR &&
+              errors.every((old) => row.sequence > old.sequence) &&
+              isDeepStrictEqual(expected, identity(row.test, row.provider)),
+          )
+        ) {
+          for (const id of ids) {
+            replaced.add(id);
+          }
+          return false;
+        }
+        cells.set(key, { ids, identity: expected });
+        return true;
+      });
+    },
+    validate(step: RunEvalOptions) {
+      const cell = cells.get(getResultIndexKey(step));
+      if (!isDeepStrictEqual(cell?.identity, identity(step.test, step.provider))) {
+        throw mismatch();
+      }
+    },
+    saved(row: Pick<EvaluateResult, 'provider' | 'testCase' | 'testIdx' | 'promptIdx'>) {
+      const cell = cells.get(getResultIndexKey(row));
+      // An extension can change a test after planning. Never delete an original
+      // error solely because another row was written at its indices.
+      if (cell && isDeepStrictEqual(cell.identity, identity(row.testCase, row.provider))) {
+        for (const id of cell.ids) {
+          replaced.add(id);
+        }
+      }
+    },
+    replacedIds() {
+      const kept = captured.size - replaced.size;
+      if (kept) {
+        logger.warn(
+          `Kept ${kept} ERROR ${kept === 1 ? 'result' : 'results'} without a matching persisted replacement.`,
+        );
+      }
+      return [...replaced];
+    },
+  };
+}
+
 /**
  * Deletes ERROR results after successful retry.
  * Uses batch delete for better performance.
@@ -147,14 +291,18 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   }
 
   const db = await getDb();
+  const staleErrors = and(
+    eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+    inArray(evalResultsTable.id, resultIds),
+  );
   const affectedEvals = await db
     .selectDistinct({ evalId: evalResultsTable.evalId })
     .from(evalResultsTable)
-    .where(inArray(evalResultsTable.id, resultIds))
+    .where(staleErrors)
     .all();
 
   // Use batch delete with inArray for better performance
-  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
+  await db.delete(evalResultsTable).where(staleErrors).run();
 
   for (const { evalId } of affectedEvals) {
     notifyEvaluationChanged(evalId);
@@ -372,7 +520,9 @@ async function retryWithConfig(
   }
 
   // Set up evaluation options
+  const retryResults = trackRetryResults(evalId, errorResultIds, !cmdObj.config);
   const evaluateOptions: InternalEvaluateOptions = {
+    retryResults,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
@@ -392,7 +542,7 @@ async function retryWithConfig(
 
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
+      await deleteErrorResults(retryResults.replacedIds());
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {

@@ -50,7 +50,6 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
-  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingConfig,
@@ -93,7 +92,6 @@ import {
   isSecretEnvVarName,
   isSecretField,
   REDACTED,
-  sanitizeObject,
   sanitizeUrl,
 } from '../util/sanitizer';
 import { sleep } from '../util/time';
@@ -110,7 +108,13 @@ import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';
-import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
+import {
+  comparisonProviderOptions,
+  PROMPTFOO_METADATA_KEY,
+  persistComparisonProvider,
+  sanitizeResultForJsonlArtifact,
+  snapshotComparisonTest,
+} from './resultProcessing';
 import {
   ABORTED_GRADING_PREFIX,
   applyGradingError,
@@ -1655,18 +1659,6 @@ function hasComparisonRedactions(
   );
 }
 
-function comparisonProviderOptions(provider: GradingConfig['provider']) {
-  if (isApiProvider(provider)) {
-    return {
-      id: provider.id(),
-      label: provider.label,
-      config: provider.config,
-      env: (provider as ApiProvider & { env?: EnvOverrides }).env,
-    };
-  }
-  return provider;
-}
-
 function comparisonProviderId(provider: GradingConfig['provider']): string | undefined {
   const id =
     typeof provider === 'string'
@@ -1761,17 +1753,6 @@ function snapshotComparisonProvider(
     });
   }
   return snapshot;
-}
-
-function persistComparisonProvider(provider: GradingConfig['provider']): GradingConfig['provider'] {
-  const options = isProviderTypeMap(provider)
-    ? { ...provider, text: persistComparisonProvider(provider.text) }
-    : comparisonProviderOptions(provider);
-  return sanitizeObject(options, {
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-    throwOnError: true,
-  });
 }
 
 function getComparisonProviders(test: AtomicTestCase, currentResult = false) {
@@ -2305,32 +2286,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
-    if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
+    const comparisonTest = snapshotComparisonTest(row.testCase);
+    if (comparisonTest !== row.testCase) {
       // Capture grader references before a later hook can replace shared nested test fields.
       this.comparisonProviders.set(
         getResultIndexKey(row),
         getComparisonProviders(row.testCase, true),
       );
-      row.testCase = {
-        ...row.testCase,
-        ...(row.testCase.options && {
-          options: {
-            ...row.testCase.options,
-            provider: persistComparisonProvider(row.testCase.options.provider),
-          },
-        }),
-        assert: row.testCase.assert?.map((assertion) =>
-          assertion.type === 'select-best'
-            ? {
-                ...assertion,
-                provider: persistComparisonProvider((assertion as Assertion).provider),
-              }
-            : assertion,
-        ),
-      };
+      row.testCase = comparisonTest;
     }
     try {
       await this.store.appendResult(row);
+      this.options.retryResults?.saved(row);
     } catch (error) {
       this.store.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
@@ -2448,6 +2415,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (testSuite.extensions?.length) {
+      this.options.retryResults?.validate(evalStep);
+    }
 
     const rows = await runEvalInternal(
       {
@@ -2669,6 +2639,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
     this.trackFinalJsonlResult(timeoutResult);
     await this.store.appendResult(timeoutResult);
+    this.options.retryResults?.saved(timeoutResult);
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -3717,6 +3688,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
       await this.store.appendResult(timeoutResult);
+      this.options.retryResults?.saved(timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -3889,7 +3861,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
       recovery,
     );
-    await this.store.appendPrompts(prompts);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);
@@ -3911,6 +3882,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite,
       tests,
     });
+    const retrySteps = await options.retryResults?.prepare(
+      runEvalOptions,
+      Boolean(testSuite.extensions?.length),
+    );
+    await this.store.appendPrompts(prompts);
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     if (cliState.resume && this.store.persisted) {
       for (const step of runEvalOptions) {
@@ -3920,7 +3896,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
-    runEvalOptions = await filterCompletedResumeSteps(runEvalOptions, this.store);
+    runEvalOptions = await filterCompletedResumeSteps(retrySteps ?? runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,

@@ -87,6 +87,12 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
+  trackRetryResults: vi.fn((_evalId: string, ids: string[]) => ({
+    prepare: vi.fn(),
+    validate: vi.fn(),
+    saved: vi.fn(),
+    replacedIds: () => ids.slice(0, 1),
+  })),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
 }));
@@ -2163,7 +2169,7 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
       latestSpy.mockRestore();
