@@ -71,7 +71,10 @@ export function synchronizeResponseMetadata(
   updatedResponseMetadata: Record<string, unknown> | undefined,
   testMetadata: Record<string, unknown> | undefined,
 ) {
-  let metadata = updatedMetadata;
+  if (!updatedMetadata || originalResponseMetadata === updatedResponseMetadata) {
+    return updatedMetadata;
+  }
+  const metadata = { ...updatedMetadata };
   for (const key of ['headers', ...RESPONSE_OUTPUT_METADATA_KEYS]) {
     const originalValue = originalMetadata?.[key];
     if (
@@ -83,11 +86,11 @@ export function synchronizeResponseMetadata(
       continue;
     }
 
-    const { [key]: _staleValue, ...metadataWithoutKey } = metadata ?? {};
-    metadata =
-      updatedResponseMetadata?.[key] === undefined
-        ? metadataWithoutKey
-        : { ...metadataWithoutKey, [key]: updatedResponseMetadata[key] };
+    if (updatedResponseMetadata?.[key] === undefined) {
+      delete metadata[key];
+    } else {
+      metadata[key] = updatedResponseMetadata[key];
+    }
   }
   return metadata;
 }
@@ -101,33 +104,30 @@ export function projectOutputMetadata<T>(
   if (!stripOutput || !metadata || typeof metadata !== 'object') {
     return metadata;
   }
-  // Provider metadata is merged after test metadata during evaluation. Restore trusted
-  // test values for reserved fields before removing any response-owned copies.
-  const outputMetadata = { ...metadata } as Record<string, unknown>;
+  // Reserved keys can contain output even if a hook replaced their original values.
+  const projected = { ...metadata } as Record<string, unknown>;
   for (const key of RESPONSE_OUTPUT_METADATA_KEYS) {
-    if (testMetadata && Object.prototype.hasOwnProperty.call(testMetadata, key)) {
-      outputMetadata[key] = sanitizeForDb(testMetadata[key]);
+    if (testMetadata && Object.hasOwn(testMetadata, key)) {
+      projected[key] = sanitizeForDb(testMetadata[key]);
+    } else {
+      delete projected[key];
     }
   }
-  return Object.fromEntries(
-    Object.entries(outputMetadata).flatMap(([key, value]) => {
-      if (
-        testMetadata &&
-        Object.prototype.hasOwnProperty.call(testMetadata, key) &&
-        isDeepStrictEqual(sanitizeForDb(value), sanitizeForDb(testMetadata[key]))
-      ) {
-        return [[key, value]];
-      }
-      // These keys contain response output even when hooks annotate or replace their copies.
-      if (RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
-        return [];
-      }
-      if (!responseMetadata || !Object.prototype.hasOwnProperty.call(responseMetadata, key)) {
-        return [[key, value]];
-      }
-      return [[key, stripMediaReferences(sanitizeForDb(value))]];
-    }),
-  ) as T;
+  for (const key of Object.keys(responseMetadata ?? {})) {
+    if (!Object.hasOwn(projected, key) || RESPONSE_OUTPUT_METADATA_KEYS.includes(key)) {
+      continue;
+    }
+    const value = sanitizeForDb(projected[key]);
+    if (
+      testMetadata &&
+      Object.hasOwn(testMetadata, key) &&
+      isDeepStrictEqual(value, sanitizeForDb(testMetadata[key]))
+    ) {
+      continue;
+    }
+    projected[key] = stripMediaReferences(value);
+  }
+  return projected as T;
 }
 
 export function projectProviderResponse(

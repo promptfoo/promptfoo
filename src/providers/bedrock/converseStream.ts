@@ -247,7 +247,8 @@ export async function collectConverseStream(
   for (const [index, raw] of toolInputs) {
     const toolUse = blocks.get(index)!.toolUse!;
     try {
-      const input: unknown = JSON.parse(raw || '{}');
+      // A server tool can omit public arguments. Local calls must stream a JSON object.
+      const input: unknown = !raw && toolUse.type === 'server_tool_use' ? {} : JSON.parse(raw);
       if (input === null || typeof input !== 'object' || Array.isArray(input)) {
         throw new Error('Expected an object');
       }

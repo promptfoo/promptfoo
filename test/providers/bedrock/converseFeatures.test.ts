@@ -2120,7 +2120,7 @@ describe('ConverseStream response parity', () => {
     },
   );
 
-  it.each(['{broken', 'null', '[]', '1'])(
+  it.each([undefined, '', '{broken', 'null', '[]', '1'])(
     'rejects invalid local tool arguments %s without invoking the callback',
     async (input) => {
       cache.enabled = true;
@@ -2137,7 +2137,9 @@ describe('ConverseStream response parity', () => {
               start: { toolUse: { name: 'lookup', toolUseId: 'id' } },
             },
           },
-          { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input } } } },
+          ...(input === undefined
+            ? []
+            : [{ contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input } } } }]),
           { contentBlockStop: { contentBlockIndex: 0 } },
           { messageStop: { stopReason: 'tool_use' } },
           { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
