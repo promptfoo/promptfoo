@@ -8,6 +8,7 @@ import cliState from '../../src/cliState';
 import {
   getFileHashes,
   parseScriptParts,
+  prepareScript,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
 import { mockProcessEnv } from '../util/utils';
@@ -185,6 +186,11 @@ describe('ScriptCompletionProvider', () => {
       digest: vi.fn().mockReturnValue('default-hash'),
     } as unknown as crypto.Hash;
     createHashMock.mockReturnValue(mockHashUpdate);
+  });
+
+  it('rejects invalid setup before child dispatch', () => {
+    expect(() => prepareScript('   ')).toThrow('No command found');
+    expect(execFile).not.toHaveBeenCalled();
   });
 
   it('should return the correct id', () => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { executablePromptFunction } from '../../src/prompts/processors/executable';
-import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
+import { prepareScript, ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 const cache = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
 vi.mock('../../src/cache', () => ({ getCache: () => cache, isCacheEnabled: () => true }));
@@ -34,6 +34,16 @@ process.stdin.on('end', () => process.stdout.write(process.argv.at(-1)));`,
   });
 
   afterAll(() => rm(directory, { recursive: true, force: true }));
+
+  it('binds the configured command and fixed argv before accepting runtime arguments', async () => {
+    const script = prepareScript(command);
+    expect(Reflect.set(script, 'command', 'other')).toBe(false);
+    expect(Reflect.set(script, 'scriptPath', 'node --version')).toBe(false);
+    const argv = ['a greeting with spaces'];
+    const result = script.run(argv);
+    argv[0] = 'changed';
+    expect(await result).toBe('a greeting with spaces');
+  });
 
   it.each(['provider', 'prompt'])(
     'closes %s stdin and propagates cache write failures after child completion',

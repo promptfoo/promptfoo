@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runScript, ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
+import { prepareScript, ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 import { createApp } from '../../src/server/server';
 import { withoutExecutableScripts } from '../../src/util/scriptExecution';
 import { setupTestServer } from '../util/testServer';
@@ -17,10 +17,11 @@ describe('HTTP script execution policy', () => {
 
   it('rejects a locally prepared provider or command inside the request scope', async () => {
     const provider = new ScriptCompletionProvider('node --version');
+    const script = prepareScript('node --version');
     await withoutExecutableScripts(async () => {
       const message = 'require the CLI or Node.js library';
       await expect(provider.callApi('hello')).rejects.toThrow(message);
-      await expect(runScript(['node', '--version'], [], {})).rejects.toThrow(message);
+      await expect(script.run([])).rejects.toThrow(message);
     });
   });
 

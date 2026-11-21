@@ -50,37 +50,46 @@ export function getFileHashes(scriptParts: string[]): string[] {
   return fileHashes;
 }
 
-/** Only the configured script selects the executable. Runtime inputs are literal arguments. */
-export async function runScript(
-  [command, ...args]: string[],
-  inputs: string[],
-  options: { cwd?: string; timeout?: number },
-): Promise<string> {
+/** Capture the executable, fixed argv and working directory before accepting runtime data. */
+export function prepareScript(scriptPath: string, cwd?: string, timeout?: number) {
+  const parts = parseScriptParts(scriptPath);
+  const [command, ...args] = parts;
   requireLocalCommand(command);
-  const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
-    (resolve, reject) => {
-      const child = execFile(
-        command,
-        [...args, ...inputs],
-        { cwd: options.cwd, timeout: options.timeout, env: getProcessEnv(), shell: false },
-        (error, stdout, stderr) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve({ stdout, stderr });
-          }
+  return Object.freeze({
+    scriptPath,
+    command,
+    getFileHashes() {
+      requireLocalCommand(command);
+      return getFileHashes(parts);
+    },
+    async run(inputs: string[]): Promise<string> {
+      requireLocalCommand(command);
+      const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
+        (resolve, reject) => {
+          const child = execFile(
+            command,
+            [...args, ...inputs],
+            { cwd, timeout, env: getProcessEnv(), shell: false },
+            (error, stdout, stderr) => {
+              if (error) {
+                reject(error);
+              } else {
+                resolve({ stdout, stderr });
+              }
+            },
+          );
+          // Scripts receive input through argv and may wait for EOF on stdin.
+          child.stdin?.end();
         },
       );
-      // Scripts receive input through argv and may wait for EOF on stdin.
-      child.stdin?.end();
+      const output = stripText(stdout);
+      const error = stripText(stderr);
+      if (error && !output) {
+        throw new Error(error);
+      }
+      return output;
     },
-  );
-  const output = stripText(stdout);
-  const error = stripText(stderr);
-  if (error && !output) {
-    throw new Error(error);
-  }
-  return output;
+  });
 }
 
 function scriptContext(context?: CallApiContextParams) {
@@ -100,26 +109,27 @@ function scriptContext(context?: CallApiContextParams) {
 }
 
 export class ScriptCompletionProvider implements ApiProvider {
+  readonly #script: ReturnType<typeof prepareScript>;
+
   constructor(
-    private scriptPath: string,
+    scriptPath: string,
     private options?: ProviderOptions,
   ) {
-    requireLocalCommand(scriptPath);
+    this.#script = prepareScript(scriptPath, options?.config?.basePath);
   }
 
   id() {
-    return `exec:${this.scriptPath}`;
+    return `exec:${this.#script.scriptPath}`;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
+    const fileHashes = this.#script.getFileHashes();
 
     if (fileHashes.length === 0) {
-      logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
+      logger.warn(`Could not find any valid files in the command: ${this.#script.scriptPath}`);
     }
 
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey = `exec:${this.#script.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
 
     const cache = fileHashes.length && isCacheEnabled() ? await getCache() : undefined;
     const cachedResult = await cache?.get(cacheKey);
@@ -127,15 +137,11 @@ export class ScriptCompletionProvider implements ApiProvider {
       return { ...JSON.parse(cachedResult as string), cached: true };
     }
 
-    const output = await runScript(
-      scriptParts,
-      [
-        prompt,
-        safeJsonStringify(this.options ?? {}) as string,
-        safeJsonStringify(scriptContext(context)) as string,
-      ],
-      { cwd: this.options?.config?.basePath },
-    );
+    const output = await this.#script.run([
+      prompt,
+      safeJsonStringify(this.options ?? {}) as string,
+      safeJsonStringify(scriptContext(context)) as string,
+    ]);
     const result = { output };
     await cache?.set(cacheKey, JSON.stringify(result));
     return result;
