@@ -95,12 +95,16 @@ export function getTestCaseDeduplicationKey(testCase: TestCase): string {
  * Runtime variables (like _conversation, sessionId) are filtered out before comparison.
  *
  * @param tests - Array of test cases to deduplicate
+ * @param getKey - Optional identity selector for callers that need additional grouping
  * @returns Deduplicated array of test cases
  */
-export function deduplicateTestCases(tests: TestCase[]): TestCase[] {
+export function deduplicateTestCases(
+  tests: TestCase[],
+  getKey: (testCase: TestCase) => string = getTestCaseDeduplicationKey,
+): TestCase[] {
   const seen = new Set<string>();
   return tests.filter((test) => {
-    const key = getTestCaseDeduplicationKey(test);
+    const key = getKey(test);
     if (seen.has(key)) {
       return false;
     }
