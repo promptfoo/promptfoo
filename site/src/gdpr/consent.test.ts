@@ -190,7 +190,7 @@ describe('consent.js', () => {
       expect(document.getElementById('cc-banner')).not.toBeNull();
     });
 
-    it.each(['A', 'AA', 'ZZ', 'XX', 'T1', 'invalid'])(
+    it.each(['A', 'AA', 'ZZ', 'XX', 'T1', 'invalid', 'UK', 'FX', 'EU', 'EZ', 'XA'])(
       'requires consent for unknown country %s',
       (country) => {
         setCookie('pf_country', country);
@@ -720,6 +720,8 @@ describe('consent.js', () => {
       'LI',
       'NO', // EEA
       'GB', // UK
+      'GF', // French Guiana
+      'AX', // Åland
       'CH', // Switzerland
       'BR', // Brazil
       'CA', // Canada

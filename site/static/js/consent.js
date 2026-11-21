@@ -28,47 +28,23 @@
   var gtagReady = false;
   var configuredTags = new Set();
 
-  // Countries with opt-in defaults
-  // EU-27 + EEA (IS, LI, NO) + UK + Switzerland + Brazil + Canada
-  var OPT_IN_COUNTRIES = [
-    'AT',
-    'BE',
-    'BG',
-    'HR',
-    'CY',
-    'CZ',
-    'DK',
-    'EE',
-    'FI',
-    'FR',
-    'DE',
-    'GR',
-    'HU',
-    'IE',
-    'IT',
-    'LV',
-    'LT',
-    'LU',
-    'MT',
-    'NL',
-    'PL',
-    'PT',
-    'RO',
-    'SK',
-    'SI',
-    'ES',
-    'SE',
-    'IS',
-    'LI',
-    'NO',
-    'GB',
-    'CH',
-    'BR',
-    'CA',
-  ];
-
-  // Countries using opt-out model
-  var OPT_OUT_COUNTRIES = ['US'];
+  // ISO 3166-1 destinations outside the opt-in regions and the US.
+  // An allowlist keeps aliases, macroregions and unfamiliar codes opt-in.
+  var NOTICE_COUNTRIES = new Set(
+    [
+      'AD AE AF AG AI AL AM AO AQ AR AS AU AW AZ BA BB BD BF BH BI BJ BL BM BN',
+      'BO BQ BS BT BV BW BY BZ CC CD CF CG CI CK CL CM CN CO CR CU CV CW CX DJ',
+      'DM DO DZ EC EG EH ER ET FJ FK FM FO GA GD GE GG GH GI GL GM GN GQ GS GT',
+      'GU GW GY HK HM HN HT ID IL IM IN IO IQ IR JE JM JO JP KE KG KH KI KM KN',
+      'KP KR KW KY KZ LA LB LC LK LR LS LY MA MC MD ME MG MH MK ML MM MN MO MP',
+      'MR MS MU MV MW MX MY MZ NA NC NE NF NG NI NP NR NU NZ OM PA PE PF PG PH',
+      'PK PM PN PR PS PW PY QA RS RU RW SA SB SC SD SG SH SJ SL SM SN SO SR SS',
+      'ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM',
+      'UY UZ VA VC VE VG VI VN VU WF WS YE ZA ZM ZW',
+    ]
+      .join(' ')
+      .split(' '),
+  );
 
   // Helpers
 
@@ -143,18 +119,8 @@
 
   function getRegion() {
     var country = getCookie('pf_country');
-    // Missing or unrecognized country data must not enable tracking.
-    if (!country || !/^[A-Z]{2}$/.test(country) || country === 'ZZ') return 'opt_in';
-    try {
-      if (new Intl.DisplayNames(['en'], { type: 'region' }).of(country) === country) {
-        return 'opt_in';
-      }
-    } catch {
-      return 'opt_in';
-    }
-    if (OPT_IN_COUNTRIES.includes(country)) return 'opt_in';
-    if (OPT_OUT_COUNTRIES.includes(country)) return 'opt_out';
-    return 'notice';
+    if (country === 'US') return 'opt_out';
+    return NOTICE_COUNTRIES.has(country) ? 'notice' : 'opt_in';
   }
 
   var REGION_CODE = { opt_in: 'i', opt_out: 'o', notice: 'n' };

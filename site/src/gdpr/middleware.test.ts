@@ -57,6 +57,21 @@ describe('_middleware', () => {
     expect(res.headers.get('Set-Cookie')).toBeNull();
   });
 
+  it.each([undefined, 'T1', 'US;Domain=example.com'])(
+    'expires the previous country on an HTML response with country %s',
+    async (cfCountry) => {
+      const ctx = makeContext({
+        contentType: 'text/html',
+        cookies: 'test=1; pf_country=US',
+        cfCountry,
+      });
+      const res = await onRequest(ctx);
+      expect(res.headers.get('Set-Cookie')).toBe(
+        'pf_country=;Path=/;SameSite=Lax;Secure;Max-Age=0',
+      );
+    },
+  );
+
   it('always refreshes country cookie to handle travel/VPN', async () => {
     const ctx = makeContext({
       contentType: 'text/html',
