@@ -102,27 +102,17 @@ export abstract class RedteamPluginBase {
    * @param n - The number of test cases to generate.
    * @param delayMs - The delay in milliseconds between plugin API calls.
    * @param templateGetter - A function that returns a promise of a template string.
-   * @param fixedUserMessage - The user task when generating a separate tool artifact.
+   * @param checkMessageLength - Validates generated user messages. Pass null for tool content.
    * @returns A promise that resolves to an array of TestCase objects.
    */
   async generateTests(
     n: number,
     delayMs: number = 0,
     templateGetter: () => Promise<string> = this.getTemplate.bind(this),
-    fixedUserMessage?: string,
+    checkMessageLength: typeof getGeneratedPromptOverLimit | null = getGeneratedPromptOverLimit,
   ): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
-    const generatesUserMessage = fixedUserMessage === undefined;
-    const fixedViolation =
-      !generatesUserMessage &&
-      getGeneratedPromptOverLimit(fixedUserMessage, this.config.maxCharsPerMessage);
-    if (fixedViolation) {
-      logger.warn(
-        `[${this.id}] Skipping artifact generation because the user task exceeds maxCharsPerMessage=${fixedViolation.limit} (${fixedViolation.length} chars)`,
-      );
-      return [];
-    }
 
     // Check if we're using multi-input mode
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
@@ -150,6 +140,7 @@ export abstract class RedteamPluginBase {
       const nunjucks = getNunjucksEngine();
       const renderedTemplate = nunjucks.renderString(await templateGetter(), {
         purpose: this.purpose,
+        legitimateTask: this.config.legitimateTask,
         n: currentBatchSize,
         examples: this.config.examples,
         outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
@@ -157,7 +148,11 @@ export abstract class RedteamPluginBase {
       });
 
       const finalTemplate = [
-        RedteamPluginBase.appendModifiers(renderedTemplate, this.config, generatesUserMessage),
+        RedteamPluginBase.appendModifiers(
+          renderedTemplate,
+          this.config,
+          checkMessageLength !== null,
+        ),
         retryInstructions,
       ]
         .filter(Boolean)
@@ -218,9 +213,7 @@ export abstract class RedteamPluginBase {
         const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
         // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
         // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
-        const violation =
-          generatesUserMessage &&
-          getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
+        const violation = checkMessageLength?.(promptText, this.config.maxCharsPerMessage);
         if (violation) {
           rejectedPromptLengths.push(violation.length);
           rejectedPromptLimit = violation.limit;

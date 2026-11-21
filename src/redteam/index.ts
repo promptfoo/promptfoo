@@ -4,6 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import { z } from 'zod';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -1286,6 +1287,7 @@ export async function synthesize({
         logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
       }
     } else if (registeredPlugin.validate) {
+      const isOutcome = isAgentOutcomePlugin(plugin.id);
       try {
         const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
           plugin.config,
@@ -1294,6 +1296,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           ...resolvedPluginConfig,
+          ...(isOutcome && { injectVar, ...(hasMultipleInputs && { inputs }) }),
           modifiers: buildRedteamModifiers({
             maxCharsPerMessage,
             pluginConfig: resolvedPluginConfig,
@@ -1301,6 +1304,9 @@ export async function synthesize({
           }),
         });
       } catch (error) {
+        if (isOutcome && error instanceof z.ZodError) {
+          throw new Error(`Invalid configuration for ${plugin.id}. ${z.prettifyError(error)}`);
+        }
         logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
         return false;
       }

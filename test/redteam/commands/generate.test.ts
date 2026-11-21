@@ -3112,7 +3112,7 @@ describe('doGenerateRedteam', () => {
       );
     });
 
-    it('should merge context vars into test case vars', async () => {
+    it('merges context vars while preserving generated literal bindings', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
@@ -3129,7 +3129,7 @@ describe('doGenerateRedteam', () => {
               {
                 id: 'ctx',
                 purpose: 'Context purpose',
-                vars: { context_file: 'data.json', role: 'admin' },
+                vars: { context_file: 'data.json', role: 'admin', ticket: 'Context ticket' },
               },
             ],
           },
@@ -3139,9 +3139,16 @@ describe('doGenerateRedteam', () => {
       vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
-            vars: { input: 'Test input', existingVar: 'existing' },
+            vars: { input: 'Test input', existingVar: 'existing', ticket: 'Default ticket' },
             assert: [{ type: 'equals', value: 'Test output' }],
             metadata: { pluginId: 'harmful:hate' },
+          },
+          {
+            vars: { input: 'Triage the ticket', ticket: 'Generated ticket' },
+            metadata: {
+              pluginId: 'agentic:private-to-public-disclosure',
+              __promptfoo: { literalVars: ['input', 'ticket'] },
+            },
           },
         ],
         purpose: 'Test purpose',
@@ -3169,6 +3176,14 @@ describe('doGenerateRedteam', () => {
                 input: 'Test input',
                 existingVar: 'existing',
                 context_file: 'data.json',
+                role: 'admin',
+                ticket: 'Context ticket',
+              }),
+            }),
+            expect.objectContaining({
+              vars: expect.objectContaining({
+                input: 'Triage the ticket',
+                ticket: 'Generated ticket',
                 role: 'admin',
               }),
             }),

@@ -4,14 +4,12 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import {
   DATASET_EXEMPT_PLUGINS,
+  getAgentOutcomeCase,
+  isAgentOutcomePlugin,
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
 } from '../../redteam/constants';
-import {
-  getAgentOutcomeArtifact,
-  isAgentOutcomePlugin,
-} from '../../redteam/constants/agentOutcomes';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import {
@@ -158,7 +156,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       prompt: extractGeneratedPrompt(testCase, injectVar),
       context,
       metadata: testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {},
-      artifact: getAgentOutcomeArtifact(testCase),
+      artifact: getAgentOutcomeCase(testCase)?.artifact,
     });
 
     // Handle multi-turn strategies (always single test case)

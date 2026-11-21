@@ -12,6 +12,7 @@ import {
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { getLiteralVarNames } from '../contracts/literalVars';
 import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars';
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
@@ -107,7 +108,6 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../util/transform';
-import { getLiteralVarNames } from '../validation/literalVars';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';

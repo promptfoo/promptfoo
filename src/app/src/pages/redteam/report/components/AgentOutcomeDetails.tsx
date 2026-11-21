@@ -1,10 +1,11 @@
+import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import {
   type AgentOutcomeCase,
-  AgentOutcomeCaseSchema,
   AgentOutcomeEvidenceSchema,
   AgentOutcomeResultSchema,
 } from '@promptfoo/contracts';
-import { getAgentOutcomeArtifact } from '@promptfoo/redteam/constants';
+import { Link } from 'react-router';
 import type { GradingResult } from '@promptfoo/types';
 
 import type { TestWithMetadata } from './shared';
@@ -37,28 +38,54 @@ function yesNo(value: boolean | null | undefined) {
   return value ? 'Yes' : 'No';
 }
 
-export function AgentOutcomeDetails({ test }: { test: TestWithMetadata }) {
-  const testCase = test.result?.testCase;
-  if (!testCase?.metadata?.agentOutcome) {
+export function AgentOutcomeCoverage({ count, evalId }: { count: number; evalId: string | null }) {
+  if (!count || !evalId) {
     return null;
   }
-  const parsed = AgentOutcomeCaseSchema.safeParse(testCase.metadata.agentOutcome);
-  if (!parsed.success) {
-    return null;
-  }
+  return (
+    <Alert variant="warning">
+      <AlertDescription>
+        Pass rates exclude {count} agent outcome {count === 1 ? 'test' : 'tests'} with errors.{' '}
+        <Link
+          to={EVAL_ROUTES.DETAIL(encodeURIComponent(evalId)) + '?mode=errors'}
+          className="underline"
+        >
+          View errors
+        </Link>
+      </AlertDescription>
+    </Alert>
+  );
+}
 
-  const { mode } = parsed.data;
-  const artifact = getAgentOutcomeArtifact(testCase);
-  const outcome = findOutcome(test.gradingResult, parsed.data);
+export function getAgentOutcomeLabel({ mode, variant }: AgentOutcomeCase) {
+  if (variant === 'authorized') {
+    return 'Authorized folder share';
+  }
+  return (
+    (mode === 'indirect' ? 'Indirect' : 'Direct') + (variant === 'attack' ? ' attack' : ' baseline')
+  );
+}
+
+export function AgentOutcomeDetails({
+  test,
+  assigned,
+}: {
+  test: TestWithMetadata;
+  assigned: AgentOutcomeCase & { artifact?: string };
+}) {
+  const { mode, artifact } = assigned;
+  const outcome = findOutcome(test.gradingResult, assigned);
   const evidence = AgentOutcomeEvidenceSchema.safeParse(
     test.result?.response?.metadata?.agentOutcomeEvidence,
   );
   const measurements =
-    evidence.success && matchesCase(parsed.data, evidence.data) ? evidence.data.measurements : null;
+    evidence.success && matchesCase(assigned, evidence.data) ? evidence.data.measurements : null;
   const facts = {
-    'Attack source': mode === 'direct' ? 'User request' : 'Third-party content',
-    'Reached agent': yesNo(outcome?.attackExposed),
+    [mode === 'direct' ? 'User request delivered' : 'Tool content delivered']: yesNo(
+      outcome?.attackExposed,
+    ),
     'Task completed': yesNo(outcome?.taskCompleted),
+    'Positive control passed': yesNo(outcome?.controlPassed),
   };
   return (
     <div className="border-y border-border px-3 py-2 text-sm">
