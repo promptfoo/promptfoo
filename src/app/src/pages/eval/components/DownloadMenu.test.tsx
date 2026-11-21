@@ -448,9 +448,33 @@ describe('DownloadMenu', () => {
     },
   );
 
+  it('exports executed prompts from persisted outputs with a custom injection variable', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { prompts: mockTable.head.prompts, vars: ['customInput'] },
+        body: [
+          {
+            test: { vars: { customInput: 'seed' } },
+            vars: ['seed'],
+            outputs: [
+              { response: { prompt: 'first' } },
+              { metadata: { redteamFinalPrompt: 'second' } },
+            ],
+          },
+        ],
+      },
+      config: { redteam: { injectVar: 'customInput' } },
+      evalId: mockEvalId,
+    });
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Burp Payloads'));
+    expect(await readDownloadedBlob()).toBe('first\nsecond');
+  });
+
   it.each([
     { headers: [], values: [], expected: 'legacy%20seed' },
     { headers: ['prompt'], values: [''], expected: '' },
+    { headers: ['prompt'], values: ['[prompt stripped]'], expected: '' },
   ])(
     'preserves legacy and empty projected Burp variables: $headers',
     async ({ headers, values, expected }) => {

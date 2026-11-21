@@ -5,25 +5,45 @@ import { getTableCellMedia, getTableCellText } from './evalTableCells';
 
 import type { EvaluateResult, EvaluateTable, EvaluateTableRow, ResultsFile } from '../types/index';
 
+/** Historical prompt values can be structured JSON, including a literal toString field. */
+export function promptText(value: unknown): string {
+  if (!value || (Array.isArray(value) && value.length === 0)) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function getExecutedPrompt(result: Pick<EvaluateResult, 'response' | 'metadata'>): string {
+  return (
+    promptText(getActualPrompt(result.response)) || promptText(result.metadata?.redteamFinalPrompt)
+  );
+}
+
 /** Build display-only variables without changing stored evaluation results. */
-export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' | 'metadata'>) {
+export function getDisplayVars(
+  result: Pick<EvaluateResult, 'vars' | 'response' | 'metadata'>,
+  injectVar = 'prompt',
+) {
   let displayVars = result.vars ? { ...result.vars } : undefined;
-
-  // Prefer the provider prompt; older results store it in metadata.
-  const actualPrompt =
-    getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
-
+  const actualPrompt = getExecutedPrompt(result);
   if (displayVars && actualPrompt) {
-    const varKeys = Object.keys(displayVars);
-    if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
-      displayVars[varKeys[0]] = actualPrompt;
-    } else if (varKeys.length > 1) {
-      // Config is unavailable here; preserve the legacy prompt-key priority.
-      const targetKeys = ['prompt', 'query', 'question'];
-      const keyToUpdate = targetKeys.find((key) => displayVars?.[key]);
-      if (keyToUpdate) {
-        displayVars[keyToUpdate] = actualPrompt;
-      }
+    const keys = Object.keys(displayVars);
+    const target =
+      keys.length === 1
+        ? keys[0]
+        : [injectVar, 'prompt', 'query', 'question'].find(
+            (key) => keys.includes(key) && displayVars?.[key],
+          );
+    if (
+      target &&
+      target !== 'harmCategory' &&
+      displayVars[target] &&
+      displayVars[target] !== '[prompt stripped]'
+    ) {
+      displayVars[target] = actualPrompt;
     }
   }
 
@@ -97,7 +117,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       test: result.testCase,
     };
 
-    const displayVars = getDisplayVars(result);
+    const displayVars = getDisplayVars(result, eval_.config?.redteam?.injectVar);
     for (const varName of Object.keys(displayVars || {})) {
       varsForHeader.add(varName);
     }

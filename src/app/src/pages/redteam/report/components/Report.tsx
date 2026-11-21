@@ -35,7 +35,11 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import { convertResultsToTable, getDisplayVars } from '@promptfoo/presentation/evalResults';
+import {
+  convertResultsToTable,
+  getDisplayVars,
+  promptText,
+} from '@promptfoo/presentation/evalResults';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -81,6 +85,16 @@ function buildStrategyStats(
     });
   }
   return stats;
+}
+
+function reportPrompt(result: EvaluateResult, injectVar = 'prompt'): string {
+  const vars = getDisplayVars(result, injectVar);
+  return (
+    promptText(vars?.[injectVar]) ||
+    promptText(vars?.query) ||
+    promptText(vars?.prompt) ||
+    result.prompt.raw
+  );
 }
 
 function forEachReportResult(
@@ -232,13 +246,8 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
-        // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
-        const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
-        const displayVars = getDisplayVars(result);
-        const injectVarValue =
-          displayVars?.[injectVar]?.toString() || displayVars?.query?.toString();
         failures[pluginId].push({
-          prompt: injectVarValue || result.prompt.raw,
+          prompt: reportPrompt(result, evalData.config.redteam?.injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -262,10 +271,8 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
-        const displayVars = getDisplayVars(result);
         passes[pluginId].push({
-          prompt:
-            displayVars?.query?.toString() || displayVars?.prompt?.toString() || result.prompt.raw,
+          prompt: reportPrompt(result, evalData.config.redteam?.injectVar),
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,

@@ -775,94 +775,20 @@ describe('Report attack prompt groupings', () => {
       expected: 'result fallback',
     },
     { name: 'seed fallback', response: {}, expected: 'seed prompt' },
-    {
-      name: 'result structured legacy 0',
-      response: {},
-      metadata: { redteamFinalPrompt: { query: 'historic' } },
-      expected: '[object Object]',
-    },
-    {
-      name: 'result structured legacy 1',
-      response: {},
-      metadata: { redteamFinalPrompt: ['historic', 'array'] },
-      expected: 'historic,array',
-    },
-    {
-      name: 'result structured legacy 2',
-      response: {},
-      metadata: { redteamFinalPrompt: 37 },
-      expected: '37',
-    },
-    {
-      name: 'result structured legacy 3',
-      response: {},
-      metadata: { redteamFinalPrompt: true },
-      expected: 'true',
-    },
-    {
-      name: 'result structured legacy 4',
-      response: {},
-      metadata: { redteamFinalPrompt: 0 },
-      expected: 'seed prompt',
-    },
-    {
-      name: 'result structured legacy 5',
-      response: {},
-      metadata: { redteamFinalPrompt: false },
-      expected: 'seed prompt',
-    },
-    {
-      name: 'result structured legacy 6',
-      response: {},
-      metadata: { redteamFinalPrompt: [] },
-      expected: 'test',
-    },
-    {
-      name: 'result structured legacy 7',
-      response: {},
-      metadata: { redteamFinalPrompt: null },
-      expected: 'seed prompt',
-    },
-    {
-      name: 'response structured legacy 0',
-      response: { metadata: { redteamFinalPrompt: { query: 'historic' } } },
-      expected: '[object Object]',
-    },
-    {
-      name: 'response structured legacy 1',
-      response: { metadata: { redteamFinalPrompt: ['historic', 'array'] } },
-      expected: 'historic,array',
-    },
-    {
-      name: 'response structured legacy 2',
-      response: { metadata: { redteamFinalPrompt: 37 } },
-      expected: '37',
-    },
-    {
-      name: 'response structured legacy 3',
-      response: { metadata: { redteamFinalPrompt: true } },
-      expected: 'true',
-    },
-    {
-      name: 'response structured legacy 4',
-      response: { metadata: { redteamFinalPrompt: 0 } },
-      expected: 'seed prompt',
-    },
-    {
-      name: 'response structured legacy 5',
-      response: { metadata: { redteamFinalPrompt: false } },
-      expected: 'seed prompt',
-    },
-    {
-      name: 'response structured legacy 6',
-      response: { metadata: { redteamFinalPrompt: [] } },
-      expected: 'test',
-    },
-    {
-      name: 'response structured legacy 7',
-      response: { metadata: { redteamFinalPrompt: null } },
-      expected: 'seed prompt',
-    },
+    ...[
+      { value: { toString: 'text' }, expected: '{"toString":"text"}' },
+      { value: { query: 'historic' }, expected: '{"query":"historic"}' },
+      { value: ['historic', 'array'], expected: '["historic","array"]' },
+      { value: 37, expected: '37' },
+      { value: true, expected: 'true' },
+      ...[0, false, [], null].map((value) => ({ value, expected: 'seed prompt' })),
+    ].flatMap(({ value, expected }, index) => {
+      const metadata = { redteamFinalPrompt: value };
+      return [
+        { name: `result metadata ${index}`, response: {}, metadata, expected },
+        { name: `response metadata ${index}`, response: { metadata }, expected },
+      ];
+    }),
   ];
 
   it.each(cases)(
@@ -923,6 +849,11 @@ describe('Report attack prompt groupings', () => {
 
   it.each([
     { vars: {}, response: { prompt: 'stripped secret' }, expected: '[prompt stripped]' },
+    {
+      vars: { prompt: '[prompt stripped]' },
+      response: { prompt: 'stripped secret' },
+      expected: '[prompt stripped]',
+    },
     {
       vars: {},
       response: { metadata: { redteamFinalPrompt: 'stripped secret' } },
