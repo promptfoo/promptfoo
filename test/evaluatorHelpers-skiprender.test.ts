@@ -1,7 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { renderPrompt } from '../src/evaluatorHelpers';
+import { renderPrompt, setRuntimeFileVarNames } from '../src/evaluatorHelpers';
 
 describe('renderPrompt with skipRenderVars', () => {
+  it('preserves register-derived aliases across strategy renders and resolves adjacent names', async () => {
+    const prompt = { raw: '{{ alias }}|{{ greeting }}', label: 'test' };
+    const vars = {
+      saved: 'file://missing-file',
+      alias: '{{ saved }}',
+      greeting: '{{ saved }} / {{ name }}',
+      name: 'Ada',
+    };
+    setRuntimeFileVarNames(vars, ['saved']);
+    const expected = 'file://missing-file|file://missing-file / Ada';
+    expect(await renderPrompt(prompt, vars)).toBe(expected);
+    expect(await renderPrompt(prompt, { ...vars })).toBe(expected);
+  });
+
+  it('keeps named nested script references literal', async () => {
+    const prompt = { raw: '{{ arg.js }}|{{ arg.py }}', label: 'test' };
+    const vars = { arg: { js: 'file://missing.ts:run', py: 'file://missing.py:run' } };
+    expect(
+      await renderPrompt(prompt, vars, undefined, undefined, undefined, new Set(['arg'])),
+    ).toBe('file://missing.ts:run|file://missing.py:run');
+  });
+
   it('should skip rendering variables in skipRenderVars array', async () => {
     const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
     const vars = {
