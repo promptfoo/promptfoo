@@ -135,6 +135,7 @@ describe('evaluator', () => {
     'redacts completed-prompt provider IDs at the %s boundary without changing runtime prompts',
     async (method) => {
       const prompt = createCompletedPrompt('literal prompt', {
+        config: { apiKey: 'fixture-prompt-key' },
         provider: 'https://example.test/eval?api_key=fixture-header-id',
       });
       const evaluation = await Eval.create({}, [], {
@@ -154,6 +155,7 @@ describe('evaluator', () => {
       const saved = await Eval.findById(savedId);
       expect(saved?.prompts[0]).toEqual({
         ...prompt,
+        config: { apiKey: '[REDACTED]' },
         provider: 'https://example.test/eval?api_key=%5BREDACTED%5D',
       });
       const summary = await (method === 'create' ? saved! : evaluation).toEvaluateSummary();
@@ -161,6 +163,8 @@ describe('evaluator', () => {
         'https://example.test/eval?api_key=%5BREDACTED%5D',
       );
       expect(evaluation.prompts).toEqual(method === 'create' ? [] : [prompt]);
+      expect(JSON.stringify(summary)).not.toContain('fixture-prompt-key');
+      expect(prompt.config?.apiKey).toBe('fixture-prompt-key');
       expect(prompt.provider).toContain('fixture-header-id');
     },
   );

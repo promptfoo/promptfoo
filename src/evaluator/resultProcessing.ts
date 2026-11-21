@@ -12,6 +12,7 @@ import {
   mapTestProviderRefs,
   REDACTED,
   sanitizeObject,
+  snapshotJsonData,
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
@@ -127,28 +128,25 @@ export function projectProviderResponse(
 }
 
 export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
-  const projected =
-    prompt &&
-    typeof prompt === 'object' &&
-    'provider' in prompt &&
-    typeof prompt.provider === 'string'
-      ? {
-          ...prompt,
-          provider: sanitizeObject(prompt.provider, {
-            sanitizeUrls: true,
-            redactStringValues: false,
-          }),
-        }
-      : prompt;
+  const projected = { ...prompt };
+  if (projected.config !== undefined) {
+    projected.config = sanitizePromptConfig(projected.config);
+  }
+  if ('provider' in projected && typeof projected.provider === 'string') {
+    projected.provider = sanitizeObject(projected.provider, {
+      sanitizeUrls: true,
+      redactStringValues: false,
+    });
+  }
   return stripPromptText
     ? {
         ...projected,
         raw: '[prompt stripped]',
         template: undefined,
-        ...(prompt.config?.provider && {
+        ...(projected.config?.provider && {
           config: {
-            ...prompt.config,
-            provider: stripProviderPromptSelectors(prompt.config.provider),
+            ...projected.config,
+            provider: stripProviderPromptSelectors(projected.config.provider),
           },
         }),
       }
@@ -485,7 +483,7 @@ export function sanitizeForDb<T>(obj: T): T {
 
 // Test cases and prompts can carry resolved grader providers with credential-bearing
 // SDK clients. Traverse the full object depth and fail closed if serialization fails.
-export function sanitizeForDbWithSecrets<T>(obj: T, redactStringValues = true): T {
+function sanitizeForDbWithSecrets<T>(obj: T, redactStringValues = true): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
@@ -588,29 +586,27 @@ export function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase 
   }
 }
 
+function sanitizePromptConfig(config: Prompt['config']): Prompt['config'] {
+  if (!config || typeof config !== 'object' || !('provider' in config)) {
+    return sanitizeForDbWithSecrets(config);
+  }
+  const { provider, ...options } = config;
+  return {
+    ...sanitizeForDbWithSecrets(options),
+    ...(provider !== undefined && { provider: sanitizeProviderReference(provider) }),
+  };
+}
+
 export function sanitizePromptForDb(prompt: Prompt): Prompt {
   if (!prompt) {
     return prompt;
   }
   try {
-    const captured = { ...prompt };
-    const config = captured.config;
-    let configProvider: unknown;
-    if (config && typeof config === 'object' && 'provider' in config) {
-      const { provider, ...withoutProvider } = config;
-      configProvider = provider;
-      captured.config = withoutProvider;
-    }
-    const sanitized = sanitizeForDbWithSecrets(captured, false);
-    if (config !== undefined) {
-      sanitized.config = sanitizeForDbWithSecrets(captured.config);
-      if (configProvider !== undefined) {
-        sanitized.config.provider = sanitizeProviderReference(
-          configProvider,
-        ) as Prompt['config']['provider'];
-      }
-    }
-    return sanitized;
+    const { config, ...fields } = prompt;
+    return {
+      ...sanitizeForDbWithSecrets(fields, false),
+      ...(config !== undefined && { config: sanitizePromptConfig(config) }),
+    };
   } catch {
     logger.debug('Unable to sanitize prompt safely; omitting field contents');
     return {} as Prompt;
@@ -772,7 +768,7 @@ function redactHttpHeadersOnMetadata<T>(
 }
 
 // Redact transport headers and assertion configs on each grading component.
-export function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<object>()): T {
+function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<object>()): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return sanitizeForDbWithSecrets(gradingResult) as T;
   }
@@ -787,7 +783,9 @@ export function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakS
     if (metadata !== undefined) {
       try {
         next.metadata =
-          metadata === null ? null : (redactHttpHeadersOnMetadata(sanitizeForDb(metadata)) ?? {});
+          metadata === null
+            ? null
+            : (redactHttpHeadersOnMetadata(snapshotMetadata(metadata)) ?? {});
       } catch {
         next.metadata = {};
       }
@@ -827,19 +825,11 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
   return { ...response, metadata: redactedMetadata } as T;
 }
 
-// `responseMetadata` is the (pre-redaction) provider response metadata, used as the provenance
-// source so a legacy top-level `metadata.headers` is redacted only where it echoes the
-// transport — leaving user-authored test metadata headers intact.
-function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
+// Preserve literal transcripts while preventing custom serializers from moving
+// credentials outside known transport header slots.
+function snapshotMetadata<T>(metadata: T): T {
   try {
-    // Root serializers can move transport credentials outside their known header slots.
-    if (metadata && typeof metadata === 'object' && 'toJSON' in metadata) {
-      return REDACTED as T;
-    }
-    // Preserve literal transcripts and redact only known transport header slots.
-    return redactHttpHeadersOnMetadata(sanitizeForDb(metadata), {
-      legacyHeadersSource: sanitizeForDb(responseMetadata),
-    });
+    return sanitizeForDb(snapshotJsonData(metadata)) as T;
   } catch {
     return REDACTED as T;
   }
@@ -1018,7 +1008,7 @@ export function surfaceTraceMetadata(metadata: Record<string, unknown> | null | 
 }
 
 // Share response, grading, and metadata redaction between DB and JSONL writes.
-export function redactSensitiveResultFieldsForDb<
+function redactSensitiveResultFieldsForDb<
   R extends ProviderResponse | null | undefined,
   G,
   M,
@@ -1031,17 +1021,19 @@ export function redactSensitiveResultFieldsForDb<
   gradingResult: G;
   metadata: M;
 } {
-  const plainResponse = sanitizeForDb(fields.response);
+  // Capture metadata once, before serializing any part of the response.
+  const response = fields.response && { ...fields.response, toJSON: undefined };
+  if (response?.metadata) {
+    response.metadata = snapshotMetadata(response.metadata);
+  }
+  const plainResponse = sanitizeForDb(response as R);
   return {
     response: sanitizeResponseForDb(plainResponse),
     gradingResult: sanitizeForDb(sanitizeGradingResultForDb(fields.gradingResult)),
-    // Pass the response metadata as the legacy-header provenance source (see
-    // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
-    // cleartext here and can be matched against an echoed result-level metadata.headers.
-    metadata: sanitizeMetadataForDb(
-      fields.metadata,
-      (plainResponse as ProviderResponse | null | undefined)?.metadata,
-    ),
+    metadata: redactHttpHeadersOnMetadata(snapshotMetadata(fields.metadata), {
+      // Match legacy result headers against their source before redaction.
+      legacyHeadersSource: plainResponse?.metadata,
+    }),
   };
 }
 

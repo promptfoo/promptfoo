@@ -1558,7 +1558,7 @@ function hasPropertyGetter(value: object, key: string): boolean {
 // JSON.stringify reads enumerable getters before its replacer runs. Snapshot data
 // descriptors first so a getter cannot rename or expose a credential while being
 // serialized. Keep built-ins with trusted serializers intact for the replacer below.
-function snapshotJsonData(
+export function snapshotJsonData(
   value: unknown,
   seen = new WeakMap<object, unknown>(),
   throwOnAccessor = false,

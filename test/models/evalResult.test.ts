@@ -107,11 +107,10 @@ describe('EvalResult', () => {
       const saved = result instanceof EvalResult ? await EvalResult.findById(result.id) : result;
 
       expect(saved?.metadata).toEqual(input.metadata);
-      for (const grading of [saved?.gradingResult, saved?.gradingResult?.componentResults?.[0]]) {
-        expect(grading?.metadata).toEqual({
-          http: { requestHeaders: { Authorization: '[REDACTED]', Accept: 'text/plain' } },
-        });
-      }
+      expect(saved?.gradingResult?.metadata).toBe('[REDACTED]');
+      expect(saved?.gradingResult?.componentResults?.[0].metadata).toEqual({
+        http: { requestHeaders: '[REDACTED]' },
+      });
       expect(JSON.stringify(saved?.gradingResult)).not.toContain('fixture-grading-credential');
       expect(metadata.http.requestHeaders.toJSON().Authorization).toBe(
         'fixture-grading-credential',
@@ -148,7 +147,7 @@ describe('EvalResult', () => {
       const saved = result instanceof EvalResult ? await EvalResult.findById(result.id) : result;
       const expectedMetadata = {
         ...metadata,
-        http: { requestHeaders: { Authorization: '[REDACTED]', Accept: 'text/plain' } },
+        http: { requestHeaders: '[REDACTED]' },
       };
 
       expect(saved?.metadata).toEqual(expectedMetadata);
@@ -380,7 +379,7 @@ describe('EvalResult', () => {
     const metadata = new Proxy(
       {},
       {
-        has() {
+        ownKeys() {
           throw new Error('unreadable fixture');
         },
       },
@@ -405,9 +404,16 @@ describe('EvalResult', () => {
       },
     };
 
-    const result = sanitizeResultForJsonlArtifact({ metadata });
-
-    expect(result.metadata).toBe('[REDACTED]');
+    const serializer = vi.spyOn(metadata, 'toJSON');
+    expect(sanitizeResultForJsonlArtifact({ metadata }).metadata).toBe('[REDACTED]');
+    const nested = { records: [metadata], sessionId: 'session' };
+    const result = sanitizeResultForJsonlArtifact({
+      metadata: nested,
+      response: { metadata: nested },
+    });
+    expect(result.metadata).toEqual({ records: ['[REDACTED]'], sessionId: 'session' });
+    expect(result.response.metadata).toEqual(result.metadata);
+    expect(serializer).not.toHaveBeenCalled();
   });
 
   it('projects provider slots before generic result serialization', () => {
