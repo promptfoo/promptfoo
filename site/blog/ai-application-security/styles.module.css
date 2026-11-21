@@ -1,0 +1,163 @@
+/* Promptfoo feature card */
+.promptfooCard {
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 12px;
+  padding: 0;
+  margin: 2rem 0;
+  overflow: hidden;
+  font-family: var(--ifm-font-family-base);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+}
+
+.logoSection {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.pandaLogo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.brandName {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ifm-color-emphasis-900);
+}
+
+.cardTagline {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ifm-color-emphasis-900);
+  text-align: center;
+}
+
+.learnMoreBtn {
+  display: inline-block;
+  padding: 0.45rem 1.1rem;
+  border: 1.5px solid var(--pf-red-base, #e53a3a);
+  border-radius: 6px;
+  color: var(--pf-red-base, #e53a3a) !important;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-decoration: none !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.learnMoreBtn:hover {
+  background: var(--pf-red-base, #e53a3a);
+  color: #fff !important;
+}
+
+.featureList {
+  padding: 0.25rem 0;
+}
+
+.featureItem {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.85rem 1.5rem;
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+  font-size: 0.92rem;
+  color: var(--ifm-color-emphasis-800);
+}
+
+.featureItem:last-child {
+  border-bottom: none;
+}
+
+.featureIcon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  color: var(--ifm-color-emphasis-600);
+}
+
+/* Mobile: stack header vertically, keep button on same row as logo */
+@media (max-width: 640px) {
+  .cardHeader {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+
+  .cardTagline {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .learnMoreBtn {
+    order: 2;
+    margin-left: auto;
+  }
+}
+
+/* Shared CTA banner (get started, read more, etc.) */
+.ctaBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem 1.75rem;
+  margin: 2.5rem 0;
+  background: color-mix(in srgb, var(--pf-red-base, #e53a3a) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pf-red-base, #e53a3a) 30%, transparent);
+  border-radius: 10px;
+}
+
+.ctaText {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ifm-color-emphasis-900);
+  margin: 0;
+}
+
+.ctaBtn {
+  display: inline-block;
+  padding: 0.6rem 1.4rem;
+  background: var(--pf-red-base, #e53a3a);
+  color: #fff !important;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-decoration: none !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.ctaBtn:hover {
+  background: var(--pf-red-dark, #cb3434);
+  color: #fff !important;
+}
+
+@media (max-width: 480px) {
+  .ctaBanner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ctaBtn {
+    width: 100%;
+    text-align: center;
+  }
+}
