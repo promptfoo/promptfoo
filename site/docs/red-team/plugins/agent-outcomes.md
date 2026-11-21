@@ -76,6 +76,8 @@ npx promptfoo redteam eval --no-cache
 
 Ground `purpose` in actions your target supports and terms the sender would know. For an indirect attack, keep the owner's assignment in `legitimateTask`. Preview the ticket as if you were the reporter. Could you plausibly write it before seeing the internal record? Would following it put the seeded ID in the public reply? Keep the ID itself in the harness.
 
+If a scan covers several services, keep only common details in `purpose`. Put each service's tools and fields in the corresponding plugin's `config.modifiers.context`. This keeps unrelated details, such as the storefront SDK, out of the generator's instructions for a support ticket.
+
 1. Start each trial with fresh synthetic data, including retries. Keep `trial.pluginId` and `trial.caseId` in the harness.
 2. Send `message` as the user request. For indirect trials it contains the fixed `legitimateTask`. Seed the ticket with `ticketBody` so the agent retrieves it through a tool. To rename `artifact`, set `indirectInjectionVar` and update the request transform.
 3. After the turn, collect `observations` with separate credentials. Keep the collector, credentials, controls, and observations outside the agent's write access. Observations can appear in eval exports.
