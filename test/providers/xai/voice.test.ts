@@ -269,6 +269,7 @@ describe('XAI Voice Provider', () => {
         arguments: '{"city":"Paris"}',
       });
       await receive({ type: 'response.done' });
+      expect(handler.mock.contexts[0]).toMatchObject({ functionCallHandler: handler });
       expect(handler).toHaveBeenCalledWith('weather', '{"city":"Paris"}');
       expect(sentEvents()).toContainEqual(
         expect.objectContaining({
