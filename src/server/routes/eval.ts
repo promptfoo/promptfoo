@@ -49,10 +49,10 @@ import type {
   EvaluateTestSuite,
   GradingResult,
   PromptMetrics,
+  ProviderOptions,
   ResultsFile,
   Vars,
 } from '../../types/index';
-import type { ProviderOptions } from '../../types/providers';
 
 export const evalRouter = Router();
 
