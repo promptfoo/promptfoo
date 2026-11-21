@@ -44,20 +44,24 @@ const NUMERIC_PROMPT_OPTION_KEYS = new Set([
   'startup_timeout_ms',
   'turn_timeout_ms',
 ]);
-const BOOLEAN_PROMPT_OPTION_KEYS = new Set([
-  'skip_git_repo_check',
-  'network_access_enabled',
-  'persist_threads',
-  'ephemeral',
-  'persist_extended_history',
-  'experimental_raw_events',
-  'experimental_api',
-  'include_raw_events',
-  'inherit_process_env',
-  'reuse_server',
-  'deep_tracing',
-  'harness_guidance',
-]);
+const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
+  codex_path_override: true,
+})
+  .extend({
+    interpreter_path: z.string().min(1).optional(),
+    interpreter_home: z.string().min(1).optional(),
+    harness: z.string().min(1).optional(),
+    harness_guidance: z.boolean().optional(),
+  })
+  .strict();
+
+const BOOLEAN_PROMPT_OPTION_KEYS = new Set(
+  Object.entries(OpenInterpreterConfigSchema.shape)
+    .filter(
+      ([, option]) => option instanceof z.ZodOptional && option.unwrap() instanceof z.ZodBoolean,
+    )
+    .map(([key]) => key),
+);
 const ENUM_PROMPT_OPTION_KEYS = new Set([
   'service_tier',
   'sandbox_mode',
@@ -102,17 +106,6 @@ function isSchemaDefinedBooleanPath(path: string[]): boolean {
       path[3] === 'success')
   );
 }
-
-const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
-  codex_path_override: true,
-})
-  .extend({
-    interpreter_path: z.string().min(1).optional(),
-    interpreter_home: z.string().min(1).optional(),
-    harness: z.string().min(1).optional(),
-    harness_guidance: z.boolean().optional(),
-  })
-  .strict();
 
 export interface OpenInterpreterConfig extends Omit<CodexAppServerConfig, 'codex_path_override'> {
   interpreter_path?: string;
@@ -408,7 +401,9 @@ function isWithinDirectory(root: string, candidate: string): boolean {
 
 function isVirtualMention(item: Record<string, unknown>): boolean {
   return (
-    item.type === 'mention' && typeof item.path === 'string' && /^(app|plugin):\/\//.test(item.path)
+    item.type === 'mention' &&
+    typeof item.path === 'string' &&
+    /^(app|mcp|plugin):\/\//.test(item.path)
   );
 }
 
@@ -450,34 +445,8 @@ function normalizePrompt(
   let inlineImageChars = 0;
 
   for (const item of parsed) {
-    if (!isRecord(item) || typeof item.type !== 'string') {
+    if (!isRecord(item) || typeof item.type !== 'string' || isVirtualMention(item)) {
       continue;
-    }
-
-    if (isVirtualMention(item)) {
-      continue;
-    }
-
-    if (
-      ['local_image', 'localImage', 'skill', 'mention'].includes(item.type) &&
-      typeof item.path === 'string'
-    ) {
-      let candidate: string;
-      try {
-        candidate = fs.realpathSync(path.resolve(workingDir, item.path));
-      } catch {
-        return {
-          prompt,
-          error: 'Open Interpreter structured input path does not exist or is not accessible.',
-        };
-      }
-      if (!roots.some((root) => isWithinDirectory(root, candidate))) {
-        return {
-          prompt,
-          error: 'Open Interpreter structured input path is outside the configured workspace.',
-        };
-      }
-      item.path = candidate;
     }
 
     if (item.type === 'image' && typeof item.url === 'string') {
@@ -496,6 +465,35 @@ function normalizePrompt(
         };
       }
     }
+
+    if (
+      !['local_image', 'localImage', 'skill', 'mention'].includes(item.type) ||
+      typeof item.path !== 'string'
+    ) {
+      continue;
+    }
+    if (config.environment_access === false) {
+      return {
+        prompt,
+        error: 'Open Interpreter cannot use local attachments with environment_access: false.',
+      };
+    }
+    let candidate: string;
+    try {
+      candidate = fs.realpathSync(path.resolve(workingDir, item.path));
+    } catch {
+      return {
+        prompt,
+        error: 'Open Interpreter structured input path does not exist or is not accessible.',
+      };
+    }
+    if (!roots.some((root) => isWithinDirectory(root, candidate))) {
+      return {
+        prompt,
+        error: 'Open Interpreter structured input path is outside the configured workspace.',
+      };
+    }
+    item.path = candidate;
   }
 
   return { prompt: JSON.stringify(parsed) };
@@ -587,6 +585,9 @@ export class OpenInterpreterProvider implements ApiProvider {
       const effectiveConfig = {
         ...renderedBaseConfig,
         ...(promptConfig ?? {}),
+        environment_access:
+          promptConfig?.environment_access ?? renderedBaseConfig.environment_access,
+        sandbox_policy: promptConfig?.sandbox_policy ?? renderedBaseConfig.sandbox_policy,
         cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
         cli_env: { ...(renderedBaseConfig.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
         server_request_policy: mergeServerRequestPolicy(
