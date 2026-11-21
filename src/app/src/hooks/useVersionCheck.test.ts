@@ -203,11 +203,15 @@ describe('useVersionCheck', () => {
     });
     expect(callApi).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await timers.advanceByAsync(1);
+    act(() => {
+      timers.advanceBy(1);
     });
-    expect(result.current.error?.message).toBe('Second network error');
     expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error?.message).toBe('First network error');
+
+    await act(async () => {});
+    expect(result.current.error?.message).toBe('Second network error');
 
     await act(async () => {
       await timers.advanceByAsync(5 * 60 * 1000);

@@ -518,13 +518,10 @@ describe('readLayerConfig', () => {
   });
 
   it('rejects layers that omit allowed dependencies', () => {
-    fs.writeFileSync(
-      path.join(repoRoot, 'architecture/layers.json'),
-      JSON.stringify({
-        publicFacade: 'src/index.ts',
-        layers: [{ name: 'core', roots: ['src/core'] }],
-      }),
-    );
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [{ name: 'core', roots: ['src/core'] }],
+    });
 
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" must declare allowedDependencies.',
@@ -532,13 +529,10 @@ describe('readLayerConfig', () => {
   });
 
   it('rejects dependencies on unknown layers', () => {
-    fs.writeFileSync(
-      path.join(repoRoot, 'architecture/layers.json'),
-      JSON.stringify({
-        publicFacade: 'src/index.ts',
-        layers: [{ name: 'core', roots: ['src/core'], allowedDependencies: ['missing'] }],
-      }),
-    );
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ allowedDependencies: ['missing'] })],
+    });
 
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" allows unknown dependency "missing".',
@@ -546,14 +540,11 @@ describe('readLayerConfig', () => {
   });
 
   it('rejects aliases that point to missing paths', () => {
-    fs.writeFileSync(
-      path.join(repoRoot, 'architecture/layers.json'),
-      JSON.stringify({
-        publicFacade: 'src/index.ts',
-        aliases: { '@missing': 'src/missing' },
-        layers: [{ name: 'core', roots: ['src/core'], allowedDependencies: [] }],
-      }),
-    );
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      aliases: { '@missing': 'src/missing' },
+      layers: [coreLayer()],
+    });
 
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture alias "@missing" points to missing path "src/missing".',
@@ -562,16 +553,13 @@ describe('readLayerConfig', () => {
 
   it('rejects overlapping layer roots', () => {
     fs.mkdirSync(path.join(repoRoot, 'src/core/nested'), { recursive: true });
-    fs.writeFileSync(
-      path.join(repoRoot, 'architecture/layers.json'),
-      JSON.stringify({
-        publicFacade: 'src/index.ts',
-        layers: [
-          { name: 'core', roots: ['src/core'], allowedDependencies: [] },
-          { name: 'nested', roots: ['src/core/nested'], allowedDependencies: [] },
-        ],
-      }),
-    );
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [
+        coreLayer(),
+        { name: 'nested', roots: ['src/core/nested'], allowedDependencies: [] },
+      ],
+    });
 
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture roots "src/core" (core) and "src/core/nested" (nested) overlap.',
