@@ -44,8 +44,8 @@ Hydra relies on Promptfoo Cloud to coordinate the attacker agent, maintain scan-
 
 | Option          | Default | Description                                                                                                                                                                                                 |
 | --------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxTurns`      | `10`    | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations.                                                                                               |
-| `maxBacktracks` | `10`    | Number of times Hydra can roll back the last turn when it detects a refusal. Set to `0` automatically when `stateful: true`.                                                                                |
+| `maxTurns`      | `10`    | Maximum conversation turns. With backtracking enabled, a refusal on any turn, including the first, counts only toward `maxBacktracks`.                                                                      |
+| `maxBacktracks` | `10`    | A finite limit on refusal rollbacks. Hydra stops when it reaches this limit. Use `0` to disable backtracking. Stateful mode always disables it.                                                             |
 | `stateful`      | `false` | When `true`, use target-managed session mode: Hydra sends only the newest turn, and the target provider must preserve earlier turns for that session. Keep `false` to replay the full transcript each time. |
 
 ::::tip
