@@ -55,14 +55,12 @@ export function selectPromptPortfolio(
   count: number,
 ): Candidate[] | undefined {
   const patterns = features.get(pluginId);
-  const modifiers = config.modifiers as Record<string, unknown> | undefined;
-  const language = config.language ?? modifiers?.language;
+  const language = config.language ?? config.modifiers?.language;
   if (
     !patterns ||
     config.examples?.length ||
     Object.keys(config.inputs ?? {}).length ||
-    modifiers?.testGenerationInstructions ||
-    config.testGenerationInstructions ||
+    config.modifiers?.testGenerationInstructions ||
     (language && !/^(en|english)$/i.test(String(language)))
   ) {
     return undefined;
