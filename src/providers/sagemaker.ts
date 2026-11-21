@@ -5,12 +5,13 @@ import { join, resolve, sep } from 'node:path';
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getCacheOperationScope } from '../util/cacheOperationScope';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
+import { resolveProviderEnv } from './env';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import type {
   AwsCredentialIdentity,
@@ -1037,8 +1038,7 @@ abstract class SageMakerGenericProvider {
     ) => Promise<T>,
   ): Promise<T> {
     const scope = getCacheOperationScope(cache, key);
-    const submittedGeneration = scope.getGeneration();
-    const submittedWhileClearing = scope.isClearing();
+    const submitted = scope.getState();
     let entries = runtimeCacheEntries.get(scope.cache);
     if (!entries) {
       entries = new Map();
@@ -1050,7 +1050,7 @@ abstract class SageMakerGenericProvider {
       state = {
         tail: Promise.resolve(),
         active: 0,
-        generation: scope.getGeneration(),
+        generation: submitted.generation,
         initialized: false,
         untrusted: false,
       };
@@ -1058,8 +1058,8 @@ abstract class SageMakerGenericProvider {
     }
     const entry = state;
     const refresh = () => {
-      const generation = scope.getGeneration();
-      if (entry.generation === generation && !scope.isClearing()) {
+      const { generation, clearing } = scope.getState();
+      if (entry.generation === generation && !clearing) {
         return false;
       }
       entry.generation = generation;
@@ -1077,9 +1077,7 @@ abstract class SageMakerGenericProvider {
       return operation(
         entry,
         refresh,
-        submittedWhileClearing ||
-          scope.isClearing() ||
-          scope.getGeneration() !== submittedGeneration,
+        submitted.clearing || entry.generation !== submitted.generation,
       );
     });
     entry.tail = result
@@ -1177,6 +1175,12 @@ abstract class SageMakerGenericProvider {
     });
   }
 
+  protected getNumericEnv(key: string, integer: boolean, defaultValue: number): number {
+    const value = this.env?.[key] ?? getEnvString(key);
+    const parsed = integer ? Number.parseInt(value ?? '', 10) : Number.parseFloat(value ?? '');
+    return Number.isNaN(parsed) ? defaultValue : parsed;
+  }
+
   protected captureRuntimeInputs() {
     const borrowedRuntime = this.getBorrowedRuntime();
     const credentialConfig = {
@@ -1215,7 +1219,7 @@ abstract class SageMakerGenericProvider {
       filesFingerprint: sharedFiles?.fingerprint ?? '',
       runtimeProfileForStaticCredentials,
       hasCredentialProcess: sharedFiles?.hasCredentialProcess ?? false,
-      maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+      maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
       processEnvironment,
     };
   }
@@ -1692,9 +1696,7 @@ abstract class SageMakerGenericProvider {
   getRegion(): string {
     return (
       this.config?.region ||
-      this.env?.AWS_REGION ||
-      getEnvString('AWS_REGION') ||
-      getEnvString('AWS_DEFAULT_REGION') ||
+      resolveProviderEnv(this.env, ['AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
       'us-east-1'
     );
   }
@@ -1944,15 +1946,16 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   }
 
   private getPayloadParameters() {
-    const maxTokens = this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024;
+    const maxTokens =
+      this.config.maxTokens ?? this.getNumericEnv('AWS_SAGEMAKER_MAX_TOKENS', true, 1024);
     const temperature =
       typeof this.config.temperature === 'number'
         ? this.config.temperature
-        : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7);
+        : this.getNumericEnv('AWS_SAGEMAKER_TEMPERATURE', false, 0.7);
     const topP =
       typeof this.config.topP === 'number'
         ? this.config.topP
-        : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
+        : this.getNumericEnv('AWS_SAGEMAKER_TOP_P', false, 1.0);
     const stopSequences = [...(this.config.stopSequences ?? [])];
     return { maxTokens, temperature, topP, stopSequences };
   }

@@ -69,7 +69,7 @@ function runEntrypoint(
  */
 const CI_NODE_EXECUTABLE_VARS: Record<string, string> = {
   'v20.20.0': 'PROMPTFOO_NODE20_BIN',
-  'v22.22.0': 'PROMPTFOO_MIN_NODE_BIN',
+  'v22.22.2': 'PROMPTFOO_MIN_NODE_BIN',
 };
 
 function runEntrypointWithNodeVersion(version: string) {
@@ -339,20 +339,20 @@ describe('CLI Smoke Tests', () => {
       expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
     });
 
-    it.each(['v20.20.0', 'v22.21.9'])(
+    it.each(['v20.20.0', 'v22.22.1', 'v23.0.0', 'v24.14.9', 'v25.0.0'])(
       '1.7.5 - shipped runtime guard rejects unsupported Node.js %s',
       (version) => {
         const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
 
         expect(exitCode).toBe(1);
         expect(stderr).toContain(`Detected: ${version}`);
-        expect(stderr).toContain('Required: >=22.22.0');
+        expect(stderr).toContain('Required: ^22.22.2 || ^24.15.0 || >=26');
         expect(stderr).toContain('Install a supported Node.js version and try again.');
       },
     );
 
     it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
-      const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');
+      const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.2');
 
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);

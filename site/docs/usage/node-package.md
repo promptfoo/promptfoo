@@ -16,8 +16,7 @@ npm install promptfoo
 
 :::note
 
-promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. See the
-[runtime support guide](/docs/installation#nodejs-runtime-support).
+Use a [supported Node.js version](/docs/installation#nodejs-runtime-support). We recommend the latest Node.js 24 LTS release.
 
 :::
 
@@ -67,7 +66,9 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
 });
 ```
 
-During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. Environment variables in a provider file override suite environment variables, and explicit provider `env` options override the file. Providers that read environment variables later use the environment active at that call.
+During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. For `loadApiProvider('file://provider.yaml', { env })`, precedence from lowest to highest is inherited environment, file `env`, explicit caller `env`, then provider `options.env`. Providers that read environment variables later use the environment active at that call.
+
+`loadApiProviders('file://provider.yaml', { env })` expands the file into provider options, so the file's `env` overrides caller `env`. File references supplied as provider objects, such as `loadApiProviders([{ id: 'file://provider.yaml' }], { env })`, follow the direct-loader precedence instead. These distinctions preserve existing loader behavior.
 
 Environment files loaded by reusable Node/MCP eval calls stay within that call. The values remain available to provider configuration templates and subprocesses, subject to each provider's environment inheritance controls, without changing the host's `process.env`. Custom JavaScript providers should use templated provider config for values supplied by those files.
 
