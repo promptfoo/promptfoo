@@ -6,8 +6,6 @@ import { isValidPolicyId } from './plugins/policy/validators';
 import type { EventSource } from '../types/eventSource';
 import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
 
-export { getAgentOutcomeConfigSchema } from './plugins/agentic/agentOutcomeConfig';
-
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
 

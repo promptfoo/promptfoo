@@ -21,6 +21,7 @@ import {
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { getStrategyPreviewPlugins } from '../utils/plugins';
+import { withAgentOutcomeMessageLimit } from './AgentOutcomeConfig';
 import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
@@ -457,7 +458,14 @@ export const TestCaseGenerationProvider: React.FC<{
         });
 
         const response = await callTestGenerationApi(
-          targetPlugin,
+          {
+            ...targetPlugin,
+            config: withAgentOutcomeMessageLimit(
+              targetPlugin.id,
+              targetPlugin.config,
+              redTeamConfig.maxCharsPerMessage,
+            ),
+          },
           targetStrategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
           redTeamConfig.language,
@@ -487,6 +495,7 @@ export const TestCaseGenerationProvider: React.FC<{
       redTeamConfig.applicationDefinition?.purpose,
       redTeamConfig.language,
       redTeamConfig.provider,
+      redTeamConfig.maxCharsPerMessage,
       recordEvent,
     ],
   );

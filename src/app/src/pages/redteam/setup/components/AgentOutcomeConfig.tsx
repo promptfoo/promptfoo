@@ -8,14 +8,16 @@ import {
   AGENT_OUTCOME_DEFAULT_TASKS,
   type AgentOutcomePluginId,
   DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR,
+  getAgentOutcomeConfigSchema,
   isAgentOutcomePlugin,
 } from '@promptfoo/redteam/constants';
-import { getAgentOutcomeConfigSchema, type PluginConfig } from '@promptfoo/redteam/types';
 import { getPluginDocumentationUrl } from './pluginDocumentationMap';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 
 interface AgentOutcomeConfigProps {
   plugin: AgentOutcomePluginId;
   config: PluginConfig;
+  maxCharsPerMessage?: number;
   onChange: (config: PluginConfig) => void;
   readOnly?: boolean;
   singleTest?: boolean;
@@ -27,9 +29,24 @@ const modes = [
   { value: 'both', label: 'Both' },
 ] as const;
 
-export function getAgentOutcomeConfigIssue(plugin: string | null, config: unknown) {
+export function withAgentOutcomeMessageLimit(
+  plugin: string,
+  config: PluginConfig,
+  maxCharsPerMessage?: number,
+) {
+  return maxCharsPerMessage && isAgentOutcomePlugin(plugin)
+    ? { ...config, maxCharsPerMessage }
+    : config;
+}
+
+export function getAgentOutcomeConfigIssue(
+  plugin: string | null,
+  config: PluginConfig,
+  maxCharsPerMessage?: number,
+) {
   if (plugin && isAgentOutcomePlugin(plugin)) {
-    return getAgentOutcomeConfigSchema(plugin).safeParse(config).error?.issues[0];
+    const effectiveConfig = withAgentOutcomeMessageLimit(plugin, config, maxCharsPerMessage);
+    return getAgentOutcomeConfigSchema(plugin).safeParse(effectiveConfig).error?.issues[0];
   }
   return undefined;
 }
@@ -37,6 +54,7 @@ export function getAgentOutcomeConfigIssue(plugin: string | null, config: unknow
 export function AgentOutcomeConfig({
   plugin,
   config,
+  maxCharsPerMessage,
   onChange,
   readOnly,
   singleTest,
@@ -44,7 +62,7 @@ export function AgentOutcomeConfig({
   const id = useId();
   const configured = config.mode ?? 'both';
   const mode = singleTest && configured === 'both' ? 'indirect' : configured;
-  const issue = getAgentOutcomeConfigIssue(plugin, config);
+  const issue = getAgentOutcomeConfigIssue(plugin, config, maxCharsPerMessage);
   const invalidTask = issue?.path[0] === 'legitimateTask';
   const invalidVariable = issue?.path[0] === 'indirectInjectionVar';
   const errorId = `${id}-error`;

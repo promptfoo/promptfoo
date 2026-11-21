@@ -102,7 +102,14 @@ export default function PluginConfigDialog({
     }
 
     if (isAgentOutcomePlugin(plugin)) {
-      return <AgentOutcomeConfig plugin={plugin} config={localConfig} onChange={setLocalConfig} />;
+      return (
+        <AgentOutcomeConfig
+          plugin={plugin}
+          config={localConfig}
+          maxCharsPerMessage={redTeamConfig.maxCharsPerMessage}
+          onChange={setLocalConfig}
+        />
+      );
     }
 
     let specificConfig;
@@ -370,7 +377,9 @@ export default function PluginConfigDialog({
           </Button>
           {!isReadOnlyPlugin && (
             <Button
-              disabled={!!getAgentOutcomeConfigIssue(plugin, localConfig)}
+              disabled={
+                !!getAgentOutcomeConfigIssue(plugin, localConfig, redTeamConfig.maxCharsPerMessage)
+              }
               onClick={handleSave}
             >
               Save

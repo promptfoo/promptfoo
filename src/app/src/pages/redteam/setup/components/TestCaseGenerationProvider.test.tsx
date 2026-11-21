@@ -185,11 +185,15 @@ describe('TestCaseGenerationProvider', () => {
     render(
       <ToastProvider>
         <TestCaseGenerationProvider
-          redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+          redTeamConfig={{
+            ...MOCK_CONFIG,
+            target: createHttpGenerationProvider(),
+            maxCharsPerMessage: 30,
+          }}
         >
           <TestConsumer
             testPlugin="agentic:unauthorized-sharing"
-            pluginConfig={{ mode: 'indirect' }}
+            pluginConfig={{ mode: 'indirect', maxCharsPerMessage: 100 }}
             testStrategy="basic"
           />
         </TestCaseGenerationProvider>
@@ -200,6 +204,9 @@ describe('TestCaseGenerationProvider', () => {
     expect(screen.getByText(prompt)).toBeInTheDocument();
     expect(screen.getByText(/Run the red team/)).toBeInTheDocument();
     expect(callApiMock.mock.calls.map(([path]) => path)).toEqual(['/redteam/generate-test']);
+    expect(
+      JSON.parse(callApiMock.mock.calls[0][1]!.body as string).plugin.config.maxCharsPerMessage,
+    ).toBe(30);
   });
 
   beforeEach(() => {

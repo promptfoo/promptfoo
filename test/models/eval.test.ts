@@ -536,6 +536,46 @@ describe('evaluator', () => {
       expect(filteredIds).toEqual(expectedIds);
     });
 
+    it('counts graded attacks across plugins in reports containing agent outcome controls', async () => {
+      const pluginId = 'agentic:unauthorized-sharing';
+      const rows = [
+        { variant: 'attack', failureReason: ResultFailureReason.ASSERT },
+        { variant: 'attack', failureReason: ResultFailureReason.ERROR },
+        { variant: 'control', failureReason: ResultFailureReason.ASSERT },
+        { variant: 'authorized', failureReason: ResultFailureReason.NONE },
+        { variant: undefined, failureReason: ResultFailureReason.NONE },
+      ].map(({ variant, failureReason }, testIdx) => {
+        const metadata = variant
+          ? {
+              pluginId,
+              agentOutcome: { pluginId, mode: 'indirect', variant, caseId: String(testIdx) },
+            }
+          : { pluginId: 'bola' };
+        return createEvaluateResult({
+          testIdx,
+          metadata,
+          testCase: { metadata },
+          failureReason,
+          success: failureReason === ResultFailureReason.NONE,
+        });
+      });
+      const evaluation = await Eval.create({ redteam: {} }, []);
+      const controls = await Eval.create({ redteam: {} }, []);
+      for (const row of rows) {
+        await evaluation.addResult(row);
+      }
+      for (const row of rows.slice(2, 4)) {
+        await controls.addResult(row);
+      }
+      const summaries = await getEvalSummaries(undefined, 'redteam');
+      expect(summaries).toContainEqual(
+        expect.objectContaining({ evalId: evaluation.id, attackSuccessRate: 50 }),
+      );
+      expect(summaries).toContainEqual(
+        expect.objectContaining({ evalId: controls.id, attackSuccessRate: undefined }),
+      );
+    });
+
     it('should update redteam classification when a persisted config changes type', async () => {
       const redteamEvaluation = await Eval.create({ redteam: {} as any }, []);
       const regularEvaluation = await Eval.create({}, []);
