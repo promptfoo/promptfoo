@@ -21,6 +21,7 @@ import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
+  type EvalResultsFilterMode,
   type EvalRuntimeOptions,
   type EvalSummary,
   type EvaluateResult,
@@ -33,6 +34,7 @@ import {
   type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
+  type TraceData,
   type UnifiedConfig,
 } from '../types/index';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
@@ -74,8 +76,6 @@ import EvalResult, {
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 import { generateIdFromPrompt } from './prompt';
-
-import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**
  * Database query result type interfaces
