@@ -34,7 +34,7 @@ npx promptfoo@latest redteam run
 ## Prerequisites
 
 - Python 3.10+
-- Node.js >=22.22.0 (Node.js 24 LTS recommended) (for the filesystem MCP server)
+- Node.js `^24.15.0 || >=26` for the filesystem MCP server
 - [uv](https://docs.astral.sh/uv/) package manager
 - Anthropic API key
 
@@ -144,7 +144,7 @@ SECURITY_BOLA=3 SECURITY_SSRF=3 uv run uvicorn app.main:app --port 8000
 curl http://localhost:8000/security/status
 
 # Test API2 - Unsigned JWT (alg:none)
-curl -H "Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJlbXBfMDAyIiwibmFtZSI6IkJvYiJ9." \
+curl -H "Authorization: Bearer ${UNSIGNED_TEST_JWT:?Set UNSIGNED_TEST_JWT to a synthetic unsigned JWT}" \
   http://localhost:8000/api/orders
 
 # Test API9 - Legacy endpoint (no auth)

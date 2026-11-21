@@ -20,7 +20,7 @@ The example includes:
 
 ## Prerequisites
 
-- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - Python 3.10+ (for the optional Python MCP server example)
 - OpenAI API key
 

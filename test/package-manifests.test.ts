@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import * as yaml from 'js-yaml';
 import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
@@ -683,9 +684,12 @@ describe('package manifests', () => {
     ).toThrow('Unable to resolve override reference $missing');
   });
 
-  it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
+  it('exercises each supported Node floor in CI and an unsupported runtime in CLI smoke tests', () => {
     const workflowPath = '.github/workflows/main.yml';
-    const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
+    const workflow = yaml.load(fs.readFileSync(workflowPath, 'utf8')) as {
+      env: { NODE_FLOORS: string };
+      jobs: Record<string, { steps: { uses?: string; with?: { 'node-version'?: string } }[] }>;
+    };
     const supportedNodeRange = readPackageJson<{ engines: { node: string } }>('package.json')
       .engines.node;
     const renovateConfig = readPackageJson<{
@@ -698,17 +702,27 @@ describe('package manifests', () => {
       }>;
     }>('renovate.json');
 
-    const unsupportedNodeVersion = workflow.match(
-      /name:\s*Set up unsupported Node[^\n]*\n[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
-    )?.[1];
-    const minimumSupportedNodeVersion = workflow.match(
-      /name:\s*Set up minimum supported Node[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
-    )?.[1];
-
-    expect(unsupportedNodeVersion).toBeDefined();
-    expect(satisfies(unsupportedNodeVersion!, supportedNodeRange)).toBe(false);
-    expect(minimumSupportedNodeVersion).toBeDefined();
-    expect(minimumSupportedNodeVersion).toBe(minVersion(supportedNodeRange)?.version);
+    const floors: Record<string, string> = JSON.parse(workflow.env.NODE_FLOORS);
+    const nodeVersions = (job: string) =>
+      workflow.jobs[job].steps
+        .filter((step) => step.uses?.startsWith('actions/setup-node@'))
+        .map((step) => step.with?.['node-version']);
+    const [unsupported, minimum] = nodeVersions('smoke-tests');
+    expect(unsupported).toBeDefined();
+    expect(satisfies(unsupported!, supportedNodeRange)).toBe(false);
+    expect(minimum).toBe("${{ fromJSON(env.NODE_FLOORS)['22.22'] }}");
+    expect(floors['22.22']).toBe(minVersion(supportedNodeRange)?.version);
+    expect(Object.values(floors).sort()).toEqual(
+      supportedNodeRange
+        .split('||')
+        .map((range) => minVersion(range)?.version)
+        .sort(),
+    );
+    for (const job of ['build', 'package-build', 'package-acceptance']) {
+      expect(nodeVersions(job)).toEqual([
+        '${{ fromJSON(env.NODE_FLOORS)[matrix.node] || matrix.node }}',
+      ]);
+    }
 
     const protectedRuntimeRule = renovateConfig.packageRules?.find(
       (rule) =>
@@ -729,8 +743,11 @@ describe('package manifests', () => {
       protectedRuntimeRule!.matchCurrentValue!.slice(1, -1),
     );
 
-    expect(protectedRuntimePattern.test(unsupportedNodeVersion!)).toBe(true);
-    expect(protectedRuntimePattern.test(minimumSupportedNodeVersion!)).toBe(true);
+    expect(protectedRuntimePattern.test(unsupported!)).toBe(true);
+    for (const [label, version] of Object.entries(floors)) {
+      expect(satisfies(version, label)).toBe(true);
+      expect(protectedRuntimePattern.test(version)).toBe(true);
+    }
     expect(protectedRuntimePattern.test(fs.readFileSync('.nvmrc', 'utf8').trim())).toBe(false);
   });
 
@@ -851,22 +868,9 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps the streaming OpenAI example aligned with supported Node versions', () => {
-    const rootManifest = readPackageJson<{ engines?: { node?: string } }>('package.json');
-    const exampleManifest = readPackageJson<{ engines?: { node?: string } }>(
-      'examples/config-websockets/streaming/server/package.json',
-    );
-    const readme = fs.readFileSync(
-      path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
-      'utf8',
-    );
-    const exampleNodeMinimum = minVersion(exampleManifest.engines?.node ?? '');
-    const rootNodeMinimum = minVersion(rootManifest.engines?.node ?? '');
-
-    expect(exampleNodeMinimum).not.toBeNull();
-    expect(rootNodeMinimum).not.toBeNull();
-    expect(exampleNodeMinimum?.compare(rootNodeMinimum!)).toBeGreaterThanOrEqual(0);
-    expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
+  it('links the streaming OpenAI example to the supported Node releases', () => {
+    const readme = fs.readFileSync('examples/config-websockets/streaming/server/README.md', 'utf8');
+    expect(readme).toContain('https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support');
   });
 
   it('does not import jsdom from root src/', () => {
@@ -895,7 +899,11 @@ describe('package manifests', () => {
 
     expect(validRange(rootEngines ?? '')).toBeTruthy();
 
-    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
+    for (const manifestPath of [
+      'site/package.json',
+      'code-scan-action/package.json',
+      'examples/config-websockets/streaming/server/package.json',
+    ]) {
       const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
       expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
     }
