@@ -1,8 +1,9 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { preserveRemoteFields } from './remoteTestData';
 import { getNunjucksEngine } from './templates';
 
-import type { TestCase, VarValue } from '../types';
+import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -128,28 +129,12 @@ export function renderEnvOnlyInObject<T>(
     }
 
     if (typeof value === 'object' && value !== null) {
-      const origin = (value as TestCase).metadata?.__promptfoo;
-      return mapObjectValues(value, (key, child) => {
-        // Imported fields and conversation history are data, never environment templates.
-        if (key === '_conversation') {
-          return child;
-        }
-        if (origin?.remote === true) {
-          if (key === 'providerOutput' || key === 'description' || key === 'metadata') {
-            return child;
-          }
-          if (key === 'vars') {
-            if (!origin.remoteVars || !child || typeof child !== 'object' || Array.isArray(child)) {
-              return child;
-            }
-            const remoteVars = new Set(origin.remoteVars);
-            return mapObjectValues(child, (name, item) =>
-              remoteVars.has(name) ? item : render(item),
-            );
-          }
-        }
-        return render(child);
-      });
+      return mapObjectValues(
+        value,
+        preserveRemoteFields(value, (key, child) =>
+          key === '_conversation' ? child : render(child),
+        ),
+      );
     }
 
     return value;

@@ -22,6 +22,7 @@ import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { remoteTestRefOptions } from './remoteTestData';
 import { renderEnvOnlyInObject } from './render';
 import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
@@ -507,22 +508,17 @@ async function readTestWithEnv(
   // Bare vars-file references and providers in imported rows use the tests file's directory.
   sourceBasePath = basePath,
 ): Promise<TestCase> {
-  if (typeof test === 'object' && isRemoteTestCase(test)) {
-    return test as TestCase;
-  }
-  let testCase: TestCase;
   let effectiveBasePath = sourceBasePath;
-
   if (typeof test === 'string') {
     const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
-  } else {
-    testCase = await loadTestWithVars(test, sourceBasePath);
+    test = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
   }
-
+  if (isRemoteTestCase(test)) {
+    return test as TestCase;
+  }
+  const testCase = await loadTestWithVars(test, effectiveBasePath);
   const providerId =
     typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
   // Provider construction is deferred until after parsing. Keep the source directory
@@ -675,7 +671,7 @@ async function loadTestsFromGlobWithEnv(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases)) as TestCase[];
+    return (await $RefParser.dereference(testCases, remoteTestRefOptions())) as TestCase[];
   };
 
   const ret: TestCase[] = [];
