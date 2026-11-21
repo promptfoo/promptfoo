@@ -4740,7 +4740,10 @@ describe('GoogleInteractionsProvider', () => {
           description: 'Get the weather for a city',
           parameters: {
             type: 'OBJECT' as const,
-            properties: { city: { type: 'STRING' as const } },
+            properties: {
+              city: { type: 'STRING' as const },
+              days: { type: 'ARRAY' as const, items: { type: 'INTEGER' as const } },
+            },
             required: ['city'],
           },
         },
@@ -4783,7 +4786,14 @@ describe('GoogleInteractionsProvider', () => {
           type: 'function',
           name: 'get_weather',
           description: 'Get the weather for a city',
-          parameters: weatherTool.functionDeclarations[0].parameters,
+          parameters: {
+            type: 'object',
+            properties: {
+              city: { type: 'string' },
+              days: { type: 'array', items: { type: 'integer' } },
+            },
+            required: ['city'],
+          },
         },
         { type: 'google_search' },
       ]);
@@ -4794,6 +4804,69 @@ describe('GoogleInteractionsProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 50, completion: 10, numRequests: 1 });
       expect(() => provider.validateFunctionToolCall(result.output)).not.toThrow();
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves JSON Schema constraints and literals when sending and validating tools', async () => {
+      const parameters = {
+        type: 'object',
+        properties: { item: { const: { type: 'STRING' } } },
+        additionalProperties: false,
+      };
+      const callback = vi.fn();
+      mockFetchWithCache.mockResolvedValueOnce(functionCallResponse() as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            { type: 'function', function: { name: 'get_weather', parameters } },
+            { functionDeclarations: [{ name: 'native', parametersJsonSchema: parameters }] },
+          ] as any,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('Weather?');
+
+      expect(requestBody(0).tools).toEqual([
+        { type: 'function', name: 'get_weather', parameters },
+        { type: 'function', name: 'native', parameters },
+      ]);
+      expect(result.error).toContain('rejected a function call');
+      expect(callback).not.toHaveBeenCalled();
+      expect(() =>
+        provider.validateFunctionToolCall([
+          {
+            functionCall: {
+              name: 'native',
+              args: { item: { type: 'STRING' } },
+            },
+          },
+        ]),
+      ).not.toThrow();
+    });
+
+    it('redacts credentials in saved calls without changing callback arguments or results', async () => {
+      const response = functionCallResponse('interaction-1');
+      const args = { city: 'Paris', apiKey: 'input-fixture' };
+      response.data.steps[1].arguments = args;
+      const callback = vi.fn().mockResolvedValue({ tempC: 18, password: 'result-fixture' });
+      mockFetchWithCache
+        .mockResolvedValueOnce(response as any)
+        .mockResolvedValueOnce(textResponse('18C') as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('Weather?');
+
+      expect(callback).toHaveBeenCalledWith(JSON.stringify(args));
+      expect(requestBody(1).input[0].result[0].text).toContain('result-fixture');
+      expect(result.metadata?.toolCalls).toMatchObject([{ args: { city: 'Paris' } }]);
+      expect(JSON.stringify(result.metadata)).not.toMatch(/input-fixture|result-fixture/);
     });
 
     it('keeps resolved tool factories local to each concurrent response', async () => {

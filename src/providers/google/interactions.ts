@@ -2,6 +2,7 @@ import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
+import { sanitizeObject } from '../../util/sanitizer';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { resolveProviderEnv } from '../env';
@@ -11,6 +12,7 @@ import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
+  getFunctionParameterSchema,
   getNativeGeminiApiKey,
   loadFile,
   loadGoogleTools,
@@ -725,6 +727,10 @@ function normalizeInteractionCitation(
   return [];
 }
 
+function sanitizeToolData<T>(value: T): T {
+  return sanitizeObject(value, { context: 'Gemini tool data', sanitizeUrls: true });
+}
+
 function getInteractionGroundingMetadata(
   data: InteractionResponse,
   outputContent: InteractionContent[],
@@ -750,8 +756,12 @@ function getInteractionGroundingMetadata(
   return {
     ...(annotations.length > 0 ? { annotations } : {}),
     ...(citations.length > 0 ? { citations } : {}),
-    ...(interactionToolCalls.length > 0 ? { interactionToolCalls } : {}),
-    ...(interactionToolResults.length > 0 ? { interactionToolResults } : {}),
+    ...(interactionToolCalls.length > 0
+      ? { interactionToolCalls: sanitizeToolData(interactionToolCalls) }
+      : {}),
+    ...(interactionToolResults.length > 0
+      ? { interactionToolResults: sanitizeToolData(interactionToolResults) }
+      : {}),
   };
 }
 
@@ -777,7 +787,11 @@ function isEmptyObject(value: unknown): boolean {
 /** Translate generateContent-style tools into Interactions tool entries. */
 function toInteractionTools(tools: Tool[]): Record<string, unknown>[] {
   return tools.flatMap((tool) => {
-    if (typeof (tool as { type?: unknown }).type === 'string') {
+    if ('type' in tool && typeof tool.type === 'string') {
+      if (tool.type === 'function' && 'function' in tool && tool.function) {
+        const { name, description, parameters } = tool.function as FunctionDeclaration;
+        return [{ type: 'function', name, description, parameters }];
+      }
       // Already an Interactions-native tool.
       return [tool as Record<string, unknown>];
     }
@@ -788,10 +802,7 @@ function toInteractionTools(tools: Tool[]): Record<string, unknown>[] {
           `Gemini Interactions does not support function response schemas (${declaration.name}).`,
         );
       }
-      const parameters =
-        declaration.parametersJsonSchema ??
-        declaration.parameters_json_schema ??
-        declaration.parameters;
+      const parameters = getFunctionParameterSchema(declaration);
       return {
         type: 'function',
         name: declaration.name,
@@ -819,7 +830,7 @@ function interactionFunctions(tools: unknown[]): FunctionDeclaration[] {
     }
     const fn = ('function' in tool ? tool.function : tool) as FunctionDeclaration | undefined;
     return typeof fn?.name === 'string' && fn.name.trim()
-      ? [{ name: fn.name, parameters: fn.parameters }]
+      ? [{ name: fn.name, parametersJsonSchema: fn.parameters }]
       : [];
   });
 }
@@ -1091,7 +1102,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (response?.[requestFunctions]) {
       return validateGoogleFunctionCalls(calls, response[requestFunctions]);
     }
-    const configured = loadFile(this.config.tools, vars);
+    const configured = loadFile(this.config.tools, vars, 'json');
     const declarations = interactionFunctions([
       ...toInteractionTools(
         Array.isArray(configured) ? configured : configured ? [configured] : [],
@@ -1216,6 +1227,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           ...(hasConfigTools
             ? toInteractionTools(
                 await loadGoogleTools(interactionConfigTools, context?.vars, {
+                  schemaFormat: 'json',
                   abortSignal: signal,
                 }),
               )
@@ -1745,7 +1757,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
             ...toolCallMetadata(),
           };
         }
-        toolCalls.push({ name: call.name, args: call.arguments ?? {}, result: output });
+        toolCalls.push(
+          sanitizeToolData({ name: call.name, args: call.arguments ?? {}, result: output }),
+        );
         functionResults.push({
           type: 'function_result',
           ...(call.id === undefined ? {} : { call_id: call.id }),
