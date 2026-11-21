@@ -15,6 +15,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'eu:ai-act': 'EU AI Act',
   'iso:42001': 'ISO/IEC 42001',
   gdpr: 'GDPR',
+  dpdp: 'India DPDP Act',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -920,6 +921,79 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
 };
 
 /**
+ * India Digital Personal Data Protection Act, 2023 (No. 22 of 2023) and the
+ * Digital Personal Data Protection Rules, 2025 (G.S.R. 846(E)).
+ * Maps DPDP provisions whose failure modes are observable in an AI system's behavior
+ * to relevant Promptfoo plugins. Organizational duties (breach intimation, grievance
+ * redressal, cross-border transfer conditions) are not mapped because red team probes
+ * cannot observe them.
+ *
+ * Commencement is phased by G.S.R. 843(E): the provisions mapped here come into force
+ * eighteen months from the date of publication of that notification (13 November 2025).
+ *
+ * Sources:
+ *  * Act (Gazette of India, 11 August 2023): https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf
+ *  * Rules, G.S.R. 846(E): https://egazette.gov.in/WriteReadData/2025/267650.pdf
+ *  * Commencement, G.S.R. 843(E): https://egazette.gov.in/WriteReadData/2025/267647.pdf
+ */
+export const DPDP_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'dpdp:sec4': {
+    // Sections 4(1) and 6(1) - Processing only for a lawful purpose with consent or for a
+    // legitimate use; consent limited to the personal data necessary for the specified purpose
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'dpdp:sec8-3': {
+    // Section 8(3) - Completeness, accuracy and consistency of personal data used to make a
+    // decision that affects the Data Principal
+    plugins: ['hallucination', 'overreliance'],
+    strategies: [],
+  },
+  'dpdp:sec8-5': {
+    // Section 8(5) and Rule 6 - Reasonable security safeguards to prevent personal data breach
+    // (access control to computer resources, protection against unauthorized access)
+    plugins: [
+      'rbac',
+      'bola',
+      'bfla',
+      'pii:api-db',
+      'pii:session',
+      'cross-session-leak',
+      'data-exfil',
+      'sql-injection',
+      'shell-injection',
+      'ssrf',
+      'debug-access',
+    ],
+    strategies: [],
+  },
+  'dpdp:sec8-7': {
+    // Sections 8(7), 6(6) and 12(3) - Erasure on withdrawal of consent, on request, or once the
+    // specified purpose is no longer served
+    plugins: ['cross-session-leak', 'pii:session', 'pii:direct', 'pii:api-db'],
+    strategies: [],
+  },
+  'dpdp:sec9': {
+    // Section 9(1) and 9(3) - Verifiable parental consent; no tracking, behavioural monitoring
+    // or targeted advertising directed at children
+    plugins: ['coppa'],
+    strategies: [],
+  },
+  'dpdp:sec11': {
+    // Section 11(1) and Rule 14(2) - Right to access information about personal data, on a
+    // request by the Data Principal herself
+    plugins: ['pii:social', 'pii:api-db', 'rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'dpdp:sec12': {
+    // Section 12(2) - Right to correction, completion and updating of personal data, on a
+    // request by the Data Principal herself
+    plugins: ['rbac', 'bola', 'bfla', 'excessive-agency'],
+    strategies: [],
+  },
+};
+
+/**
  * U.S. Department of Defense (DoD) AI ethical principles.
  *
  * Source:
@@ -998,6 +1072,7 @@ export const ALIASED_PLUGINS = [
   'eu:ai-act',
   'iso:42001',
   'gdpr',
+  'dpdp',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(MITRE_ATLAS_LEGACY_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
@@ -1008,6 +1083,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(ISO_42001_MAPPING),
   ...Object.keys(GDPR_MAPPING),
   ...Object.keys(DOD_AI_ETHICS_MAPPING),
+  ...Object.keys(DPDP_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -1025,6 +1101,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'eu:ai-act': EU_AI_ACT_MAPPING,
   'iso:42001': ISO_42001_MAPPING,
   gdpr: GDPR_MAPPING,
+  dpdp: DPDP_MAPPING,
   'tool-discovery:multi-turn': {
     'tool-discovery:multi-turn': {
       plugins: ['tool-discovery'],

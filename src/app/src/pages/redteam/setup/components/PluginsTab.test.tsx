@@ -13,6 +13,7 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import {
   DEFAULT_PLUGINS,
   DOD_AI_ETHICS_MAPPING,
+  DPDP_MAPPING,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
   GDPR_MAPPING,
@@ -1256,6 +1257,30 @@ describe('PluginsTab', () => {
           renderComponent();
 
           const presetCard = screen.getByTestId('preset-card-gdpr');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Selecting the "India DPDP Act" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(Object.values(DPDP_MAPPING).flatMap((v) => v.plugins));
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent();
+
+          const presetCard = screen.getByTestId('preset-card-india-dpdp-act');
           await user.click(presetCard);
 
           await waitFor(() => {

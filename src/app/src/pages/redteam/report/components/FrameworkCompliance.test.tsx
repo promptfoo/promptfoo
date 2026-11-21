@@ -58,9 +58,30 @@ describe('FrameworkCompliance', () => {
     expect(screen.getByText(/20\.00% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(8\/40 tests failed across 4 plugins\)/)).toBeInTheDocument();
 
-    // FrameworkCard should be called for each framework in FRAMEWORK_COMPLIANCE_IDS
-    expect(mockFrameworkCard.mock.calls.length).toBeGreaterThan(0);
+    const frameworks = mockFrameworkCard.mock.calls.map(([props]) => props.framework);
+    expect(new Set(frameworks).size).toBe(10);
+    expect(frameworks).toContain('dpdp');
   });
+
+  it.each([
+    { plugin: 'harmful:hate', isCompliant: false },
+    { plugin: 'bola', isCompliant: true },
+  ])(
+    'counts only passing DPDP plugins in the heading and card ($plugin)',
+    ({ plugin, isCompliant }) => {
+      renderFrameworkCompliance(
+        { [plugin]: { pass: 1, total: 1, passWithFilter: 1, failCount: 0 } },
+        0.9,
+        { redteam: { frameworks: ['dpdp'] } },
+      );
+      expect(
+        screen.getByRole('heading', { name: `Framework Compliance (${Number(isCompliant)}/1)` }),
+      ).toBeInTheDocument();
+      expect(mockFrameworkCard.mock.calls.map(([props]) => props.isCompliant)).toEqual([
+        isCompliant,
+      ]);
+    },
+  );
 
   it('stacks heading controls on narrow screens', () => {
     renderFrameworkCompliance();
@@ -189,18 +210,6 @@ describe('FrameworkCompliance', () => {
     // Should not include other frameworks
     expect(renderedFrameworks.includes('mitre:atlas')).toBe(false);
     expect(renderedFrameworks.includes('nist:ai:measure')).toBe(false);
-  });
-
-  it('should show all frameworks when no config.redteam.frameworks is provided', () => {
-    const categoryStats = {
-      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
-    };
-
-    renderFrameworkCompliance(categoryStats, 0.9, undefined);
-
-    // Should render FrameworkCards for all frameworks (9 total)
-    const frameworkCardCalls = mockFrameworkCard.mock.calls;
-    expect(frameworkCardCalls.length).toBe(9); // All FRAMEWORK_COMPLIANCE_IDS
   });
 
   it('should pass frameworksToShow to CSVExporter', () => {

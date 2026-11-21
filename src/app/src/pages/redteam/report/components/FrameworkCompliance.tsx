@@ -45,11 +45,11 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     );
   }, [config?.redteam?.frameworks]);
 
-  const getNonCompliantPlugins = React.useCallback(
+  const getFrameworkCategories = React.useCallback(
     (framework: string) => {
       const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
       if (!mappings) {
-        return [];
+        return { compliant: [], nonCompliant: [], untested: [] };
       }
 
       // First, collect all plugins from all subcategories
@@ -60,19 +60,14 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
       });
 
       // Then filter for non-compliant ones
-      const { nonCompliant } = categorizePlugins(
-        allPlugins,
-        categoryStats,
-        pluginPassRateThreshold,
-      );
-      return nonCompliant;
+      return categorizePlugins(allPlugins, categoryStats, pluginPassRateThreshold);
     },
     [categoryStats, pluginPassRateThreshold],
   );
 
   const getFrameworkSeverity = React.useCallback(
     (framework: string): Severity => {
-      const nonCompliantPlugins = getNonCompliantPlugins(framework);
+      const { nonCompliant: nonCompliantPlugins } = getFrameworkCategories(framework);
 
       if (nonCompliantPlugins.length === 0) {
         return Severity.Low;
@@ -98,17 +93,17 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
 
       return highestSeverity;
     },
-    [getNonCompliantPlugins],
+    [getFrameworkCategories],
   );
 
   const frameworkCompliance = React.useMemo(() => {
     const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
     frameworksToShow.forEach((framework) => {
-      const nonCompliantPlugins = getNonCompliantPlugins(framework);
-      result[framework] = nonCompliantPlugins.length === 0;
+      const { compliant, nonCompliant } = getFrameworkCategories(framework);
+      result[framework] = compliant.length > 0 && nonCompliant.length === 0;
     });
     return result;
-  }, [frameworksToShow, getNonCompliantPlugins]);
+  }, [frameworksToShow, getFrameworkCategories]);
 
   const pluginComplianceStats = React.useMemo(() => {
     // Collect all unique plugins across all frameworks to show
@@ -205,7 +200,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
             {frameworksToShow.map((framework, idx) => {
-              const nonCompliantPlugins = getNonCompliantPlugins(framework);
+              const { nonCompliant: nonCompliantPlugins } = getFrameworkCategories(framework);
               const isCompliant = frameworkCompliance[framework] ?? false;
               const frameworkSeverity = getFrameworkSeverity(framework);
 
