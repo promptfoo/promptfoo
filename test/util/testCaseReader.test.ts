@@ -910,7 +910,7 @@ describe('readTest', () => {
     clearAllMocks();
   });
 
-  it('readTest with string input (path to test config)', async () => {
+  const verifyFileTestConfig = async () => {
     const testPath = 'test1.yaml';
     const testContent = {
       description: 'Test 1',
@@ -923,7 +923,9 @@ describe('readTest', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual(testContent);
-  });
+  };
+
+  it('readTest with string input (path to test config)', verifyFileTestConfig);
 
   it('readTest with TestCase input', async () => {
     const input: TestCase = {
@@ -1111,20 +1113,7 @@ describe('readTest', () => {
     await expect(readTest(invalidTestInput, '', false)).rejects.toThrow('Test case must contain');
   });
 
-  it('should read test from file', async () => {
-    const testPath = 'test1.yaml';
-    const testContent = {
-      description: 'Test 1',
-      vars: { var1: 'value1', var2: 'value2' },
-      assert: [{ type: 'equals', value: 'value1' }],
-    };
-    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
-
-    const result = await readTest(testPath);
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(testContent);
-  });
+  it('should read test from file', verifyFileTestConfig);
 });
 
 describe('readTests', () => {
@@ -2001,6 +1990,29 @@ describe('loadTestsFromGlob', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No test files found'));
   });
 
+  it("loads a row's vars files and Python provider from its tests file directory", async () => {
+    const configDir = path.resolve('fixture-config');
+    const testsFile = path.join(configDir, 'tests', 'cases.yaml');
+    const varsFile = path.join(configDir, 'vars', 'extra.yaml');
+    vi.mocked(fs.existsSync).mockImplementation((file) => file === testsFile);
+    vi.mocked(globSync).mockImplementation((pattern) =>
+      pattern === path.join(configDir, 'vars', '*.yaml') ? [varsFile] : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((file) =>
+      file === varsFile
+        ? 'topic: nested'
+        : '- vars: ../vars/*.yaml\n  provider: python:provider.py\n',
+    );
+
+    const [test] = await loadTestsFromGlob('tests/cases.yaml', configDir);
+
+    expect(test.vars).toEqual({ topic: 'nested' });
+    expect(loadApiProvider).toHaveBeenCalledWith(
+      'python:provider.py',
+      expect.objectContaining({ basePath: path.dirname(testsFile) }),
+    );
+  });
+
   it('should handle Hugging Face dataset URLs', async () => {
     const mockDataset: TestCase[] = [
       {
@@ -2039,6 +2051,17 @@ describe('loadTestsFromGlob', () => {
     expect(fetchLangfuseTraces).toHaveBeenCalledWith('langfuse://traces?tags=production&limit=1');
     expect(result).toMatchObject(mockTraces);
     expect(result[0].metadata?.__promptfoo?.remote).toBe(true);
+  });
+  it('uses the resolved suite credentials while loading Langfuse tests', async () => {
+    const env = { LANGFUSE_PUBLIC_KEY: 'suite-public', LANGFUSE_SECRET_KEY: 'suite-private' };
+    const { getEnvString: readEnv } =
+      await vi.importActual<typeof import('../../src/envars')>('../../src/envars');
+    vi.mocked(fetchLangfuseTraces).mockImplementationOnce(async () => {
+      expect(readEnv('LANGFUSE_PUBLIC_KEY')).toBe(env.LANGFUSE_PUBLIC_KEY);
+      expect(readEnv('LANGFUSE_SECRET_KEY')).toBe(env.LANGFUSE_SECRET_KEY);
+      return [{ providerOutput: 'saved' }];
+    });
+    await expect(readTests('langfuse://traces', '', env)).resolves.toHaveLength(1);
   });
 
   it('should not route lookalike Langfuse globs as trace sources', async () => {

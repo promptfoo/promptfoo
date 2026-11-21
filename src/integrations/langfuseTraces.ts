@@ -9,8 +9,24 @@ const PAGE_SIZE = 100;
 const TRACE_LIST_FIELDS = 'core,io,metrics';
 const LANGFUSE_TRACES_PREFIX = 'langfuse://traces';
 
-type LangfuseTracesResponse = Awaited<ReturnType<LangfuseClient['api']['trace']['list']>>;
-type LangfuseTrace = LangfuseTracesResponse['data'][number];
+// The v5 SDK exposes the legacy list method. SDK v6 only supports root observations.
+interface LangfuseTrace {
+  id: string;
+  timestamp: string;
+  htmlPath?: string | null;
+  name?: string | null;
+  input?: unknown;
+  output?: unknown;
+  metadata?: unknown;
+  tags?: string[] | null;
+  sessionId?: string | null;
+  userId?: string | null;
+  latency?: number | null;
+  totalCost?: number | null;
+}
+interface LegacyTraceApi {
+  list(query: FetchTracesQuery): Promise<{ data: LangfuseTrace[]; meta?: { totalPages: number } }>;
+}
 
 interface FetchTracesQuery {
   fields?: string;
@@ -68,8 +84,18 @@ function isTextBlock(value: unknown): value is { text: unknown } {
   );
 }
 
+function isRefusalBlock(value: unknown): value is { refusal: string } {
+  return isRecord(value) && value.type === 'refusal' && typeof value.refusal === 'string';
+}
+
+function isContentBlock(value: unknown) {
+  return isTextBlock(value) || isRefusalBlock(value);
+}
+
 function getTextBlockValues(content: unknown[]): unknown[] {
-  return content.filter(isTextBlock).map((item) => item.text);
+  return content.flatMap((item) =>
+    isRefusalBlock(item) ? [item.refusal] : isTextBlock(item) ? [item.text] : [],
+  );
 }
 
 function joinTextValues(textValues: unknown[]): unknown {
@@ -78,7 +104,7 @@ function joinTextValues(textValues: unknown[]): unknown {
   }
   return textValues
     .map((text) => (typeof text === 'string' ? text : JSON.stringify(text)))
-    .join('\n');
+    .join('');
 }
 
 function extractTextBlocksIfPresent(content: unknown[]): unknown | undefined {
@@ -128,6 +154,9 @@ function extractOutputItemText(item: unknown): unknown | undefined {
     return undefined;
   }
 
+  if (isRefusalBlock(item)) {
+    return item.refusal;
+  }
   if (isTextBlock(item)) {
     return item.text;
   }
@@ -136,7 +165,7 @@ function extractOutputItemText(item: unknown): unknown | undefined {
     return item;
   }
   if (Array.isArray(item.content)) {
-    return item.content.every(isTextBlock) ? extractTextBlocks(item.content) : item.content;
+    return item.content.every(isContentBlock) ? extractTextBlocks(item.content) : item.content;
   }
 
   if (item.type === 'message' || item.role === 'assistant') {
@@ -161,7 +190,7 @@ function extractOutputItemsText(outputItems: unknown[]): unknown | undefined {
     outputItems.some(
       (item) =>
         isRecord(item) &&
-        !isTextBlock(item) &&
+        !isContentBlock(item) &&
         item.type !== 'message' &&
         item.type !== 'reasoning' &&
         item.role !== 'assistant',
@@ -191,7 +220,7 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
       return choice.message;
     }
     if (content !== undefined && content !== null) {
-      return Array.isArray(content) && content.every(isTextBlock)
+      return Array.isArray(content) && content.every(isContentBlock)
         ? extractTextBlocks(content)
         : content;
     }
@@ -368,7 +397,7 @@ function extractOutputText(output: unknown): unknown {
   // Anthropic format: { content: [{type: 'text', text: '...'}] } or { content: '...' }
   if (obj.content !== undefined) {
     if (Array.isArray(obj.content)) {
-      return obj.content.every(isTextBlock) ? extractTextBlocks(obj.content) : obj.content;
+      return obj.content.every(isContentBlock) ? extractTextBlocks(obj.content) : obj.content;
     }
     return obj.content;
   }
@@ -434,6 +463,7 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
     vars,
     metadata: {
       __promptfoo: { remoteVars: Object.keys(vars) },
+      conversationId: `langfuse:${trace.id}`,
       langfuseTraceId: trace.id,
       langfuseTraceUrl: traceUrl,
     },
@@ -489,12 +519,12 @@ function getFetchErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function fetchTracePage(
-  langfuse: LangfuseClient,
-  fetchQuery: FetchTracesQuery,
-): Promise<LangfuseTracesResponse> {
+async function fetchTracePage<T>(request: () => Promise<T>): Promise<T> {
   try {
-    const response = await langfuse.api.trace.list(fetchQuery);
+    const response = await request();
+    if (isRecord(response) && typeof response.status === 'number' && response.status >= 400) {
+      throw response;
+    }
     if (!response) {
       throw new Error(
         'Langfuse returned an empty response. Check your credentials and network connection.',
@@ -516,8 +546,99 @@ async function fetchTracePage(
         'Langfuse access denied. Your API key may not have permission to access traces.',
       );
     }
-    throw new Error(`Failed to fetch traces from Langfuse: ${message}`);
+    // SDK exceptions can contain credentials, selectors, or stored output.
+    throw new Error('Failed to fetch traces from Langfuse. Check your network and API settings.');
   }
+}
+
+// Observations v2 returns serialized JSON or plain text. parseIoAsJson is no longer supported.
+function decodeIo(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+async function fetchRootObservations(
+  client: LangfuseClient,
+  query: FetchTracesQuery,
+  limit: number,
+  baseUrl: string,
+) {
+  if (!client.api.observations?.getMany) {
+    throw new Error(
+      'Langfuse Cloud requires an SDK with observations v2. Install @langfuse/client@^6.',
+    );
+  }
+  if (query.release) {
+    throw new Error('The release selector requires the legacy Langfuse trace API.');
+  }
+  // A filter overrides query parameter selectors, including isRootObservation.
+  const filter = JSON.stringify([
+    { type: 'boolean', column: 'isRootObservation', operator: '=', value: true },
+    ...Object.entries({
+      traceName: query.name,
+      sessionId: query.sessionId,
+      userId: query.userId,
+      version: query.version,
+    })
+      .filter(([, value]) => value !== undefined)
+      .map(([column, value]) => ({ type: 'string', column, operator: '=', value })),
+    ...(query.tags
+      ? [{ type: 'arrayOptions', column: 'traceTags', operator: 'all of', value: query.tags }]
+      : []),
+    ...(query.fromTimestamp
+      ? [{ type: 'datetime', column: 'startTime', operator: '>=', value: query.fromTimestamp }]
+      : []),
+    ...(query.toTimestamp
+      ? [{ type: 'datetime', column: 'startTime', operator: '<', value: query.toTimestamp }]
+      : []),
+  ]);
+  const tests = new Map<string, LangfuseTraceTestCase>();
+  const cursors = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const response = await fetchTracePage(() =>
+      client.api.observations.getMany({
+        fields: 'core,basic,io,metadata,metrics,usage,trace_context',
+        filter,
+        cursor,
+        limit: Math.min(PAGE_SIZE, limit),
+      }),
+    );
+    for (const root of response.data) {
+      if (!root.traceId || tests.has(root.traceId) || tests.size === limit) {
+        continue;
+      }
+      tests.set(
+        root.traceId,
+        traceToTestCase(
+          {
+            ...root,
+            id: root.traceId,
+            name: root.traceName ?? root.name,
+            timestamp: root.startTime,
+            input: decodeIo(root.input),
+            output: decodeIo(root.output),
+            htmlPath: `/project/${encodeURIComponent(root.projectId)}/traces/${encodeURIComponent(root.traceId)}`,
+          },
+          baseUrl,
+        ),
+      );
+    }
+    cursor = response.meta?.cursor ?? undefined;
+    if (cursor && (cursors.has(cursor) || cursors.size >= MAX_LIMIT)) {
+      throw new Error('Langfuse observations pagination did not complete.');
+    }
+    if (cursor) {
+      cursors.add(cursor);
+    }
+  } while (cursor && tests.size < limit);
+  return [...tests.values()];
 }
 
 export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTestCase[]> {
@@ -538,6 +659,12 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
     'https://cloud.langfuse.com'
   ).replace(/\/+$/, '');
   const langfuse = await getLangfuseClient();
+  const host = new URL(baseUrl).hostname;
+  const legacyApi = langfuse.api.trace as Partial<LegacyTraceApi> | undefined;
+  const list = legacyApi?.list?.bind(legacyApi);
+  if (!list || host === 'cloud.langfuse.com' || host.endsWith('.cloud.langfuse.com')) {
+    return fetchRootObservations(langfuse, query, limit, baseUrl);
+  }
 
   const tests: LangfuseTraceTestCase[] = [];
   let page = 1;
@@ -553,7 +680,7 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
 
     logger.debug('[Langfuse Traces] Fetching page', { page, pageLimit });
 
-    const response = await fetchTracePage(langfuse, fetchQuery);
+    const response = await fetchTracePage(() => list(fetchQuery));
 
     if (!response.data || response.data.length === 0) {
       logger.debug('[Langfuse Traces] No more traces found', { page });

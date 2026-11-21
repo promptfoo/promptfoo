@@ -9,11 +9,15 @@ description: Use Langfuse prompts and stored trace outputs in Promptfoo evals. C
 
 ## Setup
 
-1. Install the Langfuse client SDK:
+1. Install promptfoo and the optional Langfuse client SDK together in your project:
 
    ```bash
-   npm install @langfuse/client
+   npm install promptfoo @langfuse/client@^6.0.0
    ```
+
+   The SDK is not installed by default. Run `npx promptfoo eval` from this project so promptfoo can resolve it. For a global installation, use `npm install -g promptfoo @langfuse/client@^6.0.0`.
+
+   SDK v6 requires Langfuse Cloud or self-hosted Langfuse v4.59.0 or later. For older self-hosted servers, install `@langfuse/client@^5.11.1`, which remains supported. See the [Langfuse migration guide](https://langfuse.com/docs/observability/sdk/upgrade-path/js-v5-to-v6).
 
 2. Set the required environment variables:
 
@@ -161,7 +165,9 @@ Trace input and output may contain production data. They appear in local results
 | `fromTimestamp`, `toTimestamp` | ISO 8601 timestamp bounds                                        |
 | `version`, `release`           | Match the trace version or release                               |
 
-Unknown or empty selectors and repeated scalar selectors are rejected. A `sessionId` filter selects individual traces; it does not reconstruct conversation history or grade session continuity.
+Langfuse Cloud and SDK v6 use the Observations v2 API. Promptfoo imports one root observation per trace. Latency and cost describe that observation, and metadata may be truncated by the API. The `release` selector requires a self-hosted server with the legacy trace API and SDK v5.
+
+Unknown or empty selectors and repeated scalar selectors are rejected. A `sessionId` filter selects individual traces. Each trace has independent conversation state.
 
 ### Trace variables
 

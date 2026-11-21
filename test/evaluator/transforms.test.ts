@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -145,10 +147,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Transformed: ${output}`',
     };
 
@@ -299,10 +298,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`ProviderTransformed: ${output}`',
     };
 
@@ -355,10 +351,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with multiple transforms', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -392,10 +385,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -433,10 +423,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -477,7 +464,7 @@ describeEvaluator('evaluator transforms', () => {
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('evaluate with no output', async () => {
+  it.each([false, true])('evaluate with no output and redteam=%s', async (isRedteam) => {
     const mockApiProviderNoOutput: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-no-output'),
       callApi: vi.fn().mockResolvedValue({
@@ -490,13 +477,15 @@ describeEvaluator('evaluator transforms', () => {
       providers: [mockApiProviderNoOutput],
       prompts: [toPrompt('Test prompt')],
       tests: [],
+      redteam: isRedteam ? {} : undefined,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(0);
-    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.errors).toBe(1);
     expect(summary.results[0].error).toBe('No output');
     expect(summary.results[0].success).toBe(false);
     expect(summary.results[0].score).toBe(0);

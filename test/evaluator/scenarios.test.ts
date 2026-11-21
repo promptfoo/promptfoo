@@ -1,3 +1,4 @@
+import { createTestOutput, createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -106,10 +107,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
   it('applies repeat from scenario config options', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Hello',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Hello')),
     };
 
     const testSuite: TestSuite = {
@@ -134,10 +132,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
   it('lets scenario test options.repeat override scenario config options.repeat', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Hello',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Hello')),
     };
 
     const testSuite: TestSuite = {
@@ -311,9 +306,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     // Scenarios should have isolated _conversation state by default
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
+      callApi: vi.fn().mockImplementation((_prompt) => createTestOutput()),
     };
 
     const testSuite: TestSuite = {
@@ -381,9 +374,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     // This test verifies that users can still explicitly share conversations across scenarios
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
+      callApi: vi.fn().mockImplementation((_prompt) => createTestOutput()),
     };
 
     const testSuite: TestSuite = {

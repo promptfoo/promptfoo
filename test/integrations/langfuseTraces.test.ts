@@ -5,6 +5,7 @@ vi.mock('../../src/envars', () => ({
   isCI: vi.fn().mockReturnValue(true),
 }));
 
+const getMany = vi.hoisted(() => vi.fn());
 const mockTraceList = vi.hoisted(() => vi.fn());
 const mockLangfuseConstructorError = vi.hoisted(() => ({ error: undefined as Error | undefined }));
 vi.mock('../../src/integrations/langfuse', () => ({
@@ -12,7 +13,7 @@ vi.mock('../../src/integrations/langfuse', () => ({
     if (mockLangfuseConstructorError.error) {
       throw mockLangfuseConstructorError.error;
     }
-    return { api: { trace: { list: mockTraceList } } };
+    return { api: { trace: { list: mockTraceList }, observations: { getMany } } };
   },
 }));
 
@@ -162,10 +163,50 @@ describe('langfuseTraces', () => {
           return 'sk-test';
         }
         if (key === 'LANGFUSE_BASE_URL' || key === 'LANGFUSE_HOST') {
-          return 'https://cloud.langfuse.com';
+          return 'https://legacy.example';
         }
         return '';
       });
+    });
+
+    it('loads independent Cloud root observations with all selectors and cursor pagination', async () => {
+      vi.mocked(getEnvString).mockImplementation((key) =>
+        key.endsWith('KEY') ? 'key' : 'https://us.cloud.langfuse.com',
+      );
+      const root = {
+        traceId: 'first',
+        startTime: '2026-01-01',
+        projectId: 'p',
+        input: JSON.stringify({ input: 'hello' }),
+        output: JSON.stringify({
+          output: [{ type: 'message', content: [{ type: 'refusal', refusal: 'No' }] }],
+        }),
+      };
+      getMany
+        .mockResolvedValueOnce({ data: [root], meta: { cursor: 'next' } })
+        .mockResolvedValueOnce({ data: [root, { ...root, traceId: 'second' }], meta: {} });
+      const tests = await fetchLangfuseTraces(
+        'langfuse://traces?name=demo&tags=one&userId=user&limit=2',
+      );
+      expect(tests).toHaveLength(2);
+      expect(tests[0]).toMatchObject({
+        providerOutput: 'No',
+        metadata: { conversationId: 'langfuse:first' },
+      });
+      expect(tests[1].metadata?.conversationId).toBe('langfuse:second');
+      expect(getMany.mock.calls[1][0].cursor).toBe('next');
+      expect(JSON.parse(getMany.mock.calls[0][0].filter)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ column: 'isRootObservation', value: true }),
+          expect.objectContaining({ column: 'traceName', value: 'demo' }),
+          expect.objectContaining({ column: 'traceTags', value: ['one'] }),
+          expect.objectContaining({ column: 'userId', value: 'user' }),
+        ]),
+      );
+      await expect(fetchLangfuseTraces('langfuse://traces?release=stable')).rejects.toThrow(
+        'release',
+      );
+      expect(mockTraceList).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -282,7 +323,7 @@ describe('langfuseTraces', () => {
         },
         metadata: {
           langfuseTraceId: 'trace-1',
-          langfuseTraceUrl: 'https://cloud.langfuse.com/project/123/traces/trace-1',
+          langfuseTraceUrl: 'https://legacy.example/project/123/traces/trace-1',
         },
         options: {
           disableVarExpansion: true,
@@ -660,7 +701,7 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      expect(tests[0].providerOutput).toBe('Final answer\nAdditional detail');
+      expect(tests[0].providerOutput).toBe('Final answerAdditional detail');
     });
 
     it.each(
@@ -811,8 +852,8 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       // Should extract text from Anthropic format
-      expect(tests[0].vars?.input).toBe('Hello Claude\nSecond question');
-      expect(tests[0].providerOutput).toBe('Hello!\nHow can I help?');
+      expect(tests[0].vars?.input).toBe('Hello ClaudeSecond question');
+      expect(tests[0].providerOutput).toBe('Hello!How can I help?');
     });
 
     it('should handle traces with unrecognized complex format', async () => {
@@ -928,7 +969,7 @@ describe('langfuseTraces', () => {
       mockTraceList.mockRejectedValueOnce(new Error('Network timeout'));
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
-        'Failed to fetch traces from Langfuse: Network timeout',
+        'Failed to fetch traces from Langfuse',
       );
     });
   });

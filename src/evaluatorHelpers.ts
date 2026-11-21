@@ -23,7 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject } from './util/index';
+import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import {
@@ -71,7 +71,7 @@ export function resolveVariables(
     }
     resolving.add(key);
     const value = originals[key];
-    if (typeof value === 'string') {
+    if (typeof value === 'string' && /\{[{%#]/.test(value)) {
       if (renderTemplate && !referencesUndefinedVariables(value, originals)) {
         for (const name of Object.keys(originals)) {
           if (templateReferencesVariable(value, name)) {
@@ -260,6 +260,7 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const loadedMimeTypes = setLoadedFileMimeTypes(vars);
 
   let basePrompt = prompt.raw;
 
@@ -285,7 +286,7 @@ export async function renderPrompt(
         if (javascriptOutput.error) {
           throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
         }
-        if (!javascriptOutput.output) {
+        if (typeof javascriptOutput.output !== 'string') {
           throw new Error(
             `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
           );
@@ -300,7 +301,7 @@ export async function renderPrompt(
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
-        if (!pythonScriptOutput.output) {
+        if (pythonScriptOutput.output == null) {
           throw new Error(`Python script ${filePath} did not return any output`);
         }
         invariant(
@@ -361,17 +362,17 @@ export async function renderPrompt(
             }
 
             vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else if (fileType === 'audio' && fileExtension?.toLowerCase() === 'm4a' && provider) {
-            // Generic ISO-BMFF brands such as `isom` and `mp42` do not reveal
-            // whether a file contains audio or video. Preserve the known M4A
-            // provenance so providers receive the correct modality.
-            vars[varName] =
-              provider.getAudioInputFormat?.() === 'google'
-                ? `data:audio/mp4;base64,${base64Data}`
-                : base64Data;
           } else {
             // Keep existing behavior for video/audio files (raw base64)
             vars[varName] = base64Data;
+            if (
+              fileType === 'audio' &&
+              fileExtension?.toLowerCase() === 'm4a' &&
+              provider?.getAudioInputFormat?.() === 'google'
+            ) {
+              loadedMimeTypes.set(base64Data, 'audio/mp4');
+              setLoadedFileMimeTypes(vars, loadedMimeTypes);
+            }
           }
         } catch (error) {
           throw new Error(
@@ -397,7 +398,7 @@ export async function renderPrompt(
       if (javascriptOutput.error) {
         throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
       }
-      if (!javascriptOutput.output) {
+      if (typeof javascriptOutput.output !== 'string') {
         throw new Error(
           `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
         );
@@ -723,20 +724,16 @@ function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prom
   // A prompt function that was neither restored nor returned by the hook means the
   // prompt will render its raw source as text — the original #9653 symptom. Surface
   // why, so users get a breadcrumb instead of a silent behavior change.
-  const labelsWithFunction = new Set<string>();
   const returnedLabels = new Set<string>();
   for (const prompt of restored) {
     if (prompt?.label != null) {
       returnedLabels.add(prompt.label);
       if (typeof prompt.function === 'function') {
-        labelsWithFunction.add(prompt.label);
+        originalsByLabel.delete(prompt.label);
       }
     }
   }
   for (const [label, original] of originalsByLabel) {
-    if (labelsWithFunction.has(label)) {
-      continue;
-    }
     if (original === null) {
       if (returnedLabels.has(label)) {
         logger.warn(

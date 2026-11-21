@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
-import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from '../base';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './utils';
 
@@ -116,12 +116,7 @@ export class PolicyPlugin extends RedteamPluginBase {
    * @returns
    */
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: `${POLICY_METRIC_PREFIX}:${this.policyId}`,
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, `${POLICY_METRIC_PREFIX}:${this.policyId}`)];
   }
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
