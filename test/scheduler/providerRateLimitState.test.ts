@@ -677,6 +677,83 @@ describe('ProviderRateLimitState', () => {
       state2.dispose();
     });
 
+    describe('limit reset windows', () => {
+      // Groq's `-requests` headers describe a per-day limit (captured 2026-11-20).
+      const groqDayWindow = {
+        'x-ratelimit-limit-requests': '1000',
+        'x-ratelimit-remaining-requests': '970',
+        'x-ratelimit-reset-requests': '43m12s',
+      };
+
+      function createState(rateLimitKey: string) {
+        return new ProviderRateLimitState({
+          rateLimitKey,
+          maxConcurrency: 1,
+          minConcurrency: 1,
+          retryPolicy: { maxRetries: 0, baseDelayMs: 1, maxDelayMs: 1, jitterFactor: 0 },
+        });
+      }
+
+      it('holds the queue for Retry-After after a per-minute 429, not the per-day reset', async () => {
+        const groq = createState('groq-rpm-429');
+        const hits: any[] = [];
+        groq.on('ratelimit:hit', (data) => hits.push(data));
+
+        await groq
+          .executeWithRetry('req-1', async () => 'rate-limited', {
+            getHeaders: () => ({ ...groqDayWindow, 'retry-after': '20' }),
+            isRateLimited: () => true,
+          })
+          .catch(() => undefined);
+
+        expect(hits).toHaveLength(1);
+        expect(hits[0].resetAt).toBe(Date.now() + 20_000);
+        groq.dispose();
+      });
+
+      it('waits for the token reset after a success that exhausts tokens', async () => {
+        const groq = createState('groq-tpm-200');
+        await groq.executeWithRetry('req-1', async () => 'first', {
+          getHeaders: () => ({
+            ...groqDayWindow,
+            'x-ratelimit-limit-tokens': '8000',
+            'x-ratelimit-remaining-tokens': '0',
+            'x-ratelimit-reset-tokens': '7.66s',
+          }),
+          isRateLimited: () => false,
+        });
+
+        let settled = false;
+        const second = groq
+          .executeWithRetry('req-2', async () => 'second', { isRateLimited: () => false })
+          .then((value) => {
+            settled = true;
+            return value;
+          });
+        await vi.advanceTimersByTimeAsync(7_659);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(second).resolves.toBe('second');
+        groq.dispose();
+      });
+
+      it('holds the queue at most 60s when a 429 reports only the per-day reset', async () => {
+        const groq = createState('groq-header-only-429');
+        const hits: any[] = [];
+        groq.on('ratelimit:hit', (data) => hits.push(data));
+
+        await groq
+          .executeWithRetry('req-1', async () => 'rate-limited', {
+            getHeaders: () => ({ ...groqDayWindow, 'x-ratelimit-remaining-requests': '0' }),
+            isRateLimited: () => true,
+          })
+          .catch(() => undefined);
+
+        expect(hits[0].resetAt).toBe(Date.now() + 60_000);
+        groq.dispose();
+      });
+    });
+
     it('should call markRateLimited for rate-limited responses with retry-after headers', async () => {
       const state2 = new ProviderRateLimitState({
         rateLimitKey: 'test-block-on-429',

@@ -9,7 +9,7 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { parseRateLimitHeaders } from '../../scheduler/headerParser';
+import { MAX_RESET_HEADER_WAIT_MS, parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sha256 } from '../createHash';
@@ -425,11 +425,17 @@ export function isRateLimited(response: Response): boolean {
 
 /**
  * Compute how long to wait after a rate-limited response.
- * Reads `retry-after-ms`, `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
- * Default: 60s.
+ * `retry-after-ms` and `Retry-After` take precedence. Otherwise the reset of the
+ * exhausted limit (OpenAI-style headers, then `X-RateLimit-Reset`) applies, capped
+ * at the 60s default because a reset window can be much longer than the limit
+ * that was hit (Groq's `x-ratelimit-reset-requests` is a per-day window).
  */
 export function computeRateLimitWaitMs(response: Response): number {
   const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
+  if (parsedHeaders.retryAfterMs !== undefined) {
+    return parsedHeaders.retryAfterMs;
+  }
+
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   const openaiReset =
     response.headers.get('x-ratelimit-reset-requests') ||
@@ -437,18 +443,22 @@ export function computeRateLimitWaitMs(response: Response): number {
 
   if (openaiReset) {
     if (parsedHeaders.resetAt !== undefined) {
-      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
+      return capResetWait(parsedHeaders.resetAt - Date.now());
     }
   }
 
   if (rateLimitReset) {
     const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
     if (Number.isFinite(resetAt) && resetAt >= 0) {
-      return Math.max(resetAt - Date.now() + 1000, 0);
+      return capResetWait(resetAt - Date.now() + 1000);
     }
   }
 
-  return parsedHeaders.retryAfterMs ?? 60_000;
+  return MAX_RESET_HEADER_WAIT_MS;
+}
+
+function capResetWait(waitMs: number): number {
+  return Math.min(Math.max(waitMs, 0), MAX_RESET_HEADER_WAIT_MS);
 }
 
 /**

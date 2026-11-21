@@ -75,35 +75,12 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
     ANTHROPIC_HEADERS.limitTokens,
   ]);
 
-  // --- Reset time (ordered: OpenAI, Anthropic, Standard) ---
-  for (const name of [
-    OPENAI_HEADERS.resetRequests,
-    OPENAI_HEADERS.resetTokens,
-    ANTHROPIC_HEADERS.resetRequests,
-    // Token limits bind before request limits on eval workloads, and a
-    // token-limited 429 may carry only the tokens reset.
-    ANTHROPIC_HEADERS.resetTokens,
-    STANDARD_HEADERS.resetAlt,
-    STANDARD_HEADERS.reset,
-  ]) {
-    if (h[name] !== undefined) {
-      const parsed = parseResetTime(h[name]);
-      if (parsed !== null) {
-        result.resetAt = parsed;
-        break;
-      }
-    }
-  }
-
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {
     const ms = Number.parseInt(h['retry-after-ms'], 10);
     // Accept 0 as valid (means "retry immediately")
     if (Number.isFinite(ms) && ms >= 0) {
       result.retryAfterMs = ms;
-      if (result.resetAt === undefined) {
-        result.resetAt = Date.now() + ms;
-      }
     }
   }
 
@@ -111,13 +88,86 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
     const parsed = parseRetryAfter(h['retry-after']);
     if (parsed !== null) {
       result.retryAfterMs = parsed;
-      if (result.resetAt === undefined) {
-        result.resetAt = Date.now() + parsed;
-      }
     }
   }
 
+  // --- Reset time ---
+  // Retry-After is the server's own answer to when a retry can succeed, so it
+  // takes precedence over the limit reset headers.
+  if (result.retryAfterMs !== undefined) {
+    result.resetAt = Date.now() + result.retryAfterMs;
+    return result;
+  }
+
+  // Otherwise use the reset of the limit that ran out. The same header names
+  // can describe windows of different lengths: OpenAI reports two per-minute
+  // limits, while Groq's `-requests` headers describe a per-day limit and its
+  // `-tokens` headers a per-minute one. Taking the first reset header would let
+  // a day-long request window drive the wait for an exhausted token window.
+  result.resetAt = selectResetAt([
+    {
+      remaining: result.remainingRequests,
+      resetAt: parseFirstReset(h, [
+        OPENAI_HEADERS.resetRequests,
+        ANTHROPIC_HEADERS.resetRequests,
+        STANDARD_HEADERS.resetAlt,
+        STANDARD_HEADERS.reset,
+      ]),
+    },
+    {
+      remaining: result.remainingTokens,
+      // Token limits bind before request limits on eval workloads, and a
+      // token-limited 429 may carry only the tokens reset.
+      resetAt: parseFirstReset(h, [OPENAI_HEADERS.resetTokens, ANTHROPIC_HEADERS.resetTokens]),
+    },
+  ]);
+
   return result;
+}
+
+/**
+ * Longest wait that limit reset headers alone may impose: the same 60 seconds
+ * promptfoo waits when a rate-limited response has no timing headers at all
+ * (and the scheduler's default `maxDelayMs`). A reset header can shorten that
+ * wait but never extend it, because the window it describes may not be the one
+ * that ran out. Only an explicit Retry-After asks for longer.
+ */
+export const MAX_RESET_HEADER_WAIT_MS = 60_000;
+
+/**
+ * Choose the reset time for the exhausted limit.
+ *
+ * When some limits report zero remaining, every one of them must refill before a
+ * request can succeed, so the latest of their resets applies. When none is known
+ * to be exhausted (a 429 can leave a few tokens that are fewer than requested),
+ * the earliest reset is the first point at which capacity returns.
+ */
+function selectResetAt(
+  limits: Array<{ remaining?: number; resetAt?: number }>,
+): number | undefined {
+  const resets = limits.filter(
+    (limit): limit is { remaining?: number; resetAt: number } => limit.resetAt !== undefined,
+  );
+  if (resets.length === 0) {
+    return undefined;
+  }
+  const exhausted = resets.filter((limit) => limit.remaining === 0);
+  if (exhausted.length > 0) {
+    return Math.max(...exhausted.map((limit) => limit.resetAt));
+  }
+  return Math.min(...resets.map((limit) => limit.resetAt));
+}
+
+function parseFirstReset(headers: Record<string, string>, names: string[]): number | undefined {
+  for (const name of names) {
+    if (headers[name] !== undefined) {
+      const parsed = parseResetTime(headers[name]);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
