@@ -28,6 +28,7 @@ export interface TrajectoryStep {
   type: TrajectoryStepType;
 }
 
+const EXIT_CODE_ATTRIBUTE = /(?:^|[._])exit[._]?code$/i;
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
 const DEFAULT_COMMAND_TOOL_NAMES = ['exec_command', 'local_shell', 'shell'] as const;
 
@@ -232,7 +233,7 @@ function extractCommand(
       continue;
     }
 
-    if (/command/i.test(key) && !/output|result/i.test(key)) {
+    if (/command/i.test(key) && !/output|result/i.test(key) && !EXIT_CODE_ATTRIBUTE.test(key)) {
       return value.trim();
     }
   }
@@ -509,7 +510,7 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
           return [];
         }
         const failed = Object.entries(step.attributes ?? {}).some(
-          ([key, value]) => /(?:^|[._])exit[._]?code$/i.test(key) && value !== 0 && value !== '0',
+          ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
         );
         return [
           {

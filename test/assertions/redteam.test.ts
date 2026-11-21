@@ -131,6 +131,7 @@ describe('redteam strategy result grading', () => {
 
   it.each([
     { statusCode: 1, exit: 0, confirmed: true },
+    { statusCode: 1, exit: '0', confirmed: true },
     { statusCode: 1, exit: 1, confirmed: false },
     { statusCode: 2, exit: 0, confirmed: false },
     { statusCode: undefined, exit: undefined, confirmed: false },
