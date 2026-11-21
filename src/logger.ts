@@ -56,7 +56,6 @@ export interface SanitizedLogContext {
 }
 
 // Lazy source map support - only loaded when debug is enabled
-export let sourceMapSupportInitialized = false;
 let sourceMapSupportInitializationPromise: Promise<void> | null = null;
 
 // Shutdown state tracking - prevents writes once logger closure begins
@@ -72,24 +71,18 @@ export function getLoggerShuttingDown(): boolean {
   return isLoggerShuttingDown;
 }
 
-export async function initializeSourceMapSupport(): Promise<void> {
-  if (sourceMapSupportInitialized) {
-    return;
-  }
-
+export function initializeSourceMapSupport(): Promise<void> {
   sourceMapSupportInitializationPromise ??= (async () => {
     try {
       const sourceMapSupport = await import('source-map-support');
       sourceMapSupport.install();
-      sourceMapSupportInitialized = true;
     } catch {
-      // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
-    } finally {
+      // The optional dev dependency can be unavailable. Allow the next call to retry.
       sourceMapSupportInitializationPromise = null;
     }
   })();
 
-  await sourceMapSupportInitializationPromise;
+  return sourceMapSupportInitializationPromise;
 }
 
 /**

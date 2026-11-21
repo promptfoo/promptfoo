@@ -97,19 +97,19 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 ### Core Evaluation Tools
 
 - **`list_evaluations`** - Browse your evaluation runs with optional dataset filtering
-- **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
+- **`get_evaluation_details`** - Get results, metrics, and test cases for an eval
 - **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
 
 ### Generation Tools
 
-- **`generate_dataset`** - Generate test datasets using AI for comprehensive evaluation coverage
+- **`generate_dataset`** - Generate test datasets using a model
 - **`generate_test_cases`** - Generate test cases with assertions for existing prompts
 - **`compare_providers`** - Compare multiple AI providers side-by-side for performance and quality
 
 ### Redteam Security Tools
 
-- **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
+- **`redteam_run`** - Run red team tests against an AI application
 - **`redteam_generate`** - Generate adversarial test cases for redteam security testing with configurable plugins and strategies
 
 ### Configuration & Testing
