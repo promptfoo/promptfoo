@@ -13,30 +13,6 @@ const path = require('path');
 const CHANGELOG_PATH = path.join(__dirname, '..', 'CHANGELOG.md');
 
 /**
- * Empty template for the Unreleased section after release
- */
-const EMPTY_UNRELEASED = `## [Unreleased]
-
-### Added
-
-### Changed
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
-
-### Dependencies
-
-### Documentation
-
-### Tests
-`;
-
-/**
  * All valid Keep a Changelog category headers
  * https://keepachangelog.com/en/1.1.0/
  */
@@ -51,6 +27,14 @@ const CHANGELOG_CATEGORIES = [
   'Documentation',
   'Tests',
 ];
+
+/**
+ * Empty template for the Unreleased section after release
+ */
+const EMPTY_UNRELEASED = `## [Unreleased]
+
+### ${CHANGELOG_CATEGORIES.join('\n\n### ')}
+`;
 
 /**
  * Check if a section contains only headers and whitespace (no actual entries)

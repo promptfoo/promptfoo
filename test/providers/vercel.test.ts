@@ -1,17 +1,35 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   createVercelProvider,
   VercelAiEmbeddingProvider,
   VercelAiProvider,
 } from '../../src/providers/vercel';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { mockProcessEnv } from '../util/utils';
+
+const createFreshTextResult = () => ({
+  text: 'Fresh response',
+  usage: { inputTokens: 10, outputTokens: 20 },
+  finishReason: 'stop',
+});
+
+const createStreamingOptions = () => ({
+  config: { streaming: true },
+});
+
+const createEmbeddingResult = () => ({
+  embedding: [0.1, 0.2, 0.3],
+  usage: { tokens: 5 },
+});
 
 // Mock the cache module
 vi.mock('../../src/cache', async () => ({
@@ -57,12 +75,12 @@ afterEach(() => restoreEnv());
 
 const testTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
 const spanExporter = new InMemorySpanExporter();
-const testTracerProvider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+const testTracerProvider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter: spanExporter })],
 });
 
 beforeAll(() => {
-  testTracerProvider.register();
+  registerTracerProvider(testTracerProvider);
 });
 
 afterAll(async () => {
@@ -101,6 +119,34 @@ describe('VercelAiProvider', () => {
   });
 
   describe('constructor', () => {
+    it.each([undefined, 'explicit-key', ''])(
+      'keeps a registered gateway alias ahead of suite keys with explicit value %j',
+      async (explicit) => {
+        const { createGateway, generateText } = await import('ai');
+        vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
+        const previousProvider = getEnvOverridesProvider();
+        setEnvOverridesProvider(
+          (layer) =>
+            layer === 'provider'
+              ? { AI_GATEWAY_API_KEY: 'registered-key' }
+              : previousProvider?.(layer),
+          { providerLayer: true },
+        );
+        try {
+          const provider = await loadApiProvider('vercel:openai/gpt-4o-mini', {
+            env: { VERCEL_AI_GATEWAY_API_KEY: 'suite-key' },
+            options: { env: { VERCEL_AI_GATEWAY_API_KEY: explicit } },
+          });
+          await provider.callApi('hello');
+          expect(createGateway).toHaveBeenLastCalledWith(
+            expect.objectContaining({ apiKey: explicit ?? 'registered-key' }),
+          );
+        } finally {
+          setEnvOverridesProvider(previousProvider);
+        }
+      },
+    );
+
     it('preserves gateway initialization errors', async () => {
       const { createGateway } = await import('ai');
       vi.mocked(createGateway).mockImplementationOnce(() => {
@@ -149,6 +195,34 @@ describe('VercelAiProvider', () => {
   });
 
   describe('configuration options', () => {
+    it.each([
+      { model: 'openai/gpt-6.2-astra', streaming: false },
+      { model: 'openai/gpt-6.2-sol', streaming: true },
+    ])(
+      'passes $model options to the SDK with streaming=$streaming',
+      async ({ model, streaming }) => {
+        const { generateText, streamText } = await import('ai');
+        vi.mocked(generateText).mockResolvedValueOnce(createFreshTextResult() as any);
+        vi.mocked(streamText).mockReturnValueOnce({
+          fullStream: [{ type: 'text-delta', text: 'Fresh response' }],
+          finishReason: Promise.resolve('stop'),
+        } as any);
+
+        const openai = { reasoningEffort: 'high', serviceTier: 'ultrafast' } as const;
+        const providerOptions = {
+          openai: { ...openai, unrelatedSetting: true },
+          gateway: { unrelatedSetting: true },
+        };
+        const provider = createVercelProvider(`vercel:${model}`, {
+          config: { providerOptions, streaming },
+        });
+        expect(await provider.callApi('Hello')).toMatchObject({ output: 'Fresh response' });
+        expect(streaming ? streamText : generateText).toHaveBeenCalledWith(
+          expect.objectContaining({ model: { modelName: model }, providerOptions: { openai } }),
+        );
+      },
+    );
+
     it('should store apiKeyEnvar in config', () => {
       const provider = new VercelAiProvider('openai/gpt-4o', {
         config: { apiKeyEnvar: 'MY_CUSTOM_API_KEY' },
@@ -313,6 +387,7 @@ describe('VercelAiProvider', () => {
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       const result = await provider.callApi('Hello');
 
+      expect(vi.mocked(generateText).mock.calls[0][0]).not.toHaveProperty('providerOptions');
       expect(result).toEqual({
         output: 'Hello from GPT-4o!',
         tokenUsage: {
@@ -507,9 +582,7 @@ describe('VercelAiProvider', () => {
         } as any;
       });
 
-      const provider = new VercelAiProvider('openai/gpt-4o', {
-        config: { streaming: true },
-      });
+      const provider = new VercelAiProvider('openai/gpt-4o', createStreamingOptions());
       await provider.callApi('prompt', {
         prompt: { raw: 'prompt', label: 'test' },
         traceparent: testTraceparent,
@@ -543,11 +616,10 @@ describe('VercelAiProvider', () => {
         finishReason: Promise.resolve('stop'),
       } as any);
 
-      const provider = new VercelAiProvider('openai/gpt-4o', {
-        config: { streaming: true },
-      });
+      const provider = new VercelAiProvider('openai/gpt-4o', createStreamingOptions());
       const result = await provider.callApi('Hello');
 
+      expect(vi.mocked(streamText).mock.calls[0][0]).not.toHaveProperty('providerOptions');
       expect(result).toEqual({
         output: 'Hello from streaming!',
         tokenUsage: {
@@ -597,9 +669,7 @@ describe('VercelAiProvider', () => {
         throw new Error('Stream connection failed');
       });
 
-      const provider = new VercelAiProvider('openai/gpt-4o', {
-        config: { streaming: true },
-      });
+      const provider = new VercelAiProvider('openai/gpt-4o', createStreamingOptions());
       const result = await provider.callApi('Hello');
 
       expect(result).toEqual({
@@ -750,9 +820,7 @@ describe('VercelAiProvider', () => {
         finishReason: Promise.resolve('content-filter'),
       } as any);
 
-      const provider = new VercelAiProvider('openai/gpt-4o', {
-        config: { streaming: true },
-      });
+      const provider = new VercelAiProvider('openai/gpt-4o', createStreamingOptions());
       const result = await provider.callApi('Hello');
 
       expect(result.finishReason).toBe('content_filter');
@@ -814,6 +882,28 @@ describe('VercelAiProvider', () => {
   });
 
   describe('caching', () => {
+    it('separates cache entries when OpenAI reasoning effort or service tier changes', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
+
+      for (const openai of [
+        { reasoningEffort: 'low', serviceTier: 'default' },
+        { reasoningEffort: 'high', serviceTier: 'default' },
+        { reasoningEffort: 'high', serviceTier: 'ultrafast' },
+        { serviceTier: 'ultrafast', reasoningEffort: 'high' },
+      ] as const) {
+        const provider = new VercelAiProvider('openai/gpt-6.2-sol', {
+          config: { providerOptions: { openai } },
+        });
+        await provider.callApi('Hello');
+      }
+
+      const keys = mockCache.get.mock.calls.map(([key]) => key);
+      expect(new Set(keys).size).toBe(3);
+      expect(keys[3]).toBe(keys[2]);
+    });
+
     it.each([
       ['tool-calls', 'tool_calls'],
       ['content-filter', 'content_filter'],
@@ -954,11 +1044,7 @@ describe('VercelAiProvider', () => {
     it('should cache response after successful API call', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValueOnce({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValueOnce(createFreshTextResult() as any);
 
       const prompt = 'PFQA_VERCEL_PROMPT_SENTINEL';
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
@@ -977,11 +1063,7 @@ describe('VercelAiProvider', () => {
     it('should include gateway identity in cache keys without leaking secrets', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const prompt = 'PFQA_VERCEL_PROMPT_SENTINEL';
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
@@ -1016,11 +1098,7 @@ describe('VercelAiProvider', () => {
     it('should separate cache keys for different gateway header values with the same header names', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const prompt = 'PFQA_VERCEL_PROMPT_SENTINEL';
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
@@ -1053,11 +1131,7 @@ describe('VercelAiProvider', () => {
     it('should reuse cache keys for equivalent gateway header name casing', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const prompt = 'PFQA_VERCEL_PROMPT_SENTINEL';
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
@@ -1090,11 +1164,7 @@ describe('VercelAiProvider', () => {
     it('should separate cache keys when only gateway baseUrl changes', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const prompt = 'PFQA_VERCEL_PROMPT_SENTINEL';
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
@@ -1129,11 +1199,7 @@ describe('VercelAiProvider', () => {
     it('should reuse cache keys when the same API key resolves from different sources', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const prompt = 'PFQA_VERCEL_PROMPT_SENTINEL';
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
@@ -1164,11 +1230,7 @@ describe('VercelAiProvider', () => {
     it('should reuse cache keys when optional config auth fields are undefined', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const env = { VERCEL_AI_GATEWAY_API_KEY: 'PFQA_VERCEL_ENV_API_KEY' };
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
@@ -1196,11 +1258,7 @@ describe('VercelAiProvider', () => {
     it('should separate cache keys for custom env var API key values without leaking them', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(generateText).mockResolvedValue({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
 
       const firstProvider = new VercelAiProvider('openai/gpt-4o-mini', {
         config: { apiKeyEnvar: 'PFQA_VERCEL_CUSTOM_KEY' },
@@ -1241,11 +1299,7 @@ describe('VercelAiProvider', () => {
           output: 'Cached response',
         }),
       );
-      vi.mocked(generateText).mockResolvedValueOnce({
-        text: 'Fresh response',
-        usage: { inputTokens: 10, outputTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockResolvedValueOnce(createFreshTextResult() as any);
 
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       const result = await provider.callApi('Hello', { bustCache: true } as any);
@@ -1532,6 +1586,43 @@ describe('VercelAiEmbeddingProvider', () => {
   });
 
   describe('callEmbeddingApi()', () => {
+    it('combines embedding cancellation with the SDK timeout and does not cache an aborted request', async () => {
+      const { embed } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      let markStarted!: (signal: AbortSignal) => void;
+      const started = new Promise<AbortSignal>((resolve) => {
+        markStarted = resolve;
+      });
+      vi.mocked(embed).mockImplementation(({ abortSignal }) => {
+        if (!abortSignal) {
+          throw new Error('Embedding SDK received no signal');
+        }
+        markStarted(abortSignal);
+        return new Promise<never>((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
+        });
+      });
+      const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+      const controller = new AbortController();
+      const request = provider.callEmbeddingApi('prompt', undefined, {
+        abortSignal: controller.signal,
+      });
+      try {
+        const combined = await started;
+        expect(combined).not.toBe(controller.signal);
+        expect(combined.aborted).toBe(false);
+        const reason = new Error('evaluation cancelled');
+        controller.abort(reason);
+        await expect(request).rejects.toBe(reason);
+        expect(combined.reason).toBe(reason);
+        expect(mockCache.set).not.toHaveBeenCalled();
+      } finally {
+        controller.abort();
+        await Promise.allSettled([request]);
+      }
+    });
+
     it('enables native SDK telemetry for traced embedding calls', async () => {
       const { embed } = await import('ai');
       vi.mocked(embed).mockImplementationOnce(async () => {
@@ -1594,10 +1685,7 @@ describe('VercelAiEmbeddingProvider', () => {
     it('should cache embedding responses', async () => {
       const { embed } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(embed).mockResolvedValueOnce({
-        embedding: [0.1, 0.2, 0.3],
-        usage: { tokens: 5 },
-      } as any);
+      vi.mocked(embed).mockResolvedValueOnce(createEmbeddingResult() as any);
 
       const input = 'PFQA_VERCEL_EMBEDDING_INPUT_SENTINEL';
       const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
@@ -1613,10 +1701,7 @@ describe('VercelAiEmbeddingProvider', () => {
     it('should include gateway identity in embedding cache keys without leaking secrets', async () => {
       const { embed } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(embed).mockResolvedValue({
-        embedding: [0.1, 0.2, 0.3],
-        usage: { tokens: 5 },
-      } as any);
+      vi.mocked(embed).mockResolvedValue(createEmbeddingResult() as any);
 
       const input = 'PFQA_VERCEL_EMBEDDING_INPUT_SENTINEL';
       const firstProvider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small', {
@@ -1651,10 +1736,7 @@ describe('VercelAiEmbeddingProvider', () => {
     it('should separate embedding cache keys when only gateway baseUrl changes', async () => {
       const { embed } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(embed).mockResolvedValue({
-        embedding: [0.1, 0.2, 0.3],
-        usage: { tokens: 5 },
-      } as any);
+      vi.mocked(embed).mockResolvedValue(createEmbeddingResult() as any);
 
       const input = 'PFQA_VERCEL_EMBEDDING_INPUT_SENTINEL';
       const firstProvider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small', {

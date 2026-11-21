@@ -174,7 +174,7 @@ includes:
 - `gateway.tls.enabled` for `https://` / `wss://`
 - `gateway.mode=remote` via `gateway.remote.url`
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - openclaw
 ```
@@ -183,7 +183,7 @@ providers:
 
 Override auto-detection with explicit config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openclaw:main
     config:
@@ -209,7 +209,7 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 # export OPENCLAW_GATEWAY_PASSWORD=your-password-here
 ```
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - openclaw
 ```
@@ -246,6 +246,7 @@ providers:
 ### Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'What is the capital of {{country}}?'
 
@@ -267,6 +268,7 @@ tests:
 the upstream provider/model combination.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Analyze the pros and cons of {{topic}}'
 
@@ -285,6 +287,7 @@ tests:
 ### Using Responses API
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Summarize: {{text}}'
 
@@ -299,17 +302,22 @@ tests:
 ### Using Embeddings
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - '{{text}}'
+  - 'Promptfoo routes this through OpenClaw.'
 
 providers:
-  - id: openclaw:embedding:main
-    config:
-      backend_model: openai/text-embedding-3-small
+  - echo
 
 tests:
-  - vars:
-      text: Promptfoo routes this through OpenClaw.
+  - assert:
+      - type: similar
+        value: 'Promptfoo routes this through OpenClaw.'
+        threshold: 0.9
+        provider:
+          id: openclaw:embedding:main
+          config:
+            backend_model: openai/text-embedding-3-small
 ```
 
 ### Backend Model Override
@@ -317,7 +325,7 @@ tests:
 Use `backend_model` when you want the selected OpenClaw agent to run a specific provider/model for
 this eval without changing the agent's normal default model.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openclaw
     config:
@@ -342,6 +350,7 @@ For WS, `unknown` requires an explicit agent and becomes `agent:<agent-id>:unkno
 With bare `openclaw:agent`, use another key or omit `session_key` instead of using `unknown`.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{task}}'
 
@@ -359,6 +368,7 @@ tests:
 ### Tool Invoke
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{}'
 
@@ -374,6 +384,7 @@ tests:
 If a tool exposes sub-actions, add `config.action`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{}'
 
