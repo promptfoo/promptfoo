@@ -18,11 +18,8 @@ describe('Http Provider Certificate Content Support', () => {
         signatureValidityMs: 300000,
       };
 
-      // This should pass validation
-      expect(() => {
-        const result = HttpProviderConfigSchema.parse({ signatureAuth });
-        expect(result.signatureAuth).toBeDefined();
-      }).not.toThrow();
+      const result = HttpProviderConfigSchema.parse({ signatureAuth });
+      expect(result.signatureAuth).toEqual(signatureAuth);
     });
 
     it('should validate JKS certificates with base64 content', () => {
@@ -36,13 +33,8 @@ describe('Http Provider Certificate Content Support', () => {
         signatureValidityMs: 300000,
       };
 
-      // This should pass validation
-      expect(() => {
-        const result = HttpProviderConfigSchema.parse({ signatureAuth });
-        expect(result.signatureAuth).toBeDefined();
-      }).not.toThrow();
-
-      expect(signatureAuth.keystoreContent).toBeDefined();
+      const result = HttpProviderConfigSchema.parse({ signatureAuth });
+      expect(result.signatureAuth).toEqual(signatureAuth);
     });
 
     it('should validate PFX certificates with base64 content', () => {
@@ -56,13 +48,8 @@ describe('Http Provider Certificate Content Support', () => {
         signatureValidityMs: 300000,
       };
 
-      // This should pass validation
-      expect(() => {
-        const result = HttpProviderConfigSchema.parse({ signatureAuth });
-        expect(result.signatureAuth).toBeDefined();
-      }).not.toThrow();
-
-      expect(signatureAuth.pfxContent).toBeDefined();
+      const result = HttpProviderConfigSchema.parse({ signatureAuth });
+      expect(result.signatureAuth).toEqual(signatureAuth);
     });
 
     it('should validate separate certificate and key content', () => {
@@ -77,14 +64,8 @@ describe('Http Provider Certificate Content Support', () => {
         signatureValidityMs: 300000,
       };
 
-      // This should pass validation
-      expect(() => {
-        const result = HttpProviderConfigSchema.parse({ signatureAuth });
-        expect(result.signatureAuth).toBeDefined();
-      }).not.toThrow();
-
-      expect(signatureAuth.certContent).toBeDefined();
-      expect(signatureAuth.keyContent).toBeDefined();
+      const result = HttpProviderConfigSchema.parse({ signatureAuth });
+      expect(result.signatureAuth).toEqual(signatureAuth);
     });
 
     it('should accept configurations that fall back to legacy schema', () => {

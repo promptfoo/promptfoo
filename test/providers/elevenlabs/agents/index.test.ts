@@ -2,6 +2,7 @@ const { createLoggerModule } = await vi.hoisted(async () => import('../../../fac
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+import { ElevenLabsClient } from '../../../../src/providers/elevenlabs/client';
 import { mockProcessEnv } from '../../../util/utils';
 
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
@@ -100,13 +101,13 @@ describe('ElevenLabsAgentsProvider', () => {
 
     it('should respect environment variable overrides', () => {
       mockProcessEnv({ CUSTOM_API_KEY: 'custom-key' });
-      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
-        config: {
-          apiKeyEnvar: 'CUSTOM_API_KEY',
-        },
+      new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: { apiKeyEnvar: 'CUSTOM_API_KEY' },
       });
 
-      expect(provider).toBeDefined();
+      expect(ElevenLabsClient).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ apiKey: 'custom-key' }),
+      );
       mockProcessEnv({ CUSTOM_API_KEY: undefined });
     });
   });

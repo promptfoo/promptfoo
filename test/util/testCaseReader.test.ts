@@ -878,7 +878,7 @@ describe('readTest', () => {
     clearAllMocks();
   });
 
-  const verifyFileTestConfig = async () => {
+  it('readTest with string input (path to test config)', async () => {
     const testPath = 'test1.yaml';
     const testContent = {
       description: 'Test 1',
@@ -891,9 +891,7 @@ describe('readTest', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual(testContent);
-  };
-
-  it('readTest with string input (path to test config)', verifyFileTestConfig);
+  });
 
   it('readTest with TestCase input', async () => {
     const input: TestCase = {
@@ -1074,8 +1072,6 @@ describe('readTest', () => {
 
     await expect(readTest(invalidTestInput, '', false)).rejects.toThrow('Test case must contain');
   });
-
-  it('should read test from file', verifyFileTestConfig);
 });
 
 describe('readTests', () => {

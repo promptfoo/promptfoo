@@ -1,7 +1,6 @@
 import os from 'os';
 import path from 'path';
 
-import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
 import logger from '../logger';
 import { fetchWithTimeout } from '../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -9,11 +8,15 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { CHROMIUM_INSTALL_HINT, loadBrowserProviderDependencies } from './browserDependencies';
+import { providerRegistry } from './providerRegistry';
+import { waitForPromiseWithAbort } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
+import type { Browser, BrowserContext, ElementHandle, Page } from 'playwright';
 
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
@@ -34,6 +37,7 @@ interface BrowserAction {
 interface BrowserProviderConfig {
   cookies?:
     | Array<{
+        url?: string;
         domain?: string;
         name: string;
         path?: string;
@@ -75,6 +79,22 @@ export function createTransformResponse(
   return (_extracted, finalHtml) => ({ output: finalHtml });
 }
 
+interface CookieNavigation {
+  step: BrowserAction;
+  args: Record<string, any>;
+}
+
+interface BrowserSession {
+  browser?: Browser;
+  context?: BrowserContext;
+  page?: Page;
+  ownsBrowser: boolean;
+  ownsContext: boolean;
+  closed: boolean;
+  initialization?: Promise<void>;
+  cleanup?: Promise<void>;
+}
+
 export class BrowserProvider implements ApiProvider {
   static clearSessionCache(): void {
     // Sessions are stored on provider instances; there is no global cache to clear.
@@ -85,13 +105,12 @@ export class BrowserProvider implements ApiProvider {
   private defaultTimeout: number;
   private headless: boolean;
 
-  /**
-   * Instance-level page storage for multi-turn conversations.
-   * This works because strategies like Hydra reuse the same provider instance
-   * across all turns of a conversation, so the page persists naturally.
-   */
-  private persistedPage: Page | null = null;
-  private isFirstCall: boolean = true;
+  private persistedSession?: BrowserSession;
+  private pendingTurn?: Promise<void>;
+  private sessions = new Set<BrowserSession>();
+  private cleanupPromise?: Promise<void>;
+  private cleanupGeneration = 0;
+  readonly retainOutsideEvaluation = true;
 
   constructor(_: string, options: ProviderOptions) {
     this.config = options.config as BrowserProviderConfig;
@@ -116,127 +135,213 @@ export class BrowserProvider implements ApiProvider {
     return '[Browser Provider]';
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const vars = {
-      ...(context?.vars || {}),
-      prompt,
-    };
-
-    const isNewSession = this.isFirstCall;
-
-    logger.debug(
-      `[Browser] callApi called - persistSession=${this.config.persistSession}, isFirstCall=${this.isFirstCall}, hasPersistedPage=${!!this.persistedPage}`,
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    return providerRegistry.withProvider(
+      this,
+      () => {
+        const signal = options?.abortSignal;
+        const run = () => this.runBrowser(prompt, context, signal);
+        if (!this.config.persistSession) {
+          return run();
+        }
+        const previous = this.pendingTurn;
+        const generation = this.cleanupGeneration;
+        const turn = previous
+          ? waitForPromiseWithAbort(previous, signal).then(() =>
+              generation === this.cleanupGeneration
+                ? run()
+                : { error: 'Browser session was closed during cleanup' },
+            )
+          : run();
+        // A cancelled waiter must not let the next turn race the still-active page.
+        const finished = Promise.allSettled([previous, turn]).then(() => {
+          if (this.pendingTurn === finished) {
+            this.pendingTurn = undefined;
+          }
+        });
+        this.pendingTurn = finished;
+        return turn;
+      },
+      options?.abortSignal,
     );
+  }
 
-    // If session persistence is enabled and we have a persisted page, use it
-    if (this.config.persistSession && this.persistedPage) {
-      try {
-        // Verify page is still usable
-        if (this.persistedPage.isClosed()) {
-          logger.debug(`[Browser] Persisted page was closed, will create new one`);
-          this.persistedPage = null;
-        } else {
-          logger.debug(`[Browser] Reusing persisted page for multi-turn conversation`);
-          return this.executeSteps(this.persistedPage, vars, false);
-        }
-      } catch {
-        logger.debug(`[Browser] Persisted page is no longer valid, will create new one`);
-        this.persistedPage = null;
-      }
+  private async runBrowser(
+    prompt: string,
+    context?: CallApiContextParams,
+    signal?: AbortSignal,
+  ): Promise<ProviderResponse> {
+    if (this.cleanupPromise) {
+      await waitForPromiseWithAbort(this.cleanupPromise, signal);
     }
-
-    // Mark that we've made at least one call
-    this.isFirstCall = false;
-
-    let chromium, stealth;
-    try {
-      ({ chromium, stealth } = await loadBrowserProviderDependencies());
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : 'Failed to load browser packages',
-      };
-    }
-
-    chromium.use(stealth());
-
-    let browser;
-    let shouldCloseBrowser = true;
-    let browserContext: BrowserContext;
+    providerRegistry.throwIfResourceUseAborted(signal);
+    const generation = this.cleanupGeneration;
+    const vars = { ...(context?.vars || {}), prompt };
+    let session = this.persistedSession;
 
     try {
-      // Connect to existing browser or launch new one
-      if (this.config.connectOptions) {
-        const connectionResult = await this.connectToExistingBrowser(chromium);
-        browser = connectionResult.browser;
-        shouldCloseBrowser = connectionResult.shouldClose;
-      } else {
-        browser = await chromium.launch({
-          headless: this.headless,
-          args: ['--ignore-certificate-errors'],
-        });
-      }
-
-      // Get or create browser context
-      const contexts = browser.contexts();
-      if (contexts.length > 0 && this.config.connectOptions) {
-        // Use existing context when connecting to existing browser
-        browserContext = contexts[0];
-        logger.debug('Using existing browser context');
-      } else {
-        // Create new context
-        browserContext = await browser.newContext({
-          ignoreHTTPSErrors: true,
-        });
-      }
-
-      if (this.config.cookies) {
-        await this.setCookies(browserContext);
-      }
-
-      const page = await browserContext.newPage();
-
-      // Store page for session persistence (instance-level for multi-turn)
-      if (this.config.persistSession) {
-        this.persistedPage = page;
-        logger.debug(`[Browser] Created persistent session page for multi-turn conversation`);
-      }
-
-      try {
-        const result = await this.executeSteps(page, vars, isNewSession);
-
-        // Clean up page if NOT persisting session
-        if (!this.config.persistSession && this.config.connectOptions && !shouldCloseBrowser) {
-          await page.close();
+      if (session?.page?.isClosed()) {
+        await this.closeSession(session);
+        session = undefined;
+        providerRegistry.throwIfResourceUseAborted(signal);
+        if (generation !== this.cleanupGeneration) {
+          throw new Error('Browser session was closed during cleanup');
         }
-
-        return result;
-      } catch (error) {
-        // Clean up on error
+      }
+      const isNewSession = !session;
+      const step =
+        isNewSession && typeof this.config.cookies === 'string'
+          ? this.config.steps.find((step) => step.action === 'navigate')
+          : undefined;
+      const navigation = step && { step, args: this.renderArgs(step.args ?? {}, vars) };
+      if (!session) {
+        session = { ownsBrowser: !this.config.connectOptions, ownsContext: false, closed: false };
+        this.sessions.add(session);
+        // Register before async launch so process shutdown also owns pending initialization.
+        providerRegistry.register(this);
+        session.initialization = this.initializeSession(session, navigation);
+        await session.initialization;
+        if (session.closed) {
+          throw new Error('Browser session was closed during initialization');
+        }
+        providerRegistry.throwIfResourceUseAborted(signal);
         if (this.config.persistSession) {
-          this.persistedPage = null;
+          this.persistedSession = session;
         }
-        if (this.config.connectOptions && !shouldCloseBrowser) {
-          await page.close();
-        }
-        throw error;
       }
+
+      const result = await this.executeSteps(session.page!, vars, isNewSession, navigation);
+      if (!this.config.persistSession || result.error) {
+        try {
+          await this.closeSession(session);
+        } catch (cleanupError) {
+          if (!result.error) {
+            throw cleanupError;
+          }
+          logger.warn('[Browser] Failed to close browser session', { error: cleanupError });
+        }
+      }
+      return result;
     } catch (error) {
+      if (session) {
+        try {
+          await this.closeSession(session);
+        } catch (cleanupError) {
+          logger.warn('[Browser] Failed to close browser session', { error: cleanupError });
+        }
+      }
       const hint =
         error instanceof Error && error.message.includes("Executable doesn't exist")
           ? ` ${CHROMIUM_INSTALL_HINT}`
           : '';
       return { error: `Browser execution error: ${error}${hint}` };
-    } finally {
-      if (shouldCloseBrowser && browser) {
-        await browser.close();
+    }
+  }
+
+  private async initializeSession(
+    session: BrowserSession,
+    navigation?: CookieNavigation,
+  ): Promise<void> {
+    const { chromium, stealth } = await loadBrowserProviderDependencies();
+    if (session.closed) {
+      return;
+    }
+    chromium.use(stealth());
+    session.browser = this.config.connectOptions
+      ? await this.connectToExistingBrowser(chromium)
+      : await chromium.launch({
+          headless: this.headless,
+          args: ['--ignore-certificate-errors'],
+        });
+    if (session.closed) {
+      return;
+    }
+
+    const existingContext = this.config.connectOptions && session.browser!.contexts()[0];
+    session.ownsContext = !existingContext;
+    session.context =
+      existingContext || (await session.browser!.newContext({ ignoreHTTPSErrors: true }));
+    if (session.closed) {
+      return;
+    }
+    if (this.config.cookies) {
+      await this.setCookies(session.context, navigation);
+    }
+    if (!session.closed) {
+      session.page = await session.context.newPage();
+    }
+  }
+
+  private closeSession(session: BrowserSession): Promise<void> {
+    if (session.cleanup) {
+      return session.cleanup;
+    }
+    session.closed = true;
+    if (this.persistedSession === session) {
+      this.persistedSession = undefined;
+    }
+    session.cleanup = (async () => {
+      await session.initialization?.catch(() => {});
+      try {
+        if (!session.ownsBrowser) {
+          if (session.ownsContext) {
+            await session.context?.close();
+          } else {
+            await session.page?.close();
+          }
+        }
+      } finally {
+        // For connected browsers, close() disconnects this client transport without
+        // terminating the external browser or its existing contexts.
+        await session.browser?.close();
+      }
+      this.sessions.delete(session);
+      if (this.sessions.size === 0) {
+        providerRegistry.unregister(this);
+      }
+    })().catch((error) => {
+      session.cleanup = undefined;
+      providerRegistry.retainForProcessShutdown(this);
+      throw error;
+    });
+    return session.cleanup;
+  }
+
+  cleanup(): Promise<void> {
+    if (!this.cleanupPromise) {
+      this.cleanupGeneration++;
+      this.cleanupPromise = Promise.allSettled(
+        [...this.sessions].map((session) => this.closeSession(session)),
+      )
+        .then((results) => {
+          const failure = results.find((result) => result.status === 'rejected');
+          if (failure) {
+            throw failure.reason;
+          }
+        })
+        .finally(() => {
+          this.cleanupPromise = undefined;
+        });
+      if (this.sessions.size > 0) {
+        providerRegistry.trackResourceCleanup(this, this.cleanupPromise);
       }
     }
+    return this.cleanupPromise;
+  }
+
+  shutdown(): Promise<void> {
+    return this.cleanup();
   }
 
   private async executeSteps(
     page: Page,
     vars: Record<string, any>,
     isNewSession: boolean,
+    navigation?: CookieNavigation,
   ): Promise<ProviderResponse> {
     const extracted: Record<string, any> = {};
 
@@ -245,7 +350,9 @@ export class BrowserProvider implements ApiProvider {
         logger.debug(`[Browser] Skipping runOnce step: ${step.action}`);
         continue;
       }
-      await this.executeAction(page, step, vars, extracted);
+      const args =
+        step === navigation?.step ? navigation.args : this.renderArgs(step.args ?? {}, vars);
+      await this.executeAction(page, step, args, extracted);
     }
 
     const finalHtml = await page.content();
@@ -257,25 +364,62 @@ export class BrowserProvider implements ApiProvider {
     return normalizeResponseTransformResult(ret);
   }
 
-  private async setCookies(browserContext: BrowserContext): Promise<void> {
+  private async setCookies(
+    browserContext: BrowserContext,
+    navigation?: CookieNavigation,
+  ): Promise<void> {
     if (typeof this.config.cookies === 'string') {
-      // Handle big blob string of cookies
-      const cookieString = maybeLoadFromExternalFile(this.config.cookies) as string;
-      const cookiePairs = cookieString.split(';').map((pair) => pair.trim());
+      const cookieString = maybeLoadFromExternalFile(this.config.cookies);
+      invariant(
+        typeof cookieString === 'string',
+        'Browser cookie file must contain a cookie string',
+      );
+      const cookiePairs = cookieString
+        .split(';')
+        .map((pair) => pair.trim())
+        .filter(Boolean);
+      if (cookiePairs.length === 0) {
+        return;
+      }
+
+      let url: URL;
+      try {
+        url = new URL(navigation?.args.url);
+        invariant(
+          url.origin === new URL(navigation?.step.args?.url).origin,
+          'Dynamic cookie origin',
+        );
+        invariant(url.protocol === 'http:' || url.protocol === 'https:', 'Unsupported cookie URL');
+      } catch {
+        throw new Error(
+          'String browser cookies require a first navigate step with an absolute HTTP(S) URL and a fixed origin. ' +
+            'Otherwise, use cookie objects with an explicit url or domain/path scope.',
+        );
+      }
+      // Cookie scope needs only the target host and directory, never URL credentials or query data.
+      url.username = '';
+      url.password = '';
+      url.search = '';
+      url.hash = '';
       const cookies = cookiePairs.map((pair) => {
-        const [name, value] = pair.split('=');
-        return { name, value };
+        const separator = pair.indexOf('=');
+        invariant(
+          separator > 0 && pair.slice(0, separator).trim(),
+          'Invalid browser cookie: expected name=value',
+        );
+        return {
+          name: pair.slice(0, separator).trim(),
+          value: pair.slice(separator + 1),
+          url: url.href,
+        };
       });
       await browserContext.addCookies(cookies);
     } else if (Array.isArray(this.config.cookies)) {
-      // Handle array of cookie objects
       await browserContext.addCookies(this.config.cookies);
     }
   }
 
-  private async connectToExistingBrowser(
-    chromium: any,
-  ): Promise<{ browser: any; shouldClose: boolean }> {
+  private async connectToExistingBrowser(chromium: any): Promise<Browser> {
     const connectOptions = this.config.connectOptions!;
 
     try {
@@ -315,7 +459,7 @@ export class BrowserProvider implements ApiProvider {
         browser = await chromium.connectOverCDP(cdpUrl);
       }
 
-      return { browser, shouldClose: false };
+      return browser;
     } catch (error) {
       logger.error(`Failed to connect to existing browser: ${error}`);
       throw error;
@@ -325,11 +469,10 @@ export class BrowserProvider implements ApiProvider {
   private async executeAction(
     page: Page,
     action: BrowserAction,
-    vars: Record<string, any>,
+    renderedArgs: Record<string, any>,
     extracted: Record<string, any>,
   ): Promise<void> {
     const { action: actionType, args = {}, name } = action;
-    const renderedArgs = this.renderArgs(args, vars);
 
     logger.debug(`Executing headless action: ${actionType}`);
 
@@ -345,7 +488,6 @@ export class BrowserProvider implements ApiProvider {
             `    url: 'https://example.com'\n\n` +
             `Current action args: ${safeJsonStringify(args)}`,
         );
-        logger.debug(`Navigating to ${renderedArgs.url}`);
         await page.goto(renderedArgs.url);
         break;
       case 'click':

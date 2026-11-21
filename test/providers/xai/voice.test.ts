@@ -7,7 +7,6 @@ import {
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
   XAI_VOICES,
-  type XAIFunctionCallOutput,
   type XAIVoiceOptions,
   XAIVoiceProvider,
 } from '../../../src/providers/xai/voice';
@@ -748,42 +747,6 @@ describe('XAI Voice Provider', () => {
   // ============================================================================
 
   describe('Function call output interface', () => {
-    it('XAIFunctionCallOutput has correct structure', () => {
-      const output: XAIFunctionCallOutput = {
-        name: 'set_volume',
-        arguments: { level: 50 },
-        result: 'success',
-      };
-      expect(output.name).toBe('set_volume');
-      expect(output.arguments).toEqual({ level: 50 });
-      expect(output.result).toBe('success');
-    });
-
-    it('XAIFunctionCallOutput allows optional result', () => {
-      const output: XAIFunctionCallOutput = {
-        name: 'get_weather',
-        arguments: { location: 'San Francisco' },
-      };
-      expect(output.name).toBe('get_weather');
-      expect(output.arguments).toEqual({ location: 'San Francisco' });
-      expect(output.result).toBeUndefined();
-    });
-
-    it('XAIFunctionCallOutput supports complex arguments', () => {
-      const output: XAIFunctionCallOutput = {
-        name: 'search',
-        arguments: {
-          query: 'test',
-          filters: { category: 'news', limit: 10 },
-          options: ['featured', 'recent'],
-        },
-        result: JSON.stringify({ results: [] }),
-      };
-      expect(output.arguments.query).toBe('test');
-      expect((output.arguments.filters as Record<string, unknown>).category).toBe('news');
-      expect(output.arguments.options).toEqual(['featured', 'recent']);
-    });
-
     it('accepts functionCallHandler in config', () => {
       const handler = async (_name: string, _args: string) => {
         return JSON.stringify({ success: true });

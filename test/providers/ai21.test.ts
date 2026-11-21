@@ -87,7 +87,7 @@ describe('AI21ChatCompletionProvider', () => {
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
     expect(result.error).toBeUndefined();
-    expect(result.cost).toBeGreaterThan(0);
+    expect(result.cost).toBeCloseTo(0.000003, 10);
   });
 
   it('should preserve explicit zero for top_p', async () => {
